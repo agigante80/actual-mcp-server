@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",                      // Modern JS target for Node.js 16+
+    "module": "NodeNext",                    // Use Node.js ESM module resolution
+    "outDir": "dist",                        // Output compiled files here
+    "rootDir": "src",                        // Source files root
+    "moduleResolution": "NodeNext",          // Match module system
+    "esModuleInterop": true,                 // Enable interoperability between CommonJS and ES modules
+    "forceConsistentCasingInFileNames": true, // Enforce consistent casing in imports
+    "strict": true,                          // Enable all strict type-checking options
+    "skipLibCheck": true,                    // Skip type checking of declaration files for faster builds
+    "typeRoots": ["./types", "./node_modules/@types"] // Include custom and npm types
+  },
+  "include": [
+    "src/**/*",
+    "lib/**/*",
+    "types/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

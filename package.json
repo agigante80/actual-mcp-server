@@ -1,0 +1,49 @@
+{
+  "name": "librechat-actual-bridge",
+  "version": "0.1.0",
+  "description": "A bridge service connecting LibreChat to Actual Finance",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "npm run build && node register-tsconfig-paths.js -- --debug",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@actual-app/api": "^25.9.0",
+    "@jlongster/sql.js": "^1.6.7",
+    "@librechat/api": "github:danny-avila/LibreChat#main",
+    "@modelcontextprotocol/sdk": "^1.18.2",
+    "axios": "^1.12.2",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.2",
+    "express": "^4.21.2",
+    "mitt": "^3.0.1",
+    "winston": "^3.18.3",
+    "winston-daily-rotate-file": "^5.0.0",
+    "ws": "^8.18.3"
+  },
+  "devDependencies": {
+    "@types/axios": "^0.9.36",
+    "@types/date-fns": "^2.5.3",
+    "@types/express": "^5.0.3",
+    "@types/google-protobuf": "^3.15.12",
+    "@types/node": "^24.5.2",
+    "@types/ws": "^8.18.1",
+    "nodemon": "^3.0.0",
+    "ts-node": "^10.9.1",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.9.2"
+  },
+  "license": "MIT",
+  "directories": {
+    "test": "test"
+  },
+  "keywords": [
+    "librechat",
+    "actual-finance",
+    "bridge",
+    "chatbot"
+  ],
+  "author": ""
+}

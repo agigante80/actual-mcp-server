@@ -1,0 +1,43 @@
+# Node modules
+node_modules/
+
+# Actual Finance data directory
+actual-data/
+
+# Environment variables
+.env
+
+# Test files
+test/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+coverage/
+
+# npm cache
+.npm
+
+# ESLint cache
+.eslintcache
+
+# TypeScript output
+dist/
+build/
+
+# VS Code settings
+.vscode/
+
+# macOS system files
+.DS_Store
