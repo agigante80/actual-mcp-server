@@ -134,8 +134,14 @@ class ActualToolsManager {
     if (!tool) throw new Error(`Tool not found: ${name}`);
     try {
       const result = await tool.call(args);
-      logger.info(`[TOOL RESULT] ${name}:`, JSON.stringify(result, null, 2));
-      return result;
+
+      // Force-serialize/deserialize to ensure result is JSON-safe (no circular refs,
+      // Buffers, class instances, etc). Convert undefined -> null so callers always
+      // receive a valid JSON value.
+      const safe = result === undefined ? null : JSON.parse(JSON.stringify(result));
+
+      logger.info(`[TOOL RESULT] ${name}: ${JSON.stringify(safe)}`);
+      return safe;
     } catch (err: any) {
       logger.error(`[TOOL ERROR] ${name}:`, err.message || err);
       throw err;

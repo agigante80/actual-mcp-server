@@ -14,10 +14,13 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import logTransportWithDirection from '../logger.js';
 import logger from '../logger.js';
-
-console.error('Starting Streamable HTTP server...');
+// don't log at import time — only log when the server is actually started
+// console.error('Starting Streamable HTTP server...');
+ // top-level logging removed so message is not printed at import-time
+// logger.info('Starting Streamable HTTP server (will be logged when startHttpServer is called)');
 
 export async function startHttpServer(mcp: ActualMCPConnection, port: number, httpPath: string) {
+  logger.info('Starting Streamable HTTP server (testing)...');
   const app = express();
   app.use(express.json());
 
@@ -71,8 +74,8 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
 
     // Set up the list tools handler
     server.setRequestHandler(ListToolsRequestSchema, async () => {
-      console.error('[TOOLS LIST] Listing available tools');
-      const tools: Tool[] = [
+      logger.debug('[TOOLS LIST] Listing available tools');
+       const tools: Tool[] = [
         {
           name: ToolName.HELLO_WORLD,
           description: "A simple tool that returns a greeting",
@@ -101,8 +104,8 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
     // Set up the call tool handler
     server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
       const { name, arguments: args } = request.params;
-      console.error(`[TOOL CALL] Tool: ${name}, Args:`, JSON.stringify(args, null, 2));
-      debug(`Tool request details:`, JSON.stringify(request.params, null, 2));
+      logger.debug(`[TOOL CALL] Tool: ${name}, Args: ${JSON.stringify(args, null, 2)}`);
+      debug(`Tool request details: ${JSON.stringify(request.params, null, 2)}`);
 
       if (name === ToolName.HELLO_WORLD) {
         const validatedArgs = HelloWorldSchema.parse(args);
@@ -149,7 +152,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
           
           if (progressToken !== undefined) {
             try {
-              console.error(`[PROGRESS] Sending progress update: ${i}/${steps} for token: ${progressToken}`);
+              logger.debug(`[PROGRESS] Sending progress update: ${i}/${steps} for token: ${progressToken}`);
               await server.notification({
                 method: "notifications/progress",
                 params: {
@@ -158,9 +161,9 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
                   progressToken,
                 },
               }, { relatedRequestId: extra.requestId });
-              console.error(`[PROGRESS] Successfully sent progress update: ${i}/${steps}`);
+              logger.debug(`[PROGRESS] Successfully sent progress update: ${i}/${steps}`);
             } catch (error) {
-              console.error(`[PROGRESS ERROR] Failed to send progress notification:`, error);
+              logger.error(`[PROGRESS ERROR] Failed to send progress notification: ${String(error)}`);
             }
           } else {
             debug(`No progress token provided, skipping progress update ${i}/${steps}`);
@@ -212,7 +215,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
           
           if (progressToken !== undefined) {
             try {
-              console.error(`[PROGRESS] Sending progress update: ${i}/${steps} for token: ${progressToken}`);
+              logger.debug(`[PROGRESS] Sending progress update: ${i}/${steps} for token: ${progressToken}`);
               await server.notification({
                 method: "notifications/progress",
                 params: {
@@ -221,9 +224,9 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
                   progressToken,
                 },
               }, { relatedRequestId: extra.requestId });
-              console.error(`[PROGRESS] Successfully sent progress update: ${i}/${steps}`);
+              logger.debug(`[PROGRESS] Successfully sent progress update: ${i}/${steps}`);
             } catch (error) {
-              console.error(`[PROGRESS ERROR] Failed to send progress notification:`, error);
+              logger.error(`[PROGRESS ERROR] Failed to send progress notification: ${String(error)}`);
             }
           } else {
             debug(`No progress token provided, skipping progress update ${i}/${steps}`);
@@ -232,7 +235,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
           // Log progress every 5 steps
           if (i % 5 === 0) {
             const elapsedMinutes = (i / steps) * 10;
-            console.error(`[SLOW_TEST] Progress: ${i}/${steps} steps (${elapsedMinutes.toFixed(1)} minutes elapsed)`);
+            logger.info(`[SLOW_TEST] Progress: ${i}/${steps} steps (${elapsedMinutes.toFixed(1)} minutes elapsed)`);
           }
         }
         
@@ -269,8 +272,8 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
 
   // Handle POST requests
   app.post(httpPath, async (req: Request, res: Response) => {
-    console.error('Received MCP POST request');
-    console.error('Request method:', req.body?.method);
+    logger.debug('Received MCP POST request');
+    logger.debug('Request method: %s', req.body?.method);
     debug('Headers:', JSON.stringify(req.headers, null, 2));
     debug('Body:', JSON.stringify(req.body, null, 2));
     
@@ -282,10 +285,10 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
       if (sessionId && transports.has(sessionId)) {
         // Reuse existing transport
         transport = transports.get(sessionId)!;
-        console.error(`[SESSION] Reusing existing transport for session ${sessionId}`);
+        logger.debug(`[SESSION] Reusing existing transport for session ${sessionId}`);
       } else if (!sessionId) {
         // New initialization request
-        console.error('[SESSION] Creating new server for initialization request');
+        logger.debug('[SESSION] Creating new server for initialization request');
         const { server } = createServerInstance();
         
         transport = new StreamableHTTPServerTransport({
@@ -324,7 +327,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
       // Handle the request with existing transport
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      console.error('Error handling MCP request:', error);
+      logger.error('Error handling MCP request: %s', String(error));
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',
@@ -340,7 +343,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
 
   // Handle GET requests for SSE streams
   app.get(httpPath, async (req: Request, res: Response) => {
-    console.error('Received MCP GET request');
+    logger.debug('Received MCP GET request');
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     
     if (!sessionId || !transports.has(sessionId)) {
@@ -357,9 +360,9 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
 
     const lastEventId = req.headers['last-event-id'] as string | undefined;
     if (lastEventId) {
-      console.error(`Client reconnecting with Last-Event-ID: ${lastEventId}`);
+      logger.debug(`Client reconnecting with Last-Event-ID: ${lastEventId}`);
     } else {
-      console.error(`Establishing new SSE stream for session ${sessionId}`);
+      logger.debug(`Establishing new SSE stream for session ${sessionId}`);
     }
 
     const transport = transports.get(sessionId)!;
@@ -382,13 +385,13 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
       return;
     }
 
-    console.error(`Received session termination request for session ${sessionId}`);
+    logger.debug(`Received session termination request for session ${sessionId}`);
 
     try {
       const transport = transports.get(sessionId)!;
       await transport.handleRequest(req, res, req.body);
     } catch (error) {
-      console.error('Error handling session termination:', error);
+      logger.error('Error handling session termination: %s', String(error));
       if (!res.headersSent) {
         res.status(500).json({
           jsonrpc: '2.0',
@@ -417,31 +420,31 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
 
   // Start server
   app.listen(port, () => {
-    console.error(`MCP Streamable HTTP Server listening on port ${port}`);
-    console.log(`📨 MCP endpoint: http://localhost:${port}${httpPath}`);
-    console.log(`❤️  Health check: http://localhost:${port}/health`);
-    console.log(`🛠️  Available tools: hello_world, get_server_info, long_running_test, slow_test`);
+    logger.info(`MCP Streamable HTTP Server listening on port ${port}`);
+    logger.info(`📨 MCP endpoint: http://localhost:${port}${httpPath}`);
+    logger.info(`❤️  Health check: http://localhost:${port}/health`);
+    logger.info(`🛠️  Available tools: hello_world, get_server_info, long_running_test, slow_test`);
   });
 
   // Handle server shutdown
   process.on('SIGINT', async () => {
-    console.error('Shutting down server...');
-
-    // Close all active transports
-    for (const [sessionId, transport] of transports) {
-      try {
-        console.error(`Closing transport for session ${sessionId}`);
+    logger.info('Shutting down server...');
+ 
+     // Close all active transports
+     for (const [sessionId, transport] of transports) {
+       try {
+        logger.debug(`Closing transport for session ${sessionId}`);
         await transport.close();
-        transports.delete(sessionId);
-      } catch (error) {
-        console.error(`Error closing transport for session ${sessionId}:`, error);
-      }
-    }
-
-    console.error('Server shutdown complete');
-    process.exit(0);
-  });
-}
+         transports.delete(sessionId);
+       } catch (error) {
+        logger.error(`Error closing transport for session ${sessionId}: ${String(error)}`);
+       }
+     }
+ 
+    logger.info('Server shutdown complete');
+     process.exit(0);
+   });
+ } 
 
 const debug = (...args: any[]) => {
   if (process.env.DEBUG === 'true' || process.env.DEBUG === '1') {
