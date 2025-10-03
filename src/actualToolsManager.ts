@@ -64,7 +64,7 @@ const GetAccountsInputSchema = z.object({});
 
 // Input schema for get_account_balance
 const GetAccountBalanceInputSchema = z.object({
-  id: z.string().describe('Account ID to get balance for'),
+  id: z.string().optional().describe('Account ID to get balance for (optional; defaults to first account)'),
   cutoff: z.string().optional().describe('Optional ISO date string cutoff'),
 });
 
@@ -99,9 +99,21 @@ class ActualToolsManager {
       name: 'get_account_balance',
       description: 'Get the balance for an account, optionally as of a cutoff date',
       call: async (args) => {
-        // Validate input with schema
-        const validated = GetAccountBalanceInputSchema.parse(args);
-        return ActualApiAny.getAccountBalance(validated.id, validated.cutoff);
+        // Validate input with schema (id is optional)
+        const validated = GetAccountBalanceInputSchema.parse(args || {});
+
+        // If no id provided, fall back to the first account
+        let accountId = validated.id;
+        if (!accountId) {
+          const accounts = await ActualApiAny.getAccounts();
+          if (!Array.isArray(accounts) || accounts.length === 0) {
+            throw new Error('No accounts available to determine default account id');
+          }
+          accountId = accounts[0].id;
+        }
+
+        // getAccountBalance(id, cutoff?) — pass cutoff if provided
+        return ActualApiAny.getAccountBalance(accountId, validated.cutoff);
       },
       inputSchema: GetAccountBalanceInputSchema,
     });
