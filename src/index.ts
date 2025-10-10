@@ -92,6 +92,7 @@ export {};
 
   const useTestActualConnection = args.includes('--test-actual-connection');
   const useTestActualTools = args.includes('--test-actual-tools');
+  const useTestMcpClient = args.includes('--test-mcp-client');
 
   const SERVER_DESCRIPTION = 'Bridge MCP server exposing Actual finance API to LibreChat.';
   const SERVER_INSTRUCTIONS =
@@ -181,6 +182,39 @@ export {};
       useWebSocket ? (process.env.MCP_BRIDGE_WS_PATH || '/') : (process.env.MCP_BRIDGE_HTTP_PATH || HTTP_PATH);
 
     const advertisedUrl = `${scheme}://${advertisedHost}:${PORT}${advertisedPath}`;
+
+    // If requested, run the MCP client-side tests now that all variables are ready
+    if (useTestMcpClient) {
+      logger.info('⚙️  --test-mcp-client specified, starting HTTP server and running client-side MCP tests...');
+      // start server in http mode (bind to configured PORT)
+      await startHttpServer(
+        mcp,
+        PORT,
+        HTTP_PATH,
+        capabilities,
+        implementedTools,
+        SERVER_DESCRIPTION,
+        SERVER_INSTRUCTIONS,
+        toolSchemas,
+        process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
+        advertisedUrl
+      );
+
+      // dynamic import to avoid circular at top
+      const { testMcpClient } = await import('./tests/testMcpClient.js');
+      try {
+        await testMcpClient(advertisedUrl, PORT, HTTP_PATH);
+        logger.info('✅ MCP client-side tests passed');
+        process.exit(0);
+      } catch (err: any) {
+        // Log the full error object and stack so we get useful debug info
+        logger.error('❌ MCP client-side tests failed: %o', err);
+        if (err && err.stack) {
+          logger.error(err.stack);
+        }
+        process.exit(1);
+      }
+    }
 
     logger.info('---------');
     logger.info('🟡 MCP SERVER INFO');

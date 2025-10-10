@@ -9,7 +9,8 @@
     "build": "tsc",
     "dev": "npm run build && node register-tsconfig-paths.js -- --debug",
     "start": "node dist/index.js",
-    "test:e2e": "npx playwright test"
+    "test:e2e": "npx playwright test",
+    "test:mcp-client": "npm run build && node register-tsconfig-paths.js -- --http --test-mcp-client"
   },
   "dependencies": {
     "@actual-app/api": "^25.9.0",

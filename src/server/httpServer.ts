@@ -34,12 +34,19 @@ export async function startHttpServer(
 
   // Create a fresh Server instance similar to httpServer_testing
   function createServerInstance() {
+    // ensure capabilities.tools is an object mapping tool name -> {}
+    const capabilitiesObj = capabilities && Object.keys(capabilities).length
+      ? capabilities
+      : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}) };
+
     const serverOptions: any = {
       // Provide instructions and capabilities so the SDK initialize response is correct
       instructions: serverInstructions || "Welcome to the Actual MCP server.",
       serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
-      capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: {} },
+      capabilities: capabilitiesObj,
       implementedTools: toolsList,
+      // Include tools array explicitly so initialize result contains tools: string[]
+      tools: toolsList,
     };
 
     const server = new Server(
@@ -121,7 +128,13 @@ export async function startHttpServer(
 
         // connect transport then handle request (matching working example)
         await server.connect(transport);
-        await transport.handleRequest(req, res, req.body);
+        try {
+          await transport.handleRequest(req, res, req.body);
+        } catch (err: any) {
+          logger.error('Transport.handleRequest failed during initialize: %o', err);
+          if (err && err.stack) logger.error(err.stack);
+          throw err;
+        }
         return;
       }
 
@@ -144,7 +157,8 @@ export async function startHttpServer(
 
       await transport.handleRequest(req, res, req.body);
     } catch (err: any) {
-      logger.error('POST handler error', String(err));
+      logger.error('POST handler error: %o', err);
+      if (err && err.stack) logger.error(err.stack);
       if (!res.headersSent) {
         res.status(500).json({ jsonrpc: '2.0', id: payload?.id ?? null, error: { code: -32603, message: String(err) } });
       }
