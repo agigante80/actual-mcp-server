@@ -12,6 +12,7 @@ import logger from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState } from '../actualConnection.js';
+import observability from '../observability.js';
 
 export async function startHttpServer(
   mcp: ActualMCPConnection,
@@ -214,6 +215,16 @@ export async function startHttpServer(
   app.get('/health', (_req, res) => {
     const state = getConnectionState();
     res.json({ status: state.initialized ? 'ok' : 'not-initialized', ...state, transport: 'streamable-http', activeSessions: transports.size });
+  });
+
+  app.get('/metrics', async (_req, res) => {
+    const txt = await observability.getMetricsText();
+    if (!txt) {
+      res.status(204).end();
+      return;
+    }
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+    res.send(txt);
   });
 
   const listener = app.listen(port, () => {

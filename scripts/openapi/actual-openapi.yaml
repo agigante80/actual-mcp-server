@@ -1,6 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Actual Finance API (Minimal)
+  title: Actual Finance API (Expanded for generator)
   version: 0.1.0
 paths:
   /accounts:
@@ -16,6 +16,59 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Account'
+    post:
+      operationId: accounts_create
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+      responses:
+        '200':
+          description: Created account id
+          content:
+            application/json:
+              schema:
+                type: string
+    put:
+      operationId: accounts_update
+      summary: Update an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: null
+  /accounts/balance:
+    get:
+      operationId: accounts_get_balance
+      summary: Get account balance
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+        - name: cutoff
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account balance number
+          content:
+            application/json:
+              schema:
+                type: number
+
   /transactions:
     post:
       operationId: transactions_create
@@ -33,6 +86,169 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Transaction'
+    get:
+      operationId: transactions_get
+      summary: Get transactions for an account and date range
+      parameters:
+        - name: accountId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transactions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+  /transactions/import:
+    post:
+      operationId: transactions_import
+      summary: Import transactions (reconcile, avoid duplicates)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionInputArray'
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: array
+                    items:
+                      type: string
+                  updated:
+                    type: array
+                    items:
+                      type: string
+                  errors:
+                    type: array
+                    items:
+                      type: string
+
+  /categories:
+    get:
+      operationId: categories_get
+      summary: Get categories
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      operationId: categories_create
+      summary: Create category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Created category id
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /payees:
+    get:
+      operationId: payees_get
+      summary: Get payees
+      responses:
+        '200':
+          description: Payee list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      operationId: payees_create
+      summary: Create payee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Created payee id
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /budgets/months:
+    get:
+      operationId: budgets_getMonths
+      summary: Get budget months
+      responses:
+        '200':
+          description: months array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /budgets/month:
+    get:
+      operationId: budgets_getMonth
+      summary: Get budget month
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Budget object
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      operationId: budgets_setAmount
+      summary: Set budget amount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: null
+
 components:
   schemas:
     Account:
@@ -56,6 +272,10 @@ components:
         date:
           type: string
           format: date
+    TransactionInputArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/TransactionInput'
     Transaction:
       allOf:
         - $ref: '#/components/schemas/TransactionInput'
