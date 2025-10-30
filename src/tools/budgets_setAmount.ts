@@ -10,7 +10,7 @@ const InputSchema = z.object({
 });
 
 // RESPONSE_TYPE: any
-type Output = any; // refine using generated types (paths['/budgets/month']['post'])
+type Output = void | null;
 
 const tool: ToolDefinition = {
   name: 'actual.budgets.setAmount',

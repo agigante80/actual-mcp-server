@@ -12,7 +12,7 @@ const InputSchema = z.object({
 });
 
 // RESPONSE_TYPE: any
-type Output = any; // refine using generated types (paths['/accounts']['put'])
+type Output = void | null;
 
 const tool: ToolDefinition = {
   name: 'actual.accounts.update',

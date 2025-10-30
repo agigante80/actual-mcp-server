@@ -9,7 +9,7 @@ const InputSchema = z.object({
 });
 
 // RESPONSE_TYPE: string
-type Output = any; // refine using generated types (paths['/payees']['post'])
+type Output = string;
 
 const tool: ToolDefinition = {
   name: 'actual.payees.create',
