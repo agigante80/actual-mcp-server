@@ -3,7 +3,11 @@ import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.any();
+const InputSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1).describe('Account display name'),
+  balance: z.number().optional(),
+});
 
 // RESPONSE_TYPE: string
 type Output = any; // refine using generated types (paths['/accounts']['post'])
@@ -14,7 +18,8 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: any, _meta?: any) => {
   const input = InputSchema.parse(args || {});
-  const res = await adapter.createAccount(input as any, (input as any).initialBalance as any);
+  // adapter.createAccount may accept an optional initial balance param
+  const res = await adapter.createAccount(input as any, (input as any).balance as any);
   return { result: res };
 
   },
