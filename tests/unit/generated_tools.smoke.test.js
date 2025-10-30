@@ -40,14 +40,16 @@ console.log('Running generated tools smoke tests');
   if (mod && mod.default) mod = mod.default;
       const inputExample = {};
       // Provide minimal examples for known tools
-      if (name.includes('transactions_create')) inputExample.accountId = 'acct_1', inputExample.amount = 12.34;
-      if (name.includes('transactions_import')) inputExample.accountId = 'acct_1', inputExample.transactions = [{ amount: 100 }];
-      if (name.includes('transactions_get')) inputExample.accountId = 'acct_1';
-      if (name.includes('accounts_get_balance')) inputExample.id = 'acct_1';
-      if (name.includes('accounts_create')) inputExample.name = 'New';
-      if (name.includes('categories_create')) inputExample.name = 'Food', inputExample.group_id = 'g1';
-      if (name.includes('payees_create')) inputExample.name = 'Kroger';
-      if (name.includes('budgets')) inputExample.month = '2025-10';
+  if (name.includes('transactions_create')) inputExample.accountId = 'acct_1', inputExample.amount = 12.34;
+  if (name.includes('transactions_import')) inputExample.accountId = 'acct_1', inputExample.transactions = [{ amount: 100 }];
+  if (name.includes('transactions_get')) inputExample.accountId = 'acct_1';
+  if (name.includes('accounts_get_balance')) inputExample.id = 'acct_1';
+  if (name.includes('accounts_create')) inputExample.name = 'New';
+  if (name.includes('accounts_update')) inputExample.id = 'acct_1', inputExample.name = 'Updated Name';
+  if (name.includes('categories_create')) inputExample.name = 'Food';
+  if (name.includes('payees_create')) inputExample.name = 'Kroger';
+  if (name.includes('budgets_setAmount')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1', inputExample.amount = 100;
+  if (name.includes('budgets_getMonth')) inputExample.month = '2025-10';
 
       // Validate input parsing
   try { mod.inputSchema.parse(inputExample); } catch (e) { /* ignore parse errors for optional inputs */ }
