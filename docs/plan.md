@@ -1,14 +1,66 @@
 
-# Project Progress (as of Oct 30, 2025)
+# Project Progress & Next Steps (as of Oct 30, 2025)
 
-## Completed
-- P0: Foundation — TypeScript-only source, config validation (zod), connection lifecycle, health endpoint, and CI are all implemented.
-- P1: Full-API coverage pipeline — OpenAPI spec (scripts/openapi/actual-openapi.yaml), type generation (generated/actual-client/types.ts), tool generator (scripts/generate-tools.ts), and dynamic tool registration are all implemented. Tool modules are generated in src/tools/.
-- P2: LibreChat integration — fetchCapabilities returns full tool metadata, serverInstructions, and JSON schemas. Resources and prompts mapping are scaffolded (src/resources/, src/prompts/).
-- P3: Integration and E2E test harnesses — test/integration/mock-actual-server.ts, librechat-probe.test.ts, and e2e-smoke.test.ts are present.
+This document summarizes current repository status, what has been completed, and the concrete next PR-sized tasks with acceptance criteria.
 
-## Remaining
-- P4: Production readiness (Docker, secrets, scaling, monitoring) is not yet implemented.
+Current status (accurate to repository)
+
+- Foundation (P0): Core TypeScript source and connection lifecycle helpers exist (`src/actualConnection.ts`). Basic health endpoint design is present. A zod-based `src/config.ts` file was prepared and should be reviewed for full adoption.
+- Tool generation (P1): The generator (`scripts/generate-tools-node.js`) and the OpenAPI fragment `scripts/openapi/actual-openapi.yaml` were used to generate many tool stubs under `src/tools/`. `src/tools/index.ts` is auto-generated.
+- Adapter (P1.5): `src/lib/actual-adapter.ts` now implements thin wrappers for several Actual API methods (getAccounts, addTransactions, importTransactions, getTransactions, getCategories, createCategory, getPayees, createPayee, budgets methods, createAccount, updateAccount, getAccountBalance). These wrappers include a small concurrency limiter, retry/backoff and observability hooks.
+- Tests & CI (P3): A new smoke test `tests/unit/generated_tools.smoke.test.js` exercises all generated tools with a monkeypatched adapter. The CI workflow (`.github/workflows/ci.yml`) was updated to run the existing unit smoke tests, the generated tools smoke test, and Playwright e2e smoke runs on PRs to `develop`/`main`.
+- Production readiness (P4): Partial scaffolding exists (`docs/deploy.md`, Dockerfile example), but secrets-handling, k8s probes, rate-limiting library replacement and production-grade monitoring need completion.
+
+What changed in the repo during the audit
+- Expanded `scripts/openapi/actual-openapi.yaml` with high-value endpoints and re-ran the generator.
+- Added adapter wrappers and exported them as the adapter default so generated tool modules can call `adapter.<method>()`.
+- Added smoke tests for generated tools and wired that test into CI.
+
+Next immediate PR-sized tasks (recommended order)
+
+1) Normalize tool input schemas (High priority)
+  - Problem: Several generated tools still use `z.any()` or have TODO output types.
+  - Files to change: `src/tools/*.ts` for tools with `InputSchema = z.any()` or TODO output comments.
+  - Work: For each high-value tool (accounts_create, transactions_import, transactions_get, budgets_setAmount, categories_create, payees_create), refine InputSchema using the OpenAPI schema or hand-write minimal zod schemas for required fields.
+  - Tests: Add a small unit smoke test per tool (mirror pattern in `tests/unit/transactions_create.test.js`) that asserts inputSchema rejects invalid input and the tool.call invokes the adapter stub.
+  - Acceptance: `npm run build` passes; per-tool smoke tests validate schema and call path.
+
+2) Finish mapping for the remainder of Actual API (Medium priority)
+  - Problem: API_TOOL_MAP in `src/actualToolsManager.ts` lists more endpoints than currently generated.
+  - Work: Extend `scripts/openapi/actual-openapi.yaml` to include the remaining endpoints (rules, schedules, misc endpoints like runImport, runBankSync, runQuery) and run generator.
+  - Tests: Generated tools smoke test will catch runtime issues; add targeted unit tests for critical endpoints.
+  - Acceptance: `node scripts/generate-tools-node.js` generates stubs for the remaining endpoints and tool verification passes (`node scripts/verify-tools.js`).
+
+3) Hardening adapter and replace in-memory limiter (Medium priority)
+  - Problem: current concurrency limiter is in-memory and naive; production should use `bottleneck` or `p-queue`.
+  - Files to change: `src/lib/actual-adapter.ts` replace concurrency implementation with Bottleneck; add configuration via `src/config.ts`.
+  - Tests: Unit tests simulating concurrency and transient failures validating retry/backoff.
+  - Acceptance: under a small local load test, adapter respects concurrency limits and retries transient failures.
+
+4) Improve capabilities & LibreChat UX (Medium priority)
+  - Problem: Some tools don't include examples or robust input metadata.
+  - Files to change: `src/lib/ActualMCPConnection.ts` `fetchCapabilities()` to include tool descriptions, input JSON Schema (via zod -> JSON Schema), and examples where available.
+  - Tests: Unit test that calls `fetchCapabilities()` and validates shape including an example tool with JSON Schema.
+  - Acceptance: LibreChat or MCP client can render the tool forms for at least the primary flows (accounts, transactions, budgets).
+
+5) CI / PR automation & branch protection (Low priority)
+  - Problem: local automation exists; automatic PR creation & merging requires GitHub credentials/config.
+  - Work: Prepare automation-ready branches and a GitHub Action to auto-merge PRs with a label when CI passes (note: requires repo admin setup / token to enable auto-merge flow).
+  - Acceptance: a PR labeled `automerge` is merged when CI is green and required approvals are present (requires org-level configuration).
+
+6) Production readiness tasks (P4) — secrets, Docker, observability (Low priority)
+  - Files: Dockerfile, docker-compose.prod.yml, `src/observability.ts`, `/metrics` endpoint wiring, k8s manifest templates.
+  - Acceptance: Container passes a simple health check and exposes `/metrics` when `prom-client` is available.
+
+Developer workflow recommendations
+- Make one small PR per item above. Each PR should include one test and CI must pass.
+- Use `scripts/generate-tools-node.js` to update tool stubs. Generated files are idempotent and will skip hand-edited files; commit the generator and the resulting new files in the same PR.
+
+If you want, I'll prepare the next PR automations:
+- Option A: Normalize the top 6 tool input schemas and add per-tool smoke tests.
+- Option B: Replace the in-memory concurrency with Bottleneck and add a concurrency test.
+
+Tell me which PR to prepare next and I'll generate the patch, update tests, and run the local verification steps.
 
 ---
 

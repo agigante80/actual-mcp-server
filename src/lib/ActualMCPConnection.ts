@@ -2,6 +2,7 @@
 import { EventEmitter } from 'events';
 import * as actual from '@actual-app/api';
 import actualToolsManager from '../actualToolsManager.js';
+import adapter from './actual-adapter.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 
@@ -22,6 +23,15 @@ export class ActualMCPConnection extends EventEmitter {
       models: { listChanged: false },
       logging: { listChanged: false },
     };
+
+    // Re-emit adapter notifications as connection-level 'progress' events
+    try {
+      adapter.notifications.on('progress', (token: string, payload: any) => {
+        this.emit('progress', { token, payload });
+      });
+    } catch (e) {
+      // ignore if adapter doesn't expose notifications yet
+    }
   }
 
   /** Called by the MCP client to fetch current capabilities */

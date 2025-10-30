@@ -1,5 +1,18 @@
 # Actual MCP Server
 
+This repository is an MCP bridge exposing Actual Finance APIs as MCP tools.
+
+Docker
+------
+Build and run with Docker:
+
+```bash
+docker build -t actual-mcp-server:latest .
+docker run -e ACTUAL_SERVER_URL="https://actual.example" -e ACTUAL_PASSWORD_FILE=/run/secrets/actual_password -p 3000:3000 actual-mcp-server:latest
+```
+
+See `docs/deploy.md` for more details.
+
 A lightweight Node.js service that connects [Actual Finance](https://actualbudget.org/) to clients via the MCP protocol.  
 Currently, this server focuses on integration with [LibreChat](https://github.com/danny-avila/LibreChat) but future efforts will include testing with other MCP-compatible clients.
 
