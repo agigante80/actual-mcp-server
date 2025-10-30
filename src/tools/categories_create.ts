@@ -3,7 +3,10 @@ import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({  });
+const InputSchema = z.object({
+  name: z.string().min(1).describe('Category name'),
+  parentId: z.string().optional(),
+});
 
 // RESPONSE_TYPE: string
 type Output = any; // refine using generated types (paths['/categories']['post'])
