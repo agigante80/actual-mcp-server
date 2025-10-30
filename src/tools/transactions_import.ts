@@ -3,7 +3,17 @@ import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.any();
+const TransactionInput = z.object({
+  accountId: z.string().optional(),
+  amount: z.number().optional(),
+  payee: z.string().optional(),
+  date: z.string().optional(),
+});
+
+const InputSchema = z.union([
+  z.array(TransactionInput),
+  z.object({ accountId: z.string().optional(), transactions: z.array(TransactionInput) }),
+]);
 
 // RESPONSE_TYPE: object
 type Output = any; // refine using generated types (paths['/transactions/import']['post'])
@@ -20,8 +30,8 @@ const tool: ToolDefinition = {
       const res = await adapter.importTransactions(undefined, input);
       return { result: res };
     }
-    const accountId = input.accountId ?? undefined;
-    const txs = input.transactions ?? input.items ?? input;
+    const accountId = (input as any).accountId ?? undefined;
+    const txs = (input as any).transactions ?? (input as any);
     const res = await adapter.importTransactions(accountId, txs);
     return { result: res };
 
