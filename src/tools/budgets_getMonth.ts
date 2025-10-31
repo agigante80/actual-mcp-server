@@ -6,13 +6,13 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({ month: z.string().optional() });
 
 // RESPONSE_TYPE: BudgetMonth
-type Output = any; // refine using generated types (paths['/budgets/month']['get'])
+type Output = unknown; // refine using generated types (paths['/budgets/month']['get'])
 
 const tool: ToolDefinition = {
   name: 'actual.budgets.getMonth',
   description: "Get budget month",
   inputSchema: InputSchema,
-    call: async (args: unknown, _meta?: any) => {
+    call: async (args: unknown, _meta?: unknown) => {
       const input = InputSchema.parse(args || {});
       const result = await adapter.getBudgetMonth(input.month);
       return { result };

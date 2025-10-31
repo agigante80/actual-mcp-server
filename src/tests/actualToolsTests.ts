@@ -12,8 +12,9 @@ export async function testAllTools() {
       logger.info(`⚙️  Testing tool: ${name}`);
       const result = await actualToolsManager.callTool(name, {}); // pass empty args; customize if needed
       logger.info(`✅ Tool ${name} output: ${JSON.stringify(result, null, 2)}`);
-    } catch (err: any) {
-      logger.error(`❌ Tool ${name} test failed: ${err.message || err}`);
+    } catch (err: unknown) {
+      const message = err && typeof (err as { message?: unknown })?.message === 'string' ? (err as { message: string }).message : String(err);
+      logger.error(`❌ Tool ${name} test failed: ${message}`);
       throw err; // stop on first failure
     }
   }
