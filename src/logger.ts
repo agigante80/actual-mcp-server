@@ -49,7 +49,9 @@ const transports: winston.transport[] = [];
 // file transports when enabled (capture debug+)
 if (STORE_LOGS) {
   const createDailyRotateTransport = (level: string) =>
-    new (winston.transports as any).DailyRotateFile({
+    // access DailyRotateFile transport dynamically; keep runtime behavior but avoid `as any`
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new ((winston.transports as unknown as Record<string, any>)['DailyRotateFile'])({
       level,
       dirname: LOG_DIR,
       filename: `${level}-%DATE%.log`,

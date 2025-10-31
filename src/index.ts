@@ -48,7 +48,7 @@ export {};
   const [{ connectToActual }, { testAllTools }, { ActualMCPConnection }] = await Promise.all([
     import('./actualConnection.js'),
     import('./tests/actualToolsTests.js'),
-    import('./lib/ActualMCPConnection.js'),
+  import('./lib/ActualMCPConnection.js'),
   ]);
 
   const [
@@ -73,11 +73,11 @@ export {};
     import('zod-to-json-schema'),
   ]);
 
-  const logger = (loggerModule as any).default;
+  const logger = (loggerModule as unknown as { default: typeof console }).default;
   const os = osModule as typeof import('os');
-  const { getLocalIp } = utilsModule as any;
-  const actualToolsManager = (actualToolsManagerModule as any).default;
-  const zodToJsonSchema = (zodToJsonSchemaModule as any).zodToJsonSchema;
+  const { getLocalIp } = (utilsModule as unknown as { getLocalIp: () => string });
+  const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
+  const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: Function }).zodToJsonSchema;
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;
@@ -115,8 +115,12 @@ export {};
       try {
         await testAllTools();
         logger.info('✅ All tool tests completed.');
-      } catch (err: any) {
-        logger.error('❌ Tool tests failed:', err.message || err);
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          logger.error('❌ Tool tests failed: %s', err.message);
+        } else {
+          logger.error('❌ Tool tests failed: %o', err);
+        }
         process.exit(1);
       }
       process.exit(0);
@@ -129,7 +133,7 @@ export {};
     const implementedTools = actualToolsManager.getToolNames();
 
     // Extract schemas map with tool name → JSON schema
-    const toolSchemas: Record<string, any> = {};
+    const toolSchemas: Record<string, unknown> = {};
     for (const toolName of implementedTools) {
       const tool = actualToolsManager.getTool(toolName);
       if (tool?.inputSchema) {
@@ -206,11 +210,13 @@ export {};
         await testMcpClient(advertisedUrl, PORT, HTTP_PATH);
         logger.info('✅ MCP client-side tests passed');
         process.exit(0);
-      } catch (err: any) {
+      } catch (err: unknown) {
         // Log the full error object and stack so we get useful debug info
-        logger.error('❌ MCP client-side tests failed: %o', err);
-        if (err && err.stack) {
-          logger.error(err.stack);
+        if (err instanceof Error) {
+          logger.error('❌ MCP client-side tests failed: %s', err.message);
+          if (err.stack) logger.error(err.stack);
+        } else {
+          logger.error('❌ MCP client-side tests failed: %o', err);
         }
         process.exit(1);
       }

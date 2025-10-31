@@ -3,16 +3,8 @@ import * as ActualApi from '@actual-app/api';
 import logger from './logger.js';
 import { z } from 'zod';
 
-const ActualApiAny = ActualApi as any;
-
-import { ZodTypeAny } from 'zod';
-
-type ToolDefinition = {
-  name: string;
-  description: string;
-  call: (args: any) => Promise<any>;
-  inputSchema?: ZodTypeAny; 
-};
+import type { ZodTypeAny } from 'zod';
+import type { ToolDefinition } from '../types/tool.d.js';
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -74,51 +66,16 @@ class ActualToolsManager {
   constructor() {}
 
   async initialize() {
-    // 👇 Automated check for missing tools
-    const availableApiKeys = Object.keys(ActualApi);
-
-    const availableTools = Object.keys(API_TOOL_MAP)
-      .filter((apiKey) => availableApiKeys.includes(apiKey))
-      .map((apiKey) => API_TOOL_MAP[apiKey]);
-
-    const missingTools = availableTools.filter(
-      (tool) => !IMPLEMENTED_TOOLS.includes(tool)
-    );
-
-    logger.info('✅ Implemented tools: ' + IMPLEMENTED_TOOLS.join(', '));
-    logger.info('🛠️ Available but not yet implemented: ' + missingTools.join(', '));
-
-    this.tools.set('get_accounts', {
-      name: 'get_accounts',
-      description: 'List all accounts',
-      call: async () => ActualApiAny.getAccounts(),
-      inputSchema: GetAccountsInputSchema,
-    });
-
-    this.tools.set('get_account_balance', {
-      name: 'get_account_balance',
-      description: 'Get the balance for an account, optionally as of a cutoff date',
-      call: async (args) => {
-        // Validate input with schema (id is optional)
-        const validated = GetAccountBalanceInputSchema.parse(args || {});
-
-        // If no id provided, fall back to the first account
-        let accountId = validated.id;
-        if (!accountId) {
-          const accounts = await ActualApiAny.getAccounts();
-          if (!Array.isArray(accounts) || accounts.length === 0) {
-            throw new Error('No accounts available to determine default account id');
-          }
-          accountId = accounts[0].id;
-        }
-
-        // getAccountBalance(id, cutoff?) — pass cutoff if provided
-        return ActualApiAny.getAccountBalance(accountId, validated.cutoff);
-      },
-      inputSchema: GetAccountBalanceInputSchema,
-    });
-
-    logger.info(`🔗 Loaded ${this.tools.size} Actual tools for MCP bridge`);
+    // Dynamically import all tool modules from src/tools/index.ts
+    const toolModules = await import('./tools/index.js');
+    let count = 0;
+    for (const [key, tool] of Object.entries(toolModules)) {
+      if (tool && tool.name) {
+        this.tools.set(tool.name, tool);
+        count++;
+      }
+    }
+    logger.info(`🔗 Loaded ${count} tool modules from src/tools`);
   }
 
   getToolNames(): string[] {
@@ -129,7 +86,7 @@ class ActualToolsManager {
     return this.tools.get(name);
   }
 
-  async callTool(name: string, args: any): Promise<any> {
+  async callTool(name: string, args: unknown): Promise<unknown> {
     const tool = this.getTool(name);
     if (!tool) throw new Error(`Tool not found: ${name}`);
     try {
@@ -142,8 +99,10 @@ class ActualToolsManager {
 
       logger.info(`[TOOL RESULT] ${name}: ${JSON.stringify(safe)}`);
       return safe;
-    } catch (err: any) {
-      logger.error(`[TOOL ERROR] ${name}:`, err.message || err);
+    } catch (err: unknown) {
+      const e = err as Error | { message?: unknown } | undefined;
+      const msg = e && typeof e.message === 'string' ? e.message : String(err);
+      logger.error(`[TOOL ERROR] ${name}: ${msg}`);
       throw err;
     }
   }

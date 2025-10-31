@@ -1,0 +1,330 @@
+openapi: 3.0.0
+info:
+  title: Actual Finance API (Expanded for generator)
+  version: 0.1.0
+paths:
+  /accounts:
+    get:
+      operationId: accounts_list
+      summary: List all accounts
+      responses:
+        '200':
+          description: List of accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Account'
+    post:
+      operationId: accounts_create
+      summary: Create an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+      responses:
+        '200':
+          description: Created account id
+          content:
+            application/json:
+              schema:
+                type: string
+    put:
+      operationId: accounts_update
+      summary: Update an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Account'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: null
+  /accounts/balance:
+    get:
+      operationId: accounts_get_balance
+      summary: Get account balance
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: string
+        - name: cutoff
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Account balance number
+          content:
+            application/json:
+              schema:
+                type: number
+
+  /transactions:
+    post:
+      operationId: transactions_create
+      summary: Create a transaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionInput'
+      responses:
+        '200':
+          description: Created transaction
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+    get:
+      operationId: transactions_get
+      summary: Get transactions for an account and date range
+      parameters:
+        - name: accountId
+          in: query
+          schema:
+            type: string
+        - name: startDate
+          in: query
+          schema:
+            type: string
+        - name: endDate
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Transactions list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+  /transactions/import:
+    post:
+      operationId: transactions_import
+      summary: Import transactions (reconcile, avoid duplicates)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransactionInputArray'
+      responses:
+        '200':
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  added:
+                    type: array
+                    items:
+                      type: string
+                  updated:
+                    type: array
+                    items:
+                      type: string
+                  errors:
+                    type: array
+                    items:
+                      type: string
+
+  /categories:
+    get:
+      operationId: categories_get
+      summary: Get categories
+      responses:
+        '200':
+          description: Category list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Category'
+    post:
+      operationId: categories_create
+      summary: Create category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Category'
+      responses:
+        '200':
+          description: Created category id
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /payees:
+    get:
+      operationId: payees_get
+      summary: Get payees
+      responses:
+        '200':
+          description: Payee list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Payee'
+    post:
+      operationId: payees_create
+      summary: Create payee
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Payee'
+      responses:
+        '200':
+          description: Created payee id
+          content:
+            application/json:
+              schema:
+                type: string
+
+  /budgets/months:
+    get:
+      operationId: budgets_getMonths
+      summary: Get budget months
+      responses:
+        '200':
+          description: months array
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /budgets/month:
+    get:
+      operationId: budgets_getMonth
+      summary: Get budget month
+      parameters:
+        - name: month
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Budget object
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BudgetMonth'
+    post:
+      operationId: budgets_setAmount
+      summary: Set budget amount
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BudgetSetRequest'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: null
+
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        balance:
+          type: number
+    TransactionInput:
+      type: object
+      properties:
+        accountId:
+          type: string
+        amount:
+          type: number
+        payee:
+          type: string
+        date:
+          type: string
+          format: date
+    TransactionInputArray:
+      type: array
+      items:
+        $ref: '#/components/schemas/TransactionInput'
+    Transaction:
+      allOf:
+        - $ref: '#/components/schemas/TransactionInput'
+        - type: object
+          properties:
+            id:
+              type: string
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+        description:
+          type: string
+    Payee:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        notes:
+          type: string
+    BudgetCategory:
+      type: object
+      properties:
+        categoryId:
+          type: string
+        amount:
+          type: number
+    BudgetMonth:
+      type: object
+      properties:
+        month:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetCategory'
+    BudgetSetRequest:
+      type: object
+      properties:
+        month:
+          type: string
+        categoryId:
+          type: string
+        amount:
+          type: number

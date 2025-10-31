@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [ develop, main ]
+  pull_request:
+    branches: [ develop, main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Cache node modules
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+      - name: Install dependencies
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run adapter unit tests
+        run: npm run test:adapter
+      - name: Run unit smoke tests
+        run: npm run test:unit-js
+      - name: Run generated tools smoke tests
+        run: node tests/unit/generated_tools.smoke.test.js
+      - name: Run Playwright smoke tests
+        run: npm run test:e2e

@@ -1,5 +1,5 @@
 // src/server/wsServer.ts
-import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
+import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import { WebSocketServer } from 'ws';
 import type { WebSocket as WSClient } from 'ws';
 import logTransportWithDirection from '../logger.js';

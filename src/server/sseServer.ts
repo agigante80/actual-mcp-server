@@ -1,5 +1,5 @@
 // src/server/sseServer.ts
-import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
+import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import express from 'express';
 import { createServer } from 'http';
 import type { Request, Response } from 'express';

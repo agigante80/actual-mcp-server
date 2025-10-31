@@ -1,16 +1,18 @@
 // src/server/httpServer.ts
-import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
+import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import express, { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { Server } from "./streamable-http.js";
+import { StreamableHTTPServerTransport } from './streamable-http.js';
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+} from "./streamable-http.js";
 import logger from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
+import { getConnectionState } from '../actualConnection.js';
+import observability from '../observability.js';
 
 export async function startHttpServer(
   mcp: ActualMCPConnection,
@@ -20,7 +22,7 @@ export async function startHttpServer(
   implementedTools: string[],                    // was passed by index.ts
   serverDescription: string,                     // was passed by index.ts
   serverInstructions: string,                    // was passed by index.ts
-  toolSchemas: Record<string, any>,              // was passed by index.ts
+  toolSchemas: Record<string, unknown>,              // was passed by index.ts
   bindHost = 'localhost',
   advertisedUrl?: string
 ) {
@@ -39,7 +41,7 @@ export async function startHttpServer(
       ? capabilities
       : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}) };
 
-    const serverOptions: any = {
+  const serverOptions: Record<string, unknown> = {
       // Provide instructions and capabilities so the SDK initialize response is correct
       instructions: serverInstructions || "Welcome to the Actual MCP server.",
       serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
@@ -63,7 +65,7 @@ export async function startHttpServer(
       logger.debug('[TOOLS LIST] Listing available tools');
       const tools = toolsList.map((name: string) => {
         const schemaFromParam = toolSchemas && toolSchemas[name];
-        const schemaFromManager = (actualToolsManager as any)?.getToolSchema?.(name);
+  const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
         const schema = schemaFromParam || schemaFromManager || {};
         return {
           name,
@@ -75,19 +77,26 @@ export async function startHttpServer(
     });
 
     // Call tool handler -> proxy to mcp.executeTool or to actualToolsManager
-    server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params as any;
+    server.setRequestHandler(CallToolRequestSchema, async (request: unknown) => {
+      const req = request as { params?: Record<string, unknown> } | undefined;
+      const params = req?.params ?? {};
+      const rawName = params.name;
+      const args = params.arguments;
+      if (typeof rawName !== 'string') {
+        throw new Error('Tool name must be a string');
+      }
+      const name = rawName;
       logger.debug(`[TOOL CALL] ${name} args=${JSON.stringify(args)}`);
       // Prefer ActualMCPConnection executor if provided
-      if (typeof (mcp as any).executeTool === 'function') {
-        const result = await (mcp as any).executeTool(name, args ?? {});
+      if (typeof (mcp as unknown as { executeTool?: Function }).executeTool === 'function') {
+        const result = await (mcp as unknown as { executeTool?: (n: string, a?: unknown) => Promise<unknown> }).executeTool!(name, args ?? {});
         return {
           content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
         };
       }
       // fallback: attempt actualToolsManager
-      if (actualToolsManager && typeof (actualToolsManager as any).invoke === 'function') {
-        const r = await (actualToolsManager as any).invoke(name, args ?? {});
+      if (actualToolsManager && typeof (actualToolsManager as unknown as { invoke?: Function }).invoke === 'function') {
+        const r = await (actualToolsManager as unknown as { invoke?: (n: string, a?: unknown) => Promise<unknown> }).invoke!(name, args ?? {});
         return { content: [{ type: 'text', text: JSON.stringify(r) }] };
       }
       throw new Error(`Tool executor not available for ${name}`);
@@ -130,9 +139,10 @@ export async function startHttpServer(
         await server.connect(transport);
         try {
           await transport.handleRequest(req, res, req.body);
-        } catch (err: any) {
+        } catch (err: unknown) {
           logger.error('Transport.handleRequest failed during initialize: %o', err);
-          if (err && err.stack) logger.error(err.stack);
+          const e = err as Error | { stack?: unknown } | undefined;
+          if (e && typeof e.stack === 'string') logger.error(e.stack);
           throw err;
         }
         return;
@@ -156,9 +166,10 @@ export async function startHttpServer(
       }
 
       await transport.handleRequest(req, res, req.body);
-    } catch (err: any) {
+      } catch (err: unknown) {
       logger.error('POST handler error: %o', err);
-      if (err && err.stack) logger.error(err.stack);
+      const e2 = err as Error | { stack?: unknown } | undefined;
+      if (e2 && typeof e2.stack === 'string') logger.error(e2.stack);
       if (!res.headersSent) {
         res.status(500).json({ jsonrpc: '2.0', id: payload?.id ?? null, error: { code: -32603, message: String(err) } });
       }
@@ -211,7 +222,18 @@ export async function startHttpServer(
   });
 
   app.get('/health', (_req, res) => {
-    res.json({ status: 'ok', transport: 'streamable-http', activeSessions: transports.size });
+    const state = getConnectionState();
+    res.json({ status: state.initialized ? 'ok' : 'not-initialized', ...state, transport: 'streamable-http', activeSessions: transports.size });
+  });
+
+  app.get('/metrics', async (_req, res) => {
+    const txt = await observability.getMetricsText();
+    if (!txt) {
+      res.status(204).end();
+      return;
+    }
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+    res.send(txt);
   });
 
   const listener = app.listen(port, () => {

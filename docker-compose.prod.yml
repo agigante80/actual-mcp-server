@@ -1,0 +1,23 @@
+version: '3.8'
+services:
+  actual-mcp:
+    build: .
+    image: actual-mcp-server:latest
+    restart: unless-stopped
+    environment:
+      - ACTUAL_SERVER_URL
+      - ACTUAL_PASSWORD
+      - ACTUAL_BUDGET_SYNC_ID
+    secrets:
+      - actual_password
+    volumes:
+      - data:/data
+    ports:
+      - 3000:3000
+
+secrets:
+  actual_password:
+    file: ./secrets/actual_password
+
+volumes:
+  data:

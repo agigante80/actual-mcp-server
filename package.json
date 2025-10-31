@@ -9,6 +9,10 @@
     "build": "tsc",
     "dev": "npm run build && node register-tsconfig-paths.js -- --debug",
     "start": "node dist/index.js",
+    "generate-tools": "node scripts/generate-tools-node.js",
+    "verify-tools": "npm run build && node scripts/verify-tools.js",
+    "test:unit-js": "node tests/unit/transactions_create.test.js",
+    "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
     "test:mcp-client": "npm run build && node register-tsconfig-paths.js -- --http --test-mcp-client"
   },
@@ -35,9 +39,11 @@
     "@types/node": "^24.5.2",
     "@types/ws": "^8.18.1",
     "nodemon": "^3.0.0",
+    "openapi-typescript": "^7.10.1",
     "ts-node": "^10.9.1",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.9.2"
+    "typescript": "^5.9.2",
+    "yaml": "^2.8.1"
   },
   "license": "MIT",
   "directories": {
