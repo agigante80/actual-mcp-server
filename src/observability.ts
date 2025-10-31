@@ -22,9 +22,13 @@ async function init() {
     registry = prom.register as RegistryLike;
     // Create a Counter if available (some versions export Counter class)
     if (typeof prom.Counter === 'function') {
-      // runtime: instantiate Counter
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      counter = new (prom.Counter as any)({ name: 'actual_tool_calls_total', help: 'Total tool calls', labelNames: ['tool'] }) as CounterLike;
+      try {
+        // prom.Counter may be a class; construct via known options shape
+        const CounterClass = prom.Counter as unknown as new (opts: { name: string; help: string; labelNames?: string[] }) => { inc: (labels?: Record<string, string>, v?: number) => void };
+        counter = new CounterClass({ name: 'actual_tool_calls_total', help: 'Total tool calls', labelNames: ['tool'] });
+      } catch {
+        counter = { inc: (_labels?: Record<string, string>, _v?: number) => {} };
+      }
     } else {
       // fallback: try to use prom.register.getSingleMetric or similar; if not present, noop
       counter = {
