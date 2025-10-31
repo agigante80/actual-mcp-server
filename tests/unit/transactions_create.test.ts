@@ -1,4 +1,4 @@
-import tool from '../../src/tools/transactions_create.ts';
+import tool from '../../src/tools/transactions_create.js';
 
 async function run() {
   console.log('Running transactions_create InputSchema smoke tests');
