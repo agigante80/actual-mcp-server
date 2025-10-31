@@ -78,8 +78,8 @@ export async function startHttpServer(
 
     // Call tool handler -> proxy to mcp.executeTool or to actualToolsManager
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const params = (request && (request as unknown as { params?: unknown }).params) ?? {};
-      const { name, arguments: args } = (params as any) as { name?: string; arguments?: unknown };
+  const params = (request && (request as unknown as { params?: unknown }).params) ?? {};
+  const { name, arguments: args } = params as { name?: string; arguments?: unknown };
       logger.debug(`[TOOL CALL] ${name} args=${JSON.stringify(args)}`);
       // Prefer ActualMCPConnection executor if provided
       if (typeof (mcp as unknown as { executeTool?: (...a: unknown[]) => unknown })?.executeTool === 'function') {

@@ -48,7 +48,12 @@ export async function connectToActual() {
       // but the current types expect a single string id. Try the untyped call first,
       // fall back to the typed call if that fails.
       try {
-        await (api as any).downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
+        const maybe = api as unknown as { downloadBudget?: (id: string, opts?: { password?: string }) => Promise<unknown> };
+        if (typeof maybe.downloadBudget === 'function') {
+          await maybe.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
+        } else {
+          await api.downloadBudget(BUDGET_SYNC_ID);
+        }
       } catch (e) {
         logger.warn('downloadBudget with password failed, falling back to plain downloadBudget:', e);
         await api.downloadBudget(BUDGET_SYNC_ID);
@@ -62,8 +67,9 @@ export async function connectToActual() {
 
       // Prefer the documented shutdown method only
       try {
-        if (typeof (api as any).shutdown === 'function') {
-          await (api as any).shutdown();
+        const maybe = api as unknown as { shutdown?: () => Promise<unknown> };
+        if (typeof maybe.shutdown === 'function') {
+          await maybe.shutdown();
         } else {
           logger.warn('No shutdown method found on Actual API; leaving session as-is.');
         }
@@ -94,8 +100,9 @@ export async function connectToActual() {
 
 export async function shutdownActual() {
   try {
-    if (typeof (api as any).shutdown === 'function') {
-      await (api as any).shutdown();
+    const maybe = api as unknown as { shutdown?: () => Promise<unknown> };
+    if (typeof maybe.shutdown === 'function') {
+      await maybe.shutdown();
     }
     initialized = false;
     logger.info('Actual API shutdown complete.');

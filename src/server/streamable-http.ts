@@ -144,10 +144,9 @@ export class StreamableHTTPServerTransport {
 
   async close() {
     this.closed = true;
-    if (this.server && typeof (this.server as any).removeTransport === 'function') {
-      // call removeTransport if available (some Server implementations provide it)
+    if (this.server && typeof (this.server as unknown as ServerWithRemove).removeTransport === 'function') {
       try {
-        (this.server as unknown as { removeTransport?: (t: any) => void }).removeTransport?.(this);
+        (this.server as ServerWithRemove).removeTransport?.(this);
       } catch {}
     }
   }
