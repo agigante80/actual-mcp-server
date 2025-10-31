@@ -5,9 +5,9 @@ import adapter from '../lib/actual-adapter.js';
 
 const TransactionInput = z.object({
   accountId: z.string().optional(),
-  amount: z.number().optional(),
+  amount: z.number().describe('Transaction amount'),
   payee: z.string().optional(),
-  date: z.string().optional(),
+  date: z.string().describe('Date in YYYY-MM-DD format'),
 });
 
 const InputSchema = z.union([
