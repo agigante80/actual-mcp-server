@@ -10,14 +10,15 @@ if (!fs.existsSync(toolsDir)) fs.mkdirSync(toolsDir, { recursive: true });
 
 const openapi = parse(fs.readFileSync(openapiPath, 'utf8'));
 
-function toZodType(schema: any): string {
+function toZodType(schema: unknown): string {
   if (!schema) return 'z.any()';
-  if (schema.type === 'string') return 'z.string()';
-  if (schema.type === 'number' || schema.type === 'integer') return 'z.number()';
-  if (schema.type === 'boolean') return 'z.boolean()';
-  if (schema.type === 'array') return `z.array(${toZodType(schema.items)})`;
-  if (schema.type === 'object') {
-    const props = schema.properties || {};
+  const s = schema as any;
+  if (s.type === 'string') return 'z.string()';
+  if (s.type === 'number' || s.type === 'integer') return 'z.number()';
+  if (s.type === 'boolean') return 'z.boolean()';
+  if (s.type === 'array') return `z.array(${toZodType(s.items)})`;
+  if (s.type === 'object') {
+    const props = s.properties || {};
     const entries = Object.entries(props).map(
       ([k, v]) => `${k}: ${toZodType(v)}`
     );

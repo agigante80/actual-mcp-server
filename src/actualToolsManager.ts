@@ -67,11 +67,12 @@ class ActualToolsManager {
 
   async initialize() {
     // Dynamically import all tool modules from src/tools/index.ts
-    const toolModules = await import('./tools/index.js');
+    const toolModules = (await import('./tools/index.js')) as Record<string, unknown>;
     let count = 0;
     for (const [key, tool] of Object.entries(toolModules)) {
-      if (tool && tool.name) {
-        this.tools.set(tool.name, tool);
+      const t = tool as unknown as { name?: string };
+      if (t && t.name) {
+        this.tools.set(t.name, tool as unknown as ToolDefinition);
         count++;
       }
     }

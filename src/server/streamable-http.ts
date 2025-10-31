@@ -154,3 +154,10 @@ export class StreamableHTTPServerTransport {
     }
   }
 }
+
+// Provide a typed helper implementation for Server.removeTransport callers in case
+// the runtime Server wants to call it. This keeps compatibility with earlier code
+// that called removeTransport on the server instance.
+export interface ServerWithRemove extends Server {
+  removeTransport?(t: StreamableHTTPServerTransport): void;
+}
