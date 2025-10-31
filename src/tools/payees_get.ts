@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
+import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({});
 
@@ -13,9 +14,8 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: any, _meta?: any) => {
     InputSchema.parse(args || {});
-    // TODO: implement call to Actual API using generated client/adapters
-    return { result: null };
-
+    const result = await adapter.getPayees();
+    return { result };
   },
 };
 
