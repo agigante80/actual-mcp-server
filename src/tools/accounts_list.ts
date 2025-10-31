@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import type { paths } from '../../generated/actual-client/types.js';
+import type { paths, components } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({});
 
-type Output = any; // refine using generated types (paths['/accounts']['get'])
+type Output = components['schemas']['Account'][];
 
 const tool: ToolDefinition = {
   name: 'actual.accounts.list',

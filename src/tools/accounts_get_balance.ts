@@ -6,7 +6,7 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({ "id": z.string().optional(), "cutoff": z.string().optional() });
 
 // RESPONSE_TYPE: number
-type Output = any; // refine using generated types (paths['/accounts/balance']['get'])
+type Output = number;
 
 const tool: ToolDefinition = {
   name: 'actual.accounts.get.balance',
