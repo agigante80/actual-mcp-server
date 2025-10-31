@@ -1,3 +1,39 @@
+# Actual MCP Server — Business & Architectural Plan
+
+Date: 2025-10-31
+
+Purpose
+-------
+This is the single, top-level plan for the repository. It contains the business goals and the architectural checklist. Mark steps done as they complete. Each checklist item refers to a detailed implementation in `docs/steps.md`.
+
+Business goals (why we build this)
+---------------------------------
+1. Provide a stable bridge that exposes a user's Actual finance data as MCP tools for LibreChat and other MCP clients.
+2. Keep the bridge safe and auditable: strict input validation, small attack surface, observable behavior.
+3. Allow incremental coverage: generate tools from OpenAPI, land small PRs to expand coverage.
+4. Be production-ready: Dockerized, secrets-managed, rate-limited, observable, and health-checked.
+
+High-level success metrics
+--------------------------
+- All core tools (accounts, transactions, budgets, categories, payees) have Zod input schemas and smoke tests.
+- CI runs and passes on PRs: build + adapter tests + generated-tools smoke + minimal e2e smoke.
+- Production: container starts, responds to `/health` and `/metrics`, and respects concurrency limits.
+
+Top-level checklist (business + architecture)
+-------------------------------------------
+Mark items DONE when implemented and verified in CI.
+
+- [ ] P0: Foundation — TypeScript source, config validation, connection lifecycle, health endpoints, and CI (build + tests).  See `docs/steps.md#p0-foundation`.
+- [ ] P1: Tool generation pipeline — OpenAPI → typed client → tool generator → dynamic registration. See `docs/steps.md#p1-tool-generation`.
+- [ ] P2: Core tool coverage — implement input schemas and smoke tests for accounts, transactions, budgets, categories, payees. See `docs/steps.md#p2-core-tools`.
+- [ ] P3: Adapter hardening — concurrency limiter (Bottleneck), retries, normalization, observability. See `docs/steps.md#p3-adapter`.
+- [ ] P4: UX & capabilities — fetchCapabilities returns JSON Schema, friendly descriptions, and examples for LibreChat. See `docs/steps.md#p4-capabilities`.
+- [ ] P5: Tests & CI automation — add/maintain smoke tests, Playwright e2e smoke, and gating rules. See `docs/steps.md#p5-ci`.
+- [ ] P6: Production readiness — Dockerfile, secrets, metrics, k8s manifests, and deployment runbook. See `docs/steps.md#p6-production`.
+
+If you want me to commit and open PRs for any subset of the checklist, tell me which items to start with (e.g., P0 then P2). I'll create focused branches and PRs with tests included.
+
+Detailed task descriptions live in `docs/steps.md`.
 # Project Progress (as of Oct 30, 2025)
 
 ## Completed
