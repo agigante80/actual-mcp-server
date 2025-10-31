@@ -6,13 +6,13 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({ accountId: z.string().optional(), startDate: z.string().optional(), endDate: z.string().optional() });
 
 // RESPONSE_TYPE: Transaction[]
-type Output = any; // refine using generated types (paths['/transactions']['get'])
+type Output = unknown; // refine using generated types (paths['/transactions']['get'])
 
 const tool: ToolDefinition = {
   name: 'actual.transactions.get',
   description: "Get transactions for an account and date range",
   inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     const result = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
     return { result };

@@ -6,13 +6,13 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({});
 
 // RESPONSE_TYPE: Payee[]
-type Output = any; // refine using generated types (paths['/payees']['get'])
+type Output = unknown; // refine using generated types (paths['/payees']['get'])
 
 const tool: ToolDefinition = {
   name: 'actual.payees.get',
   description: "Get payees",
   inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     InputSchema.parse(args || {});
     const result = await adapter.getPayees();
     return { result };

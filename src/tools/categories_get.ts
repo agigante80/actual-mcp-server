@@ -6,13 +6,13 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({});
 
 // RESPONSE_TYPE: Category[]
-type Output = any; // refine using generated types (paths['/categories']['get'])
+type Output = unknown; // refine using generated types (paths['/categories']['get'])
 
 const tool: ToolDefinition = {
   name: 'actual.categories.get',
   description: "Get categories",
   inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     InputSchema.parse(args || {});
     const result = await adapter.getCategories();
     return { result };

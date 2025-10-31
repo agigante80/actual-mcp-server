@@ -6,16 +6,16 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({ name: z.string().min(1), notes: z.string().optional() });
 
 // RESPONSE_TYPE: string
-type Output = any; // refine using generated types (paths['/payees']['post'])
+type Output = unknown; // refine using generated types (paths['/payees']['post'])
 
 const tool: ToolDefinition = {
   name: 'actual.payees.create',
   description: "Create payee",
   inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     // call adapter to create payee
-    const result = await adapter.createPayee(input as any);
+    const result = await adapter.createPayee(input);
     return { result };
   },
 };

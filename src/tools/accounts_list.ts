@@ -6,13 +6,13 @@ import adapter from '../lib/actual-adapter.js';
 const InputSchema = z.object({});
 
 // RESPONSE_TYPE: Account[]
-type Output = any; // refine using generated types (paths['/accounts']['get'])
+type Output = unknown; // refine using generated types (paths['/accounts']['get'])
 
 const tool: ToolDefinition = {
   name: 'actual.accounts.list',
   description: "List all accounts",
   inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     // call adapter.getAccounts with no args
     const result = await adapter.getAccounts();
     return { result };

@@ -10,13 +10,13 @@ const InputSchema = z.union([
 ]);
 
 // RESPONSE_TYPE: object
-type Output = any; // refine using generated types (paths['/transactions/import']['post'])
+type Output = unknown; // refine using generated types (paths['/transactions/import']['post'])
 
 const tool: ToolDefinition = {
   name: 'actual.transactions.import',
   description: "Import transactions (reconcile, avoid duplicates)",
   inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     const parsed = InputSchema.parse(args || {});
     // allow either { accountId, txs } or raw txs
     let accountId: string | undefined;
