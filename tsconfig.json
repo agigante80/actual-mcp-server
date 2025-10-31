@@ -15,7 +15,8 @@
     "src/**/*",
     "lib/**/*",
     "types/**/*",
-    "generated/**/*"
+    "generated/**/*",
+    "tests/**/*"
   ],
   "exclude": [
     "node_modules",
