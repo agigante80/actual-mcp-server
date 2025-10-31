@@ -1,5 +1,5 @@
 import winston from 'winston';
-import 'winston-daily-rotate-file';
+import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -49,7 +49,7 @@ const transports: winston.transport[] = [];
 // file transports when enabled (capture debug+)
 if (STORE_LOGS) {
   const createDailyRotateTransport = (level: string) =>
-    new (winston.transports as any).DailyRotateFile({
+    new DailyRotateFile({
       level,
       dirname: LOG_DIR,
       filename: `${level}-%DATE%.log`,

@@ -1,6 +1,7 @@
 export async function testMcpClient(advertisedUrl: string, port: number, httpPath: string) {
   // Try builtin fetch or fallback to node-fetch if necessary
-  const fetchFn: typeof fetch = (globalThis as any).fetch ?? (await import('node-fetch')).default;
+  const globalFetch = (globalThis as unknown as { fetch?: typeof fetch }).fetch;
+  const fetchFn = (globalFetch ?? (await import('node-fetch')).default) as unknown as typeof fetch;
 
   const base = new URL(advertisedUrl);
   // quick probe endpoint

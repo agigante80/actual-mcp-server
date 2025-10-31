@@ -48,11 +48,17 @@ export function logTransport(prefix: string, obj: unknown): void {
 // Helper replacer to avoid throwing on circular refs and to truncate very large buffers
 function replacer(_key: string, value: unknown) {
   // Limit Buffer/Uint8Array printing
-  if (value instanceof Uint8Array || (typeof Buffer !== 'undefined' && value instanceof Buffer)) {
-    const buf = value as any;
-    const len = buf.length ?? 0;
+  if (typeof Buffer !== 'undefined' && Buffer.isBuffer(value as any)) {
+    const buf = value as Buffer;
+    const len = buf.length;
     const preview = Array.prototype.slice.call(buf, 0, 64);
     return { _type: 'Buffer', length: len, preview };
+  }
+  if (value instanceof Uint8Array) {
+    const buf = value as Uint8Array;
+    const len = buf.length;
+    const preview = Array.prototype.slice.call(buf, 0, 64);
+    return { _type: 'Uint8Array', length: len, preview };
   }
   return value;
 }
