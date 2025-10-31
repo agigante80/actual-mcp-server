@@ -154,7 +154,7 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
+                  $ref: '#/components/schemas/Category'
     post:
       operationId: categories_create
       summary: Create category
@@ -163,7 +163,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/Category'
       responses:
         '200':
           description: Created category id
@@ -184,7 +184,7 @@ paths:
               schema:
                 type: array
                 items:
-                  type: object
+                  $ref: '#/components/schemas/Payee'
     post:
       operationId: payees_create
       summary: Create payee
@@ -193,7 +193,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/Payee'
       responses:
         '200':
           description: Created payee id
@@ -231,7 +231,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/BudgetMonth'
     post:
       operationId: budgets_setAmount
       summary: Set budget amount
@@ -240,7 +240,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/BudgetSetRequest'
       responses:
         '200':
           description: OK
@@ -283,3 +283,48 @@ components:
           properties:
             id:
               type: string
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        parentId:
+          type: string
+        description:
+          type: string
+    Payee:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        notes:
+          type: string
+    BudgetCategory:
+      type: object
+      properties:
+        categoryId:
+          type: string
+        amount:
+          type: number
+    BudgetMonth:
+      type: object
+      properties:
+        month:
+          type: string
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/BudgetCategory'
+    BudgetSetRequest:
+      type: object
+      properties:
+        month:
+          type: string
+        categoryId:
+          type: string
+        amount:
+          type: number

@@ -16,11 +16,11 @@ const tool: ToolDefinition = {
   name: 'actual.transactions.create',
   description: "Create a transaction",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     // validate input
-    const input = InputSchema.parse(args || {});
-  // Call the actual API to create a transaction (wrap single tx in array)
-  const tx = await adapter.addTransactions([input]);
+    const input = InputSchema.parse(args ?? {});
+    // Call the actual API to create a transaction (wrap single tx in array)
+    const tx = await adapter.addTransactions([input]);
     return { result: tx };
   },
 };

@@ -26,7 +26,7 @@ export class ActualMCPConnection extends EventEmitter {
 
     // Re-emit adapter notifications as connection-level 'progress' events
     try {
-      adapter.notifications.on('progress', (token: string, payload: any) => {
+      adapter.notifications.on('progress', (token: string, payload: unknown) => {
         this.emit('progress', { token, payload });
       });
     } catch (e) {
@@ -94,7 +94,7 @@ export class ActualMCPConnection extends EventEmitter {
   }
 
   /** Executes a tool requested by the client */
-  async executeTool(toolName: string, params: any) {
+  async executeTool(toolName: string, params: unknown) {
     // If actualToolsManager is not ready, support demo tools
     if (actualToolsManager && typeof actualToolsManager.callTool === 'function') {
       try {
@@ -104,11 +104,23 @@ export class ActualMCPConnection extends EventEmitter {
       }
     }
     switch (toolName) {
-      case 'search.docs':
+      case 'search.docs': {
         // Example: bridge to Actual API (demo)
-        return { result: await actual.searchDocuments(params.query) };
-      case 'math.add':
-        return { result: params.a + params.b };
+        if (params && typeof params === 'object' && 'query' in (params as Record<string, unknown>)) {
+          const query = (params as Record<string, unknown>)['query'];
+          if (typeof query === 'string') {
+            return { result: await actual.searchDocuments(query) };
+          }
+        }
+        throw new Error('Invalid params for search.docs');
+      }
+      case 'math.add': {
+        if (params && typeof params === 'object' && 'a' in (params as Record<string, unknown>) && 'b' in (params as Record<string, unknown>)) {
+          const p = params as { a: number; b: number };
+          return { result: p.a + p.b };
+        }
+        throw new Error('Invalid params for math.add');
+      }
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }

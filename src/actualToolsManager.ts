@@ -3,16 +3,8 @@ import * as ActualApi from '@actual-app/api';
 import logger from './logger.js';
 import { z } from 'zod';
 
-const ActualApiAny = ActualApi as any;
-
-import { ZodTypeAny } from 'zod';
-
-type ToolDefinition = {
-  name: string;
-  description: string;
-  call: (args: any) => Promise<any>;
-  inputSchema?: ZodTypeAny; 
-};
+import type { ZodTypeAny } from 'zod';
+import type { ToolDefinition } from '../types/tool.d.js';
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -94,7 +86,7 @@ class ActualToolsManager {
     return this.tools.get(name);
   }
 
-  async callTool(name: string, args: any): Promise<any> {
+  async callTool(name: string, args: unknown): Promise<unknown> {
     const tool = this.getTool(name);
     if (!tool) throw new Error(`Tool not found: ${name}`);
     try {
@@ -107,8 +99,10 @@ class ActualToolsManager {
 
       logger.info(`[TOOL RESULT] ${name}: ${JSON.stringify(safe)}`);
       return safe;
-    } catch (err: any) {
-      logger.error(`[TOOL ERROR] ${name}:`, err.message || err);
+    } catch (err: unknown) {
+      const e = err as Error | { message?: unknown } | undefined;
+      const msg = e && typeof e.message === 'string' ? e.message : String(err);
+      logger.error(`[TOOL ERROR] ${name}: ${msg}`);
       throw err;
     }
   }

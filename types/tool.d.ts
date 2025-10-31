@@ -4,5 +4,6 @@ export interface ToolDefinition {
   name: string;
   description: string;
   inputSchema: ZodTypeAny;
-  call: (args: any, meta?: any) => Promise<any>;
+  // Use `unknown` for external inputs; tool `call` implementations should parse with zod
+  call: (args: unknown, meta?: unknown) => Promise<unknown>;
 }

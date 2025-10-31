@@ -12,10 +12,11 @@ const tool: ToolDefinition = {
   name: 'actual.accounts.get.balance',
   description: "Get account balance",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
-  const input = InputSchema.parse(args || {});
-  const res = await adapter.getAccountBalance((input as any).id as any, (input as any).cutoff as any);
-  return { result: res };
+  call: async (args: unknown, _meta?: unknown) => {
+    const input = InputSchema.parse(args ?? {});
+    const { id, cutoff } = input as { id?: string; cutoff?: string };
+    const res = await adapter.getAccountBalance(id ?? '', cutoff);
+    return { result: res };
 
   },
 };

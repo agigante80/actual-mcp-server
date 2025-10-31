@@ -5,40 +5,44 @@ import crypto from 'crypto';
 
 export const ListToolsRequestSchema = Symbol('ListToolsRequestSchema');
 export const CallToolRequestSchema = Symbol('CallToolRequestSchema');
-export const ToolSchema: any = {};
+export const ToolSchema: Record<string, unknown> = {};
 
 export type Tool = {
   name: string;
   description?: string;
-  inputSchema?: any;
+  inputSchema?: unknown;
 };
 
 export class Server {
-  meta: any;
-  options: any;
-  handlers: Map<any, (req: any, extra?: any) => Promise<any>>;
-  transports: Set<any>;
-  constructor(meta: any = {}, options: any = {}) {
+  meta: Record<string, unknown>;
+  options: Record<string, unknown>;
+  handlers: Map<unknown, (req: unknown, extra?: unknown) => Promise<unknown>>;
+  transports: Set<unknown>;
+  onclose?: () => Promise<void> | undefined;
+  constructor(meta: Record<string, unknown> = {}, options: Record<string, unknown> = {}) {
     this.meta = meta;
     this.options = options;
     this.handlers = new Map();
     this.transports = new Set();
   }
 
-  setRequestHandler(schema: any, handler: (req: any, extra?: any) => Promise<any>) {
+  setRequestHandler(schema: unknown, handler: (req: unknown, extra?: unknown) => Promise<unknown>) {
     this.handlers.set(schema, handler);
   }
 
-  async connect(transport: any) {
+  async connect(transport: unknown) {
     this.transports.add(transport);
-    transport.server = this;
+    // Attach reference for test shims (loose typing intentionally preserved here)
+    try {
+      (transport as { server?: unknown }).server = this;
+    } catch {}
   }
 
-  async notification(payload: any, opts?: any) {
+  async notification(payload: unknown, opts?: unknown) {
     for (const t of this.transports) {
-      if (typeof t.pushNotification === 'function') {
+      if (typeof (t as unknown as { pushNotification?: Function }).pushNotification === 'function') {
         try {
-          await t.pushNotification(payload);
+          await (t as unknown as { pushNotification?: (p: unknown) => Promise<unknown> }).pushNotification!(payload);
         } catch {
           // ignore
         }
@@ -47,7 +51,7 @@ export class Server {
   }
 
   // allow handlers to be invoked by transports (shim convenience)
-  async invokeHandler(schema: any, req: any, extra?: any) {
+  async invokeHandler(schema: unknown, req: unknown, extra?: unknown) {
     const handler = this.handlers.get(schema);
     if (!handler) throw new Error('Handler not registered');
     return handler(req, extra);
@@ -55,32 +59,32 @@ export class Server {
 }
 
 export class StreamableHTTPServerTransport {
-  opts: any;
+  opts: Record<string, unknown>;
   sessionId: string | null;
   server: Server | null;
   closed = false;
-  constructor(opts: any = {}) {
+  constructor(opts: Record<string, unknown> = {}) {
     this.opts = opts;
     this.sessionId = null;
     this.server = null;
   }
 
-  async pushNotification(_payload: any) {
+  async pushNotification(_payload: unknown) {
     // noop
   }
 
-  async handleRequest(req: any, res: any, bodyFromCaller?: any) {
-    const payload = bodyFromCaller && Object.keys(bodyFromCaller).length ? bodyFromCaller : req.body ?? {};
-    const method = payload.method;
+  async handleRequest(req: any, res: any, bodyFromCaller?: unknown) {
+    const payload = (bodyFromCaller && Object.keys(bodyFromCaller as Record<string, unknown>).length ? bodyFromCaller : (req.body ?? {})) as Record<string, unknown>;
+    const method = payload.method as string | undefined;
 
     if (method === 'initialize') {
       this.sessionId =
         typeof this.opts.sessionIdGenerator === 'function'
-          ? this.opts.sessionIdGenerator()
+          ? (this.opts.sessionIdGenerator as () => string)()
           : crypto.randomUUID?.() ?? `local-${Math.random().toString(36).slice(2, 10)}`;
       if (typeof this.opts.onsessioninitialized === 'function') {
         try {
-          this.opts.onsessioninitialized(this.sessionId);
+          (this.opts.onsessioninitialized as (id: string | null) => void)(this.sessionId);
         } catch {}
       }
       // Provide a robust initialize result with safe defaults so MCP clients
@@ -107,22 +111,23 @@ export class StreamableHTTPServerTransport {
         const r = await this.server.invokeHandler(ListToolsRequestSchema, { params: {} });
         res.json({ jsonrpc: '2.0', id: payload.id ?? null, result: r });
         return;
-      } catch (e: any) {
+      } catch (e: unknown) {
         res.status(500).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { message: String(e) } });
         return;
       }
     }
 
-    if (method === 'tools/call' && payload.params && payload.params.name) {
+    if (method === 'tools/call' && payload.params && (payload.params as Record<string, unknown>).name) {
       if (!this.server) {
         res.status(500).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { message: 'Server not connected' } });
         return;
       }
       try {
-        const r = await this.server.invokeHandler(CallToolRequestSchema, { params: { name: payload.params.name, arguments: payload.params.arguments ?? {} } }, {});
+        const params = payload.params as Record<string, unknown>;
+        const r = await this.server.invokeHandler(CallToolRequestSchema, { params: { name: params.name, arguments: params.arguments ?? {} } }, {});
         res.json({ jsonrpc: '2.0', id: payload.id ?? null, result: r });
         return;
-      } catch (e: any) {
+      } catch (e: unknown) {
         res.status(500).json({ jsonrpc: '2.0', id: payload.id ?? null, error: { message: String(e) } });
         return;
       }
@@ -144,8 +149,8 @@ export class StreamableHTTPServerTransport {
 
   async close() {
     this.closed = true;
-    if (this.server && typeof (this.server as any).removeTransport === 'function') {
-      (this.server as any).removeTransport(this);
+    if (this.server && typeof (this.server as { removeTransport?: Function }).removeTransport === 'function') {
+      (this.server as { removeTransport?: (t: unknown) => void }).removeTransport!(this);
     }
   }
 }

@@ -26,8 +26,10 @@ function toZodType(schema: any): string {
   return 'z.any()';
 }
 
-for (const [route, methods] of Object.entries(openapi.paths)) {
-  for (const [method, op] of Object.entries(methods as any)) {
+for (const [route, methods] of Object.entries(openapi.paths || {})) {
+  const methodEntries = methods && typeof methods === 'object' ? Object.entries(methods as Record<string, unknown>) : [];
+  for (const [method, opRaw] of methodEntries) {
+    const op = opRaw as Record<string, any>;
     const opId = op.operationId;
     const inputSchema =
       op.requestBody?.content?.['application/json']?.schema ||
@@ -47,15 +49,15 @@ import { ToolDefinition } from '../../types/tool';
 
 const InputSchema = ${toZodType(inputSchema)};
 
-type Output = any; // TODO: refine using paths['${route}']['${method}']['responses']['200']
+type Output = unknown; // TODO: refine using paths['${route}']['${method}']['responses']['200']
 
 const tool: ToolDefinition = {
   name: 'actual.${opId.replace('_', '.')}',
   description: ${JSON.stringify(op.summary)},
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: unknown) => {
     // TODO: implement call to actual API
-    return { result: null };
+    return { result: null as unknown };
   },
 };
 

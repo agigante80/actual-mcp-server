@@ -18,14 +18,13 @@ const tool: ToolDefinition = {
   name: 'actual.accounts.update',
   description: "Update an account",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
-  const input = InputSchema.parse(args || {});
-  // expect { id, ...fields }
-  const id = (input as any).id;
-  const fields = Object.assign({}, input);
-  delete (fields as any).id;
-  const res = await adapter.updateAccount(id as any, fields as any);
-  return { result: res };
+  call: async (args: unknown, _meta?: unknown) => {
+    const input = InputSchema.parse(args ?? {});
+    // expect { id, ...fields }
+    const { id, ...rest } = input as { id: string } & Record<string, unknown>;
+    const fields = Object.assign({}, rest);
+    const res = await adapter.updateAccount(id, fields);
+    return { result: res };
 
   },
 };

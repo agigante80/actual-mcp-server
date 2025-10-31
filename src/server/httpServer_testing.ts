@@ -4,14 +4,14 @@ import { z } from 'zod';
 import { randomUUID } from 'crypto';
 import { zodToJsonSchema } from "zod-to-json-schema";
 import express, { Request, Response } from 'express';
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
+import { Server } from './streamable-http.js';
+import { StreamableHTTPServerTransport } from './streamable-http.js';
 import {
   Tool,
   ToolSchema,
   CallToolRequestSchema,
   ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+} from './streamable-http.js';
 import logTransportWithDirection from '../logger.js';
 import logger from '../logger.js';
 // don't log at import time — only log when the server is actually started
@@ -28,8 +28,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
   const transports = new Map<string, StreamableHTTPServerTransport>();
 
   // Tool schemas and types
-  const ToolInputSchema = ToolSchema.shape.inputSchema;
-  type ToolInput = z.infer<typeof ToolInputSchema>;
+  // ToolSchema isn't typed here; we'll cast request params at runtime below
 
   // Define tool schemas
   const HelloWorldSchema = z.object({
@@ -79,22 +78,22 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
         {
           name: ToolName.HELLO_WORLD,
           description: "A simple tool that returns a greeting",
-          inputSchema: zodToJsonSchema(HelloWorldSchema) as ToolInput,
+          inputSchema: zodToJsonSchema(HelloWorldSchema) as unknown,
         },
         {
           name: ToolName.GET_SERVER_INFO,
           description: "Get information about the server",
-          inputSchema: zodToJsonSchema(GetServerInfoSchema) as ToolInput,
+          inputSchema: zodToJsonSchema(GetServerInfoSchema) as unknown,
         },
         {
           name: ToolName.LONG_RUNNING_TEST,
           description: "A test tool that demonstrates long-running operations with progress updates",
-          inputSchema: zodToJsonSchema(LongRunningTestSchema) as ToolInput,
+          inputSchema: zodToJsonSchema(LongRunningTestSchema) as unknown,
         },
         {
           name: ToolName.SLOW_TEST,
           description: "A test tool that takes 10 minutes to complete and returns timing information",
-          inputSchema: zodToJsonSchema(SlowTestSchema) as ToolInput,
+          inputSchema: zodToJsonSchema(SlowTestSchema) as unknown,
         }
       ];
       
@@ -102,10 +101,13 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
     });
 
     // Set up the call tool handler
-    server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
-      const { name, arguments: args } = request.params;
+    server.setRequestHandler(CallToolRequestSchema, async (request: unknown, extra: unknown) => {
+      const req = request as { params?: Record<string, unknown> } | undefined;
+      const params = req?.params ?? {};
+      const name = params.name as string | undefined;
+      const args = params.arguments;
       logger.debug(`[TOOL CALL] Tool: ${name}, Args: ${JSON.stringify(args, null, 2)}`);
-      debug(`Tool request details: ${JSON.stringify(request.params, null, 2)}`);
+      debug(`Tool request details: ${JSON.stringify(params, null, 2)}`);
 
       if (name === ToolName.HELLO_WORLD) {
         const validatedArgs = HelloWorldSchema.parse(args);
@@ -143,7 +145,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
         debug(`long_running_test started at: ${startTimestamp}, duration: ${duration}s, steps: ${steps}`);
         
         // Get progress token if available
-        const progressToken = request.params._meta?.progressToken;
+  const progressToken = (params as Record<string, unknown>)['_meta'] ? ((params as Record<string, any>)['_meta'] as Record<string, unknown>)?.progressToken : undefined;
         const stepDurationMs = (duration * 1000) / steps;
         
         // Send progress updates
@@ -160,7 +162,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
                   total: steps,
                   progressToken,
                 },
-              }, { relatedRequestId: extra.requestId });
+              }, { relatedRequestId: (extra && typeof extra === 'object' && 'requestId' in (extra as Record<string, unknown>) ? (extra as Record<string, unknown>)['requestId'] as string | undefined : undefined) });
               logger.debug(`[PROGRESS] Successfully sent progress update: ${i}/${steps}`);
             } catch (error) {
               logger.error(`[PROGRESS ERROR] Failed to send progress notification: ${String(error)}`);
@@ -203,7 +205,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
         debug(`slow_test tool started at: ${startTimestamp}`);
         
         // Get progress token if available
-        const progressToken = request.params._meta?.progressToken;
+  const progressToken = (params as Record<string, unknown>)['_meta'] ? ((params as Record<string, any>)['_meta'] as Record<string, unknown>)?.progressToken : undefined;
         
         // Wait for 10 minutes (600,000 milliseconds)
         const tenMinutesMs = 10 * 60 * 1000;
@@ -223,7 +225,7 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
                   total: steps,
                   progressToken,
                 },
-              }, { relatedRequestId: extra.requestId });
+              }, { relatedRequestId: (extra && typeof extra === 'object' && 'requestId' in (extra as Record<string, unknown>) ? (extra as Record<string, unknown>)['requestId'] as string | undefined : undefined) });
               logger.debug(`[PROGRESS] Successfully sent progress update: ${i}/${steps}`);
             } catch (error) {
               logger.error(`[PROGRESS ERROR] Failed to send progress notification: ${String(error)}`);
@@ -446,8 +448,10 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
    });
  } 
 
-const debug = (...args: any[]) => {
+const debug = (...args: unknown[]) => {
   if (process.env.DEBUG === 'true' || process.env.DEBUG === '1') {
-    console.debug('[DEBUG]', ...args);
+    // safely stringify args to avoid implicit any spread
+    const s = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+    console.debug('[DEBUG]', s);
   }
 };

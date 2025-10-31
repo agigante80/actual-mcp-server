@@ -49,8 +49,8 @@ export function logTransport(prefix: string, obj: unknown): void {
 function replacer(_key: string, value: unknown) {
   // Limit Buffer/Uint8Array printing
   if (value instanceof Uint8Array || (typeof Buffer !== 'undefined' && value instanceof Buffer)) {
-    const buf = value as any;
-    const len = buf.length ?? 0;
+    const buf = value as Uint8Array | Buffer;
+    const len = (buf as { length?: number }).length ?? 0;
     const preview = Array.prototype.slice.call(buf, 0, 64);
     return { _type: 'Buffer', length: len, preview };
   }

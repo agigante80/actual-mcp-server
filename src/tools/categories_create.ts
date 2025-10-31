@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { paths } from '../../generated/actual-client/types.js';
+import type { paths, components } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
@@ -9,15 +9,15 @@ const InputSchema = z.object({
 });
 
 // RESPONSE_TYPE: string
-type Output = any; // refine using generated types (paths['/categories']['post'])
+type Output = string;
 
 const tool: ToolDefinition = {
   name: 'actual.categories.create',
   description: "Create category",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
-  const input = InputSchema.parse(args || {});
-  const res = await adapter.createCategory(input as any);
+  call: async (args: unknown, _meta?: unknown) => {
+    const input = InputSchema.parse(args ?? {});
+    const res = await adapter.createCategory(input as unknown);
   return { result: res };
 
   },

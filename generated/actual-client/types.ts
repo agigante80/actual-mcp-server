@@ -13,6 +13,25 @@ export interface paths {
         };
         /** List all accounts */
         get: operations["accounts_list"];
+        /** Update an account */
+        put: operations["accounts_update"];
+        /** Create an account */
+        post: operations["accounts_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/accounts/balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get account balance */
+        get: operations["accounts_get_balance"];
         put?: never;
         post?: never;
         delete?: never;
@@ -28,10 +47,99 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Get transactions for an account and date range */
+        get: operations["transactions_get"];
         put?: never;
         /** Create a transaction */
         post: operations["transactions_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/transactions/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Import transactions (reconcile, avoid duplicates) */
+        post: operations["transactions_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get categories */
+        get: operations["categories_get"];
+        put?: never;
+        /** Create category */
+        post: operations["categories_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/payees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get payees */
+        get: operations["payees_get"];
+        put?: never;
+        /** Create payee */
+        post: operations["payees_create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/months": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get budget months */
+        get: operations["budgets_getMonths"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/budgets/month": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get budget month */
+        get: operations["budgets_getMonth"];
+        put?: never;
+        /** Set budget amount */
+        post: operations["budgets_setAmount"];
         delete?: never;
         options?: never;
         head?: never;
@@ -54,8 +162,33 @@ export interface components {
             /** Format: date */
             date?: string;
         };
+        TransactionInputArray: components["schemas"]["TransactionInput"][];
         Transaction: components["schemas"]["TransactionInput"] & {
             id?: string;
+        };
+        Category: {
+            id?: string;
+            name?: string;
+            parentId?: string;
+            description?: string;
+        };
+        Payee: {
+            id?: string;
+            name?: string;
+            notes?: string;
+        };
+        BudgetCategory: {
+            categoryId?: string;
+            amount?: number;
+        };
+        BudgetMonth: {
+            month?: string;
+            categories?: components["schemas"]["BudgetCategory"][];
+        };
+        BudgetSetRequest: {
+            month?: string;
+            categoryId?: string;
+            amount?: number;
         };
     };
     responses: never;
@@ -86,6 +219,101 @@ export interface operations {
             };
         };
     };
+    accounts_update: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Account"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+        };
+    };
+    accounts_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Account"];
+            };
+        };
+        responses: {
+            /** @description Created account id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    accounts_get_balance: {
+        parameters: {
+            query?: {
+                id?: string;
+                cutoff?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account balance number */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": number;
+                };
+            };
+        };
+    };
+    transactions_get: {
+        parameters: {
+            query?: {
+                accountId?: string;
+                startDate?: string;
+                endDate?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Transactions list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Transaction"][];
+                };
+            };
+        };
+    };
     transactions_create: {
         parameters: {
             query?: never;
@@ -106,6 +334,188 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Transaction"];
+                };
+            };
+        };
+    };
+    transactions_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TransactionInputArray"];
+            };
+        };
+        responses: {
+            /** @description Import result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        added?: string[];
+                        updated?: string[];
+                        errors?: string[];
+                    };
+                };
+            };
+        };
+    };
+    categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Category list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Category"][];
+                };
+            };
+        };
+    };
+    categories_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Category"];
+            };
+        };
+        responses: {
+            /** @description Created category id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    payees_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Payee list */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Payee"][];
+                };
+            };
+        };
+    };
+    payees_create: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Payee"];
+            };
+        };
+        responses: {
+            /** @description Created payee id */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+        };
+    };
+    budgets_getMonths: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description months array */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    budgets_getMonth: {
+        parameters: {
+            query?: {
+                month?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Budget object */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BudgetMonth"];
+                };
+            };
+        };
+    };
+    budgets_setAmount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BudgetSetRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
                 };
             };
         };

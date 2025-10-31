@@ -11,8 +11,8 @@ const tool: ToolDefinition = {
   name: 'actual.accounts.list',
   description: "List all accounts",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
-    InputSchema.parse(args || {});
+  call: async (args: unknown, _meta?: unknown) => {
+    InputSchema.parse(args ?? {});
     const accounts = await adapter.getAccounts();
     return { result: accounts };
   },

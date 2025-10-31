@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { paths } from '../../generated/actual-client/types.js';
+import type { paths, components } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
@@ -10,19 +10,19 @@ const InputSchema = z.object({
 });
 
 // RESPONSE_TYPE: any
-type Output = any; // refine using generated types (paths['/budgets/month']['post'])
+type Output = components['schemas']['BudgetSetRequest'] | null | void;
 
 const tool: ToolDefinition = {
   name: 'actual.budgets.setAmount',
   description: "Set budget amount",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
-  const input = InputSchema.parse(args || {});
-  const month = (input as any).month;
-  const categoryId = (input as any).categoryId;
-  const amount = (input as any).amount;
-  const res = await adapter.setBudgetAmount(month as any, categoryId as any, amount as any);
-  return { result: res };
+  call: async (args: unknown, _meta?: unknown) => {
+    const input = InputSchema.parse(args ?? {});
+    const month = (input as { month?: string }).month;
+    const categoryId = (input as { categoryId?: string }).categoryId;
+    const amount = (input as { amount?: number }).amount;
+    const res = await adapter.setBudgetAmount(month, categoryId, amount);
+    return { result: res };
 
   },
 };
