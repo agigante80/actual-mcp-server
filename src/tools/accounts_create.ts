@@ -15,7 +15,8 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: any) => {
     const input = InputSchema.parse(args || {});
     // call adapter to create account; adapter returns an id-like string
-    const result = await adapter.createAccount(input as any, (input as any).balance);
+    const accountPayload = { id: input.id, name: input.name, balance: input.balance } as any;
+    const result = await adapter.createAccount(accountPayload, input.balance);
     return { result };
   },
 };

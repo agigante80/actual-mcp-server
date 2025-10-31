@@ -16,18 +16,18 @@ const tool: ToolDefinition = {
   name: 'actual.transactions.import',
   description: "Import transactions (reconcile, avoid duplicates)",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
     const parsed = InputSchema.parse(args || {});
     // allow either { accountId, txs } or raw txs
     let accountId: string | undefined;
     let txs: unknown;
     if (parsed && typeof parsed === 'object' && 'txs' in (parsed as Record<string, unknown>)) {
-      accountId = (parsed as any).accountId;
-      txs = (parsed as any).txs;
+  accountId = (parsed as any).accountId;
+  txs = (parsed as any).txs;
     } else {
       txs = parsed;
     }
-    const result = await adapter.importTransactions(accountId, txs as any);
+  const result = await adapter.importTransactions(accountId, txs);
     return { result };
 
   },

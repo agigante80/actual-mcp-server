@@ -12,7 +12,7 @@ const tool: ToolDefinition = {
   name: 'actual.categories.get',
   description: "Get categories",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
     InputSchema.parse(args || {});
     const result = await adapter.getCategories();
     return { result };

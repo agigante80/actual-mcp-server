@@ -12,7 +12,7 @@ const tool: ToolDefinition = {
   name: 'actual.transactions.get',
   description: "Get transactions for an account and date range",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
     const input = InputSchema.parse(args || {});
     const result = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
     return { result };
