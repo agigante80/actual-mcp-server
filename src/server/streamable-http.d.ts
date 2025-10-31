@@ -1,13 +1,13 @@
 declare module './streamable-http.js' {
   export class Server {
-    constructor(meta?: any, options?: any);
-    setRequestHandler(schema: any, handler: (req: any, extra?: any) => Promise<any>): void;
-    connect(transport: any): Promise<void>;
+  constructor(meta?: unknown, options?: unknown);
+  setRequestHandler(schema: unknown, handler: (req: unknown, extra?: unknown) => Promise<unknown>): void;
+  connect(transport: unknown): Promise<void>;
   }
 
   export class StreamableHTTPServerTransport {
-    constructor(opts?: any);
-    handleRequest(req: any, res: any, body?: any): Promise<void>;
+  constructor(opts?: unknown);
+  handleRequest(req: unknown, res: unknown, body?: unknown): Promise<void>;
     close(): Promise<void>;
     sessionId?: string;
   }
