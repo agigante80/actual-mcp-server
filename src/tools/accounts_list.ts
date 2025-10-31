@@ -12,7 +12,7 @@ const tool: ToolDefinition = {
   name: 'actual.accounts.list',
   description: "List all accounts",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
     // call adapter.getAccounts with no args
     const result = await adapter.getAccounts();
     return { result };
