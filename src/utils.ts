@@ -54,5 +54,11 @@ function replacer(_key: string, value: unknown) {
     const preview = Array.prototype.slice.call(buf, 0, 64);
     return { _type: 'Buffer', length: len, preview };
   }
+  if (value instanceof Uint8Array) {
+    const buf = value as Uint8Array;
+    const len = buf.length;
+    const preview = Array.prototype.slice.call(buf, 0, 64);
+    return { _type: 'Uint8Array', length: len, preview };
+  }
   return value;
 }
