@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
+import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.any();
+const InputSchema = z.object({ id: z.string().optional(), name: z.string().min(1), balance: z.number().optional() });
 
 // RESPONSE_TYPE: string
 type Output = any; // refine using generated types (paths['/accounts']['post'])
@@ -11,11 +12,11 @@ const tool: ToolDefinition = {
   name: 'actual.accounts.create',
   description: "Create an account",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
-    InputSchema.parse(args || {});
-    // TODO: implement call to Actual API using generated client/adapters
-    return { result: null };
-
+  call: async (args: unknown, _meta?: any) => {
+    const input = InputSchema.parse(args || {});
+    // call adapter to create account; adapter returns an id-like string
+    const result = await adapter.createAccount(input as any, (input as any).balance);
+    return { result };
   },
 };
 

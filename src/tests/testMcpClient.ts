@@ -82,7 +82,16 @@ export async function testMcpClient(advertisedUrl: string, port: number, httpPat
   }
 
   // If server sets a mcp-session-id header, capture it for subsequent calls
-  const sessionId = initRes.headers && typeof initRes.headers === 'object' && typeof (initRes.headers as any).get === 'function' ? (initRes.headers as any).get('mcp-session-id') ?? undefined : undefined;
+  type HeadersLike = { get?: (name: string) => string | null } | Record<string, string>;
+  let sessionId: string | undefined = undefined;
+  if (initRes.headers && typeof initRes.headers === 'object') {
+    const h = initRes.headers as HeadersLike;
+    if (typeof h.get === 'function') {
+      sessionId = h.get('mcp-session-id') ?? undefined;
+    } else if ('mcp-session-id' in (h as Record<string, string>)) {
+      sessionId = (h as Record<string, string>)['mcp-session-id'];
+    }
+  }
   if (sessionId) console.info(`Received session id header: ${sessionId}`);
 
   // Validate initialize result fields (capabilities/tools/serverInstructions)
