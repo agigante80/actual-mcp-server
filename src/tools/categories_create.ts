@@ -15,9 +15,10 @@ const tool: ToolDefinition = {
   name: 'actual.categories.create',
   description: "Create category",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
   const input = InputSchema.parse(args || {});
-  const res = await adapter.createCategory(input as any);
+  const { name, parentId } = input as { name: string; parentId?: string };
+  const res = await adapter.createCategory({ name, parentId });
   return { result: res };
 
   },

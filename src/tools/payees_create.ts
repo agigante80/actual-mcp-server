@@ -15,9 +15,10 @@ const tool: ToolDefinition = {
   name: 'actual.payees.create',
   description: "Create payee",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
   const input = InputSchema.parse(args || {});
-  const res = await adapter.createPayee(input as any);
+  const { name, notes } = input as { name: string; notes?: string };
+  const res = await adapter.createPayee({ name, notes });
   return { result: res };
 
   },

@@ -12,9 +12,10 @@ const tool: ToolDefinition = {
   name: 'actual.budgets.getMonth',
   description: "Get budget month",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
   const input = InputSchema.parse(args || {});
-  const res = await adapter.getBudgetMonth((input as any).month as any);
+  const { month } = input as { month?: string };
+  const res = await adapter.getBudgetMonth(month);
   return { result: res };
 
   },

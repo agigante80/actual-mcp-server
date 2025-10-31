@@ -131,7 +131,7 @@ export async function updateAccount(id: string, fields: any) {
   return await withConcurrency(() => retry(() => rawUpdateAccount(id, fields), { retries: 2, backoffMs: 200 }));
 }
 
-export async function getAccountBalance(id: string, cutoff?: string) {
+export async function getAccountBalance(id?: string, cutoff?: string) {
   observability.incrementToolCall('actual.accounts.get.balance').catch(() => {});
   return await withConcurrency(() => retry(() => rawGetAccountBalance(id, cutoff), { retries: 2, backoffMs: 200 }));
 }

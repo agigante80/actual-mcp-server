@@ -16,14 +16,11 @@ const tool: ToolDefinition = {
   name: 'actual.budgets.setAmount',
   description: "Set budget amount",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
   const input = InputSchema.parse(args || {});
-  const month = (input as any).month;
-  const categoryId = (input as any).categoryId;
-  const amount = (input as any).amount;
-  const res = await adapter.setBudgetAmount(month as any, categoryId as any, amount as any);
+  const { month, categoryId, amount } = input as { month: string; categoryId: string; amount: number };
+  const res = await adapter.setBudgetAmount(month, categoryId, amount);
   return { result: res };
-
   },
 };
 

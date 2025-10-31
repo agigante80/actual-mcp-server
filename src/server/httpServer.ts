@@ -65,7 +65,7 @@ export async function startHttpServer(
       logger.debug('[TOOLS LIST] Listing available tools');
       const tools = toolsList.map((name: string) => {
         const schemaFromParam = toolSchemas && toolSchemas[name];
-        const schemaFromManager = (actualToolsManager as any)?.getToolSchema?.(name);
+        const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
         const schema = schemaFromParam || schemaFromManager || {};
         return {
           name,
@@ -78,18 +78,21 @@ export async function startHttpServer(
 
     // Call tool handler -> proxy to mcp.executeTool or to actualToolsManager
     server.setRequestHandler(CallToolRequestSchema, async (request) => {
-      const { name, arguments: args } = request.params as any;
+      const params = (request && (request as unknown as { params?: unknown }).params) ?? {};
+      const { name, arguments: args } = (params as any) as { name?: string; arguments?: unknown };
       logger.debug(`[TOOL CALL] ${name} args=${JSON.stringify(args)}`);
       // Prefer ActualMCPConnection executor if provided
-      if (typeof (mcp as any).executeTool === 'function') {
-        const result = await (mcp as any).executeTool(name, args ?? {});
+      if (typeof (mcp as unknown as { executeTool?: (...a: unknown[]) => unknown })?.executeTool === 'function') {
+        // use a safe call with unknowns
+        const exec = (mcp as unknown as { executeTool: (n: string, a?: unknown) => Promise<unknown> }).executeTool;
+        const result = await exec(name as string, args ?? {});
         return {
           content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
         };
       }
       // fallback: attempt actualToolsManager
-      if (actualToolsManager && typeof (actualToolsManager as any).invoke === 'function') {
-        const r = await (actualToolsManager as any).invoke(name, args ?? {});
+      if (actualToolsManager && typeof (actualToolsManager as unknown as { invoke?: (...a: unknown[]) => unknown })?.invoke === 'function') {
+        const r = await (actualToolsManager as unknown as { invoke: (n: string, a?: unknown) => Promise<unknown> }).invoke(name as string, args ?? {});
         return { content: [{ type: 'text', text: JSON.stringify(r) }] };
       }
       throw new Error(`Tool executor not available for ${name}`);

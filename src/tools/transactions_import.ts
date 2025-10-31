@@ -22,17 +22,17 @@ const tool: ToolDefinition = {
   name: 'actual.transactions.import',
   description: "Import transactions (reconcile, avoid duplicates)",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
     const input = InputSchema.parse(args || {});
-    // expect input to be { accountId, transactions }
-    // if caller passed { accountId, transactions } or an array, try to call accordingly
+    // input is either an array of transactions or { accountId?, transactions }
     if (Array.isArray(input)) {
-      const res = await adapter.importTransactions(undefined, input);
+      const res = await adapter.importTransactions(undefined, input as unknown[]);
       return { result: res };
     }
-    const accountId = (input as any).accountId ?? undefined;
-    const txs = (input as any).transactions ?? (input as any);
-    const res = await adapter.importTransactions(accountId, txs);
+    // object form
+    const { accountId, transactions } = input as { accountId?: string; transactions?: Array<unknown> };
+    const txs = transactions ?? [];
+    const res = await adapter.importTransactions(accountId, txs as unknown[]);
     return { result: res };
 
   },

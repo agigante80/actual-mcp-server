@@ -73,11 +73,11 @@ export {};
     import('zod-to-json-schema'),
   ]);
 
-  const logger = (loggerModule as any).default;
+  const logger = (loggerModule as unknown as { default: typeof import('./logger.js').default }).default;
   const os = osModule as typeof import('os');
-  const { getLocalIp } = utilsModule as any;
-  const actualToolsManager = (actualToolsManagerModule as any).default;
-  const zodToJsonSchema = (zodToJsonSchemaModule as any).zodToJsonSchema;
+  const { getLocalIp } = (utilsModule as unknown as { getLocalIp?: () => string });
+  const actualToolsManager = (actualToolsManagerModule as unknown as { default: typeof import('./actualToolsManager.js').default }).default;
+  const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: (z: any) => unknown }).zodToJsonSchema;
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;

@@ -5,12 +5,12 @@ import crypto from 'crypto';
 
 export const ListToolsRequestSchema = Symbol('ListToolsRequestSchema');
 export const CallToolRequestSchema = Symbol('CallToolRequestSchema');
-export const ToolSchema: any = {};
+export const ToolSchema: unknown = {};
 
 export type Tool = {
   name: string;
   description?: string;
-  inputSchema?: any;
+  inputSchema?: unknown;
 };
 
 export class Server {
@@ -145,7 +145,17 @@ export class StreamableHTTPServerTransport {
   async close() {
     this.closed = true;
     if (this.server && typeof (this.server as any).removeTransport === 'function') {
-      (this.server as any).removeTransport(this);
+      // call removeTransport if available (some Server implementations provide it)
+      try {
+        (this.server as unknown as { removeTransport?: (t: any) => void }).removeTransport?.(this);
+      } catch {}
     }
   }
+}
+
+// Provide a typed helper implementation for Server.removeTransport callers in case
+// the runtime Server wants to call it. This keeps compatibility with earlier code
+// that called removeTransport on the server instance.
+export interface ServerWithRemove extends Server {
+  removeTransport?(t: StreamableHTTPServerTransport): void;
 }

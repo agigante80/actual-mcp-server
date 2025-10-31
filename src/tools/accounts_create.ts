@@ -16,10 +16,11 @@ const tool: ToolDefinition = {
   name: 'actual.accounts.create',
   description: "Create an account",
   inputSchema: InputSchema,
-  call: async (args: any, _meta?: any) => {
+  call: async (args: unknown, _meta?: any) => {
   const input = InputSchema.parse(args || {});
+  const { id, name, balance } = input as { id?: string; name: string; balance?: number };
   // adapter.createAccount may accept an optional initial balance param
-  const res = await adapter.createAccount(input as any, (input as any).balance as any);
+  const res = await adapter.createAccount({ id, name }, balance);
   return { result: res };
 
   },
