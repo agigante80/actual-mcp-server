@@ -26,6 +26,13 @@ import {
   createRule as rawCreateRule,
   updateRule as rawUpdateRule,
   deleteRule as rawDeleteRule,
+  setBudgetCarryover as rawSetBudgetCarryover,
+  closeAccount as rawCloseAccount,
+  reopenAccount as rawReopenAccount,
+  getCategoryGroups as rawGetCategoryGroups,
+  createCategoryGroup as rawCreateCategoryGroup,
+  updateCategoryGroup as rawUpdateCategoryGroup,
+  deleteCategoryGroup as rawDeleteCategoryGroup,
 } from '@actual-app/api/dist/methods.js';
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
@@ -243,6 +250,36 @@ export async function deleteRule(id: string): Promise<void> {
   observability.incrementToolCall('actual.rules.delete').catch(() => {});
   await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
 }
+export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
+  observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
+  await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function closeAccount(id: string): Promise<void> {
+  observability.incrementToolCall('actual.accounts.close').catch(() => {});
+  await withConcurrency(() => retry(() => rawCloseAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function reopenAccount(id: string): Promise<void> {
+  observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
+  await withConcurrency(() => retry(() => rawReopenAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function getCategoryGroups(): Promise<unknown[]> {
+  observability.incrementToolCall('actual.category_groups.get').catch(() => {});
+  const raw = await withConcurrency(() => retry(() => rawGetCategoryGroups() as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+  return Array.isArray(raw) ? raw : [];
+}
+export async function createCategoryGroup(group: unknown): Promise<string> {
+  observability.incrementToolCall('actual.category_groups.create').catch(() => {});
+  const raw = await withConcurrency(() => retry(() => rawCreateCategoryGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
+  return normalizeToId(raw);
+}
+export async function updateCategoryGroup(id: string, fields: unknown): Promise<void> {
+  observability.incrementToolCall('actual.category_groups.update').catch(() => {});
+  await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function deleteCategoryGroup(id: string): Promise<void> {
+  observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
+  await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
 
 export default {
   getAccounts,
@@ -270,5 +307,12 @@ export default {
   createRule,
   updateRule,
   deleteRule,
+  setBudgetCarryover,
+  closeAccount,
+  reopenAccount,
+  getCategoryGroups,
+  createCategoryGroup,
+  updateCategoryGroup,
+  deleteCategoryGroup,
   notifications,
 };

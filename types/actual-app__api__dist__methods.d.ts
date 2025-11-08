@@ -25,6 +25,13 @@ declare module '@actual-app/api/dist/methods.js' {
   export function createRule(...args: unknown[]): Promise<unknown>;
   export function updateRule(...args: unknown[]): Promise<unknown>;
   export function deleteRule(...args: unknown[]): Promise<unknown>;
+  export function setBudgetCarryover(...args: unknown[]): Promise<unknown>;
+  export function closeAccount(...args: unknown[]): Promise<unknown>;
+  export function reopenAccount(...args: unknown[]): Promise<unknown>;
+  export function getCategoryGroups(...args: unknown[]): Promise<unknown>;
+  export function createCategoryGroup(...args: unknown[]): Promise<unknown>;
+  export function updateCategoryGroup(...args: unknown[]): Promise<unknown>;
+  export function deleteCategoryGroup(...args: unknown[]): Promise<unknown>;
   export function searchDocuments(...args: unknown[]): Promise<unknown>;
   export function downloadBudget(...args: unknown[]): Promise<unknown>;
   export function shutdown(...args: unknown[]): Promise<unknown>;
