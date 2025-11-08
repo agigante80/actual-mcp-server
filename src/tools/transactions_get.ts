@@ -9,7 +9,7 @@ const InputSchema = z.object({ accountId: z.string().optional(), startDate: z.st
 type Output = unknown; // refine using generated types (paths['/transactions']['get'])
 
 const tool: ToolDefinition = {
-  name: 'actual.transactions.get',
+  name: 'actual_transactions_get',
   description: "Get transactions for an account and date range",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

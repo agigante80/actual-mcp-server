@@ -9,7 +9,7 @@ const InputSchema = z.object({});
 type Output = unknown; // refine using generated types (paths['/budgets/months']['get'])
 
 const tool: ToolDefinition = {
-  name: 'actual.budgets.getMonths',
+  name: 'actual_budgets_getMonths',
   description: "Get budget months",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

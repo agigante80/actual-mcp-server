@@ -9,7 +9,7 @@ const InputSchema = z.object({ name: z.string().min(1), notes: z.string().option
 type Output = unknown; // refine using generated types (paths['/payees']['post'])
 
 const tool: ToolDefinition = {
-  name: 'actual.payees.create',
+  name: 'actual_payees_create',
   description: "Create payee",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

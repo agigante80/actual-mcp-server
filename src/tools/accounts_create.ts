@@ -9,8 +9,8 @@ const InputSchema = z.object({ id: z.string().optional(), name: z.string().min(1
 type Output = unknown; // refine using generated types (paths['/accounts']['post'])
 
 const tool: ToolDefinition = {
-  name: 'actual.accounts.create',
-  description: "Create an account",
+  name: 'actual_accounts_create',
+  description: 'Create an account',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

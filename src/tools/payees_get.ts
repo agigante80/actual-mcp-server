@@ -9,7 +9,7 @@ const InputSchema = z.object({});
 type Output = unknown; // refine using generated types (paths['/payees']['get'])
 
 const tool: ToolDefinition = {
-  name: 'actual.payees.get',
+  name: 'actual_payees_get',
   description: "Get payees",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

@@ -1,3 +1,14 @@
+// Add global error handlers
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
+});
+
 // Minimal early help handling before any side-effectful modules (prevents dotenv from running on --help)
 const argsEarly = process.argv.slice(2);
 
