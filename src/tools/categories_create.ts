@@ -14,13 +14,19 @@ const InputSchema = z.object({
 type Output = unknown; // refine using generated types (paths['/categories']['post'])
 
 const tool: ToolDefinition = {
-  name: 'actual.categories.create',
+  name: 'actual_categories_create',
   description: "Create category",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    const result = await adapter.createCategory(input);
-    return { result };
+    try {
+      const result = await adapter.createCategory(input);
+      return { result };
+    } catch (error) {
+      // Log the full error for debugging
+      console.error('Categories create error:', error);
+      throw error;
+    }
   },
 };
 

@@ -9,7 +9,7 @@ const InputSchema = z.object({ id: z.string().optional(), cutoff: z.string().opt
 type Output = unknown; // refine using generated types (paths['/accounts/balance']['get'])
 
 const tool: ToolDefinition = {
-  name: 'actual.accounts.get.balance',
+  name: 'actual_accounts_get_balance',
   description: "Get account balance",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

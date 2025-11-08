@@ -9,7 +9,7 @@ const InputSchema = z.object({ id: z.string().min(1), fields: z.record(z.unknown
 type Output = unknown; // refine using generated types (paths['/accounts']['put'])
 
 const tool: ToolDefinition = {
-  name: 'actual.accounts.update',
+  name: 'actual_accounts_update',
   description: "Update an account",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

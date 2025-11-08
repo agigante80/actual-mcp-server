@@ -9,7 +9,7 @@ const InputSchema = z.object({});
 type Output = unknown; // refine using generated types (paths['/categories']['get'])
 
 const tool: ToolDefinition = {
-  name: 'actual.categories.get',
+  name: 'actual_categories_get',
   description: "Get categories",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

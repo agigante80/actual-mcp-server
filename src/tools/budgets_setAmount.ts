@@ -9,7 +9,7 @@ const InputSchema = z.object({ month: z.string().min(1), categoryId: z.string().
 type Output = unknown; // refine using generated types (paths['/budgets/month']['post'])
 
 const tool: ToolDefinition = {
-  name: 'actual.budgets.setAmount',
+  name: 'actual_budgets_setAmount',
   description: "Set budget amount",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
