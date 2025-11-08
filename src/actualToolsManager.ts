@@ -9,37 +9,57 @@ import type { ToolDefinition } from '../types/tool.d.js';
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
 const IMPLEMENTED_TOOLS = [
-  'get_accounts', 
-  'get_account_balance',
+  'actual_accounts_create',
+  'actual_accounts_get_balance',
+  'actual_accounts_list',
+  'actual_accounts_update',
+  'actual_budgets_getMonth',
+  'actual_budgets_getMonths',
+  'actual_budgets_setAmount',
+  'actual_categories_create',
+  'actual_categories_get',
+  'actual_payees_create',
+  'actual_payees_get',
+  'actual_transactions_create',
+  'actual_transactions_get',
+  'actual_transactions_import',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names
 // This allows us to compare what exists in the API vs. what it has been wrapped.
 const API_TOOL_MAP: Record<string, string> = {
-  getAccounts: 'get_accounts',
-  createAccount: 'create_account',
-  updateAccount: 'update_account',
-  deleteAccount: 'delete_account',
-  getAccountBalance: 'get_account_balance',
-  getTransactions: 'get_transactions',
-  addTransactions: 'add_transactions',
-  updateTransaction: 'update_transaction',
-  deleteTransaction: 'delete_transaction',
-  getBudgetMonths: 'get_budget_months',
-  getBudgetMonth: 'get_budget_month',
-  setBudgetAmount: 'set_budget_amount',
-  getCategories: 'get_categories',
-  createCategory: 'create_category',
-  updateCategory: 'update_category',
-  deleteCategory: 'delete_category',
-  getPayees: 'get_payees',
-  createPayee: 'create_payee',
-  updatePayee: 'update_payee',
-  deletePayee: 'delete_payee',
-  getRules: 'get_rules',
-  createRule: 'create_rule',
-  updateRule: 'update_rule',
-  deleteRule: 'delete_rule',
+  getAccounts: 'actual_accounts_list',
+  createAccount: 'actual_accounts_create',
+  updateAccount: 'actual_accounts_update',
+  deleteAccount: 'actual_accounts_delete',
+  getAccountBalance: 'actual_accounts_get_balance',
+  getTransactions: 'actual_transactions_get',
+  addTransactions: 'actual_transactions_create',
+  importTransactions: 'actual_transactions_import',
+  updateTransaction: 'actual_transactions_update',
+  deleteTransaction: 'actual_transactions_delete',
+  getBudgetMonths: 'actual_budgets_getMonths',
+  getBudgetMonth: 'actual_budgets_getMonth',
+  setBudgetAmount: 'actual_budgets_setAmount',
+  setBudgetCarryover: 'actual_budgets_setCarryover',
+  getCategories: 'actual_categories_get',
+  createCategory: 'actual_categories_create',
+  updateCategory: 'actual_categories_update',
+  deleteCategory: 'actual_categories_delete',
+  getPayees: 'actual_payees_get',
+  createPayee: 'actual_payees_create',
+  updatePayee: 'actual_payees_update',
+  deletePayee: 'actual_payees_delete',
+  getRules: 'actual_rules_get',
+  createRule: 'actual_rules_create',
+  updateRule: 'actual_rules_update',
+  deleteRule: 'actual_rules_delete',
+  closeAccount: 'actual_accounts_close',
+  reopenAccount: 'actual_accounts_reopen',
+  getCategoryGroups: 'actual_category_groups_get',
+  createCategoryGroup: 'actual_category_groups_create',
+  updateCategoryGroup: 'actual_category_groups_update',
+  deleteCategoryGroup: 'actual_category_groups_delete',
 };
 
 // Define Account schema for validation (simplified example)
@@ -106,6 +126,41 @@ class ActualToolsManager {
       logger.error(`[TOOL ERROR] ${name}: ${msg}`);
       throw err;
     }
+  }
+
+  /**
+   * Get coverage statistics comparing implemented tools with available API methods
+   */
+  getCoverageStats() {
+    const apiMethods = Object.keys(API_TOOL_MAP);
+    const mappedTools = Object.values(API_TOOL_MAP);
+    const implemented = IMPLEMENTED_TOOLS;
+    
+    const missing = mappedTools.filter(tool => !implemented.includes(tool));
+    const coverage = (implemented.length / mappedTools.length) * 100;
+    
+    return {
+      totalApiMethods: apiMethods.length,
+      totalMappedTools: mappedTools.length,
+      implementedTools: implemented.length,
+      missingTools: missing.length,
+      coveragePercent: Math.round(coverage * 100) / 100,
+      missingToolsList: missing,
+    };
+  }
+
+  /**
+   * Get the API method name for a given tool name
+   */
+  getApiMethodForTool(toolName: string): string | undefined {
+    return Object.entries(API_TOOL_MAP).find(([_, tool]) => tool === toolName)?.[0];
+  }
+
+  /**
+   * Get the tool name for a given API method
+   */
+  getToolForApiMethod(apiMethod: string): string | undefined {
+    return API_TOOL_MAP[apiMethod];
   }
 }
 

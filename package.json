@@ -11,6 +11,7 @@
     "start": "node dist/src/index.js",
     "generate-tools": "node scripts/generate-tools-node.js",
     "verify-tools": "npm run build && node scripts/verify-tools.js",
+    "check:coverage": "node scripts/list-actual-api-methods.mjs",
     "test:unit-js": "node tests/unit/transactions_create.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
