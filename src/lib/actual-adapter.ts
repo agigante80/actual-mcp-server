@@ -15,6 +15,13 @@ import {
   createAccount as rawCreateAccount,
   updateAccount as rawUpdateAccount,
   getAccountBalance as rawGetAccountBalance,
+  updateTransaction as rawUpdateTransaction,
+  deleteTransaction as rawDeleteTransaction,
+  updateCategory as rawUpdateCategory,
+  deleteCategory as rawDeleteCategory,
+  updatePayee as rawUpdatePayee,
+  deletePayee as rawDeletePayee,
+  deleteAccount as rawDeleteAccount,
 } from '@actual-app/api/dist/methods.js';
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
@@ -186,6 +193,34 @@ export async function getAccountBalance(id: string, cutoff?: string): Promise<nu
   observability.incrementToolCall('actual.accounts.get.balance').catch(() => {});
   return await withConcurrency(() => retry(() => rawGetAccountBalance(id, cutoff) as Promise<number>, { retries: 2, backoffMs: 200 }));
 }
+export async function deleteAccount(id: string): Promise<void> {
+  observability.incrementToolCall('actual.accounts.delete').catch(() => {});
+  await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function updateTransaction(id: string, fields: Partial<components['schemas']['Transaction']> | unknown): Promise<void> {
+  observability.incrementToolCall('actual.transactions.update').catch(() => {});
+  await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function deleteTransaction(id: string): Promise<void> {
+  observability.incrementToolCall('actual.transactions.delete').catch(() => {});
+  await withConcurrency(() => retry(() => rawDeleteTransaction(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
+  observability.incrementToolCall('actual.categories.update').catch(() => {});
+  await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function deleteCategory(id: string): Promise<void> {
+  observability.incrementToolCall('actual.categories.delete').catch(() => {});
+  await withConcurrency(() => retry(() => rawDeleteCategory(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
+  observability.incrementToolCall('actual.payees.update').catch(() => {});
+  await withConcurrency(() => retry(() => rawUpdatePayee(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function deletePayee(id: string): Promise<void> {
+  observability.incrementToolCall('actual.payees.delete').catch(() => {});
+  await withConcurrency(() => retry(() => rawDeletePayee(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
 
 export default {
   getAccounts,
@@ -202,5 +237,12 @@ export default {
   createAccount,
   updateAccount,
   getAccountBalance,
+  deleteAccount,
+  updateTransaction,
+  deleteTransaction,
+  updateCategory,
+  deleteCategory,
+  updatePayee,
+  deletePayee,
   notifications,
 };

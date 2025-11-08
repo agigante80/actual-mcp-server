@@ -12,9 +12,10 @@ methods.sort().forEach((method, index) => {
 
 console.log('\n=== Comparison with MCP Tools ===\n');
 
-// List of implemented MCP tools based on current tool files
+// List of implemented MCP tools based on current tool files (synchronized with actualToolsManager.ts)
 const implementedTools = [
   'actual_accounts_create',
+  'actual_accounts_delete',
   'actual_accounts_get_balance',
   'actual_accounts_list',
   'actual_accounts_update',
@@ -22,12 +23,18 @@ const implementedTools = [
   'actual_budgets_getMonths',
   'actual_budgets_setAmount',
   'actual_categories_create',
+  'actual_categories_delete',
   'actual_categories_get',
+  'actual_categories_update',
   'actual_payees_create',
+  'actual_payees_delete',
   'actual_payees_get',
+  'actual_payees_update',
   'actual_transactions_create',
+  'actual_transactions_delete',
   'actual_transactions_get',
   'actual_transactions_import',
+  'actual_transactions_update',
 ];
 
 // Mapping from the actualToolsManager.ts (synchronized)

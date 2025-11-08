@@ -1,0 +1,34 @@
+{
+  "accounts": [
+    {
+      "id": "42128287-e5f4-47fd-8a3c-5bbf429a9bed",
+      "name": "E2E Checking Account",
+      "type": "checking"
+    },
+    {
+      "id": "f8255f56-0bcd-40f3-8ae4-698a8213ca32",
+      "name": "E2E Savings Account",
+      "type": "savings"
+    }
+  ],
+  "categories": [
+    {
+      "id": "3e0097af-9d65-4f0f-a44c-3f7b2b2abe06",
+      "name": "Groceries"
+    },
+    {
+      "id": "58043b4e-548e-4365-881a-aa60f5ece290",
+      "name": "Transportation"
+    }
+  ],
+  "payees": [
+    {
+      "id": "513ccbb6-9ec8-4714-9284-37ed62e343ef",
+      "name": "Test Store"
+    },
+    {
+      "id": "c72d1128-8dc6-453e-aed8-5317e50f1318",
+      "name": "Gas Station"
+    }
+  ]
+}

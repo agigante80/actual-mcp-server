@@ -10,6 +10,7 @@ import type { ToolDefinition } from '../types/tool.d.js';
 // Adding the tool name here is considered fully implemented.
 const IMPLEMENTED_TOOLS = [
   'actual_accounts_create',
+  'actual_accounts_delete',
   'actual_accounts_get_balance',
   'actual_accounts_list',
   'actual_accounts_update',
@@ -17,12 +18,18 @@ const IMPLEMENTED_TOOLS = [
   'actual_budgets_getMonths',
   'actual_budgets_setAmount',
   'actual_categories_create',
+  'actual_categories_delete',
   'actual_categories_get',
+  'actual_categories_update',
   'actual_payees_create',
+  'actual_payees_delete',
   'actual_payees_get',
+  'actual_payees_update',
   'actual_transactions_create',
+  'actual_transactions_delete',
   'actual_transactions_get',
   'actual_transactions_import',
+  'actual_transactions_update',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names

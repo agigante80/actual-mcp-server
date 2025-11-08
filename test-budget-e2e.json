@@ -1,0 +1,24 @@
+{
+  "id": "637882e3-dc20-45a8-b4f5-fd990cc1f99d",
+  "name": "E2E Test Budget",
+  "accounts": [
+    {
+      "id": "c0721e43-8c13-476b-9382-b4a92c248c10",
+      "name": "Checking Account"
+    },
+    {
+      "id": "49d0273e-ce4a-4c3a-9836-c46f5bb6977c",
+      "name": "Savings Account"
+    }
+  ],
+  "categories": [
+    {
+      "id": "4691d35b-5b3e-4d68-9447-038d80c7045e",
+      "name": "Groceries"
+    },
+    {
+      "id": "ffbbbfaf-991e-4869-8bbc-16d7b05e4f47",
+      "name": "Transportation"
+    }
+  ]
+}
