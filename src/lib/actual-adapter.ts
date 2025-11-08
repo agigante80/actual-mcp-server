@@ -22,6 +22,10 @@ import {
   updatePayee as rawUpdatePayee,
   deletePayee as rawDeletePayee,
   deleteAccount as rawDeleteAccount,
+  getRules as rawGetRules,
+  createRule as rawCreateRule,
+  updateRule as rawUpdateRule,
+  deleteRule as rawDeleteRule,
 } from '@actual-app/api/dist/methods.js';
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
@@ -221,6 +225,24 @@ export async function deletePayee(id: string): Promise<void> {
   observability.incrementToolCall('actual.payees.delete').catch(() => {});
   await withConcurrency(() => retry(() => rawDeletePayee(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
 }
+export async function getRules(): Promise<unknown[]> {
+  observability.incrementToolCall('actual.rules.get').catch(() => {});
+  const raw = await withConcurrency(() => retry(() => rawGetRules() as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+  return Array.isArray(raw) ? raw : [];
+}
+export async function createRule(rule: unknown): Promise<string> {
+  observability.incrementToolCall('actual.rules.create').catch(() => {});
+  const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
+  return normalizeToId(raw);
+}
+export async function updateRule(id: string, fields: unknown): Promise<void> {
+  observability.incrementToolCall('actual.rules.update').catch(() => {});
+  await withConcurrency(() => retry(() => rawUpdateRule(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function deleteRule(id: string): Promise<void> {
+  observability.incrementToolCall('actual.rules.delete').catch(() => {});
+  await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
 
 export default {
   getAccounts,
@@ -244,5 +266,9 @@ export default {
   deleteCategory,
   updatePayee,
   deletePayee,
+  getRules,
+  createRule,
+  updateRule,
+  deleteRule,
   notifications,
 };

@@ -21,6 +21,10 @@ declare module '@actual-app/api/dist/methods.js' {
   export function updatePayee(...args: unknown[]): Promise<unknown>;
   export function deletePayee(...args: unknown[]): Promise<unknown>;
   export function deleteAccount(...args: unknown[]): Promise<unknown>;
+  export function getRules(...args: unknown[]): Promise<unknown>;
+  export function createRule(...args: unknown[]): Promise<unknown>;
+  export function updateRule(...args: unknown[]): Promise<unknown>;
+  export function deleteRule(...args: unknown[]): Promise<unknown>;
   export function searchDocuments(...args: unknown[]): Promise<unknown>;
   export function downloadBudget(...args: unknown[]): Promise<unknown>;
   export function shutdown(...args: unknown[]): Promise<unknown>;
