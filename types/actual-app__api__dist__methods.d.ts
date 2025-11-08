@@ -32,6 +32,13 @@ declare module '@actual-app/api/dist/methods.js' {
   export function createCategoryGroup(...args: unknown[]): Promise<unknown>;
   export function updateCategoryGroup(...args: unknown[]): Promise<unknown>;
   export function deleteCategoryGroup(...args: unknown[]): Promise<unknown>;
+  export function mergePayees(...args: unknown[]): Promise<unknown>;
+  export function getPayeeRules(...args: unknown[]): Promise<unknown>;
+  export function batchBudgetUpdates(...args: unknown[]): Promise<unknown>;
+  export function holdBudgetForNextMonth(...args: unknown[]): Promise<unknown>;
+  export function resetBudgetHold(...args: unknown[]): Promise<unknown>;
+  export function setBudgetAmount(...args: unknown[]): Promise<unknown>;
+  export function setBudgetCarryover(...args: unknown[]): Promise<unknown>;
   export function searchDocuments(...args: unknown[]): Promise<unknown>;
   export function downloadBudget(...args: unknown[]): Promise<unknown>;
   export function shutdown(...args: unknown[]): Promise<unknown>;

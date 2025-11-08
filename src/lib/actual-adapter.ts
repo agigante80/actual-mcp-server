@@ -33,6 +33,11 @@ import {
   createCategoryGroup as rawCreateCategoryGroup,
   updateCategoryGroup as rawUpdateCategoryGroup,
   deleteCategoryGroup as rawDeleteCategoryGroup,
+  mergePayees as rawMergePayees,
+  getPayeeRules as rawGetPayeeRules,
+  batchBudgetUpdates as rawBatchBudgetUpdates,
+  holdBudgetForNextMonth as rawHoldBudgetForNextMonth,
+  resetBudgetHold as rawResetBudgetHold,
 } from '@actual-app/api/dist/methods.js';
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
@@ -280,6 +285,27 @@ export async function deleteCategoryGroup(id: string): Promise<void> {
   observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
   await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
 }
+export async function mergePayees(targetId: string, mergeIds: string[]): Promise<void> {
+  observability.incrementToolCall('actual.payees.merge').catch(() => {});
+  await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
+  observability.incrementToolCall('actual.payees.getPayeeRules').catch(() => {});
+  const raw = await withConcurrency(() => retry(() => rawGetPayeeRules(payeeId) as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+  return Array.isArray(raw) ? raw : [];
+}
+export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {
+  observability.incrementToolCall('actual.budgets.batchUpdates').catch(() => {});
+  await withConcurrency(() => retry(() => rawBatchBudgetUpdates(fn) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function holdBudgetForNextMonth(month: string, categoryId: string): Promise<void> {
+  observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
+  await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function resetBudgetHold(month: string, categoryId: string): Promise<void> {
+  observability.incrementToolCall('actual.budgets.resetHold').catch(() => {});
+  await withConcurrency(() => retry(() => rawResetBudgetHold(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
 
 export default {
   getAccounts,
@@ -314,5 +340,10 @@ export default {
   createCategoryGroup,
   updateCategoryGroup,
   deleteCategoryGroup,
+  mergePayees,
+  getPayeeRules,
+  batchBudgetUpdates,
+  holdBudgetForNextMonth,
+  resetBudgetHold,
   notifications,
 };
