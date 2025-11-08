@@ -23,8 +23,11 @@ const implementedTools = [
   'actual_accounts_update',
   'actual_budgets_getMonth',
   'actual_budgets_getMonths',
+  'actual_budgets_holdForNextMonth',
+  'actual_budgets_resetHold',
   'actual_budgets_setAmount',
   'actual_budgets_setCarryover',
+  'actual_budget_updates_batch',
   'actual_categories_create',
   'actual_categories_delete',
   'actual_categories_get',
@@ -36,7 +39,9 @@ const implementedTools = [
   'actual_payees_create',
   'actual_payees_delete',
   'actual_payees_get',
+  'actual_payees_merge',
   'actual_payees_update',
+  'actual_payee_rules_get',
   'actual_rules_create',
   'actual_rules_delete',
   'actual_rules_get',
@@ -82,6 +87,11 @@ const apiToolMap = {
   'createCategoryGroup': 'actual_category_groups_create',
   'updateCategoryGroup': 'actual_category_groups_update',
   'deleteCategoryGroup': 'actual_category_groups_delete',
+  'mergePayees': 'actual_payees_merge',
+  'getPayeeRules': 'actual_payee_rules_get',
+  'batchBudgetUpdates': 'actual_budget_updates_batch',
+  'holdBudgetForNextMonth': 'actual_budgets_holdForNextMonth',
+  'resetBudgetHold': 'actual_budgets_resetHold',
 };
 
 console.log('✅ Implemented Tools:');
