@@ -18,11 +18,13 @@ const getTestArgs = (toolName: string): unknown => {
     case 'actual.transactions.import':
       return { accountId: 'test-account-id', txs: [{ amount: 50, payee: 'Import Test', date: '2025-11-08' }] };
     case 'actual.categories.create':
-      return { name: 'Test Category' };
+      // Try different field names that might be expected
+      return { name: 'Test Category', group_id: 'fc3825fd-b982-4b72-b768-5b30844cf832', groupId: 'fc3825fd-b982-4b72-b768-5b30844cf832' };
     case 'actual.payees.create':
       return { name: 'Test Payee' };
     case 'actual.budgets.setAmount':
-      return { month: '2025-11', categoryId: 'test-category-id', amount: 500 };
+      // Use an existing category ID (Food category from the budget data)
+      return { month: '2025-11', categoryId: '541836f1-e756-4473-a5d0-6c1d3f06c7fa', amount: 500 };
     case 'actual.budgets.getMonth':
       return { month: '2025-11' };
     // These tools don't require parameters
