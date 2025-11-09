@@ -4,8 +4,8 @@ This document provides a comprehensive overview of which Actual Budget API metho
 
 ## Summary Statistics
 
-- **Total MCP Tools**: 37
-- **API Coverage**: ~76% of core Actual Budget API
+- **Total MCP Tools**: 39
+- **API Coverage**: ~78% of core Actual Budget API
 - **Implemented Categories**: 8
 - **Test Coverage**: >80% unit test coverage
 
@@ -47,16 +47,16 @@ const balance = await tools.call('actual_accounts_get_balance', {
 await tools.call('actual_accounts_close', { id: accountId });
 ```
 
-### ✅ Transactions (5/6 - 83% Coverage)
+### ✅ Transactions (6/6 - 100% Coverage)
 
 | MCP Tool | Actual Budget API | Status | Description |
 |----------|------------------|--------|-------------|
 | `actual_transactions_get` | `api.getTransactions()` | ✅ Implemented | Get transactions for account/date range |
+| `actual_transactions_filter` | `api.getTransactions()` + filtering | ✅ Implemented | Filter transactions with advanced criteria |
 | `actual_transactions_create` | `api.addTransaction()` / `api.addTransactions()` | ✅ Implemented | Create one or more transactions |
 | `actual_transactions_import` | `api.importTransactions()` | ✅ Implemented | Import transactions with reconciliation |
 | `actual_transactions_update` | `api.updateTransaction()` | ✅ Implemented | Update transaction fields |
 | `actual_transactions_delete` | `api.deleteTransaction()` | ✅ Implemented | Delete a transaction |
-| `actual_transactions_filter` | `api.runQuery()` | ❌ Not Implemented | Advanced transaction queries |
 
 **Usage Examples:**
 
@@ -85,6 +85,19 @@ const result = await tools.call('actual_transactions_import', {
     { date: '2025-11-08', amount: -2500, payee: 'Grocery Store' },
     { date: '2025-11-09', amount: -1500, payee: 'Coffee Shop' }
   ]
+});
+
+// Filter transactions with advanced criteria
+const filtered = await tools.call('actual_transactions_filter', {
+  accountId: 'account-uuid',
+  startDate: '2025-11-01',
+  endDate: '2025-11-30',
+  minAmount: -10000, // Expenses between $10 and $100
+  maxAmount: -1000,
+  categoryId: 'groceries-category-uuid',
+  notes: 'weekly', // Search in notes
+  cleared: true, // Only cleared transactions
+  reconciled: false // Not yet reconciled
 });
 ```
 
@@ -170,18 +183,18 @@ const rules = await tools.call('actual_payee_rules_get', {
 });
 ```
 
-### ✅ Budgets (6/8 - 75% Coverage)
+### ✅ Budgets (7/7 - 100% Coverage)
 
 | MCP Tool | Actual Budget API | Status | Description |
 |----------|------------------|--------|-------------|
 | `actual_budgets_getMonths` | `api.getBudgetMonths()` | ✅ Implemented | List available budget months |
 | `actual_budgets_getMonth` | `api.getBudgetMonth()` | ✅ Implemented | Get budget for specific month |
 | `actual_budgets_setAmount` | `api.setBudgetAmount()` | ✅ Implemented | Set category budget amount |
+| `actual_budgets_transfer` | `api.setBudgetAmount()` (batched) | ✅ Implemented | Transfer amount between categories |
 | `actual_budgets_setCarryover` | `api.setBudgetCarryover()` | ✅ Implemented | Enable/disable carryover |
 | `actual_budgets_holdForNextMonth` | `api.holdForNextMonth()` | ✅ Implemented | Hold category funds |
 | `actual_budgets_resetHold` | `api.resetHold()` | ✅ Implemented | Reset hold status |
 | `actual_budget_updates_batch` | `api.batchBudgetUpdates()` | ✅ Implemented | Batch multiple budget updates |
-| `actual_budgets_transfer` | `api.transferCategoryBalance()` | ❌ Not Implemented | Transfer between categories |
 
 **Usage Examples:**
 
@@ -196,6 +209,14 @@ await tools.call('actual_budgets_setAmount', {
   month: '2025-11',
   categoryId: 'category-uuid',
   amount: 50000 // $500.00
+});
+
+// Transfer budget between categories
+await tools.call('actual_budgets_transfer', {
+  month: '2025-11',
+  fromCategoryId: 'groceries-category-uuid',
+  toCategoryId: 'dining-category-uuid',
+  amount: 5000 // Transfer $50.00
 });
 
 // Enable carryover
@@ -247,13 +268,11 @@ The following Actual Budget API methods are **not yet covered**:
 
 | Feature | Actual Budget API | Priority | Notes |
 |---------|------------------|----------|-------|
-| Advanced Queries | `api.runQuery()` | Medium | Complex transaction filtering |
 | Reports | `api.runReport()` | Low | Pre-built financial reports |
 | Notes | `api.addNote()`, `api.getNotes()` | Low | Transaction/account notes |
 | Attachments | `api.addAttachment()` | Low | File attachments |
-| Bulk Operations | Various | Medium | Batch create/update/delete |
+| Bulk Operations | Various | Medium | Batch create/update/delete (except budgets) |
 | Budget Templates | `api.applyBudgetTemplate()` | Low | Template-based budgeting |
-| Category Transfers | `api.transferCategoryBalance()` | Medium | Move funds between categories |
 | Scheduled Transactions | `api.getSchedules()`, etc. | High | Recurring transactions |
 
 ## Tool Call Examples

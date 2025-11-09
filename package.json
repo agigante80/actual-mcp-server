@@ -2,7 +2,7 @@
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
   "version": "0.1.0",
-  "description": "A bridge service connecting LibreChat to Actual Finance",
+  "description": "MCP server providing 39 tools for AI-driven financial management with Actual Budget (78% API coverage)",
   "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
