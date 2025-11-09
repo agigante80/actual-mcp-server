@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-1.18-orange)](https://modelcontextprotocol.io/)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants like [LibreChat](https://github.com/danny-avila/LibreChat) with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through 37 specialized tools covering 76% of the Actual Budget API.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants like [LibreChat](https://github.com/danny-avila/LibreChat) with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through 39 specialized tools covering 78% of the Actual Budget API.
 
 ---
 
@@ -31,11 +31,11 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 
 ### Core Capabilities
 
-- 🤖 **37 MCP Tools**: Comprehensive financial operations via natural language
+- 🤖 **39 MCP Tools**: Comprehensive financial operations via natural language
 - 🔄 **Multiple Transports**: HTTP, WebSocket, and Server-Sent Events (SSE)
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
-- 📊 **76% API Coverage**: Supports majority of Actual Budget operations
+- 📊 **78% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
 
 ### Advanced Features
@@ -119,7 +119,7 @@ docker compose --profile fullstack --profile dev up
 
 ## 🛠️ Available Tools
 
-The MCP server exposes **37 tools** organized into 8 categories. All tools follow the naming convention `actual_<category>_<action>`.
+The MCP server exposes **39 tools** organized into 8 categories. All tools follow the naming convention `actual_<category>_<action>`.
 
 ### Accounts (7 tools)
 
@@ -133,11 +133,12 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 | `actual_accounts_reopen` | Reopen closed account | `id` |
 | `actual_accounts_get_balance` | Get account balance at date | `id`, `cutoff?` |
 
-### Transactions (5 tools)
+### Transactions (6 tools)
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `actual_transactions_get` | Get transactions for account | `accountId`, `startDate?`, `endDate?` |
+| `actual_transactions_filter` | Filter transactions with advanced criteria | `accountId?`, `startDate?`, `endDate?`, `minAmount?`, `maxAmount?`, `categoryId?`, `payeeId?`, `notes?`, `cleared?`, `reconciled?` |
 | `actual_transactions_create` | Create new transaction(s) | `accountId`, `date`, `amount`, `payee?`, `category?`, `notes?` |
 | `actual_transactions_import` | Import and reconcile transactions | `accountId`, `transactions[]` |
 | `actual_transactions_update` | Update transaction | `id`, `amount?`, `payee?`, `category?`, `notes?`, `date?` |
@@ -172,13 +173,14 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 | `actual_payees_merge` | Merge duplicate payees | `targetId`, `mergeIds[]` |
 | `actual_payee_rules_get` | Get rules for a payee | `payeeId` |
 
-### Budgets (6 tools)
+### Budgets (7 tools)
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `actual_budgets_getMonths` | List available budget months | - |
 | `actual_budgets_getMonth` | Get budget for specific month | `month` |
 | `actual_budgets_setAmount` | Set category budget amount | `month`, `categoryId`, `amount` |
+| `actual_budgets_transfer` | Transfer amount between categories | `month`, `fromCategoryId`, `toCategoryId`, `amount` |
 | `actual_budgets_setCarryover` | Enable/disable carryover | `month`, `categoryId`, `flag` |
 | `actual_budgets_holdForNextMonth` | Hold funds for next month | `month`, `categoryId` |
 | `actual_budgets_resetHold` | Reset hold status | `month`, `categoryId` |
@@ -198,7 +200,7 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 |------|-------------|------------|
 | `actual_budget_updates_batch` | Batch multiple budget updates | `updates` (function) |
 
-**Total: 37 tools across 8 categories**
+**Total: 39 tools across 8 categories**
 
 ---
 
@@ -217,6 +219,8 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 
 #### Transaction Management
 - ✅ **View** transactions with date range filtering
+- ✅ **Filter** transactions by amount, category, payee, notes, status
+- ✅ **Search** transactions with advanced criteria
 - ✅ **Create** single or multiple transactions
 - ✅ **Import** bank CSV files (auto-reconciliation)
 - ✅ **Update** transaction details (amount, payee, category, notes, date)
@@ -228,6 +232,7 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 - ✅ **Create** category groups and categories
 - ✅ **Organize** categories into groups
 - ✅ **Set** monthly budget amounts
+- ✅ **Transfer** budget amounts between categories
 - ✅ **Enable** category carryover (rollover unused funds)
 - ✅ **Hold** funds for next month
 - ✅ **Batch update** multiple budget categories efficiently
@@ -266,7 +271,7 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 - ❌ **Copy** budgets between months
 
 #### Category Transfers
-- ❌ **Transfer** funds between budget categories
+- ✅ **Transfer** funds between budget categories (same month)
 - ❌ **Borrow** from future months
 
 #### Notes & Attachments
@@ -285,8 +290,7 @@ The MCP server exposes **37 tools** organized into 8 categories. All tools follo
 - 🔄 **Scheduled Transactions**: Full support for recurring transactions
 - 📊 **Custom Reports**: Generate spending analysis and trends
 - 📁 **Bulk Operations**: Mass update/delete with filters
-- 🔍 **Advanced Queries**: SQL-like transaction filtering
-- 📎 **Notes Support**: Add notes to transactions and accounts
+-  **Notes Support**: Add notes to transactions and accounts
 - 🏷️ **Tags**: Tag-based transaction organization
 
 ---
