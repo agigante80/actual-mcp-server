@@ -3,12 +3,29 @@ name: CI/CD Pipeline
 # ============================================================================
 # Trigger Configuration
 # ============================================================================
-# Runs on all pushes to main/develop and pull requests
+# Runs on all pushes to main/develop, pull requests, and manual triggers
 on:
   push:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: 'Skip test jobs (for faster builds)'
+        required: false
+        type: boolean
+        default: false
+      skip_docker:
+        description: 'Skip Docker build and push'
+        required: false
+        type: boolean
+        default: false
+      force_release:
+        description: 'Force release creation (even on non-main branch)'
+        required: false
+        type: boolean
+        default: false
 
 # ============================================================================
 # Permissions
@@ -68,6 +85,7 @@ jobs:
     name: Test Suite
     runs-on: ubuntu-latest
     needs: lint
+    if: ${{ !inputs.skip_tests }}
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -109,6 +127,7 @@ jobs:
     name: E2E Tests (Playwright)
     runs-on: ubuntu-latest
     needs: lint
+    if: ${{ !inputs.skip_tests }}
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -147,6 +166,7 @@ jobs:
     name: Build Artifacts
     runs-on: ubuntu-latest
     needs: [test, e2e]
+    if: ${{ always() && !cancelled() && (success() || inputs.skip_tests) }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       short_sha: ${{ steps.sha.outputs.short_sha }}
@@ -192,12 +212,12 @@ jobs:
   # --------------------------------------------------------------------------
   # Job 5: Docker Build & Publish
   # --------------------------------------------------------------------------
-  # Builds and pushes Docker image (depends on build passing, only on push)
+  # Builds and pushes Docker image (depends on build passing, only on push or manual)
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
     needs: build
-    if: github.event_name == 'push'
+    if: ${{ !inputs.skip_docker && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     outputs:
       docker_tag: ${{ steps.meta.outputs.tags }}
     steps:
@@ -274,12 +294,12 @@ jobs:
   # --------------------------------------------------------------------------
   # Job 6: Release & Docker Hub Update
   # --------------------------------------------------------------------------
-  # Creates GitHub release and updates Docker Hub descriptions (only on main)
+  # Creates GitHub release and updates Docker Hub descriptions (only on main or forced)
   release:
     name: Release & Update Docker Hub
     runs-on: ubuntu-latest
     needs: [build, docker]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.force_release) }}
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -411,7 +431,7 @@ jobs:
     name: Pipeline Summary
     runs-on: ubuntu-latest
     needs: [build, docker, release]
-    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: ${{ always() && !cancelled() && ((github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch') }}
     steps:
       - name: 📊 Generate summary
         run: |
@@ -419,6 +439,7 @@ jobs:
           ## ✅ CI/CD Pipeline Results
           
           ### 🏗️ Build Information
+          - **Trigger:** ${{ github.event_name }}
           - **Version:** ${{ needs.build.outputs.version }}
           - **Commit:** ${{ needs.build.outputs.short_sha }}
           - **Branch:** ${{ github.ref_name }}
