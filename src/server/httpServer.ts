@@ -2,12 +2,12 @@
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import express, { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
-import { Server } from "./streamable-http.js";
-import { StreamableHTTPServerTransport } from './streamable-http.js';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
-  CallToolRequestSchema,
   ListToolsRequestSchema,
-} from "./streamable-http.js";
+  CallToolRequestSchema,
+} from '@modelcontextprotocol/sdk/types.js';
 import logger from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
