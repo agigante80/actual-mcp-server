@@ -13,6 +13,7 @@ import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState } from '../actualConnection.js';
 import observability from '../observability.js';
+import config from '../config.js';
 
 export async function startHttpServer(
   mcp: ActualMCPConnection,
@@ -33,6 +34,38 @@ export async function startHttpServer(
 
   // safe fallback if index didn't provide implementedTools
   const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
+
+  // Authentication middleware
+  const authenticateRequest = (req: Request, res: Response): boolean => {
+    // If MCP_SSE_AUTHORIZATION is not configured, allow all requests
+    if (!config.MCP_SSE_AUTHORIZATION) {
+      return true;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Missing Authorization header`);
+      res.status(401).json({ error: 'Unauthorized: Missing Authorization header' });
+      return false;
+    }
+
+    // Check for Bearer token format
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!match) {
+      logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid Authorization header format`);
+      res.status(401).json({ error: 'Unauthorized: Invalid Authorization header format. Expected "Bearer <token>"' });
+      return false;
+    }
+
+    const token = match[1];
+    if (token !== config.MCP_SSE_AUTHORIZATION) {
+      logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid token`);
+      res.status(401).json({ error: 'Unauthorized: Invalid token' });
+      return false;
+    }
+
+    return true;
+  };
 
   // Create a fresh Server instance similar to httpServer_testing
   function createServerInstance() {
@@ -107,6 +140,11 @@ export async function startHttpServer(
 
   // Unified POST handler. Create new server/transport only on initialize (no session id).
   app.post(httpPath, async (req: Request, res: Response) => {
+    // Authenticate the request
+    if (!authenticateRequest(req, res)) {
+      return;
+    }
+
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     const payload = (req.body && Object.keys(req.body).length) ? req.body : {};
     const method = payload?.method;
@@ -241,6 +279,11 @@ export async function startHttpServer(
     console.info(`MCP Streamable HTTP Server listening on ${port}`);
     console.info(`📨 MCP endpoint: ${advertised}`);
     console.info(`❤️ Health check: http://localhost:${port}/health`);
+    if (config.MCP_SSE_AUTHORIZATION) {
+      logger.info(`🔒 HTTP authentication enabled (Bearer token required)`);
+    } else {
+      logger.warn(`⚠️  HTTP authentication disabled (no MCP_SSE_AUTHORIZATION set)`);
+    }
   });
 
   return { app, listener };
