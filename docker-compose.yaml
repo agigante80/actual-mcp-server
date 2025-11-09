@@ -1,0 +1,245 @@
+# ============================================================================
+# Docker Compose Configuration for Actual MCP Server
+# ============================================================================
+# This file provides multiple configurations for running the Actual MCP Server
+# with Docker Compose, including both development and production setups.
+#
+# Usage:
+#   Development:  docker compose up
+#   Production:   docker compose --profile production up
+#   Full Stack:   docker compose --profile fullstack up
+# ============================================================================
+
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # Actual Budget Server (Optional - Full Stack)
+  # --------------------------------------------------------------------------
+  # Uncomment this service if you don't have an existing Actual Budget server
+  # This will run the official Actual Budget server locally
+  
+  actual-server:
+    image: actualbudget/actual-server:latest
+    container_name: actual-budget-server
+    profiles:
+      - fullstack
+    restart: unless-stopped
+    ports:
+      - "5006:5006"
+    volumes:
+      # Persist Actual Budget data
+      - actual-data:/data
+    environment:
+      # Optional: Set a password for file uploads
+      # ACTUAL_UPLOAD_FILE_SYNC_PASSWORD: your-upload-password
+      
+      # Optional: Trusted proxies (if behind reverse proxy)
+      # ACTUAL_TRUSTED_PROXIES: 172.17.0.0/16
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5006"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - actual-network
+
+  # --------------------------------------------------------------------------
+  # Actual MCP Server - Development Mode
+  # --------------------------------------------------------------------------
+  # Default service for local development with hot-reload and debug logging
+  
+  mcp-server-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: actual-mcp-dev
+    profiles:
+      - dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Mount source code for development
+      - ./src:/app/src:ro
+      - ./dist:/app/dist
+      # Persist Actual data locally
+      - ./actual-data:/data
+      # Persist logs
+      - ./logs:/app/logs
+    environment:
+      # Actual Finance connection
+      - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-server:5006}
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
+      - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
+      
+      # MCP Bridge settings
+      - MCP_BRIDGE_DATA_DIR=/data
+      - MCP_BRIDGE_PORT=3000
+      - MCP_BRIDGE_BIND_HOST=0.0.0.0
+      - MCP_BRIDGE_LOG_LEVEL=debug
+      - MCP_BRIDGE_STORE_LOGS=true
+      - MCP_BRIDGE_LOG_DIR=/app/logs
+      
+      # Development settings
+      - NODE_ENV=development
+    networks:
+      - actual-network
+    depends_on:
+      actual-server:
+        condition: service_healthy
+        required: false
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # --------------------------------------------------------------------------
+  # Actual MCP Server - Production Mode
+  # --------------------------------------------------------------------------
+  # Production-ready configuration with secrets management
+  
+  mcp-server-prod:
+    image: actual-mcp-server:latest
+    container_name: actual-mcp-prod
+    profiles:
+      - production
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist Actual data
+      - mcp-data:/data
+      # Persist logs
+      - mcp-logs:/app/logs
+    environment:
+      # Actual Finance connection
+      - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
+      - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
+      
+      # Use Docker secret for password
+      - ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
+      
+      # MCP Bridge settings
+      - MCP_BRIDGE_DATA_DIR=/data
+      - MCP_BRIDGE_PORT=3000
+      - MCP_BRIDGE_BIND_HOST=0.0.0.0
+      - MCP_BRIDGE_LOG_LEVEL=info
+      - MCP_BRIDGE_STORE_LOGS=true
+      - MCP_BRIDGE_LOG_DIR=/app/logs
+      - MCP_BRIDGE_MAX_FILES=30d
+      
+      # SSE Authentication
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION:?MCP_SSE_AUTHORIZATION is required}
+      
+      # Production settings
+      - NODE_ENV=production
+    secrets:
+      - actual_password
+    networks:
+      - actual-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # --------------------------------------------------------------------------
+  # Reverse Proxy - Traefik (Optional)
+  # --------------------------------------------------------------------------
+  # Uncomment to add HTTPS and automatic SSL with Let's Encrypt
+  
+  # traefik:
+  #   image: traefik:v2.10
+  #   container_name: traefik
+  #   profiles:
+  #     - production
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - ./traefik/traefik.yml:/etc/traefik/traefik.yml:ro
+  #     - ./traefik/acme.json:/acme.json
+  #   networks:
+  #     - actual-network
+
+# ----------------------------------------------------------------------------
+# Networks
+# ----------------------------------------------------------------------------
+networks:
+  actual-network:
+    driver: bridge
+    name: actual-network
+
+# ----------------------------------------------------------------------------
+# Volumes
+# ----------------------------------------------------------------------------
+volumes:
+  # Actual Budget server data
+  actual-data:
+    driver: local
+    name: actual-budget-data
+  
+  # MCP server data (production)
+  mcp-data:
+    driver: local
+    name: actual-mcp-data
+  
+  # MCP server logs (production)
+  mcp-logs:
+    driver: local
+    name: actual-mcp-logs
+
+# ----------------------------------------------------------------------------
+# Secrets (Production)
+# ----------------------------------------------------------------------------
+# For production, store sensitive data in Docker secrets
+secrets:
+  actual_password:
+    file: ./secrets/actual_password.txt
+    # In Docker Swarm, use:
+    # external: true
+
+# ============================================================================
+# Usage Examples
+# ============================================================================
+#
+# 1. Development with existing Actual server:
+#    $ docker compose --profile dev up
+#
+# 2. Full stack (Actual + MCP Server):
+#    $ docker compose --profile fullstack --profile dev up
+#
+# 3. Production deployment:
+#    $ mkdir -p secrets
+#    $ echo "your-actual-password" > secrets/actual_password.txt
+#    $ chmod 600 secrets/actual_password.txt
+#    $ docker compose --profile production up -d
+#
+# 4. Build custom image:
+#    $ docker compose build mcp-server-dev
+#
+# 5. View logs:
+#    $ docker compose logs -f mcp-server-dev
+#
+# 6. Stop all services:
+#    $ docker compose down
+#
+# 7. Remove all data (CAUTION: This deletes all data):
+#    $ docker compose down -v
+#
+# ============================================================================

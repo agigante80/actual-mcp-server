@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/agigante80/actual-mcp-server/discussions
+    about: Ask questions, share ideas, or discuss the project
+  - name: 📚 Documentation
+    url: https://github.com/agigante80/actual-mcp-server/tree/main/docs
+    about: Read the comprehensive documentation
+  - name: 🔒 Security Vulnerability
+    url: https://github.com/agigante80/actual-mcp-server/security/advisories/new
+    about: Report security vulnerabilities privately (DO NOT create public issues)
