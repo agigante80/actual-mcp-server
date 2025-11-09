@@ -379,6 +379,20 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: ✅ Validate Docker Hub descriptions
+        run: |
+          # Check short description length (must be <= 100 characters)
+          SHORT_DESC=$(cat docker/description/short.md | tr -d '\n')
+          SHORT_LEN=${#SHORT_DESC}
+          
+          if [ $SHORT_LEN -gt 100 ]; then
+            echo "❌ Short description is too long: $SHORT_LEN characters (max 100)"
+            echo "Content: $SHORT_DESC"
+            exit 1
+          else
+            echo "✅ Short description length OK: $SHORT_LEN/100 characters"
+          fi
+
       - name: 📝 Ensure GitHub link in Docker Hub description
         run: |
           LONG_DESC=$(cat docker/description/long.md)
