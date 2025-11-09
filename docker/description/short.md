@@ -1,0 +1,1 @@
+MCP bridge connecting LibreChat to Actual Finance - 37 tools, 76% API coverage, TypeScript-based
