@@ -8,7 +8,7 @@ This repository uses a comprehensive GitHub Actions workflow (`.github/workflows
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      TRIGGER (Push/PR)                       │
+│              TRIGGER (Push/PR/Manual)                        │
 └─────────────────────────┬───────────────────────────────────┘
                           │
                           ▼
@@ -62,6 +62,42 @@ This repository uses a comprehensive GitHub Actions workflow (`.github/workflows
 │  - Show all artifacts and links                              │
 └─────────────────────────────────────────────────────────────┘
 ```
+
+## Manual Workflow Triggers
+
+You can manually trigger the workflow from the GitHub Actions tab with customizable options:
+
+### How to Run Manually
+
+1. Go to **Actions** tab in GitHub
+2. Select **CI/CD Pipeline** workflow
+3. Click **Run workflow** button
+4. Choose options:
+   - **Skip test jobs**: Skip unit and E2E tests for faster builds
+   - **Skip Docker**: Skip Docker build and push
+   - **Force release**: Create release even on non-main branches
+
+### Use Cases
+
+**Quick Build Test** (skip tests and Docker):
+- ✅ Lint and type check
+- ✅ Build artifacts
+- ⏭️ Skip tests
+- ⏭️ Skip Docker
+
+**Docker Only** (skip tests):
+- ✅ Lint
+- ⏭️ Skip tests
+- ✅ Build
+- ✅ Docker build and push
+
+**Full Pipeline** (all options off):
+- ✅ Complete pipeline execution
+- Same as automatic push triggers
+
+**Force Release on Develop**:
+- ✅ Run full pipeline on develop branch
+- ✅ Create GitHub release (normally only on main)
 
 ## Features
 
@@ -199,6 +235,14 @@ Configure these in **Settings → Secrets and variables → Actions**:
 ### Pull Requests
 - **Purpose**: Validation before merge
 - **Actions**: Lint, test, E2E, build (no Docker push or release)
+
+### Manual Triggers (`workflow_dispatch`)
+- **Purpose**: On-demand pipeline execution with custom options
+- **Available Options**:
+  - `skip_tests` - Skip unit and E2E tests (faster builds)
+  - `skip_docker` - Skip Docker build and push
+  - `force_release` - Create release on any branch (not just main)
+- **Actions**: Customizable based on selected options
 
 ## Version Management
 
