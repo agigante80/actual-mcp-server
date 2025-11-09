@@ -6,7 +6,7 @@ import { fileURLToPath } from 'url';
 
 // ESM-safe __dirname replacement
 const __filename = fileURLToPath(import.meta.url);
-const ROOT = path.resolve(path.dirname(__filename), '..');
+const ROOT = path.resolve(path.dirname(__filename), '..', '..');
 const START_TIMEOUT = 30_000;
 
 test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => {
