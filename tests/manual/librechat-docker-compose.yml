@@ -1,0 +1,24 @@
+version: '3.8'
+services:
+  librechat:
+    image: ghcr.io/danny-avila/librechat:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - MONGO_URI=mongodb://mongo:27017/librechat
+      - LIBRECHAT_TITLE=E2E Test LibreChat
+    depends_on:
+      - mongo
+    volumes:
+      - ./librechat-config.yaml:/app/librechat.yaml
+  
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    volumes:
+      - librechat_mongo_data:/data/db
+
+volumes:
+  librechat_mongo_data:

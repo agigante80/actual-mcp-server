@@ -1,0 +1,11 @@
+version: 1.0.5
+cache: true
+endpoints:
+  custom:
+    - name: "actual-mcp"
+      apiKey: "test-key"
+      baseURL: "http://host.docker.internal:3000"
+      models:
+        default: ["mcp-actual"]
+      titleConvo: true
+      titleModel: "mcp-actual"

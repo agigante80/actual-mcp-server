@@ -104,7 +104,7 @@ jobs:
         run: npm run build
 
       - name: 🧪 Run unit smoke tests
-        run: node test/unit/generated_tools.smoke.test.js
+        run: node tests/unit/generated_tools.smoke.test.js
 
       - name: 📊 Upload test results
         if: always()
