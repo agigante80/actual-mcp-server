@@ -1,13 +1,18 @@
 // src/server/sseServer.ts
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import express from 'express';
 import { createServer } from 'http';
 import type { Request, Response } from 'express';
-import logger, { logTransportWithDirection } from '../logger.js';
+import logger from '../logger.js';
+import actualToolsManager from '../actualToolsManager.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import config from '../config.js';
 
 export async function startSseServer(mcp: ActualMCPConnection, port: number, ssePath: string) {
   const app = express();
-  const server = createServer(app);
+  const httpServer = createServer(app);
 
   app.use(express.json());
 
@@ -16,86 +21,174 @@ export async function startSseServer(mcp: ActualMCPConnection, port: number, sse
     next();
   });
 
-  app.get(ssePath, (req: Request, res: Response) => {
-    const clientIp = req.ip || req.connection.remoteAddress || 'unknown IP';
+  // Store transports by session ID
+  const transports: Record<string, SSEServerTransport> = {};
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-
-    logger.info(`⚡ SSE client connected from ${clientIp}`);
-
-    function sendSSE(data: unknown) {
-      if (process.env.DEBUG) {
-        logger.debug(`to ${clientIp} ${JSON.stringify(data)}`);
-      }
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+  // Authentication middleware
+  const authenticateRequest = (req: Request, res: Response): boolean => {
+    // If MCP_SSE_AUTHORIZATION is not configured, allow all requests
+    if (!config.MCP_SSE_AUTHORIZATION) {
+      return true;
     }
 
-    logger.debug(`from ${clientIp} {}`);
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+      logger.warn(`[SSE] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Missing Authorization header`);
+      res.status(401).json({ error: 'Unauthorized: Missing Authorization header' });
+      return false;
+    }
 
-    logger.info('---------');
-    logger.info('🟡 MCP SERVER INFO');
-    logger.info('• Server Description:   Actual MCP SSE server ready');
-    logger.info('• OAuth Required:       false');
-    logger.info('• Capabilities:         tools: get_balances, get_transactions');
-    logger.info('• Tools:                get_balances, get_transactions');
-    logger.info('• Server Instructions:  Welcome to Actual MCP SSE server');
-    logger.info('---------');
+    // Check for Bearer token format
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (!match) {
+      logger.warn(`[SSE] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid Authorization header format`);
+      res.status(401).json({ error: 'Unauthorized: Invalid Authorization header format. Expected "Bearer <token>"' });
+      return false;
+    }
 
-    sendSSE({
-      jsonrpc: "2.0",
-      method: "server/capabilities",
-      params: {
+    const token = match[1];
+    if (token !== config.MCP_SSE_AUTHORIZATION) {
+      logger.warn(`[SSE] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid token`);
+      res.status(401).json({ error: 'Unauthorized: Invalid token' });
+      return false;
+    }
+
+    return true;
+  };
+
+  // Function to create and configure MCP server for each client
+  const createMcpServer = () => {
+    const server = new Server(
+      {
+        name: 'actual-mcp',
+        version: '0.1.0',
+      },
+      {
         capabilities: {
-          tools: [
+          tools: {},
+        },
+      }
+    );
+
+    // Set up tools/list handler
+    server.setRequestHandler(ListToolsRequestSchema, async () => {
+      logger.debug('[SSE] Listing available tools');
+      const capabilities = await mcp.fetchCapabilities();
+      return {
+        tools: capabilities.tools.list || [],
+      };
+    });
+
+    // Set up tools/call handler
+    server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+      const { name, arguments: args } = request.params;
+      logger.debug(`[SSE] Tool call: ${name}`);
+      try {
+        const result = await mcp.executeTool(name, args || {});
+        return {
+          content: [
             {
-              name: "get_balances",
-              description: "Get account balances",
-              inputSchema: { type: "object", properties: {} },
-            },
-            {
-              name: "get_transactions",
-              description: "Get transactions",
-              inputSchema: {
-                type: "object",
-                properties: { accountId: { type: "string" } },
-              },
+              type: 'text',
+              text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
             },
           ],
-          resources: [],
-          prompts: [],
-          models: [],
-          logging: {},
-        },
-      },
+        };
+      } catch (error: any) {
+        logger.error(`[SSE] Tool error for ${name}:`, error);
+        throw error;
+      }
     });
 
-    sendSSE({
-      jsonrpc: "2.0",
-      method: "server/instructions",
-      params: {
-        instructions: "Welcome to Actual MCP SSE server",
-      },
-    });
+    return server;
+  };
 
-    const interval = setInterval(() => {
-      sendSSE({ ping: Date.now() });
-    }, 15000);
+  // SSE endpoint for establishing the stream
+  app.get(ssePath, async (req: Request, res: Response) => {
+    const clientIp = req.ip || req.connection.remoteAddress || 'unknown IP';
+    
+    // Authenticate the request
+    if (!authenticateRequest(req, res)) {
+      return;
+    }
+    
+    logger.info(`⚡ SSE client connected from ${clientIp}`);
 
-    req.on('error', (err) => {
-      logger.error('SSE request error:', err);
-    });
+    try {
+      // Create SSE transport - the POST endpoint will be ssePath (same path)
+      const transport = new SSEServerTransport(ssePath, res);
+      const sessionId = transport.sessionId;
+      
+      // Store the transport
+      transports[sessionId] = transport;
 
-    res.on('error', (err) => {
-      logger.error('SSE response error:', err);
-    });
+      // Set up onclose handler
+      transport.onclose = () => {
+        logger.info(`❌ SSE client disconnected (session: ${sessionId}) from ${clientIp}`);
+        delete transports[sessionId];
+      };
 
-    req.on('close', () => {
-      clearInterval(interval);
-      logger.info(`❌ SSE client disconnected from ${clientIp}`);
-    });
+      // Create and connect MCP server
+      const mcpServer = createMcpServer();
+      await mcpServer.connect(transport);
+      
+      logger.info(`[SSE] MCP server connected for client ${clientIp} (session: ${sessionId})`);
+    } catch (error) {
+      logger.error(`[SSE] Error establishing connection from ${clientIp}:`, error);
+      res.status(500).end();
+    }
+  });
+
+  // HEAD endpoint for checking endpoint availability
+  app.head(ssePath, (req: Request, res: Response) => {
+    // Authenticate the request
+    if (!authenticateRequest(req, res)) {
+      return;
+    }
+    
+    // Return 200 OK with appropriate headers
+    res.status(200).end();
+  });
+
+  // POST endpoint for receiving client messages
+  app.post(ssePath, async (req: Request, res: Response) => {
+    const clientIp = req.ip || req.connection.remoteAddress || 'unknown IP';
+    
+    // Authenticate the request
+    if (!authenticateRequest(req, res)) {
+      return;
+    }
+    
+    const sessionId = req.query.sessionId as string;
+    
+    if (!sessionId) {
+      logger.warn(`[SSE] POST without sessionId from ${clientIp}`);
+      res.status(400).json({ error: 'Missing sessionId query parameter' });
+      return;
+    }
+
+    const transport = transports[sessionId];
+    if (!transport) {
+      logger.warn(`[SSE] POST for unknown session ${sessionId} from ${clientIp}`);
+      res.status(404).json({ error: 'Session not found' });
+      return;
+    }
+
+    logger.debug(`[SSE] Received POST for session ${sessionId} from ${clientIp}`);
+    
+    try {
+      // Let the transport handle the message
+      await transport.handlePostMessage(req, res, req.body);
+    } catch (error) {
+      logger.error(`[SSE] Error handling POST message:`, error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Internal server error' });
+      }
+    }
+  });
+
+  // Health check endpoint
+  app.get('/health', (_req, res) => {
+    res.json({ status: 'ok', transport: 'sse', activeSessions: Object.keys(transports).length });
   });
 
   app.use((req, res) => {
@@ -103,7 +196,12 @@ export async function startSseServer(mcp: ActualMCPConnection, port: number, sse
     res.status(404).json({ ok: false, error: 'Not Found' });
   });
 
-  server.listen(port, () => {
+  httpServer.listen(port, () => {
     logger.info(`🌐 SSE MCP server listening on http://localhost:${port}${ssePath}`);
+    if (config.MCP_SSE_AUTHORIZATION) {
+      logger.info(`🔒 SSE authentication enabled (Bearer token required)`);
+    } else {
+      logger.warn(`⚠️  SSE authentication disabled (no MCP_SSE_AUTHORIZATION set)`);
+    }
   });
 }

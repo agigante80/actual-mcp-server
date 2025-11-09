@@ -6,6 +6,7 @@ export const configSchema = z.object({
   ACTUAL_BUDGET_SYNC_ID: z.string().min(1),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
   MCP_BRIDGE_PORT: z.string().default('3000'),
+  MCP_SSE_AUTHORIZATION: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
