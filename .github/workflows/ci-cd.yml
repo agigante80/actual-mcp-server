@@ -404,15 +404,20 @@ jobs:
             exit 0
           fi
           
-          # Read descriptions
-          SHORT_DESC=$(cat docker/description/short.md)
-          FULL_DESC=$(cat docker/description/long.md)
+          # Read descriptions and properly escape for JSON
+          SHORT_DESC=$(cat docker/description/short.md | jq -Rs .)
+          FULL_DESC=$(cat docker/description/long.md | jq -Rs .)
           
-          # Update repository description
+          # Update repository description using jq to build proper JSON
+          PAYLOAD=$(jq -n \
+            --argjson description "$SHORT_DESC" \
+            --argjson full_description "$FULL_DESC" \
+            '{description: $description, full_description: $full_description}')
+          
           RESPONSE=$(curl -s -X PATCH \
             -H "Authorization: JWT ${TOKEN}" \
             -H "Content-Type: application/json" \
-            -d "{\"description\": \"${SHORT_DESC}\", \"full_description\": \"${FULL_DESC}\"}" \
+            -d "$PAYLOAD" \
             "https://hub.docker.com/v2/repositories/${{ env.DOCKER_IMAGE_NAME }}/")
           
           if echo "$RESPONSE" | jq -e .name > /dev/null 2>&1; then
