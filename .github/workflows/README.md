@@ -174,8 +174,8 @@ Configure these in **Settings → Secrets and variables → Actions**:
 
 | Secret | Description | Required For |
 |--------|-------------|--------------|
-| `DOCKER_USERNAME` | Docker Hub username | Docker push, Hub description update |
-| `DOCKER_PASSWORD` | Docker Hub password/token | Docker push, Hub description update |
+| `DOCKERHUB_USER` | Docker Hub username | Docker push, Hub description update |
+| `DOCKERHUB_TOKEN` | Docker Hub access token | Docker push, Hub description update |
 | `GITHUB_TOKEN` | Auto-provided by GitHub | Release creation (automatic) |
 
 ## Tagging Strategy
@@ -299,7 +299,7 @@ npm run test:e2e
 ### Docker Push Failures
 
 **Symptom**: Authentication error
-- Verify `DOCKER_USERNAME` and `DOCKER_PASSWORD` secrets are set correctly
+- Verify `DOCKERHUB_USER` and `DOCKERHUB_TOKEN` secrets are set correctly
 - Check Docker Hub token has push permissions
 - Ensure repository exists on Docker Hub
 
