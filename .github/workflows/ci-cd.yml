@@ -359,16 +359,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 📝 Update Docker Hub description
-        uses: peter-evans/dockerhub-description@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USER }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-          repository: ${{ env.DOCKER_IMAGE_NAME }}
-          short-description: "$(cat docker/description/short.md)"
-          readme-filepath: ./docker/description/long.md
-        continue-on-error: true
-
       - name: 📝 Ensure GitHub link in Docker Hub description
         run: |
           LONG_DESC=$(cat docker/description/long.md)
@@ -380,6 +370,38 @@ jobs:
           else
             echo "✅ GitHub repository link already present"
           fi
+
+      - name: 🐳 Update Docker Hub description via API
+        run: |
+          # Get Docker Hub token
+          TOKEN=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d '{"username": "${{ secrets.DOCKERHUB_USER }}", "password": "${{ secrets.DOCKERHUB_TOKEN }}"}' \
+            https://hub.docker.com/v2/users/login/ | jq -r .token)
+          
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "⚠️  Failed to get Docker Hub token, skipping description update"
+            exit 0
+          fi
+          
+          # Read descriptions
+          SHORT_DESC=$(cat docker/description/short.md)
+          FULL_DESC=$(cat docker/description/long.md)
+          
+          # Update repository description
+          RESPONSE=$(curl -s -X PATCH \
+            -H "Authorization: JWT ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "{\"description\": \"${SHORT_DESC}\", \"full_description\": \"${FULL_DESC}\"}" \
+            "https://hub.docker.com/v2/repositories/${{ env.DOCKER_IMAGE_NAME }}/")
+          
+          if echo "$RESPONSE" | jq -e .name > /dev/null 2>&1; then
+            echo "✅ Docker Hub description updated successfully"
+          else
+            echo "⚠️  Failed to update Docker Hub description: $RESPONSE"
+            exit 0
+          fi
+        continue-on-error: true
 
   # --------------------------------------------------------------------------
   # Job 7: Summary Report
@@ -448,12 +470,12 @@ jobs:
 # 
 # Required Secrets:
 # - DOCKERHUB_USER: Docker Hub username
-# - DOCKERHUB_TOKEN: Docker Hub access token (for docker login and push)
-# - DOCKERHUB_PASSWORD: Docker Hub password (optional, for description updates only)
+# - DOCKERHUB_TOKEN: Docker Hub access token (for login, push, and API operations)
 # - GITHUB_TOKEN: Automatically provided by GitHub Actions
 #
-# Note: DOCKERHUB_TOKEN is used for Docker operations (login, push).
-# DOCKERHUB_PASSWORD is only needed if you want automatic Docker Hub description updates.
-# If DOCKERHUB_PASSWORD is not set, description updates will be skipped (non-blocking).
+# Note: DOCKERHUB_TOKEN is used for all Docker Hub operations including:
+# - Docker login and image push (via docker/login-action)
+# - Docker Hub API calls for description updates (via direct API)
+# Description updates are non-blocking and will be skipped if authentication fails.
 # 
 # ============================================================================
