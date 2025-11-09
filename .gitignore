@@ -7,9 +7,6 @@ actual-data/
 # Environment variables
 .env
 
-# Test files
-test/
-
 # Logs
 logs/
 *.log
