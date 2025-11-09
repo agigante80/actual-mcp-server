@@ -174,9 +174,12 @@ Configure these in **Settings → Secrets and variables → Actions**:
 
 | Secret | Description | Required For |
 |--------|-------------|--------------|
-| `DOCKERHUB_USER` | Docker Hub username | Docker push, Hub description update |
-| `DOCKERHUB_TOKEN` | Docker Hub access token | Docker push, Hub description update |
+| `DOCKERHUB_USER` | Docker Hub username | Docker login and push |
+| `DOCKERHUB_TOKEN` | Docker Hub access token | Docker login and push |
+| `DOCKERHUB_PASSWORD` | Docker Hub password (optional) | Docker Hub description updates only |
 | `GITHUB_TOKEN` | Auto-provided by GitHub | Release creation (automatic) |
+
+**Note:** `DOCKERHUB_TOKEN` is used for Docker operations (login, push). `DOCKERHUB_PASSWORD` is only needed if you want automatic Docker Hub description updates via the API. If not set, description updates will be skipped (non-blocking).
 
 ## Tagging Strategy
 
@@ -298,10 +301,15 @@ npm run test:e2e
 
 ### Docker Push Failures
 
-**Symptom**: Authentication error
+**Symptom**: Docker push authentication error
 - Verify `DOCKERHUB_USER` and `DOCKERHUB_TOKEN` secrets are set correctly
 - Check Docker Hub token has push permissions
 - Ensure repository exists on Docker Hub
+
+**Symptom**: Docker Hub description update fails
+- The `DOCKERHUB_PASSWORD` secret is required for description updates (not token)
+- This is optional - set `continue-on-error: true` means pipeline won't fail
+- Alternative: Update descriptions manually on Docker Hub
 
 **Symptom**: Image too large
 - Review Dockerfile for unnecessary files
