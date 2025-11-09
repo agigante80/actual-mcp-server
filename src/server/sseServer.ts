@@ -10,7 +10,16 @@ import actualToolsManager from '../actualToolsManager.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import config from '../config.js';
 
-export async function startSseServer(mcp: ActualMCPConnection, port: number, ssePath: string) {
+export async function startSseServer(
+  mcp: ActualMCPConnection,
+  port: number,
+  ssePath: string,
+  capabilities: Record<string, object>,
+  implementedTools: string[],
+  serverDescription: string,
+  serverInstructions: string,
+  toolSchemas: Record<string, unknown>
+) {
   const app = express();
   const httpServer = createServer(app);
 
@@ -23,6 +32,9 @@ export async function startSseServer(mcp: ActualMCPConnection, port: number, sse
 
   // Store transports by session ID
   const transports: Record<string, SSEServerTransport> = {};
+
+  // safe fallback if index didn't provide implementedTools
+  const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
 
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {
@@ -58,25 +70,44 @@ export async function startSseServer(mcp: ActualMCPConnection, port: number, sse
 
   // Function to create and configure MCP server for each client
   const createMcpServer = () => {
+    // ensure capabilities.tools is an object mapping tool name -> {}
+    const capabilitiesObj = capabilities && Object.keys(capabilities).length
+      ? capabilities
+      : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}) };
+
+    const serverOptions: Record<string, unknown> = {
+      // Provide instructions and capabilities so the SDK initialize response is correct
+      instructions: serverInstructions || "Welcome to the Actual MCP server.",
+      serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
+      capabilities: capabilitiesObj,
+      implementedTools: toolsList,
+      // Include tools array explicitly so initialize result contains tools: string[]
+      tools: toolsList,
+    };
+
     const server = new Server(
       {
-        name: 'actual-mcp',
-        version: '0.1.0',
+        name: serverDescription || 'actual-mcp-server',
+        version: '1.0.0',
+        description: serverDescription || 'Actual MCP server',
       },
-      {
-        capabilities: {
-          tools: {},
-        },
-      }
+      serverOptions
     );
 
     // Set up tools/list handler
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       logger.debug('[SSE] Listing available tools');
-      const capabilities = await mcp.fetchCapabilities();
-      return {
-        tools: capabilities.tools.list || [],
-      };
+      const tools = toolsList.map((name: string) => {
+        const schemaFromParam = toolSchemas && toolSchemas[name];
+        const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
+        const schema = schemaFromParam || schemaFromManager || {};
+        return {
+          name,
+          description: `Tool ${name}`,
+          inputSchema: schema || {},
+        };
+      });
+      return { tools };
     });
 
     // Set up tools/call handler

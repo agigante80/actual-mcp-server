@@ -264,7 +264,16 @@ export {};
       await startWsServer(mcp, PORT);
     } else if (useSSE) {
       logger.info('Mode: SSE');
-      await startSseServer(mcp, PORT, SSE_PATH);
+      await startSseServer(
+        mcp,
+        PORT,
+        SSE_PATH,
+        capabilities,
+        implementedTools,
+        SERVER_DESCRIPTION,
+        SERVER_INSTRUCTIONS,
+        toolSchemas
+      );
     } else if (useSseTesting) {
       logger.info('Mode: HTTP-TESTING');
       await startHttpServerTesting(mcp, PORT, HTTP_PATH);
