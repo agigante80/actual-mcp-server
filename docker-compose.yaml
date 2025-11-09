@@ -85,6 +85,9 @@ services:
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs
       
+      # SSE Authentication (optional - leave commented for no auth)
+      # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      
       # Timezone (set to your local timezone)
       - TZ=${TZ:-UTC}
       
@@ -138,7 +141,8 @@ services:
       - MCP_BRIDGE_LOG_DIR=/app/logs
       - MCP_BRIDGE_MAX_FILES=30d
       
-      # SSE Authentication (not yet implemented - planned feature)
+      # SSE Authentication (optional - leave commented for no auth)
+      # Uncomment and set a secure token to enable authentication
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
       
       # Timezone (set to your local timezone)
