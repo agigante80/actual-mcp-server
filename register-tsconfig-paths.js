@@ -9,7 +9,7 @@ register({
 });
 
 // Import and run the compiled main entry point
-import('./dist/index.js').catch((err) => {
+import('./dist/src/index.js').catch((err) => {
   console.error('Failed to start application:', err);
   process.exit(1);
 });
