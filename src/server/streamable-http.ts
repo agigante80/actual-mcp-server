@@ -77,6 +77,11 @@ export class StreamableHTTPServerTransport {
     const payload = (bodyFromCaller && Object.keys(bodyFromCaller as Record<string, unknown>).length ? bodyFromCaller : (req.body ?? {})) as Record<string, unknown>;
     const method = payload.method as string | undefined;
 
+    // Always include session ID in response headers if we have one
+    if (this.sessionId) {
+      res.setHeader('MCP-Session-Id', this.sessionId);
+    }
+
     if (method === 'initialize') {
       this.sessionId =
         typeof this.opts.sessionIdGenerator === 'function'
@@ -98,6 +103,8 @@ export class StreamableHTTPServerTransport {
         // advertise known tools when available
         tools: this.server?.options?.implementedTools ?? [],
       };
+      // Set the MCP-Session-Id header so clients can make subsequent requests
+      res.setHeader('MCP-Session-Id', this.sessionId);
       res.json({ jsonrpc: '2.0', id: payload.id ?? null, result });
       return;
     }
