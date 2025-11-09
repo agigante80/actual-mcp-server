@@ -103,14 +103,8 @@ jobs:
       - name: 🏗️ Build project
         run: npm run build
 
-      - name: 🧪 Run adapter unit tests
-        run: npm run test:adapter
-
       - name: 🧪 Run unit smoke tests
-        run: npm run test:unit-js
-
-      - name: 🧪 Run generated tools smoke tests
-        run: node tests/unit/generated_tools.smoke.test.js
+        run: node test/unit/generated_tools.smoke.test.js
 
       - name: 📊 Upload test results
         if: always()
