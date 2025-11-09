@@ -18,6 +18,7 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 - [Installation](#-installation)
 - [Usage Examples](#-usage-examples)
 - [Configuration](#-configuration)
+- [Transports & Authentication](#-transports--authentication)
 - [Docker Deployment](#-docker-deployment)
 - [Architecture](#-architecture)
 - [API Coverage](#-api-coverage)
@@ -33,7 +34,8 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 
 - 🤖 **39 MCP Tools**: Comprehensive financial operations via natural language
 - 🔄 **Multiple Transports**: HTTP, WebSocket, and Server-Sent Events (SSE)
-- 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
+- � **Secure**: Bearer token authentication on all transports
+- �🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **78% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
@@ -43,8 +45,9 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 - **Concurrent Control**: Rate-limited API calls prevent overwhelming Actual Budget
 - **Observability**: Prometheus metrics, structured logging with Winston
 - **Flexible Deployment**: Docker, Kubernetes, bare metal, or Docker Compose
-- **Secure**: Docker secrets support, environment-based configuration
+- **Secure**: Bearer token authentication, Docker secrets support, environment-based configuration
 - **Tested**: >80% test coverage with unit, integration, and E2E tests
+- **LibreChat Ready**: Tested and verified with 39 tools loading successfully
 
 ### What You Can Do
 
@@ -96,6 +99,7 @@ docker run -d \
   -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
+  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
   -v actual-mcp-data:/data \
   ghcr.io/agigante80/actual-mcp-server:latest
 
@@ -482,12 +486,174 @@ MCP_BRIDGE_MAX_LOG_SIZE=20m
 #### Security
 
 ```bash
-# SSE authorization (recommended)
+# Bearer token authentication (recommended for production)
 MCP_SSE_AUTHORIZATION=your_random_token
 
 # Use Docker secrets in production
 ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
 ```
+
+---
+
+## 🔌 Transports & Authentication
+
+The MCP server supports **three transport protocols** with optional Bearer token authentication.
+
+### Available Transports
+
+| Transport | Type | LibreChat Support | Authentication | Recommended |
+|-----------|------|-------------------|----------------|-------------|
+| **HTTP** | `streamable-http` | ✅ Full support | ✅ Working | **✅ RECOMMENDED** |
+| **SSE** | `sse` | ✅ Supported | ⚠️ Headers not sent by client | Use without auth |
+| **WebSocket** | `ws` | ❌ Not supported | ✅ Implemented | For other clients |
+
+### 1. HTTP Transport (Recommended)
+
+**Best for:** Production deployments with LibreChat
+
+```bash
+# Start server with HTTP
+npm run dev -- --http
+
+# Or with authentication
+MCP_SSE_AUTHORIZATION=your_token npm run dev -- --http
+```
+
+**LibreChat Configuration:**
+
+```yaml
+# librechat.yaml
+mcpServers:
+  actual-mcp:
+    type: "streamable-http"
+    url: "http://192.168.8.245:3600/http"
+    headers:
+      Authorization: "Bearer your_token_here"
+    serverInstructions: true
+```
+
+**Features:**
+- ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
+- ✅ Bearer token authentication via headers
+- ✅ All 39 tools load successfully in LibreChat
+- ✅ Session management with `MCP-Session-Id` headers
+- ✅ Production-ready and tested
+
+### 2. SSE Transport
+
+**Best for:** Development or non-authenticated environments
+
+```bash
+# Start server with SSE
+npm run dev -- --sse
+```
+
+**LibreChat Configuration:**
+
+```yaml
+# librechat.yaml (without authentication)
+mcpServers:
+  actual-mcp:
+    type: "sse"
+    url: "http://192.168.8.245:3600/sse"
+    serverInstructions: true
+```
+
+**Features:**
+- ✅ Full MCP protocol support
+- ✅ Server-side authentication implemented
+- ⚠️ LibreChat SSE client doesn't send custom headers
+- ✅ Works perfectly without authentication
+
+**Known Limitation:** While the server supports Bearer token authentication for SSE, LibreChat's SSE client implementation does not send custom headers specified in the configuration. Use HTTP transport for authenticated deployments.
+
+### 3. WebSocket Transport
+
+**Best for:** Custom MCP clients (not LibreChat)
+
+```bash
+# Start server with WebSocket
+npm run dev -- --ws
+```
+
+**Connection Examples:**
+
+```javascript
+// With Authorization header
+const ws = new WebSocket('ws://localhost:3600', {
+  headers: {
+    'Authorization': 'Bearer your_token_here'
+  }
+});
+
+// Or with token query parameter
+const ws = new WebSocket('ws://localhost:3600?token=your_token_here');
+```
+
+**Features:**
+- ✅ Bearer token authentication (header or query param)
+- ✅ Connection rejected during handshake if unauthorized
+- ✅ Efficient for real-time applications
+- ❌ Not supported by LibreChat
+
+### Authentication Configuration
+
+#### Enable Authentication
+
+Set the `MCP_SSE_AUTHORIZATION` environment variable:
+
+```bash
+# Generate a secure token
+openssl rand -hex 32
+
+# Add to .env
+MCP_SSE_AUTHORIZATION=your_generated_token_here
+
+# Restart server
+npm run build
+npm run dev -- --http
+```
+
+#### Authentication Behavior
+
+When `MCP_SSE_AUTHORIZATION` is set:
+- ✅ Server validates Bearer tokens on all requests
+- ✅ Returns `401 Unauthorized` for missing/invalid tokens
+- ✅ Logs all authentication attempts
+- ✅ Optional - if not set, authentication is disabled
+
+#### Security Best Practices
+
+```bash
+# ✅ DO: Use strong random tokens (32+ characters)
+MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32)
+
+# ✅ DO: Use HTTPS/WSS in production
+ACTUAL_SERVER_URL=https://actual.yourdomain.com
+
+# ✅ DO: Rotate tokens regularly
+# ✅ DO: Use environment variables, never hardcode
+# ✅ DO: Monitor authentication failures in logs
+
+# ❌ DON'T: Use weak or predictable tokens
+# ❌ DON'T: Commit tokens to version control
+# ❌ DON'T: Share tokens between environments
+```
+
+### Testing Results
+
+Comprehensive testing completed with LibreChat:
+
+| Test Case | Result | Tools Loaded |
+|-----------|--------|--------------|
+| HTTP without auth | ✅ Success | 39 tools |
+| HTTP with auth | ✅ Success | 39 tools |
+| SSE without auth | ✅ Success | 39 tools |
+| SSE with auth | ⚠️ Client limitation | 0 tools (headers not sent) |
+
+**Conclusion:** Use **HTTP transport with Bearer token authentication** for secure production LibreChat deployments.
+
+See [`docs/transport-testing-final-report.md`](docs/transport-testing-final-report.md) for detailed test results.
 
 ---
 
@@ -661,6 +827,8 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - **[API Coverage](docs/api-coverage.md)**: Complete tool reference with examples
 - **[Deployment](docs/deployment.md)**: Docker, Kubernetes, bare metal guides
 - **[Development](docs/development.md)**: Local development and debugging
+- **[Transport Testing](docs/transport-testing-final-report.md)**: Complete transport and authentication test results
+- **[SSE Authentication](docs/sse-authentication.md)**: SSE-specific authentication guide
 - **[Contributing](CONTRIBUTING.md)**: Contribution guidelines and workflow
 
 ---
