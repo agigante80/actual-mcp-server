@@ -30,10 +30,11 @@ on:
 # ============================================================================
 # Permissions
 # ============================================================================
-# Required for creating releases and publishing packages
+# Required for creating releases, publishing packages, and security scanning
 permissions:
   contents: write
   packages: write
+  security-events: write  # Required for uploading SARIF results to GitHub Security
 
 # ============================================================================
 # Environment Variables
