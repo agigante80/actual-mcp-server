@@ -201,7 +201,10 @@ npm run dev -- --debug
 
 ### Run with Docker
 
-**Docker images are published on Docker Hub**: [agigante80/actual-mcp-server](https://hub.docker.com/r/agigante80/actual-mcp-server)
+**Docker images are published on two registries:**
+
+- **Docker Hub**: [agigante80/actual-mcp-server](https://hub.docker.com/r/agigante80/actual-mcp-server)
+- **GitHub Container Registry**: [ghcr.io/agigante80/actual-mcp-server](https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server)
 
 Available tags:
 - `latest` - Latest stable release from main branch
@@ -209,10 +212,12 @@ Available tags:
 - `development` - Latest development build
 - `development-<sha>` - Specific development commit
 
+Both registries have identical images. Use Docker Hub for public access, or GHCR for integration with GitHub workflows.
+
 #### Quick Start (HTTP)
 
 ```bash
-# Pull and run the latest image
+# Pull and run from Docker Hub
 docker run -d \
   --name actual-mcp-server \
   -p 3600:3600 \
@@ -222,6 +227,17 @@ docker run -d \
   -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
   -v actual-mcp-data:/data \
   agigante80/actual-mcp-server:latest
+
+# Or from GitHub Container Registry
+docker run -d \
+  --name actual-mcp-server \
+  -p 3600:3600 \
+  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
+  -e ACTUAL_PASSWORD=your_password \
+  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
+  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
+  -v actual-mcp-data:/data \
+  ghcr.io/agigante80/actual-mcp-server:latest
 
 # Check if running
 curl http://localhost:3600/health
@@ -259,14 +275,36 @@ curl -k https://localhost:3600/health
 #### Pull Specific Version
 
 ```bash
-# Latest stable
+# Latest stable from Docker Hub
 docker pull agigante80/actual-mcp-server:latest
+
+# Latest stable from GHCR
+docker pull ghcr.io/agigante80/actual-mcp-server:latest
 
 # Development version
 docker pull agigante80/actual-mcp-server:development
 
 # Specific commit
 docker pull agigante80/actual-mcp-server:latest-abc1234
+```
+
+#### Using docker-compose.prod.yml
+
+For production deployments, use the provided `docker-compose.prod.yml`:
+
+```bash
+# Copy and configure environment
+cp .env.example .env
+# Edit .env with your Actual Budget server details
+
+# Start using GHCR image
+docker-compose -f docker-compose.prod.yml up -d
+
+# View logs
+docker-compose -f docker-compose.prod.yml logs -f
+
+# Stop
+docker-compose -f docker-compose.prod.yml down
 ```
 
 ### Run with Docker Compose
