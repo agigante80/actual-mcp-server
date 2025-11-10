@@ -214,10 +214,12 @@ Available tags:
 
 Both registries have identical images. Use Docker Hub for public access, or GHCR for integration with GitHub workflows.
 
+> **Note**: Docker images default to HTTP transport mode. To use SSE or WebSocket, set `MCP_TRANSPORT_MODE=--sse` or `MCP_TRANSPORT_MODE=--ws`.
+
 #### Quick Start (HTTP)
 
 ```bash
-# Pull and run from Docker Hub
+# Pull and run from Docker Hub (HTTP is the default)
 docker run -d \
   --name actual-mcp-server \
   -p 3600:3600 \
@@ -615,6 +617,10 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 # Security (generate with: openssl rand -hex 32)
 MCP_SSE_AUTHORIZATION=your_bearer_token_here
 
+# Transport mode (Docker only - defaults to --http)
+# Options: --http (recommended), --sse, --ws
+MCP_TRANSPORT_MODE=--http
+
 # HTTPS (optional but recommended)
 MCP_ENABLE_HTTPS=true
 MCP_HTTPS_CERT=/app/certs/cert.pem
@@ -773,6 +779,8 @@ ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
 ## 🔌 Transports & Authentication
 
 The MCP server supports **three transport protocols** with optional Bearer token authentication.
+
+> **Docker Note**: When running in Docker, HTTP transport is the default. Override with `MCP_TRANSPORT_MODE` environment variable (`--http`, `--sse`, or `--ws`). For local development, specify the transport mode using command-line flags.
 
 ### Available Transports
 
