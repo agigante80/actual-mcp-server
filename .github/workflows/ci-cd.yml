@@ -208,13 +208,75 @@ jobs:
           retention-days: 7
 
   # --------------------------------------------------------------------------
-  # Job 5: Docker Build & Publish
+  # Job 5: Docker Test Build
   # --------------------------------------------------------------------------
-  # Builds and pushes Docker image (depends on build passing, only on push or manual)
+  # Tests Docker build without pushing (validates Dockerfile before publish)
+  docker-test:
+    name: Docker Test Build
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🧪 Test Docker build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: false
+          tags: actual-mcp-server:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+          # Load image to local Docker for testing
+          load: true
+
+      - name: ✅ Verify Docker image can start
+        run: |
+          echo "Testing if container starts without crashing..."
+          docker run --rm -d --name test-container \
+            -e ACTUAL_SERVER_URL=http://test:5006 \
+            -e ACTUAL_PASSWORD=test \
+            -e ACTUAL_BUDGET_SYNC_ID=test \
+            actual-mcp-server:test
+          
+          # Wait up to 10 seconds for container to either start or crash
+          for i in {1..10}; do
+            if docker ps | grep -q test-container; then
+              echo "✅ Container is running"
+              docker logs test-container
+              docker stop test-container
+              exit 0
+            fi
+            if ! docker ps -a | grep -q test-container; then
+              echo "❌ Container crashed immediately"
+              exit 1
+            fi
+            sleep 1
+          done
+          
+          # Check if still running after 10 seconds
+          if docker ps | grep -q test-container; then
+            echo "✅ Container survived 10 seconds"
+            docker logs test-container
+            docker stop test-container
+          else
+            echo "❌ Container crashed during startup"
+            docker logs test-container 2>&1 || true
+            exit 1
+          fi
+
+  # --------------------------------------------------------------------------
+  # Job 6: Docker Build & Publish
+  # --------------------------------------------------------------------------
+  # Builds and pushes Docker image (depends on docker-test passing, only on push or manual)
   docker:
     name: Docker Build & Push
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, docker-test]
     if: ${{ !inputs.skip_docker && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
     outputs:
       docker_tag: ${{ steps.docker_info.outputs.tag }}
@@ -305,13 +367,63 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # --------------------------------------------------------------------------
-  # Job 6: Release & Docker Hub Update
+  # Job 7: GitHub Container Registry (GHCR) Publish
+  # --------------------------------------------------------------------------
+  # Publishes to ghcr.io (depends on docker-test passing)
+  ghcr:
+    name: Publish to GHCR
+    runs-on: ubuntu-latest
+    needs: [build, docker-test]
+    if: ${{ !inputs.skip_docker && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏷️ Generate GHCR tags
+        id: ghcr_meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest-${{ needs.build.outputs.short_sha }},enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=development-${{ needs.build.outputs.short_sha }},enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=development,enable=${{ github.ref == 'refs/heads/develop' }}
+          labels: |
+            org.opencontainers.image.title=Actual MCP Server
+            org.opencontainers.image.description=MCP server providing 42 tools for AI-driven financial management with Actual Budget
+            org.opencontainers.image.version=${{ needs.build.outputs.version }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      - name: 🏗️ Build and push to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.ghcr_meta.outputs.tags }}
+          labels: ${{ steps.ghcr_meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  # --------------------------------------------------------------------------
+  # Job 8: Release & Docker Hub Update
   # --------------------------------------------------------------------------
   # Creates GitHub release and updates Docker Hub descriptions (only on main or forced)
   release:
     name: Release & Update Docker Hub
     runs-on: ubuntu-latest
-    needs: [build, docker]
+    needs: [build, docker, ghcr]
     if: ${{ (github.ref == 'refs/heads/main' && github.event_name == 'push') || (github.event_name == 'workflow_dispatch' && inputs.force_release) }}
     steps:
       - name: 📥 Checkout repository
