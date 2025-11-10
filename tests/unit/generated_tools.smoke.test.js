@@ -30,7 +30,10 @@ console.log('Running generated tools smoke tests');
     deleteRule: null,
     updateRule: null,
     getBudgetMonths: ['2025-10'],
-    getBudgetMonth: { month: '2025-10', categories: [] },
+    getBudgetMonth: { month: '2025-10', categories: [
+      { categoryId: 'cat_1', amount: 1000 },
+      { categoryId: 'cat_2', amount: 500 }
+    ] },
     setBudgetAmount: null,
     setBudgetCarryover: null,
     holdBudgetForNextMonth: null,
@@ -95,6 +98,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1';
   if (name.includes('budgets_resetHold')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1';
   if (name.includes('budgets_setCarryover')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1', inputExample.flag = true;
+  if (name.includes('budgets_transfer')) inputExample.month = '2025-10', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
 
       // Validate input parsing
   try { mod.inputSchema.parse(inputExample); } catch (e) { /* ignore parse errors for optional inputs */ }
