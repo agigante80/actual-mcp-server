@@ -372,36 +372,30 @@ The MCP server exposes **39 tools** organized into 8 categories. All tools follo
 
 ## 🚧 Missing Tools (Not Yet Implemented)
 
-The following Actual Budget features are not yet available through this MCP server:
+The following Actual Budget API features are not yet exposed as MCP tools:
 
-### Scheduled Transactions
-- Create/view/update recurring transactions
-- Auto-post scheduled transactions
-- Manage schedule patterns
+### Schedules (4 API methods available)
+- `getSchedules()` - List all scheduled transactions
+- `createSchedule()` - Create recurring transaction schedules
+- `updateSchedule()` - Modify schedule parameters
+- `deleteSchedule()` - Remove schedules
 
-### Advanced Queries & Reports
-- Custom SQL queries via `runQuery()` API
-- Built-in spending reports and trend analysis
-- Budget vs actual comparison reports
+These are available in the Actual Budget API but not yet wrapped as MCP tools.
 
-### Budget Templates
-- Apply budget templates
-- Save current budget as template
-- Copy budgets between months
-- Borrow from future months
+### Advanced Query Tools
+- `runQuery()` - Execute custom ActualQL queries for advanced data analysis
+- `getIDByName()` - Look up IDs by name for accounts/payees/categories/schedules
 
-### File Management
-- Add notes to transactions/accounts
-- Attach receipts or invoices
-- View/download attachments
+### Bank Integration
+- `runBankSync()` - Trigger 3rd party bank sync (GoCardless, SimpleFIN)
 
-### Advanced Features
-- Multi-budget support (currently one budget per server)
-- Bulk delete/update operations (except batch budget updates)
-- Data export (CSV/JSON)
-- Undo/Redo operations
+### Multi-Budget Management
+- `getBudgets()` - List all budget files
+- `loadBudget()` - Switch between budgets
+- `downloadBudget()` - Download budget from server
+- `runImport()` - Create and populate new budgets
 
-**Note**: These features represent the remaining ~22% of the Actual Budget API. Contributions are welcome!
+**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 39 tools. The missing features represent specialized workflows and advanced functionality. Contributions welcome!
 
 ## 📦 Installation
 
