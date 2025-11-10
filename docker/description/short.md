@@ -1,1 +1,1 @@
-MCP bridge connecting LibreChat to Actual Finance - 37 tools, 76% API coverage, TypeScript-based
+MCP server for Actual Budget - 42 tools, LibreChat verified, HTTPS support, query/sync/multi-budget - TypeScript
