@@ -39,3 +39,27 @@ build/
 
 # macOS system files
 .DS_Store
+
+# Test and development files
+test-*.mjs
+test-*.js
+*.backup
+
+# SSL/TLS certificates (should not be committed)
+certs/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Docker Compose overrides (keep base files only)
+docker-compose.override.yml
+
+# Test results and reports
+test-results/
+playwright-report/
+.playwright/
+
+# IDE
+.idea/
