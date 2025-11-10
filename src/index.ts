@@ -90,6 +90,10 @@ export {};
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
   const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: Function }).zodToJsonSchema;
 
+  // Load package.json for version info
+  const packageJson = await import('../package.json', { assert: { type: 'json' } });
+  const VERSION = packageJson.default.version;
+
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;
   const SSE_PATH = process.env.MCP_SSE_PATH || '/sse';
@@ -280,6 +284,7 @@ export {};
     }
 
     logger.info('---------');
+    logger.info(`🚀 Actual MCP Server v${VERSION}`);
     logger.info('Starting MCP bridge server...');
 
     if ([useWebSocket, useSSE, useHttp, useSseTesting].filter(Boolean).length !== 1) {
