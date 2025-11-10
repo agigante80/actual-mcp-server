@@ -201,20 +201,72 @@ npm run dev -- --debug
 
 ### Run with Docker
 
+**Docker images are published on Docker Hub**: [agigante80/actual-mcp-server](https://hub.docker.com/r/agigante80/actual-mcp-server)
+
+Available tags:
+- `latest` - Latest stable release from main branch
+- `latest-<sha>` - Specific commit from main (e.g., `latest-abc1234`)
+- `development` - Latest development build
+- `development-<sha>` - Specific development commit
+
+#### Quick Start (HTTP)
+
 ```bash
-# Quick start (use your credentials)
+# Pull and run the latest image
 docker run -d \
   --name actual-mcp-server \
-  -p 3000:3000 \
+  -p 3600:3600 \
   -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
   -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
   -v actual-mcp-data:/data \
-  ghcr.io/agigante80/actual-mcp-server:latest
+  agigante80/actual-mcp-server:latest
 
 # Check if running
-curl http://localhost:3000/health
+curl http://localhost:3600/health
+```
+
+#### With HTTPS (Recommended)
+
+```bash
+# Generate self-signed certificate first
+mkdir -p certs
+openssl req -x509 -newkey rsa:4096 -nodes \
+  -keyout certs/key.pem -out certs/cert.pem \
+  -days 365 -subj "/CN=your-server-ip" \
+  -addext "subjectAltName=IP:your-server-ip,DNS:localhost"
+
+# Run with HTTPS enabled
+docker run -d \
+  --name actual-mcp-server \
+  -p 3600:3600 \
+  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
+  -e ACTUAL_PASSWORD=your_password \
+  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
+  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
+  -e MCP_ENABLE_HTTPS=true \
+  -e MCP_HTTPS_CERT=/app/certs/cert.pem \
+  -e MCP_HTTPS_KEY=/app/certs/key.pem \
+  -v actual-mcp-data:/data \
+  -v $(pwd)/certs:/app/certs:ro \
+  agigante80/actual-mcp-server:latest
+
+# Verify HTTPS is working
+curl -k https://localhost:3600/health
+```
+
+#### Pull Specific Version
+
+```bash
+# Latest stable
+docker pull agigante80/actual-mcp-server:latest
+
+# Development version
+docker pull agigante80/actual-mcp-server:development
+
+# Specific commit
+docker pull agigante80/actual-mcp-server:latest-abc1234
 ```
 
 ### Run with Docker Compose
