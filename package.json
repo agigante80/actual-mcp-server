@@ -18,7 +18,7 @@
     "test:mcp-client": "npm run build && node register-tsconfig-paths.js -- --http --test-mcp-client"
   },
   "dependencies": {
-    "@actual-app/api": "^25.9.0",
+    "@actual-app/api": "^25.11.0",
     "@jlongster/sql.js": "^1.6.7",
     "@librechat/api": "github:danny-avila/LibreChat#main",
     "@modelcontextprotocol/sdk": "^1.18.2",

@@ -42,23 +42,12 @@ export async function connectToActual() {
       password: PASSWORD,
     });
 
-    // pass budget password when available (for E2E encrypted budgets)
+    logger.info(`Downloading budget with sync ID: ${BUDGET_SYNC_ID}`);
+
+    // According to official docs, downloadBudget accepts optional second parameter for E2E encryption
     if (BUDGET_PASSWORD) {
-      // Some versions of @actual-app/api accept a password as a second argument,
-      // but the current types expect a single string id. Try the untyped call first,
-      // fall back to the typed call if that fails.
-      try {
-        const maybeDownload = api as unknown as { downloadBudget?: Function };
-        if (typeof maybeDownload.downloadBudget === 'function') {
-          // call with two args when supported
-          await (maybeDownload.downloadBudget as (id: string, opts?: unknown) => Promise<unknown>)(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
-        } else {
-          await api.downloadBudget(BUDGET_SYNC_ID);
-        }
-      } catch (e) {
-        logger.warn('downloadBudget with password failed, falling back to plain downloadBudget:', e);
-        await api.downloadBudget(BUDGET_SYNC_ID);
-      }
+      const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
+      await apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
     } else {
       await api.downloadBudget(BUDGET_SYNC_ID);
     }
