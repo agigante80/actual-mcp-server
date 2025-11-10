@@ -5,53 +5,164 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-1.18-orange)](https://modelcontextprotocol.io/)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants like [LibreChat](https://github.com/danny-avila/LibreChat) with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through 39 specialized tools covering 78% of the Actual Budget API.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through 39 specialized tools covering 78% of the Actual Budget API.
+
+> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 39 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
 ## 📋 Table of Contents
 
+- [Use Cases & Scenarios](#-use-cases--scenarios)
+- [Connection Architecture](#-connection-architecture)
 - [Features](#-features)
 - [Quick Start](#-quick-start)
 - [Available Tools](#-available-tools)
-- [Allowed vs Not Allowed Operations](#-allowed-vs-not-allowed-operations)
+- [Missing Tools](#-missing-tools-not-yet-implemented)
 - [Installation](#-installation)
+- [LibreChat Integration](#-librechat-integration)
 - [Usage Examples](#-usage-examples)
 - [Configuration](#-configuration)
 - [Transports & Authentication](#-transports--authentication)
 - [Docker Deployment](#-docker-deployment)
 - [Architecture](#-architecture)
 - [API Coverage](#-api-coverage)
+- [Testing](#-testing)
 - [Contributing](#-contributing)
 - [Documentation](#-documentation)
 - [License](#-license)
 
 ---
 
+## 💡 Use Cases & Scenarios
+
+### What Can You Do with This Integration?
+
+**LibreChat ↔ Actual MCP Server ↔ Actual Budget**
+
+This MCP server enables conversational financial management by connecting LibreChat's AI capabilities with your Actual Budget data. Here are real-world scenarios:
+
+#### 🗣️ Natural Language Queries
+
+```
+You: "How much did I spend on groceries last month?"
+AI: [Uses transactions_filter] "You spent $847.23 on groceries in October 2025"
+
+You: "Show me all transactions over $100 this week"
+AI: [Uses transactions_filter] Lists large transactions with dates and payees
+
+You: "What's my checking account balance?"
+AI: [Uses accounts_get_balance] "Your checking account has $3,247.89"
+```
+
+#### 💰 Budget Management
+
+```
+You: "Set my restaurant budget to $300 for this month"
+AI: [Uses budgets_setAmount] "Restaurant budget for November 2025 set to $300"
+
+You: "Transfer $50 from Entertainment to Groceries"
+AI: [Uses budgets_transfer] "Transferred $50 from Entertainment to Groceries"
+
+You: "How much budget do I have left for December?"
+AI: [Uses budgets_getMonth] Shows remaining budget for all categories
+```
+
+#### 📝 Transaction Management
+
+```
+You: "Add a $45.67 transaction at Kroger from my checking account"
+AI: [Uses transactions_create] "Transaction created and categorized as Groceries"
+
+You: "Import my bank CSV file" [with file upload]
+AI: [Uses transactions_import] "Imported 47 transactions, matched 12 duplicates"
+
+You: "Find all Amazon transactions this year"
+AI: [Uses transactions_filter] Lists all Amazon purchases with amounts
+```
+
+#### 🏷️ Organization & Automation
+
+```
+You: "Create a rule to automatically categorize Uber as Transportation"
+AI: [Uses rules_create] "Rule created: Uber → Transportation"
+
+You: "Merge my duplicate Starbucks payees"
+AI: [Uses payees_merge] "Merged 3 Starbucks entries into one"
+
+You: "Create a new category called 'Pet Supplies' under Expenses"
+AI: [Uses categories_create] "Pet Supplies category created"
+```
+
+### 🎯 Perfect For
+
+- **💬 Conversational Finance**: Chat with your budget naturally
+- **📊 Quick Insights**: Get financial answers without opening Actual Budget
+- **🔄 Bulk Operations**: Manage multiple transactions through conversation
+- **🤖 Automation**: Set up rules and recurring patterns via AI
+- **📱 Mobile-Friendly**: Use LibreChat mobile app for on-the-go budget access
+- **♿ Accessibility**: Voice-based financial management for users with disabilities
+
+---
+
+## 🔗 Connection Architecture
+
+```
+┌─────────────┐         ┌──────────────────┐         ┌──────────────┐
+│             │  HTTPS  │                  │   API   │              │
+│  LibreChat  │ ◄─────► │  Actual MCP      │ ◄─────► │   Actual     │
+│   (Client)  │  MCP    │     Server       │  calls  │   Budget     │
+│             │Protocol │                  │         │   Server     │
+└─────────────┘         └──────────────────┘         └──────────────┘
+      │                        │                           │
+      │                        │                           │
+   User asks              Translates                  Financial
+  "How much               natural language            operations
+  did I spend?"           to Actual API calls         & data storage
+```
+
+### How It Works
+
+1. **User** chats with **LibreChat** in natural language
+2. **LibreChat** sends MCP tool requests to **Actual MCP Server**
+3. **Actual MCP Server** translates requests to **Actual Budget API** calls
+4. **Actual Budget** executes operations and returns data
+5. **Actual MCP Server** formats response for AI consumption
+6. **LibreChat** presents results in conversational format
+
+### Transport Protocols
+
+- **HTTP/HTTPS**: Production-ready with Bearer token authentication
+- **WebSocket**: Real-time bidirectional communication
+- **SSE (Server-Sent Events)**: Streaming updates (LibreChat compatible)
+
+---
+
 ## ✨ Features
 
+### Core Capabilities
 ### Core Capabilities
 
 - 🤖 **39 MCP Tools**: Comprehensive financial operations via natural language
 - 🔄 **Multiple Transports**: HTTP, WebSocket, and Server-Sent Events (SSE)
-- � **Secure**: Bearer token authentication on all transports
-- �🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
+- 🔐 **Secure**: Bearer token authentication + HTTPS/TLS encryption
+- 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **78% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
+- ✅ **LibreChat Verified**: All 39 tools tested and working
 
 ### Advanced Features
 
 - **Concurrent Control**: Rate-limited API calls prevent overwhelming Actual Budget
 - **Observability**: Prometheus metrics, structured logging with Winston
 - **Flexible Deployment**: Docker, Kubernetes, bare metal, or Docker Compose
-- **Secure**: Bearer token authentication, Docker secrets support, environment-based configuration
+- **HTTPS Support**: TLS encryption with self-signed or CA-signed certificates
 - **Tested**: >80% test coverage with unit, integration, and E2E tests
-- **LibreChat Ready**: Tested and verified with 39 tools loading successfully
 
-### What You Can Do
+### Financial Operations
 
-With AI assistance, you can:
+With conversational AI, you can:
 
 - 💰 **Manage Accounts**: Create, update, close accounts; check balances
 - 💳 **Track Transactions**: Add, update, delete transactions; import bank data
@@ -59,8 +170,7 @@ With AI assistance, you can:
 - 👥 **Handle Payees**: Manage payees, merge duplicates
 - 📅 **Budget Planning**: Set budget amounts, enable carryover, track spending
 - 🔧 **Automate Rules**: Create rules for automatic transaction categorization
-
----
+- 🔄 **Batch Operations**: Efficiently update multiple budget categories
 
 ## 🚀 Quick Start
 
@@ -208,96 +318,38 @@ The MCP server exposes **39 tools** organized into 8 categories. All tools follo
 
 ---
 
-## ✅ Allowed vs ❌ Not Allowed Operations
+## 🚧 Missing Tools (Not Yet Implemented)
 
-### ✅ What You CAN Do
+The following Actual Budget features are not yet available through this MCP server:
 
-#### Account Management
-- ✅ **View** all accounts and balances
-- ✅ **Create** checking, savings, credit card accounts
-- ✅ **Update** account names and types
-- ✅ **Close** accounts (soft delete - preserves history)
-- ✅ **Reopen** previously closed accounts
-- ✅ **Delete** accounts permanently (⚠️ destroys all transaction history)
-- ✅ **Check balance** at any point in time
+### Scheduled Transactions
+- Create/view/update recurring transactions
+- Auto-post scheduled transactions
+- Manage schedule patterns
 
-#### Transaction Management
-- ✅ **View** transactions with date range filtering
-- ✅ **Filter** transactions by amount, category, payee, notes, status
-- ✅ **Search** transactions with advanced criteria
-- ✅ **Create** single or multiple transactions
-- ✅ **Import** bank CSV files (auto-reconciliation)
-- ✅ **Update** transaction details (amount, payee, category, notes, date)
-- ✅ **Delete** transactions
-- ✅ **Split** transactions across multiple categories
-- ✅ **Reconcile** with bank statements
+### Advanced Queries & Reports
+- Custom SQL queries via `runQuery()` API
+- Built-in spending reports and trend analysis
+- Budget vs actual comparison reports
 
-#### Category & Budget Management
-- ✅ **Create** category groups and categories
-- ✅ **Organize** categories into groups
-- ✅ **Set** monthly budget amounts
-- ✅ **Transfer** budget amounts between categories
-- ✅ **Enable** category carryover (rollover unused funds)
-- ✅ **Hold** funds for next month
-- ✅ **Batch update** multiple budget categories efficiently
-- ✅ **View** budget vs actual spending
+### Budget Templates
+- Apply budget templates
+- Save current budget as template
+- Copy budgets between months
+- Borrow from future months
 
-#### Payee Management
-- ✅ **Create** and manage payees
-- ✅ **Merge** duplicate payees
-- ✅ **View** payee transaction history
-- ✅ **Get** rules associated with payees
+### File Management
+- Add notes to transactions/accounts
+- Attach receipts or invoices
+- View/download attachments
 
-#### Automation & Rules
-- ✅ **Create** automatic categorization rules
-- ✅ **Set** conditions (payee name, amount, etc.)
-- ✅ **Define** actions (assign category, rename, etc.)
-- ✅ **Update** existing rules
-- ✅ **Delete** rules
+### Advanced Features
+- Multi-budget support (currently one budget per server)
+- Bulk delete/update operations (except batch budget updates)
+- Data export (CSV/JSON)
+- Undo/Redo operations
 
-### ❌ What You CANNOT Do (Not Yet Implemented)
-
-#### Advanced Queries
-- ❌ **Custom SQL queries** via `runQuery()` API
-- ❌ **Complex transaction filters** (multiple conditions)
-- ❌ **Report generation** (spending reports, trend analysis)
-- ❌ **Budget vs actual** comparisons (built-in reports)
-
-#### Scheduled Transactions
-- ❌ **Create** recurring/scheduled transactions
-- ❌ **View** upcoming scheduled transactions
-- ❌ **Modify** schedule patterns
-- ❌ **Auto-post** scheduled transactions
-
-#### Budget Templates
-- ❌ **Apply** budget templates
-- ❌ **Save** budget as template
-- ❌ **Copy** budgets between months
-
-#### Category Transfers
-- ✅ **Transfer** funds between budget categories (same month)
-- ❌ **Borrow** from future months
-
-#### Notes & Attachments
-- ❌ **Add** notes to transactions/accounts
-- ❌ **Attach** files (receipts, invoices)
-- ❌ **View** transaction attachments
-
-#### Advanced Features
-- ❌ **Multi-budget** support (only one budget per server instance)
-- ❌ **Bulk operations** (mass delete, mass update - except batch budget updates)
-- ❌ **Data export** (CSV/JSON export)
-- ❌ **Undo/Redo** operations
-
-### 🔜 Coming Soon (Planned Features)
-
-- 🔄 **Scheduled Transactions**: Full support for recurring transactions
-- 📊 **Custom Reports**: Generate spending analysis and trends
-- 📁 **Bulk Operations**: Mass update/delete with filters
--  **Notes Support**: Add notes to transactions and accounts
-- 🏷️ **Tags**: Tag-based transaction organization
-
----
+**Note**: These features represent the remaining ~22% of the Actual Budget API. Contributions are welcome!
 
 ## 📦 Installation
 
@@ -364,6 +416,142 @@ mkdir -p secrets
 echo "your_password" > secrets/actual_password.txt
 docker compose --profile production up -d
 ```
+
+---
+
+## 💬 LibreChat Integration
+
+### Quick Setup
+
+1. **Start the MCP Server** (with HTTPS recommended)
+```bash
+# Using Docker
+docker run -d --name actual-mcp-server \
+  -p 3600:3600 \
+  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
+  -e ACTUAL_PASSWORD=your_password \
+  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
+  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
+  -e MCP_ENABLE_HTTPS=true \
+  -v $(pwd)/certs:/app/certs:ro \
+  ghcr.io/agigante80/actual-mcp-server:latest
+```
+
+2. **Configure LibreChat** (`librechat.yaml`)
+```yaml
+mcpServers:
+  actual-mcp:
+    type: "streamable-http"
+    url: "https://your-server-ip:3600/http"
+    headers:
+      Authorization: "Bearer YOUR_TOKEN_HERE"
+    serverInstructions: true
+```
+
+3. **Restart LibreChat**
+```bash
+docker restart ai-librechat
+```
+
+### HTTPS Setup (Recommended for Security)
+
+Bearer tokens are sent in HTTP headers and should be encrypted in transit.
+
+#### Option 1: Self-Signed Certificate (Development)
+
+```bash
+# Generate certificate
+mkdir -p certs
+openssl req -x509 -newkey rsa:4096 -nodes \
+  -keyout certs/key.pem -out certs/cert.pem \
+  -days 365 -subj "/CN=your-server-ip" \
+  -addext "subjectAltName=IP:your-server-ip,DNS:localhost"
+
+# Trust certificate in LibreChat (Alpine Linux)
+docker cp certs/cert.pem ai-librechat:/tmp/mcp-server.crt
+docker exec -u root ai-librechat sh -c "cat /tmp/mcp-server.crt >> /etc/ssl/certs/ca-certificates.crt"
+docker restart ai-librechat
+```
+
+#### Option 2: CA-Signed Certificate (Production)
+
+```bash
+# Using Let's Encrypt (requires domain name)
+sudo certbot certonly --standalone -d your-domain.com
+sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem certs/cert.pem
+sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem certs/key.pem
+sudo chown $USER:$USER certs/*.pem
+```
+
+Update LibreChat to use domain:
+```yaml
+mcpServers:
+  actual-mcp:
+    url: "https://your-domain.com:3600/http"  # Use domain name
+```
+
+#### Option 3: Docker Network (No HTTPS Needed)
+
+If both containers are on the same Docker network, you can use HTTP securely:
+
+```yaml
+# docker-compose.yml
+networks:
+  mcp-network:
+    driver: bridge
+
+services:
+  librechat:
+    networks:
+      - mcp-network
+  
+  actual-mcp-server:
+    networks:
+      - mcp-network
+```
+
+LibreChat configuration:
+```yaml
+mcpServers:
+  actual-mcp:
+    url: "http://actual-mcp-server:3600/http"  # Container name
+```
+
+### Environment Variables
+
+```bash
+# Required
+ACTUAL_SERVER_URL=http://your-actual-server:5006
+ACTUAL_PASSWORD=your_password
+ACTUAL_BUDGET_SYNC_ID=your_sync_id
+
+# Security (generate with: openssl rand -hex 32)
+MCP_SSE_AUTHORIZATION=your_bearer_token_here
+
+# HTTPS (optional but recommended)
+MCP_ENABLE_HTTPS=true
+MCP_HTTPS_CERT=/app/certs/cert.pem
+MCP_HTTPS_KEY=/app/certs/key.pem
+
+# Optional
+MCP_BRIDGE_PORT=3600
+MCP_BRIDGE_DATA_DIR=/data
+```
+
+### Verification
+
+Test the connection:
+```bash
+# Health check
+curl -k https://localhost:3600/health
+
+# Should return: {"status":"ok","initialized":true}
+```
+
+In LibreChat, you should see:
+- ✅ **39 tools loaded** in the MCP servers list
+- ✅ All tools available with `actual_` prefix
+- ✅ Natural language queries working
 
 ---
 
