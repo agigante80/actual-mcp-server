@@ -7,7 +7,7 @@
 
 A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through 39 specialized tools covering 78% of the Actual Budget API.
 
-> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 39 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 42 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
@@ -150,7 +150,7 @@ AI: [Uses categories_create] "Pet Supplies category created"
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **78% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
-- ✅ **LibreChat Verified**: All 39 tools tested and working
+- ✅ **LibreChat Verified**: All 42 tools tested and working
 
 ### Advanced Features
 
@@ -285,7 +285,7 @@ docker compose --profile fullstack --profile dev up
 
 ## 🛠️ Available Tools
 
-The MCP server exposes **39 tools** organized into 8 categories. All tools follow the naming convention `actual_<category>_<action>`.
+The MCP server exposes **42 tools** organized into 9 categories. All tools follow the naming convention `actual_<category>_<action>`.
 
 ### Accounts (7 tools)
 
@@ -339,10 +339,11 @@ The MCP server exposes **39 tools** organized into 8 categories. All tools follo
 | `actual_payees_merge` | Merge duplicate payees | `targetId`, `mergeIds[]` |
 | `actual_payee_rules_get` | Get rules for a payee | `payeeId` |
 
-### Budgets (7 tools)
+### Budgets (8 tools)
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
+| `actual_budgets_get_all` | List all available budget files | - |
 | `actual_budgets_getMonths` | List available budget months | - |
 | `actual_budgets_getMonth` | Get budget for specific month | `month` |
 | `actual_budgets_setAmount` | Set category budget amount | `month`, `categoryId`, `amount` |
@@ -360,13 +361,20 @@ The MCP server exposes **39 tools** organized into 8 categories. All tools follo
 | `actual_rules_update` | Update rule | `id`, `conditions?`, `actions?` |
 | `actual_rules_delete` | Delete rule | `id` |
 
+### Advanced Query & Sync (2 tools)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `actual_query_run` | Execute custom ActualQL query | `query` |
+| `actual_bank_sync` | Trigger bank sync (GoCardless/SimpleFIN) | `accountId?` |
+
 ### Batch Operations (1 tool)
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
 | `actual_budget_updates_batch` | Batch multiple budget updates | `updates` (function) |
 
-**Total: 39 tools across 8 categories**
+**Total: 42 tools across 9 categories**
 
 ---
 
@@ -380,22 +388,17 @@ The following Actual Budget API features are not yet exposed as MCP tools:
 - `updateSchedule()` - Modify schedule parameters
 - `deleteSchedule()` - Remove schedules
 
-These are available in the Actual Budget API but not yet wrapped as MCP tools.
+These methods require access to Actual's internal API and are not directly exported from the standard methods module.
 
-### Advanced Query Tools
-- `runQuery()` - Execute custom ActualQL queries for advanced data analysis
-- `getIDByName()` - Look up IDs by name for accounts/payees/categories/schedules
-
-### Bank Integration
-- `runBankSync()` - Trigger 3rd party bank sync (GoCardless, SimpleFIN)
-
-### Multi-Budget Management
-- `getBudgets()` - List all budget files
+### Additional Multi-Budget Tools
 - `loadBudget()` - Switch between budgets
 - `downloadBudget()` - Download budget from server
 - `runImport()` - Create and populate new budgets
 
-**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 39 tools. The missing features represent specialized workflows and advanced functionality. Contributions welcome!
+### Lookup Helper
+- `getIDByName()` - Look up IDs by name for accounts/payees/categories/schedules
+
+**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 42 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
 
 ## 📦 Installation
 
@@ -595,7 +598,7 @@ curl -k https://localhost:3600/health
 ```
 
 In LibreChat, you should see:
-- ✅ **39 tools loaded** in the MCP servers list
+- ✅ **42 tools loaded** in the MCP servers list
 - ✅ All tools available with `actual_` prefix
 - ✅ Natural language queries working
 
@@ -769,7 +772,7 @@ mcpServers:
 **Features:**
 - ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
 - ✅ Bearer token authentication via headers
-- ✅ All 39 tools load successfully in LibreChat
+- ✅ All 42 tools load successfully in LibreChat
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
 
@@ -880,9 +883,9 @@ Comprehensive testing completed with LibreChat:
 
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
-| HTTP without auth | ✅ Success | 39 tools |
-| HTTP with auth | ✅ Success | 39 tools |
-| SSE without auth | ✅ Success | 39 tools |
+| HTTP without auth | ✅ Success | 42 tools |
+| HTTP with auth | ✅ Success | 42 tools |
+| SSE without auth | ✅ Success | 42 tools |
 | SSE with auth | ⚠️ Client limitation | 0 tools (headers not sent) |
 
 **Conclusion:** Use **HTTP transport with Bearer token authentication** for secure production LibreChat deployments.

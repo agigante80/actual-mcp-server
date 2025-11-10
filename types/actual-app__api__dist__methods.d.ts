@@ -42,6 +42,12 @@ declare module '@actual-app/api/dist/methods.js' {
   export function searchDocuments(...args: unknown[]): Promise<unknown>;
   export function downloadBudget(...args: unknown[]): Promise<unknown>;
   export function shutdown(...args: unknown[]): Promise<unknown>;
+  export function runQuery(...args: unknown[]): Promise<unknown>;
+  export function aqlQuery(...args: unknown[]): Promise<unknown>;
+  export function runBankSync(...args: unknown[]): Promise<unknown>;
+  export function getBudgets(...args: unknown[]): Promise<unknown>;
+  export function loadBudget(...args: unknown[]): Promise<unknown>;
+  export function runImport(...args: unknown[]): Promise<unknown>;
 }
 declare module '@actual-app/api/dist/methods.js' {
   export function addTransactions(...args: unknown[]): Promise<unknown>;

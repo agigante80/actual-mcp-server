@@ -47,6 +47,9 @@ console.log('Running generated tools smoke tests');
     getAccountBalance: 12345,
     deleteTransaction: null,
     updateTransaction: null,
+    runQuery: [{ id: 'result1', value: 100 }],
+    runBankSync: null,
+    getBudgets: [{ id: 'budget1', name: 'My Budget' }],
   };
 
   // Patch adapter default export functions
@@ -99,6 +102,8 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_resetHold')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1';
   if (name.includes('budgets_setCarryover')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1', inputExample.flag = true;
   if (name.includes('budgets_transfer')) inputExample.month = '2025-10', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
+  if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
+  if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
 
       // Validate input parsing
   try { mod.inputSchema.parse(inputExample); } catch (e) { /* ignore parse errors for optional inputs */ }

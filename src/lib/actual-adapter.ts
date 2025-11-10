@@ -38,6 +38,9 @@ import {
   batchBudgetUpdates as rawBatchBudgetUpdates,
   holdBudgetForNextMonth as rawHoldBudgetForNextMonth,
   resetBudgetHold as rawResetBudgetHold,
+  runQuery as rawRunQuery,
+  runBankSync as rawRunBankSync,
+  getBudgets as rawGetBudgets,
 } from '@actual-app/api/dist/methods.js';
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
@@ -306,6 +309,19 @@ export async function resetBudgetHold(month: string, categoryId: string): Promis
   observability.incrementToolCall('actual.budgets.resetHold').catch(() => {});
   await withConcurrency(() => retry(() => rawResetBudgetHold(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
 }
+export async function runQuery(query: string): Promise<unknown> {
+  observability.incrementToolCall('actual.query.run').catch(() => {});
+  return await withConcurrency(() => retry(() => rawRunQuery(query) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+}
+export async function runBankSync(accountId?: string): Promise<void> {
+  observability.incrementToolCall('actual.bank.sync').catch(() => {});
+  await withConcurrency(() => retry(() => rawRunBankSync(accountId ? { accountId } : undefined) as Promise<void>, { retries: 2, backoffMs: 200 }));
+}
+export async function getBudgets(): Promise<unknown[]> {
+  observability.incrementToolCall('actual.budgets.getAll').catch(() => {});
+  const raw = await withConcurrency(() => retry(() => rawGetBudgets() as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+  return Array.isArray(raw) ? raw : [];
+}
 
 export default {
   getAccounts,
@@ -345,5 +361,8 @@ export default {
   batchBudgetUpdates,
   holdBudgetForNextMonth,
   resetBudgetHold,
+  runQuery,
+  runBankSync,
+  getBudgets,
   notifications,
 };
