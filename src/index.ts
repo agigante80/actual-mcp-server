@@ -17,13 +17,12 @@ const argsEarly = process.argv.slice(2);
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const usageEarly = `
-Usage: npm run dev -- [--ws | --sse | --http | --http-testing | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: npm run dev -- [--ws | --sse | --http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
   --ws                     Start WebSocket MCP server
   --sse                    Start SSE MCP server
   --http                   Start HTTP MCP server
-  --http-testing           Start HTTP MCP test server with hardcoded values
   --test-actual-connection Test connecting to Actual and exit
   --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
@@ -66,7 +65,6 @@ export {};
     { startHttpServer },
     { startSseServer },
     { startWsServer },
-    { startHttpServer: startHttpServerTesting },
     loggerModule,
     osModule,
     utilsModule,
@@ -76,7 +74,6 @@ export {};
     import('./server/httpServer.js'),
     import('./server/sseServer.js'),
     import('./server/wsServer.js'),
-    import('./server/httpServer_testing.js'),
     import('./logger.js'),
     import('os'),
     import('./utils.js'),
@@ -103,7 +100,6 @@ export {};
   const useWebSocket = args.includes('--ws');
   const useSSE = args.includes('--sse');
   const useHttp = args.includes('--http');
-  const useSseTesting = args.includes('--http-testing');
 
   const useTestActualConnection = args.includes('--test-actual-connection');
   const useTestActualTools = args.includes('--test-actual-tools');
@@ -278,17 +274,14 @@ export {};
         SERVER_INSTRUCTIONS,
         toolSchemas
       );
-    } else if (useSseTesting) {
-      logger.info('Mode: HTTP-TESTING');
-      await startHttpServerTesting(mcp, PORT, HTTP_PATH);
     }
 
     logger.info('---------');
     logger.info(`🚀 Actual MCP Server v${VERSION}`);
     logger.info('Starting MCP bridge server...');
 
-    if ([useWebSocket, useSSE, useHttp, useSseTesting].filter(Boolean).length !== 1) {
-      logger.error('❌ Please specify exactly one mode: --ws, --sse, --http, or --http-testing');
+    if ([useWebSocket, useSSE, useHttp].filter(Boolean).length !== 1) {
+      logger.error('❌ Please specify exactly one mode: --ws, --sse, or --http');
       process.exit(1);
     }
   }

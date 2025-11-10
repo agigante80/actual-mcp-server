@@ -20,4 +20,5 @@ RUN addgroup -S app && adduser -S app -G app
 USER app
 
 EXPOSE 3000
-CMD ["node", "dist/src/index.js"]
+# Use shell form to allow environment variable expansion
+CMD node dist/src/index.js ${MCP_TRANSPORT_MODE:---http}
