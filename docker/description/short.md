@@ -1,1 +1,1 @@
-MCP server for Actual Budget - 42 tools, LibreChat verified, HTTPS support, query/sync/multi-budget - TypeScript
+MCP server for Actual Budget: 42 tools, LibreChat verified, HTTPS, query/sync/multi-budget support
