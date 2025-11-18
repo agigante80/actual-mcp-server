@@ -87,9 +87,12 @@ export {};
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
   const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: Function }).zodToJsonSchema;
 
-  // Load package.json for version info
-  const packageJson = await import('../package.json', { with: { type: 'json' } });
-  const VERSION = packageJson.default.version;
+  // Load version from environment (Docker build-time) or package.json (local dev)
+  let VERSION = process.env.VERSION;
+  if (!VERSION || VERSION === 'unknown') {
+    const packageJson = await import('../package.json', { with: { type: 'json' } });
+    VERSION = packageJson.default.version;
+  }
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;

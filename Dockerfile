@@ -8,6 +8,9 @@ RUN npm run build
 FROM node:20-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# Accept VERSION as build argument and set as environment variable
+ARG VERSION=unknown
+ENV VERSION=${VERSION}
 COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
