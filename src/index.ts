@@ -88,7 +88,7 @@ export {};
   const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: Function }).zodToJsonSchema;
 
   // Load package.json for version info
-  const packageJson = await import('../package.json', { assert: { type: 'json' } });
+  const packageJson = await import('../package.json', { with: { type: 'json' } });
   const VERSION = packageJson.default.version;
 
   // now continue with the original logic (args, flags, usage, etc.)
@@ -113,6 +113,8 @@ export {};
   const usage = usageEarly;
 
   async function main() {
+    logger.info(`🚀 Starting Actual MCP Server v${VERSION}`);
+    
     // Connect to Actual once before starting MCP servers or just testing
     await connectToActual();
 
@@ -277,7 +279,6 @@ export {};
     }
 
     logger.info('---------');
-    logger.info(`🚀 Actual MCP Server v${VERSION}`);
     logger.info('Starting MCP bridge server...');
 
     if ([useWebSocket, useSSE, useHttp].filter(Boolean).length !== 1) {
