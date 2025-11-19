@@ -452,7 +452,7 @@ MCP_BRIDGE_DATA_DIR=./actual-data       # Budget cache directory
 MCP_BRIDGE_BIND_HOST=0.0.0.0            # Bind address
 
 # Transport mode (Docker only)
-MCP_TRANSPORT_MODE=--http               # --http, --sse, or --ws
+MCP_TRANSPORT_MODE=--http               # --http or --sse
 ```
 
 #### Security
@@ -495,7 +495,7 @@ export const configSchema = z.object({
   ACTUAL_BUDGET_SYNC_ID: z.string().min(1),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
   MCP_BRIDGE_PORT: z.string().default('3000'),
-  MCP_TRANSPORT_MODE: z.enum(['--http', '--sse', '--ws']).default('--http'),
+  MCP_TRANSPORT_MODE: z.enum(['--http', '--sse']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),

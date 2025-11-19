@@ -18,7 +18,7 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 - **Conversational Finance Management**: Users can manage their budget, transactions, and financial data by simply talking to an AI assistant
 - **AI-Native API Bridge**: Standardized MCP tools make Actual Budget accessible to any MCP-compatible AI client
 - **Production-Ready Integration**: Fully tested and verified with LibreChat, ready for deployment
-- **Multi-Transport Support**: HTTP, WebSocket, and Server-Sent Events (SSE) transport protocols
+- **Multi-Transport Support**: HTTP and Server-Sent Events (SSE) transport protocols
 - **Secure by Default**: Bearer token authentication, HTTPS support, and privacy-first design
 
 ### Problem Being Solved
@@ -56,11 +56,10 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 
 **Total**: 42 tools with ~80% coverage of Actual Budget core API
 
-### 🔄 **Multiple Transport Protocols**
+### 🔄 **Transport Protocols**
 
 - **HTTP (Recommended)**: `streamable-http` transport with Bearer token auth - **fully verified with LibreChat**
-- **Server-Sent Events (SSE)**: Real-time event streaming (auth limitations in LibreChat)
-- **WebSocket**: Full-duplex communication (not supported by LibreChat)
+- **Server-Sent Events (SSE)**: Alternative streaming transport (auth limitations in LibreChat)
 
 **Docker Default**: HTTP transport enabled by default, configurable via `MCP_TRANSPORT_MODE` environment variable
 
@@ -104,8 +103,7 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 |------------|---------|---------|
 | `@actual-app/api` | ^25.11.0 | Official Actual Budget API client |
 | `@modelcontextprotocol/sdk` | ^1.18.2 | MCP protocol implementation |
-| `express` | ^4.21.2 | HTTP server framework |
-| `ws` | ^8.18.3 | WebSocket server |
+| `express` | ^4.21.2 | HTTP/SSE server framework |
 | `winston` | ^3.18.3 | Structured logging |
 | `zod` | (bundled) | Runtime type validation |
 | `date-fns` | ^4.1.0 | Date manipulation |
@@ -178,7 +176,7 @@ mcpServers:
 - **Tool Registry**: `ActualToolsManager` - Dynamic tool registration and dispatch
 - **Connection Manager**: `actualConnection.ts` - API lifecycle management
 - **Adapter Layer**: `actual-adapter.ts` - Error handling, retry logic, concurrency control
-- **Transport Servers**: HTTP/SSE/WebSocket implementations
+- **Transport Servers**: HTTP and SSE implementations using official MCP SDK
 
 ---
 

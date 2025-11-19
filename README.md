@@ -132,8 +132,7 @@ AI: [Uses categories_create] "Pet Supplies category created"
 
 ### Transport Protocols
 
-- **HTTP/HTTPS**: Production-ready with Bearer token authentication
-- **WebSocket**: Real-time bidirectional communication
+- **HTTP/HTTPS**: Production-ready with Bearer token authentication (recommended)
 - **SSE (Server-Sent Events)**: Streaming updates (LibreChat compatible)
 
 ---
@@ -144,7 +143,7 @@ AI: [Uses categories_create] "Pet Supplies category created"
 ### Core Capabilities
 
 - 🤖 **39 MCP Tools**: Comprehensive financial operations via natural language
-- 🔄 **Multiple Transports**: HTTP, WebSocket, and Server-Sent Events (SSE)
+- 🔄 **Multiple Transports**: HTTP and Server-Sent Events (SSE)
 - 🔐 **Secure**: Bearer token authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
@@ -214,7 +213,7 @@ Available tags:
 
 Both registries have identical images. Use Docker Hub for public access, or GHCR for integration with GitHub workflows.
 
-> **Note**: Docker images default to HTTP transport mode. To use SSE or WebSocket, set `MCP_TRANSPORT_MODE=--sse` or `MCP_TRANSPORT_MODE=--ws`.
+> **Note**: Docker images default to HTTP transport mode. To use SSE instead, set `MCP_TRANSPORT_MODE=--sse`.
 
 #### Quick Start (HTTP)
 
@@ -778,9 +777,9 @@ ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
 
 ## 🔌 Transports & Authentication
 
-The MCP server supports **three transport protocols** with optional Bearer token authentication.
+The MCP server supports **two transport protocols** with optional Bearer token authentication.
 
-> **Docker Note**: When running in Docker, HTTP transport is the default. Override with `MCP_TRANSPORT_MODE` environment variable (`--http`, `--sse`, or `--ws`). For local development, specify the transport mode using command-line flags.
+> **Docker Note**: When running in Docker, HTTP transport is the default. Override with `MCP_TRANSPORT_MODE` environment variable (`--http` or `--sse`). For local development, specify the transport mode using command-line flags.
 
 ### Available Transports
 
@@ -788,7 +787,6 @@ The MCP server supports **three transport protocols** with optional Bearer token
 |-----------|------|-------------------|----------------|-------------|
 | **HTTP** | `streamable-http` | ✅ Full support | ✅ Working | **✅ RECOMMENDED** |
 | **SSE** | `sse` | ✅ Supported | ⚠️ Headers not sent by client | Use without auth |
-| **WebSocket** | `ws` | ❌ Not supported | ✅ Implemented | For other clients |
 
 ### 1. HTTP Transport (Recommended)
 
@@ -822,7 +820,7 @@ mcpServers:
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
 
-### 2. SSE Transport
+### 2. SSE Transport (Alternative)
 
 **Best for:** Development or non-authenticated environments
 
@@ -849,35 +847,6 @@ mcpServers:
 - ✅ Works perfectly without authentication
 
 **Known Limitation:** While the server supports Bearer token authentication for SSE, LibreChat's SSE client implementation does not send custom headers specified in the configuration. Use HTTP transport for authenticated deployments.
-
-### 3. WebSocket Transport
-
-**Best for:** Custom MCP clients (not LibreChat)
-
-```bash
-# Start server with WebSocket
-npm run dev -- --ws
-```
-
-**Connection Examples:**
-
-```javascript
-// With Authorization header
-const ws = new WebSocket('ws://localhost:3600', {
-  headers: {
-    'Authorization': 'Bearer your_token_here'
-  }
-});
-
-// Or with token query parameter
-const ws = new WebSocket('ws://localhost:3600?token=your_token_here');
-```
-
-**Features:**
-- ✅ Bearer token authentication (header or query param)
-- ✅ Connection rejected during handshake if unauthorized
-- ✅ Efficient for real-time applications
-- ❌ Not supported by LibreChat
 
 ### Authentication Configuration
 
@@ -911,7 +880,7 @@ When `MCP_SSE_AUTHORIZATION` is set:
 # ✅ DO: Use strong random tokens (32+ characters)
 MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32)
 
-# ✅ DO: Use HTTPS/WSS in production
+# ✅ DO: Use HTTPS in production
 ACTUAL_SERVER_URL=https://actual.yourdomain.com
 
 # ✅ DO: Rotate tokens regularly
@@ -1008,7 +977,7 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 - **MCP SDK**: @modelcontextprotocol/sdk ^1.18.2
 - **API Client**: @actual-app/api ^25.9.0
 - **Validation**: Zod (runtime type checking + JSON Schema)
-- **Transport**: Express (HTTP), ws (WebSocket), EventEmitter (SSE)
+- **Transport**: Express (HTTP), EventEmitter (SSE)
 - **Logging**: Winston with daily rotation
 - **Testing**: Playwright, unit tests, integration tests
 
