@@ -28,8 +28,7 @@
     "express": "^4.21.2",
     "mitt": "^3.0.1",
     "winston": "^3.18.3",
-    "winston-daily-rotate-file": "^5.0.0",
-    "ws": "^8.18.3"
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
@@ -38,7 +37,6 @@
     "@types/express": "^5.0.3",
     "@types/google-protobuf": "^3.15.12",
     "@types/node": "^24.5.2",
-    "@types/ws": "^8.18.1",
     "nodemon": "^3.0.0",
     "openapi-typescript": "^7.10.1",
     "ts-node": "^10.9.1",

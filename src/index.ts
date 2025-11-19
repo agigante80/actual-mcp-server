@@ -17,12 +17,11 @@ const argsEarly = process.argv.slice(2);
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const usageEarly = `
-Usage: npm run dev -- [--ws | --sse | --http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: npm run dev -- [--sse | --http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
-  --ws                     Start WebSocket MCP server
   --sse                    Start SSE MCP server
-  --http                   Start HTTP MCP server
+  --http                   Start HTTP MCP server (recommended)
   --test-actual-connection Test connecting to Actual and exit
   --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
@@ -64,7 +63,6 @@ export {};
   const [
     { startHttpServer },
     { startSseServer },
-    { startWsServer },
     loggerModule,
     osModule,
     utilsModule,
@@ -73,7 +71,6 @@ export {};
   ] = await Promise.all([
     import('./server/httpServer.js'),
     import('./server/sseServer.js'),
-    import('./server/wsServer.js'),
     import('./logger.js'),
     import('os'),
     import('./utils.js'),
@@ -100,7 +97,6 @@ export {};
   const HTTP_PATH = process.env.MCP_HTTP_PATH || '/http';
 
   const args = process.argv.slice(2);
-  const useWebSocket = args.includes('--ws');
   const useSSE = args.includes('--sse');
   const useHttp = args.includes('--http');
 
@@ -184,22 +180,16 @@ export {};
       process.env.MCP_BRIDGE_PUBLIC_HOST || (getLocalIp && getLocalIp()) || 'localhost';
 
     // determine scheme/protocol:
-    // - MCP_BRIDGE_PUBLIC_SCHEME can override (e.g. "https" or "wss")
-    // - otherwise use ws/wss for WebSocket mode, http/https for HTTP/SSE modes
+    // - MCP_BRIDGE_PUBLIC_SCHEME can override (e.g. "https")
+    // - otherwise use http/https based on TLS setting
     const schemeOverride = process.env.MCP_BRIDGE_PUBLIC_SCHEME;
     let scheme = schemeOverride;
     if (!scheme) {
-      if (useWebSocket) {
-        // prefer secure websocket if user explicitly asked for TLS via env
-        scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'wss' : 'ws';
-      } else {
-        scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'https' : 'http';
-      }
+      scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'https' : 'http';
     }
 
     // choose advertised path based on transport type
-    const advertisedPath =
-      useWebSocket ? (process.env.MCP_BRIDGE_WS_PATH || '/') : (process.env.MCP_BRIDGE_HTTP_PATH || HTTP_PATH);
+    const advertisedPath = process.env.MCP_BRIDGE_HTTP_PATH || HTTP_PATH;
 
     const advertisedUrl = `${scheme}://${advertisedHost}:${PORT}${advertisedPath}`;
 
@@ -264,9 +254,6 @@ export {};
         // advertised URL shown to clients
         advertisedUrl
       );
-    } else if (useWebSocket) {
-      logger.info('Mode: WebSocket');
-      await startWsServer(mcp, PORT);
     } else if (useSSE) {
       logger.info('Mode: SSE');
       await startSseServer(
@@ -284,8 +271,8 @@ export {};
     logger.info('---------');
     logger.info('Starting MCP bridge server...');
 
-    if ([useWebSocket, useSSE, useHttp].filter(Boolean).length !== 1) {
-      logger.error('❌ Please specify exactly one mode: --ws, --sse, or --http');
+    if ([useSSE, useHttp].filter(Boolean).length !== 1) {
+      logger.error('❌ Please specify exactly one mode: --sse or --http');
       process.exit(1);
     }
   }

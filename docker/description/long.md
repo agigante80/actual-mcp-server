@@ -31,9 +31,8 @@ docker run -d \
   -v actual-mcp-data:/data \
   agigante80/actual-mcp-server:latest
   
-# Note: HTTP transport is the default. To use other transports:
+# Note: HTTP transport is the default. To use SSE instead:
 # -e MCP_TRANSPORT_MODE=--sse  (Server-Sent Events)
-# -e MCP_TRANSPORT_MODE=--ws   (WebSocket)
 
 # Or use GitHub Container Registry
 docker run -d ... ghcr.io/agigante80/actual-mcp-server:latest
@@ -74,7 +73,7 @@ docker run -d \
 
 ### Server Configuration
 - `MCP_BRIDGE_PORT` - Server port (default: 3600)
-- `MCP_TRANSPORT_MODE` - Transport protocol: --http (default), --sse, or --ws
+- `MCP_TRANSPORT_MODE` - Transport protocol: --http (default) or --sse
 - `MCP_SSE_AUTHORIZATION` - Bearer token for authentication (generate with `openssl rand -hex 32`)
 
 ### HTTPS Configuration (Optional but Recommended)
