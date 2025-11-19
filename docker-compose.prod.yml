@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   mcp-server:
-    image: ghcr.io/agigante80/actual-mcp-server:latest
+    image: agigante80/actual-mcp-server:development
     container_name: actual-mcp-server
     ports:
       - "3600:3600"
