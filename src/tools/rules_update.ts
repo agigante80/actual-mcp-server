@@ -11,18 +11,20 @@ const ConditionSchema = z.object({
 });
 
 const ActionSchema = z.object({
-  field: z.string().describe('Field to set (e.g., "category", "payee", "notes", "cleared")'),
-  value: z.union([z.string(), z.number(), z.boolean()]).describe('Value to set'),
-  type: z.string().optional().describe('Type of action'),
+  op: z.string().describe('Operation to perform (e.g., "set", "set-split-amount", "link-schedule", "prepend-notes", "append-notes")'),
+  field: z.string().optional().describe('Field to set (e.g., "category", "payee", "notes", "cleared") - required for "set" operation'),
+  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe('Value to set or use in operation'),
+  type: z.string().optional().describe('Type of action (e.g., "id", "string", "number", "boolean")'),
+  options: z.object({}).passthrough().optional().describe('Additional options for the action'),
 });
 
 const InputSchema = z.object({
   id: z.string().describe('Rule ID to update'),
   fields: z.object({
+    stage: z.enum(['pre', 'default', 'post']).optional().describe('When to apply the rule - "pre" (before), "default" (normal), or "post" (after)'),
+    conditionsOp: z.enum(['and', 'or']).optional().describe('How to combine multiple conditions'),
     conditions: z.array(ConditionSchema).optional().describe('New array of conditions'),
     actions: z.array(ActionSchema).optional().describe('New array of actions'),
-    stage: z.string().optional().describe('When to apply the rule (e.g., "pre", "post")'),
-    conditionsOp: z.enum(['and', 'or']).optional().describe('How to combine multiple conditions'),
   }).describe('Fields to update'),
 });
 

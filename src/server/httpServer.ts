@@ -11,7 +11,7 @@ import {
 import logger from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
-import { getConnectionState } from '../actualConnection.js';
+import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual } from '../actualConnection.js';
 import observability from '../observability.js';
 import config from '../config.js';
 
@@ -31,9 +31,30 @@ export async function startHttpServer(
   app.use(express.json());
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
+  const sessionLastActivity = new Map<string, number>();
+  const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 
   // safe fallback if index didn't provide implementedTools
   const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
+
+  // Session cleanup: check for idle sessions every 5 minutes
+  const cleanupInterval = setInterval(async () => {
+    const now = Date.now();
+    const sessionsToCleanup: string[] = [];
+    
+    for (const [sessionId, lastActivity] of sessionLastActivity.entries()) {
+      if (now - lastActivity > SESSION_TIMEOUT_MS) {
+        sessionsToCleanup.push(sessionId);
+      }
+    }
+    
+    for (const sessionId of sessionsToCleanup) {
+      logger.info(`[SESSION] Cleaning up idle session: ${sessionId}`);
+      transports.delete(sessionId);
+      sessionLastActivity.delete(sessionId);
+      await shutdownActualForSession(sessionId);
+    }
+  }, 5 * 60 * 1000); // Check every 5 minutes
 
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {
@@ -167,9 +188,17 @@ export async function startHttpServer(
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           enableJsonResponse: true,
-          onsessioninitialized: (sid: string) => {
+          onsessioninitialized: async (sid: string) => {
             transports.set(sid, transport);
+            sessionLastActivity.set(sid, Date.now());
             logger.debug(`Session initialized: ${sid}`);
+            // Initialize connection pool for this session
+            try {
+              await connectToActualForSession(sid);
+              logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
+            } catch (err) {
+              logger.error(`[SESSION] Failed to initialize Actual for session ${sid}:`, err);
+            }
           },
         });
 
@@ -187,6 +216,7 @@ export async function startHttpServer(
       }
 
       // sessionId present -> reuse
+      sessionLastActivity.set(sessionId, Date.now()); // Track activity
       let transport = transports.get(sessionId);
       if (!transport) {
         // If the client connects SSE first (rare), create a transport pinned to sessionId
@@ -195,9 +225,17 @@ export async function startHttpServer(
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => sessionId,
           enableJsonResponse: true,
-          onsessioninitialized: (sid: string) => {
+          onsessioninitialized: async (sid: string) => {
             transports.set(sid, transport!);
+            sessionLastActivity.set(sid, Date.now());
             logger.debug(`Session initialized (pinned): ${sid}`);
+            // Initialize connection pool for this session
+            try {
+              await connectToActualForSession(sid);
+              logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
+            } catch (err) {
+              logger.error(`[SESSION] Failed to initialize Actual for session ${sid}:`, err);
+            }
           },
         });
         await server.connect(transport);
@@ -221,6 +259,7 @@ export async function startHttpServer(
       res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'No session id' }, id: null });
       return;
     }
+    sessionLastActivity.set(sessionId, Date.now()); // Track activity
     const transport = transports.get(sessionId);
     if (!transport) {
       res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Transport not ready' }, id: null });
@@ -286,5 +325,26 @@ export async function startHttpServer(
     }
   });
 
-  return { app, listener };
+  // Configure keep-alive to maintain persistent connections
+  listener.keepAliveTimeout = 65000; // 65 seconds (slightly higher than typical client timeout)
+  listener.headersTimeout = 66000;   // 66 seconds (must be higher than keepAliveTimeout)
+  logger.info(`⏱️  HTTP keep-alive enabled (timeout: ${listener.keepAliveTimeout}ms)`);
+
+  // Cleanup on server shutdown
+  const cleanup = async () => {
+    logger.info('[SERVER] Shutting down, cleaning up sessions...');
+    clearInterval(cleanupInterval);
+    for (const sessionId of transports.keys()) {
+      await shutdownActualForSession(sessionId);
+    }
+    transports.clear();
+    sessionLastActivity.clear();
+    // Also shut down the shared/pooled connections
+    await shutdownActual();
+  };
+
+  process.on('SIGTERM', cleanup);
+  process.on('SIGINT', cleanup);
+
+  return { app, listener, cleanup };
 }

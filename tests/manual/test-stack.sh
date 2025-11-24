@@ -289,26 +289,53 @@ EOF
 start_mcp() {
     log_info "=== Starting MCP Server ==="
     
-    # Check if .env exists
-    if [ ! -f "$PROJECT_ROOT/.env" ]; then
-        log_error ".env file not found in project root"
-        log_info "Creating template .env file..."
+    # Check if Actual Budget is running
+    if [ "$START_ACTUAL" = true ]; then
+        log_info "Actual Budget is available at: http://localhost:5006"
+        log_info "Please ensure you have a budget created and note its Sync ID"
+        echo ""
+    fi
+    
+    # Check if test-stack specific .env exists
+    mkdir -p "$TEST_DIR/mcp"
+    if [ ! -f "$TEST_DIR/mcp/.env.local" ]; then
+        log_warning "MCP configuration not found"
+        log_info "Please provide Actual Budget connection details:"
+        echo ""
         
-        cat > "$PROJECT_ROOT/.env" <<'EOF'
+        read -p "Actual Budget Password (default: demo): " actual_password
+        actual_password=${actual_password:-demo}
+        
+        read -p "Actual Budget Sync ID: " actual_sync_id
+        
+        if [ -z "$actual_sync_id" ]; then
+            log_error "Budget Sync ID is required!"
+            log_info "To get Sync ID:"
+            log_info "  1. Open http://localhost:5006"
+            log_info "  2. Open your budget"
+            log_info "  3. Go to Settings → Show advanced settings"
+            log_info "  4. Find 'Sync ID' under Server sync"
+            exit 1
+        fi
+        
+        local mcp_token=$(openssl rand -hex 16)
+        
+        cat > "$TEST_DIR/mcp/.env.local" <<EOF
 # Actual Budget Configuration
-ACTUAL_SERVER_URL=http://actual-main:5006
-ACTUAL_PASSWORD=your-password-here
-ACTUAL_BUDGET_SYNC_ID=your-sync-id-here
+ACTUAL_SERVER_URL=http://finance-actual-budget-main:5006
+ACTUAL_PASSWORD=$actual_password
+ACTUAL_BUDGET_SYNC_ID=$actual_sync_id
 
 # MCP Server Configuration
-MCP_SSE_AUTHORIZATION=test-token-12345
+MCP_SSE_AUTHORIZATION=$mcp_token
+MCP_TRANSPORT_MODE=--http
 EOF
         
-        log_warning ".env file created with template values"
-        log_warning "Please update ACTUAL_PASSWORD and ACTUAL_BUDGET_SYNC_ID"
-        
-        read -p "Press Enter to continue or Ctrl+C to exit and configure .env..."
+        log_success "MCP configuration saved"
     fi
+    
+    # Use the local .env file
+    cp "$TEST_DIR/mcp/.env.local" "$TEST_DIR/mcp/.env"
     
     # Create compose file
     mkdir -p "$TEST_DIR/mcp"

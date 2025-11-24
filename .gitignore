@@ -40,10 +40,22 @@ build/
 # macOS system files
 .DS_Store
 
-# Test and development files
-test-*.mjs
-test-*.js
+# Ad-hoc test and development files (root level only)
+/test-*.mjs
+/test-*.js
 *.backup
+/check-*.js
+/cleanup-*.js
+/verify-*.js
+
+# Temporary test directories (root level only)
+/*-check/
+/browser-*/
+/cleanup-*/
+/verify-*/
+
+# Keep example env file
+!.env.example
 
 # SSL/TLS certificates (should not be committed)
 certs/
