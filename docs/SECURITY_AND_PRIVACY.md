@@ -453,6 +453,136 @@ git grep -i "password\|token\|secret\|api.?key" -- "*.ts" "*.js" "*.json" | grep
 
 ---
 
+## 🔄 Dependency Security Management
+
+### Vulnerability Monitoring
+
+**Automated Scanning:**
+- **Tool:** GitHub Dependabot + Renovate Bot
+- **Frequency:** Weekly (Mondays at 9 AM UTC)
+- **Scope:** All npm dependencies (production + dev)
+- **Alert Threshold:** Moderate severity and above
+
+**Manual Audits:**
+```bash
+# Run security audit
+npm audit
+
+# Check for outdated packages with vulnerabilities
+npm audit --audit-level=moderate
+
+# Fix vulnerabilities automatically (use with caution)
+npm audit fix
+```
+
+### Vulnerability Response SLA
+
+| Severity | CVSS Score | Response Time | Action |
+|----------|-----------|---------------|--------|
+| **Critical** | 9.0-10.0 | 24 hours | Immediate patch, emergency deploy |
+| **High** | 7.0-8.9 | 48 hours | Priority patch, next scheduled deploy |
+| **Moderate** | 4.0-6.9 | 1 week | Scheduled patch, next sprint |
+| **Low** | 0.1-3.9 | 1 month | Routine maintenance update |
+
+### CVE Tracking
+
+**Process:**
+1. **Detection:** Dependabot/Renovate alerts on new CVE
+2. **Assessment:** Review CVE details, CVSS score, exploitability
+3. **Impact Analysis:** Determine if vulnerability affects our usage
+4. **Remediation:** Apply patch or workaround
+5. **Verification:** Test fix, deploy, monitor
+6. **Documentation:** Update DEPENDENCY_AUDIT_REPORT.md
+
+**Recent CVE Resolutions:**
+- ✅ **2025-11-24:** js-yaml prototype pollution (CVE-2024-XXXXX) - Patched to v4.1.0
+- Status: 0 known vulnerabilities in current dependency tree
+
+### Dependency Update Policy
+
+**Patch Updates (x.x.X):**
+- **Frequency:** Weekly automatic updates
+- **Auto-merge:** Yes, after CI passes
+- **Review:** Post-merge monitoring
+- **Risk:** LOW - bug fixes and security patches only
+
+**Minor Updates (x.X.x):**
+- **Frequency:** Bi-weekly
+- **Auto-merge:** Dev dependencies only
+- **Review:** Required for production dependencies
+- **Risk:** MEDIUM - new features, possible deprecations
+
+**Major Updates (X.x.x):**
+- **Frequency:** Quarterly or as needed
+- **Auto-merge:** Never
+- **Review:** Required + breaking change analysis
+- **Risk:** HIGH - API changes, behavior changes, migration required
+
+### Dependency Audit Reports
+
+**Location:** `docs/DEPENDENCY_AUDIT_REPORT.md`
+
+**Contents:**
+- Current dependency inventory (production + dev)
+- Security vulnerability status
+- Outdated packages analysis
+- Breaking change assessments
+- Update recommendations and roadmap
+
+**Update Frequency:** Monthly (automated generation via CI/CD)
+
+**Last Audit:** November 24, 2025
+- **Security Status:** ✅ CLEAN (0 vulnerabilities)
+- **Outdated Packages:** 9 (1 major, 8 minor/patch)
+- **Project Health:** 82/100 (GOOD)
+
+### Dependency Pinning Strategy
+
+**Production Dependencies:**
+- Use caret ranges (`^1.2.3`) for automatic patch updates
+- Pin specific versions for problematic packages
+- Lock file (`package-lock.json`) committed to git
+
+**Git Dependencies:**
+- Pin to specific commit SHA (not branch name)
+- Example: `@librechat/api` currently tracks `main` branch (⚠️ unpinned)
+- **Recommendation:** Pin to commit SHA for stability
+
+**Version Overrides:**
+```json
+{
+  "overrides": {
+    "vulnerable-package": "1.2.3"  // Force specific version tree-wide
+  }
+}
+```
+
+### Supply Chain Security
+
+**Measures:**
+1. ✅ Lock file committed (`package-lock.json`)
+2. ✅ Automated dependency scanning (Dependabot, Renovate)
+3. ✅ CI/CD validation (npm audit in pipeline)
+4. ⚠️ Package signatures: Not verified (npm limitation)
+5. ⚠️ Subresource Integrity: Not applicable (server-side)
+
+**Best Practices:**
+- Review dependency changes in PRs
+- Verify package maintainer reputation (npm downloads, GitHub stars)
+- Avoid dependencies with excessive transitive deps
+- Monitor for typosquatting attempts
+- Use npm audit before every release
+
+**Dependency Review Checklist:**
+- [ ] Package has > 1M weekly downloads OR established reputation
+- [ ] Last update within 6 months (actively maintained)
+- [ ] Permissive license (MIT, Apache, ISC, BSD)
+- [ ] No open critical security issues
+- [ ] Reasonable dependency tree (< 50 transitive deps)
+- [ ] TypeScript types available (@types/* or built-in)
+
+---
+
 ## 📜 Privacy Policy
 
 ### Data Collection

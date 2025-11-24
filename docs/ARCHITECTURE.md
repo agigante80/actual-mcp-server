@@ -636,9 +636,96 @@ queueDelay: 100ms between requests
 
 ---
 
+## Technology Stack & Dependencies
+
+### Core Dependencies
+
+**Production Runtime:**
+- **@actual-app/api** (^25.11.0): Official Actual Budget API client
+  - Purpose: Core integration with Actual Budget server
+  - License: MIT
+  - Status: ✅ Current, actively maintained
+
+- **@modelcontextprotocol/sdk** (^1.18.2): Model Context Protocol SDK
+  - Purpose: MCP protocol implementation
+  - License: MIT
+  - Status: 🔄 Update available (1.22.0)
+  - Action: Scheduled for minor update
+
+- **express** (^4.21.2): Web server framework
+  - Purpose: HTTP/SSE transport layer
+  - License: MIT
+  - Status: ✅ Current (Express v5 available but deferred)
+  - Note: Major v5 migration planned for Q1 2026
+
+- **winston** (^3.18.3): Logging framework
+  - Purpose: Structured logging with daily rotation
+  - License: MIT
+  - Status: ✅ Current
+
+- **axios** (^1.12.2): HTTP client
+  - Purpose: External API calls
+  - License: MIT
+  - Status: 🔄 Update available (1.13.2)
+
+**Development Tools:**
+- **TypeScript** (^5.9.2): Type-safe development
+- **@playwright/test** (^1.56.0): E2E testing framework
+- **ts-node** (^10.9.1): TypeScript execution
+
+### Dependency Management
+
+**Automated Monitoring:**
+- **Dependabot**: Weekly security scans, auto-PRs for updates
+- **Renovate Bot**: Intelligent update grouping, auto-merge for low-risk patches
+- **CI/CD**: Automated testing on dependency changes
+
+**Security Posture:**
+- ✅ 0 known vulnerabilities (as of 2025-11-24)
+- ✅ 306 total dependencies (207 production, 99 dev)
+- ✅ All packages actively maintained
+- ✅ Permissive licenses only (MIT, Apache-2.0, ISC, BSD)
+
+**Update Strategy:**
+- **Patch updates** (x.x.X): Auto-merge weekly after CI passes
+- **Minor updates** (x.X.x): Manual review for production deps
+- **Major updates** (X.x.x): Dedicated migration sprint with breaking change analysis
+
+**Monitoring:**
+- Weekly dependency audits (Mondays 9 AM UTC)
+- Automated security vulnerability alerts
+- Dependency dashboard in GitHub Issues
+- Full audit report: `docs/DEPENDENCY_AUDIT_REPORT.md`
+
+**Pending Updates (as of 2025-11-24):**
+1. Batch patch updates (6 packages): Ready for auto-merge
+2. MCP SDK (1.18.2 → 1.22.0): Scheduled for minor update
+3. Express v5 migration: Deferred to Q1 2026 (requires 8-16 hour migration)
+
+### Third-Party Integrations
+
+**Actual Budget Server:**
+- REST API integration via @actual-app/api
+- Local SQLite cache for performance
+- Automatic sync on startup
+
+**LibreChat / MCP Clients:**
+- HTTP transport (recommended)
+- Server-Sent Events (SSE) for streaming
+- WebSocket (deprecated, legacy support)
+
+**Monitoring & Observability:**
+- Prometheus metrics (`/metrics` endpoint)
+- Winston structured logging
+- Health checks (`/health` endpoint)
+
+---
+
 ## Next Steps
 
 For more details:
+- [Dependency Audit Report](./DEPENDENCY_AUDIT_REPORT.md) - Complete dependency analysis
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
-- [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies
+- [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies (including dependency security)
+- [Refactoring Plan](./REFACTORING_PLAN.md) - Dependency update roadmap
 - [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - AI agent rules

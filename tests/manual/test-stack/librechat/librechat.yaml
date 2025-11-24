@@ -1,0 +1,10 @@
+version: 1.1.5
+
+mcpServers:
+  actual-mcp:
+    type: "streamable-http"
+    url: "http://actual-mcp-server:3600/http"
+    headers:
+      Authorization: "Bearer 9381d5ca23f3746fdbcd2a9438ebe4cf"
+    serverInstructions: true
+    timeout: 30000

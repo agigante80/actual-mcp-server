@@ -70,7 +70,7 @@ console.log('Running generated tools smoke tests');
   if (mod && mod.default) mod = mod.default;
       const inputExample = {};
       // Provide minimal examples for known tools
-  if (name.includes('transactions_create')) inputExample.accountId = 'acct_1', inputExample.amount = 12.34;
+  if (name.includes('transactions_create')) inputExample.account = 'acct_1', inputExample.date = '2025-11-24', inputExample.amount = -1234;
   if (name.includes('transactions_import')) inputExample.accountId = 'acct_1', inputExample.transactions = [{ amount: 100 }];
   if (name.includes('transactions_get')) inputExample.accountId = 'acct_1';
   if (name.includes('transactions_delete')) inputExample.id = 'tx_1';
