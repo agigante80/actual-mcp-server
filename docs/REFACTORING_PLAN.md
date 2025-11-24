@@ -255,15 +255,93 @@ This document maintains a **live, checkbox-style record** of refactoring tasks, 
   - GitHub Actions runs `npm audit` on every push
   - Status: Automated
 
-- [ ] **Add Dependabot for automated updates**
-  - Task: Enable Dependabot on GitHub repository
-  - Benefit: Automatic security updates
-  - Priority: Medium
+- [x] **Add Dependabot for automated updates** (Completed 2025-11-24)
+  - Dependabot configured: `.github/dependabot.yml`
+  - Renovate Bot configured: `renovate.json`
+  - Weekly scans for security vulnerabilities
+  - Grouped updates: patch/minor/major
+  - Auto-merge for low-risk updates
+  - Status: Production-ready
+
+- [x] **Dependency management automation** (Completed 2025-11-24)
+  - CI/CD workflow: `.github/workflows/dependency-management.yml`
+  - Automated security audits (weekly)
+  - Outdated package detection
+  - Dependency dashboard generation
+  - Breaking change detection
+  - Status: Fully automated
 
 - [ ] **Add SAST (Static Analysis Security Testing)**
   - Tool: Consider `semgrep` or `CodeQL`
   - Integration: GitHub Actions workflow
   - Priority: Low
+
+---
+
+## 📦 Dependency Management
+
+### Major Version Updates
+
+- [ ] **Express v4 → v5 Migration**
+  - Current: Express 4.21.2
+  - Latest: Express 5.1.0
+  - Status: DEFERRED (planned for Q1 2026)
+  - Breaking Changes: Yes (requires significant migration)
+  - Migration Guide: https://expressjs.com/en/guide/migrating-5.html
+  - Impact: HIGH - Core HTTP server framework
+  - Estimated Effort: 8-16 hours
+  - Files Affected:
+    - `src/server/httpServer.ts` (primary)
+    - `src/server/sseServer.ts`
+    - All Express middleware
+  - Migration Tasks:
+    - [ ] Review Express v5 migration guide
+    - [ ] Update deprecated API usage (res.sendfile → res.sendFile)
+    - [ ] Refactor promise-based middleware
+    - [ ] Update error handling for async routes
+    - [ ] Update @types/express to v5
+    - [ ] Full integration testing
+    - [ ] Load testing and performance validation
+  - Priority: Low - Current version stable and secure
+
+### Minor/Patch Updates
+
+- [ ] **MCP SDK Update (1.18.2 → 1.22.0)**
+  - Type: Minor version update (4 versions behind)
+  - Risk: MEDIUM - Core protocol SDK
+  - Breaking Changes: Review changelog required
+  - Impact: All 42 MCP tools
+  - Testing Required: Comprehensive tool validation
+  - Estimated Effort: 2-4 hours
+  - Priority: HIGH - Keep protocol SDK current
+
+- [ ] **Axios Update (1.12.2 → 1.13.2)**
+  - Type: Minor version update
+  - Risk: LOW - HTTP client library
+  - Breaking Changes: None expected
+  - Testing Required: HTTP request validation
+  - Estimated Effort: 1 hour
+  - Priority: MEDIUM
+
+- [ ] **Batch Patch Updates**
+  - dotenv: 17.2.2 → 17.2.3
+  - @playwright/test: 1.56.0 → 1.56.1
+  - @types/express: 5.0.3 → 5.0.5
+  - @types/node: 24.5.2 → 24.10.1
+  - nodemon: 3.1.10 → 3.1.11
+  - typescript: 5.9.2 → 5.9.3
+  - Risk: LOW - All patch versions
+  - Auto-merge: Yes (after CI passes)
+  - Priority: HIGH - Security patches and bug fixes
+
+### Dependency Pinning
+
+- [ ] **Pin LibreChat Git Dependency**
+  - Current: `github:danny-avila/LibreChat#main` (tracks branch)
+  - Risk: HIGH - Unpredictable changes
+  - Recommendation: Pin to specific commit SHA
+  - Task: Find stable commit, update package.json
+  - Priority: MEDIUM - Improve build reproducibility
 
 ---
 

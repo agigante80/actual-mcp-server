@@ -36,7 +36,30 @@ This document identifies **known gaps, technical debt, and areas needing improve
 
 ### Missing Features
 
-#### 1. **Schedule Tools Not Implemented** (4 tools missing)
+#### 1. **Dependency Updates Needed** (9 packages outdated)
+
+**Impact**: Security patches, bug fixes, new features unavailable
+
+**Details**:
+- Outdated packages: 9 (1 major, 8 minor/patch)
+- Security status: ✅ CLEAN (0 vulnerabilities)
+- Major update pending: Express v4 → v5 (requires migration)
+- Minor updates: MCP SDK (1.18.2 → 1.22.0), Axios (1.12.2 → 1.13.2)
+- Patch updates: 6 packages ready for auto-merge
+- Automation: ✅ Dependabot, Renovate, CI/CD configured
+
+**User Impact**: Low - All current versions stable and secure
+
+**Action Items**:
+- [ ] Execute Phase 1: Batch patch updates (1-2 hours)
+- [ ] Execute Phase 2: MCP SDK + Axios minor updates (2-4 hours)
+- [ ] Plan Phase 3: Express v5 migration (Q1 2026, 8-16 hours)
+
+**Status**: Automated dependency management fully configured, ready for execution
+
+**Reference**: See `docs/DEPENDENCY_AUDIT_REPORT.md` for detailed analysis
+
+#### 2. **Schedule Tools Not Implemented** (4 tools missing)
 
 **Impact**: Cannot manage recurring transactions via AI
 

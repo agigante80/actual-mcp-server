@@ -4,7 +4,9 @@
 **Version:** 0.1.0  
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2025-11-24  
-**Assessment Score:** 82/100 (GOOD)
+**Assessment Score:** 82/100 (GOOD)  
+**Tool Count:** 42 MCP tools (verified LibreChat-compatible)  
+**Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---
 
@@ -55,7 +57,11 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 | **Advanced Query & Sync** | 2 | Custom ActualQL queries, bank synchronization |
 | **Batch Operations** | 1 | Batch budget updates |
 
-**Total**: 42 tools with ~80% coverage of Actual Budget core API
+**Total**: 42 tools with 78% coverage of Actual Budget core API
+
+> ✅ **All 42 tools verified** with LibreChat integration testing  
+> 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
+> 📊 **README enhanced** with comprehensive badges and improved discoverability
 
 ### 🔄 **Transport Protocols**
 

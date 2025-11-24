@@ -4,8 +4,12 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
 [![MCP Protocol](https://img.shields.io/badge/MCP-1.18-orange)](https://modelcontextprotocol.io/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/agigante80/actual-mcp-server)](https://hub.docker.com/r/agigante80/actual-mcp-server)
+[![Docker Image Size](https://img.shields.io/docker/image-size/agigante80/actual-mcp-server/latest)](https://hub.docker.com/r/agigante80/actual-mcp-server)
+[![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
+[![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through 39 specialized tools covering 78% of the Actual Budget API.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **42 specialized tools** covering 78% of the Actual Budget API.
 
 > **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 42 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
@@ -142,7 +146,7 @@ AI: [Uses categories_create] "Pet Supplies category created"
 ### Core Capabilities
 ### Core Capabilities
 
-- 🤖 **39 MCP Tools**: Comprehensive financial operations via natural language
+- 🤖 **42 MCP Tools**: Comprehensive financial operations via natural language
 - 🔄 **Multiple Transports**: HTTP and Server-Sent Events (SSE)
 - 🔐 **Secure**: Bearer token authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
@@ -172,6 +176,10 @@ With conversational AI, you can:
 - 🔄 **Batch Operations**: Efficiently update multiple budget categories
 
 ## 🚀 Quick Start
+
+> 🐳 **Docker Images Available**: 
+> - **Docker Hub**: [`agigante80/actual-mcp-server`](https://hub.docker.com/r/agigante80/actual-mcp-server)
+> - **GitHub Container Registry**: [`ghcr.io/agigante80/actual-mcp-server`](https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server)
 
 ### Prerequisites
 
