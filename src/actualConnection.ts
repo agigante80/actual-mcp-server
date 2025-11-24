@@ -5,6 +5,9 @@ import api from '@actual-app/api';
 import logger from './logger.js';
 import config from './config.js';
 import { connectionPool } from './lib/ActualConnectionPool.js';
+import { createModuleLogger } from './lib/loggerFactory.js';
+
+const log = createModuleLogger('CONNECTION');
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
 
@@ -37,7 +40,7 @@ export async function connectToActual() {
 
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-  logger.info(`Initializing Actual API with dataDir=${DATA_DIR}`);
+  log.info(`Initializing Actual API with dataDir=${DATA_DIR}`);
 
     await api.init({
       dataDir: DATA_DIR,
@@ -45,7 +48,7 @@ export async function connectToActual() {
       password: PASSWORD,
     });
 
-    logger.info(`Downloading budget with sync ID: ${BUDGET_SYNC_ID}`);
+    log.info(`Downloading budget with sync ID: ${BUDGET_SYNC_ID}`);
 
     // According to official docs, downloadBudget accepts optional second parameter for E2E encryption
     if (BUDGET_PASSWORD) {
