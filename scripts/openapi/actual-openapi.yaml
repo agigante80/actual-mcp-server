@@ -312,9 +312,6 @@ components:
         name:
           type: string
           description: Payee name
-        category:
-          type: string
-          description: Default category ID for transactions from this payee
         transfer_acct:
           type: string
           description: Transfer account ID if this payee represents an account transfer
