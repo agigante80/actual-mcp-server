@@ -161,8 +161,6 @@ export interface components {
             offbudget?: boolean;
             /** @description Whether account is closed */
             closed?: boolean;
-            /** @description Account notes or description */
-            notes?: string;
         };
         TransactionInput: {
             accountId?: string;
@@ -186,8 +184,6 @@ export interface components {
             id?: string;
             /** @description Payee name */
             name?: string;
-            /** @description Payee notes */
-            notes?: string;
             /** @description Default category ID for transactions from this payee */
             category?: string;
             /** @description Transfer account ID if this payee represents an account transfer */
