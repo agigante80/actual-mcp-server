@@ -24,6 +24,7 @@ export async function startHttpServer(
   serverDescription: string,                     // was passed by index.ts
   serverInstructions: string,                    // was passed by index.ts
   toolSchemas: Record<string, unknown>,              // was passed by index.ts
+  version: string,                               // server version from package.json
   bindHost = 'localhost',
   advertisedUrl?: string
 ) {
@@ -109,7 +110,7 @@ export async function startHttpServer(
     const server = new Server(
       {
         name: serverDescription || "actual-mcp-server",
-        version: "1.0.0",
+        version: version || "0.1.0",
         description: serverDescription || "Actual MCP server",
       },
       serverOptions
