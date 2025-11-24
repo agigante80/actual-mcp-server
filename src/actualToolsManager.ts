@@ -51,6 +51,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_transactions_get',
   'actual_transactions_import',
   'actual_transactions_update',
+  'actual_server_info',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names
