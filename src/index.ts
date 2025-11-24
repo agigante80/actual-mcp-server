@@ -90,6 +90,8 @@ export {};
     const packageJson = await import('../package.json', { with: { type: 'json' } });
     VERSION = packageJson.default.version;
   }
+  // Ensure VERSION is always a string (fallback to 0.1.0 if somehow still undefined)
+  const version: string = VERSION || '0.1.0';
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;
@@ -209,7 +211,8 @@ export {};
         SERVER_DESCRIPTION,
         SERVER_INSTRUCTIONS,
         toolSchemas,
-        process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
+        version,
+        process.env.MCP_BRIDGE_BIND_HOST || 'localhost',
         advertisedUrl
       );
 
@@ -267,7 +270,8 @@ export {};
         implementedTools,
         SERVER_DESCRIPTION,
         SERVER_INSTRUCTIONS,
-        toolSchemas
+        toolSchemas,
+        version
       );
     }
 
