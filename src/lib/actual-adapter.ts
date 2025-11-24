@@ -115,12 +115,14 @@ async function shutdownActualApi(): Promise<void> {
   }
 }
 
+import { DEFAULT_CONCURRENCY_LIMIT } from './constants.js';
+
 /**
  * Very small concurrency limiter for adapter calls. This prevents bursts from
  * overloading the actual server. It's intentionally tiny and in-memory; replace
  * with Bottleneck or p-queue for production.
  */
-let MAX_CONCURRENCY = parseInt(process.env.ACTUAL_API_CONCURRENCY || '6', 10);
+let MAX_CONCURRENCY = parseInt(process.env.ACTUAL_API_CONCURRENCY || String(DEFAULT_CONCURRENCY_LIMIT), 10);
 let running = 0;
 const queue: Array<() => void> = [];
 

@@ -33,11 +33,12 @@ export async function startHttpServer(
   const transports = new Map<string, StreamableHTTPServerTransport>();
   const sessionLastActivity = new Map<string, number>();
   const SESSION_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
+  const SESSION_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // Check every 5 minutes
 
   // safe fallback if index didn't provide implementedTools
   const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
 
-  // Session cleanup: check for idle sessions every 5 minutes
+  // Session cleanup: check for idle sessions periodically
   const cleanupInterval = setInterval(async () => {
     const now = Date.now();
     const sessionsToCleanup: string[] = [];
@@ -54,7 +55,7 @@ export async function startHttpServer(
       sessionLastActivity.delete(sessionId);
       await shutdownActualForSession(sessionId);
     }
-  }, 5 * 60 * 1000); // Check every 5 minutes
+  }, SESSION_CLEANUP_INTERVAL_MS);
 
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {

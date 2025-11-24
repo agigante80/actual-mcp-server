@@ -579,13 +579,71 @@ Priority = (Technical Debt × 2 + Business Impact × 3) / Effort
 
 ## Phased Refactoring Roadmap
 
-### 🚀 Phase 1: Quick Wins (Week 1 - 16 hours)
+### 🚀 Phase 1: Quick Wins (Week 1 - 18 hours)
 
 **Goal:** Reduce duplication and establish consistency  
 **Risk:** LOW  
 **Impact:** HIGH
 
-#### Task 1.1: Extract Constants (4 hours)
+#### Task 1.1: Update .gitignore for Test Data (2 hours)
+
+**File:** Update `.gitignore`
+
+**Problem:** 
+Large test data files (100MB+ MongoDB files) committed to repository causing:
+- Slow clone/pull operations
+- GitHub warnings about large files
+- Unnecessary repository bloat
+- Files can be regenerated locally
+
+**Solution:**
+```bash
+# Add to .gitignore
+tests/manual/test-stack/librechat/mongo-data/
+tests/manual/test-stack/librechat/pgvector-data/
+tests/manual/test-stack/librechat/meilisearch-data/
+tests/manual/test-stack/actual/data-main/
+
+# Optional: Keep structure but ignore data files
+!tests/manual/test-stack/librechat/mongo-data/.gitkeep
+!tests/manual/test-stack/librechat/pgvector-data/.gitkeep
+```
+
+**Cleanup Steps:**
+```bash
+# 1. Add patterns to .gitignore
+echo "# Test environment data (can be regenerated)" >> .gitignore
+echo "tests/manual/test-stack/librechat/mongo-data/" >> .gitignore
+echo "tests/manual/test-stack/librechat/pgvector-data/" >> .gitignore
+echo "tests/manual/test-stack/librechat/meilisearch-data/" >> .gitignore
+echo "tests/manual/test-stack/actual/data-main/" >> .gitignore
+
+# 2. Remove from Git history (keeps local files)
+git rm -r --cached tests/manual/test-stack/librechat/mongo-data/
+git rm -r --cached tests/manual/test-stack/librechat/pgvector-data/
+git rm -r --cached tests/manual/test-stack/librechat/meilisearch-data/
+git rm -r --cached tests/manual/test-stack/actual/data-main/
+
+# 3. Add .gitkeep files to preserve directory structure
+touch tests/manual/test-stack/librechat/mongo-data/.gitkeep
+touch tests/manual/test-stack/librechat/pgvector-data/.gitkeep
+git add tests/manual/test-stack/*/.gitkeep
+
+# 4. Commit changes
+git commit -m "chore: exclude test data from version control"
+git push
+```
+
+**Files to Update:** `.gitignore`  
+**Testing:** Verify test stack still works after removing data  
+**Risk:** LOW (files remain locally)  
+**Benefits:**
+- ✅ Reduces repository size by ~200MB
+- ✅ Faster clone/pull operations
+- ✅ Eliminates GitHub warnings
+- ✅ Cleaner git history
+
+#### Task 1.2: Extract Constants (4 hours)
 **File:** Create `src/config/constants.ts`
 
 ```typescript
@@ -612,9 +670,9 @@ export const API = {
 
 **Files to Update:** 8 files  
 **Testing:** Unit tests for constant usage  
-**Risk:** LOW  
+**Risk:** LOW
 
-#### Task 1.2: Create Shared Schema Library (6 hours)
+#### Task 1.3: Create Shared Schema Library (6 hours)
 **File:** Create `src/lib/schemas/common.ts`
 
 ```typescript
@@ -648,7 +706,7 @@ export const CommonSchemas = {
 **Testing:** Verify all tools still validate correctly  
 **Risk:** LOW (incremental changes)
 
-#### Task 1.3: Standardize Logging Format (6 hours)
+#### Task 1.4: Standardize Logging Format (6 hours)
 **File:** Create `src/lib/loggerFactory.ts`
 
 ```typescript
@@ -682,6 +740,8 @@ export function createModuleLogger(moduleName: string): ModuleLogger {
 **Risk:** LOW
 
 **Phase 1 Deliverables:**
+- [ ] .gitignore updated and test data removed from version control
+- [ ] Repository size reduced by ~200MB
 - [ ] Constants extracted to config file
 - [ ] Shared schema library created
 - [ ] Module-specific loggers implemented
@@ -1231,7 +1291,7 @@ The Actual MCP Server codebase is **fundamentally sound** with good architecture
 - Improved onboarding experience
 - Better code quality metrics
 
-**Total Effort:** 116 hours (~3-4 weeks)  
+**Total Effort:** 118 hours (~3-4 weeks)  
 **Total Risk:** LOW-MEDIUM (with proper testing)  
 **Total Impact:** HIGH (long-term maintainability)
 

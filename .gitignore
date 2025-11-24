@@ -48,6 +48,12 @@ build/
 /cleanup-*.js
 /verify-*.js
 
+# Test infrastructure data (regeneratable)
+tests/manual/test-stack/librechat/mongo-data/
+tests/manual/test-stack/librechat/pgvector-data/
+tests/manual/test-stack/librechat/meilisearch-data/
+tests/manual/test-stack/librechat/rag-data/
+
 # Temporary test directories (root level only)
 /*-check/
 /browser-*/
