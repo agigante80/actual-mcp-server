@@ -269,9 +269,6 @@ components:
         closed:
           type: boolean
           description: Whether account is closed
-        notes:
-          type: string
-          description: Account notes or description
     TransactionInput:
       type: object
       properties:
@@ -315,9 +312,6 @@ components:
         name:
           type: string
           description: Payee name
-        notes:
-          type: string
-          description: Payee notes
         category:
           type: string
           description: Default category ID for transactions from this payee

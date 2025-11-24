@@ -8,7 +8,6 @@ const InputSchema = z.object({
   id: CommonSchemas.payeeId,
   fields: z.object({
     name: CommonSchemas.name.optional(),
-    notes: CommonSchemas.notes,
     category: CommonSchemas.categoryId.optional().describe('Default category for transactions from this payee'),
     transfer_acct: CommonSchemas.accountId.optional().describe('Transfer account if payee represents account transfer'),
   }).strict().optional().describe('Fields to update - only recognized fields allowed'),
@@ -22,14 +21,14 @@ const tool: ToolDefinition = {
 
 Updatable fields:
 - name: Payee name (1-255 chars)
-- notes: Payee notes/description (max 1000 chars)
-- category: Default category for transactions from this payee (use category UUID)
-- transfer_acct: Mark as transfer payee linked to account (use account UUID)
+- category: Default category ID for transactions from this payee (optional)
+- transfer_acct: Transfer account ID if this payee represents an account transfer (optional)
 
-Example: Set default category for a payee:
+Example: Update payee name and default category:
 {
   "id": "<payee-uuid>",
   "fields": {
+    "name": "Grocery Store",
     "category": "<category-uuid>"
   }
 }`,
@@ -39,7 +38,7 @@ Example: Set default category for a payee:
       const input = InputSchema.parse(args || {});
       
       if (!input.fields || Object.keys(input.fields).length === 0) {
-        throw new Error('No fields provided to update. Include at least one field: name, notes, category, or transfer_acct.');
+        throw new Error('No fields provided to update. Include at least one field: name, category, or transfer_acct.');
       }
       
       await adapter.updatePayee(input.id, input.fields);

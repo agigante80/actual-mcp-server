@@ -10,7 +10,6 @@ const InputSchema = z.object({
     name: CommonSchemas.name.optional(),
     offbudget: CommonSchemas.offBudget,
     closed: CommonSchemas.closed,
-    notes: z.string().max(5000).optional().describe('Account notes (max 5000 chars)'),
   }).strict().optional().describe('Fields to update - only recognized fields allowed'),
 });
 
@@ -22,14 +21,13 @@ Updatable fields:
 - name: Account name (1-255 chars)
 - offbudget: Exclude from budget (true/false)
 - closed: Mark as closed (true/false)
-- notes: Account notes/description (max 5000 chars)
 
-Example: Update account name and add notes:
+Example: Update account name and offbudget status:
 {
   "id": "<account-uuid>",
   "fields": {
     "name": "Checking Account",
-    "notes": "Primary spending account"
+    "offbudget": false
   }
 }`,
   inputSchema: InputSchema,
@@ -38,7 +36,7 @@ Example: Update account name and add notes:
       const input = InputSchema.parse(args || {});
       
       if (!input.fields || Object.keys(input.fields).length === 0) {
-        throw new Error('No fields provided to update. Include at least one field: name, offbudget, closed, or notes.');
+        throw new Error('No fields provided to update. Include at least one field: name, offbudget, or closed.');
       }
       
       await adapter.updateAccount(input.id, input.fields);

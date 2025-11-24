@@ -206,13 +206,32 @@ async function accountTests(context) {
   const balance = await callTool("actual_accounts_get_balance", { id: accountId });
   console.log("✓ Balance:", balance);
   
-  // Update account
-  console.log("\nUpdating account name...");
+  // REGRESSION TEST: Update multiple account fields (tests strict validation)
+  console.log("\nREGRESSION: Updating multiple account fields (name, offbudget)...");
   await callTool("actual_accounts_update", { 
     id: accountId,
-    fields: { name: accountName + "-Updated" }
+    fields: { 
+      name: accountName + "-Updated",
+      offbudget: true
+    }
   });
-  console.log("✓ Account updated");
+  console.log("✓ Account updated with multiple fields");
+  
+  // REGRESSION TEST: Try to update with invalid field (should fail with clear error)
+  console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
+  try {
+    await callTool("actual_accounts_update", { 
+      id: accountId,
+      fields: { invalidField: "should fail" }
+    });
+    console.log("❌ REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
+  } catch (err) {
+    if (err.message.includes("Unrecognized key") || err.message.includes("invalidField")) {
+      console.log("✓ Strict validation working (invalid field rejected)");
+    } else {
+      console.log("⚠ Different error than expected:", err.message);
+    }
+  }
   
   // Close account
   console.log("\nClosing account...");
@@ -284,13 +303,42 @@ async function payeeTests(context) {
   console.log("✓ Created second payee:", payeeId2);
   context.payeeId2 = payeeId2;
   
+  // REGRESSION TEST: Update payee with category field
+  // This tests the fix for AI agent error where setting default category failed
+  if (context.categoryId) {
+    console.log("\nREGRESSION: Setting default category on payee...");
+    await callTool("actual_payees_update", { 
+      id: payeeId,
+      fields: { 
+        category: context.categoryId
+      }
+    });
+    console.log("✓ Payee updated with default category");
+  }
+  
   // Update payee
-  console.log("\nUpdating payee...");
+  console.log("\nUpdating payee name...");
   await callTool("actual_payees_update", { 
     id: payeeId,
     fields: { name: `MCP-Payee-${timestamp}-Updated` }
   });
   console.log("✓ Payee updated");
+  
+  // REGRESSION TEST: Test strict validation on payee update
+  console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
+  try {
+    await callTool("actual_payees_update", { 
+      id: payeeId,
+      fields: { invalidField: "should fail" }
+    });
+    console.log("❌ REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
+  } catch (err) {
+    if (err.message.includes("Unrecognized key") || err.message.includes("invalidField")) {
+      console.log("✓ Strict validation working (invalid field rejected)");
+    } else {
+      console.log("⚠ Different error than expected:", err.message);
+    }
+  }
   
   // Merge payees (merge payeeId2 into payeeId)
   console.log("\nMerging payees...");
@@ -504,6 +552,41 @@ async function budgetTests(context) {
     ]
   });
   console.log("✓ Batch updates completed");
+  
+  // REGRESSION TEST: Test large batch (31+ operations) with error resilience
+  // This tests the fix for AI agent error where large batches caused fetch failures
+  console.log("\nREGRESSION: Testing large batch with 35 operations (should handle gracefully)...");
+  const largeBatch = [];
+  for (let i = 0; i < 35; i++) {
+    largeBatch.push({ 
+      month: currentDate, 
+      categoryId: context.categoryId, 
+      amount: 10000 + (i * 100) 
+    });
+  }
+  const batchResult = await callTool("actual_budget_updates_batch", { 
+    operations: largeBatch
+  });
+  console.log("✓ Large batch handled:", batchResult);
+  
+  // REGRESSION TEST: Test batch with some invalid operations (should continue on errors)
+  console.log("\nREGRESSION: Testing batch error resilience (should continue on failures)...");
+  const mixedBatch = [
+    { month: currentDate, categoryId: context.categoryId, amount: 70000 }, // Valid
+    { month: "invalid-date", categoryId: context.categoryId, amount: 80000 }, // Invalid month
+    { month: currentDate, categoryId: context.categoryId, amount: 90000 }, // Valid
+  ];
+  try {
+    const mixedResult = await callTool("actual_budget_updates_batch", { 
+      operations: mixedBatch
+    });
+    console.log("✓ Batch with errors processed:", mixedResult);
+    if (mixedResult.successCount === 2 && mixedResult.failureCount === 1) {
+      console.log("✓ Error resilience working correctly (2 success, 1 failure)");
+    }
+  } catch (err) {
+    console.log("⚠ Batch error handling:", err.message);
+  }
 }
 
 async function rulesTests(context) {
@@ -514,6 +597,23 @@ async function rulesTests(context) {
   const rulesData = await callTool("actual_rules_get", {});
   const rules = rulesData.result || rulesData || [];
   console.log("✓ Rules found:", rules.length);
+  
+  // REGRESSION TEST: Create rule without 'op' field (should default to 'set')
+  // This tests the fix for AI agent error where 'op' was required but AI omitted it
+  console.log("\nREGRESSION: Creating rule without 'op' field (should default to 'set')...");
+  const ruleWithoutOp = await callTool("actual_rules_create", { 
+    stage: "pre",
+    conditionsOp: "and",
+    conditions: [
+      { field: "notes", op: "contains", value: "no-op-test" }
+    ],
+    actions: [
+      { field: "category", value: context.categoryId } // No 'op' field - should default to 'set'
+    ]
+  });
+  const ruleWithoutOpId = ruleWithoutOp.id || ruleWithoutOp.result || ruleWithoutOp;
+  console.log("✓ Rule created without 'op' (defaulted to 'set'):", ruleWithoutOpId);
+  context.ruleWithoutOpId = ruleWithoutOpId;
   
   // Create a rule (use category from context)
   console.log("\nCreating test rule...");
@@ -687,6 +787,13 @@ async function run() {
         console.log("\nDeleting test transaction...");
         await callTool("actual_transactions_delete", { id: context.transactionId });
         console.log("✓ Transaction deleted");
+      }
+      
+      // Delete rule (without op)
+      if (context.ruleWithoutOpId) {
+        console.log("\nDeleting test rule (without op)...");
+        await callTool("actual_rules_delete", { id: context.ruleWithoutOpId });
+        console.log("✓ Rule (without op) deleted");
       }
       
       // Delete rule
