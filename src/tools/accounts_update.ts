@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import type { components } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
@@ -7,10 +8,10 @@ const InputSchema = z.object({
   id: CommonSchemas.accountId,
   fields: z.object({
     name: CommonSchemas.name.optional(),
-    offbudget: z.boolean().optional().describe('Whether account is off-budget'),
-    closed: z.boolean().optional().describe('Whether account is closed'),
+    offbudget: CommonSchemas.offBudget,
+    closed: CommonSchemas.closed,
     notes: z.string().max(5000).optional().describe('Account notes (max 5000 chars)'),
-  }).passthrough().optional().describe('Fields to update'),
+  }).strict().optional().describe('Fields to update - only recognized fields allowed'),
 });
 
 const tool: ToolDefinition = {

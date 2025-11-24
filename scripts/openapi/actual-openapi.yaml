@@ -256,10 +256,22 @@ components:
       properties:
         id:
           type: string
+          description: Account UUID
         name:
           type: string
+          description: Account name
         balance:
           type: number
+          description: Current account balance in cents
+        offbudget:
+          type: boolean
+          description: Whether account is excluded from budget calculations
+        closed:
+          type: boolean
+          description: Whether account is closed
+        notes:
+          type: string
+          description: Account notes or description
     TransactionInput:
       type: object
       properties:

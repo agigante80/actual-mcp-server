@@ -151,9 +151,18 @@ export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Account: {
+            /** @description Account UUID */
             id?: string;
+            /** @description Account name */
             name?: string;
+            /** @description Current account balance in cents */
             balance?: number;
+            /** @description Whether account is excluded from budget calculations */
+            offbudget?: boolean;
+            /** @description Whether account is closed */
+            closed?: boolean;
+            /** @description Account notes or description */
+            notes?: string;
         };
         TransactionInput: {
             accountId?: string;
