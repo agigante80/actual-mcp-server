@@ -29,9 +29,18 @@ Example:
 }`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    const input = InputSchema.parse(args || {});
-    const result = await adapter.getAccountBalance(input.id, input.cutoff);
-    return { balance: result };
+    try {
+      const input = InputSchema.parse(args || {});
+      const result = await adapter.getAccountBalance(input.id, input.cutoff);
+      return { balance: result };
+    } catch (error) {
+      // Provide helpful error message if account doesn't exist
+      const err = error as Error;
+      if (err.message?.includes('fetch failed') || err.message?.includes('not found')) {
+        throw new Error(`Account not found. Please call actual_accounts_list first to get valid account IDs. Error: ${err.message}`);
+      }
+      throw error;
+    }
   },
 };
 
