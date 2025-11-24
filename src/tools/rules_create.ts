@@ -26,7 +26,7 @@ const ActionSchema = z.object({
 });
 
 const InputSchema = z.object({
-  stage: z.enum(['pre', 'default', 'post']).optional().default('pre').describe('When to apply the rule - "pre" (before), "default" (normal), or "post" (after)'),
+  stage: z.enum(['pre', 'post']).optional().default('pre').describe('When to apply the rule - "pre" (before transactions sync) or "post" (after transactions sync)'),
   conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine multiple conditions'),
   conditions: z.array(ConditionSchema).describe('Array of conditions that must be met for the rule to apply'),
   actions: z.array(ActionSchema).describe('Array of actions to perform when conditions are met'),
@@ -45,9 +45,10 @@ Common use cases:
 Example (auto-categorize):
 {
   "conditions": [{"field": "payee", "op": "contains", "value": "Amazon", "type": "string"}],
-  "actions": [{"field": "category", "value": "<category-uuid>", "type": "id"}],
-  "stage": "post"
+  "actions": [{"field": "category", "value": "<category-uuid>", "type": "id"}]
 }
+
+Note: Stage defaults to "pre". Use "post" for rules that should run after transaction import.
 
 Note: "op" defaults to "set" if omitted. Use "type": "id" for category/payee/account UUIDs.`,
   inputSchema: InputSchema,

@@ -21,7 +21,7 @@ const ActionSchema = z.object({
 const InputSchema = z.object({
   id: z.string().describe('Rule ID to update'),
   fields: z.object({
-    stage: z.enum(['pre', 'default', 'post']).optional().describe('When to apply the rule - "pre" (before), "default" (normal), or "post" (after)'),
+    stage: z.enum(['pre', 'post']).optional().describe('When to apply the rule - "pre" (before transactions sync) or "post" (after transactions sync)'),
     conditionsOp: z.enum(['and', 'or']).optional().describe('How to combine multiple conditions'),
     conditions: z.array(ConditionSchema).optional().describe('New array of conditions'),
     actions: z.array(ActionSchema).optional().describe('New array of actions'),
