@@ -89,6 +89,19 @@ export {};
   if (!VERSION || VERSION === 'unknown') {
     const packageJson = await import('../package.json', { with: { type: 'json' } });
     VERSION = packageJson.default.version;
+    
+    // Append git commit hash for development builds
+    try {
+      const { execSync } = await import('child_process');
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+      const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+      if (branch === 'develop' || branch !== 'main') {
+        VERSION = `${VERSION}-dev-${commitHash}`;
+      }
+    } catch (err) {
+      // Git not available or not in a git repo, use version as-is
+      logger.debug('Could not determine git commit hash:', err);
+    }
   }
   // Ensure VERSION is always a string (fallback to 0.1.0 if somehow still undefined)
   const version: string = VERSION || '0.1.0';
