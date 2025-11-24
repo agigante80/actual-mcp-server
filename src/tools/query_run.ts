@@ -10,7 +10,7 @@ type Output = unknown;
 
 const tool: ToolDefinition = {
   name: 'actual_query_run',
-  description: 'Execute a custom ActualQL query for advanced data analysis. ActualQL is Actual Budget\'s query language that allows filtering and aggregating financial data. Use this for complex queries beyond the standard tool capabilities.',
+  description: 'Execute a custom ActualQL query for advanced data analysis. Supports simple SQL-like syntax: "SELECT * FROM tablename LIMIT n" or just a table name like "accounts". Available tables: accounts, transactions, categories, payees, category_groups, schedules, rules.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

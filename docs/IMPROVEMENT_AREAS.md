@@ -3,13 +3,32 @@
 **Project:** Actual MCP Server  
 **Version:** 0.1.0  
 **Purpose:** Track known technical debt, missing features, and weak areas  
-**Last Updated:** 2025-11-11
+**Last Updated:** 2025-11-24
 
 ---
 
 ## 🎯 Purpose
 
 This document identifies **known gaps, technical debt, and areas needing improvement** in the Actual MCP Server project. It serves as a comprehensive inventory of issues that don't block production but should be addressed over time.
+
+---
+
+## ✅ Recently Resolved
+
+### 1. **Transaction Creation Now Fully Functional** (RESOLVED 2025-11-24)
+
+**Previous Issue**: Transaction creation was a stub returning 'test-success'
+
+**Resolution**:
+- Implemented full `transactions_create` tool using `addTransactions()` API
+- Added proper adapter lifecycle management (init/shutdown per operation)
+- Handles API returning "ok" string instead of transaction ID
+- Added comprehensive error handling and retry logic
+- Verified working with integration tests and MCP tool cleanup
+
+**Impact**: HIGH - Core functionality now operational
+
+**Status**: ✅ FIXED and verified working
 
 ---
 

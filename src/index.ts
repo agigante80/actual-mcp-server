@@ -114,10 +114,13 @@ export {};
   async function main() {
     logger.info(`🚀 Starting Actual MCP Server v${VERSION}`);
     
-    // Connect to Actual once before starting MCP servers or just testing
-    await connectToActual();
+    // NOTE: Persistent connection disabled - using init/shutdown per operation pattern
+    // This ensures tombstone=0 for all created entities (they appear in UI)
+    // await connectToActual();
 
     if (useTestActualConnection) {
+      // For test connection mode only, we still need to connect
+      await connectToActual();
       logger.info('⚙️  --test-actual-connection specified, connection to Actual Finance successful.');
       process.exit(0);
     }
