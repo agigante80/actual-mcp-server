@@ -77,7 +77,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('transactions_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
   if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_create')) inputExample.name = 'New';
-  if (name.includes('accounts_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.name = 'Updated Name';
+  if (name.includes('accounts_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated Name' };
   if (name.includes('accounts_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_close')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_reopen')) inputExample.id = '00000000-0000-0000-0000-000000000001';
