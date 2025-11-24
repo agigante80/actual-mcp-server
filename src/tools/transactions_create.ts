@@ -1,16 +1,17 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  account: z.string().describe('Account ID'),
-  date: z.string().describe('Transaction date (YYYY-MM-DD)'),
-  amount: z.number().describe('Amount in cents (e.g., -5000 = -$50.00, positive for income)'),
-  payee: z.string().optional().describe('Payee ID'),
+  account: CommonSchemas.accountId,
+  date: CommonSchemas.date,
+  amount: CommonSchemas.amountCents,
+  payee: CommonSchemas.payeeId.optional(),
   payee_name: z.string().optional().describe('Payee name (alternative to payee ID)'),
-  notes: z.string().optional().describe('Transaction notes'),
-  category: z.string().optional().describe('Category ID'),
-  cleared: z.boolean().optional().describe('Whether transaction is cleared'),
+  notes: CommonSchemas.notes,
+  category: CommonSchemas.categoryId.optional(),
+  cleared: CommonSchemas.cleared,
   imported_id: z.string().optional().describe('Original imported transaction ID'),
 });
 

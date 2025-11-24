@@ -69,20 +69,20 @@ console.log('Running generated tools smoke tests');
   // some bundlers/export patterns export the tool object directly, others as default
   if (mod && mod.default) mod = mod.default;
       const inputExample = {};
-      // Provide minimal examples for known tools
-  if (name.includes('transactions_create')) inputExample.account = 'acct_1', inputExample.date = '2025-11-24', inputExample.amount = -1234;
-  if (name.includes('transactions_import')) inputExample.accountId = 'acct_1', inputExample.transactions = [{ amount: 100 }];
-  if (name.includes('transactions_get')) inputExample.accountId = 'acct_1';
-  if (name.includes('transactions_delete')) inputExample.id = 'tx_1';
-  if (name.includes('transactions_update')) inputExample.id = 'tx_1', inputExample.fields = { notes: 'test' };
-  if (name.includes('accounts_get_balance')) inputExample.id = 'acct_1';
+      // Provide minimal examples for known tools (use UUIDs where schemas require them)
+  if (name.includes('transactions_create')) inputExample.account = '00000000-0000-0000-0000-000000000001', inputExample.date = '2025-11-24', inputExample.amount = -1234;
+  if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.transactions = [{ amount: 100 }];
+  if (name.includes('transactions_get')) inputExample.accountId = '00000000-0000-0000-0000-000000000001';
+  if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
+  if (name.includes('transactions_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
+  if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_create')) inputExample.name = 'New';
-  if (name.includes('accounts_update')) inputExample.id = 'acct_1', inputExample.name = 'Updated Name';
-  if (name.includes('accounts_delete')) inputExample.id = 'acct_1';
-  if (name.includes('accounts_close')) inputExample.id = 'acct_1';
-  if (name.includes('accounts_reopen')) inputExample.id = 'acct_1';
+  if (name.includes('accounts_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.name = 'Updated Name';
+  if (name.includes('accounts_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
+  if (name.includes('accounts_close')) inputExample.id = '00000000-0000-0000-0000-000000000001';
+  if (name.includes('accounts_reopen')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('categories_create')) inputExample.name = 'Food';
-  if (name.includes('categories_delete')) inputExample.id = 'cat_1';
+  if (name.includes('categories_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('categories_update')) inputExample.id = 'cat_1', inputExample.fields = { name: 'Updated' };
   if (name.includes('category_groups_create')) inputExample.name = 'Expenses';
   if (name.includes('category_groups_delete')) inputExample.id = 'grp_1';

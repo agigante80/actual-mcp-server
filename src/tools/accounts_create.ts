@@ -2,8 +2,13 @@ import { z } from 'zod';
 import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
-const InputSchema = z.object({ id: z.string().optional(), name: z.string().min(1), balance: z.number().optional() });
+const InputSchema = z.object({ 
+  id: z.string().optional(), 
+  name: CommonSchemas.name, 
+  balance: CommonSchemas.optionalAmountCents 
+});
 
 // RESPONSE_TYPE: string
 type Output = unknown; // refine using generated types (paths['/accounts']['post'])
