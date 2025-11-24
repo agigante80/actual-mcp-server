@@ -89,7 +89,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('category_groups_update')) inputExample.id = 'grp_1', inputExample.fields = { name: 'Updated' };
   if (name.includes('payees_create')) inputExample.name = 'Kroger';
   if (name.includes('payees_delete')) inputExample.id = 'p_1';
-  if (name.includes('payees_update')) inputExample.id = 'p_1', inputExample.fields = { name: 'Updated' };
+  if (name.includes('payees_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated' };
   if (name.includes('payees_merge')) inputExample.targetId = 'p_1', inputExample.mergeIds = ['p_2', 'p_3'];
   if (name.includes('payee_rules_get')) inputExample.payeeId = 'p_1';
   if (name.includes('rules_create')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: 'cat_1' }];
