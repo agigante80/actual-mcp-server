@@ -184,8 +184,6 @@ export interface components {
             id?: string;
             /** @description Payee name */
             name?: string;
-            /** @description Default category ID for transactions from this payee */
-            category?: string;
             /** @description Transfer account ID if this payee represents an account transfer */
             transfer_acct?: string;
         };
