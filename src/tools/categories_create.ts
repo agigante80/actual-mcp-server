@@ -21,7 +21,17 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     try {
-      const result = await adapter.createCategory(input);
+      // Normalize field names: convert camelCase to snake_case for Actual API
+      const normalizedInput = {
+        ...input,
+        group_id: input.group_id || input.groupId,
+        parent_id: input.parent_id || input.parentId,
+      };
+      // Remove camelCase versions to avoid confusion
+      delete normalizedInput.groupId;
+      delete normalizedInput.parentId;
+      
+      const result = await adapter.createCategory(normalizedInput);
       return { result };
     } catch (error) {
       // Log the full error for debugging
