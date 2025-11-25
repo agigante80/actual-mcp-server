@@ -384,8 +384,8 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
   });
 }
 export async function importTransactions(accountId: string | undefined, txs: components['schemas']['TransactionInput'][] | unknown) : Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>{
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.transactions.import').catch(() => {});
+  observability.incrementToolCall('actual.transactions.import').catch(() => {});
+  return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawImportTransactions(accountId, txs) as Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>, { retries: 2, backoffMs: 200 }));
     return raw || { added: [], updated: [], errors: [] };
   });
@@ -444,15 +444,15 @@ export async function getBudgetMonth(month: string | undefined): Promise<compone
   });
 }
 export async function setBudgetAmount(month: string | undefined, categoryId: string | undefined, amount: number | undefined): Promise<components['schemas']['BudgetSetRequest'] | null | void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.budgets.setAmount').catch(() => {});
+  observability.incrementToolCall('actual.budgets.setAmount').catch(() => {});
+  return queueWriteOperation(async () => {
     const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200 }));
     return result;
   });
 }
 export async function createAccount(account: components['schemas']['Account'] | unknown, initialBalance?: number): Promise<string> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.accounts.create').catch(() => {});
+  observability.incrementToolCall('actual.accounts.create').catch(() => {});
+  return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawCreateAccount(account, initialBalance) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
     const id = normalizeToId(raw);
     // NO NEED for syncToServer() - shutdown() will handle persistence
@@ -460,8 +460,8 @@ export async function createAccount(account: components['schemas']['Account'] | 
   });
 }
 export async function updateAccount(id: string, fields: Partial<components['schemas']['Account']> | unknown): Promise<void | null> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.accounts.update').catch(() => {});
+  observability.incrementToolCall('actual.accounts.update').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawUpdateAccount(id, fields) as Promise<void | null>, { retries: 2, backoffMs: 200 }));
     return null;
   });
@@ -473,8 +473,8 @@ export async function getAccountBalance(id: string, cutoff?: string): Promise<nu
   });
 }
 export async function deleteAccount(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.accounts.delete').catch(() => {});
+  observability.incrementToolCall('actual.accounts.delete').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
@@ -504,14 +504,14 @@ export async function deleteCategory(id: string): Promise<void> {
   });
 }
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.payees.update').catch(() => {});
+  observability.incrementToolCall('actual.payees.update').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawUpdatePayee(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function deletePayee(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.payees.delete').catch(() => {});
+  observability.incrementToolCall('actual.payees.delete').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawDeletePayee(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
@@ -523,42 +523,42 @@ export async function getRules(): Promise<unknown[]> {
   });
 }
 export async function createRule(rule: unknown): Promise<string> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.rules.create').catch(() => {});
+  observability.incrementToolCall('actual.rules.create').catch(() => {});
+  return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
     const id = normalizeToId(raw);
     return id;
   });
 }
 export async function updateRule(id: string, fields: unknown): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.rules.update').catch(() => {});
+  observability.incrementToolCall('actual.rules.update').catch(() => {});
+  return queueWriteOperation(async () => {
     // The Actual Budget API expects the full rule object with id, not separate id and fields
     const rule = { id, ...(fields as object) };
     await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function deleteRule(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.rules.delete').catch(() => {});
+  observability.incrementToolCall('actual.rules.delete').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
+  observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function closeAccount(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.accounts.close').catch(() => {});
+  observability.incrementToolCall('actual.accounts.close').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawCloseAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function reopenAccount(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
+  observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawReopenAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
@@ -570,28 +570,28 @@ export async function getCategoryGroups(): Promise<unknown[]> {
   });
 }
 export async function createCategoryGroup(group: unknown): Promise<string> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.category_groups.create').catch(() => {});
+  observability.incrementToolCall('actual.category_groups.create').catch(() => {});
+  return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawCreateCategoryGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
     const id = normalizeToId(raw);
     return id;
   });
 }
 export async function updateCategoryGroup(id: string, fields: unknown): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.category_groups.update').catch(() => {});
+  observability.incrementToolCall('actual.category_groups.update').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function deleteCategoryGroup(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
+  observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function mergePayees(targetId: string, mergeIds: string[]): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.payees.merge').catch(() => {});
+  observability.incrementToolCall('actual.payees.merge').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
@@ -603,20 +603,20 @@ export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
   });
 }
 export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.budgets.batchUpdates').catch(() => {});
+  observability.incrementToolCall('actual.budgets.batchUpdates').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawBatchBudgetUpdates(fn) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function holdBudgetForNextMonth(month: string, categoryId: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
+  observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function resetBudgetHold(month: string, categoryId: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.budgets.resetHold').catch(() => {});
+  observability.incrementToolCall('actual.budgets.resetHold').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawResetBudgetHold(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
