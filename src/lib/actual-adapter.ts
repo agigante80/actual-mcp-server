@@ -173,7 +173,13 @@ async function processWriteQueue() {
       })
     );
     
-    // Shutdown after all writes complete
+    // Explicitly sync changes to server before shutdown
+    // This ensures all write operations are persisted
+    logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
+    await (api as any).sync();
+    logger.debug(`[WRITE QUEUE] Sync completed`);
+    
+    // Shutdown after all writes complete and sync
     await shutdownActualApi();
     logger.debug(`[WRITE QUEUE] Batch completed successfully`);
   } catch (error) {
