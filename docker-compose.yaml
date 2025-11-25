@@ -14,6 +14,31 @@ version: '3.8'
 
 services:
   # --------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # --------------------------------------------------------------------------
+  # Provides connection pooling and keepalive for MCP Server
+  
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: actual-mcp-nginx
+    restart: unless-stopped
+    ports:
+      - "3600:3600"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - actual-mcp-server-backend
+    networks:
+      - librechat-net
+      - actual-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3600/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
   # Actual Budget Server (Optional - Full Stack)
   # --------------------------------------------------------------------------
   # Uncomment this service if you don't have an existing Actual Budget server

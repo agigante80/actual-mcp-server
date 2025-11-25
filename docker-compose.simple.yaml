@@ -1,0 +1,68 @@
+version: '3.8'
+
+networks:
+  librechat-net:
+    name: librechat-net
+    external: true
+  actual-net:
+    name: actual-net
+    external: true
+
+services:
+  # --------------------------------------------------------------------------
+  # Nginx Reverse Proxy
+  # --------------------------------------------------------------------------
+  # Provides connection pooling, keepalive, and reduces reconnect frequency
+  
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: actual-mcp-nginx
+    restart: unless-stopped
+    ports:
+      - "3600:3600"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - actual-mcp-server-backend
+    networks:
+      - librechat-net
+      - actual-net
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3600/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # --------------------------------------------------------------------------
+  # Actual MCP Server Backend
+  # --------------------------------------------------------------------------
+  # The actual MCP server - not directly exposed, accessed through nginx
+  
+  actual-mcp-server-backend:
+    image: ghcr.io/agigante80/actual-mcp-server:development
+    container_name: actual-mcp-server-backend
+    env_file:
+      - .env
+    expose:
+      - "3600"
+    environment:
+      - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-server:3000}
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD}
+      - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID}
+      - MCP_BRIDGE_PORT=3600
+      - MCP_BRIDGE_DATA_DIR=/data
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      - MCP_BRIDGE_BIND_HOST=0.0.0.0
+    volumes:
+      - ./actual-data:/data
+    restart: unless-stopped
+    networks:
+      - librechat-net
+      - actual-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:3600/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
