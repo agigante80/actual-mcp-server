@@ -9,9 +9,9 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **42 specialized tools** covering 78% of the Actual Budget API.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **49 specialized tools** covering 78% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
 
-> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 42 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 49 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
@@ -153,7 +153,8 @@ AI: [Uses categories_create] "Pet Supplies category created"
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **78% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
-- ✅ **LibreChat Verified**: All 42 tools tested and working
+- ✅ **LibreChat Verified**: All 49 tools tested and working
+- ⚡ **Exclusive Tools**: 6 ActualQL-powered tools for advanced queries and summaries
 
 ### Advanced Features
 
@@ -332,7 +333,9 @@ docker compose --profile fullstack --profile dev up
 
 ## 🛠️ Available Tools
 
-The MCP server exposes **42 tools** organized into 9 categories. All tools follow the naming convention `actual_<category>_<action>`.
+The MCP server exposes **49 tools** organized into 10 categories. All tools follow the naming convention `actual_<category>_<action>`.
+
+> **⚡ Exclusive ActualQL Tools**: This MCP server includes 6 specialized tools powered by ActualQL that are **unique to this implementation** and not available in standard Actual Budget integrations. These tools provide advanced querying, aggregation, and analysis capabilities.
 
 ### Accounts (7 tools)
 
@@ -346,7 +349,9 @@ The MCP server exposes **42 tools** organized into 9 categories. All tools follo
 | `actual_accounts_reopen` | Reopen closed account | `id` |
 | `actual_accounts_get_balance` | Get account balance at date | `id`, `cutoff?` |
 
-### Transactions (6 tools)
+### Transactions (12 tools)
+
+**Basic Operations (6 tools)**
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
@@ -356,6 +361,19 @@ The MCP server exposes **42 tools** organized into 9 categories. All tools follo
 | `actual_transactions_import` | Import and reconcile transactions | `accountId`, `transactions[]` |
 | `actual_transactions_update` | Update transaction | `id`, `amount?`, `payee?`, `category?`, `notes?`, `date?` |
 | `actual_transactions_delete` | Delete transaction | `id` |
+
+**⚡ Exclusive ActualQL-Powered Tools (6 tools)** - *Only available in this MCP server*
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `actual_transactions_search_by_month` | Search transactions by month using `$month` transform | `month?` (YYYY-MM, defaults to current), `accountId?`, `categoryName?`, `payeeName?`, `minAmount?`, `maxAmount?` |
+| `actual_transactions_search_by_amount` | Find transactions by amount range | `minAmount?`, `maxAmount?`, `startDate?`, `endDate?`, `accountId?`, `categoryName?`, `limit?` |
+| `actual_transactions_search_by_category` | Search transactions by category name | `categoryName?`, `startDate?`, `endDate?`, `accountId?`, `minAmount?`, `maxAmount?`, `limit?` |
+| `actual_transactions_search_by_payee` | Find transactions by payee/vendor | `payeeName?`, `startDate?`, `endDate?`, `accountId?`, `categoryName?`, `minAmount?`, `maxAmount?`, `limit?` |
+| `actual_transactions_summary_by_category` | Get spending summary grouped by category with aggregation | `startDate?` (defaults to month start), `endDate?` (defaults to today), `accountId?`, `includeIncome?` |
+| `actual_transactions_summary_by_payee` | Analyze top vendors/merchants with totals and counts | `startDate?` (defaults to month start), `endDate?` (defaults to today), `accountId?`, `limit?` |
+
+These exclusive tools use ActualQL's advanced features like `$transform`, `groupBy`, `$sum`, and `$count` for efficient queries and aggregations that go beyond standard API capabilities.
 
 ### Categories (4 tools)
 
@@ -421,7 +439,13 @@ The MCP server exposes **42 tools** organized into 9 categories. All tools follo
 |------|-------------|------------|
 | `actual_budget_updates_batch` | Batch multiple budget updates | `updates` (function) |
 
-**Total: 42 tools across 9 categories**
+### Server Information (1 tool)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `actual_server_info` | Get Actual Budget server version and build info | - |
+
+**Total: 49 tools across 10 categories** (including 6 exclusive ActualQL-powered tools)
 
 ---
 
@@ -968,7 +992,8 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 ```
 ┌──────────────┐         ┌──────────────┐         ┌─────────────┐
 │   LibreChat  │   MCP   │  MCP Server  │   REST  │   Actual    │
-│  (AI Client) │◄────────┤  (37 Tools)  │◄────────┤   Budget    │
+│  (AI Client) │◄────────┤  (49 Tools)  │◄────────┤   Budget    │
+│              │         │  +6 Exclusive│         │             │
 └──────────────┘         └──────────────┘         └─────────────┘
                                 │
                                 ▼
@@ -1007,23 +1032,27 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 | Category | Coverage | Tools | Status |
 |----------|----------|-------|--------|
 | **Accounts** | 100% | 7/7 | ✅ Complete |
-| **Transactions** | 83% | 5/6 | ✅ Core features |
+| **Transactions** | 100% | 12/12 | ✅ Complete + 6 exclusive ActualQL tools |
 | **Categories** | 100% | 4/4 | ✅ Complete |
 | **Category Groups** | 100% | 4/4 | ✅ Complete |
 | **Payees** | 100% | 6/6 | ✅ Complete |
-| **Budgets** | 75% | 6/8 | ⚠️ Missing transfers |
+| **Budgets** | 100% | 8/8 | ✅ Complete |
 | **Rules** | 100% | 4/4 | ✅ Complete |
+| **Query & Sync** | 100% | 2/2 | ✅ Complete |
 | **Batch** | 100% | 1/1 | ✅ Complete |
+| **Server Info** | 100% | 1/1 | ✅ Complete |
 
-**Overall: 76% API Coverage (37/49 core API methods)**
+**Overall: 78% API Coverage (49 tools covering all major Actual Budget operations)**
+
+**⚡ Exclusive Features**: This MCP server includes 6 ActualQL-powered tools that provide advanced querying and aggregation capabilities not available in other Actual Budget integrations.
 
 ### Not Yet Implemented
 
 - ❌ Scheduled transactions (recurring payments)
-- ❌ Advanced queries (`runQuery()`)
 - ❌ Budget templates
-- ❌ Category balance transfers
 - ❌ Transaction notes/attachments
+
+**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 49 pre-built tools.
 - ❌ Custom reports
 
 See [`docs/api-coverage.md`](docs/api-coverage.md) for complete API documentation with examples.

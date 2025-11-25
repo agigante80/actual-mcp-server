@@ -396,8 +396,17 @@ export async function getCategories(): Promise<components['schemas']['Category']
 export async function createCategory(category: components['schemas']['Category'] | unknown): Promise<string> {
   observability.incrementToolCall('actual.categories.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
-    return normalizeToId(raw);
+    try {
+      const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200 }));
+      return normalizeToId(raw);
+    } catch (error) {
+      logger.error('[CREATE CATEGORY] Error creating category:', error);
+      // Re-throw the error with proper context
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error(String(error));
+    }
   });
 }
 export async function getPayees(): Promise<components['schemas']['Payee'][]> {

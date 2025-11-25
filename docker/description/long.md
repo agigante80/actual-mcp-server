@@ -2,14 +2,15 @@
 
 A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budget APIs as conversational AI tools for LibreChat and other MCP-compatible clients.
 
-> **✅ LibreChat Verified**: All 42 tools tested and working with LibreChat over HTTPS with Bearer token authentication.
+> **✅ LibreChat Verified**: All 49 tools tested and working with LibreChat over HTTPS with Bearer token authentication.
 
 ## 🚀 Features
 
-- **42 Implemented Tools** - Comprehensive coverage of core Actual Budget API
+- **49 Implemented Tools** - Comprehensive coverage of core Actual Budget API
+- **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
 - **Advanced Features** - Custom ActualQL queries, bank sync, multi-budget support
 - **HTTPS Support** - Secure connections with self-signed or CA certificates
-- **LibreChat Ready** - Tested and verified with all 42 tools loading successfully
+- **LibreChat Ready** - Tested and verified with all 49 tools loading successfully
 - **Multiple Transports** - HTTP, SSE (Server-Sent Events) with authentication
 - **Production-Grade** - Retry logic, concurrency control, observability
 - **Type-Safe** - Full TypeScript implementation with generated types
@@ -81,13 +82,14 @@ docker run -d \
 - `MCP_HTTPS_CERT` - Path to SSL certificate (default: /app/certs/cert.pem)
 - `MCP_HTTPS_KEY` - Path to SSL private key (default: /app/certs/key.pem)
 
-## 📚 Available Tools (42 Total)
+## 📚 Available Tools (49 Total)
 
 ### Account Management (7 tools)
 create, list, update, delete, close, reopen, get balance
 
-### Transaction Management (6 tools)
-create, get, update, delete, import, filter
+### Transaction Management (12 tools)
+**Basic Operations (6):** create, get, update, delete, import, filter  
+**⚡ Exclusive ActualQL Tools (6):** search by month/amount/category/payee, spending summary by category, top vendors analysis
 
 ### Budget Management (8 tools)
 get all budgets, get months, get month, set amount, transfer between categories, set carryover, hold for next month, reset hold
@@ -107,6 +109,22 @@ create, list, update, delete
 
 ### Batch Operations (1 tool)
 Batch multiple budget updates in a single transaction
+
+### Server Information (1 tool)
+Get Actual Budget server version and build information
+
+## ⚡ Exclusive ActualQL Features
+
+This MCP server includes **6 specialized tools** that are **unique to this implementation** and not available in standard Actual Budget integrations:
+
+1. **Monthly Transaction Search** - Uses `$month` transform for efficient monthly queries
+2. **Amount Range Search** - Find transactions by amount with flexible filters
+3. **Category Search** - Search by category name with date ranges
+4. **Payee Search** - Find transactions by vendor/merchant
+5. **Category Spending Summary** - Aggregated totals with `groupBy` and `$sum`
+6. **Top Vendors Analysis** - Identify highest spending merchants with counts
+
+These tools leverage ActualQL's advanced features (`$transform`, `groupBy`, `$sum`, `$count`) for powerful financial analysis beyond standard API capabilities.
 
 ## 🔗 Container Registries
 
@@ -150,7 +168,7 @@ docker logs actual-mcp-server
      }
    }
    ```
-4. All 42 tools will load automatically
+4. All 49 tools will load automatically (including 6 exclusive ActualQL tools)
 
 **Verified**: HTTP transport with Bearer token authentication works perfectly with LibreChat.
 
