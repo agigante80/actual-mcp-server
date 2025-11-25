@@ -176,8 +176,14 @@ async function processWriteQueue() {
     // Explicitly sync changes to server before shutdown
     // This ensures all write operations are persisted
     logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
-    await (api as any).sync();
-    logger.debug(`[WRITE QUEUE] Sync completed`);
+    try {
+      await (api as any).sync();
+      logger.debug(`[WRITE QUEUE] Sync completed`);
+    } catch (syncError) {
+      logger.error('[WRITE QUEUE] Sync failed:', syncError);
+      // Don't throw - we still want to shutdown cleanly
+      // Individual operation errors were already reported to callers
+    }
     
     // Shutdown after all writes complete and sync
     await shutdownActualApi();
@@ -539,8 +545,17 @@ export async function createRule(rule: unknown): Promise<string> {
 export async function updateRule(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.rules.update').catch(() => {});
   return queueWriteOperation(async () => {
-    // The Actual Budget API expects the full rule object with id, not separate id and fields
-    const rule = { id, ...(fields as object) };
+    // Get the existing rule first to merge with updates
+    // This ensures we don't lose any fields (like actions) when doing partial updates
+    const existingRules = await withConcurrency(() => retry(() => rawGetRules() as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+    const existingRule = Array.isArray(existingRules) ? existingRules.find((r: any) => r.id === id) : null;
+    
+    if (!existingRule) {
+      throw new Error(`Rule with id ${id} not found`);
+    }
+    
+    // Merge existing rule with new fields
+    const rule = { ...existingRule, ...(fields as object) };
     await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
