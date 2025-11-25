@@ -142,10 +142,18 @@ let writeSessionTimeout: NodeJS.Timeout | null = null;
 const WRITE_SESSION_DELAY = 100; // Wait 100ms for more writes before closing session
 
 async function processWriteQueue() {
+  // Atomically check and set processing flag to prevent race conditions
   if (isProcessingWrites || writeQueue.length === 0) return;
-  
   isProcessingWrites = true;
+  
+  // Clear the timeout since we're processing now
+  if (writeSessionTimeout) {
+    clearTimeout(writeSessionTimeout);
+    writeSessionTimeout = null;
+  }
+  
   const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
+  logger.debug(`[WRITE QUEUE] Processing batch of ${batch.length} operations`);
   
   try {
     // Initialize API once for all queued writes
@@ -167,6 +175,7 @@ async function processWriteQueue() {
     
     // Shutdown after all writes complete
     await shutdownActualApi();
+    logger.debug(`[WRITE QUEUE] Batch completed successfully`);
   } catch (error) {
     logger.error('[WRITE QUEUE] Fatal error in write queue:', error);
     // Reject any operations that weren't processed
