@@ -3,8 +3,8 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  startDate: z.string().describe('Start date in YYYY-MM-DD format'),
-  endDate: z.string().describe('End date in YYYY-MM-DD format'),
+  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format (default: first day of current month)'),
+  endDate: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
   includeIncome: z.boolean().optional().default(false).describe('Optional: Include income categories (default: false, only expenses)'),
 });
@@ -30,6 +30,12 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // Default to current month if dates not provided
+    const today = new Date();
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const startDate = input.startDate || firstDayOfMonth.toISOString().split('T')[0];
+    const endDate = input.endDate || today.toISOString().split('T')[0];
+    
     // Build ActualQL query with groupBy and aggregation
     const api = await import('@actual-app/api');
     const q = (api as any).q;
@@ -37,8 +43,8 @@ const tool: ToolDefinition = {
     // Start with date filter
     let query = q('transactions').filter({
       $and: [
-        { date: { $gte: input.startDate } },
-        { date: { $lte: input.endDate } }
+        { date: { $gte: startDate } },
+        { date: { $lte: endDate } }
       ]
     });
     
