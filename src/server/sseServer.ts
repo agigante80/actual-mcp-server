@@ -18,7 +18,8 @@ export async function startSseServer(
   implementedTools: string[],
   serverDescription: string,
   serverInstructions: string,
-  toolSchemas: Record<string, unknown>
+  toolSchemas: Record<string, unknown>,
+  version: string
 ) {
   const app = express();
   const httpServer = createServer(app);
@@ -88,7 +89,7 @@ export async function startSseServer(
     const server = new Server(
       {
         name: serverDescription || 'actual-mcp-server',
-        version: '1.0.0',
+        version: version || '0.1.0',
         description: serverDescription || 'Actual MCP server',
       },
       serverOptions

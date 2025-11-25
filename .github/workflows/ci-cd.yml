@@ -189,7 +189,8 @@ jobs:
       - name: 📝 Generate version info
         id: version
         run: |
-          VERSION=$(node -p "require('./package.json').version")
+          chmod +x get_version.sh
+          VERSION=$(bash get_version.sh)
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Version: $VERSION"
 
@@ -231,6 +232,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          build-args: |
+            VERSION=${{ needs.build.outputs.version }}
           # Load image to local Docker for testing
           load: true
 
@@ -344,6 +347,8 @@ jobs:
           cache-to: type=gha,mode=max
           # Only AMD64 for CI (ARM64 causes timeouts - use multi-platform only for releases)
           platforms: linux/amd64
+          build-args: |
+            VERSION=${{ needs.build.outputs.version }}
 
       - name: 🔍 Scan Docker image for vulnerabilities
         uses: aquasecurity/trivy-action@master
@@ -415,6 +420,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          build-args: |
+            VERSION=${{ needs.build.outputs.version }}
 
   # --------------------------------------------------------------------------
   # Job 8: Release & Docker Hub Update

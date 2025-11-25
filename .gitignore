@@ -40,10 +40,28 @@ build/
 # macOS system files
 .DS_Store
 
-# Test and development files
-test-*.mjs
-test-*.js
+# Ad-hoc test and development files (root level only)
+/test-*.mjs
+/test-*.js
 *.backup
+/check-*.js
+/cleanup-*.js
+/verify-*.js
+
+# Test infrastructure data (regeneratable)
+tests/manual/test-stack/librechat/mongo-data/
+tests/manual/test-stack/librechat/pgvector-data/
+tests/manual/test-stack/librechat/meilisearch-data/
+tests/manual/test-stack/librechat/rag-data/
+
+# Temporary test directories (root level only)
+/*-check/
+/browser-*/
+/cleanup-*/
+/verify-*/
+
+# Keep example env file
+!.env.example
 
 # SSL/TLS certificates (should not be committed)
 certs/

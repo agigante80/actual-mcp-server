@@ -17,12 +17,11 @@ const argsEarly = process.argv.slice(2);
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const usageEarly = `
-Usage: npm run dev -- [--ws | --sse | --http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: npm run dev -- [--sse | --http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
-  --ws                     Start WebSocket MCP server
   --sse                    Start SSE MCP server
-  --http                   Start HTTP MCP server
+  --http                   Start HTTP MCP server (recommended)
   --test-actual-connection Test connecting to Actual and exit
   --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
@@ -64,7 +63,6 @@ export {};
   const [
     { startHttpServer },
     { startSseServer },
-    { startWsServer },
     loggerModule,
     osModule,
     utilsModule,
@@ -73,7 +71,6 @@ export {};
   ] = await Promise.all([
     import('./server/httpServer.js'),
     import('./server/sseServer.js'),
-    import('./server/wsServer.js'),
     import('./logger.js'),
     import('os'),
     import('./utils.js'),
@@ -87,9 +84,27 @@ export {};
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
   const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: Function }).zodToJsonSchema;
 
-  // Load package.json for version info
-  const packageJson = await import('../package.json', { assert: { type: 'json' } });
-  const VERSION = packageJson.default.version;
+  // Load version from environment (Docker build-time) or package.json (local dev)
+  let VERSION = process.env.VERSION;
+  if (!VERSION || VERSION === 'unknown') {
+    const packageJson = await import('../package.json', { with: { type: 'json' } });
+    VERSION = packageJson.default.version;
+    
+    // Append git commit hash for development builds
+    try {
+      const { execSync } = await import('child_process');
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+      const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+      if (branch === 'develop' || branch !== 'main') {
+        VERSION = `${VERSION}-dev-${commitHash}`;
+      }
+    } catch (err) {
+      // Git not available or not in a git repo, use version as-is
+      logger.debug('Could not determine git commit hash:', err);
+    }
+  }
+  // Ensure VERSION is always a string (fallback to 0.1.0 if somehow still undefined)
+  const version: string = VERSION || '0.1.0';
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;
@@ -97,7 +112,6 @@ export {};
   const HTTP_PATH = process.env.MCP_HTTP_PATH || '/http';
 
   const args = process.argv.slice(2);
-  const useWebSocket = args.includes('--ws');
   const useSSE = args.includes('--sse');
   const useHttp = args.includes('--http');
 
@@ -113,10 +127,15 @@ export {};
   const usage = usageEarly;
 
   async function main() {
-    // Connect to Actual once before starting MCP servers or just testing
-    await connectToActual();
+    logger.info(`🚀 Starting Actual MCP Server v${VERSION}`);
+    
+    // NOTE: Persistent connection disabled - using init/shutdown per operation pattern
+    // This ensures tombstone=0 for all created entities (they appear in UI)
+    // await connectToActual();
 
     if (useTestActualConnection) {
+      // For test connection mode only, we still need to connect
+      await connectToActual();
       logger.info('⚙️  --test-actual-connection specified, connection to Actual Finance successful.');
       process.exit(0);
     }
@@ -179,22 +198,16 @@ export {};
       process.env.MCP_BRIDGE_PUBLIC_HOST || (getLocalIp && getLocalIp()) || 'localhost';
 
     // determine scheme/protocol:
-    // - MCP_BRIDGE_PUBLIC_SCHEME can override (e.g. "https" or "wss")
-    // - otherwise use ws/wss for WebSocket mode, http/https for HTTP/SSE modes
+    // - MCP_BRIDGE_PUBLIC_SCHEME can override (e.g. "https")
+    // - otherwise use http/https based on TLS setting
     const schemeOverride = process.env.MCP_BRIDGE_PUBLIC_SCHEME;
     let scheme = schemeOverride;
     if (!scheme) {
-      if (useWebSocket) {
-        // prefer secure websocket if user explicitly asked for TLS via env
-        scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'wss' : 'ws';
-      } else {
-        scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'https' : 'http';
-      }
+      scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'https' : 'http';
     }
 
     // choose advertised path based on transport type
-    const advertisedPath =
-      useWebSocket ? (process.env.MCP_BRIDGE_WS_PATH || '/') : (process.env.MCP_BRIDGE_HTTP_PATH || HTTP_PATH);
+    const advertisedPath = process.env.MCP_BRIDGE_HTTP_PATH || HTTP_PATH;
 
     const advertisedUrl = `${scheme}://${advertisedHost}:${PORT}${advertisedPath}`;
 
@@ -211,7 +224,8 @@ export {};
         SERVER_DESCRIPTION,
         SERVER_INSTRUCTIONS,
         toolSchemas,
-        process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
+        version,
+        process.env.MCP_BRIDGE_BIND_HOST || 'localhost',
         advertisedUrl
       );
 
@@ -259,9 +273,6 @@ export {};
         // advertised URL shown to clients
         advertisedUrl
       );
-    } else if (useWebSocket) {
-      logger.info('Mode: WebSocket');
-      await startWsServer(mcp, PORT);
     } else if (useSSE) {
       logger.info('Mode: SSE');
       await startSseServer(
@@ -272,16 +283,16 @@ export {};
         implementedTools,
         SERVER_DESCRIPTION,
         SERVER_INSTRUCTIONS,
-        toolSchemas
+        toolSchemas,
+        version
       );
     }
 
     logger.info('---------');
-    logger.info(`🚀 Actual MCP Server v${VERSION}`);
     logger.info('Starting MCP bridge server...');
 
-    if ([useWebSocket, useSSE, useHttp].filter(Boolean).length !== 1) {
-      logger.error('❌ Please specify exactly one mode: --ws, --sse, or --http');
+    if ([useSSE, useHttp].filter(Boolean).length !== 1) {
+      logger.error('❌ Please specify exactly one mode: --sse or --http');
       process.exit(1);
     }
   }

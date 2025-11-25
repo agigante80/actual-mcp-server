@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.1.0  
 **Purpose:** Track known technical debt, missing features, and weak areas  
-**Last Updated:** 2025-11-11
+**Last Updated:** 2025-11-24
 
 ---
 
@@ -13,11 +13,53 @@ This document identifies **known gaps, technical debt, and areas needing improve
 
 ---
 
+## ✅ Recently Resolved
+
+### 1. **Transaction Creation Now Fully Functional** (RESOLVED 2025-11-24)
+
+**Previous Issue**: Transaction creation was a stub returning 'test-success'
+
+**Resolution**:
+- Implemented full `transactions_create` tool using `addTransactions()` API
+- Added proper adapter lifecycle management (init/shutdown per operation)
+- Handles API returning "ok" string instead of transaction ID
+- Added comprehensive error handling and retry logic
+- Verified working with integration tests and MCP tool cleanup
+
+**Impact**: HIGH - Core functionality now operational
+
+**Status**: ✅ FIXED and verified working
+
+---
+
 ## 🔴 Critical Gaps
 
 ### Missing Features
 
-#### 1. **Schedule Tools Not Implemented** (4 tools missing)
+#### 1. **Dependency Updates Needed** (9 packages outdated)
+
+**Impact**: Security patches, bug fixes, new features unavailable
+
+**Details**:
+- Outdated packages: 9 (1 major, 8 minor/patch)
+- Security status: ✅ CLEAN (0 vulnerabilities)
+- Major update pending: Express v4 → v5 (requires migration)
+- Minor updates: MCP SDK (1.18.2 → 1.22.0), Axios (1.12.2 → 1.13.2)
+- Patch updates: 6 packages ready for auto-merge
+- Automation: ✅ Dependabot, Renovate, CI/CD configured
+
+**User Impact**: Low - All current versions stable and secure
+
+**Action Items**:
+- [ ] Execute Phase 1: Batch patch updates (1-2 hours)
+- [ ] Execute Phase 2: MCP SDK + Axios minor updates (2-4 hours)
+- [ ] Plan Phase 3: Express v5 migration (Q1 2026, 8-16 hours)
+
+**Status**: Automated dependency management fully configured, ready for execution
+
+**Reference**: See `docs/DEPENDENCY_AUDIT_REPORT.md` for detailed analysis
+
+#### 2. **Schedule Tools Not Implemented** (4 tools missing)
 
 **Impact**: Cannot manage recurring transactions via AI
 

@@ -256,10 +256,19 @@ components:
       properties:
         id:
           type: string
+          description: Account UUID
         name:
           type: string
+          description: Account name
         balance:
           type: number
+          description: Current account balance in cents
+        offbudget:
+          type: boolean
+          description: Whether account is excluded from budget calculations
+        closed:
+          type: boolean
+          description: Whether account is closed
     TransactionInput:
       type: object
       properties:
@@ -299,10 +308,13 @@ components:
       properties:
         id:
           type: string
+          description: Payee UUID
         name:
           type: string
-        notes:
+          description: Payee name
+        transfer_acct:
           type: string
+          description: Transfer account ID if this payee represents an account transfer
     BudgetCategory:
       type: object
       properties:

@@ -1,0 +1,130 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":dependencyDashboard",
+    ":semanticCommits",
+    ":separateMajorReleases"
+  ],
+  "schedule": ["before 10am on monday"],
+  "timezone": "America/New_York",
+  "labels": ["dependencies", "renovate"],
+  "assignees": ["agigante80"],
+  "reviewers": ["agigante80"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 0,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 10am on monday"]
+  },
+  "vulnerabilityAlerts": {
+    "labels": ["security", "dependencies"],
+    "assignees": ["agigante80"],
+    "schedule": ["at any time"]
+  },
+  "packageRules": [
+    {
+      "description": "Auto-merge patch updates after CI passes",
+      "matchUpdateTypes": ["patch", "pin", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Auto-merge minor dev dependency updates",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "description": "Require manual review for minor production updates",
+      "matchDepTypes": ["dependencies"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": false,
+      "labels": ["dependencies", "review-required", "minor-update"]
+    },
+    {
+      "description": "Require manual review and testing for major updates",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "breaking-change", "review-required", "major-update"],
+      "prPriority": 10
+    },
+    {
+      "description": "High priority for security updates",
+      "matchDatasources": ["npm"],
+      "matchUpdateTypes": ["patch"],
+      "vulnerabilitySeverity": "high",
+      "labels": ["security", "high-priority"],
+      "prPriority": 100,
+      "schedule": ["at any time"]
+    },
+    {
+      "description": "Critical priority for critical security updates",
+      "matchDatasources": ["npm"],
+      "vulnerabilitySeverity": "critical",
+      "labels": ["security", "critical-priority"],
+      "prPriority": 200,
+      "schedule": ["at any time"]
+    },
+    {
+      "description": "Group all patch updates together",
+      "matchUpdateTypes": ["patch"],
+      "groupName": "all patch dependencies",
+      "groupSlug": "all-patch"
+    },
+    {
+      "description": "Group TypeScript and related type definitions",
+      "matchPackagePatterns": ["^typescript$", "^@types/"],
+      "groupName": "TypeScript and type definitions",
+      "groupSlug": "typescript"
+    },
+    {
+      "description": "Group testing dependencies",
+      "matchPackagePatterns": ["^@playwright/", "^playwright$"],
+      "groupName": "testing dependencies",
+      "groupSlug": "testing"
+    },
+    {
+      "description": "Separate major version updates for Express (v5 migration)",
+      "matchPackageNames": ["express", "@types/express"],
+      "matchUpdateTypes": ["major"],
+      "enabled": true,
+      "schedule": ["at any time"],
+      "labels": ["breaking-change", "express-v5-migration"]
+    },
+    {
+      "description": "Keep Actual Budget API in sync",
+      "matchPackageNames": ["@actual-app/api"],
+      "schedule": ["at any time"],
+      "labels": ["actual-budget", "high-priority"]
+    },
+    {
+      "description": "Keep MCP SDK updated",
+      "matchPackageNames": ["@modelcontextprotocol/sdk"],
+      "schedule": ["at any time"],
+      "labels": ["mcp-sdk", "high-priority"]
+    }
+  ],
+  "commitMessagePrefix": "chore(deps):",
+  "commitMessageAction": "update",
+  "commitMessageTopic": "{{depName}}",
+  "commitMessageExtra": "to {{newVersion}}",
+  "prTitle": "{{commitMessagePrefix}} {{commitMessageAction}} {{commitMessageTopic}} {{commitMessageExtra}}",
+  "prBodyColumns": ["Package", "Change", "Type", "Update"],
+  "prBodyDefinitions": {
+    "Change": "{{#if displayFrom}}`{{{displayFrom}}}` -> {{else}}{{#if currentValue}}`{{{currentValue}}}` -> {{/if}}{{/if}}{{#if displayTo}}`{{{displayTo}}}`{{else}}`{{{newValue}}}`{{/if}}",
+    "Type": "{{{depType}}}",
+    "Update": "{{{updateType}}}"
+  },
+  "prBodyTemplate": "{{{header}}}{{{notes}}}{{{changelogs}}}{{{table}}}{{{footer}}}",
+  "enabledManagers": ["npm", "dockerfile", "github-actions"],
+  "rangeStrategy": "bump",
+  "semanticCommits": "enabled",
+  "separateMajorMinor": true,
+  "separateMultipleMajor": true,
+  "separateMinorPatch": false
+}
