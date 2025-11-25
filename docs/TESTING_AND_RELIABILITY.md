@@ -55,6 +55,8 @@ test/
 
 ## 🏃 Running Tests
 
+**⚠️ NOTE:** Test infrastructure is currently being consolidated. A unified `npm test` command is planned but not yet implemented. Use individual test commands below.
+
 ### Quick Test Suite (Pre-Commit)
 
 ```bash
@@ -64,15 +66,17 @@ npm run test:adapter         # Adapter smoke tests (30s)
 npm audit --audit-level=moderate  # Security check
 ```
 
-### Full Test Suite
+### Full Test Suite (Manual Execution)
 
 ```bash
-# Complete test suite
+# Complete test suite - must run individually
 npm run build                # Build TypeScript
 npm run test:adapter         # Adapter tests
-npm run test:unit-js         # Unit tests
+npm run test:unit-js         # Individual unit test (transactions_create)
 npm run test:e2e             # End-to-end tests (Playwright)
 npm audit                    # Full security audit
+
+# Note: More comprehensive test runner coming soon
 ```
 
 ### Individual Test Commands

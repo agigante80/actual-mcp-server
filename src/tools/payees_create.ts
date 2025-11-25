@@ -1,23 +1,26 @@
 import { z } from 'zod';
-import type { paths } from '../../generated/actual-client/types.js';
-import type { ToolDefinition } from '../../types/tool.d.js';
+import { createTool } from '../lib/toolFactory.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({ name: z.string().min(1), notes: z.string().optional() });
-
-// RESPONSE_TYPE: string
-type Output = unknown; // refine using generated types (paths['/payees']['post'])
-
-const tool: ToolDefinition = {
+export default createTool({
   name: 'actual_payees_create',
-  description: "Create payee",
-  inputSchema: InputSchema,
-  call: async (args: unknown, _meta?: unknown) => {
-    const input = InputSchema.parse(args || {});
-    // call adapter to create payee
-    const result = await adapter.createPayee(input);
-    return { result };
+  description: 'Create a new payee in Actual Budget',
+  schema: z.object({ 
+    name: CommonSchemas.name, 
+    notes: CommonSchemas.notes 
+  }),
+  handler: async (input) => {
+    return await adapter.createPayee(input);
   },
-};
-
-export default tool;
+  examples: [
+    {
+      description: 'Create a payee for a grocery store',
+      input: { name: 'Whole Foods' },
+    },
+    {
+      description: 'Create a payee with notes',
+      input: { name: 'Electric Company', notes: 'Monthly utility payment' },
+    },
+  ],
+});

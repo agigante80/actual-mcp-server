@@ -35,6 +35,7 @@ export { default as rules_create } from './rules_create.js';
 export { default as rules_delete } from './rules_delete.js';
 export { default as rules_get } from './rules_get.js';
 export { default as rules_update } from './rules_update.js';
+export { default as server_info } from './server_info.js';
 export { default as transactions_create } from './transactions_create.js';
 export { default as transactions_delete } from './transactions_delete.js';
 export { default as transactions_filter } from './transactions_filter.js';

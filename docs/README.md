@@ -12,30 +12,46 @@ This is the **comprehensive documentation hub** for the Actual MCP Server projec
 
 ---
 
-## 📚 Documentation Index
+## Documentation Index
+
+This directory contains comprehensive documentation for the Actual MCP Server project.
 
 ### Core Documentation
 
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| [**Project Overview**](./PROJECT_OVERVIEW.md) | Goals, features, and technology summary | Everyone |
-| [**Architecture**](./ARCHITECTURE.md) | System structure and component flow | Developers, AI agents |
-| [**AI Interaction Guide**](./AI_INTERACTION_GUIDE.md) | AI agent rules and automation policies | AI agents, maintainers |
+- **[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)** - Project purpose, features, architecture, and roadmap
+- **[AI_INTERACTION_GUIDE.md](AI_INTERACTION_GUIDE.md)** - Guide for AI assistants interacting with this codebase
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture, design patterns, and system components
+- **[REFACTORING_PLAN.md](REFACTORING_PLAN.md)** - Ongoing refactoring tasks and improvements
+- **[IMPROVEMENT_AREAS.md](IMPROVEMENT_AREAS.md)** - Known issues, limitations, and enhancement opportunities
+- **[TESTING_AND_RELIABILITY.md](TESTING_AND_RELIABILITY.md)** - Testing strategy, coverage, and quality metrics
+- **[SECURITY_AND_PRIVACY.md](SECURITY_AND_PRIVACY.md)** - Security practices, threat model, and privacy considerations
+- **[ROADMAP.md](ROADMAP.md)** - Feature roadmap and development timeline
+- **[CODE_REFACTORING_ANALYSIS.md](CODE_REFACTORING_ANALYSIS.md)** - Comprehensive code refactoring analysis and prioritization
+- **[DEPENDENCY_AUDIT_REPORT.md](DEPENDENCY_AUDIT_REPORT.md)** - Dependency security audit and update recommendations
+- **[DEPENDENCY_UPDATE_PLAN.md](DEPENDENCY_UPDATE_PLAN.md)** - Phased dependency update execution plan
 
-### Planning & Quality
+---
 
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| [**Refactoring Plan**](./REFACTORING_PLAN.md) | Live task checklist for improvements | Developers, AI agents |
-| [**Testing & Reliability**](./TESTING_AND_RELIABILITY.md) | Testing policies and CI/CD | Developers, QA |
-| [**Improvement Areas**](./IMPROVEMENT_AREAS.md) | Known gaps and technical debt | Developers, maintainers |
+## 📝 Recent Documentation Updates (November 2025)
 
-### Security & Future
+**README.md Enhancements**:
+- ✅ Added comprehensive badge set (Docker Pulls, CI status, Docker image size, GitHub stars)
+- ✅ Fixed tool count consistency throughout (42 tools, not 39)
+- ✅ Enhanced Docker registry visibility (Docker Hub + GHCR prominently displayed)
+- ✅ Improved visual hierarchy and discoverability
+- ✅ Docker short description validated (98/100 characters ✅)
 
-| Document | Purpose | Audience |
-|----------|---------|----------|
-| [**Security & Privacy**](./SECURITY_AND_PRIVACY.md) | Security rules and privacy policy | Everyone |
-| [**Roadmap**](./ROADMAP.md) | Future improvements and priorities | Everyone |
+**New Technical Documentation**:
+- ✅ **CODE_REFACTORING_ANALYSIS.md** - 116-hour refactoring roadmap with prioritization (November 24, 2025)
+- ✅ **DEPENDENCY_AUDIT_REPORT.md** - Security audit of 306 dependencies (0 vulnerabilities)
+- ✅ **DEPENDENCY_UPDATE_PLAN.md** - Phased update strategy (3 phases, 26-44 hours)
+- ✅ Automated dependency management system configured (Dependabot + Renovate + CI/CD)
+
+**Project Status**:
+- **42 MCP Tools** fully implemented and LibreChat-verified
+- **Production-ready** with Docker images on Docker Hub and GHCR
+- **Security score**: 100/100 (0 vulnerabilities detected)
+- **Code quality score**: 78/100 (Good, refactoring roadmap available)
 
 ---
 

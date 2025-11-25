@@ -4,12 +4,18 @@ import os from 'os';
 import api from '@actual-app/api';
 import logger from './logger.js';
 import config from './config.js';
+import { connectionPool } from './lib/ActualConnectionPool.js';
+import { createModuleLogger } from './lib/loggerFactory.js';
+
+const log = createModuleLogger('CONNECTION');
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
 
 let initialized = false;
 let initializing = false;
 let initializationError: Error | null = null;
+// Feature flag to enable connection pooling - can be disabled via environment variable
+let useConnectionPool = process.env.USE_CONNECTION_POOL !== 'false';
 
 export async function connectToActual() {
   if (initialized) return;
@@ -34,7 +40,7 @@ export async function connectToActual() {
 
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-  logger.info(`Initializing Actual API with dataDir=${DATA_DIR}`);
+  log.info(`Initializing Actual API with dataDir=${DATA_DIR}`);
 
     await api.init({
       dataDir: DATA_DIR,
@@ -42,7 +48,7 @@ export async function connectToActual() {
       password: PASSWORD,
     });
 
-    logger.info(`Downloading budget with sync ID: ${BUDGET_SYNC_ID}`);
+    log.info(`Downloading budget with sync ID: ${BUDGET_SYNC_ID}`);
 
     // According to official docs, downloadBudget accepts optional second parameter for E2E encryption
     if (BUDGET_PASSWORD) {
@@ -89,6 +95,12 @@ export async function connectToActual() {
 }
 
 export async function shutdownActual() {
+  if (useConnectionPool) {
+    await connectionPool.shutdownAll();
+    initialized = false;
+    return;
+  }
+  
   try {
     const maybeApi = api as unknown as { shutdown?: Function };
     if (typeof maybeApi.shutdown === 'function') {
@@ -98,6 +110,41 @@ export async function shutdownActual() {
     logger.info('Actual API shutdown complete.');
   } catch (err) {
     logger.error('Error during Actual API shutdown:', err);
+  }
+}
+
+/**
+ * Initialize connection for a specific MCP session
+ * Uses connection pooling to give each session its own Actual Budget connection
+ */
+export async function connectToActualForSession(sessionId: string) {
+  if (!useConnectionPool) {
+    // Fallback to shared connection
+    return connectToActual();
+  }
+  
+  try {
+    await connectionPool.getConnection(sessionId);
+    logger.info(`Actual API connection ready for session: ${sessionId}`);
+  } catch (err) {
+    logger.error(`Failed to connect to Actual for session ${sessionId}:`, err);
+    throw err;
+  }
+}
+
+/**
+ * Shutdown connection for a specific MCP session
+ */
+export async function shutdownActualForSession(sessionId: string) {
+  if (!useConnectionPool) {
+    return;
+  }
+  
+  try {
+    await connectionPool.shutdownConnection(sessionId);
+    logger.info(`Actual API connection shutdown for session: ${sessionId}`);
+  } catch (err) {
+    logger.error(`Error shutting down Actual for session ${sessionId}:`, err);
   }
 }
 
