@@ -145,36 +145,46 @@ async function processWriteQueue() {
   if (isProcessingWrites || writeQueue.length === 0) return;
   
   isProcessingWrites = true;
+  const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
   
   try {
     // Initialize API once for all queued writes
     await initActualApiForOperation();
     
     // Process all queued writes in the same session
-    while (writeQueue.length > 0) {
-      const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
-      
-      await Promise.all(
-        batch.map(async ({ operation, resolve, reject }) => {
-          try {
-            const result = await operation();
-            resolve(result);
-          } catch (error) {
-            reject(error);
-          }
-        })
-      );
-    }
+    // Each operation handles its own success/failure
+    await Promise.allSettled(
+      batch.map(async ({ operation, resolve, reject }) => {
+        try {
+          const result = await operation();
+          resolve(result);
+        } catch (error) {
+          logger.error('[WRITE QUEUE] Operation failed:', error);
+          reject(error);
+        }
+      })
+    );
     
     // Shutdown after all writes complete
     await shutdownActualApi();
   } catch (error) {
-    logger.error('[WRITE QUEUE] Error processing write queue:', error);
-    // Reject any remaining operations
-    writeQueue.forEach(({ reject }) => reject(error));
-    writeQueue = [];
+    logger.error('[WRITE QUEUE] Fatal error in write queue:', error);
+    // Reject any operations that weren't processed
+    batch.forEach(({ reject }) => {
+      try {
+        reject(error);
+      } catch (e) {
+        logger.error('[WRITE QUEUE] Error rejecting operation:', e);
+      }
+    });
   } finally {
     isProcessingWrites = false;
+    // Process any new operations that were queued while we were processing
+    if (writeQueue.length > 0 && writeSessionTimeout === null) {
+      writeSessionTimeout = setTimeout(() => {
+        processWriteQueue();
+      }, WRITE_SESSION_DELAY);
+    }
   }
 }
 
