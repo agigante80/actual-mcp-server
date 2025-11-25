@@ -541,37 +541,81 @@ export async function runQuery(queryString: string): Promise<unknown> {
     const trimmed = queryString.trim();
     let query;
     
-    // Enhanced SQL-like parsing supporting WHERE, ORDER BY, and LIMIT
-    // Pattern: SELECT [fields] FROM table [WHERE conditions] [ORDER BY field ASC|DESC] [LIMIT n]
-    const sqlMatch = trimmed.match(/^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?)?(?:\s+LIMIT\s+(\d+))?$/is);
+    // Check for GraphQL-like query syntax: query Name { table(...) { fields } }
+    const graphqlMatch = trimmed.match(/^query\s+\w+\s*\{\s*(\w+)\s*\(([^)]*)\)\s*\{([^}]+)\}\s*\}$/is);
     
-    if (sqlMatch) {
-      const [, fields, tableName, whereClause, orderField, orderDir, limitStr] = sqlMatch;
+    if (graphqlMatch) {
+      const [, tableName, argsStr, fieldsStr] = graphqlMatch;
       query = q(tableName);
       
-      // Apply SELECT fields (if not *)
-      if (fields.trim() !== '*') {
-        const fieldList = fields.split(',').map(f => f.trim());
-        query = query.select(fieldList);
+      // Parse arguments (e.g., startDate: "2025-06-01", endDate: "2025-11-30")
+      if (argsStr.trim()) {
+        const args = argsStr.split(',').map(a => a.trim());
+        for (const arg of args) {
+          const argMatch = arg.match(/^(\w+):\s*"([^"]+)"$/);
+          if (argMatch) {
+            const [, key, value] = argMatch;
+            // Map GraphQL args to ActualQL filters
+            if (key === 'startDate') {
+              query = query.filter({ date: { $gte: value } });
+            } else if (key === 'endDate') {
+              query = query.filter({ date: { $lte: value } });
+            } else {
+              // Generic filter for other args
+              query = query.filter({ [key]: value });
+            }
+          }
+        }
       }
       
-      // Apply WHERE conditions
-      if (whereClause) {
-        query = parseWhereClause(query, whereClause);
+      // Parse fields (including nested objects like account { id name })
+      const fieldNames = [];
+      const nestedFieldPattern = /(\w+)\s*\{[^}]+\}/g;
+      const simpleFields = fieldsStr.replace(nestedFieldPattern, '').split(/\s+/).filter(f => f.trim());
+      fieldNames.push(...simpleFields.map(f => f.trim()));
+      
+      // Extract nested field names (e.g., account, payee, category)
+      let nestedMatch;
+      while ((nestedMatch = nestedFieldPattern.exec(fieldsStr)) !== null) {
+        fieldNames.push(nestedMatch[1]);
       }
       
-      // Apply ORDER BY
-      if (orderField) {
-        query = query.orderBy({ [orderField]: orderDir?.toUpperCase() === 'DESC' ? 'desc' : 'asc' });
-      }
-      
-      // Apply LIMIT
-      if (limitStr) {
-        query = query.limit(parseInt(limitStr));
+      if (fieldNames.length > 0) {
+        query = query.select(fieldNames);
       }
     } else {
-      // Assume it's just a table name
-      query = q(trimmed);
+      // Enhanced SQL-like parsing supporting WHERE, ORDER BY, and LIMIT
+      // Pattern: SELECT [fields] FROM table [WHERE conditions] [ORDER BY field ASC|DESC] [LIMIT n]
+      const sqlMatch = trimmed.match(/^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?)?(?:\s+LIMIT\s+(\d+))?$/is);
+      
+      if (sqlMatch) {
+        const [, fields, tableName, whereClause, orderField, orderDir, limitStr] = sqlMatch;
+        query = q(tableName);
+        
+        // Apply SELECT fields (if not *)
+        if (fields.trim() !== '*') {
+          const fieldList = fields.split(',').map(f => f.trim());
+          query = query.select(fieldList);
+        }
+        
+        // Apply WHERE conditions
+        if (whereClause) {
+          query = parseWhereClause(query, whereClause);
+        }
+        
+        // Apply ORDER BY
+        if (orderField) {
+          query = query.orderBy({ [orderField]: orderDir?.toUpperCase() === 'DESC' ? 'desc' : 'asc' });
+        }
+        
+        // Apply LIMIT
+        if (limitStr) {
+          query = query.limit(parseInt(limitStr));
+        }
+      } else {
+        // Assume it's just a table name
+        query = q(trimmed);
+      }
     }
     
     return await withConcurrency(() => retry(() => rawRunQuery(query) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
