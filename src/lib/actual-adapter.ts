@@ -538,19 +538,36 @@ export async function runQuery(queryString: string): Promise<unknown> {
       throw new Error('ActualQL query builder not available');
     }
     
-    // Simple parser: if it's just a table name, query that table
-    // If it contains spaces or SQL keywords, try to parse it
     const trimmed = queryString.trim();
     let query;
     
-    // Very basic SQL-like parsing: "SELECT * FROM tablename LIMIT n"
-    const selectMatch = trimmed.match(/^SELECT\s+\*\s+FROM\s+(\w+)(?:\s+LIMIT\s+(\d+))?/i);
-    if (selectMatch) {
-      const tableName = selectMatch[1];
-      const limit = selectMatch[2] ? parseInt(selectMatch[2]) : undefined;
+    // Enhanced SQL-like parsing supporting WHERE, ORDER BY, and LIMIT
+    // Pattern: SELECT [fields] FROM table [WHERE conditions] [ORDER BY field ASC|DESC] [LIMIT n]
+    const sqlMatch = trimmed.match(/^SELECT\s+(.+?)\s+FROM\s+(\w+)(?:\s+WHERE\s+(.+?))?(?:\s+ORDER\s+BY\s+(\w+)(?:\s+(ASC|DESC))?)?(?:\s+LIMIT\s+(\d+))?$/is);
+    
+    if (sqlMatch) {
+      const [, fields, tableName, whereClause, orderField, orderDir, limitStr] = sqlMatch;
       query = q(tableName);
-      if (limit) {
-        query = query.limit(limit);
+      
+      // Apply SELECT fields (if not *)
+      if (fields.trim() !== '*') {
+        const fieldList = fields.split(',').map(f => f.trim());
+        query = query.select(fieldList);
+      }
+      
+      // Apply WHERE conditions
+      if (whereClause) {
+        query = parseWhereClause(query, whereClause);
+      }
+      
+      // Apply ORDER BY
+      if (orderField) {
+        query = query.orderBy({ [orderField]: orderDir?.toUpperCase() === 'DESC' ? 'desc' : 'asc' });
+      }
+      
+      // Apply LIMIT
+      if (limitStr) {
+        query = query.limit(parseInt(limitStr));
       }
     } else {
       // Assume it's just a table name
@@ -559,6 +576,63 @@ export async function runQuery(queryString: string): Promise<unknown> {
     
     return await withConcurrency(() => retry(() => rawRunQuery(query) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
   });
+}
+
+// Helper function to parse WHERE clause conditions
+function parseWhereClause(query: any, whereClause: string): any {
+  // Split by AND (simple parser - doesn't handle OR or nested conditions)
+  const conditions = whereClause.split(/\s+AND\s+/i);
+  
+  for (const condition of conditions) {
+    const trimmedCondition = condition.trim();
+    
+    // Handle IN clause: field IN (value1, value2, ...)
+    const inMatch = trimmedCondition.match(/^(\w+)\s+IN\s+\((.+)\)$/i);
+    if (inMatch) {
+      const [, field, valuesStr] = inMatch;
+      const values = valuesStr.split(',').map(v => {
+        const trimmed = v.trim().replace(/^['"]|['"]$/g, '');
+        // Try to parse as number, otherwise keep as string
+        const num = Number(trimmed);
+        return isNaN(num) ? trimmed : num;
+      });
+      query = query.filter({ [field]: { $oneof: values } });
+      continue;
+    }
+    
+    // Handle comparison operators: field >= value, field <= value, field = value, etc.
+    const compMatch = trimmedCondition.match(/^(\w+)\s*(>=|<=|>|<|=|!=)\s*(.+)$/);
+    if (compMatch) {
+      const [, field, operator, valueStr] = compMatch;
+      const value = valueStr.trim().replace(/^['"]|['"]$/g, '');
+      
+      // Map SQL operators to ActualQL operators
+      const operatorMap: { [key: string]: string } = {
+        '>=': '$gte',
+        '<=': '$lte',
+        '>': '$gt',
+        '<': '$lt',
+        '=': '$eq',
+        '!=': '$ne',
+      };
+      
+      const actualOp = operatorMap[operator];
+      if (actualOp) {
+        // Try to parse as number if possible
+        const numValue = Number(value);
+        const finalValue = isNaN(numValue) ? value : numValue;
+        
+        if (actualOp === '$eq') {
+          // Simple equality can use direct field: value
+          query = query.filter({ [field]: finalValue });
+        } else {
+          query = query.filter({ [field]: { [actualOp]: finalValue } });
+        }
+      }
+    }
+  }
+  
+  return query;
 }
 export async function runBankSync(accountId?: string): Promise<void> {
   return withActualApi(async () => {
