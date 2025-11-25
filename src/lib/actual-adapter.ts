@@ -388,7 +388,8 @@ export async function deleteAccount(id: string): Promise<void> {
 export async function updateTransaction(id: string, fields: Partial<components['schemas']['Transaction']> | unknown): Promise<void> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.transactions.update').catch(() => {});
-    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Increased retries and backoff to handle concurrent requests better
+    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 5, backoffMs: 500 }));
   });
 }
 export async function deleteTransaction(id: string): Promise<void> {
