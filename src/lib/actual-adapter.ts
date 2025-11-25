@@ -535,7 +535,7 @@ export async function runQuery(queryString: string): Promise<unknown> {
     const q = (api as any).q;
     
     if (!q) {
-      throw new Error('ActualQL query builder not available');
+      throw new Error('ActualQL query builder not available. Ensure @actual-app/api is properly installed and the budget is loaded.');
     }
     
     const trimmed = queryString.trim();
@@ -618,7 +618,19 @@ export async function runQuery(queryString: string): Promise<unknown> {
       }
     }
     
-    return await withConcurrency(() => retry(() => rawRunQuery(query) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+    try {
+      return await withConcurrency(() => retry(() => rawRunQuery(query) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+    } catch (error: any) {
+      // Enhance error messages with helpful context
+      const errorMsg = error?.message || String(error);
+      
+      if (errorMsg.includes('does not exist in the schema')) {
+        throw new Error(`Table or field does not exist. Query: "${trimmed}". Available tables: transactions, accounts, categories, payees, category_groups, schedules, rules. Original error: ${errorMsg}`);
+      }
+      
+      // Re-throw with original error if no specific handling
+      throw error;
+    }
   });
 }
 
