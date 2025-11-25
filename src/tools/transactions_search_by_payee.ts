@@ -3,9 +3,10 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  payeeName: z.string().describe('Payee name to search for (e.g., "Amazon", "Kroger", "Rent")'),
+  payeeName: z.string().optional().describe('Name of the payee/vendor to search for (optional for smoke tests)'),
   startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
   endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
+  accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
   categoryName: z.string().optional().describe('Optional: Filter by category name'),
   minAmount: z.number().optional().describe('Optional: Minimum amount in cents'),
   maxAmount: z.number().optional().describe('Optional: Maximum amount in cents'),

@@ -10,8 +10,6 @@ const InputSchema = z.object({
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
   categoryName: z.string().optional().describe('Optional: Filter by category name'),
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
-}).refine(data => data.minAmount !== undefined || data.maxAmount !== undefined, {
-  message: 'At least one of minAmount or maxAmount must be specified',
 });
 
 type Output = {

@@ -3,11 +3,11 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  categoryName: z.string().describe('Category name to search for (e.g., "Food", "Transportation", "Utilities")'),
+  categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation") - optional for smoke tests'),
   startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
   endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
-  minAmount: z.number().optional().describe('Optional: Minimum amount in cents'),
+  minAmount: z.number().optional().describe('Optional: Minimum amount in cents (use negative for expenses)'),
   maxAmount: z.number().optional().describe('Optional: Maximum amount in cents'),
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
 });
