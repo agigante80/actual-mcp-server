@@ -126,6 +126,74 @@ let MAX_CONCURRENCY = parseInt(process.env.ACTUAL_API_CONCURRENCY || String(DEFA
 let running = 0;
 const queue: Array<() => void> = [];
 
+/**
+ * Write operation queue with budget session management
+ * This ensures write operations share a single budget session to avoid race conditions
+ */
+interface WriteOperation<T> {
+  operation: () => Promise<T>;
+  resolve: (value: T) => void;
+  reject: (error: any) => void;
+}
+
+let writeQueue: WriteOperation<any>[] = [];
+let isProcessingWrites = false;
+let writeSessionTimeout: NodeJS.Timeout | null = null;
+const WRITE_SESSION_DELAY = 100; // Wait 100ms for more writes before closing session
+
+async function processWriteQueue() {
+  if (isProcessingWrites || writeQueue.length === 0) return;
+  
+  isProcessingWrites = true;
+  
+  try {
+    // Initialize API once for all queued writes
+    await initActualApiForOperation();
+    
+    // Process all queued writes in the same session
+    while (writeQueue.length > 0) {
+      const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
+      
+      await Promise.all(
+        batch.map(async ({ operation, resolve, reject }) => {
+          try {
+            const result = await operation();
+            resolve(result);
+          } catch (error) {
+            reject(error);
+          }
+        })
+      );
+    }
+    
+    // Shutdown after all writes complete
+    await shutdownActualApi();
+  } catch (error) {
+    logger.error('[WRITE QUEUE] Error processing write queue:', error);
+    // Reject any remaining operations
+    writeQueue.forEach(({ reject }) => reject(error));
+    writeQueue = [];
+  } finally {
+    isProcessingWrites = false;
+  }
+}
+
+function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
+  return new Promise((resolve, reject) => {
+    writeQueue.push({ operation, resolve, reject });
+    
+    // Clear existing timeout
+    if (writeSessionTimeout) {
+      clearTimeout(writeSessionTimeout);
+    }
+    
+    // Set new timeout to process queue
+    writeSessionTimeout = setTimeout(() => {
+      processWriteQueue();
+    }, WRITE_SESSION_DELAY);
+  });
+}
+
 function processQueue() {
   if (running >= MAX_CONCURRENCY) return;
   const next = queue.shift();
@@ -253,9 +321,8 @@ export async function getAccounts(): Promise<components['schemas']['Account'][]>
 }
 // addTransactions returns various formats: "ok", array of IDs, or Transaction objects
 export async function addTransactions(txs: components['schemas']['TransactionInput'][] | components['schemas']['TransactionInput']) : Promise<string[]> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.transactions.create').catch(() => {});
-    
+  observability.incrementToolCall('actual.transactions.create').catch(() => {});
+  return queueWriteOperation(async () => {
     // The Actual API expects addTransactions(accountId, transactions, options)
     // Extract accountId from the first transaction and remove it from transaction objects
     const txArray = Array.isArray(txs) ? txs : [txs];
@@ -317,11 +384,10 @@ export async function getCategories(): Promise<components['schemas']['Category']
   });
 }
 export async function createCategory(category: components['schemas']['Category'] | unknown): Promise<string> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.categories.create').catch(() => {});
+  observability.incrementToolCall('actual.categories.create').catch(() => {});
+  return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
-    const id = normalizeToId(raw);
-    return id;
+    return normalizeToId(raw);
   });
 }
 export async function getPayees(): Promise<components['schemas']['Payee'][]> {
@@ -331,11 +397,10 @@ export async function getPayees(): Promise<components['schemas']['Payee'][]> {
   });
 }
 export async function createPayee(payee: components['schemas']['Payee'] | unknown): Promise<string> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.payees.create').catch(() => {});
+  observability.incrementToolCall('actual.payees.create').catch(() => {});
+  return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawCreatePayee(payee) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
-    const id = normalizeToId(raw);
-    return id;
+    return normalizeToId(raw);
   });
 }
 export async function getBudgetMonths(): Promise<string[]> {
@@ -386,27 +451,27 @@ export async function deleteAccount(id: string): Promise<void> {
   });
 }
 export async function updateTransaction(id: string, fields: Partial<components['schemas']['Transaction']> | unknown): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.transactions.update').catch(() => {});
-    // Increased retries and backoff to handle concurrent requests better
-    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 5, backoffMs: 500 }));
+  observability.incrementToolCall('actual.transactions.update').catch(() => {});
+  // Use write queue to batch concurrent updates in a single budget session
+  return queueWriteOperation(async () => {
+    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function deleteTransaction(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.transactions.delete').catch(() => {});
+  observability.incrementToolCall('actual.transactions.delete').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawDeleteTransaction(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.categories.update').catch(() => {});
+  observability.incrementToolCall('actual.categories.update').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function deleteCategory(id: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.categories.delete').catch(() => {});
+  observability.incrementToolCall('actual.categories.delete').catch(() => {});
+  return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawDeleteCategory(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
