@@ -473,7 +473,7 @@ export async function updateTransaction(id: string, fields: Partial<components['
   observability.incrementToolCall('actual.transactions.update').catch(() => {});
   // Use write queue to batch concurrent updates in a single budget session
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function deleteTransaction(id: string): Promise<void> {
@@ -526,13 +526,13 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
     observability.incrementToolCall('actual.rules.update').catch(() => {});
     // The Actual Budget API expects the full rule object with id, not separate id and fields
     const rule = { id, ...(fields as object) };
-    await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function deleteRule(id: string): Promise<void> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.rules.delete').catch(() => {});
-    await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
