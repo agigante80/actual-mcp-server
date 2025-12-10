@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.1.0  
 **Purpose:** Future improvements and feature planning  
-**Last Updated:** 2025-11-11
+**Last Updated:** 2025-12-10
 
 ---
 
@@ -17,15 +17,15 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ### Current State (v0.1.0)
 
-- ✅ **42 MCP tools** covering ~80% of Actual Budget API
+- ✅ **49 MCP tools** covering ~87.5% of Actual Budget API
 - ✅ **LibreChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
-- ✅ **Security-conscious** - Bearer auth, input validation
+- ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
 - ✅ **Well-documented** - Comprehensive documentation ecosystem
 
 ### Target State (v1.0.0)
 
-- 🎯 **100% API coverage** - All Actual Budget features
+- 🎯 **100% API coverage** - All Actual Budget features (4 schedule tools remaining)
 - 🎯 **Enterprise-grade security** - RBAC, audit logging, rate limiting
 - 🎯 **Advanced features** - Reports, goals, multi-budget workflows
 - 🎯 **Production-hardened** - Load tested, highly available
@@ -33,12 +33,12 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ---
 
-## 🚀 Short-Term (1-3 Months)
+## 🚀 Short-Term (Q1 2026)
 
 ### 🔴 High Priority
 
 #### 1. **Complete API Coverage (4 tools)**
-**Target**: v0.2.0 (December 2025)
+**Target**: v0.2.0 (January 2026)
 
 **Features**:
 - [ ] Implement `actual_schedules_get`

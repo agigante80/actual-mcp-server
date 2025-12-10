@@ -3,9 +3,9 @@
 **Project:** Actual MCP Server  
 **Version:** 0.1.0  
 **Status:** Production-ready with ongoing enhancements  
-**Last Updated:** 2025-11-24  
-**Assessment Score:** 82/100 (GOOD)  
-**Tool Count:** 42 MCP tools (verified LibreChat-compatible)  
+**Last Updated:** 2025-12-10  
+**Assessment Score:** 85/100 (GOOD)  
+**Tool Count:** 49 MCP tools (verified LibreChat-compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---
@@ -41,14 +41,14 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 
 ## ✨ Core Features
 
-### 🛠️ **42 MCP Tools**
+### 🛠️ **49 MCP Tools**
 
 Comprehensive coverage of Actual Budget functionality across 9 categories:
 
 | Category | Tools | Coverage |
 |----------|-------|----------|
 | **Accounts** | 7 | Create, list, update, delete, close, reopen, get balance |
-| **Transactions** | 6 | Create, get, update, delete, import, filter |
+| **Transactions** | 12 | Create, get, update, delete, import, filter, search (4), summary (2) |
 | **Budgets** | 8 | Get months, set amounts, transfers, carryover, holds |
 | **Categories** | 4 | Create, list, update, delete |
 | **Category Groups** | 4 | Create, list, update, delete |
@@ -56,10 +56,11 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 | **Rules** | 4 | Create, list, update, delete |
 | **Advanced Query & Sync** | 2 | Custom ActualQL queries, bank synchronization |
 | **Batch Operations** | 1 | Batch budget updates |
+| **Server Info** | 1 | Server status and information |
 
-**Total**: 42 tools with 78% coverage of Actual Budget core API
+**Total**: 49 tools with 87.5% coverage of Actual Budget core API
 
-> ✅ **All 42 tools verified** with LibreChat integration testing  
+> ✅ **All 49 tools verified** with LibreChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
 > 📊 **README enhanced** with comprehensive badges and improved discoverability
 
@@ -159,7 +160,7 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 - **Protocol**: MCP over HTTP (`streamable-http`)
 - **Integration**: LibreChat `mcpServers` configuration
 - **Authentication**: Bearer token via headers
-- **Status**: ✅ Fully verified - all 42 tools working
+- **Status**: ✅ Fully verified - all 49 tools working
 
 **LibreChat Configuration**:
 ```yaml
@@ -231,7 +232,7 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **42 tools implemented** (78% of core API coverage)
+- ✅ **49 tools implemented** (87.5% of core API coverage)
 - ✅ **LibreChat verified** - all tools loading and functional
 - ✅ **Docker images published** - Docker Hub and GHCR
 - ✅ **CI/CD pipeline** - automated testing and deployment

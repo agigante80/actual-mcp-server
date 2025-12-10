@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.1.0  
 **Purpose:** Track known technical debt, missing features, and weak areas  
-**Last Updated:** 2025-11-24
+**Last Updated:** 2025-12-10
 
 ---
 
@@ -27,6 +27,25 @@ This document identifies **known gaps, technical debt, and areas needing improve
 - Verified working with integration tests and MCP tool cleanup
 
 **Impact**: HIGH - Core functionality now operational
+
+**Status**: ✅ FIXED and verified working
+
+### 2. **Tool Registration Discrepancy** (RESOLVED 2025-12-10)
+
+**Previous Issue**: 49 tools implemented but only 43 listed in IMPLEMENTED_TOOLS array
+
+**Resolution**:
+- Discovered 6 missing transaction search/summary tools:
+  - `actual_transactions_search_by_amount`
+  - `actual_transactions_search_by_category`
+  - `actual_transactions_search_by_month`
+  - `actual_transactions_search_by_payee`
+  - `actual_transactions_summary_by_category`
+  - `actual_transactions_summary_by_payee`
+- All tools added to IMPLEMENTED_TOOLS array
+- Tool count documentation updated throughout
+
+**Impact**: MEDIUM - Documentation accuracy and tool tracking
 
 **Status**: ✅ FIXED and verified working
 
@@ -57,7 +76,7 @@ This document identifies **known gaps, technical debt, and areas needing improve
 
 **Status**: Automated dependency management fully configured, ready for execution
 
-**Reference**: See `docs/DEPENDENCY_AUDIT_REPORT.md` for detailed analysis
+**Reference**: See `docs/archive/2025-11-24_dependency_audit.md` for detailed analysis
 
 #### 2. **Schedule Tools Not Implemented** (4 tools missing)
 
