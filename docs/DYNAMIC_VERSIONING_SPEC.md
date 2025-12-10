@@ -93,7 +93,9 @@ project-root/
 
 ### 1. Version Generation Script
 
-**File:** `get_version.sh`
+### Script Implementation
+
+**File:** `scripts/get_version.sh`
 
 **Requirements:**
 - Bash script (portable across Linux/macOS/WSL)

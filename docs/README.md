@@ -21,37 +21,54 @@ This directory contains comprehensive documentation for the Actual MCP Server pr
 - **[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md)** - Project purpose, features, architecture, and roadmap
 - **[AI_INTERACTION_GUIDE.md](AI_INTERACTION_GUIDE.md)** - Guide for AI assistants interacting with this codebase
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture, design patterns, and system components
-- **[REFACTORING_PLAN.md](REFACTORING_PLAN.md)** - Ongoing refactoring tasks and improvements
+- **[REFACTORING_STATUS.md](REFACTORING_STATUS.md)** - Current refactoring tasks and code quality metrics
 - **[IMPROVEMENT_AREAS.md](IMPROVEMENT_AREAS.md)** - Known issues, limitations, and enhancement opportunities
 - **[TESTING_AND_RELIABILITY.md](TESTING_AND_RELIABILITY.md)** - Testing strategy, coverage, and quality metrics
 - **[SECURITY_AND_PRIVACY.md](SECURITY_AND_PRIVACY.md)** - Security practices, threat model, and privacy considerations
 - **[ROADMAP.md](ROADMAP.md)** - Feature roadmap and development timeline
-- **[CODE_REFACTORING_ANALYSIS.md](CODE_REFACTORING_ANALYSIS.md)** - Comprehensive code refactoring analysis and prioritization
-- **[DEPENDENCY_AUDIT_REPORT.md](DEPENDENCY_AUDIT_REPORT.md)** - Dependency security audit and update recommendations
 - **[DEPENDENCY_UPDATE_PLAN.md](DEPENDENCY_UPDATE_PLAN.md)** - Phased dependency update execution plan
+
+### Historical Documentation (Archive)
+
+- **[archive/2025-11-24_refactoring_analysis.md](archive/2025-11-24_refactoring_analysis.md)** - Comprehensive code refactoring analysis
+- **[archive/2025-11-24_dependency_audit.md](archive/2025-11-24_dependency_audit.md)** - Dependency security audit and update recommendations
+- **[archive/2025-11-24_reassessment.md](archive/2025-11-24_reassessment.md)** - Project health assessment snapshot
 
 ---
 
-## 📝 Recent Documentation Updates (November 2025)
+## 📝 Recent Documentation Updates (December 2025)
+
+**Documentation Consolidation**:
+- ✅ Corrected tool count from 42 to 49 throughout all documentation
+- ✅ Added 6 missing tools to IMPLEMENTED_TOOLS array (search/summary tools)
+- ✅ Consolidated REFACTORING_PLAN.md + CODE_REFACTORING_ANALYSIS.md → REFACTORING_STATUS.md
+- ✅ Created docs/archive/ folder for historical reports
+- ✅ Removed temporary README_UPDATE_SUMMARY.md
+- ✅ Updated PROJECT_OVERVIEW.md with accurate metrics (85/100 score)
+
+**Tool Registration**:
+- ✅ All 49 tools now properly registered in IMPLEMENTED_TOOLS array
+- ✅ Tool count consistency verified across codebase
+
+**Previous Updates (November 2025)**:
 
 **README.md Enhancements**:
 - ✅ Added comprehensive badge set (Docker Pulls, CI status, Docker image size, GitHub stars)
-- ✅ Fixed tool count consistency throughout (42 tools, not 39)
 - ✅ Enhanced Docker registry visibility (Docker Hub + GHCR prominently displayed)
 - ✅ Improved visual hierarchy and discoverability
 - ✅ Docker short description validated (98/100 characters ✅)
 
 **New Technical Documentation**:
-- ✅ **CODE_REFACTORING_ANALYSIS.md** - 116-hour refactoring roadmap with prioritization (November 24, 2025)
-- ✅ **DEPENDENCY_AUDIT_REPORT.md** - Security audit of 306 dependencies (0 vulnerabilities)
+- ✅ **REFACTORING_STATUS.md** - Consolidated refactoring tracking (December 10, 2025)
+- ✅ **DEPENDENCY_AUDIT_REPORT.md** - Security audit of 306 dependencies (0 vulnerabilities) - Archived
 - ✅ **DEPENDENCY_UPDATE_PLAN.md** - Phased update strategy (3 phases, 26-44 hours)
 - ✅ Automated dependency management system configured (Dependabot + Renovate + CI/CD)
 
 **Project Status**:
-- **42 MCP Tools** fully implemented and LibreChat-verified
+- **49 MCP Tools** fully implemented and LibreChat-verified
 - **Production-ready** with Docker images on Docker Hub and GHCR
 - **Security score**: 100/100 (0 vulnerabilities detected)
-- **Code quality score**: 78/100 (Good, refactoring roadmap available)
+- **Code quality score**: 85/100 (Good, consolidated refactoring tracking available)
 
 ---
 
@@ -209,7 +226,7 @@ When you change code, update these docs:
 
 ## 📊 Project Status
 
-- **Total Tools**: 42 MCP tools
+- **Total Tools**: 49 MCP tools
 - **API Coverage**: ~80% of Actual Budget core API
 - **Test Coverage**: >80% unit test coverage
 - **LibreChat**: ✅ Fully verified and tested

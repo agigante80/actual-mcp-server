@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.1.0  
 **Purpose:** Define operational boundaries and rules for AI agents  
-**Last Updated:** 2025-11-11
+**Last Updated:** 2025-12-10
 
 ---
 
@@ -12,6 +12,24 @@
 This document establishes **mandatory rules and policies** for AI agents working on this project. These rules ensure code quality, security, and documentation consistency.
 
 > ⚠️ **CRITICAL**: AI agents must follow these rules without exception. Violations may result in broken builds, security vulnerabilities, or production incidents.
+
+---
+
+## 🛠️ Tool Count Reference
+
+**Current Tool Count**: **49 tools** (all registered in IMPLEMENTED_TOOLS array as of 2025-12-10)
+
+**Tool Categories**:
+- Accounts: 7 tools
+- Transactions: 12 tools (including 4 search + 2 summary tools)
+- Budgets: 8 tools
+- Categories: 4 tools
+- Category Groups: 4 tools
+- Payees: 6 tools
+- Rules: 4 tools
+- Advanced: 3 tools (query, bank sync, server info)
+
+**Location**: `src/actualToolsManager.ts` - IMPLEMENTED_TOOLS array
 
 ---
 

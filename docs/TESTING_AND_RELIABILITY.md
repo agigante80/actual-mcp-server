@@ -174,7 +174,7 @@ npm run test:unit-js
 **Location**: `src/tests/actualToolsTests.ts`
 
 **What they test**:
-- All 42 tools can be called
+- All 49 tools can be called
 - Tool registration works correctly
 - Basic smoke tests for each tool
 - Error handling for invalid inputs
@@ -218,7 +218,7 @@ assert(result.success === true);
 
 **Scenarios**:
 - MCP client connects to server
-- LibreChat loads all 42 tools
+- LibreChat loads all 49 tools
 - User performs complete workflow via chat
 
 **Run**:
@@ -247,7 +247,7 @@ npm run dev -- --test-actual-connection
 
 ### 6. Tool Tests
 
-**Purpose**: Smoke test all 42 tools
+**Purpose**: Smoke test all 49 tools
 
 **Command**:
 ```bash

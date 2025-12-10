@@ -180,7 +180,7 @@ private readonly CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
    node tests/manual/actual-mcp-integration-test.js \
      http://localhost:3600/http TOKEN full no
    ```
-   - All 42 tools should pass
+   - All 49 tools should pass
    - Then stop server to trigger shutdown
    - Verify all test data has `tombstone=0`
 
