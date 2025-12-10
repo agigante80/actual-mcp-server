@@ -545,18 +545,29 @@ export async function createRule(rule: unknown): Promise<string> {
 export async function updateRule(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.rules.update').catch(() => {});
   return queueWriteOperation(async () => {
-    // Get the existing rule first to merge with updates
-    // This ensures we don't lose any fields (like actions) when doing partial updates
-    const existingRules = await withConcurrency(() => retry(() => rawGetRules() as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
-    const existingRule = Array.isArray(existingRules) ? existingRules.find((r: any) => r.id === id) : null;
+    // The Actual Budget updateRule API expects ONLY the changed fields plus id
+    // Do NOT merge with existing rule - that causes validation errors
+    const fieldsObj = fields as any;
+    const rule: any = { id };
     
-    if (!existingRule) {
-      throw new Error(`Rule with id ${id} not found`);
+    // Only include fields that are actually being updated
+    if (fieldsObj.stage !== undefined) {
+      rule.stage = fieldsObj.stage;
+    }
+    if (fieldsObj.conditionsOp !== undefined) {
+      rule.conditionsOp = fieldsObj.conditionsOp;
+    }
+    if (fieldsObj.conditions !== undefined) {
+      rule.conditions = fieldsObj.conditions;
+    }
+    if (fieldsObj.actions !== undefined) {
+      rule.actions = fieldsObj.actions;
     }
     
-    // Merge existing rule with new fields
-    const rule = { ...existingRule, ...(fields as object) };
+    logger.debug(`[UPDATE RULE] Updating rule ${id} with partial fields: ${JSON.stringify(rule)}`);
+    
     await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    logger.debug(`[UPDATE RULE] Update completed for rule ${id}`);
   });
 }
 export async function deleteRule(id: string): Promise<void> {
@@ -641,7 +652,7 @@ export async function resetBudgetHold(month: string, categoryId: string): Promis
     await withConcurrency(() => retry(() => rawResetBudgetHold(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
-export async function runQuery(queryString: string): Promise<unknown> {
+export async function runQuery(queryString: string | any): Promise<unknown> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.query.run').catch(() => {});
     // The Actual Budget runQuery expects an ActualQL query object with serialize() method
@@ -651,6 +662,15 @@ export async function runQuery(queryString: string): Promise<unknown> {
     
     if (!q) {
       throw new Error('ActualQL query builder not available. Ensure @actual-app/api is properly installed and the budget is loaded.');
+    }
+    
+    // If already a serialized query object, use it directly
+    if (typeof queryString === 'object' && queryString !== null) {
+      try {
+        return await withConcurrency(() => retry(() => rawRunQuery(queryString) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+      } catch (error: any) {
+        throw new Error(`Query execution failed: ${error.message}`);
+      }
     }
     
     const trimmed = queryString.trim();
@@ -665,7 +685,7 @@ export async function runQuery(queryString: string): Promise<unknown> {
       
       // Parse arguments (e.g., startDate: "2025-06-01", endDate: "2025-11-30")
       if (argsStr.trim()) {
-        const args = argsStr.split(',').map(a => a.trim());
+        const args = argsStr.split(',').map((a: string) => a.trim());
         for (const arg of args) {
           const argMatch = arg.match(/^(\w+):\s*"([^"]+)"$/);
           if (argMatch) {
@@ -686,8 +706,8 @@ export async function runQuery(queryString: string): Promise<unknown> {
       // Parse fields (including nested objects like account { id name })
       const fieldNames = [];
       const nestedFieldPattern = /(\w+)\s*\{[^}]+\}/g;
-      const simpleFields = fieldsStr.replace(nestedFieldPattern, '').split(/\s+/).filter(f => f.trim());
-      fieldNames.push(...simpleFields.map(f => f.trim()));
+      const simpleFields = fieldsStr.replace(nestedFieldPattern, '').split(/\s+/).filter((f: string) => f.trim());
+      fieldNames.push(...simpleFields.map((f: string) => f.trim()));
       
       // Extract nested field names (e.g., account, payee, category)
       let nestedMatch;
@@ -709,7 +729,7 @@ export async function runQuery(queryString: string): Promise<unknown> {
         
         // Apply SELECT fields (if not *)
         if (fields.trim() !== '*') {
-          const fieldList = fields.split(',').map(f => f.trim());
+          const fieldList = fields.split(',').map((f: string) => f.trim());
           query = query.select(fieldList);
         }
         

@@ -50,6 +50,12 @@ const IMPLEMENTED_TOOLS = [
   'actual_transactions_filter',
   'actual_transactions_get',
   'actual_transactions_import',
+  'actual_transactions_search_by_amount',
+  'actual_transactions_search_by_category',
+  'actual_transactions_search_by_month',
+  'actual_transactions_search_by_payee',
+  'actual_transactions_summary_by_category',
+  'actual_transactions_summary_by_payee',
   'actual_transactions_update',
   'actual_server_info',
 ];

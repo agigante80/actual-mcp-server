@@ -6,7 +6,7 @@
 //   SMOKE TESTS:
 //     Quick connectivity and core API checks. Focused on basic functionality:
 //     - Initialize MCP session
-//     - List available tools (42 tools)
+//     - List available tools (49 tools)
 //     - List accounts
 //     - List categories
 //
@@ -678,7 +678,7 @@ async function advancedTests(context) {
 
 async function fullTests(context) {
   console.log("\n========================================");
-  console.log("FULL TEST MODE - All 42 Tools");
+  console.log("FULL TEST MODE - All 49 Tools");
   console.log("========================================");
   
   await categoryGroupTests(context);

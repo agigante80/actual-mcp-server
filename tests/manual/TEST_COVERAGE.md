@@ -1,7 +1,7 @@
 # MCP Actual Budget - Comprehensive Test Coverage
 
 ## Overview
-The integration test suite now covers **ALL 42 MCP tools** across 3 test levels.
+The integration test suite now covers **ALL 49 MCP tools** across 3 test levels.
 
 ## Test Levels
 
@@ -12,7 +12,7 @@ The integration test suite now covers **ALL 42 MCP tools** across 3 test levels.
 
 | Tool | Operation | Test |
 |------|-----------|------|
-| `tools/list` | List all available tools | ✅ Verifies 42 tools available |
+| `tools/list` | List all available tools | ✅ Verifies 49 tools available |
 | `actual_accounts_list` | List all accounts | ✅ Returns account array |
 | `actual_categories_get` | Get all categories | ✅ Returns categories (or empty for new budgets) |
 
@@ -31,7 +31,7 @@ The integration test suite now covers **ALL 42 MCP tools** across 3 test levels.
 | `actual_accounts_delete` | Delete account | ✅ Tested in cleanup phase |
 
 ### FULL Level (Comprehensive Testing)
-**Purpose:** Test all 42 tools including budgets, rules, and advanced features  
+**Purpose:** Test all 49 tools including budgets, rules, and advanced features  
 **Duration:** ~30-60 seconds  
 **Tools Tested:** 42 (ALL TOOLS)
 
@@ -126,7 +126,7 @@ node tests/manual/actual-mcp-integration-test.js smoke
 # Normal test (account CRUD)
 node tests/manual/actual-mcp-integration-test.js normal
 
-# Full test (all 42 tools)
+# Full test (all 49 tools)
 node tests/manual/actual-mcp-integration-test.js full
 ```
 
@@ -145,14 +145,14 @@ node tests/manual/actual-mcp-integration-test.js full
 - Missing: budgets, rules, category groups, bank_sync, query, delete operations
 
 ### After Enhancement  
-- **42 tools tested** (100% coverage)
+- **49 tools tested** (100% coverage)
 - **ALL** MCP tools now have comprehensive test coverage
 - Proper testing of delete operations in cleanup phase
 - Advanced features (bank sync, queries) tested with graceful fallbacks
 
 ## Next Steps
 
-1. ✅ **Completed:** All 42 tools integrated into test suite
+1. ✅ **Completed:** All 49 tools integrated into test suite
 2. ⏳ **Recommended:** Add unit tests for individual tool schemas
 3. ⏳ **Recommended:** Add integration tests for tool error handling
 4. ⏳ **Recommended:** Add performance benchmarks for each tool
@@ -162,4 +162,4 @@ node tests/manual/actual-mcp-integration-test.js full
 
 **Last Updated:** 2025-11-21  
 **Test Script:** `tests/manual/actual-mcp-integration-test.js`  
-**Coverage:** 42/42 tools (100%)
+**Coverage:** 49/49 tools (100%)
