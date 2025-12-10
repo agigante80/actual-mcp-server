@@ -146,7 +146,7 @@ AI: [Uses categories_create] "Pet Supplies category created"
 ### Core Capabilities
 ### Core Capabilities
 
-- 🤖 **42 MCP Tools**: Comprehensive financial operations via natural language
+- 🤖 **49 MCP Tools**: Comprehensive financial operations via natural language
 - 🔄 **Multiple Transports**: HTTP and Server-Sent Events (SSE)
 - 🔐 **Secure**: Bearer token authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
@@ -469,7 +469,7 @@ These methods require access to Actual's internal API and are not directly expor
 ### Lookup Helper
 - `getIDByName()` - Look up IDs by name for accounts/payees/categories/schedules
 
-**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 42 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
+**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 49 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
 
 ## 📦 Installation
 
@@ -673,7 +673,7 @@ curl -k https://localhost:3600/health
 ```
 
 In LibreChat, you should see:
-- ✅ **42 tools loaded** in the MCP servers list
+- ✅ **49 tools loaded** in the MCP servers list
 - ✅ All tools available with `actual_` prefix
 - ✅ Natural language queries working
 
@@ -848,7 +848,7 @@ mcpServers:
 **Features:**
 - ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
 - ✅ Bearer token authentication via headers
-- ✅ All 42 tools load successfully in LibreChat
+- ✅ All 49 tools load successfully in LibreChat
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
 
@@ -930,9 +930,9 @@ Comprehensive testing completed with LibreChat:
 
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
-| HTTP without auth | ✅ Success | 42 tools |
-| HTTP with auth | ✅ Success | 42 tools |
-| SSE without auth | ✅ Success | 42 tools |
+| HTTP without auth | ✅ Success | 49 tools |
+| HTTP with auth | ✅ Success | 49 tools |
+| SSE without auth | ✅ Success | 49 tools |
 | SSE with auth | ⚠️ Client limitation | 0 tools (headers not sent) |
 
 **Conclusion:** Use **HTTP transport with Bearer token authentication** for secure production LibreChat deployments.

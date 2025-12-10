@@ -73,7 +73,7 @@ export const DEFAULT_HTTP_PATH = '/';
 export const SERVER_INFO = {
   name: 'actual-budget-mcp',
   version: '1.0.0',
-  description: 'MCP server for Actual Budget - 42 tools for finance management',
+  description: 'MCP server for Actual Budget - 49 tools for finance management',
 } as const;
 
 // ============================================================================
