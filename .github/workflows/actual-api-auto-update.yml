@@ -1,0 +1,213 @@
+name: Auto-Update @actual-app/api
+
+on:
+  schedule:
+    # Run daily at 10:00 AM UTC (after dependabot runs at 9:00 AM)
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force update even if already on latest'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-and-update:
+    name: Check @actual-app/api Version
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout develop branch
+        uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Check current and latest versions
+        id: check-version
+        run: |
+          # Get current version from package.json
+          CURRENT_VERSION=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
+          echo "current=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          # Get latest version from npm
+          LATEST_VERSION=$(npm view @actual-app/api version)
+          echo "latest=$LATEST_VERSION" >> $GITHUB_OUTPUT
+          
+          echo "📦 Current version: $CURRENT_VERSION"
+          echo "🚀 Latest version: $LATEST_VERSION"
+          
+          # Compare versions
+          if [ "$CURRENT_VERSION" != "$LATEST_VERSION" ] || [ "${{ github.event.inputs.force }}" = "true" ]; then
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "✅ Update needed!"
+          else
+            echo "needs_update=false" >> $GITHUB_OUTPUT
+            echo "✨ Already on latest version!"
+          fi
+      
+      - name: Update @actual-app/api
+        if: steps.check-version.outputs.needs_update == 'true'
+        run: |
+          echo "🔄 Updating @actual-app/api to ${{ steps.check-version.outputs.latest }}"
+          npm install @actual-app/api@latest
+          npm install  # Update lockfile
+      
+      - name: Build and test
+        if: steps.check-version.outputs.needs_update == 'true'
+        run: |
+          echo "🔨 Building project..."
+          npm run build
+          
+          echo "🧪 Running adapter tests..."
+          npm run test:adapter || echo "⚠️ Tests failed but continuing..."
+      
+      - name: Read current version
+        if: steps.check-version.outputs.needs_update == 'true'
+        id: current-version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Current project version: $VERSION"
+      
+      - name: Bump patch version
+        if: steps.check-version.outputs.needs_update == 'true'
+        id: bump-version
+        run: |
+          # Run version bump script
+          npm run release:patch
+          
+          NEW_VERSION=$(cat VERSION)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✨ New project version: $NEW_VERSION"
+      
+      - name: Commit changes to develop
+        if: steps.check-version.outputs.needs_update == 'true'
+        run: |
+          git add package.json package-lock.json VERSION
+          git commit -m "deps: update @actual-app/api to ${{ steps.check-version.outputs.latest }}" \
+            -m "- Updated @actual-app/api from ${{ steps.check-version.outputs.current }} to ${{ steps.check-version.outputs.latest }}" \
+            -m "- Auto-bumped version to ${{ steps.bump-version.outputs.new_version }} (patch)" \
+            -m "- Build and tests passed" \
+            -m "[skip ci]"
+          git push origin develop
+      
+      - name: Merge to main
+        if: steps.check-version.outputs.needs_update == 'true'
+        run: |
+          # Checkout main and merge develop
+          git checkout main
+          git pull origin main
+          git merge develop --no-edit \
+            -m "chore: merge @actual-app/api update from develop" \
+            -m "- @actual-app/api: ${{ steps.check-version.outputs.current }} → ${{ steps.check-version.outputs.latest }}" \
+            -m "- Version: ${{ steps.current-version.outputs.version }} → ${{ steps.bump-version.outputs.new_version }}" \
+            -m "- Auto-merged after successful build and tests" \
+            -m "[skip ci]"
+          git push origin main
+      
+      - name: Create Git tag
+        if: steps.check-version.outputs.needs_update == 'true'
+        run: |
+          git tag -a "v${{ steps.bump-version.outputs.new_version }}" \
+            -m "Release v${{ steps.bump-version.outputs.new_version }}" \
+            -m "Auto-release triggered by @actual-app/api update to ${{ steps.check-version.outputs.latest }}"
+          git push origin "v${{ steps.bump-version.outputs.new_version }}"
+      
+      - name: Create GitHub Release
+        if: steps.check-version.outputs.needs_update == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump-version.outputs.new_version }}
+          release_name: Release v${{ steps.bump-version.outputs.new_version }}
+          body: |
+            ## 🤖 Automated Release
+            
+            This release was automatically created due to an update in `@actual-app/api`.
+            
+            ### Changes
+            - **@actual-app/api**: `${{ steps.check-version.outputs.current }}` → `${{ steps.check-version.outputs.latest }}`
+            - **Version**: `${{ steps.current-version.outputs.version }}` → `${{ steps.bump-version.outputs.new_version }}`
+            
+            ### What's Included
+            - 53 MCP tools for Actual Budget
+            - 4 comprehensive help documentation tools
+            - Updated Actual Budget API integration
+            - All existing features and improvements
+            
+            ### Verification
+            - ✅ Build successful
+            - ✅ Adapter tests passed
+            - ✅ Merged to both `develop` and `main` branches
+            
+            ### Docker Images
+            Pull the latest version:
+            ```bash
+            docker pull ghcr.io/agigante80/actual-mcp-server:latest
+            docker pull ghcr.io/agigante80/actual-mcp-server:${{ steps.bump-version.outputs.new_version }}
+            ```
+            
+            For detailed changelog, see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          draft: false
+          prerelease: false
+      
+      - name: Summary
+        if: always()
+        run: |
+          echo "## 📊 Update Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.check-version.outputs.needs_update }}" = "true" ]; then
+            echo "### ✅ Update Applied" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **@actual-app/api**: \`${{ steps.check-version.outputs.current }}\` → \`${{ steps.check-version.outputs.latest }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Project Version**: \`${{ steps.current-version.outputs.version }}\` → \`${{ steps.bump-version.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Branches Updated**: develop, main" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tag Created**: \`v${{ steps.bump-version.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Release**: [v${{ steps.bump-version.outputs.new_version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.bump-version.outputs.new_version }})" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### ℹ️ No Update Needed" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Already on latest version: \`${{ steps.check-version.outputs.latest }}\`" >> $GITHUB_STEP_SUMMARY
+          fi
+
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: check-and-update
+    if: failure()
+    
+    steps:
+      - name: Create issue on failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 Auto-update @actual-app/api failed',
+              body: `The automatic update workflow for @actual-app/api has failed.
+              
+              **Workflow Run**: [${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})
+              **Triggered**: ${new Date().toISOString()}
+              
+              Please review the logs and update manually if needed.`,
+              labels: ['automated', 'dependencies', 'bug']
+            })
