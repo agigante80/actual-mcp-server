@@ -545,26 +545,25 @@ export async function createRule(rule: unknown): Promise<string> {
 export async function updateRule(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.rules.update').catch(() => {});
   return queueWriteOperation(async () => {
-    // The Actual Budget updateRule API expects ONLY the changed fields plus id
-    // Do NOT merge with existing rule - that causes validation errors
+    // The Actual Budget API validation requires conditions and actions arrays to exist
+    // We must fetch the existing rule and merge with the update fields
+    const rules = await withConcurrency(() => retry(() => rawGetRules() as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+    const existingRule = (rules as any[]).find((r: any) => r.id === id);
+    
+    if (!existingRule) {
+      throw new Error(`Rule with id ${id} not found`);
+    }
+    
     const fieldsObj = fields as any;
-    const rule: any = { id };
+    const rule: any = {
+      id,
+      stage: fieldsObj.stage ?? existingRule.stage,
+      conditionsOp: fieldsObj.conditionsOp ?? existingRule.conditionsOp,
+      conditions: fieldsObj.conditions ?? existingRule.conditions ?? [],
+      actions: fieldsObj.actions ?? existingRule.actions ?? [],
+    };
     
-    // Only include fields that are actually being updated
-    if (fieldsObj.stage !== undefined) {
-      rule.stage = fieldsObj.stage;
-    }
-    if (fieldsObj.conditionsOp !== undefined) {
-      rule.conditionsOp = fieldsObj.conditionsOp;
-    }
-    if (fieldsObj.conditions !== undefined) {
-      rule.conditions = fieldsObj.conditions;
-    }
-    if (fieldsObj.actions !== undefined) {
-      rule.actions = fieldsObj.actions;
-    }
-    
-    logger.debug(`[UPDATE RULE] Updating rule ${id} with partial fields: ${JSON.stringify(rule)}`);
+    logger.debug(`[UPDATE RULE] Updating rule ${id} with merged fields: ${JSON.stringify(rule)}`);
     
     await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200 }));
     logger.debug(`[UPDATE RULE] Update completed for rule ${id}`);

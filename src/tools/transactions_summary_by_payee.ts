@@ -55,15 +55,29 @@ const tool: ToolDefinition = {
         { totalAmount: { $sum: '$amount' } },
         { transactionCount: { $count: '*' } }
       ])
-      .orderBy({ totalAmount: 'desc' })
       .limit(input.limit || 50);
     
-    const result = await adapter.runQuery(query.serialize());
-    const summary = Array.isArray(result) ? result.map((row: any) => ({
-      payeeName: row['payee.name'] || 'Unknown',
-      totalAmount: row.totalAmount || 0,
-      transactionCount: row.transactionCount || 0,
-    })) : [];
+    const result = await adapter.runQuery(query);
+    
+    // Ensure result is an array
+    if (!result || !Array.isArray(result)) {
+      return {
+        summary: [],
+        totalAmount: 0,
+        dateRange: {
+          startDate,
+          endDate,
+        },
+      };
+    }
+    
+    const summary = result
+      .map((row: any) => ({
+        payeeName: row['payee.name'] || 'Unknown',
+        totalAmount: row.totalAmount || 0,
+        transactionCount: row.transactionCount || 0,
+      }))
+      .sort((a, b) => b.totalAmount - a.totalAmount); // Sort by totalAmount descending in JavaScript
     
     // Calculate grand total
     const totalAmount = summary.reduce((sum, item) => sum + item.totalAmount, 0);
@@ -72,8 +86,8 @@ const tool: ToolDefinition = {
       summary,
       totalAmount,
       dateRange: {
-        startDate: input.startDate,
-        endDate: input.endDate,
+        startDate,
+        endDate,
       },
     };
   },
