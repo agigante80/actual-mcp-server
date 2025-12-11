@@ -25,6 +25,18 @@ const ActionSchema = z.object({
   options: z.object({}).passthrough().optional().describe('Additional options for the action'),
 });
 
+// Operator validation map
+const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
+  'imported_payee': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
+  'payee': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
+  'account': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
+  'category': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
+  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
+  'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
+  'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
+  'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
+};
+
 const InputSchema = z.object({
   stage: z.enum(['pre', 'post']).optional().default('pre').describe('When to apply the rule - "pre" (before transactions sync) or "post" (after transactions sync)'),
   conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine multiple conditions'),
@@ -96,12 +108,23 @@ Example: {stage: "post", conditionsOp: "and", conditions: [{field: "imported_pay
       
       // Validate field usage to guide users toward correct field selection
       for (const condition of input.conditions) {
+        const fieldInfo = FIELD_OPERATORS[condition.field];
+        
+        // Validate operator is compatible with field type
+        if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
+          throw new Error(
+            `Invalid operator "${condition.op}" for field "${condition.field}". ` +
+            `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}. ` +
+            `Please use one of these operators instead.`
+          );
+        }
+        
         // Check if using payee field with text value instead of ID
         if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
           throw new Error(
             `Field "payee" expects a payee ID (UUID), but got text value "${condition.value}". ` +
             `To match payee names with text, use "imported_payee" field instead. ` +
-            `Example: {field: "imported_payee", op: "${condition.op}", value: "${condition.value}"}`
+            `Example: {field: "imported_payee", op: "contains", value: "${condition.value}"}`
           );
         }
         
@@ -109,7 +132,15 @@ Example: {stage: "post", conditionsOp: "and", conditions: [{field: "imported_pay
         if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
           throw new Error(
             `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
-            `Use the ${condition.field} UUID from your budget data.`
+            `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
+          );
+        }
+        
+        // Validate oneOf/notOneOf operators expect array values
+        if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
+          throw new Error(
+            `Operator "${condition.op}" expects an array of values, but got ${typeof condition.value}. ` +
+            `Example: {field: "${condition.field}", op: "${condition.op}", value: ["uuid-1", "uuid-2"]}`
           );
         }
       }
