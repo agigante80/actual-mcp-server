@@ -9,6 +9,7 @@ const InputSchema = z.object({
   payeeName: z.string().optional().describe('Optional: Filter by payee name'),
   minAmount: z.number().optional().describe('Optional: Minimum amount in cents (use negative for expenses)'),
   maxAmount: z.number().optional().describe('Optional: Maximum amount in cents'),
+  limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
 });
 
 type Output = {
@@ -61,10 +62,10 @@ const tool: ToolDefinition = {
       query = query.filter({ amount: amountFilter });
     }
     
-    // Select all fields and order by date
-    query = query.select('*').orderBy({ date: 'desc' });
+    // Select all fields, order by date descending, and apply limit
+    query = query.select('*').orderBy({ date: 'desc' }).limit(input.limit || 100);
     
-    const result = await adapter.runQuery(query.serialize());
+    const result = await adapter.runQuery(query);
     const transactions = Array.isArray(result) ? result : [];
     
     // Calculate summary stats

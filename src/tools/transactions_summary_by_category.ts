@@ -69,13 +69,26 @@ const tool: ToolDefinition = {
       ])
       .orderBy(['category.group.sort_order', 'category.sort_order']);
     
-    const result = await adapter.runQuery(query.serialize());
-    const summary = Array.isArray(result) ? result.map((row: any) => ({
+    const result = await adapter.runQuery(query);
+    
+    // Ensure result is an array
+    if (!result || !Array.isArray(result)) {
+      return {
+        summary: [],
+        totalAmount: 0,
+        dateRange: {
+          startDate,
+          endDate,
+        },
+      };
+    }
+    
+    const summary = result.map((row: any) => ({
       categoryGroup: row['category.group.name'] || 'Uncategorized',
       categoryName: row['category.name'] || 'Uncategorized',
       totalAmount: row.totalAmount || 0,
       transactionCount: row.transactionCount || 0,
-    })) : [];
+    }));
     
     // Calculate grand total
     const totalAmount = summary.reduce((sum, item) => sum + item.totalAmount, 0);
@@ -84,8 +97,8 @@ const tool: ToolDefinition = {
       summary,
       totalAmount,
       dateRange: {
-        startDate: input.startDate,
-        endDate: input.endDate,
+        startDate,
+        endDate,
       },
     };
   },

@@ -67,7 +67,7 @@ const tool: ToolDefinition = {
     // Select all fields, order by amount descending, and apply limit
     query = query.select('*').orderBy({ amount: 'desc' }).limit(input.limit || 100);
     
-    const result = await adapter.runQuery(query.serialize());
+    const result = await adapter.runQuery(query);
     const transactions = Array.isArray(result) ? result : [];
     
     // Calculate summary stats
