@@ -2,7 +2,7 @@
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
   "version": "0.1.0",
-  "description": "MCP server providing 49 tools for AI-driven financial management with Actual Budget - includes query, bank sync, and multi-budget support",
+  "description": "MCP server providing 53 tools for AI-driven financial management with Actual Budget - includes comprehensive help docs, query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
@@ -15,7 +15,14 @@
     "test:unit-js": "node tests/unit/transactions_create.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
-    "test:mcp-client": "npm run build && node scripts/register-tsconfig-paths.js -- --http --test-mcp-client"
+    "test:mcp-client": "npm run build && node scripts/register-tsconfig-paths.js -- --http --test-mcp-client",
+    "version:current": "cat VERSION",
+    "version:dev": "node scripts/version-dev.js",
+    "version:bump": "node scripts/version-bump.js",
+    "version:check": "node scripts/version-check.js",
+    "release:major": "npm run version:bump -- major",
+    "release:minor": "npm run version:bump -- minor",
+    "release:patch": "npm run version:bump -- patch"
   },
   "dependencies": {
     "@actual-app/api": "^25.11.0",
