@@ -1,0 +1,130 @@
+name: Manual Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      branch:
+        description: 'Target branch'
+        required: true
+        type: choice
+        options:
+          - develop
+          - main
+        default: develop
+      create_release:
+        description: 'Create GitHub release'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump-version:
+    name: Bump Version
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.branch }}
+          fetch-depth: 0
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Read current version
+        id: current-version
+        run: |
+          VERSION=$(cat VERSION)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Current version: $VERSION"
+      
+      - name: Bump version
+        id: bump
+        run: |
+          npm run release:${{ github.event.inputs.bump_type }}
+          NEW_VERSION=$(cat VERSION)
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✨ New version: $NEW_VERSION"
+      
+      - name: Build project
+        run: npm run build
+      
+      - name: Commit changes
+        run: |
+          git add VERSION package.json
+          git commit -m "chore(release): bump version to ${{ steps.bump.outputs.new_version }}" \
+            -m "- Bump type: ${{ github.event.inputs.bump_type }}" \
+            -m "- Previous version: ${{ steps.current-version.outputs.version }}" \
+            -m "- New version: ${{ steps.bump.outputs.new_version }}" \
+            -m "- Branch: ${{ github.event.inputs.branch }}" \
+            -m "Manual version bump via workflow dispatch."
+          git push origin ${{ github.event.inputs.branch }}
+      
+      - name: Create and push tag
+        if: github.event.inputs.create_release == 'true'
+        run: |
+          git tag -a "v${{ steps.bump.outputs.new_version }}" -m "Release v${{ steps.bump.outputs.new_version }}"
+          git push origin "v${{ steps.bump.outputs.new_version }}"
+      
+      - name: Create GitHub Release
+        if: github.event.inputs.create_release == 'true'
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          release_name: Release v${{ steps.bump.outputs.new_version }}
+          body: |
+            ## Release v${{ steps.bump.outputs.new_version }}
+            
+            Manual release created from `${{ github.event.inputs.branch }}` branch.
+            
+            ### Version
+            - **Previous**: `${{ steps.current-version.outputs.version }}`
+            - **New**: `${{ steps.bump.outputs.new_version }}`
+            - **Bump Type**: `${{ github.event.inputs.bump_type }}`
+            
+            ### What's Included
+            - 53 MCP tools for Actual Budget
+            - 4 comprehensive help documentation tools
+            - Full ActualQL query support
+            
+            For detailed changes, see [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md)
+          draft: false
+          prerelease: false
+      
+      - name: Summary
+        run: |
+          echo "## 📊 Version Bump Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bump Type**: \`${{ github.event.inputs.bump_type }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Previous Version**: \`${{ steps.current-version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Version**: \`${{ steps.bump.outputs.new_version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: \`${{ github.event.inputs.branch }}\`" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ github.event.inputs.create_release }}" = "true" ]; then
+            echo "- **Release**: [v${{ steps.bump.outputs.new_version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.bump.outputs.new_version }})" >> $GITHUB_STEP_SUMMARY
+          fi

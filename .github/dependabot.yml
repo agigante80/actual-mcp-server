@@ -4,20 +4,32 @@ updates:
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
+      interval: "daily"
       time: "09:00"
       timezone: "America/New_York"
     open-pull-requests-limit: 10
     
     # Group minor and patch updates for cleaner PR management
     groups:
+      # Critical: @actual-app/api gets its own group for immediate updates
+      actual-api:
+        applies-to: version-updates
+        patterns:
+          - "@actual-app/api"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
       production-dependencies:
         applies-to: version-updates
         dependency-type: "production"
         update-types:
           - "minor"
           - "patch"
+        # Exclude @actual-app/api from this group
+        exclude-patterns:
+          - "@actual-app/api"
       
       development-dependencies:
         applies-to: version-updates
@@ -47,6 +59,12 @@ updates:
     labels:
       - "dependencies"
       - "automated"
+    
+    # Commit message prefix
+    commit-message:
+      prefix: "deps"
+      prefix-development: "deps-dev"
+      include: "scope"
     
     # Assign reviewers for dependency PRs
     reviewers:
