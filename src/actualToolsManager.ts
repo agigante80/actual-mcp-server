@@ -44,6 +44,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_rules_create',
   'actual_rules_delete',
   'actual_rules_get',
+  'actual_rules_help',
   'actual_rules_update',
   'actual_transactions_create',
   'actual_transactions_delete',
