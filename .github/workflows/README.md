@@ -2,25 +2,30 @@
 
 ## Overview
 
-This directory contains 4 automated workflows that manage continuous integration, deployment, dependency updates, and releases for the Actual MCP Server project.
+This directory contains 3 automated workflows that manage continuous integration, deployment, dependency updates, and releases for the Actual MCP Server project.
 
 **Last Updated:** December 12, 2025  
-**Total Workflows:** 4 (optimized from 5)  
-**Total Lines:** ~1,209 lines (reduced from 1,359)
+**Total Workflows:** 3 (optimized from 5, now fully consolidated)  
+**Total Lines:** ~1,082 lines (down from 1,359)  
+**Key Improvements:** Multi-registry publishing, security scanning, deployment testing
 
-## Recent Optimizations (Dec 12, 2025)
+## Recent Optimizations (Dec 12, 2025 - Phase 2)
 
-### Changes Made
-- ✅ **Deleted `docker-publish-on-release.yml`** (113 lines) - Complete duplicate of ci-cd.yml Docker jobs
-- ✅ **Removed `audit-security` job** from dependency-management.yml (38 lines) - Duplicate of ci-cd.yml security job
-- ✅ **Fixed job dependencies** - Removed broken references to deleted jobs
-- ✅ **Clearer separation of concerns** - Each workflow has distinct purpose
+### Major Improvements ✅
+- ✅ **Tag-based triggers** - Workflow now triggers on `v*` tags for automated releases
+- ✅ **Multi-registry publishing** - Publishes to Docker Hub AND GitHub Container Registry (GHCR)
+- ✅ **Trivy security scanning** - Vulnerability scanning with SARIF upload to GitHub Security tab
+- ✅ **Consolidated Docker jobs** - Single unified job handles all Docker publishing (was 3 separate jobs)
+- ✅ **Deployment testing** - Tests published images from both registries
+- ✅ **Docker Hub description updates** - Keeps metadata in sync automatically
+- ✅ **Improved tagging strategy** - Semantic versions on both registries (`:0.2.0`, `:main`, `:latest`)
 
 ### Impact
-- **Workflows:** 5 → 4 (20% reduction)
-- **Code:** 1,359 → 1,209 lines (11% reduction)
-- **Duplications:** 2 major duplications eliminated
-- **Maintainability:** Improved with single source of truth
+- **Code reduction:** 1,359 → 1,082 lines (20% reduction)
+- **Complexity reduction:** 3 Docker jobs → 1 consolidated job
+- **New capabilities:** 5 major features added (security, GHCR, deployment testing, etc.)
+- **Maintainability:** Single source of truth for Docker publishing
+- **Security:** Automated vulnerability scanning with GitHub Security integration
 
 ---
 
@@ -28,9 +33,285 @@ This directory contains 4 automated workflows that manage continuous integration
 
 ### 1. CI/CD Pipeline (`ci-cd.yml`)
 
-**Triggers:** Push to main/develop, Pull Requests, Manual  
-**Size:** 654 lines (24KB)  
+**Triggers:**  
+- Push to main/develop/development branches
+- Version tags (`v*`)  
+- Pull Requests
+- Manual (workflow_dispatch)
+
+**Size:** 656 lines (25KB) - Down from 702 lines  
+**Jobs:** 11 jobs total (optimized from 9 split jobs)
+
 **Purpose:** Comprehensive build, test, security, and deployment pipeline
+
+#### Job Flow:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│  1. VERSION GENERATION                                       │
+│  - Extract from VERSION file                                 │
+│  - Generate Docker-safe version                              │
+│  - Determine if stable release                               │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+              ┌───────────┴───────────┐
+              ↓                       ↓
+┌─────────────────────────┐ ┌─────────────────────────┐
+│  2. LINT & TYPE CHECK   │ │  3. RUN TESTS           │
+│  - TypeScript           │ │  - Unit tests           │
+│  - Tool coverage        │ │  - Adapter tests        │
+└─────────────┬───────────┘ └───────────┬─────────────┘
+              │                         │
+              └───────────┬─────────────┘
+                          ↓
+┌─────────────────────────────────────────────────────────────┐
+│  4. BUILD APPLICATION                                        │
+│  - Production build                                          │
+│  - Dependencies installed                                    │
+└─────────────────────────┬───────────────────────────────────┘
+                          │
+              ┌───────────┴───────────┐
+              ↓                       ↓
+┌─────────────────────────┐ ┌─────────────────────────┐
+│  5. VALIDATE DOCKER     │ │  6. DOCKER TEST BUILD   │
+│     DESCRIPTION         │ │  - Build test image     │
+│  - Check length ≤100    │ │  - Startup validation   │
+└─────────────────────────┘ └───────────┬─────────────┘
+                                        │
+                  ┌─────────────────────┴─────────────────────┐
+                  ↓                                           ↓
+┌─────────────────────────────────────┐ ┌─────────────────────────────────────┐
+│  7. DOCKER PUBLISH (CONSOLIDATED)   │ │  8. SECURITY SCAN                   │
+│  - Build multi-platform             │ │  - Trivy vulnerability scan         │
+│  - Push to Docker Hub + GHCR        │ │  - SARIF upload to Security tab     │
+│  - Semantic version tags            │ │  - Critical/High/Medium severity    │
+└───────────┬─────────────────────────┘ └───────────┬─────────────────────────┘
+            │                                       │
+            └───────────┬───────────────────────────┘
+                        ↓
+      ┌─────────────────┴─────────────────┐
+      ↓                                   ↓
+┌─────────────────────────┐ ┌─────────────────────────┐
+│  9. DOCKER HUB          │ │  10. DEPLOYMENT TEST    │
+│     DESCRIPTION         │ │  - Pull from Docker Hub │
+│  - Update metadata      │ │  - Pull from GHCR       │
+│  - Sync README          │ │  - Test both images     │
+└─────────────────────────┘ └───────────┬─────────────┘
+                                        │
+                                        ↓
+                      ┌─────────────────────────────────────┐
+                      │  11. CREATE GITHUB RELEASE          │
+                      │  - Generate changelog               │
+                      │  - Create release with notes        │
+                      │  - Tag version                      │
+                      └───────────┬─────────────────────────┘
+                                  ↓
+                      ┌─────────────────────────────────────┐
+                      │  12. PIPELINE SUMMARY               │
+                      │  - Status table                     │
+                      │  - All job results                  │
+                      └─────────────────────────────────────┘
+```
+
+#### Key Features:
+
+**🏷️ Docker Tag Strategy** (NEW):
+```bash
+# Version tags (from VERSION file)
+agigante80/actual-mcp-server:0.2.0
+ghcr.io/agigante80/actual-mcp-server:0.2.0
+
+# Branch tags
+agigante80/actual-mcp-server:main          # main branch
+agigante80/actual-mcp-server:develop       # develop branch
+agigante80/actual-mcp-server:development   # development branch
+
+# Latest tags (main branch + stable releases only)
+agigante80/actual-mcp-server:latest
+ghcr.io/agigante80/actual-mcp-server:latest
+```
+
+**🔒 Security Scanning** (NEW):
+- Trivy vulnerability scanner
+- SARIF format upload to GitHub Security tab
+- Critical, High, and Medium severity tracking
+- Automated on every build
+
+**🧪 Deployment Testing** (NEW):
+- Pulls published images from both registries
+- Validates images actually work
+- Tests node version execution
+- Catches registry-specific issues
+
+**📝 Docker Hub Updates** (NEW):
+- Automatically updates short description (≤100 chars)
+- Syncs long description from `docker/description/long.md`
+- Runs on main branch and version tags only
+
+**🏗️ Multi-Platform Builds** (IMPROVED):
+- `linux/amd64` - Intel/AMD 64-bit
+- `linux/arm64` - ARM 64-bit (Raspberry Pi, Apple Silicon, etc.)
+- Single consolidated build job
+
+**🎯 Tag-Based Triggers** (NEW):
+- Workflow triggers on `v*` tags (e.g., `v0.2.0`)
+- Enables automated release creation on tag push
+- `is_release` flag for conditional logic
+
+**Manual Workflow Options:**
+- `skip_tests` - Skip test suite for emergency deployments
+- `skip_docker_publish` - Skip Docker publishing
+- `docker_tag_suffix` - Add custom suffix to tags
+
+---
+
+### 2. Auto-Update @actual-app/api (`actual-api-auto-update.yml`)
+
+**Triggers:** Daily at 10:00 AM UTC, Manual  
+**Size:** 214 lines (8.8KB)  
+**Purpose:** Automatically update `@actual-app/api` dependency
+
+**Process:**
+1. ✅ Check for new @actual-app/api version
+2. ✅ Install latest version if available
+3. ✅ Build and test project
+4. ✅ Auto-bump PATCH version (e.g., 0.2.0 → 0.2.1)
+5. ✅ Commit to `develop` branch
+6. ✅ Merge to `main` branch
+7. ✅ Create git tag and GitHub release
+8. ✅ Trigger Docker builds via ci-cd.yml
+9. ✅ Create issue on failure
+
+**Schedule:** Runs daily after Dependabot (9 AM)  
+**Target Branch:** Always updates `develop` first, then merges to `main`  
+**Release Creation:** Automatic with changelog and Docker image links
+
+---
+
+### 3. Dependency Management (`dependency-management.yml`)
+
+**Triggers:** Weekly (Monday 9 AM UTC), Manual, package.json PRs  
+**Size:** 212 lines (7KB)  
+**Purpose:** Monitor and report on dependency health
+
+**Jobs:**
+1. **check-outdated** - List outdated packages with comparison table
+2. **test-with-updates** - Test with latest compatible updates (manual only)
+3. **dependency-review** - Security review on PRs (blocks GPL licenses)
+4. **update-dependency-dashboard** - Generate comprehensive dependency report
+
+**Dashboard Features:**
+- 🔴 Security vulnerability counts (Critical, High, Moderate, Low)
+- 📊 Outdated package table with update types
+- 🎯 Recommendations for addressing issues
+
+---
+
+## Comparison with Actual-sync
+
+### Features Adopted from Actual-sync ✅
+
+1. **Tag-based triggers** - `on.push.tags: ['v*']`
+2. **Multi-registry publishing** - Docker Hub + GHCR
+3. **Trivy security scanning** - With SARIF upload
+4. **Deployment testing** - Test published images
+5. **Docker Hub description updates** - Automated metadata sync
+6. **Consolidated Docker job** - Single unified publish job
+7. **Semantic version tags** - Version-specific tags on both registries
+
+### Features Kept from Original ✅
+
+1. **Fully automated @actual-app/api updates** - Zero manual intervention
+2. **Weekly dependency dashboards** - Comprehensive health monitoring
+3. **TypeScript type checking** - Full compilation validation
+4. **Tool coverage validation** - Verifies all 53 MCP tools registered
+5. **VERSION file** - Single source of truth for versioning
+
+---
+
+## Workflow Statistics
+
+| Metric | Before | After | Change |
+|--------|--------|-------|--------|
+| **Total Workflows** | 5 | 3 | -40% |
+| **Total Lines** | 1,359 | 1,082 | -20% |
+| **CI/CD Lines** | 702 | 656 | -7% |
+| **Docker Jobs** | 3 separate | 1 consolidated | -67% |
+| **Registries** | 1 (Docker Hub) | 2 (Hub + GHCR) | +100% |
+| **Security Scanning** | npm audit only | Trivy + npm audit | +100% |
+| **Deployment Testing** | None | Both registries | NEW |
+| **Tag Triggers** | No | Yes (`v*`) | NEW |
+
+---
+
+## Required Secrets
+
+### GitHub Secrets Configuration
+
+Add these secrets in **Settings → Secrets and variables → Actions**:
+
+1. **DOCKERHUB_USER** - Your Docker Hub username
+2. **DOCKERHUB_TOKEN** - Docker Hub Personal Access Token
+   - Generate at: https://hub.docker.com/settings/security
+   - Permissions: Read, Write, Delete
+3. **GITHUB_TOKEN** - Automatically provided by GitHub Actions (no setup needed)
+
+---
+
+## Monitoring & Troubleshooting
+
+### Check Workflow Status
+
+```bash
+# View all workflow runs
+gh run list --workflow=ci-cd.yml
+
+# View specific run details
+gh run view <run-id>
+
+# Watch live workflow
+gh run watch <run-id>
+```
+
+### Common Issues
+
+**Issue: Trivy scan fails**  
+**Solution:** This is non-blocking. Check Security tab for details. Common in development branches.
+
+**Issue: Docker Hub description update fails**  
+**Solution:** Verify `DOCKERHUB_TOKEN` has write permissions. This is non-blocking.
+
+**Issue: GHCR push fails**  
+**Solution:** Ensure `packages: write` permission is set in workflow. Check GitHub token permissions.
+
+**Issue: Deployment test fails**  
+**Solution:** Images may still be propagating. Retry workflow after 5 minutes.
+
+---
+
+## Next Steps
+
+### Recommended Enhancements (Future)
+
+1. **Automated changelog generation** - Use conventional commits
+2. **Release notes enhancement** - Include feature highlights
+3. **Performance benchmarking** - Track build times over releases
+4. **Artifact caching** - Speed up dependency installation
+5. **Parallel E2E tests** - Enable Playwright tests in CI
+
+---
+
+## Documentation
+
+- **Workflow Comparison**: See `docs/WORKFLOW_COMPARISON_ACTUAL_SYNC.md`
+- **Docker Descriptions**: `docker/description/short.md` and `long.md`
+- **Validation Script**: `docker/validate-docker-desc.sh`
+- **Project Overview**: `docs/PROJECT_OVERVIEW.md`
+
+---
+
+**Last Major Update:** December 12, 2025  
+**Optimization Phase:** Phase 2 - Consolidation & Enhancement Complete ✅
 
 ## Pipeline Architecture
 
