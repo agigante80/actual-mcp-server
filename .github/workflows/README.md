@@ -1,8 +1,36 @@
-# CI/CD Pipeline Documentation
+# GitHub Actions Workflows Documentation
 
 ## Overview
 
-This repository uses a comprehensive GitHub Actions workflow (`.github/workflows/ci-cd.yml`) that implements a modern, production-grade CI/CD pipeline tailored for the Node.js/TypeScript MCP server project.
+This directory contains 4 automated workflows that manage continuous integration, deployment, dependency updates, and releases for the Actual MCP Server project.
+
+**Last Updated:** December 12, 2025  
+**Total Workflows:** 4 (optimized from 5)  
+**Total Lines:** ~1,209 lines (reduced from 1,359)
+
+## Recent Optimizations (Dec 12, 2025)
+
+### Changes Made
+- ✅ **Deleted `docker-publish-on-release.yml`** (113 lines) - Complete duplicate of ci-cd.yml Docker jobs
+- ✅ **Removed `audit-security` job** from dependency-management.yml (38 lines) - Duplicate of ci-cd.yml security job
+- ✅ **Fixed job dependencies** - Removed broken references to deleted jobs
+- ✅ **Clearer separation of concerns** - Each workflow has distinct purpose
+
+### Impact
+- **Workflows:** 5 → 4 (20% reduction)
+- **Code:** 1,359 → 1,209 lines (11% reduction)
+- **Duplications:** 2 major duplications eliminated
+- **Maintainability:** Improved with single source of truth
+
+---
+
+## Active Workflows
+
+### 1. CI/CD Pipeline (`ci-cd.yml`)
+
+**Triggers:** Push to main/develop, Pull Requests, Manual  
+**Size:** 654 lines (24KB)  
+**Purpose:** Comprehensive build, test, security, and deployment pipeline
 
 ## Pipeline Architecture
 
