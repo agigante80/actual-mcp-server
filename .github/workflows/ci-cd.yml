@@ -478,7 +478,7 @@ jobs:
           echo "Short description: ${SHORT_DESC}"
 
       - name: 🐳 Update Docker Hub description
-        uses: peter-evans/dockerhub-description@v4
+        uses: peter-evans/dockerhub-description@v5
         with:
           username: ${{ secrets.DOCKERHUB_USER }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
