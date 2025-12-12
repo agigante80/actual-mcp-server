@@ -8,26 +8,18 @@ updates:
       interval: "daily"
       time: "09:00"
       timezone: "UTC"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 3
     
-    # Group updates for cleaner PR management
+    # Group updates for cleaner PR management (single group for all dependencies)
     groups:
-      production-dependencies:
+      all-dependencies:
         applies-to: version-updates
-        dependency-type: "production"
         update-types:
           - "minor"
           - "patch"
         # Exclude @actual-app/api (handled by dedicated workflow)
         exclude-patterns:
           - "@actual-app/api"
-      
-      development-dependencies:
-        applies-to: version-updates
-        dependency-type: "development"
-        update-types:
-          - "minor"
-          - "patch"
       
       # Security updates always get separate PRs for immediate review
       security-updates:

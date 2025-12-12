@@ -1,7 +1,7 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "MCP server providing 53 tools for AI-driven financial management with Actual Budget - includes comprehensive help docs, query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
