@@ -1,7 +1,7 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "MCP server providing 53 tools for AI-driven financial management with Actual Budget - includes comprehensive help docs, query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
@@ -25,7 +25,7 @@
     "release:patch": "npm run version:bump -- patch"
   },
   "dependencies": {
-    "@actual-app/api": "^25.11.0",
+    "@actual-app/api": "^25.12.0",
     "@jlongster/sql.js": "^1.6.7",
     "@librechat/api": "github:danny-avila/LibreChat#main",
     "@modelcontextprotocol/sdk": "^1.18.2",
