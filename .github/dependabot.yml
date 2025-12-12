@@ -1,33 +1,24 @@
 version: 2
 updates:
   # Enable version updates for npm
+  # Note: @actual-app/api updates are handled by dependency-update.yml workflow
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "daily"
       time: "09:00"
-      timezone: "America/New_York"
-    open-pull-requests-limit: 10
+      timezone: "UTC"
+    open-pull-requests-limit: 5
     
-    # Group minor and patch updates for cleaner PR management
+    # Group updates for cleaner PR management
     groups:
-      # Critical: @actual-app/api gets its own group for immediate updates
-      actual-api:
-        applies-to: version-updates
-        patterns:
-          - "@actual-app/api"
-        update-types:
-          - "major"
-          - "minor"
-          - "patch"
-      
       production-dependencies:
         applies-to: version-updates
         dependency-type: "production"
         update-types:
           - "minor"
           - "patch"
-        # Exclude @actual-app/api from this group
+        # Exclude @actual-app/api (handled by dedicated workflow)
         exclude-patterns:
           - "@actual-app/api"
       
@@ -38,43 +29,32 @@ updates:
           - "minor"
           - "patch"
       
-      # Keep security updates separate for immediate review
+      # Security updates always get separate PRs for immediate review
       security-updates:
         applies-to: security-updates
         patterns:
           - "*"
     
-    # Allow both direct and indirect dependencies
-    allow:
-      - dependency-type: "direct"
-      - dependency-type: "indirect"
-    
-    # Ignore major version updates that need manual review
+    # Ignore specific updates requiring manual review
     ignore:
-      # Express v5 requires significant migration
-      - dependency-name: "express"
-        update-types: ["version-update:semver-major"]
+      # @actual-app/api updates handled by dependency-update.yml workflow
+      - dependency-name: "@actual-app/api"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
     
     # Labels for PR categorization
     labels:
       - "dependencies"
       - "automated"
     
-    # Commit message prefix
-    commit-message:
-      prefix: "deps"
-      prefix-development: "deps-dev"
-      include: "scope"
-    
-    # Assign reviewers for dependency PRs
-    reviewers:
-      - "agigante80"
-    
-    # Commit message prefix
+    # Commit message conventions
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
       include: "scope"
+    
+    # Assign reviewer
+    reviewers:
+      - "agigante80"
   
   # Monitor GitHub Actions workflow dependencies
   - package-ecosystem: "github-actions"

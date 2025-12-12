@@ -1,0 +1,127 @@
+name: Dependency Update Check
+
+on:
+  schedule:
+    # Run daily at 1:00 AM UTC
+    - cron: '0 1 * * *'
+  workflow_dispatch: # Allow manual triggering
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-updates:
+    name: Check for Actual API Updates
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          
+      - name: Get current version
+        id: current
+        run: |
+          CURRENT=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current @actual-app/api version: $CURRENT"
+          
+      - name: Check latest version
+        id: latest
+        run: |
+          LATEST=$(npm show @actual-app/api version)
+          echo "version=$LATEST" >> $GITHUB_OUTPUT
+          echo "Latest @actual-app/api version: $LATEST"
+          
+      - name: Compare versions
+        id: compare
+        run: |
+          CURRENT="${{ steps.current.outputs.version }}"
+          LATEST="${{ steps.latest.outputs.version }}"
+          
+          if [ "$CURRENT" != "$LATEST" ]; then
+            echo "update_needed=true" >> $GITHUB_OUTPUT
+            echo "🔔 Update available: $CURRENT → $LATEST"
+          else
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "✅ Already on latest version: $CURRENT"
+          fi
+          
+      - name: Update package.json
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          npm install --package-lock-only @actual-app/api@^$LATEST
+          
+      - name: Get changelog
+        if: steps.compare.outputs.update_needed == 'true'
+        id: changelog
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          # Get package info including recent versions
+          CHANGELOG=$(npm show @actual-app/api@$LATEST --json | jq -r '.version + ": Released " + .time.modified')
+          echo "info=$CHANGELOG" >> $GITHUB_OUTPUT
+          
+      - name: Create Pull Request
+        if: steps.compare.outputs.update_needed == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "chore(deps): upgrade @actual-app/api to ${{ steps.latest.outputs.version }}"
+          branch: deps/actual-api-${{ steps.latest.outputs.version }}
+          delete-branch: true
+          title: "⬆️ Upgrade @actual-app/api to ${{ steps.latest.outputs.version }}"
+          body: |
+            ## 🔄 Dependency Update
+            
+            Automated update of `@actual-app/api` dependency.
+            
+            ### Changes
+            - **Current version:** `${{ steps.current.outputs.version }}`
+            - **New version:** `${{ steps.latest.outputs.version }}`
+            - **Package:** [@actual-app/api on npm](https://www.npmjs.com/package/@actual-app/api)
+            
+            ### Release Info
+            ${{ steps.changelog.outputs.info }}
+            
+            ### Testing Required
+            - [ ] Verify migration compatibility
+            - [ ] Test with existing budget files
+            - [ ] Run `npm test` to ensure tests pass
+            - [ ] Check all 49 MCP tools work correctly
+            
+            ### Auto-Release
+            Once merged to develop, the CI/CD pipeline will:
+            1. Run all tests and validations
+            2. Build and publish Docker images
+            3. Create a new release tag automatically
+            
+            ---
+            🤖 This PR was automatically created by the dependency update workflow.
+          labels: |
+            dependencies
+            automated
+            actual-api
+          reviewers: agigante80
+          
+      - name: Summary
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          echo "### ✅ Update PR Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **From:** ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **To:** ${{ steps.latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Review and merge the PR, then the CI/CD pipeline will handle the release." >> $GITHUB_STEP_SUMMARY
+          
+      - name: No update needed
+        if: steps.compare.outputs.update_needed == 'false'
+        run: |
+          echo "### ✅ Already Up to Date" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Current version ${{ steps.current.outputs.version }} is the latest." >> $GITHUB_STEP_SUMMARY
