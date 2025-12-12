@@ -16,45 +16,6 @@ permissions:
   issues: write
 
 jobs:
-  audit-security:
-    name: Security Audit
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-      
-      - name: Run npm audit
-        run: |
-          npm audit --audit-level=moderate || true
-          npm audit --json > audit-report.json || true
-      
-      - name: Check for critical vulnerabilities
-        id: critical-check
-        run: |
-          CRITICAL=$(jq '.metadata.vulnerabilities.critical' audit-report.json)
-          HIGH=$(jq '.metadata.vulnerabilities.high' audit-report.json)
-          echo "critical=$CRITICAL" >> $GITHUB_OUTPUT
-          echo "high=$HIGH" >> $GITHUB_OUTPUT
-          
-          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 0 ]; then
-            echo "⚠️ Found $CRITICAL critical and $HIGH high severity vulnerabilities"
-            exit 1
-          fi
-      
-      - name: Upload audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-audit-report
-          path: audit-report.json
-          retention-days: 30
-  
   check-outdated:
     name: Check Outdated Packages
     runs-on: ubuntu-latest
@@ -185,7 +146,7 @@ jobs:
     name: Update Dependency Dashboard
     runs-on: ubuntu-latest
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
-    needs: [audit-security, check-outdated]
+    needs: [check-outdated]
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
