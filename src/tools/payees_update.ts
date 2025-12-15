@@ -55,7 +55,7 @@ Example: Mark payee as transfer account:
       };
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const fieldErrors = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ');
+        const fieldErrors = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
         throw new Error(`Invalid payee update data: ${fieldErrors}`);
       }
       throw error;
