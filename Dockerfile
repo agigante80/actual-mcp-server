@@ -1,11 +1,11 @@
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci --production=false
 COPY . ./
 RUN npm run build
 
-FROM node:20-alpine AS runtime
+FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 # Accept VERSION as build argument and set as environment variable
@@ -23,5 +23,5 @@ RUN addgroup -S app && adduser -S app -G app
 USER app
 
 EXPOSE 3000
-# Use shell form to allow environment variable expansion
-CMD node dist/src/index.js ${MCP_TRANSPORT_MODE:---http}
+# Use exec form with sh to allow environment variable expansion and proper signal handling
+CMD ["sh", "-c", "node dist/src/index.js ${MCP_TRANSPORT_MODE:---http}"]
