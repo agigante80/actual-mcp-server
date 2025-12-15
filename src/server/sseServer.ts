@@ -90,7 +90,6 @@ export async function startSseServer(
       {
         name: serverDescription || 'actual-mcp-server',
         version: version || '0.1.0',
-        description: serverDescription || 'Actual MCP server',
       },
       serverOptions
     );

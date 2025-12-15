@@ -152,7 +152,7 @@ Example: {stage: "post", conditionsOp: "and", conditions: [{field: "imported_pay
       return { id: ruleId, success: true };
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const fieldErrors = error.errors.map(e => `${e.path.join('.')}: ${e.message}`).join('; ');
+        const fieldErrors = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
         throw new Error(`Invalid rule data: ${fieldErrors}`);
       }
       throw error;

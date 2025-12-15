@@ -50,7 +50,7 @@ export class ActualMCPConnection extends EventEmitter {
           name: tool.name,
           title: tool.name,
           description: tool.description,
-          inputSchema: tool.inputSchema ? zodToJsonSchema(tool.inputSchema) : { type: 'object' },
+          inputSchema: tool.inputSchema ? zodToJsonSchema(tool.inputSchema as any) : { type: 'object' },
         };
       });
     } catch (e) {

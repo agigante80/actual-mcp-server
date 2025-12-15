@@ -78,22 +78,22 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
         {
           name: ToolName.HELLO_WORLD,
           description: "A simple tool that returns a greeting",
-          inputSchema: zodToJsonSchema(HelloWorldSchema) as unknown,
+          inputSchema: zodToJsonSchema(HelloWorldSchema as any) as any,
         },
         {
           name: ToolName.GET_SERVER_INFO,
           description: "Get information about the server",
-          inputSchema: zodToJsonSchema(GetServerInfoSchema) as unknown,
+          inputSchema: zodToJsonSchema(GetServerInfoSchema as any) as any,
         },
         {
           name: ToolName.LONG_RUNNING_TEST,
           description: "A test tool that demonstrates long-running operations with progress updates",
-          inputSchema: zodToJsonSchema(LongRunningTestSchema) as unknown,
+          inputSchema: zodToJsonSchema(LongRunningTestSchema as any) as any,
         },
         {
           name: ToolName.SLOW_TEST,
           description: "A test tool that takes 10 minutes to complete and returns timing information",
-          inputSchema: zodToJsonSchema(SlowTestSchema) as unknown,
+          inputSchema: zodToJsonSchema(SlowTestSchema as any) as any,
         }
       ];
       
