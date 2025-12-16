@@ -38,8 +38,6 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
-    "@types/axios": "^0.9.36",
-    "@types/date-fns": "^2.5.3",
     "@types/express": "^5.0.3",
     "@types/google-protobuf": "^3.15.12",
     "@types/node": "^25.0.2",
