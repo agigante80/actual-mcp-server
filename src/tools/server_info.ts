@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import actualToolsManager from '../actualToolsManager.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -74,7 +75,7 @@ Use this to check server status, verify version compatibility, or debug issues.`
         },
       },
       tools: {
-        total: 43, // Update this when tools are added/removed
+        total: actualToolsManager.getToolNames().length,
       },
     };
   },

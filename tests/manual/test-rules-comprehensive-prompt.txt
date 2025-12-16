@@ -1,0 +1,196 @@
+I want you to systematically test all 51 Actual Budget MCP tools available to you. Follow these rules:
+
+**Preflight Assumptions:**
+- An Actual Budget file is already open and writable
+- MCP server is connected to a single budget (no budget switching required)
+- No other concurrent clients are mutating the budget
+- Currency is consistent (assume cents-based integer amounts unless specified)
+- Dates are interpreted in local budget timezone
+
+**Failure Definition:**
+A tool test is considered FAILED if:
+- The MCP tool returns an error, exception, or non-OK status
+- The response schema is missing required fields
+- Returned data contradicts expected effects (e.g., deleted item still listed)
+- IDs expected to be returned are null or missing
+
+**Testing Approach:**
+1. Test ONE tool at a time, sequentially - DO NOT test multiple tools in parallel unless explicitly requested
+2. WAIT for each tool's response before proceeding to the next tool
+3. Test tools AUTOMATICALLY one after another - DO NOT STOP - DO NOT wait for user confirmation
+4. NEVER ASK if user wants to continue - just continue automatically to the next tool
+5. ONLY STOP if a tool fails per the Failure Definition above - report the failure and wait for instructions
+6. Start with read-only/safe operations, then move to write operations
+7. Use realistic test data with clear naming (include timestamp: 2025-12-16)
+8. After each tool test, output exactly one line: [Phase X] tool_name — ✓ success OR [Phase X] tool_name — ✗ failure: <error summary>
+9. DO NOT provide explanatory text between tests - just the status line and continue to next tool
+10. Continue testing automatically until you hit a failure or complete all 51 tools
+
+**ID Handling Rules:**
+- Persist every returned ID immediately after creation
+- NEVER assume ordering or auto-selection of IDs
+- If an ID is missing, treat as failure
+- Explicitly reference stored IDs in all subsequent calls
+
+**Query Constraints:**
+- If a query fails due to unsupported SQL features:
+  - Report as "Unsupported by query engine" (✓ informational)
+  - Do NOT treat as MCP failure
+
+**Safety Rule:**
+If a destructive operation would affect non-test data:
+- Abort and report ✗ failure immediately
+
+**Testing Order:**
+
+**Phase 1 - Server & Read-Only (5 tools):**
+- actual_server_info (expect: server metadata, no error)
+- actual_accounts_list (expect: array possibly empty, no error)
+- actual_category_groups_get (expect: category groups array, no error)
+- actual_categories_get (expect: categories grouped or flat per API contract)
+- actual_payees_get (expect: payees array possibly empty, no error)
+
+**Phase 2 - Accounts (7 tools):**
+- actual_accounts_create (name: "Test-Account-2025-12-16") → Save account ID
+- actual_accounts_get_balance (use saved account ID)
+- actual_accounts_update (use saved ID, change name to "Test-Account-Updated")
+- actual_accounts_close (use saved ID)
+- actual_accounts_reopen (use saved ID)
+- actual_accounts_delete (use saved ID)
+- Verify with actual_accounts_list (confirm deletion)
+
+**Phase 3 - Category Groups & Categories (8 tools):**
+- actual_category_groups_create (name: "Test-Group-2025-12-16") → Save group ID
+- actual_category_groups_update (use saved ID, rename to "Test-Group-Updated")
+- actual_categories_create (name: "Test-Category-2025-12-16", use saved group ID) → Save category ID
+- actual_categories_update (use saved category ID, rename to "Test-Category-Updated")
+- actual_categories_delete (use saved category ID)
+- actual_category_groups_delete (use saved group ID)
+- Verify with actual_category_groups_get and actual_categories_get (confirm deletions)
+
+**Phase 4 - Payees (6 tools):**
+- actual_payees_create (name: "Test-Payee-2025-12-16") → Save payee1 ID
+- actual_payees_create (name: "Test-Payee-2-2025-12-16") → Save payee2 ID
+- actual_payees_update (use saved payee1 ID, rename to "Test-Payee-Updated")
+- actual_payee_rules_get (expect: rules array possibly empty)
+- actual_payees_merge (merge payee2 into payee1 using saved IDs)
+- actual_payees_delete (use saved payee1 ID)
+- Verify with actual_payees_get (confirm deletion)
+
+**Phase 5 - Rules (4 tools):**
+- actual_rules_get (expect: rules array possibly empty)
+- actual_rules_create (create test rule, requires existing payee/category) → Save rule ID
+- actual_rules_update (use saved rule ID, modify conditions or actions)
+- actual_rules_delete (use saved rule ID)
+
+**Phase 6 - Transactions (11 tools):**
+- actual_transactions_create (expense: -5000 cents in saved account) → Save transaction1 ID
+- actual_transactions_create (income: 10000 cents in saved account) → Save transaction2 ID
+- actual_transactions_get (use saved transaction1 ID)
+- actual_transactions_filter (filter by saved account ID)
+- actual_transactions_update (use saved transaction1 ID, change amount or notes)
+- actual_transactions_search_by_amount (search for amounts around -5000 cents)
+- actual_transactions_search_by_category (search using existing category)
+- actual_transactions_search_by_month (search month: 2025-12)
+- actual_transactions_search_by_payee (search using existing payee)
+- actual_transactions_import (empty array - expect no-op success OR validation error, both acceptable)
+- actual_transactions_delete (use saved transaction IDs)
+
+**Phase 7 - Transaction Summaries (2 tools):**
+- actual_transactions_summary_by_category
+- actual_transactions_summary_by_payee
+
+**Phase 8 - Budgets (9 tools):**
+- actual_budgets_get_all (expect: budget data for all months)
+- actual_budgets_getMonth (current month: 2025-12)
+- actual_budgets_getMonths (get 3 months: 2025-10, 2025-11, 2025-12)
+- actual_budgets_setAmount (set budget 50000 cents for existing category)
+- actual_budgets_setCarryover (enable carryover for same category)
+- actual_budgets_holdForNextMonth (hold 10000 cents for same category)
+- actual_budgets_resetHold (reset the hold for same category)
+- actual_budgets_transfer (transfer budget between two existing categories - create temp category if needed)
+- actual_budgets_updates_batch (update multiple budgets at once using existing categories)
+
+**Phase 9 - Advanced Query & Sync (2 tools):**
+- actual_bank_sync (use saved account ID)
+  * If no bank connection exists: Report "Skipped (no bank connection)" as ✓ success
+  * Do NOT treat missing bank connection as failure
+- actual_query_run - Test with these queries (if unsupported SQL features cause errors, report as ✓ informational):
+  1. "SELECT COUNT(*) as total_transactions FROM transactions WHERE date >= '2025-01-01'" (simple count)
+  2. "SELECT account, COUNT(*) as count, SUM(amount) as total FROM transactions GROUP BY account LIMIT 10" (basic aggregation)
+  3. "SELECT payee, amount, date FROM transactions WHERE amount < 0 ORDER BY amount ASC LIMIT 5" (simple filter and sort)
+
+**Phase 10 - Session Management (2 tools):**
+- actual_session_list (expect: current session info with totalSessions, activeSessions, maxConcurrent)
+- actual_session_close (optional sessionId parameter - test closing oldest idle session)
+  * Note: May return error if only 1 active session (won't close current session)
+  * If error about current session, report as ✓ informational (expected behavior)
+
+**Phase 11 - Concurrency Test (ONLY if explicitly requested):**
+- NOTE: By default, skip this phase and test sequentially
+- If user requests concurrency testing, create 10 transactions simultaneously using actual_transactions_create
+  * Use Promise.all() or make 10 rapid consecutive calls
+  * Test different amounts: -1000, -2000, -3000, -4000, -5000, -6000, -7000, -8000, -9000, -10000 (cents)
+  * All in the same test account
+  * Verify all 10 were created successfully
+  * This tests the write queue and concurrency handling
+
+**Phase 12 - Cleanup (Non-Blocking):**
+- Attempt to delete all test data created (accounts, categories, payees, transactions, rules)
+- If a cleanup operation fails:
+  * Report it as informational
+  * Continue with remaining cleanup attempts
+  * Do NOT mark overall test as failed
+- Verify cleanup with list commands (expect test items removed)
+
+**After completing all tests, provide:**
+1. Total tools tested: X/51 (51 tools available)
+2. Successful: X (✓)
+3. Failed: X (✗) with error details
+4. Informational: X (unsupported features, skipped operations)
+5. Concurrency test result: Skipped (or Created X/10 transactions if requested)
+6. Tools that might need special attention
+7. Any patterns or issues observed
+8. Complete list of all saved IDs for reference
+
+**Output Format:**
+Use this exact format for each tool:
+[Phase X] tool_name — ✓ success
+[Phase X] tool_name — ✗ failure: error message
+[Phase X] tool_name — ℹ informational: reason
+
+Ready? Start testing automatically with Phase 1, Tool 1: actual_server_info
+
+**CRITICAL INSTRUCTIONS FOR TOOL EXECUTION:**
+- You have direct access to 51 Actual Budget MCP tools via the MCP protocol
+- DO NOT use actual_query_run to call other tools
+- Call each tool directly using its proper MCP tool interface
+- For example, to call actual_rules_help, invoke the MCP tool "actual_rules_help" with parameter {"topic": "all"}
+- Each tool is a separate MCP tool that can be invoked directly
+- The tools are NOT SQL queries - they are MCP protocol tools
+
+**AUTOMATED TESTING MODE - NO INTERRUPTIONS:**
+- This is an AUTOMATED test run - complete ALL 51 tools in one continuous session
+- DO NOT STOP after successful tools - immediately proceed to the next tool
+- DO NOT ask "Would you like me to continue?" - just continue
+- DO NOT provide detailed explanations - just status lines and continue
+- Test ONE tool at a time, wait for response, output status line, immediately test next tool
+- ONLY STOP on failure (as defined in Failure Definition section)
+- Your goal: test all 51 tools without any breaks or confirmations
+
+**CRITICAL: STRICTLY SEQUENTIAL EXECUTION:**
+- NEVER call multiple tools in parallel
+- NEVER make concurrent tool requests
+- ALWAYS wait for the previous tool to complete before calling the next one
+- This is MANDATORY - parallel calls will cause server failures
+- If you detect you're about to make parallel calls, STOP and do them one by one instead
+
+**ABSOLUTELY CRITICAL - DO NOT SIMULATE:**
+- DO NOT just write the output lines without calling tools
+- DO NOT generate fake success messages
+- You MUST actually invoke each MCP tool and wait for the real response
+- Only report success/failure AFTER receiving the actual tool response
+- If you find yourself writing "[Phase X] tool_name — ✓ success" without having called the tool, STOP
+- Every status line MUST be based on an actual tool invocation and response
+
+**START NOW: Actually invoke the MCP tool "actual_server_info" with no parameters and wait for the response before proceeding.**
