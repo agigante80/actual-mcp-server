@@ -2,7 +2,7 @@
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
   "version": "0.2.4",
-  "description": "MCP server providing 53 tools for AI-driven financial management with Actual Budget - includes comprehensive help docs, query, bank sync, and multi-budget support",
+  "description": "MCP server providing 49 tools for AI-driven financial management with Actual Budget - query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
@@ -34,7 +34,14 @@
     "express": "^4.21.2",
     "mitt": "^3.0.1",
     "winston": "^3.18.3",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "3.25.76"
+  },
+  "overrides": {
+    "zod": "3.25.76"
+  },
+  "comments": {
+    "zod-version": "CRITICAL: Must use Zod 3.x. Zod 4.x breaks zod-to-json-schema causing LibreChat validation to fail. See docs/ZOD_VERSION_CONSTRAINT.md"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",

@@ -11,7 +11,7 @@ import {
 import logger from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
-import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual } from '../actualConnection.js';
+import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
 import observability from '../observability.js';
 import config from '../config.js';
 
@@ -121,11 +121,17 @@ export async function startHttpServer(
       const tools = toolsList.map((name: string) => {
         const schemaFromParam = toolSchemas && toolSchemas[name];
   const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
-        const schema = schemaFromParam || schemaFromManager || {};
+        const schema = schemaFromParam || schemaFromManager;
+        
+        // Ensure inputSchema is a valid JSON Schema object with required properties
+        const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
+          ? schema
+          : { type: 'object', properties: {}, additionalProperties: false };
+        
         return {
           name,
           description: `Tool ${name}`,
-          inputSchema: schema || {},
+          inputSchema,
         };
       });
       return { tools };
@@ -179,6 +185,27 @@ export async function startHttpServer(
             jsonrpc: '2.0',
             id: payload?.id ?? null,
             error: { code: -32000, message: 'Missing session id; only initialize allowed' },
+          });
+          return;
+        }
+
+        // Check if we can accept a new session (concurrent limit)
+        if (!canAcceptNewSession()) {
+          const stats = getConnectionState().connectionPool;
+          const errorMsg = `Max concurrent sessions (${stats?.maxConcurrent}) reached. Active: ${stats?.activeSessions}. Please close existing sessions or wait for idle sessions to timeout (10 minutes).`;
+          logger.warn(`[SESSION] Rejecting new session: ${errorMsg}`);
+          res.status(503).json({
+            jsonrpc: '2.0',
+            id: payload?.id ?? null,
+            error: { 
+              code: -32000, 
+              message: errorMsg,
+              data: {
+                maxConcurrent: stats?.maxConcurrent,
+                activeSessions: stats?.activeSessions,
+                availableSlots: (stats?.maxConcurrent ?? 0) - (stats?.activeSessions ?? 0)
+              }
+            },
           });
           return;
         }
@@ -301,7 +328,14 @@ export async function startHttpServer(
 
   app.get('/health', (_req, res) => {
     const state = getConnectionState();
-    res.json({ status: state.initialized ? 'ok' : 'not-initialized', ...state, transport: 'streamable-http', activeSessions: transports.size });
+    const poolStats = state.connectionPool || null;
+    res.json({ 
+      status: state.initialized ? 'ok' : 'not-initialized', 
+      ...state, 
+      transport: 'streamable-http', 
+      activeSessions: transports.size,
+      connectionPool: poolStats
+    });
   });
 
   app.get('/metrics', async (_req, res) => {

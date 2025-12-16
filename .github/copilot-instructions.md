@@ -6,7 +6,7 @@
 
 **Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
 
-**Current Status**: Production-ready, 49 tools implemented (6 search/summary tools recently discovered), 78% Actual Budget API coverage
+**Current Status**: Production-ready, 49 tools implemented, 82% Actual Budget API coverage
 
 ## Architecture Essentials
 
@@ -67,7 +67,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (49 tools, 43 in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (49 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── lib/
 │   ├── actual-adapter.ts       # ⚠️ CRITICAL: withActualApi wrapper, retry logic
 │   ├── ActualMCPConnection.ts  # MCP protocol implementation (EventEmitter-based)
@@ -78,7 +78,7 @@ src/
 ├── server/
 │   ├── httpServer.ts           # HTTP transport (recommended for LibreChat)
 │   └── sseServer.ts            # SSE transport (LibreChat header limitation)
-└── tools/                      # 49 tool definitions (see actualToolsManager.ts)
+└── tools/                      # 53 tool definitions (see actualToolsManager.ts)
 ```
 
 ## Development Workflow
@@ -97,7 +97,7 @@ npm run test:e2e                # Playwright E2E tests (initialize → tools/cal
 
 # Tool Management
 npm run generate-tools          # Auto-generate tool definitions from Actual API
-npm run verify-tools            # Verify all 49 tools are correctly registered
+npm run verify-tools            # Verify all 53 tools are correctly registered
 ```
 
 ### Pre-Commit Testing Policy
@@ -127,6 +127,42 @@ docker compose --profile fullstack up
 ```
 
 Default ports: HTTP (3000), Nginx proxy (3600), Actual Budget (5006)
+
+## Critical Dependency Constraints
+
+### Zod Version MUST Be 3.x
+
+**⚠️ DO NOT upgrade Zod to 4.x under any circumstances!**
+
+**Problem**: Zod 4.x has breaking internal changes:
+- Removed `typeName` property from schema `_def` objects
+- Changed internal schema structure from `{ typeName, ...}` to `{ type, ...}`
+- This breaks `zod-to-json-schema@3.25.0` which relies on `typeName` to determine schema type
+- Result: `zodToJsonSchema()` returns only `{"$schema": "..."}` without type/properties
+- LibreChat's Zod validation rejects these incomplete schemas: "invalid_literal, expected: object"
+- **All 53 tools become invisible to LibreChat**
+
+**Solution Implemented**:
+1. `package.json`: `"zod": "3.25.76"` (exact version, no caret)
+2. `package.json`: `"overrides": { "zod": "3.25.76" }` (force all dependencies)
+3. `Dockerfile`: Post-install step removes Zod 4.x and reinstalls 3.25.76
+4. `renovate.json`: Should pin Zod to 3.x range
+
+**When Dependabot/Renovate Suggests Zod 4.x**:
+1. **REJECT the PR immediately**
+2. Add comment: "Zod 4.x breaks zod-to-json-schema compatibility. See docs/ZOD_VERSION_CONSTRAINT.md"
+3. Update pin rules if needed
+
+**Testing After Any Dependency Update**:
+```bash
+# Verify Zod version in container
+docker exec <container> cat /app/node_modules/zod/package.json | grep version
+# Must show "3.25.76" or "3.25.x" (NOT 4.x)
+
+# Test schema conversion
+node -e "(async()=>{const{z}=await import('zod');const{zodToJsonSchema}=await import('zod-to-json-schema');console.log(JSON.stringify(zodToJsonSchema(z.object({id:z.string()})),null,2));})()"
+# Must show full schema with type, properties, NOT just $schema
+```
 
 ## Common Patterns & Gotchas
 
@@ -277,7 +313,7 @@ Located in `src/tests_adapter_runner.ts`:
 # Test Actual connection only
 npm run dev -- --test-actual-connection
 
-# Test all 49 tools
+# Test all 53 tools
 npm run dev -- --test-actual-tools
 ```
 
