@@ -1,5 +1,7 @@
 FROM node:22-alpine AS build
 WORKDIR /app
+# Upgrade npm to latest version to fix security vulnerabilities in npm's dependencies
+RUN npm install -g npm@latest
 COPY package.json package-lock.json* ./
 RUN npm ci --production=false
 COPY . ./
@@ -7,6 +9,8 @@ RUN npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
+# Upgrade npm to latest version to fix security vulnerabilities in npm's dependencies
+RUN npm install -g npm@latest
 ENV NODE_ENV=production
 # Accept VERSION as build argument and set as environment variable
 ARG VERSION=unknown
