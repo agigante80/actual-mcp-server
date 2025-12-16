@@ -162,6 +162,11 @@ jobs:
           npm audit --audit-level=high || echo "⚠️ Vulnerabilities found, but continuing..."
 
       - name: 🧪 Run unit smoke tests
+        env:
+          # Dummy credentials for smoke tests (don't connect to actual server)
+          ACTUAL_SERVER_URL: http://localhost:5006
+          ACTUAL_PASSWORD: dummy-password-for-tests
+          ACTUAL_BUDGET_SYNC_ID: 00000000-0000-0000-0000-000000000000
         run: node tests/unit/generated_tools.smoke.test.js
 
       - name: 📋 Test summary
