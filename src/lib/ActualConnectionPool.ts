@@ -36,12 +36,12 @@ class ActualConnectionPool {
   private sharedConnection: ActualConnection | null = null;
 
   constructor() {
-    // Read from environment variable or default to 3
+    // Read from environment variable or default to 15
     // @actual-app/api is a singleton, so concurrent sessions cause conflicts
-    this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '3', 10);
+    this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '15', 10);
     
     // Configurable idle timeout (in minutes)
-    const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '2', 10);
+    const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '5', 10);
     this.IDLE_TIMEOUT = idleTimeoutMinutes * 60 * 1000;
     
     // Cleanup runs at half the idle timeout (or 2 minutes minimum)
