@@ -55,22 +55,43 @@ Once stable (1.0.0+):
 
 | Stage | Version Example | Description | Use Case |
 |-------|----------------|-------------|----------|
-| **Current Dev** | `0.1.0` | Pre-1.0 development | Active development |
-| **Dev Build** | `0.1.0-dev-abcdef7` | Includes commit hash | Feature branch testing |
-| **Docker Latest** | `latest` → `0.1.0` | Current stable dev version | Production testing |
-| **Docker Dev** | `development` | Latest from develop branch | Bleeding edge |
+| **Current Dev** | `0.2.4` | Pre-1.0 development | Active development |
+| **Dev Build** | `0.2.4-dev-abcdef7` | Includes commit hash | Feature branch testing |
+| **Docker Latest** | `latest` → `1.0.0` | **Only from main branch** | Production releases |
+| **Docker Dev** | `development` / `develop` | Latest from develop branch | Bleeding edge testing |
 | **Future Stable** | `1.0.0` | First stable release | Production ready |
 
 ## Docker Image Tagging Strategy
 
-Current implementation:
+### Current Implementation
+
 ```yaml
-# Docker Hub & GHCR tags
-agigante80/actual-mcp-server:latest          # Current stable (0.1.0)
-agigante80/actual-mcp-server:development     # Latest develop branch
-agigante80/actual-mcp-server:0.1.0          # Specific version (future)
-agigante80/actual-mcp-server:0.1.0-dev-abc1234  # Version + commit (future)
+# Docker Hub & GHCR - Branch-based tagging
+agigante80/actual-mcp-server:latest          # ✅ ONLY from main branch (stable)
+agigante80/actual-mcp-server:main            # Latest main branch build
+agigante80/actual-mcp-server:develop         # Latest develop branch build  
+agigante80/actual-mcp-server:development     # Alias for develop branch
+agigante80/actual-mcp-server:0.2.4           # Specific version tag
+agigante80/actual-mcp-server:0.2.4-dev-abc1234  # Version + commit (future)
 ```
+
+### Tagging Rules
+
+**`main` branch builds:**
+- `:latest` ✅ (stable release)
+- `:main` ✅ (branch tracking)
+- `:X.Y.Z` ✅ (version number from VERSION file)
+
+**`develop` branch builds:**
+- `:develop` ✅ (branch tracking)
+- `:development` ✅ (alias)
+- `:X.Y.Z` ✅ (version number from VERSION file)
+- `:latest` ❌ (NEVER - reserved for main only)
+
+**Tagged releases (e.g., `v1.0.0`):**
+- `:latest` ✅ (marks as stable)
+- `:X.Y.Z` ✅ (version number)
+- `:main` ❌ (no branch tag for version tags)
 
 ## Conventional Commits for Actual MCP Server
 
