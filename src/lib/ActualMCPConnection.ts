@@ -97,11 +97,8 @@ export class ActualMCPConnection extends EventEmitter {
   async executeTool(toolName: string, params: unknown) {
     // If actualToolsManager is not ready, support demo tools
     if (actualToolsManager && typeof actualToolsManager.callTool === 'function') {
-      try {
-        return await actualToolsManager.callTool(toolName, params);
-      } catch (e) {
-        // fallback to demo
-      }
+      // Call the tool - let errors propagate to client
+      return await actualToolsManager.callTool(toolName, params);
     }
     switch (toolName) {
       case 'search.docs': {

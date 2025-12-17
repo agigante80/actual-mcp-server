@@ -71,7 +71,26 @@ jobs:
       - name: 📝 Extract version
         id: version
         run: |
-          VERSION=$(cat VERSION | tr -d '\n')
+          BASE_VERSION=$(cat VERSION | tr -d '\n')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          # Add development metadata for non-main branches
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]] || [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
+            VERSION="${BASE_VERSION}-dev-${SHORT_SHA}"
+            echo "🔨 This is a development build"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            VERSION="${BASE_VERSION}"
+            echo "🚀 This is a stable release from main"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${BASE_VERSION}"
+            echo "🏷️ This is a tagged release"
+          else
+            # Feature branches or other branches
+            BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g')
+            VERSION="${BASE_VERSION}-${BRANCH_NAME}-${SHORT_SHA}"
+            echo "🌿 This is a feature branch build"
+          fi
+          
           # Docker doesn't allow + in tags, replace with -
           DOCKER_VERSION="${VERSION//+/-}"
           
@@ -80,13 +99,11 @@ jobs:
           echo "📦 Semver version: $VERSION"
           echo "🐳 Docker version: $DOCKER_VERSION"
           
-          # Determine if this is a stable release
+          # Determine if this is a stable release (no pre-release metadata)
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "is_release=true" >> $GITHUB_OUTPUT
-            echo "🚀 This is a stable release"
           else
             echo "is_release=false" >> $GITHUB_OUTPUT
-            echo "🔨 This is a development build"
           fi
 
       - name: 📊 Display version info
@@ -162,6 +179,11 @@ jobs:
           npm audit --audit-level=high || echo "⚠️ Vulnerabilities found, but continuing..."
 
       - name: 🧪 Run unit smoke tests
+        env:
+          # Dummy credentials for smoke tests (don't connect to actual server)
+          ACTUAL_SERVER_URL: http://localhost:5006
+          ACTUAL_PASSWORD: dummy-password-for-tests
+          ACTUAL_BUDGET_SYNC_ID: 00000000-0000-0000-0000-000000000000
         run: node tests/unit/generated_tools.smoke.test.js
 
       - name: 📋 Test summary
@@ -342,7 +364,9 @@ jobs:
         run: |
           DOCKER_VERSION="${{ needs.version.outputs.docker_version }}"
           DOCKER_HUB_IMAGE="${{ env.DOCKER_IMAGE_NAME }}"
-          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}"
+          # Extract just the repository name (after /) for GHCR
+          REPO_NAME="${DOCKER_HUB_IMAGE##*/}"
+          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${REPO_NAME}"
           
           # Base tags (using Docker-safe version)
           TAGS="${DOCKER_HUB_IMAGE}:${DOCKER_VERSION},${GHCR_IMAGE}:${DOCKER_VERSION}"
@@ -353,12 +377,14 @@ jobs:
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:latest,${GHCR_IMAGE}:latest"
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:develop,${GHCR_IMAGE}:develop"
+            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:development,${GHCR_IMAGE}:development"
           elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:development,${GHCR_IMAGE}:development"
           fi
           
-          # Add latest tag for version tag releases
-          if [[ "${{ needs.version.outputs.is_release }}" == "true" ]]; then
+          # Add latest tag ONLY for tagged releases (e.g., v1.0.0)
+          # NOT for branch builds, even if version is clean semver
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:latest,${GHCR_IMAGE}:latest"
           fi
           
@@ -521,12 +547,15 @@ jobs:
       - name: 🧪 Test GHCR image
         run: |
           echo "Pulling image from GHCR..."
-          docker pull ghcr.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ needs.version.outputs.docker_version }}
+          # Extract repo name without Docker Hub username prefix
+          REPO_NAME="${{ env.DOCKER_IMAGE_NAME }}"
+          REPO_NAME="${REPO_NAME##*/}"
+          docker pull ghcr.io/${{ github.repository_owner }}/${REPO_NAME}:${{ needs.version.outputs.docker_version }}
           
           echo "Testing image..."
           docker run --rm \
             -e VERSION=${{ needs.version.outputs.version }} \
-            ghcr.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ needs.version.outputs.docker_version }} \
+            ghcr.io/${{ github.repository_owner }}/${REPO_NAME}:${{ needs.version.outputs.docker_version }} \
             node --version
           
           echo "✅ GHCR image is working"
@@ -594,7 +623,7 @@ jobs:
             docker pull ${{ env.DOCKER_IMAGE_NAME }}:${{ needs.version.outputs.docker_version }}
             
             # GitHub Container Registry
-            docker pull ghcr.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}:${{ needs.version.outputs.docker_version }}
+            docker pull ghcr.io/${{ github.repository_owner }}/actual-mcp-server:${{ needs.version.outputs.docker_version }}
             ```
             
             ### 📝 Changelog

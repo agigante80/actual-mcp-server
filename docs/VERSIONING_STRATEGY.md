@@ -6,30 +6,32 @@ This document outlines the comprehensive semantic versioning strategy with autom
 
 ## Current Implementation Status
 
-**Version:** 0.1.0
-**Last Updated:** December 11, 2025
+**Version:** 0.2.4
+**Last Updated:** December 17, 2025
 
 ### ✅ Already Implemented
 - Semantic versioning in package.json
+- VERSION file with base version
+- Development build versioning with commit hashes (e.g., `0.2.4-dev-abc1234`)
 - GitHub Actions for Docker builds
-- Docker image tagging (latest, development)
+- Docker image tagging (latest, development, main, develop)
+- Branch-specific version metadata (main, develop, feature branches)
 - Manual version management
 
 ### 🚧 To Be Implemented
 - Automated version bumping
 - Conventional commits enforcement
-- Pre-release workflow
+- Pre-release workflow (beta, rc)
 - CHANGELOG generation
-- VERSION file
 
-## Recommended Implementation Plan
+## Implementation Plan
 
-Given that Actual MCP Server is currently in **active development (0.1.0)**, we recommend:
+Given that Actual MCP Server is currently in **active development (0.2.4)**:
 
-1. **Phase 1** (Immediate): Create VERSION file, sync with package.json
-2. **Phase 2** (Pre-1.0): Implement development build versioning with commit hashes
-3. **Phase 3** (Pre-1.0): Add conventional commits and automated changelog
-4. **Phase 4** (1.0 release): Implement full automated release workflow
+1. **Phase 1** ✅ COMPLETE: VERSION file, development build versioning with commit hashes
+2. **Phase 2** (Next): Conventional commits enforcement and PR validation
+3. **Phase 3** (Pre-1.0): Automated CHANGELOG generation
+4. **Phase 4** (1.0 release): Automated version bumping and release workflow
 
 ## Version Format
 
@@ -55,22 +57,43 @@ Once stable (1.0.0+):
 
 | Stage | Version Example | Description | Use Case |
 |-------|----------------|-------------|----------|
-| **Current Dev** | `0.1.0` | Pre-1.0 development | Active development |
-| **Dev Build** | `0.1.0-dev-abcdef7` | Includes commit hash | Feature branch testing |
-| **Docker Latest** | `latest` → `0.1.0` | Current stable dev version | Production testing |
-| **Docker Dev** | `development` | Latest from develop branch | Bleeding edge |
+| **Current Dev** | `0.2.4` | Pre-1.0 development | Active development |
+| **Dev Build** | `0.2.4-dev-abcdef7` | Includes commit hash | Feature branch testing |
+| **Docker Latest** | `latest` → `1.0.0` | **Only from main branch** | Production releases |
+| **Docker Dev** | `development` / `develop` | Latest from develop branch | Bleeding edge testing |
 | **Future Stable** | `1.0.0` | First stable release | Production ready |
 
 ## Docker Image Tagging Strategy
 
-Current implementation:
+### Current Implementation
+
 ```yaml
-# Docker Hub & GHCR tags
-agigante80/actual-mcp-server:latest          # Current stable (0.1.0)
-agigante80/actual-mcp-server:development     # Latest develop branch
-agigante80/actual-mcp-server:0.1.0          # Specific version (future)
-agigante80/actual-mcp-server:0.1.0-dev-abc1234  # Version + commit (future)
+# Docker Hub & GHCR - Branch-based tagging
+agigante80/actual-mcp-server:latest          # ✅ ONLY from main branch (stable)
+agigante80/actual-mcp-server:main            # Latest main branch build
+agigante80/actual-mcp-server:develop         # Latest develop branch build  
+agigante80/actual-mcp-server:development     # Alias for develop branch
+agigante80/actual-mcp-server:0.2.4           # Specific version tag
+agigante80/actual-mcp-server:0.2.4-dev-abc1234  # Version + commit (future)
 ```
+
+### Tagging Rules
+
+**`main` branch builds:**
+- `:latest` ✅ (stable release)
+- `:main` ✅ (branch tracking)
+- `:X.Y.Z` ✅ (version number from VERSION file)
+
+**`develop` branch builds:**
+- `:develop` ✅ (branch tracking)
+- `:development` ✅ (alias)
+- `:X.Y.Z` ✅ (version number from VERSION file)
+- `:latest` ❌ (NEVER - reserved for main only)
+
+**Tagged releases (e.g., `v1.0.0`):**
+- `:latest` ✅ (marks as stable)
+- `:X.Y.Z` ✅ (version number)
+- `:main` ❌ (no branch tag for version tags)
 
 ## Conventional Commits for Actual MCP Server
 

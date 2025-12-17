@@ -29,11 +29,20 @@ console.log('Running generated tools smoke tests');
     createRule: 'rule-new',
     deleteRule: null,
     updateRule: null,
-    getBudgetMonths: ['2025-10'],
-    getBudgetMonth: { month: '2025-10', categories: [
-      { categoryId: 'cat_1', amount: 1000 },
-      { categoryId: 'cat_2', amount: 500 }
-    ] },
+    getBudgetMonths: ['2025-12'],
+    getBudgetMonth: { 
+      month: '2025-12', 
+      categoryGroups: [
+        { 
+          id: 'grp_1', 
+          name: 'Test Group',
+          categories: [
+            { id: 'cat_1', name: 'Category 1', budgeted: 1000 },
+            { id: 'cat_2', name: 'Category 2', budgeted: 500 }
+          ]
+        }
+      ]
+    },
     setBudgetAmount: null,
     setBudgetCarryover: null,
     holdBudgetForNextMonth: null,
@@ -81,7 +90,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('accounts_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_close')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_reopen')) inputExample.id = '00000000-0000-0000-0000-000000000001';
-  if (name.includes('categories_create')) inputExample.name = 'Food';
+  if (name.includes('categories_create')) inputExample.name = 'Food', inputExample.group_id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('categories_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('categories_update')) inputExample.id = 'cat_1', inputExample.fields = { name: 'Updated' };
   if (name.includes('category_groups_create')) inputExample.name = 'Expenses';
@@ -95,13 +104,13 @@ console.log('Running generated tools smoke tests');
   if (name.includes('rules_create')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_delete')) inputExample.id = 'rule_1';
   if (name.includes('rules_update')) inputExample.id = 'rule_1', inputExample.fields = { conditions: [] };
-  if (name.includes('budgets_setAmount')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1', inputExample.amount = 100;
-  if (name.includes('budgets_getMonth')) inputExample.month = '2025-10';
-  if (name.includes('budget_updates_batch')) inputExample.operations = [{ month: '2025-10', categoryId: 'cat_1', amount: 100 }];
-  if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1';
-  if (name.includes('budgets_resetHold')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1';
-  if (name.includes('budgets_setCarryover')) inputExample.month = '2025-10', inputExample.categoryId = 'cat_1', inputExample.flag = true;
-  if (name.includes('budgets_transfer')) inputExample.month = '2025-10', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
+  if (name.includes('budgets_setAmount')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.amount = 100;
+  if (name.includes('budgets_getMonth')) inputExample.month = '2025-12';
+  if (name.includes('budget_updates_batch')) inputExample.operations = [{ month: '2025-12', categoryId: 'cat_1', amount: 100 }];
+  if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1';
+  if (name.includes('budgets_resetHold')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1';
+  if (name.includes('budgets_setCarryover')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.flag = true;
+  if (name.includes('budgets_transfer')) inputExample.month = '2025-12', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
   if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
   if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
 
@@ -127,4 +136,5 @@ console.log('Running generated tools smoke tests');
   }
 
   console.log('All generated tool smoke tests passed');
+  process.exit(0);
 })();

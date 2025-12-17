@@ -4,6 +4,12 @@ WORKDIR /app
 RUN npm install -g npm@latest
 COPY package.json package-lock.json* ./
 RUN npm ci --production=false
+# CRITICAL FIX: Force Zod 3.x (DO NOT REMOVE)
+# Problem: npm chooses Zod 4.x for @modelcontextprotocol/sdk peer dependency (^3.25 || ^4.0)
+# Impact: Zod 4.x breaks zod-to-json-schema, causing LibreChat to detect 0 tools instead of 53
+# Solution: Remove npm's choice and force install Zod 3.25.76
+# See: docs/ZOD_VERSION_CONSTRAINT.md for full details
+RUN rm -rf node_modules/zod && npm install --no-save zod@3.25.76
 COPY . ./
 RUN npm run build
 
@@ -26,6 +32,12 @@ COPY --from=build /app/src/lib ./src/lib
 RUN addgroup -S app && adduser -S app -G app
 USER app
 
-EXPOSE 3000
+EXPOSE 3000 3600
+
+# Healthcheck: Verify the MCP server is responding
+# Use $MCP_BRIDGE_PORT if set, otherwise default to 3600 (HTTP mode default)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+  CMD wget --quiet --tries=1 --spider http://localhost:${MCP_BRIDGE_PORT:-3600}/health || exit 1
+
 # Use exec form with sh to allow environment variable expansion and proper signal handling
 CMD ["sh", "-c", "node dist/src/index.js ${MCP_TRANSPORT_MODE:---http}"]

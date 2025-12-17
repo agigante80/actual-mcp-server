@@ -24,6 +24,14 @@
   },
   "packageRules": [
     {
+      "description": "CRITICAL: Block Zod 4.x - breaks zod-to-json-schema compatibility",
+      "matchPackageNames": ["zod"],
+      "allowedVersions": ">=3.25.0 <4.0.0",
+      "matchUpdateTypes": ["major"],
+      "enabled": false,
+      "labels": ["blocked", "zod-constraint"]
+    },
+    {
       "description": "Auto-merge patch updates after CI passes",
       "matchUpdateTypes": ["patch", "pin", "digest"],
       "automerge": true,
