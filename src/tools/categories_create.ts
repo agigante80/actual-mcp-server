@@ -7,7 +7,7 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 const InputSchema = z.object({ 
   name: CommonSchemas.name, 
   group_id: CommonSchemas.categoryGroupId,
-  is_income: z.boolean().optional(),
+  is_income: z.boolean().nullable().optional(),
 }).passthrough(); // Allow other fields to pass through
 
 // RESPONSE_TYPE: string
@@ -21,6 +21,7 @@ const tool: ToolDefinition = {
     const input = InputSchema.parse(args || {});
     try {
       // Input already has correct field names (group_id, is_income)
+      // Convert null to false (LibreChat sometimes sends null instead of undefined)
       const normalizedInput = {
         name: input.name,
         group_id: input.group_id,
