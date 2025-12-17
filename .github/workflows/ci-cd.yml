@@ -360,12 +360,14 @@ jobs:
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:latest,${GHCR_IMAGE}:latest"
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:develop,${GHCR_IMAGE}:develop"
+            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:development,${GHCR_IMAGE}:development"
           elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:development,${GHCR_IMAGE}:development"
           fi
           
-          # Add latest tag for version tag releases
-          if [[ "${{ needs.version.outputs.is_release }}" == "true" ]]; then
+          # Add latest tag ONLY for tagged releases (e.g., v1.0.0)
+          # NOT for branch builds, even if version is clean semver
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             TAGS="${TAGS},${DOCKER_HUB_IMAGE}:latest,${GHCR_IMAGE}:latest"
           fi
           
