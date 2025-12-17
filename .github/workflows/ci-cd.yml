@@ -71,7 +71,26 @@ jobs:
       - name: 📝 Extract version
         id: version
         run: |
-          VERSION=$(cat VERSION | tr -d '\n')
+          BASE_VERSION=$(cat VERSION | tr -d '\n')
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          
+          # Add development metadata for non-main branches
+          if [[ "${{ github.ref }}" == "refs/heads/develop" ]] || [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
+            VERSION="${BASE_VERSION}-dev-${SHORT_SHA}"
+            echo "🔨 This is a development build"
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            VERSION="${BASE_VERSION}"
+            echo "🚀 This is a stable release from main"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${BASE_VERSION}"
+            echo "🏷️ This is a tagged release"
+          else
+            # Feature branches or other branches
+            BRANCH_NAME=$(echo "${{ github.ref_name }}" | sed 's/[^a-zA-Z0-9]/-/g')
+            VERSION="${BASE_VERSION}-${BRANCH_NAME}-${SHORT_SHA}"
+            echo "🌿 This is a feature branch build"
+          fi
+          
           # Docker doesn't allow + in tags, replace with -
           DOCKER_VERSION="${VERSION//+/-}"
           
@@ -80,13 +99,11 @@ jobs:
           echo "📦 Semver version: $VERSION"
           echo "🐳 Docker version: $DOCKER_VERSION"
           
-          # Determine if this is a stable release
+          # Determine if this is a stable release (no pre-release metadata)
           if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "is_release=true" >> $GITHUB_OUTPUT
-            echo "🚀 This is a stable release"
           else
             echo "is_release=false" >> $GITHUB_OUTPUT
-            echo "🔨 This is a development build"
           fi
 
       - name: 📊 Display version info

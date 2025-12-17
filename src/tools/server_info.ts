@@ -8,23 +8,29 @@ import actualToolsManager from '../actualToolsManager.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Read version from package.json and append git commit hash for dev builds
+// Read version from environment variable (set during Docker build) or package.json
 let packageInfo: { version: string; name: string; description: string };
 try {
   const packagePath = join(__dirname, '../../../package.json');
   const packageJson = readFileSync(packagePath, 'utf-8');
   packageInfo = JSON.parse(packageJson);
   
-  // Append git commit hash for development builds
-  try {
-    const { execSync } = require('child_process');
-    const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', cwd: join(__dirname, '../../..') }).trim();
-    const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8', cwd: join(__dirname, '../../..') }).trim();
-    if (branch === 'develop' || branch !== 'main') {
-      packageInfo.version = `${packageInfo.version}-dev-${commitHash}`;
+  // Use VERSION environment variable if available (set by Docker build or CI/CD)
+  // This includes development metadata like: 0.2.4-dev-abc1234
+  if (process.env.VERSION && process.env.VERSION !== 'unknown') {
+    packageInfo.version = process.env.VERSION;
+  } else {
+    // Fallback: Try to append git commit hash for local development builds
+    try {
+      const { execSync } = require('child_process');
+      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8', cwd: join(__dirname, '../../..') }).trim();
+      const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8', cwd: join(__dirname, '../../..') }).trim();
+      if (branch === 'develop' || branch === 'development' || branch !== 'main') {
+        packageInfo.version = `${packageInfo.version}-dev-${commitHash}`;
+      }
+    } catch (gitErr) {
+      // Git not available or not in a git repo, use package.json version as-is
     }
-  } catch (gitErr) {
-    // Git not available or not in a git repo, use version as-is
   }
 } catch (error) {
   packageInfo = { version: 'unknown', name: 'actual-mcp-server', description: 'MCP server for Actual Budget' };
