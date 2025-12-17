@@ -36,9 +36,9 @@ class ActualConnectionPool {
   private sharedConnection: ActualConnection | null = null;
 
   constructor() {
-    // Read from environment variable or default to 1
+    // Read from environment variable or default to 3
     // @actual-app/api is a singleton, so concurrent sessions cause conflicts
-    this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10);
+    this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '3', 10);
     
     // Configurable idle timeout (in minutes)
     const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '2', 10);
@@ -50,6 +50,9 @@ class ActualConnectionPool {
     logger.info(`[ConnectionPool] Max concurrent sessions: ${this.MAX_CONCURRENT_SESSIONS}`);
     logger.info(`[ConnectionPool] Session idle timeout: ${idleTimeoutMinutes} minutes`);
     logger.info(`[ConnectionPool] Cleanup interval: ${Math.floor(this.CLEANUP_INTERVAL / 1000)}s`);
+    
+    // Force close any stale connections from previous instance
+    this.forceCloseStaleConnections();
     
     // Start periodic cleanup of idle connections
     this.startCleanupTimer();
@@ -245,6 +248,30 @@ class ActualConnectionPool {
     } catch (err) {
       logger.error('[ConnectionPool] Error shutting down shared connection:', err);
     }
+  }
+
+  /**
+   * Force close any stale connections from previous server instance
+   * This ensures clean state on restart
+   */
+  private async forceCloseStaleConnections(): Promise<void> {
+    try {
+      logger.info('[ConnectionPool] Force closing any stale connections from previous instance');
+      
+      // Try to shutdown the API if it was left initialized
+      const maybeApi = api as unknown as { shutdown?: Function };
+      if (typeof maybeApi.shutdown === 'function') {
+        await (maybeApi.shutdown as () => Promise<unknown>)();
+        logger.info('[ConnectionPool] Successfully closed stale API connection');
+      }
+    } catch (err) {
+      // Ignore errors - connection may not have been initialized
+      logger.debug('[ConnectionPool] No stale connections to close (or already closed)');
+    }
+    
+    // Clear any connection state
+    this.connections.clear();
+    this.sharedConnection = null;
   }
 
   /**
