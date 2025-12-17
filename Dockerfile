@@ -32,11 +32,12 @@ COPY --from=build /app/src/lib ./src/lib
 RUN addgroup -S app && adduser -S app -G app
 USER app
 
-EXPOSE 3000
+EXPOSE 3000 3600
 
 # Healthcheck: Verify the MCP server is responding
+# Use $MCP_BRIDGE_PORT if set, otherwise default to 3600 (HTTP mode default)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-  CMD wget --quiet --tries=1 --spider http://localhost:3000/health || exit 1
+  CMD wget --quiet --tries=1 --spider http://localhost:${MCP_BRIDGE_PORT:-3600}/health || exit 1
 
 # Use exec form with sh to allow environment variable expansion and proper signal handling
 CMD ["sh", "-c", "node dist/src/index.js ${MCP_TRANSPORT_MODE:---http}"]
