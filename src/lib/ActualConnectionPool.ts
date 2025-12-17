@@ -41,7 +41,7 @@ class ActualConnectionPool {
     this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10);
     
     // Configurable idle timeout (in minutes)
-    const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '10', 10);
+    const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '2', 10);
     this.IDLE_TIMEOUT = idleTimeoutMinutes * 60 * 1000;
     
     // Cleanup runs at half the idle timeout (or 2 minutes minimum)
