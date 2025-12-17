@@ -6,9 +6,9 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({ 
   name: CommonSchemas.name, 
-  groupId: CommonSchemas.categoryGroupId.optional(),
-  group_id: CommonSchemas.categoryGroupId.optional(), 
-  parentId: CommonSchemas.categoryId.optional() 
+  groupId: CommonSchemas.categoryGroupId.nullable().optional(),
+  group_id: CommonSchemas.categoryGroupId.nullable().optional(), 
+  parentId: CommonSchemas.categoryId.nullable().optional() 
 }).passthrough(); // Allow other fields to pass through
 
 // RESPONSE_TYPE: string
