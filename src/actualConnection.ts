@@ -153,6 +153,7 @@ export function getConnectionState() {
     initialized,
     initializationError,
     connectionPool: useConnectionPool ? connectionPool.getStats() : null,
+    idleTimeoutMinutes: useConnectionPool ? connectionPool.getIdleTimeoutMinutes() : null,
   };
 }
 

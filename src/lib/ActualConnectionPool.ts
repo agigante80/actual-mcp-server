@@ -306,6 +306,13 @@ class ActualConnectionPool {
   }
 
   /**
+   * Get idle timeout in minutes
+   */
+  getIdleTimeoutMinutes(): number {
+    return Math.floor(this.IDLE_TIMEOUT / 60000);
+  }
+
+  /**
    * Get connection statistics
    */
   getStats(): { 
