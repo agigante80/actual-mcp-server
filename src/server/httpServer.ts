@@ -227,15 +227,18 @@ export async function startHttpServer(
           sessionIdGenerator: () => randomUUID(),
           enableJsonResponse: true,
           onsessioninitialized: async (sid: string) => {
-            transports.set(sid, transport);
-            sessionLastActivity.set(sid, Date.now());
             logger.debug(`Session initialized: ${sid}`);
             // Initialize connection pool for this session
             try {
               await connectToActualForSession(sid);
+              // Only add to transports/activity map if connection successful
+              transports.set(sid, transport);
+              sessionLastActivity.set(sid, Date.now());
               logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
             } catch (err) {
               logger.error(`[SESSION] Failed to initialize Actual for session ${sid}:`, err);
+              // Don't add failed sessions to transports map - they won't be usable anyway
+              // This prevents accumulation of dead sessions
             }
           },
         });
