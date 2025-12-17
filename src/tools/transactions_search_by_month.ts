@@ -30,12 +30,20 @@ const tool: ToolDefinition = {
     const today = new Date();
     const month = input.month || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
     
-    // Build ActualQL query using the $transform function for month filtering
+    // Calculate the date range for the month
+    const [year, monthNum] = month.split('-').map(Number);
+    const startDate = `${year}-${String(monthNum).padStart(2, '0')}-01`;
+    
+    // Calculate last day of month
+    const lastDay = new Date(year, monthNum, 0).getDate();
+    const endDate = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+    
+    // Build ActualQL query using date range
     const api = await import('@actual-app/api');
     const q = (api as any).q;
     
     let query = q('transactions').filter({
-      date: { $transform: '$month', $eq: month }
+      date: { $gte: startDate, $lte: endDate }
     });
     
     // Apply optional filters
@@ -75,7 +83,7 @@ const tool: ToolDefinition = {
       transactions,
       count: transactions.length,
       totalAmount,
-      month: input.month,
+      month,
     };
   },
 };
