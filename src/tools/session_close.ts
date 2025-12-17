@@ -24,8 +24,10 @@ const tool: ToolDefinition = {
       };
     }
 
-    // Get current session ID from meta (if available)
-    const currentSessionId = (meta as any)?.sessionId;
+    // Get current session ID from request context to prevent closing own session
+    const { requestContext } = await import('../server/httpServer.js');
+    const context = requestContext.getStore();
+    const currentSessionId = context?.sessionId;
 
     // Find session to close
     let targetSessionId: string | null = null;
