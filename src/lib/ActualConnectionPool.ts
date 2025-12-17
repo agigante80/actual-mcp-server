@@ -351,7 +351,7 @@ class ActualConnectionPool {
   } {
     const now = Date.now();
     const sessions = Array.from(this.connections.entries()).map(([id, conn]) => ({
-      sessionId: id.substring(0, 8) + '...',
+      sessionId: id, // Return full session ID so session_close can use it
       lastActivity: new Date(conn.lastActivity),
       idleMinutes: Math.floor((now - conn.lastActivity) / 60000)
     }));
