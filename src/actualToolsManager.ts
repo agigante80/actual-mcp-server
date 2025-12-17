@@ -163,6 +163,18 @@ class ActualToolsManager {
       logger.info(`[TOOL RESULT] ${name}: ${JSON.stringify(safe)}`);
       return safe;
     } catch (err: unknown) {
+      // Format Zod validation errors more clearly
+      if (err && typeof err === 'object' && 'issues' in err) {
+        const zodError = err as z.ZodError;
+        const issues = zodError.issues.map(issue => {
+          const path = issue.path.join('.');
+          return `${path}: ${issue.message}`;
+        }).join(', ');
+        const formattedMsg = `Validation error: ${issues}`;
+        logger.error(`[TOOL ERROR] ${name}: ${formattedMsg}`);
+        throw new Error(formattedMsg);
+      }
+      
       const e = err as Error | { message?: unknown } | undefined;
       const msg = e && typeof e.message === 'string' ? e.message : String(err);
       logger.error(`[TOOL ERROR] ${name}: ${msg}`);
