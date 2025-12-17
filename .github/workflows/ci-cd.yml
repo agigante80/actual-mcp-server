@@ -347,7 +347,9 @@ jobs:
         run: |
           DOCKER_VERSION="${{ needs.version.outputs.docker_version }}"
           DOCKER_HUB_IMAGE="${{ env.DOCKER_IMAGE_NAME }}"
-          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${{ env.DOCKER_IMAGE_NAME }}"
+          # Extract just the repository name (after /) for GHCR
+          REPO_NAME="${DOCKER_HUB_IMAGE##*/}"
+          GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${REPO_NAME}"
           
           # Base tags (using Docker-safe version)
           TAGS="${DOCKER_HUB_IMAGE}:${DOCKER_VERSION},${GHCR_IMAGE}:${DOCKER_VERSION}"
