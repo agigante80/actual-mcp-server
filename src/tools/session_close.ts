@@ -83,19 +83,18 @@ const tool: ToolDefinition = {
 
     // Close the session
     try {
-      // Get full session ID from connection pool
+      // Verify session exists in connection pool
       const connectionMap = (connectionPool as any).connections as Map<string, unknown>;
-      const fullSessionId = Array.from(connectionMap.keys())
-        .find(id => id.includes(targetSessionId!));
       
-      if (!fullSessionId) {
+      if (!connectionMap.has(targetSessionId!)) {
         return {
           success: false,
           message: `Session ${targetSessionId} not found in connection pool`,
+          availableSessions: Array.from(connectionMap.keys()),
         };
       }
 
-      await shutdownActualForSession(fullSessionId as string);
+      await shutdownActualForSession(targetSessionId! as string);
       
       const newStats = connectionPool.getStats();
       
