@@ -37,7 +37,9 @@ export async function startHttpServer(
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
   const sessionLastActivity = new Map<string, number>();
-  const SESSION_TIMEOUT_MS = 2 * 60 * 1000; // 2 minutes (matches ConnectionPool timeout)
+  // Use same timeout as ConnectionPool (SESSION_IDLE_TIMEOUT_MINUTES env var, default: 2 minutes)
+  const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '2', 10);
+  const SESSION_TIMEOUT_MS = idleTimeoutMinutes * 60 * 1000;
   const SESSION_CLEANUP_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 
   // safe fallback if index didn't provide implementedTools
