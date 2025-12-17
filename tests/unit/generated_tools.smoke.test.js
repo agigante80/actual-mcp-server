@@ -127,4 +127,5 @@ console.log('Running generated tools smoke tests');
   }
 
   console.log('All generated tool smoke tests passed');
+  process.exit(0);
 })();
