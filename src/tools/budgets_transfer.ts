@@ -57,11 +57,10 @@ const tool: ToolDefinition = {
       );
     }
     
-    // Perform the transfer using batch updates for atomicity
-    await adapter.batchBudgetUpdates(async () => {
-      await adapter.setBudgetAmount(input.month, input.fromCategoryId, currentFromAmount - input.amount);
-      await adapter.setBudgetAmount(input.month, input.toCategoryId, currentToAmount + input.amount);
-    });
+    // Perform the transfer - use adapter.setBudgetAmount directly (already queued)
+    // Note: Don't use batchBudgetUpdates as it creates a nested queue deadlock
+    await adapter.setBudgetAmount(input.month, input.fromCategoryId, currentFromAmount - input.amount);
+    await adapter.setBudgetAmount(input.month, input.toCategoryId, currentToAmount + input.amount);
     
     return {
       result: {
