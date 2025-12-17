@@ -1,4 +1,5 @@
 // src/server/httpServer.ts
+import { AsyncLocalStorage } from 'async_hooks';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import express, { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
@@ -14,6 +15,9 @@ import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
 import observability from '../observability.js';
 import config from '../config.js';
+
+// AsyncLocalStorage for request context (sessionId accessible to tools)
+export const requestContext = new AsyncLocalStorage<{ sessionId?: string }>();
 
 export async function startHttpServer(
   mcp: ActualMCPConnection,
@@ -138,6 +142,7 @@ export async function startHttpServer(
     });
 
     // Call tool handler -> proxy to mcp.executeTool or to actualToolsManager
+    // Note: sessionId is available via requestContext.getStore() for tools that need it
     server.setRequestHandler(CallToolRequestSchema, async (request: unknown) => {
       const req = request as { params?: Record<string, unknown> } | undefined;
       const params = req?.params ?? {};
@@ -236,7 +241,10 @@ export async function startHttpServer(
         // connect transport then handle request (matching working example)
         await server.connect(transport);
         try {
-          await transport.handleRequest(req, res, req.body);
+          // Run in AsyncLocalStorage context so tools can access sessionId
+          await requestContext.run({ sessionId: undefined }, async () => {
+            await transport.handleRequest(req, res, req.body);
+          });
         } catch (err: unknown) {
           logger.error('Transport.handleRequest failed during initialize: %o', err);
           const e = err as Error | { stack?: unknown } | undefined;
@@ -272,7 +280,10 @@ export async function startHttpServer(
         await server.connect(transport);
       }
 
-      await transport.handleRequest(req, res, req.body);
+      // Run in AsyncLocalStorage context so tools can access sessionId
+      await requestContext.run({ sessionId }, async () => {
+        await transport.handleRequest(req, res, req.body);
+      });
       } catch (err: unknown) {
       logger.error('POST handler error: %o', err);
       const e2 = err as Error | { stack?: unknown } | undefined;

@@ -81,7 +81,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('accounts_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_close')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_reopen')) inputExample.id = '00000000-0000-0000-0000-000000000001';
-  if (name.includes('categories_create')) inputExample.name = 'Food';
+  if (name.includes('categories_create')) inputExample.name = 'Food', inputExample.group_id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('categories_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('categories_update')) inputExample.id = 'cat_1', inputExample.fields = { name: 'Updated' };
   if (name.includes('category_groups_create')) inputExample.name = 'Expenses';
