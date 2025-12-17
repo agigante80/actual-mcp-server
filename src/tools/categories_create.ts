@@ -6,9 +6,8 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({ 
   name: CommonSchemas.name, 
-  groupId: CommonSchemas.categoryGroupId.nullable().optional(),
-  group_id: CommonSchemas.categoryGroupId.nullable().optional(), 
-  parentId: CommonSchemas.categoryId.nullable().optional() 
+  group_id: CommonSchemas.categoryGroupId,
+  is_income: z.boolean().optional(),
 }).passthrough(); // Allow other fields to pass through
 
 // RESPONSE_TYPE: string
@@ -16,20 +15,17 @@ type Output = unknown; // refine using generated types (paths['/categories']['po
 
 const tool: ToolDefinition = {
   name: 'actual_categories_create',
-  description: "Create category",
+  description: "Create a category. REQUIRED: group_id (category group UUID). Use actual_category_groups_get to find available groups. Optional: is_income (boolean, defaults to false for expense categories).",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     try {
-      // Normalize field names: convert camelCase to snake_case for Actual API
+      // Input already has correct field names (group_id, is_income)
       const normalizedInput = {
-        ...input,
-        group_id: input.group_id || input.groupId,
-        parent_id: input.parent_id || input.parentId,
+        name: input.name,
+        group_id: input.group_id,
+        is_income: input.is_income ?? false,
       };
-      // Remove camelCase versions to avoid confusion
-      delete normalizedInput.groupId;
-      delete normalizedInput.parentId;
       
       const result = await adapter.createCategory(normalizedInput);
       return { result };
