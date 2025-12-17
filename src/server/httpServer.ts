@@ -191,8 +191,10 @@ export async function startHttpServer(
 
         // Check if we can accept a new session (concurrent limit)
         if (!canAcceptNewSession()) {
-          const stats = getConnectionState().connectionPool;
-          const errorMsg = `Max concurrent sessions (${stats?.maxConcurrent}) reached. Active: ${stats?.activeSessions}. Please close existing sessions or wait for idle sessions to timeout (10 minutes).`;
+          const state = getConnectionState();
+          const stats = state.connectionPool;
+          const timeoutMinutes = state.idleTimeoutMinutes || 2;
+          const errorMsg = `Max concurrent sessions (${stats?.maxConcurrent}) reached. Active: ${stats?.activeSessions}. Please close existing sessions or wait for idle sessions to timeout (${timeoutMinutes} minutes).`;
           logger.warn(`[SESSION] Rejecting new session: ${errorMsg}`);
           res.status(503).json({
             jsonrpc: '2.0',
@@ -203,7 +205,8 @@ export async function startHttpServer(
               data: {
                 maxConcurrent: stats?.maxConcurrent,
                 activeSessions: stats?.activeSessions,
-                availableSlots: (stats?.maxConcurrent ?? 0) - (stats?.activeSessions ?? 0)
+                availableSlots: (stats?.maxConcurrent ?? 0) - (stats?.activeSessions ?? 0),
+                idleTimeoutMinutes: timeoutMinutes
               }
             },
           });
