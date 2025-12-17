@@ -100,11 +100,17 @@ export async function startSseServer(
       const tools = toolsList.map((name: string) => {
         const schemaFromParam = toolSchemas && toolSchemas[name];
         const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
-        const schema = schemaFromParam || schemaFromManager || {};
+        const schema = schemaFromParam || schemaFromManager;
+        
+        // Ensure inputSchema is a valid JSON Schema object with required properties
+        const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
+          ? schema
+          : { type: 'object', properties: {}, additionalProperties: false };
+        
         return {
           name,
           description: `Tool ${name}`,
-          inputSchema: schema || {},
+          inputSchema,
         };
       });
       return { tools };

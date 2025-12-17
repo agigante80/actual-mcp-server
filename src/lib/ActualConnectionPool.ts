@@ -30,11 +30,30 @@ interface ActualConnection {
 class ActualConnectionPool {
   private connections: Map<string, ActualConnection> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private readonly IDLE_TIMEOUT = 30 * 60 * 1000; // 30 minutes
-  private readonly CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+  private readonly IDLE_TIMEOUT: number; // Configurable via SESSION_IDLE_TIMEOUT_MINUTES env var (default: 10 minutes)
+  private readonly CLEANUP_INTERVAL: number; // Check frequency (default: 2 minutes)
+  private readonly MAX_CONCURRENT_SESSIONS: number; // Configurable via MAX_CONCURRENT_SESSIONS env var (default: 1)
   private sharedConnection: ActualConnection | null = null;
 
   constructor() {
+    // Read from environment variable or default to 15
+    // @actual-app/api is a singleton, so concurrent sessions cause conflicts
+    this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '15', 10);
+    
+    // Configurable idle timeout (in minutes)
+    const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '5', 10);
+    this.IDLE_TIMEOUT = idleTimeoutMinutes * 60 * 1000;
+    
+    // Cleanup runs at half the idle timeout (or 2 minutes minimum)
+    this.CLEANUP_INTERVAL = Math.max(Math.floor(this.IDLE_TIMEOUT / 5), 2 * 60 * 1000);
+    
+    logger.info(`[ConnectionPool] Max concurrent sessions: ${this.MAX_CONCURRENT_SESSIONS}`);
+    logger.info(`[ConnectionPool] Session idle timeout: ${idleTimeoutMinutes} minutes`);
+    logger.info(`[ConnectionPool] Cleanup interval: ${Math.floor(this.CLEANUP_INTERVAL / 1000)}s`);
+    
+    // Force close any stale connections from previous instance
+    this.forceCloseStaleConnections();
+    
     // Start periodic cleanup of idle connections
     this.startCleanupTimer();
   }
@@ -45,6 +64,15 @@ class ActualConnectionPool {
   hasConnection(sessionId: string): boolean {
     const conn = this.connections.get(sessionId);
     return conn?.initialized ?? false;
+  }
+
+  /**
+   * Check if we can accept a new session (under the concurrent limit)
+   * Returns true if limit not reached, false otherwise
+   */
+  canAcceptNewSession(): boolean {
+    const activeConnections = Array.from(this.connections.values()).filter(c => c.initialized).length;
+    return activeConnections < this.MAX_CONCURRENT_SESSIONS;
   }
 
   /**
@@ -59,8 +87,16 @@ class ActualConnectionPool {
       return;
     }
 
+    // Check concurrent session limit
+    const activeConnections = Array.from(this.connections.values()).filter(c => c.initialized).length;
+    if (activeConnections >= this.MAX_CONCURRENT_SESSIONS) {
+      const errorMsg = `[ConnectionPool] Max concurrent sessions (${this.MAX_CONCURRENT_SESSIONS}) reached. Active: ${activeConnections}. Please close some connections or wait for idle sessions to timeout.`;
+      logger.warn(errorMsg);
+      throw new Error(errorMsg);
+    }
+
     // Create new connection for this session
-    logger.info(`[ConnectionPool] Creating Actual connection for session: ${sessionId}`);
+    logger.info(`[ConnectionPool] Creating Actual connection for session: ${sessionId} (${activeConnections + 1}/${this.MAX_CONCURRENT_SESSIONS})`);
     
     const SERVER_URL = config.ACTUAL_SERVER_URL;
     const PASSWORD = config.ACTUAL_PASSWORD;
@@ -215,6 +251,30 @@ class ActualConnectionPool {
   }
 
   /**
+   * Force close any stale connections from previous server instance
+   * This ensures clean state on restart
+   */
+  private async forceCloseStaleConnections(): Promise<void> {
+    try {
+      logger.info('[ConnectionPool] Force closing any stale connections from previous instance');
+      
+      // Try to shutdown the API if it was left initialized
+      const maybeApi = api as unknown as { shutdown?: Function };
+      if (typeof maybeApi.shutdown === 'function') {
+        await (maybeApi.shutdown as () => Promise<unknown>)();
+        logger.info('[ConnectionPool] Successfully closed stale API connection');
+      }
+    } catch (err) {
+      // Ignore errors - connection may not have been initialized
+      logger.debug('[ConnectionPool] No stale connections to close (or already closed)');
+    }
+    
+    // Clear any connection state
+    this.connections.clear();
+    this.sharedConnection = null;
+  }
+
+  /**
    * Start periodic cleanup of idle connections
    */
   private startCleanupTimer(): void {
@@ -273,12 +333,35 @@ class ActualConnectionPool {
   }
 
   /**
+   * Get idle timeout in minutes
+   */
+  getIdleTimeoutMinutes(): number {
+    return Math.floor(this.IDLE_TIMEOUT / 60000);
+  }
+
+  /**
    * Get connection statistics
    */
-  getStats(): { activeConnections: number; sharedConnection: boolean } {
+  getStats(): { 
+    totalSessions: number; 
+    activeSessions: number;
+    maxConcurrent: number;
+    sharedConnection: boolean;
+    sessions: Array<{ sessionId: string; lastActivity: Date; idleMinutes: number }>;
+  } {
+    const now = Date.now();
+    const sessions = Array.from(this.connections.entries()).map(([id, conn]) => ({
+      sessionId: id, // Return full session ID so session_close can use it
+      lastActivity: new Date(conn.lastActivity),
+      idleMinutes: Math.floor((now - conn.lastActivity) / 60000)
+    }));
+
     return {
-      activeConnections: this.connections.size,
-      sharedConnection: this.sharedConnection?.initialized || false
+      totalSessions: this.connections.size,
+      activeSessions: Array.from(this.connections.values()).filter(c => c.initialized).length,
+      maxConcurrent: this.MAX_CONCURRENT_SESSIONS,
+      sharedConnection: this.sharedConnection?.initialized || false,
+      sessions
     };
   }
 }

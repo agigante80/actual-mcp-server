@@ -20,7 +20,6 @@ const IMPLEMENTED_TOOLS = [
   'actual_budgets_get_all',
   'actual_budgets_getMonth',
   'actual_budgets_getMonths',
-  'actual_budgets_help',
   'actual_budgets_holdForNextMonth',
   'actual_budgets_resetHold',
   'actual_budgets_setAmount',
@@ -41,18 +40,15 @@ const IMPLEMENTED_TOOLS = [
   'actual_payees_merge',
   'actual_payees_update',
   'actual_payee_rules_get',
-  'actual_query_help',
   'actual_query_run',
   'actual_rules_create',
   'actual_rules_delete',
   'actual_rules_get',
-  'actual_rules_help',
   'actual_rules_update',
   'actual_transactions_create',
   'actual_transactions_delete',
   'actual_transactions_filter',
   'actual_transactions_get',
-  'actual_transactions_help',
   'actual_transactions_import',
   'actual_transactions_search_by_amount',
   'actual_transactions_search_by_category',
@@ -62,6 +58,8 @@ const IMPLEMENTED_TOOLS = [
   'actual_transactions_summary_by_payee',
   'actual_transactions_update',
   'actual_server_info',
+  'actual_session_close',
+  'actual_session_list',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names
@@ -165,6 +163,18 @@ class ActualToolsManager {
       logger.info(`[TOOL RESULT] ${name}: ${JSON.stringify(safe)}`);
       return safe;
     } catch (err: unknown) {
+      // Format Zod validation errors more clearly
+      if (err && typeof err === 'object' && 'issues' in err) {
+        const zodError = err as z.ZodError;
+        const issues = zodError.issues.map(issue => {
+          const path = issue.path.join('.');
+          return `${path}: ${issue.message}`;
+        }).join(', ');
+        const formattedMsg = `Validation error: ${issues}`;
+        logger.error(`[TOOL ERROR] ${name}: ${formattedMsg}`);
+        throw new Error(formattedMsg);
+      }
+      
       const e = err as Error | { message?: unknown } | undefined;
       const msg = e && typeof e.message === 'string' ? e.message : String(err);
       logger.error(`[TOOL ERROR] ${name}: ${msg}`);

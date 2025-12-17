@@ -1,0 +1,108 @@
+I'd like you to help me test all 51 Actual Budget MCP tools systematically. Let's work through this together.
+
+**What we're testing:**
+- 51 MCP tools total (49 operational + 2 session management)
+- Testing one tool at a time, waiting for each response
+- Using test data with timestamp: 2025-12-16
+
+**IMPORTANT - Session Management:**
+The MCP server is configured to allow only 1 concurrent session at a time (MAX_CONCURRENT_SESSIONS=1). If you get "fetch failed" errors, it means another session is active.
+
+**Before starting, check and clean up sessions:**
+1. First, run: actual_session_list (to see active sessions)
+2. If you see other sessions, run: actual_session_close (to close the oldest idle session)
+3. If that fails because you can't close your own session, wait 10 minutes for idle sessions to timeout, or ask me to restart the server
+
+**Testing phases:**
+
+**Phase 1 - Server & Read-Only (5 tools):**
+1. actual_server_info
+2. actual_accounts_list
+3. actual_category_groups_get
+4. actual_categories_get
+5. actual_payees_get
+
+**Phase 2 - Accounts (7 tools):**
+6. actual_accounts_create (name: "Test-Account-2025-12-16") - save the account ID
+7. actual_accounts_get_balance (use saved account ID)
+8. actual_accounts_update (rename to "Test-Account-Updated")
+9. actual_accounts_close (use saved ID)
+10. actual_accounts_reopen (use saved ID)
+11. actual_accounts_delete (use saved ID)
+12. actual_accounts_list (verify deletion)
+
+**Phase 3 - Category Groups & Categories (8 tools):**
+13. actual_category_groups_create (name: "Test-Group-2025-12-16") - save group ID
+14. actual_category_groups_update (rename to "Test-Group-Updated")
+15. actual_categories_create (name: "Test-Category-2025-12-16", use saved group ID) - save category ID
+16. actual_categories_update (rename to "Test-Category-Updated")
+17. actual_categories_delete (use saved category ID)
+18. actual_category_groups_delete (use saved group ID)
+19. actual_category_groups_get (verify deletion)
+20. actual_categories_get (verify deletion)
+
+**Phase 4 - Payees (6 tools):**
+21. actual_payees_create (name: "Test-Payee-2025-12-16") - save payee1 ID
+22. actual_payees_create (name: "Test-Payee-2-2025-12-16") - save payee2 ID
+23. actual_payees_update (use payee1 ID, rename to "Test-Payee-Updated")
+24. actual_payee_rules_get
+25. actual_payees_merge (merge payee2 into payee1)
+26. actual_payees_delete (use payee1 ID)
+
+**Phase 5 - Rules (4 tools):**
+27. actual_rules_get
+28. actual_rules_create (simple test rule with existing payee/category) - save rule ID
+29. actual_rules_update (use saved rule ID)
+30. actual_rules_delete (use saved rule ID)
+
+**Phase 6 - Transactions (11 tools):**
+31. actual_transactions_create (expense: -5000 cents in test account) - save transaction1 ID
+32. actual_transactions_create (income: 10000 cents in test account) - save transaction2 ID
+33. actual_transactions_get (use transaction1 ID)
+34. actual_transactions_filter (filter by account ID)
+35. actual_transactions_update (use transaction1 ID, change notes)
+36. actual_transactions_search_by_amount (search around -5000 cents)
+37. actual_transactions_search_by_category (use existing category)
+38. actual_transactions_search_by_month (month: 2025-12)
+39. actual_transactions_search_by_payee (use existing payee)
+40. actual_transactions_import (empty array test)
+41. actual_transactions_delete (delete both test transactions)
+
+**Phase 7 - Transaction Summaries (2 tools):**
+42. actual_transactions_summary_by_category
+43. actual_transactions_summary_by_payee
+
+**Phase 8 - Budgets (9 tools):**
+44. actual_budgets_get_all
+45. actual_budgets_getMonth (month: 2025-12)
+46. actual_budgets_getMonths (months: 2025-10, 2025-11, 2025-12)
+47. actual_budgets_setAmount (50000 cents for existing category)
+48. actual_budgets_setCarryover (enable for same category)
+49. actual_budgets_holdForNextMonth (hold 10000 cents)
+50. actual_budgets_resetHold (reset the hold)
+51. actual_budgets_transfer (transfer between two categories)
+52. actual_budgets_updates_batch (batch update multiple budgets)
+
+**Phase 9 - Advanced Query & Sync (2 tools):**
+53. actual_bank_sync (use test account ID - skip if no bank connection)
+54. actual_query_run - Try this query: "SELECT COUNT(*) as total FROM transactions WHERE date >= '2025-01-01'"
+
+**Phase 10 - Session Management (2 tools):**
+55. actual_session_list (show current session info)
+56. actual_session_close (try closing oldest idle session - may fail if only 1 session active, that's OK)
+
+**Output format for each test:**
+[Phase X] tool_name — ✓ success
+[Phase X] tool_name — ✗ failure: error message
+[Phase X] tool_name — ℹ️ informational: reason (for expected failures/skips)
+
+**Important notes:**
+- Save all IDs returned (accounts, categories, payees, transactions, rules)
+- Use those IDs in subsequent tests
+- Test sequentially - one at a time
+- Amount values are always in CENTS (not dollars)
+- If a test fails, note it and continue with remaining tests
+- For bank_sync: if no bank connection, that's expected - mark as informational
+
+**Let's start with Phase 1, Tool 1:**
+Can you invoke actual_server_info and tell me what you get back? Then we'll continue through the rest.

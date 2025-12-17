@@ -654,23 +654,25 @@ export async function resetBudgetHold(month: string, categoryId: string): Promis
 export async function runQuery(queryString: string | any): Promise<unknown> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.query.run').catch(() => {});
-    // The Actual Budget runQuery expects an ActualQL query object with serialize() method
-    // Import the q builder dynamically
-    const api = await import('@actual-app/api');
-    const q = (api as any).q;
     
-    if (!q) {
-      throw new Error('ActualQL query builder not available. Ensure @actual-app/api is properly installed and the budget is loaded.');
-    }
-    
-    // If already a serialized query object, use it directly
-    if (typeof queryString === 'object' && queryString !== null) {
-      try {
-        return await withConcurrency(() => retry(() => rawRunQuery(queryString) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
-      } catch (error: any) {
-        throw new Error(`Query execution failed: ${error.message}`);
+    try {
+      // The Actual Budget runQuery expects an ActualQL query object with serialize() method
+      // Import the q builder dynamically
+      const api = await import('@actual-app/api');
+      const q = (api as any).q;
+      
+      if (!q) {
+        throw new Error('ActualQL query builder not available. Ensure @actual-app/api is properly installed and the budget is loaded.');
       }
-    }
+      
+      // If already a serialized query object, use it directly
+      if (typeof queryString === 'object' && queryString !== null) {
+        try {
+          return await withConcurrency(() => retry(() => rawRunQuery(queryString) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+        } catch (error: any) {
+          throw new Error(`Query execution failed: ${error.message}`);
+        }
+      }
     
     const trimmed = queryString.trim();
     let query;
@@ -765,6 +767,16 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       // Re-throw with original error if no specific handling
       throw error;
     }
+    } catch (error: any) {
+      // Outer catch for query parsing errors
+      const errorMsg = error?.message || String(error);
+      
+      if (errorMsg.includes('tableName') || errorMsg.includes('expandStar') || errorMsg.includes('Cannot read properties of undefined')) {
+        throw new Error(`SQL query parsing failed. The Actual Budget query engine has limitations with complex SQL features like COUNT(*), SUM(), GROUP BY, and aggregate functions. Try using simpler queries or ActualQL format instead. See https://actualbudget.org/docs/api/actual-ql/ for supported syntax. Error: ${errorMsg}`);
+      }
+      
+      throw error;
+    }
   });
 }
 
@@ -827,7 +839,19 @@ function parseWhereClause(query: any, whereClause: string): any {
 export async function runBankSync(accountId?: string): Promise<void> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.bank.sync').catch(() => {});
-    await withConcurrency(() => retry(() => rawRunBankSync(accountId ? { accountId } : undefined) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    
+    try {
+      await withConcurrency(() => retry(() => rawRunBankSync(accountId ? { accountId } : undefined) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      
+      // Provide helpful error message for common cases
+      if (errorMsg.includes('No bank account') || errorMsg.includes('not configured') || errorMsg.includes('not linked') || !errorMsg || errorMsg === '{}') {
+        throw new Error(`Bank sync failed: The ${accountId ? 'specified account is' : 'accounts are'} not configured for bank sync. To use bank sync, you must first link your account(s) with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`);
+      }
+      
+      throw new Error(`Bank sync failed: ${errorMsg}`);
+    }
   });
 }
 export async function getBudgets(): Promise<unknown[]> {

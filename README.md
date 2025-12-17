@@ -9,7 +9,7 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **49 specialized tools** covering 78% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **53 specialized tools** covering 82% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
 
 > **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 49 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
@@ -187,6 +187,16 @@ With conversational AI, you can:
 - **Node.js 20+** or **Docker**
 - **Actual Budget server** (running locally or hosted)
 - Actual Budget credentials (password and sync ID)
+
+### ⚠️ Critical: Zod Version Constraint
+
+**This project MUST use Zod 3.x (3.25.76).** Do NOT upgrade to Zod 4.x!
+
+Zod 4.x has breaking internal changes that cause `zod-to-json-schema` to produce incomplete schemas, breaking LibreChat tool validation. All 49 tools become invisible if Zod 4.x is used.
+
+- **Reject any Dependabot/Renovate PRs** suggesting Zod 4.x
+- The project includes safeguards: `package.json` overrides and Dockerfile post-install
+- See `docs/ZOD_VERSION_CONSTRAINT.md` for technical details
 
 ### Install with npm
 
@@ -1042,7 +1052,7 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 | **Batch** | 100% | 1/1 | ✅ Complete |
 | **Server Info** | 100% | 1/1 | ✅ Complete |
 
-**Overall: 78% API Coverage (49 tools covering all major Actual Budget operations)**
+**Overall: 82% API Coverage (49 tools covering all major Actual Budget operations)**
 
 **⚡ Exclusive Features**: This MCP server includes 6 ActualQL-powered tools that provide advanced querying and aggregation capabilities not available in other Actual Budget integrations.
 

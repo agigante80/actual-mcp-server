@@ -2,7 +2,7 @@
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
   "version": "0.2.4",
-  "description": "MCP server providing 53 tools for AI-driven financial management with Actual Budget - includes comprehensive help docs, query, bank sync, and multi-budget support",
+  "description": "MCP server providing 49 tools for AI-driven financial management with Actual Budget - query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
@@ -27,7 +27,6 @@
   "dependencies": {
     "@actual-app/api": "^25.12.0",
     "@jlongster/sql.js": "^1.6.7",
-    "@librechat/api": "github:danny-avila/LibreChat#main",
     "@modelcontextprotocol/sdk": "^1.24.0",
     "axios": "^1.12.2",
     "date-fns": "^4.1.0",
@@ -35,12 +34,17 @@
     "express": "^4.21.2",
     "mitt": "^3.0.1",
     "winston": "^3.18.3",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "zod": "3.25.76"
+  },
+  "overrides": {
+    "zod": "3.25.76"
+  },
+  "comments": {
+    "zod-version": "CRITICAL: Must use Zod 3.x. Zod 4.x breaks zod-to-json-schema causing LibreChat validation to fail. See docs/ZOD_VERSION_CONSTRAINT.md"
   },
   "devDependencies": {
     "@playwright/test": "^1.56.0",
-    "@types/axios": "^0.9.36",
-    "@types/date-fns": "^2.5.3",
     "@types/express": "^5.0.3",
     "@types/google-protobuf": "^3.15.12",
     "@types/node": "^25.0.2",

@@ -152,5 +152,14 @@ export function getConnectionState() {
   return {
     initialized,
     initializationError,
+    connectionPool: useConnectionPool ? connectionPool.getStats() : null,
+    idleTimeoutMinutes: useConnectionPool ? connectionPool.getIdleTimeoutMinutes() : null,
   };
+}
+
+export function canAcceptNewSession(): boolean {
+  if (!useConnectionPool) {
+    return true; // Shared connection mode - always accept
+  }
+  return connectionPool.canAcceptNewSession();
 }
