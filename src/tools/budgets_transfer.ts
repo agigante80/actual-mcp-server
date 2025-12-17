@@ -27,14 +27,17 @@ const tool: ToolDefinition = {
     }
     
     // Get current budget for both categories
-    const budgetMonth = await adapter.getBudgetMonth(input.month);
+    const budgetMonth = await adapter.getBudgetMonth(input.month) as any;
     
-    if (!budgetMonth || !budgetMonth.categories) {
+    if (!budgetMonth || !budgetMonth.categoryGroups) {
       throw new Error(`Budget not found for month ${input.month}`);
     }
     
-    const fromBudget = budgetMonth.categories.find(c => c.categoryId === input.fromCategoryId);
-    const toBudget = budgetMonth.categories.find(c => c.categoryId === input.toCategoryId);
+    // Flatten categories from all groups
+    const allCategories = budgetMonth.categoryGroups.flatMap((group: any) => group.categories || []);
+    
+    const fromBudget = allCategories.find((c: any) => c.id === input.fromCategoryId);
+    const toBudget = allCategories.find((c: any) => c.id === input.toCategoryId);
     
     if (!fromBudget) {
       throw new Error(`Source category ${input.fromCategoryId} not found in budget`);
@@ -44,8 +47,8 @@ const tool: ToolDefinition = {
       throw new Error(`Target category ${input.toCategoryId} not found in budget`);
     }
     
-    const currentFromAmount = fromBudget.amount || 0;
-    const currentToAmount = toBudget.amount || 0;
+    const currentFromAmount = fromBudget.budgeted || 0;
+    const currentToAmount = toBudget.budgeted || 0;
     
     // Check if source has enough budget
     if (currentFromAmount < input.amount) {
