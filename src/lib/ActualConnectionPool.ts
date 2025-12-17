@@ -30,8 +30,8 @@ interface ActualConnection {
 class ActualConnectionPool {
   private connections: Map<string, ActualConnection> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private readonly IDLE_TIMEOUT = 10 * 60 * 1000; // 10 minutes - reduced to cleanup faster
-  private readonly CLEANUP_INTERVAL = 2 * 60 * 1000; // 2 minutes - check more frequently
+  private readonly IDLE_TIMEOUT: number; // Configurable via SESSION_IDLE_TIMEOUT_MINUTES env var (default: 10 minutes)
+  private readonly CLEANUP_INTERVAL: number; // Check frequency (default: 2 minutes)
   private readonly MAX_CONCURRENT_SESSIONS: number; // Configurable via MAX_CONCURRENT_SESSIONS env var (default: 1)
   private sharedConnection: ActualConnection | null = null;
 
@@ -39,7 +39,17 @@ class ActualConnectionPool {
     // Read from environment variable or default to 1
     // @actual-app/api is a singleton, so concurrent sessions cause conflicts
     this.MAX_CONCURRENT_SESSIONS = parseInt(process.env.MAX_CONCURRENT_SESSIONS || '1', 10);
+    
+    // Configurable idle timeout (in minutes)
+    const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '10', 10);
+    this.IDLE_TIMEOUT = idleTimeoutMinutes * 60 * 1000;
+    
+    // Cleanup runs at half the idle timeout (or 2 minutes minimum)
+    this.CLEANUP_INTERVAL = Math.max(Math.floor(this.IDLE_TIMEOUT / 5), 2 * 60 * 1000);
+    
     logger.info(`[ConnectionPool] Max concurrent sessions: ${this.MAX_CONCURRENT_SESSIONS}`);
+    logger.info(`[ConnectionPool] Session idle timeout: ${idleTimeoutMinutes} minutes`);
+    logger.info(`[ConnectionPool] Cleanup interval: ${Math.floor(this.CLEANUP_INTERVAL / 1000)}s`);
     
     // Start periodic cleanup of idle connections
     this.startCleanupTimer();
