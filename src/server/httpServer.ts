@@ -89,6 +89,7 @@ export async function startHttpServer(
     const token = match[1];
     if (token !== config.MCP_SSE_AUTHORIZATION) {
       logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid token`);
+      logger.debug(`[HTTP] Token comparison failed. Received: "${token}" (length: ${token.length}), Expected: "${config.MCP_SSE_AUTHORIZATION}" (length: ${config.MCP_SSE_AUTHORIZATION?.length || 0})`);
       res.status(401).json({ error: 'Unauthorized: Invalid token' });
       return false;
     }
