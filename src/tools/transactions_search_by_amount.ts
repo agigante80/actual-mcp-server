@@ -3,8 +3,9 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00)'),
-  maxAmount: z.number().optional().describe('Maximum amount in cents (e.g., 10000 for $100.00)'),
+  minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
+  maxAmount: z.number().optional().describe('Maximum amount in cents (e.g., 10000 for $100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
+  absoluteAmount: z.number().optional().describe('Optional: Search by absolute value (magnitude) in cents, ignoring sign. E.g., 5000 will match both +$50.00 (income) and -$50.00 (expense). If specified, minAmount/maxAmount are ignored.'),
   startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
   endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
@@ -24,63 +25,135 @@ type Output = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_amount',
-  description: 'Search transactions by amount range using ActualQL. Useful for finding large expenses, deposits, or transactions within a specific amount range. Amounts are in cents (e.g., $100 = 10000, $-50.25 = -5025). At least one of minAmount or maxAmount must be specified.',
+  description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
-    // Build ActualQL query with amount filter
-    const api = await import('@actual-app/api');
-    const q = (api as any).q;
-    
-    const amountFilter: any = {};
-    if (input.minAmount !== undefined) {
-      amountFilter.$gte = input.minAmount;
-    }
-    if (input.maxAmount !== undefined) {
-      amountFilter.$lte = input.maxAmount;
-    }
-    
-    let query = q('transactions').filter({ amount: amountFilter });
-    
-    // Apply date range filters
-    if (input.startDate || input.endDate) {
-      const dateFilter: any = {};
-      if (input.startDate) {
-        dateFilter.$gte = input.startDate;
-      }
-      if (input.endDate) {
-        dateFilter.$lte = input.endDate;
-      }
-      query = query.filter({ date: dateFilter });
-    }
-    
-    // Apply optional filters
+    // Validate accountId exists if provided
     if (input.accountId) {
-      query = query.filter({ account: input.accountId });
+      const accounts = await adapter.getAccounts();
+      const accountExists = accounts.some((acc: any) => acc.id === input.accountId);
+      
+      if (!accountExists) {
+        // Check if user provided account name instead of UUID
+        const accountByName = accounts.find((acc: any) => 
+          acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
+        );
+        
+        if (accountByName) {
+          return {
+            transactions: [],
+            count: 0,
+            totalAmount: 0,
+            amountRange: {
+              min: input.minAmount,
+              max: input.maxAmount,
+            },
+            error: `Account '${input.accountId}' appears to be a name, not an ID. Use account UUID '${accountByName.id}' instead.`,
+          };
+        }
+        
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          amountRange: {
+            min: input.minAmount,
+            max: input.maxAmount,
+          },
+          error: `Account '${input.accountId}' not found. Did you mean to use account UUID instead of name? Use actual_accounts_list to get valid account UUIDs.`,
+        };
+      }
     }
     
+    // Get base transactions (filtered by account and date range if provided)
+    const allTransactions = await adapter.getTransactions(
+      input.accountId,
+      input.startDate,
+      input.endDate
+    );
+    
+    if (!Array.isArray(allTransactions)) {
+      return {
+        transactions: [],
+        count: 0,
+        totalAmount: 0,
+        amountRange: {
+          min: input.minAmount,
+          max: input.maxAmount,
+        },
+      };
+    }
+    
+    // Apply JavaScript filters
+    let filtered = allTransactions;
+    
+    // Filter by absolute amount (if specified, this takes precedence)
+    if (input.absoluteAmount !== undefined) {
+      const targetAbs = Math.abs(input.absoluteAmount);
+      filtered = filtered.filter((t: any) => Math.abs(t.amount || 0) === targetAbs);
+    } else {
+      // Filter by signed amount range
+      if (input.minAmount !== undefined) {
+        filtered = filtered.filter((t: any) => (t.amount || 0) >= input.minAmount!);
+      }
+      if (input.maxAmount !== undefined) {
+        filtered = filtered.filter((t: any) => (t.amount || 0) <= input.maxAmount!);
+      }
+    }
+    
+    // Filter by category name (need to lookup category ID)
     if (input.categoryName) {
-      query = query.filter({ 'category.name': input.categoryName });
+      const categories = await adapter.getCategories();
+      const category = categories.find((c: any) =>
+        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
+      );
+      if (category) {
+        filtered = filtered.filter((t: any) => t.category === category.id);
+      } else {
+        // Category not found - return empty
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          amountRange: {
+            min: input.minAmount,
+            max: input.maxAmount,
+          },
+          error: `Category "${input.categoryName}" not found`,
+        };
+      }
     }
     
-    // Select all fields, order by amount descending, and apply limit
-    query = query.select('*').orderBy({ amount: 'desc' }).limit(input.limit || 100);
+    // Sort by amount descending and apply limit
+    filtered.sort((a: any, b: any) => {
+      const amountA = a.amount || 0;
+      const amountB = b.amount || 0;
+      return amountB - amountA;
+    });
     
-    const result = await adapter.runQuery(query);
-    const transactions = Array.isArray(result) ? result : [];
+    const limited = filtered.slice(0, input.limit || 100);
+    
+    // Enrich transactions with account names
+    const accounts = await adapter.getAccounts();
+    const accountMap = new Map(accounts.map((acc: any) => [acc.id, acc.name]));
+    
+    const enrichedTransactions = limited.map((t: any) => ({
+      ...t,
+      accountName: accountMap.get(t.account) || t.account,
+    }));
     
     // Calculate summary stats
-    const totalAmount = transactions.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+    const totalAmount = limited.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
     
     return {
-      transactions,
-      count: transactions.length,
+      transactions: enrichedTransactions,
+      count: enrichedTransactions.length,
       totalAmount,
-      amountRange: {
-        min: input.minAmount,
-        max: input.maxAmount,
-      },
+      amountRange: input.absoluteAmount !== undefined 
+        ? { absolute: input.absoluteAmount }
+        : { min: input.minAmount, max: input.maxAmount },
     };
   },
 };

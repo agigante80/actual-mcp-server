@@ -34,6 +34,7 @@ class ActualConnectionPool {
   private readonly CLEANUP_INTERVAL: number; // Check frequency (default: 2 minutes)
   private readonly MAX_CONCURRENT_SESSIONS: number; // Configurable via MAX_CONCURRENT_SESSIONS env var (default: 1)
   private sharedConnection: ActualConnection | null = null;
+  private initializationPromise: Promise<void> | null = null;
 
   constructor() {
     // Read from environment variable or default to 15
@@ -51,11 +52,33 @@ class ActualConnectionPool {
     logger.info(`[ConnectionPool] Session idle timeout: ${idleTimeoutMinutes} minutes`);
     logger.info(`[ConnectionPool] Cleanup interval: ${Math.floor(this.CLEANUP_INTERVAL / 1000)}s`);
     
+    // Initialize asynchronously (force close stale connections, then start cleanup timer)
+    // Store the promise so callers can await it if needed
+    this.initializationPromise = this.initialize();
+  }
+
+  /**
+   * Async initialization: force close stale connections, then start cleanup timer
+   * This ensures cleanup completes before any connections are accepted
+   */
+  private async initialize(): Promise<void> {
     // Force close any stale connections from previous instance
-    this.forceCloseStaleConnections();
+    await this.forceCloseStaleConnections();
     
     // Start periodic cleanup of idle connections
     this.startCleanupTimer();
+    
+    logger.info('[ConnectionPool] Initialization complete, ready to accept connections');
+  }
+
+  /**
+   * Wait for connection pool initialization to complete
+   * Should be called before accepting any connections
+   */
+  async waitForInitialization(): Promise<void> {
+    if (this.initializationPromise) {
+      await this.initializationPromise;
+    }
   }
 
   /**
@@ -139,6 +162,22 @@ class ActualConnectionPool {
       
     } catch (err) {
       logger.error(`[ConnectionPool] Failed to initialize connection for session ${sessionId}:`, err);
+      
+      // Clean up the failed connection attempt
+      // Try to shutdown the API to leave it in a clean state for the next attempt
+      try {
+        const maybeApi = api as unknown as { shutdown?: Function };
+        if (typeof maybeApi.shutdown === 'function') {
+          await (maybeApi.shutdown as () => Promise<unknown>)();
+          logger.debug(`[ConnectionPool] Cleaned up failed connection for session: ${sessionId}`);
+        }
+      } catch (cleanupErr) {
+        logger.debug(`[ConnectionPool] Error during cleanup (ignoring): ${cleanupErr}`);
+      }
+      
+      // Ensure this session is not in the connections map
+      this.connections.delete(sessionId);
+      
       throw err;
     }
   }

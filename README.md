@@ -9,9 +9,9 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **53 specialized tools** covering 82% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **51 specialized tools** covering 82% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
 
-> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 49 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 51 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
@@ -343,7 +343,7 @@ docker compose --profile fullstack --profile dev up
 
 ## 🛠️ Available Tools
 
-The MCP server exposes **49 tools** organized into 10 categories. All tools follow the naming convention `actual_<category>_<action>`.
+The MCP server exposes **51 tools** organized into 10 categories. All tools follow the naming convention `actual_<category>_<action>`.
 
 > **⚡ Exclusive ActualQL Tools**: This MCP server includes 6 specialized tools powered by ActualQL that are **unique to this implementation** and not available in standard Actual Budget integrations. These tools provide advanced querying, aggregation, and analysis capabilities.
 
@@ -455,7 +455,14 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 |------|-------------|------------|
 | `actual_server_info` | Get Actual Budget server version and build info | - |
 
-**Total: 49 tools across 10 categories** (including 6 exclusive ActualQL-powered tools)
+### Session Management (2 tools)
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `actual_session_list` | List all active MCP sessions | - |
+| `actual_session_close` | Close a specific MCP session | `sessionId` |
+
+**Total: 51 tools across 11 categories** (including 6 exclusive ActualQL-powered tools)
 
 ---
 
@@ -479,7 +486,7 @@ These methods require access to Actual's internal API and are not directly expor
 ### Lookup Helper
 - `getIDByName()` - Look up IDs by name for accounts/payees/categories/schedules
 
-**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 49 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
+**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 51 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
 
 ## 📦 Installation
 
@@ -781,38 +788,87 @@ ACTUAL_BUDGET_SYNC_ID=abc123  # From Actual: Settings → Sync ID
 
 ```bash
 # Port and host
-MCP_BRIDGE_PORT=3000
-MCP_BRIDGE_BIND_HOST=0.0.0.0
+MCP_BRIDGE_PORT=3000                    # Default: 3000
+MCP_BRIDGE_BIND_HOST=0.0.0.0            # Default: 0.0.0.0
 
 # Data directory
-MCP_BRIDGE_DATA_DIR=./actual-data
+MCP_BRIDGE_DATA_DIR=./actual-data       # Default: ./actual-data
 
 # Transport endpoints
-MCP_SSE_PATH=/sse
-MCP_HTTP_PATH=/http
+MCP_SSE_PATH=/sse                       # Default: /sse
+MCP_HTTP_PATH=/http                     # Default: /http
+
+# Transport mode (Docker only)
+MCP_TRANSPORT_MODE=--http               # Default: --http (Options: --http, --sse)
+
+# Human-friendly advertised URL (optional)
+MCP_BRIDGE_ADVERTISED_URL=http://localhost:3000  # Default: none
+```
+
+#### Session Management
+
+```bash
+# Maximum concurrent sessions
+MAX_CONCURRENT_SESSIONS=10              # Default: 10
+
+# Session idle timeout (minutes)
+SESSION_IDLE_TIMEOUT_MINUTES=2          # Default: 2
 ```
 
 #### Logging
 
 ```bash
 # Enable file logging
-MCP_BRIDGE_STORE_LOGS=true
-MCP_BRIDGE_LOG_DIR=./logs
-MCP_BRIDGE_LOG_LEVEL=info  # error, warn, info, debug
+MCP_BRIDGE_STORE_LOGS=false             # Default: false
+MCP_BRIDGE_LOG_DIR=./logs               # Default: ./logs
+MCP_BRIDGE_LOG_LEVEL=info               # Default: info (error, warn, info, debug)
 
-# Log rotation
-MCP_BRIDGE_MAX_FILES=14d
-MCP_BRIDGE_MAX_LOG_SIZE=20m
+# Log rotation (when MCP_BRIDGE_STORE_LOGS=true)
+MCP_BRIDGE_MAX_FILES=14d                # Default: 14d
+MCP_BRIDGE_MAX_LOG_SIZE=20m             # Default: 20m
+MCP_BRIDGE_COMPRESS_AFTER_HOURS=24      # Default: 24
+MCP_BRIDGE_ROTATE_DATEPATTERN=YYYY-MM-DD  # Default: YYYY-MM-DD
 ```
 
 #### Security
 
 ```bash
 # Bearer token authentication (recommended for production)
-MCP_SSE_AUTHORIZATION=your_random_token
+MCP_SSE_AUTHORIZATION=your_random_token  # Default: none (no auth)
+
+# HTTPS support
+MCP_ENABLE_HTTPS=false                  # Default: false
+MCP_HTTPS_CERT=/path/to/cert.pem        # Default: none
+MCP_HTTPS_KEY=/path/to/key.pem          # Default: none
 
 # Use Docker secrets in production
-ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
+ACTUAL_PASSWORD_FILE=/run/secrets/actual_password  # Default: none
+```
+
+#### Development & Testing
+
+```bash
+# Debug mode
+DEBUG=false                             # Default: false
+
+# Skip budget download on startup
+SKIP_BUDGET_DOWNLOAD=false              # Default: false
+
+# Test modes
+TEST_ACTUAL_CONNECTION=false            # Default: false
+TEST_ACTUAL_TOOLS=false                 # Default: false
+USE_TEST_DATA=false                     # Default: false
+```
+
+#### Observability (Optional)
+
+```bash
+# Prometheus metrics
+ENABLE_METRICS=false                    # Default: false
+METRICS_PORT=9090                       # Default: 9090
+
+# Timezone
+TZ=UTC                                  # Default: UTC
 ```
 
 ---

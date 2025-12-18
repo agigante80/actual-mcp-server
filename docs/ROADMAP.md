@@ -48,6 +48,260 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 **Impact**: Achieves 100% Actual Budget API coverage
 
+---
+
+#### 2. **Pattern Matching Enhancement Roadmap**
+**Target**: v0.3.0 - v0.5.0 (Phased approach)
+
+**Vision**: Progressive enhancement from basic pattern matching to full regex support across all search tools.
+
+##### Phase 1: Basic Pattern Matching (v0.3.0 - Q2 2026)
+**Goal**: Add simple, safe pattern matching for common use cases
+
+**New Tools**:
+- [ ] `actual_transactions_search_by_payee_pattern`
+  - Supports: `startsWith`, `contains`, `endsWith`
+  - Returns transactions from ALL matching payees
+  - Example: "Amazon" matches "Amazon", "Amazon Prime", "Amazon Web Services"
+  
+- [ ] `actual_transactions_search_by_category_pattern`
+  - Same pattern types as payee
+  - Useful for finding category groups (e.g., "Util" → "Utilities", "Utility Bills")
+
+**Implementation Details**:
+- Case-insensitive matching by default
+- Returns aggregated results with source entity name in each transaction
+- All existing filters (date range, amount, account) still apply
+- Clear error messages for zero matches
+
+**Benefits**:
+- ✅ Solves "I don't know the exact name" problem
+- ✅ Handles typos and variations gracefully
+- ✅ No breaking changes to existing tools
+- ✅ Safe, predictable behavior
+
+**Affected Components**:
+- 2 new tool files (`transactions_search_by_payee_pattern.ts`, `transactions_search_by_category_pattern.ts`)
+- Shared pattern matching utility (`src/lib/patternMatcher.ts`)
+- 2 new test files
+- Tool registry update (`actualToolsManager.ts`)
+
+**Estimated Effort**: 2-3 days
+- Day 1: Implement payee pattern tool + utility + tests
+- Day 2: Implement category pattern tool + tests
+- Day 3: Integration testing, documentation
+
+---
+
+##### Phase 2: Extended Pattern Support (v0.4.0 - Q3 2026)
+**Goal**: Add advanced pattern matching to more entity types
+
+**New Tools/Features**:
+- [ ] `actual_accounts_search_pattern`
+  - Find accounts by partial name
+  - Example: "Check" → "Checking", "Check Account", "Business Checking"
+  
+- [ ] Account name matching in transaction search tools
+  - Add `accountNamePattern` parameter alongside `accountId`
+  - Auto-resolve account name patterns to UUIDs
+  - Example: `{ accountNamePattern: "Sav", matchType: "startsWith" }` → finds all savings accounts
+
+- [ ] Payee/Category pattern in summary tools
+  - `actual_transactions_summary_by_payee` with pattern support
+  - `actual_transactions_summary_by_category` with pattern support
+  - Aggregate spending across matched entities
+
+**Enhanced Matching**:
+- [ ] Case sensitivity option (`caseSensitive: boolean`)
+- [ ] Word boundary matching (`wordBoundary: boolean`)
+  - Example: "market" with wordBoundary → "Super Market" ✅, "Marketing" ❌
+- [ ] Multiple pattern support
+  - Example: `patterns: ["Amazon", "AWS"]` → matches both
+
+**Benefits**:
+- ✅ Consistent pattern matching across all entity types
+- ✅ More powerful filtering without complexity
+- ✅ Better UX for users who don't memorize exact names
+
+**Estimated Effort**: 3-4 days
+
+---
+
+##### Phase 3: Regex Support (v0.5.0 - Q4 2026)
+**Goal**: Full regex capabilities for power users and complex queries
+
+**Enhanced Tools**:
+- [ ] Add `matchType: 'regex'` to all pattern tools
+- [ ] Regex pattern validation and safety checks
+- [ ] Regex timeout protection (prevent ReDoS attacks)
+- [ ] Regex complexity limits
+
+**Implementation**:
+```typescript
+// Example: Find all transactions to companies ending in LLC or Inc
+{
+  payeePattern: "^.*(LLC|Inc\\.?)$",
+  matchType: "regex"
+}
+
+// Example: Find transactions with amounts matching patterns
+{
+  payeePattern: "Store|Market|Shop",
+  matchType: "regex",
+  minAmount: -10000
+}
+```
+
+**Security Considerations**:
+- [ ] Regex complexity analyzer (prevent catastrophic backtracking)
+- [ ] Timeout enforcement (max 100ms per regex execution)
+- [ ] Pattern blacklist (dangerous regex patterns)
+- [ ] Audit logging for regex usage
+- [ ] Documentation on safe regex patterns
+
+**Testing Requirements**:
+- [ ] ReDoS attack prevention tests
+- [ ] Performance benchmarks (1000+ payees)
+- [ ] Edge case validation (special characters, Unicode)
+- [ ] Security audit of regex engine
+
+**Benefits**:
+- ✅ Ultimate flexibility for power users
+- ✅ Complex multi-condition searches
+- ✅ Supports advanced AI-generated queries
+- ✅ No need for multiple tool calls
+
+**Risks & Mitigations**:
+- ⚠️ **Risk**: ReDoS attacks → **Mitigation**: Timeout + complexity limits
+- ⚠️ **Risk**: Hard to debug → **Mitigation**: Better error messages
+- ⚠️ **Risk**: AI might generate invalid regex → **Mitigation**: Validation + fallback
+
+**Estimated Effort**: 4-5 days
+- Day 1-2: Regex engine integration with safety checks
+- Day 3: Security testing and hardening
+- Day 4: Performance testing and optimization
+- Day 5: Documentation and examples
+
+---
+
+##### Phase 4: Advanced Pattern Features (v0.6.0 - 2027)
+**Goal**: AI-assisted pattern generation and smart matching
+
+**Features**:
+- [ ] Fuzzy matching (Levenshtein distance)
+  - Handle typos automatically
+  - Example: "Amazom" → suggests "Amazon"
+  
+- [ ] Natural language patterns
+  - AI converts "show me grocery stores" → regex pattern
+  - Pre-built pattern library (common categories)
+
+- [ ] Pattern templates
+  - `template: "email"` → matches email-like payee names
+  - `template: "website"` → matches URL-like payees
+  - `template: "company"` → matches "Inc", "LLC", "Corp", etc.
+
+- [ ] Multi-field pattern matching
+  - Search across payee + category + notes simultaneously
+  - Example: "Find all Amazon purchases in Electronics category"
+
+- [ ] Pattern statistics and suggestions
+  - "Top 10 payee patterns used"
+  - "Did you mean: [similar patterns]"
+
+**Benefits**:
+- ✅ Extremely user-friendly
+- ✅ Reduces cognitive load
+- ✅ Learns from usage patterns
+- ✅ AI agents can self-optimize queries
+
+**Estimated Effort**: 1-2 weeks
+
+---
+
+##### Rollout Strategy
+
+**Backward Compatibility**:
+- ✅ Existing exact-match tools remain unchanged
+- ✅ Pattern tools are opt-in additions
+- ✅ No breaking changes across all phases
+
+**Documentation Updates**:
+- [ ] Pattern matching guide with examples
+- [ ] Regex safety best practices
+- [ ] AI prompt templates for pattern usage
+- [ ] Migration guide (exact → pattern tools)
+
+**Testing Strategy**:
+- [ ] Unit tests: Pattern matching logic (all match types)
+- [ ] Integration tests: Full search flows with patterns
+- [ ] Performance tests: 10k+ entities, complex regex
+- [ ] Security tests: ReDoS, injection attempts
+- [ ] E2E tests: LibreChat integration with pattern tools
+
+**Monitoring & Metrics**:
+- [ ] Track pattern tool usage vs exact match
+- [ ] Monitor regex timeout incidents
+- [ ] Measure query performance impact
+- [ ] Collect pattern match success rates
+
+---
+
+##### Success Criteria
+
+**Phase 1 (Basic Patterns)**:
+- ✅ 90%+ of "payee not found" errors eliminated
+- ✅ <50ms performance overhead per search
+- ✅ Zero breaking changes to existing tools
+
+**Phase 3 (Regex)**:
+- ✅ Zero ReDoS incidents in production
+- ✅ <100ms regex execution time (95th percentile)
+- ✅ Positive user feedback on flexibility
+
+**Phase 4 (Advanced)**:
+- ✅ 50%+ of searches use pattern tools
+- ✅ AI agents self-generate effective patterns
+- ✅ User satisfaction score >4.5/5
+
+---
+
+##### Risk Assessment
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| Regex ReDoS attack | High | Medium | Timeout + complexity limits + testing |
+| Performance degradation | Medium | Low | Benchmarking + optimization |
+| AI misuse of patterns | Medium | Medium | Clear tool descriptions + examples |
+| Pattern complexity confusion | Low | High | Documentation + templates |
+| Backward compatibility break | High | Low | Strict versioning + testing |
+
+---
+
+##### Tools Benefiting from Pattern Matching
+
+**Immediate Benefit** (Phase 1-2):
+1. ✅ `actual_transactions_search_by_payee` → `_pattern` variant
+2. ✅ `actual_transactions_search_by_category` → `_pattern` variant
+3. ✅ `actual_transactions_summary_by_payee` → pattern support
+4. ✅ `actual_transactions_summary_by_category` → pattern support
+
+**Future Benefit** (Phase 2-3):
+5. ✅ `actual_accounts_list` → filter by name pattern
+6. ✅ `actual_categories_list` → filter by name pattern
+7. ✅ `actual_payees_list` → filter by name pattern
+8. ✅ `actual_rules_get` → find rules by pattern
+
+**Advanced** (Phase 4):
+9. ✅ Multi-entity search (payee + category + account patterns)
+10. ✅ Cross-budget pattern search (if multi-budget support added)
+
+---
+
+**Pattern Matching Priority**: 🟠 Medium-High (Post v0.2.0)  
+**Total Estimated Timeline**: 6-8 months (phased rollout)  
+**Total Estimated Effort**: 3-4 weeks development time (spread across releases)
+
 **Technical Approach**:
 - Research internal Actual API access
 - Use `send()` method for schedule operations
