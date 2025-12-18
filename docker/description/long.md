@@ -2,11 +2,11 @@
 
 A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budget APIs as conversational AI tools for LibreChat and other MCP-compatible clients.
 
-> **✅ LibreChat Verified**: All 49 tools tested and working with LibreChat over HTTPS with Bearer token authentication.
+> **✅ LibreChat Verified**: All 51 tools tested and working with LibreChat over HTTPS with Bearer token authentication.
 
 ## 🚀 Features
 
-- **49 Implemented Tools** - Comprehensive coverage of core Actual Budget API
+- **51 Implemented Tools** - Comprehensive coverage of core Actual Budget API
 - **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
 - **Advanced Features** - Custom ActualQL queries, bank sync, multi-budget support
 - **HTTPS Support** - Secure connections with self-signed or CA certificates

@@ -124,6 +124,8 @@ export async function connectToActualForSession(sessionId: string) {
   }
   
   try {
+    // Ensure connection pool initialization is complete before accepting connections
+    await connectionPool.waitForInitialization();
     await connectionPool.getConnection(sessionId);
     logger.info(`Actual API connection ready for session: ${sessionId}`);
   } catch (err) {
