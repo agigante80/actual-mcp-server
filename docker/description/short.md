@@ -1,1 +1,1 @@
-MCP server for Actual Budget: 49 tools (6 exclusive ActualQL), LibreChat verified, HTTPS support
+MCP server for Actual Budget: 51 tools (6 exclusive ActualQL), LibreChat verified, HTTPS support
