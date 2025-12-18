@@ -87,9 +87,17 @@ export async function startHttpServer(
     }
 
     const token = match[1];
+    
+    // Debug logging for token comparison
+    logger.debug(`[HTTP] Auth header received: "${authHeader}"`);
+    logger.debug(`[HTTP] Extracted token: "${token}" (length: ${token.length})`);
+    logger.debug(`[HTTP] Expected token: "${config.MCP_SSE_AUTHORIZATION}" (length: ${config.MCP_SSE_AUTHORIZATION?.length || 0})`);
+    logger.debug(`[HTTP] Tokens equal: ${token === config.MCP_SSE_AUTHORIZATION}`);
+    logger.debug(`[HTTP] Token hex dump (received): ${Buffer.from(token).toString('hex')}`);
+    logger.debug(`[HTTP] Token hex dump (expected): ${Buffer.from(config.MCP_SSE_AUTHORIZATION || '').toString('hex')}`);
+    
     if (token !== config.MCP_SSE_AUTHORIZATION) {
       logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid token`);
-      logger.debug(`[HTTP] Token comparison failed. Received: "${token}" (length: ${token.length}), Expected: "${config.MCP_SSE_AUTHORIZATION}" (length: ${config.MCP_SSE_AUTHORIZATION?.length || 0})`);
       res.status(401).json({ error: 'Unauthorized: Invalid token' });
       return false;
     }
