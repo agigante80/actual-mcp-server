@@ -48,6 +48,10 @@ const tool: ToolDefinition = {
     }
     
     // Apply optional filters
+    if (input.accountId) {
+      query = query.filter({ account: input.accountId });
+    }
+    
     if (input.categoryName) {
       query = query.filter({ 'category.name': input.categoryName });
     }
