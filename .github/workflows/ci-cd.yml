@@ -60,6 +60,7 @@ jobs:
   version:
     name: Version Generation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.version.outputs.version }}
       docker_version: ${{ steps.version.outputs.docker_version }}
@@ -122,6 +123,7 @@ jobs:
   lint:
     name: Lint Code
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: version
     steps:
       - name: 📥 Checkout repository
@@ -155,6 +157,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     steps:
@@ -199,6 +202,7 @@ jobs:
   build:
     name: Build Application
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, lint, test]
     if: |
       always() &&
@@ -235,6 +239,7 @@ jobs:
   validate-short-description:
     name: Validate Docker Description
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: version
     steps:
       - name: 📥 Checkout repository
@@ -261,6 +266,7 @@ jobs:
   docker-test:
     name: Docker Test Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, build, validate-short-description]
     if: |
       always() &&
@@ -328,6 +334,7 @@ jobs:
   docker-publish:
     name: Build & Publish Docker Images
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, docker-test]
     if: |
       always() &&
@@ -431,6 +438,7 @@ jobs:
   security-scan:
     name: Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, docker-test]
     if: |
       always() &&
@@ -488,6 +496,7 @@ jobs:
   docker-hub-description:
     name: Update Docker Hub Description
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, docker-publish]
     if: |
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
@@ -525,6 +534,7 @@ jobs:
   deployment-test:
     name: Deployment Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, docker-publish]
     if: |
       always() &&
@@ -574,6 +584,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, docker-publish, security-scan]
     if: |
       always() &&
@@ -653,6 +664,7 @@ jobs:
   summary:
     name: Pipeline Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [version, lint, test, build, validate-short-description, docker-test,
             docker-publish, security-scan, deployment-test, release]
     if: always()
