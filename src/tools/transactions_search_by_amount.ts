@@ -30,6 +30,43 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // Validate accountId exists if provided
+    if (input.accountId) {
+      const accounts = await adapter.getAccounts();
+      const accountExists = accounts.some((acc: any) => acc.id === input.accountId);
+      
+      if (!accountExists) {
+        // Check if user provided account name instead of UUID
+        const accountByName = accounts.find((acc: any) => 
+          acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
+        );
+        
+        if (accountByName) {
+          return {
+            transactions: [],
+            count: 0,
+            totalAmount: 0,
+            amountRange: {
+              min: input.minAmount,
+              max: input.maxAmount,
+            },
+            error: `Account '${input.accountId}' appears to be a name, not an ID. Use account UUID '${accountByName.id}' instead.`,
+          };
+        }
+        
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          amountRange: {
+            min: input.minAmount,
+            max: input.maxAmount,
+          },
+          error: `Account '${input.accountId}' not found. Did you mean to use account UUID instead of name? Use actual_accounts_list to get valid account UUIDs.`,
+        };
+      }
+    }
+    
     // Get base transactions (filtered by account and date range if provided)
     const allTransactions = await adapter.getTransactions(
       input.accountId,
