@@ -11,8 +11,8 @@ const InputSchema = z.object({
   categoryId: z.string().optional().describe('Filter by category ID'),
   payeeId: z.string().optional().describe('Filter by payee ID'),
   notes: z.string().optional().describe('Search in transaction notes (case-insensitive)'),
-  cleared: z.boolean().optional().describe('Filter by cleared status'),
-  reconciled: z.boolean().optional().describe('Filter by reconciled status'),
+  cleared: z.boolean().nullable().optional().describe('Filter by cleared status'),
+  reconciled: z.boolean().nullable().optional().describe('Filter by reconciled status'),
 });
 
 type Output = unknown;
