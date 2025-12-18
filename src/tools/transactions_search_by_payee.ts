@@ -139,12 +139,21 @@ const tool: ToolDefinition = {
     
     const limited = filtered.slice(0, input.limit || 100);
     
+    // Enrich transactions with account names
+    const accounts = await adapter.getAccounts();
+    const accountMap = new Map(accounts.map((acc: any) => [acc.id, acc.name]));
+    
+    const enrichedTransactions = limited.map((t: any) => ({
+      ...t,
+      accountName: accountMap.get(t.account) || t.account,
+    }));
+    
     // Calculate summary stats
     const totalAmount = limited.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
     
     return {
-      transactions: limited,
-      count: limited.length,
+      transactions: enrichedTransactions,
+      count: enrichedTransactions.length,
       totalAmount,
       payeeName: input.payeeName,
     };
