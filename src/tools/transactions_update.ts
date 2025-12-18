@@ -15,8 +15,8 @@ const InputSchema = z.object({
     notes: z.string().optional().describe('Transaction notes'),
     imported_id: z.string().optional().describe('Original imported transaction ID'),
     transfer_id: z.string().optional().describe('Transfer transaction ID if this is a transfer'),
-    cleared: z.boolean().optional().describe('Whether transaction is cleared'),
-    reconciled: z.boolean().optional().describe('Whether transaction is reconciled'),
+    cleared: z.boolean().nullable().optional().describe('Whether transaction is cleared'),
+    reconciled: z.boolean().nullable().optional().describe('Whether transaction is reconciled'),
   }).describe('Fields to update'),
 });
 
