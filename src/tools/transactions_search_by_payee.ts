@@ -22,63 +22,98 @@ type Output = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_payee',
-  description: 'Search transactions by payee name using ActualQL. Returns all transactions for a specific payee with optional date range, category, and amount filters. Useful for analyzing spending patterns with specific vendors or service providers.',
+  description: 'Search transactions by payee name. Returns all transactions for a specific payee with optional date range, category, and amount filters. Useful for analyzing spending patterns with specific vendors or service providers.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
-    // Build ActualQL query
-    const api = await import('@actual-app/api');
-    const q = (api as any).q;
+    // Step 1: Find payee ID by name
+    let payeeId: string | undefined;
+    if (input.payeeName) {
+      const payees = await adapter.getPayees();
+      const payee = payees.find((p: any) => 
+        p.name && p.name.toLowerCase() === input.payeeName!.toLowerCase()
+      );
+      if (!payee) {
+        // Payee not found - return empty result
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          payeeName: input.payeeName,
+          error: `Payee "${input.payeeName}" not found`,
+        };
+      }
+      payeeId = payee.id;
+    }
     
-    let query = q('transactions').filter({
-      'payee.name': input.payeeName
+    // Step 2: Get base transactions (filtered by account and date range if provided)
+    const allTransactions = await adapter.getTransactions(
+      input.accountId,
+      input.startDate,
+      input.endDate
+    );
+    
+    if (!Array.isArray(allTransactions)) {
+      return {
+        transactions: [],
+        count: 0,
+        totalAmount: 0,
+        payeeName: input.payeeName,
+      };
+    }
+    
+    // Step 3: Apply JavaScript filters
+    let filtered = allTransactions;
+    
+    // Filter by payee ID
+    if (payeeId) {
+      filtered = filtered.filter((t: any) => t.payee === payeeId);
+    }
+    
+    // Filter by category name (need to lookup category ID)
+    if (input.categoryName) {
+      const categories = await adapter.getCategories();
+      const category = categories.find((c: any) =>
+        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
+      );
+      if (category) {
+        filtered = filtered.filter((t: any) => t.category === category.id);
+      } else {
+        // Category not found - return empty
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          payeeName: input.payeeName,
+          error: `Category "${input.categoryName}" not found`,
+        };
+      }
+    }
+    
+    // Filter by amount range
+    if (input.minAmount !== undefined) {
+      filtered = filtered.filter((t: any) => (t.amount || 0) >= input.minAmount!);
+    }
+    if (input.maxAmount !== undefined) {
+      filtered = filtered.filter((t: any) => (t.amount || 0) <= input.maxAmount!);
+    }
+    
+    // Sort by date descending and apply limit
+    filtered.sort((a: any, b: any) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateB.localeCompare(dateA);
     });
     
-    // Apply date range filters
-    if (input.startDate || input.endDate) {
-      const dateFilter: any = {};
-      if (input.startDate) {
-        dateFilter.$gte = input.startDate;
-      }
-      if (input.endDate) {
-        dateFilter.$lte = input.endDate;
-      }
-      query = query.filter({ date: dateFilter });
-    }
-    
-    // Apply optional filters
-    if (input.accountId) {
-      query = query.filter({ account: input.accountId });
-    }
-    
-    if (input.categoryName) {
-      query = query.filter({ 'category.name': input.categoryName });
-    }
-    
-    if (input.minAmount !== undefined || input.maxAmount !== undefined) {
-      const amountFilter: any = {};
-      if (input.minAmount !== undefined) {
-        amountFilter.$gte = input.minAmount;
-      }
-      if (input.maxAmount !== undefined) {
-        amountFilter.$lte = input.maxAmount;
-      }
-      query = query.filter({ amount: amountFilter });
-    }
-    
-    // Select all fields, order by date descending, and apply limit
-    query = query.select('*').orderBy({ date: 'desc' }).limit(input.limit || 100);
-    
-    const result = await adapter.runQuery(query);
-    const transactions = Array.isArray(result) ? result : [];
+    const limited = filtered.slice(0, input.limit || 100);
     
     // Calculate summary stats
-    const totalAmount = transactions.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+    const totalAmount = limited.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
     
     return {
-      transactions,
-      count: transactions.length,
+      transactions: limited,
+      count: limited.length,
       totalAmount,
       payeeName: input.payeeName,
     };
