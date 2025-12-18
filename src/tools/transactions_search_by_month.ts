@@ -26,6 +26,39 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // Step 0: Validate accountId exists if provided
+    if (input.accountId) {
+      const accounts = await adapter.getAccounts();
+      const accountExists = accounts.some((acc: any) => acc.id === input.accountId);
+      
+      if (!accountExists) {
+        // Check if user provided account name instead of UUID
+        const accountByName = accounts.find((acc: any) => 
+          acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
+        );
+        
+        const month = input.month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        
+        if (accountByName) {
+          return {
+            transactions: [],
+            count: 0,
+            totalAmount: 0,
+            month,
+            error: `Account '${input.accountId}' appears to be a name, not an ID. Use account UUID '${accountByName.id}' instead.`,
+          };
+        }
+        
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          month,
+          error: `Account '${input.accountId}' not found. Did you mean to use account UUID instead of name? Use actual_accounts_list to get valid account UUIDs.`,
+        };
+      }
+    }
+    
     // Default to current month if not provided
     const today = new Date();
     const month = input.month || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
