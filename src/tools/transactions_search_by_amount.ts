@@ -3,8 +3,9 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00)'),
-  maxAmount: z.number().optional().describe('Maximum amount in cents (e.g., 10000 for $100.00)'),
+  minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
+  maxAmount: z.number().optional().describe('Maximum amount in cents (e.g., 10000 for $100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
+  absoluteAmount: z.number().optional().describe('Optional: Search by absolute value (magnitude) in cents, ignoring sign. E.g., 5000 will match both +$50.00 (income) and -$50.00 (expense). If specified, minAmount/maxAmount are ignored.'),
   startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
   endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
@@ -24,7 +25,7 @@ type Output = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_amount',
-  description: 'Search transactions by amount range. Useful for finding large expenses, deposits, or transactions within a specific amount range. Amounts are in cents (e.g., $100 = 10000, $-50.25 = -5025). At least one of minAmount or maxAmount must be specified.',
+  description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
@@ -51,12 +52,18 @@ const tool: ToolDefinition = {
     // Apply JavaScript filters
     let filtered = allTransactions;
     
-    // Filter by amount range
-    if (input.minAmount !== undefined) {
-      filtered = filtered.filter((t: any) => (t.amount || 0) >= input.minAmount!);
-    }
-    if (input.maxAmount !== undefined) {
-      filtered = filtered.filter((t: any) => (t.amount || 0) <= input.maxAmount!);
+    // Filter by absolute amount (if specified, this takes precedence)
+    if (input.absoluteAmount !== undefined) {
+      const targetAbs = Math.abs(input.absoluteAmount);
+      filtered = filtered.filter((t: any) => Math.abs(t.amount || 0) === targetAbs);
+    } else {
+      // Filter by signed amount range
+      if (input.minAmount !== undefined) {
+        filtered = filtered.filter((t: any) => (t.amount || 0) >= input.minAmount!);
+      }
+      if (input.maxAmount !== undefined) {
+        filtered = filtered.filter((t: any) => (t.amount || 0) <= input.maxAmount!);
+      }
     }
     
     // Filter by category name (need to lookup category ID)
@@ -98,10 +105,9 @@ const tool: ToolDefinition = {
       transactions: limited,
       count: limited.length,
       totalAmount,
-      amountRange: {
-        min: input.minAmount,
-        max: input.maxAmount,
-      },
+      amountRange: input.absoluteAmount !== undefined 
+        ? { absolute: input.absoluteAmount }
+        : { min: input.minAmount, max: input.maxAmount },
     };
   },
 };
