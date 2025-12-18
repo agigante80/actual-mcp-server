@@ -24,58 +24,79 @@ type Output = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_amount',
-  description: 'Search transactions by amount range using ActualQL. Useful for finding large expenses, deposits, or transactions within a specific amount range. Amounts are in cents (e.g., $100 = 10000, $-50.25 = -5025). At least one of minAmount or maxAmount must be specified.',
+  description: 'Search transactions by amount range. Useful for finding large expenses, deposits, or transactions within a specific amount range. Amounts are in cents (e.g., $100 = 10000, $-50.25 = -5025). At least one of minAmount or maxAmount must be specified.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
-    // Build ActualQL query with amount filter
-    const api = await import('@actual-app/api');
-    const q = (api as any).q;
+    // Get base transactions (filtered by account and date range if provided)
+    const allTransactions = await adapter.getTransactions(
+      input.accountId,
+      input.startDate,
+      input.endDate
+    );
     
-    const amountFilter: any = {};
+    if (!Array.isArray(allTransactions)) {
+      return {
+        transactions: [],
+        count: 0,
+        totalAmount: 0,
+        amountRange: {
+          min: input.minAmount,
+          max: input.maxAmount,
+        },
+      };
+    }
+    
+    // Apply JavaScript filters
+    let filtered = allTransactions;
+    
+    // Filter by amount range
     if (input.minAmount !== undefined) {
-      amountFilter.$gte = input.minAmount;
+      filtered = filtered.filter((t: any) => (t.amount || 0) >= input.minAmount!);
     }
     if (input.maxAmount !== undefined) {
-      amountFilter.$lte = input.maxAmount;
+      filtered = filtered.filter((t: any) => (t.amount || 0) <= input.maxAmount!);
     }
     
-    let query = q('transactions').filter({ amount: amountFilter });
-    
-    // Apply date range filters
-    if (input.startDate || input.endDate) {
-      const dateFilter: any = {};
-      if (input.startDate) {
-        dateFilter.$gte = input.startDate;
-      }
-      if (input.endDate) {
-        dateFilter.$lte = input.endDate;
-      }
-      query = query.filter({ date: dateFilter });
-    }
-    
-    // Apply optional filters
-    if (input.accountId) {
-      query = query.filter({ account: input.accountId });
-    }
-    
+    // Filter by category name (need to lookup category ID)
     if (input.categoryName) {
-      query = query.filter({ 'category.name': input.categoryName });
+      const categories = await adapter.getCategories();
+      const category = categories.find((c: any) =>
+        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
+      );
+      if (category) {
+        filtered = filtered.filter((t: any) => t.category === category.id);
+      } else {
+        // Category not found - return empty
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          amountRange: {
+            min: input.minAmount,
+            max: input.maxAmount,
+          },
+          error: `Category "${input.categoryName}" not found`,
+        };
+      }
     }
     
-    // Select all fields, order by amount descending, and apply limit
-    query = query.select('*').orderBy({ amount: 'desc' }).limit(input.limit || 100);
+    // Sort by amount descending and apply limit
+    filtered.sort((a: any, b: any) => {
+      const amountA = a.amount || 0;
+      const amountB = b.amount || 0;
+      return amountB - amountA;
+    });
     
-    const result = await adapter.runQuery(query);
-    const transactions = Array.isArray(result) ? result : [];
+    const limited = filtered.slice(0, input.limit || 100);
     
     // Calculate summary stats
-    const totalAmount = transactions.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+    const totalAmount = limited.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
     
     return {
-      transactions,
-      count: transactions.length,
+      transactions: limited,
+      count: limited.length,
       totalAmount,
       amountRange: {
         min: input.minAmount,

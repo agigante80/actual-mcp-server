@@ -21,7 +21,7 @@ type Output = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
-  description: 'Search transactions for a specific month using ActualQL. Returns all transactions matching the month and optional filters (account, category, payee, amount range). Uses the $month transform function for efficient monthly queries.',
+  description: 'Search transactions for a specific month. Returns all transactions matching the month and optional filters (account, category, payee, amount range). Efficiently queries by date range.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
@@ -38,52 +38,88 @@ const tool: ToolDefinition = {
     const lastDay = new Date(year, monthNum, 0).getDate();
     const endDate = `${year}-${String(monthNum).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
     
-    // Build ActualQL query with date range (same pattern as category search)
-    const api = await import('@actual-app/api');
-    const q = (api as any).q;
+    // Get base transactions (filtered by account and date range)
+    const allTransactions = await adapter.getTransactions(
+      input.accountId,
+      startDate,
+      endDate
+    );
     
-    let query = q('transactions');
-    
-    // Apply date range filter
-    const dateFilter: any = { $gte: startDate, $lte: endDate };
-    query = query.filter({ date: dateFilter });
-    
-    // Apply optional filters by chaining .filter() calls
-    if (input.accountId) {
-      query = query.filter({ account: input.accountId });
+    if (!Array.isArray(allTransactions)) {
+      return {
+        transactions: [],
+        count: 0,
+        totalAmount: 0,
+        month,
+      };
     }
     
+    // Apply JavaScript filters
+    let filtered = allTransactions;
+    
+    // Filter by category name (need to lookup category ID)
     if (input.categoryName) {
-      query = query.filter({ 'category.name': input.categoryName });
+      const categories = await adapter.getCategories();
+      const category = categories.find((c: any) =>
+        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
+      );
+      if (category) {
+        filtered = filtered.filter((t: any) => t.category === category.id);
+      } else {
+        // Category not found - return empty
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          month,
+          error: `Category "${input.categoryName}" not found`,
+        };
+      }
     }
     
+    // Filter by payee name (need to lookup payee ID)
     if (input.payeeName) {
-      query = query.filter({ 'payee.name': input.payeeName });
+      const payees = await adapter.getPayees();
+      const payee = payees.find((p: any) =>
+        p.name && p.name.toLowerCase() === input.payeeName!.toLowerCase()
+      );
+      if (payee) {
+        filtered = filtered.filter((t: any) => t.payee === payee.id);
+      } else {
+        // Payee not found - return empty
+        return {
+          transactions: [],
+          count: 0,
+          totalAmount: 0,
+          month,
+          error: `Payee "${input.payeeName}" not found`,
+        };
+      }
     }
     
-    if (input.minAmount !== undefined || input.maxAmount !== undefined) {
-      const amountFilter: any = {};
-      if (input.minAmount !== undefined) {
-        amountFilter.$gte = input.minAmount;
-      }
-      if (input.maxAmount !== undefined) {
-        amountFilter.$lte = input.maxAmount;
-      }
-      query = query.filter({ amount: amountFilter });
+    // Filter by amount range
+    if (input.minAmount !== undefined) {
+      filtered = filtered.filter((t: any) => (t.amount || 0) >= input.minAmount!);
+    }
+    if (input.maxAmount !== undefined) {
+      filtered = filtered.filter((t: any) => (t.amount || 0) <= input.maxAmount!);
     }
     
-    // Select all fields, order by date descending, and apply limit
-    query = query.select('*').orderBy({ date: 'desc' }).limit(input.limit || 100);
+    // Sort by date descending and apply limit
+    filtered.sort((a: any, b: any) => {
+      const dateA = a.date || '';
+      const dateB = b.date || '';
+      return dateB.localeCompare(dateA);
+    });
     
-    const result = await adapter.runQuery(query);
-    const transactions = Array.isArray(result) ? result : [];
+    const limited = filtered.slice(0, input.limit || 100);
     
     // Calculate summary stats
-    const totalAmount = transactions.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
+    const totalAmount = limited.reduce((sum: number, t: any) => sum + (t.amount || 0), 0);
     
     return {
-      transactions,
-      count: transactions.length,
+      transactions: limited,
+      count: limited.length,
       totalAmount,
       month,
     };
