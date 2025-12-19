@@ -3,16 +3,16 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  accountId: z.string().optional().describe('Filter by specific account ID'),
-  startDate: z.string().optional().describe('Start date (YYYY-MM-DD format)'),
-  endDate: z.string().optional().describe('End date (YYYY-MM-DD format)'),
-  minAmount: z.number().optional().describe('Minimum transaction amount in cents (negative for expenses)'),
-  maxAmount: z.number().optional().describe('Maximum transaction amount in cents'),
-  categoryId: z.string().optional().describe('Filter by category ID'),
-  payeeId: z.string().optional().describe('Filter by payee ID'),
-  notes: z.string().optional().describe('Search in transaction notes (case-insensitive)'),
-  cleared: z.boolean().optional().describe('Filter by cleared status'),
-  reconciled: z.boolean().optional().describe('Filter by reconciled status'),
+  accountId: z.string().nullable().optional().describe('Filter by specific account ID'),
+  startDate: z.string().nullable().optional().describe('Start date (YYYY-MM-DD format)'),
+  endDate: z.string().nullable().optional().describe('End date (YYYY-MM-DD format)'),
+  minAmount: z.number().nullable().optional().describe('Minimum transaction amount in cents (negative for expenses)'),
+  maxAmount: z.number().nullable().optional().describe('Maximum transaction amount in cents'),
+  categoryId: z.string().nullable().optional().describe('Filter by category ID'),
+  payeeId: z.string().nullable().optional().describe('Filter by payee ID'),
+  notes: z.string().nullable().optional().describe('Search in transaction notes (case-insensitive)'),
+  cleared: z.boolean().nullable().optional().describe('Filter by cleared status'),
+  reconciled: z.boolean().nullable().optional().describe('Filter by reconciled status'),
 });
 
 type Output = unknown;
@@ -24,8 +24,13 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // Convert null to undefined for adapter (LibreChat sends null, adapter expects undefined)
+    const accountId = input.accountId ?? undefined;
+    const startDate = input.startDate ?? undefined;
+    const endDate = input.endDate ?? undefined;
+    
     // Get base transactions
-    const transactions = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
+    const transactions = await adapter.getTransactions(accountId, startDate, endDate);
     
     if (!Array.isArray(transactions)) {
       return { result: [] };
