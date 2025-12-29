@@ -96,6 +96,7 @@ export class StreamableHTTPServerTransport {
       // that validate serverInstructions / capabilities / tools won't error.
       const result = {
         protocolVersion: '2025-06-18',
+        identifier: 'actual-mcp-server',
         // capabilities expected to be an object like { tools: { ... } }
         capabilities: this.server?.options?.capabilities ?? { tools: {} },
         // some clients expect serverInstructions to exist (object or string)
