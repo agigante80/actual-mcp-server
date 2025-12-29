@@ -133,6 +133,7 @@ export async function startHttpServer(
     // List tools handler
     server.setRequestHandler(ListToolsRequestSchema, async () => {
       logger.debug('[TOOLS LIST] Listing available tools');
+      logger.debug(`[TOOLS LIST] toolsList length: ${toolsList.length}`);
       const tools = toolsList.map((name: string) => {
         const schemaFromParam = toolSchemas && toolSchemas[name];
   const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
@@ -149,6 +150,7 @@ export async function startHttpServer(
           inputSchema,
         };
       });
+      logger.debug(`[TOOLS LIST] Returning ${tools.length} tools`);
       return { tools };
     });
 
@@ -181,6 +183,18 @@ export async function startHttpServer(
 
     return { server };
   }
+
+  // Middleware to inject Accept header for LobeChat compatibility
+  // Must be before the route handler
+  app.use(httpPath, (req: Request, _res: Response, next: () => void) => {
+    const accept = req.get('Accept');
+    logger.debug(`[ACCEPT HEADER MIDDLEWARE] Original: ${accept || 'undefined'}`);
+    if (!accept || accept === '*/*' || (!accept.includes('application/json') || !accept.includes('text/event-stream'))) {
+      logger.debug('[ACCEPT HEADER MIDDLEWARE] Modifying Accept header for MCP SDK compatibility');
+      req.headers['accept'] = 'application/json, text/event-stream';
+    }
+    next();
+  });
 
   // Unified POST handler. Create new server/transport only on initialize (no session id).
   app.post(httpPath, async (req: Request, res: Response) => {
@@ -273,7 +287,7 @@ export async function startHttpServer(
       let transport = transports.get(sessionId);
       if (!transport) {
         // If the client connects SSE first (rare), create a transport pinned to sessionId
-        logger.debug(`[SESSION] No transport for session ${sessionId}, creating pinned transport`);
+        logger.debug(`[SESSION] No transport for session ${sessionId}, creating pinned transport for method: ${method}`);
         const { server } = createServerInstance();
         transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => sessionId,
