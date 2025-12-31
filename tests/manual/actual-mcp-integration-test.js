@@ -148,7 +148,9 @@ async function callTool(toolName, args = {}) {
     const textContent = response.content[0].text;
     if (textContent) {
       try {
-        return JSON.parse(textContent);
+        const parsed = JSON.parse(textContent);
+        // Actual tools wrap responses in {"result": data}, extract it
+        return parsed.result !== undefined ? parsed.result : parsed;
       } catch (e) {
         return textContent; // Return as-is if not JSON
       }
