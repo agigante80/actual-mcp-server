@@ -11,7 +11,7 @@
 
 A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **51 specialized tools** covering 82% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
 
-> **🧪 Tested with LibreChat**: This MCP server has been extensively tested and verified with [LibreChat](https://github.com/danny-avila/LibreChat) as the client. All 51 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+> **🧪 Tested with Multiple AI Clients**: This MCP server has been extensively tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 51 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
@@ -24,7 +24,7 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 - [Available Tools](#-available-tools)
 - [Missing Tools](#-missing-tools-not-yet-implemented)
 - [Installation](#-installation)
-- [LibreChat Integration](#-librechat-integration)
+- [AI Client Integration (LibreChat & LobeChat)](#-ai-client-integration-librechat--lobechat)
 - [Usage Examples](#-usage-examples)
 - [Configuration](#-configuration)
 - [Transports & Authentication](#-transports--authentication)
@@ -137,7 +137,34 @@ AI: [Uses categories_create] "Pet Supplies category created"
 ### Transport Protocols
 
 - **HTTP/HTTPS**: Production-ready with Bearer token authentication (recommended)
-- **SSE (Server-Sent Events)**: Streaming updates (LibreChat compatible)
+- **SSE (Server-Sent Events)**: Streaming updates (compatible with LibreChat and LobeChat)
+
+### 🐳 Docker Networking Best Practices
+
+**For Docker-to-Docker communication (LibreChat, LobeChat, etc.)**, use internal Docker hostnames instead of host IPs:
+
+✅ **RECOMMENDED**: `http://actual-mcp-server-backend:3600/http`  
+❌ **NOT RECOMMENDED**: `http://192.168.x.x:3600/http`
+
+**Why internal hostnames are better:**
+- **Direct communication**: No extra network hops through host bridge
+- **Better security**: No external network exposure required
+- **Built-in DNS**: Automatic hostname resolution within Docker networks
+- **Resilient**: Works even if host IP changes
+- **Performance**: Lower latency for container-to-container communication
+
+**Example configuration for AI clients:**
+```yaml
+# LibreChat librechat.yaml
+mcpServers:
+  actual-mcp:
+    url: "http://actual-mcp-server-backend:3600/http"  # ✅ Use container name
+
+# LobeChat (via UI)
+Server URL: http://actual-mcp-server-backend:3600/http  # ✅ Use container name
+```
+
+Both containers must be on the same Docker network. See [Docker Deployment](#-docker-deployment) section below for network configuration.
 
 ---
 
@@ -556,45 +583,143 @@ docker compose --profile production up -d
 
 ---
 
-## 💬 LibreChat Integration
+## 💬 AI Client Integration (LibreChat & LobeChat)
 
-### Quick Setup
+This MCP server has been tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 51 tools work correctly with both clients.
 
-1. **Start the MCP Server** (with HTTPS recommended)
+### Quick Setup (Docker Environment)
+
+**⚠️ Important for Docker Deployments**: Always use **internal Docker hostnames** (not host IPs) for container-to-container communication. This provides better performance, security, and reliability.
+
+✅ **CORRECT**: `http://actual-mcp-server-backend:3600/http`  
+❌ **AVOID**: `http://192.168.x.x:3600/http`
+
+#### 1. Start the MCP Server
+
 ```bash
-# Using Docker
-docker run -d --name actual-mcp-server \
+# Using Docker Compose (recommended)
+docker compose up -d mcp-server
+
+# Or standalone Docker
+docker run -d --name actual-mcp-server-backend \
+  --network your-ai-network \
   -p 3600:3600 \
   -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
   -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
-  -e MCP_ENABLE_HTTPS=true \
-  -v $(pwd)/certs:/app/certs:ro \
+  -v actual-mcp-data:/data \
   ghcr.io/agigante80/actual-mcp-server:latest
 ```
 
-2. **Configure LibreChat** (`librechat.yaml`)
+#### 2a. Configure LibreChat
+
+Edit your `librechat.yaml`:
+
 ```yaml
+# librechat.yaml
 mcpServers:
   actual-mcp:
     type: "streamable-http"
-    url: "https://your-server-ip:3600/http"
+    # ✅ Use container name (not IP) if on same Docker network
+    url: "http://actual-mcp-server-backend:3600/http"
     headers:
       Authorization: "Bearer YOUR_TOKEN_HERE"
     serverInstructions: true
+    timeout: 600000  # 10 minutes
 ```
 
-3. **Restart LibreChat**
+Then restart LibreChat:
 ```bash
 docker restart ai-librechat
 ```
 
-### HTTPS Setup (Recommended for Security)
+#### 2b. Configure LobeChat
 
-Bearer tokens are sent in HTTP headers and should be encrypted in transit.
+In LobeChat UI:
+1. Navigate to **Settings** → **Language Model** → **Model Context Protocol**
+2. Click **Add Plugin**
+3. Fill in the configuration:
+   - **Name**: Actual Budget MCP
+   - **Server Type**: HTTP
+   - **Server URL**: `http://actual-mcp-server-backend:3600/http` ✅ (use container name)
+   - **Authorization**: `Bearer YOUR_TOKEN_HERE`
+4. Click **Save**
 
-#### Option 1: Self-Signed Certificate (Development)
+LobeChat will automatically discover all 51 tools.
+
+### Network Configuration
+
+Both the MCP server and AI client containers must be on the same Docker network:
+
+```yaml
+# docker-compose.yml
+networks:
+  ai-network:
+    driver: bridge
+
+services:
+  librechat:  # or lobe-chat
+    networks:
+      - ai-network
+  
+  actual-mcp-server-backend:
+    networks:
+      - ai-network
+```
+
+Verify connectivity:
+```bash
+# From LibreChat/LobeChat container
+docker exec <ai-container> wget -qO- http://actual-mcp-server-backend:3600/health
+# Should return: {"status":"ok","initialized":true,...}
+```
+
+### HTTPS Setup (Optional - For External Access)
+
+**Note**: HTTPS is **not required** when using internal Docker networking. Use HTTPS only if:
+- Accessing MCP server from outside the Docker network
+- Exposing server to the internet
+- Compliance requirements mandate encryption
+
+For internal Docker-to-Docker communication, HTTP is secure and simpler.
+
+#### Option 1: Docker Internal Network (Recommended - No HTTPS Needed)
+
+If both containers are on the same Docker network, use HTTP securely without TLS overhead:
+
+```yaml
+# docker-compose.yml
+networks:
+  ai-network:
+    driver: bridge
+
+services:
+  librechat:  # or lobe-chat
+    networks:
+      - ai-network
+  
+  actual-mcp-server-backend:
+    networks:
+      - ai-network
+```
+
+Configuration:
+```yaml
+# LibreChat librechat.yaml
+mcpServers:
+  actual-mcp:
+    url: "http://actual-mcp-server-backend:3600/http"  # ✅ No HTTPS needed
+    
+# LobeChat UI
+Server URL: http://actual-mcp-server-backend:3600/http  # ✅ No HTTPS needed
+```
+
+Benefits: No certificate management, simpler configuration, same security (network isolation).
+
+#### Option 2: Self-Signed Certificate (Development/External Access)
+
+For testing HTTPS or external access:
 
 ```bash
 # Generate certificate
@@ -604,13 +729,27 @@ openssl req -x509 -newkey rsa:4096 -nodes \
   -days 365 -subj "/CN=your-server-ip" \
   -addext "subjectAltName=IP:your-server-ip,DNS:localhost"
 
+# Run MCP server with HTTPS
+docker run -d --name actual-mcp-server-backend \
+  -p 3600:3600 \
+  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
+  -e ACTUAL_PASSWORD=your_password \
+  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
+  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
+  -e MCP_ENABLE_HTTPS=true \
+  -e MCP_HTTPS_CERT=/app/certs/cert.pem \
+  -e MCP_HTTPS_KEY=/app/certs/key.pem \
+  -v actual-mcp-data:/data \
+  -v $(pwd)/certs:/app/certs:ro \
+  ghcr.io/agigante80/actual-mcp-server:latest
+
 # Trust certificate in LibreChat (Alpine Linux)
 docker cp certs/cert.pem ai-librechat:/tmp/mcp-server.crt
 docker exec -u root ai-librechat sh -c "cat /tmp/mcp-server.crt >> /etc/ssl/certs/ca-certificates.crt"
 docker restart ai-librechat
 ```
 
-#### Option 2: CA-Signed Certificate (Production)
+#### Option 3: CA-Signed Certificate (Production/Internet-Facing)
 
 ```bash
 # Using Let's Encrypt (requires domain name)
@@ -620,45 +759,20 @@ sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem certs/key.pem
 sudo chown $USER:$USER certs/*.pem
 ```
 
-Update LibreChat to use domain:
+Update AI client to use domain:
 ```yaml
+# LibreChat librechat.yaml
 mcpServers:
   actual-mcp:
     url: "https://your-domain.com:3600/http"  # Use domain name
+    
+# LobeChat UI
+Server URL: https://your-domain.com:3600/http
 ```
 
-#### Option 3: Docker Network (No HTTPS Needed)
+### Verification
 
-If both containers are on the same Docker network, you can use HTTP securely:
-
-```yaml
-# docker-compose.yml
-networks:
-  mcp-network:
-    driver: bridge
-
-services:
-  librechat:
-    networks:
-      - mcp-network
-  
-  actual-mcp-server:
-    networks:
-      - mcp-network
-```
-
-LibreChat configuration:
-```yaml
-mcpServers:
-  actual-mcp:
-    url: "http://actual-mcp-server:3600/http"  # Container name
-```
-
-### Environment Variables
-
-```bash
-# Required
-ACTUAL_SERVER_URL=http://your-actual-server:5006
+Test the connection:
 ACTUAL_PASSWORD=your_password
 ACTUAL_BUDGET_SYNC_ID=your_sync_id
 
@@ -683,16 +797,20 @@ MCP_BRIDGE_DATA_DIR=/data
 
 Test the connection:
 ```bash
-# Health check
+# Health check (adjust URL based on your setup)
+curl http://localhost:3600/health
+# Or with HTTPS
 curl -k https://localhost:3600/health
 
-# Should return: {"status":"ok","initialized":true}
+# Should return: {"status":"ok","initialized":true,...}
 ```
 
-In LibreChat, you should see:
-- ✅ **49 tools loaded** in the MCP servers list
+In your AI client, you should see:
+- ✅ **51 tools loaded** in the MCP servers list
 - ✅ All tools available with `actual_` prefix
 - ✅ Natural language queries working
+
+**Note**: Tool count updated from 49 to 51 to reflect current implementation.
 
 ---
 
@@ -759,13 +877,17 @@ curl -X POST http://localhost:3000/http \
   }'
 ```
 
-### Example 4: Using with LibreChat
+### Example 4: Using with AI Clients (LibreChat/LobeChat)
 
-1. Start the MCP server: `npm run dev -- --http`
-2. Configure LibreChat to use MCP server at `http://localhost:3000`
-3. In LibreChat, ask: **"What's my checking account balance?"**
-4. LibreChat calls `actual_accounts_list` and `actual_accounts_get_balance`
-5. You get a natural language response: "Your checking account balance is $1,234.56"
+1. Start the MCP server: `npm run dev -- --http` (or use Docker)
+2. Configure your AI client to connect:
+   - **LibreChat**: Edit `librechat.yaml` with MCP server URL
+   - **LobeChat**: Add plugin via Settings → Model Context Protocol
+3. Ask natural language questions: **"What's my checking account balance?"**
+4. AI client calls appropriate tools (`actual_accounts_list`, `actual_accounts_get_balance`)
+5. You get conversational responses: "Your checking account balance is $1,234.56"
+
+Both LibreChat and LobeChat work identically - all 51 tools are available for conversational financial management.
 
 ---
 
@@ -773,103 +895,105 @@ curl -X POST http://localhost:3000/http \
 
 ### Environment Variables
 
-All configuration via environment variables. See [`.env.example`](.env.example) for full reference.
+All configuration is managed via environment variables. See [`.env.example`](.env.example) for a complete reference with detailed descriptions.
 
-#### Required Settings
+#### Complete Environment Variables Reference
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| **Actual Budget Connection** ||||
+| `ACTUAL_SERVER_URL` | `http://localhost:5006` | ✅ Yes | URL of your Actual Budget server |
+| `ACTUAL_PASSWORD` | - | ✅ Yes | Password for Actual Budget server |
+| `ACTUAL_BUDGET_SYNC_ID` | - | ✅ Yes | Budget Sync ID from Actual (Settings → Sync ID) |
+| `ACTUAL_BUDGET_PASSWORD` | - | ❌ No | Optional encryption password for encrypted budgets |
+| **MCP Server Settings** ||||
+| `MCP_BRIDGE_PORT` | `3000` (dev)<br/>`3600` (Docker) | ❌ No | Port for MCP server to listen on |
+| `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | ❌ No | Host address to bind server to (`0.0.0.0` = all interfaces) |
+| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | ❌ No | Directory to store Actual Budget local data (SQLite) |
+| `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | ❌ No | Public hostname/IP for server (shown in logs) |
+| `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | ❌ No | Public scheme (`http` or `https`) |
+| `MCP_BRIDGE_USE_TLS` | `false` | ❌ No | Legacy TLS flag (use `MCP_ENABLE_HTTPS` instead) |
+| `MCP_BRIDGE_ADVERTISED_URL` | - | ❌ No | Human-friendly URL displayed to users |
+| **Transport Configuration** ||||
+| `MCP_TRANSPORT_MODE` | `--http` | ❌ No | Transport mode (`--http` or `--sse`) - Docker only |
+| `MCP_SSE_PATH` | `/sse` | ❌ No | SSE endpoint path |
+| `MCP_HTTP_PATH` | `/http` | ❌ No | HTTP endpoint path |
+| **Session Management** ||||
+| `USE_CONNECTION_POOL` | `true` | ❌ No | Enable session-based connection pooling |
+| `MAX_CONCURRENT_SESSIONS` | `15` | ❌ No | Maximum concurrent MCP sessions allowed |
+| `SESSION_IDLE_TIMEOUT_MINUTES` | `5` (pool)<br/>`2` (HTTP) | ❌ No | Minutes before idle session cleanup |
+| **Security & Authentication** ||||
+| `MCP_SSE_AUTHORIZATION` | - | ❌ No | Bearer token for authentication (highly recommended) |
+| `MCP_ENABLE_HTTPS` | `false` | ❌ No | Enable HTTPS/TLS encryption |
+| `MCP_HTTPS_CERT` | - | ⚠️ If HTTPS | Path to TLS certificate file (PEM format) |
+| `MCP_HTTPS_KEY` | - | ⚠️ If HTTPS | Path to TLS private key file (PEM format) |
+| `ACTUAL_PASSWORD_FILE` | - | ❌ No | Path to file containing password (Docker secrets) |
+| **Logging Configuration** ||||
+| `MCP_BRIDGE_STORE_LOGS` | `false` | ❌ No | Enable file logging (vs console only) |
+| `MCP_BRIDGE_LOG_DIR` | `./logs` | ❌ No | Directory for log files (if `STORE_LOGS=true`) |
+| `MCP_BRIDGE_LOG_LEVEL` | `info` | ❌ No | Log level: `error`, `warn`, `info`, `debug` |
+| `LOG_LEVEL` | `info` | ❌ No | Alternative log level variable (overrides default) |
+| `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | ❌ No | Enable transport-level debug logging |
+| **Log Rotation** (when `MCP_BRIDGE_STORE_LOGS=true`) ||||
+| `MCP_BRIDGE_MAX_FILES` | `14d` | ❌ No | Keep rotated logs for N days (e.g., `14d`, `30d`) |
+| `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | ❌ No | Rotate when file reaches size (e.g., `20m`, `100m`) |
+| `MCP_BRIDGE_COMPRESS_AFTER_HOURS` | `24` | ❌ No | Compress logs older than N hours |
+| `MCP_BRIDGE_ROTATE_DATEPATTERN` | `YYYY-MM-DD` | ❌ No | Date pattern for rotated log filenames |
+| **Development & Testing** ||||
+| `DEBUG` | `false` | ❌ No | Enable debug mode (verbose logging) |
+| `SKIP_BUDGET_DOWNLOAD` | `false` | ❌ No | Skip budget sync on startup (testing) |
+| `TEST_ACTUAL_CONNECTION` | `false` | ❌ No | Test connection only and exit |
+| `TEST_ACTUAL_TOOLS` | `false` | ❌ No | Run all tools test and exit |
+| `USE_TEST_DATA` | `false` | ❌ No | Use mock data instead of real Actual server |
+| **Advanced/Internal** ||||
+| `ACTUAL_API_CONCURRENCY` | `5` | ❌ No | Max concurrent Actual API operations |
+| `VERSION` | auto-detected | ❌ No | Server version (auto-set by build/Docker) |
+| `ENABLE_METRICS` | `false` | ❌ No | Enable Prometheus metrics endpoint |
+| `METRICS_PORT` | `9090` | ❌ No | Port for metrics endpoint |
+| `TZ` | `UTC` | ❌ No | Timezone for timestamps (e.g., `America/New_York`) |
+
+#### Quick Start Configuration
+
+**Minimum required variables** to get started:
 
 ```bash
-# Actual Budget Connection
+# .env file
 ACTUAL_SERVER_URL=http://localhost:5006
 ACTUAL_PASSWORD=your_password
-ACTUAL_BUDGET_SYNC_ID=abc123  # From Actual: Settings → Sync ID
+ACTUAL_BUDGET_SYNC_ID=abc123
 ```
 
-#### Server Settings
+**Recommended production configuration:**
 
 ```bash
-# Port and host
-MCP_BRIDGE_PORT=3000                    # Default: 3000
-MCP_BRIDGE_BIND_HOST=0.0.0.0            # Default: 0.0.0.0
+# Required
+ACTUAL_SERVER_URL=https://actual.yourdomain.com
+ACTUAL_PASSWORD=your_password
+ACTUAL_BUDGET_SYNC_ID=abc123
 
-# Data directory
-MCP_BRIDGE_DATA_DIR=./actual-data       # Default: ./actual-data
+# Security (generate token: openssl rand -hex 32)
+MCP_SSE_AUTHORIZATION=your_secure_random_token
 
-# Transport endpoints
-MCP_SSE_PATH=/sse                       # Default: /sse
-MCP_HTTP_PATH=/http                     # Default: /http
+# HTTPS
+MCP_ENABLE_HTTPS=true
+MCP_HTTPS_CERT=/path/to/cert.pem
+MCP_HTTPS_KEY=/path/to/key.pem
 
-# Transport mode (Docker only)
-MCP_TRANSPORT_MODE=--http               # Default: --http (Options: --http, --sse)
+# Logging
+MCP_BRIDGE_STORE_LOGS=true
+MCP_BRIDGE_LOG_LEVEL=info
 
-# Human-friendly advertised URL (optional)
-MCP_BRIDGE_ADVERTISED_URL=http://localhost:3000  # Default: none
+# Session Management
+MAX_CONCURRENT_SESSIONS=15
+SESSION_IDLE_TIMEOUT_MINUTES=5
 ```
 
-#### Session Management
+**Docker-specific settings:**
 
-```bash
-# Maximum concurrent sessions
-MAX_CONCURRENT_SESSIONS=10              # Default: 10
-
-# Session idle timeout (minutes)
-SESSION_IDLE_TIMEOUT_MINUTES=2          # Default: 2
-```
-
-#### Logging
-
-```bash
-# Enable file logging
-MCP_BRIDGE_STORE_LOGS=false             # Default: false
-MCP_BRIDGE_LOG_DIR=./logs               # Default: ./logs
-MCP_BRIDGE_LOG_LEVEL=info               # Default: info (error, warn, info, debug)
-
-# Log rotation (when MCP_BRIDGE_STORE_LOGS=true)
-MCP_BRIDGE_MAX_FILES=14d                # Default: 14d
-MCP_BRIDGE_MAX_LOG_SIZE=20m             # Default: 20m
-MCP_BRIDGE_COMPRESS_AFTER_HOURS=24      # Default: 24
-MCP_BRIDGE_ROTATE_DATEPATTERN=YYYY-MM-DD  # Default: YYYY-MM-DD
-```
-
-#### Security
-
-```bash
-# Bearer token authentication (recommended for production)
-MCP_SSE_AUTHORIZATION=your_random_token  # Default: none (no auth)
-
-# HTTPS support
-MCP_ENABLE_HTTPS=false                  # Default: false
-MCP_HTTPS_CERT=/path/to/cert.pem        # Default: none
-MCP_HTTPS_KEY=/path/to/key.pem          # Default: none
-
-# Use Docker secrets in production
-ACTUAL_PASSWORD_FILE=/run/secrets/actual_password  # Default: none
-```
-
-#### Development & Testing
-
-```bash
-# Debug mode
-DEBUG=false                             # Default: false
-
-# Skip budget download on startup
-SKIP_BUDGET_DOWNLOAD=false              # Default: false
-
-# Test modes
-TEST_ACTUAL_CONNECTION=false            # Default: false
-TEST_ACTUAL_TOOLS=false                 # Default: false
-USE_TEST_DATA=false                     # Default: false
-```
-
-#### Observability (Optional)
-
-```bash
-# Prometheus metrics
-ENABLE_METRICS=false                    # Default: false
-METRICS_PORT=9090                       # Default: 9090
-
-# Timezone
-TZ=UTC                                  # Default: UTC
-```
+Docker images use these defaults (can be overridden):
+- `MCP_BRIDGE_PORT=3600` (instead of 3000)
+- `MCP_TRANSPORT_MODE=--http` (set in CMD)
+- `MCP_BRIDGE_DATA_DIR=/data` (recommended for volume mount)
 
 ---
 
