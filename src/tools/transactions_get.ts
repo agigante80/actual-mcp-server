@@ -10,7 +10,7 @@ type Output = unknown; // refine using generated types (paths['/transactions']['
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_get',
-  description: "Get transactions for an account and date range",
+  description: "Get all transactions for a specific account within a date range. Returns transaction details including date, amount (cents), payee, category, notes, and cleared status. Dates in YYYY-MM-DD format. Perfect for account reconciliation and spending analysis.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

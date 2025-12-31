@@ -10,7 +10,7 @@ type Output = unknown; // refine using generated types (paths['/budgets/month'][
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_getMonth',
-  description: "Get budget month",
+  description: "Get budget data for a specific month in YYYY-MM format (e.g., '2025-12'). Returns all categories with their budgeted amounts, actual spending, and available balances for the month.",
   inputSchema: InputSchema,
     call: async (args: unknown, _meta?: unknown) => {
       const input = InputSchema.parse(args || {});

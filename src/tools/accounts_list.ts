@@ -10,7 +10,7 @@ type Output = unknown; // refine using generated types (paths['/accounts']['get'
 
 const tool: ToolDefinition = {
   name: 'actual_accounts_list',
-  description: "List all accounts",
+  description: "List all accounts in Actual Budget including checking, savings, credit cards, and investment accounts. Returns account ID, name, balance, on-budget/off-budget status, and open/closed state.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // call adapter.getAccounts with no args
