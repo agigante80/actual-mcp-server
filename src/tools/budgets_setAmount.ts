@@ -10,7 +10,7 @@ type Output = unknown; // refine using generated types (paths['/budgets/month'][
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_setAmount',
-  description: "Set budget amount",
+  description: "Set the budgeted amount for a specific category in a given month. Amount in cents (e.g., 50000 = $500). Use this to allocate money to spending categories for budget planning.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

@@ -15,7 +15,7 @@ type Output = unknown; // refine using generated types (paths['/transactions/imp
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_import',
-  description: "Import transactions (reconcile, avoid duplicates)",
+  description: "Bulk import transactions with automatic reconciliation and duplicate detection. Matches against existing transactions using imported_id to prevent duplicates. Ideal for importing bank statements, CSV files, or syncing from external sources. Automatically applies budget rules.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const parsed = InputSchema.parse(args || {});
