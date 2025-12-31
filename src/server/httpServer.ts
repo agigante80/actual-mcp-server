@@ -144,9 +144,13 @@ export async function startHttpServer(
           ? schema
           : { type: 'object', properties: {}, additionalProperties: false };
         
+        // Get the actual tool description from the tool definition
+        const tool = actualToolsManager.getTool(name);
+        const description = tool?.description || `Tool ${name}`;
+        
         return {
           name,
-          description: `Tool ${name}`,
+          description,
           inputSchema,
         };
       });
