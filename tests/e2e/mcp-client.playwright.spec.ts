@@ -11,15 +11,27 @@ const START_TIMEOUT = 30_000;
 
 test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => {
   let serverProc: ChildProcessWithoutNullStreams | null = null;
-  let advertisedUrl = 'http://localhost:3600';
+  let advertisedUrl = 'http://localhost:3601';
   const httpPath = '/http';
 
   test.beforeAll(async () => {
     // start the server as a child process using the same entrypoint the repo uses
     const node = process.execPath;
-    const entry = path.join(ROOT, 'register-tsconfig-paths.js');
+    const entry = path.join(ROOT, 'dist', 'src', 'index.js');
     const args = ['--', '--debug', '--http'];
-    serverProc = spawn(node, [entry, ...args], { cwd: ROOT, env: process.env });
+    
+    // Provide minimal test env vars for E2E tests
+    const testEnv = {
+      ...process.env,
+      ACTUAL_SERVER_URL: 'http://localhost:5007',
+      ACTUAL_PASSWORD: 'test',
+      ACTUAL_BUDGET_SYNC_ID: 'test-sync-id',
+      ACTUAL_DATA_DIR: path.join(ROOT, 'test-actual-data'),
+      LOG_LEVEL: 'info',
+      MCP_BRIDGE_PORT: '3601',  // Use different port for E2E tests
+    };
+    
+    serverProc = spawn(node, [entry, ...args], { cwd: ROOT, env: testEnv });
 
     // capture stdout/stderr and wait for the advertised URL line
     let stdout = '';
