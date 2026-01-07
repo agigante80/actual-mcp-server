@@ -1,7 +1,7 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.1.0  
+**Version:** 0.4.7  
 **Last Updated:** 2025-11-11
 
 ---

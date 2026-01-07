@@ -1,11 +1,11 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.1.0  
+**Version:** 0.4.7  
 **Status:** Production-ready with ongoing enhancements  
-**Last Updated:** 2025-12-10  
-**Assessment Score:** 85/100 (GOOD)  
-**Tool Count:** 49 MCP tools (verified LibreChat-compatible)  
+**Last Updated:** 2026-01-07  
+**Assessment Score:** 88/100 (EXCELLENT)  
+**Tool Count:** 51 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---

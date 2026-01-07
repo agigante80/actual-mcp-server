@@ -1,7 +1,7 @@
 # AI Interaction Guide
 
 **Project:** Actual MCP Server  
-**Version:** 0.1.0  
+**Version:** 0.4.7  
 **Purpose:** Define operational boundaries and rules for AI agents  
 **Last Updated:** 2025-12-10
 
