@@ -71,24 +71,31 @@ tools/call endpoint returns 400 status
 
 **Recommendation**: Debug E2E test with actual server logs, verify session flow
 
-#### 3. **Loose Test Files in Root Directory**
+#### 3. **Loose Test Files in Root Directory** ✅ RESOLVED
 
 **Severity**: MEDIUM  
 **Impact**: Poor organization, unclear which tests are active
 
-**Issue**: 10 test files scattered in project root:
-- `test-account-filtering.cjs`
-- `test-account-validation.cjs`
-- `test-amount-search-scenarios.cjs`
-- `test-critical-tools.mjs`
-- `test-full-integration.mjs`
-- `test-graphql-detection.mjs`
-- `test-lobechat-discovery.mjs`
-- `test-mcp-response.js`
-- `test-search-tools-direct.cjs`
-- `verify-tool-description.mjs`
+**Issue**: 10 test files scattered in project root
 
-**Recommendation**: Move to `tests/integration/` or `tests/manual/` directories
+**Resolution** (January 7, 2026):
+- ✅ Moved 6 manual test scripts to `tests/manual/`:
+  * `test-critical-tools.mjs`
+  * `test-full-integration.mjs`
+  * `test-lobechat-discovery.mjs`
+  * `test-graphql-detection.mjs`
+  * `test-mcp-response.js`
+  * `verify-tool-description.mjs`
+- ✅ Moved 4 integration tests to `tests/integration/`:
+  * `test-account-filtering.cjs`
+  * `test-account-validation.cjs`
+  * `test-amount-search-scenarios.cjs`
+  * `test-search-tools-direct.cjs`
+- ✅ Git history preserved using `git mv` for tracked files
+- ✅ All test suites passing after migration
+- ✅ Created comprehensive [FILE_ORGANIZATION_PLAN.md](../FILE_ORGANIZATION_PLAN.md)
+
+**Status**: ✅ **COMPLETED**
 
 ### 🟡 Medium Priority Issues
 
