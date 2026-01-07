@@ -657,6 +657,9 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       observability.incrementToolCall('actual.query.run').catch(() => {});
       
       try {
+        // Import validation utilities
+        const { validateQuery, formatValidationErrors } = await import('./query-validator.js');
+        
         // The Actual Budget runQuery expects an ActualQL query object with serialize() method
         // Import the q builder dynamically
         const api = await import('@actual-app/api');
@@ -739,6 +742,14 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       
       if (sqlMatch) {
         const [, fields, tableName, whereClause, orderField, orderDir, limitStr] = sqlMatch;
+        
+        // ✅ VALIDATE QUERY BEFORE EXECUTION
+        const validation = validateQuery(trimmed);
+        if (!validation.valid) {
+          const errorMsg = formatValidationErrors(validation);
+          throw new Error(`Invalid SQL query:\n${errorMsg}\n\nQuery: "${trimmed}"`);
+        }
+        
         query = q(tableName);
         
         // Apply SELECT fields (if not *)
