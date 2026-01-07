@@ -12,7 +12,7 @@ console.log('Running JS smoke tests for transactions_create');
     console.log('Empty input correctly failed');
   }
 
-  const good = { accountId: 'acct_1', amount: 12.34 };
+  const good = { account: '12345678-1234-1234-1234-123456789abc', date: '2026-01-05', amount: 1234 };
   const parsed = tool.inputSchema.parse(good);
   console.log('Parsed OK:', parsed);
 

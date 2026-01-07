@@ -26,7 +26,7 @@ Supported Query Formats:
    Example: accounts
 
 Available Tables:
-- transactions: Financial transactions with fields: id, date, amount, payee_name, notes, cleared, account, payee, category
+- transactions: Financial transactions with fields: id, date, amount, notes, cleared, account, payee, category (use payee.name and category.name for text)
 - accounts: Bank accounts with fields: id, name, type, closed, offbudget
 - categories: Budget categories with fields: id, name, group_id, is_income
 - payees: Transaction payees with fields: id, name, category, transfer_acct

@@ -18,6 +18,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+      
+      - name: Generate token from GitHub App
+        id: generate-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
         
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -71,7 +78,7 @@ jobs:
         if: steps.compare.outputs.update_needed == 'true'
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.generate-token.outputs.token }}
           commit-message: "chore(deps): upgrade @actual-app/api to ${{ steps.latest.outputs.version }}"
           branch: deps/actual-api-${{ steps.latest.outputs.version }}
           delete-branch: true
