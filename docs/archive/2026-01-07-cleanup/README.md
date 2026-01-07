@@ -83,3 +83,17 @@ cat docs/archive/2026-01-07-cleanup/FILE_ORGANIZATION_PLAN.md
 **Reason**: Cleanup after successful deployment and consolidation  
 **Files Archived**: 7  
 **Status**: All issues resolved ✅
+
+### Nginx Configuration (January 7, 2026)
+
+- **NGINX_PROXY.md**
+  - Nginx reverse proxy setup documentation
+  - Originally added for connection pooling and keepalive
+  - After testing: Determined nginx is not needed
+  - Direct MCP server connection works better
+
+- **nginx.conf** (deleted from root)
+  - Nginx configuration file
+  - No longer needed after removing nginx dependency
+
+**Reason for Removal**: Testing showed nginx proxy was unnecessary. Direct connection between LibreChat and MCP server works reliably without the additional proxy layer.

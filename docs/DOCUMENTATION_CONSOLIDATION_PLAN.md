@@ -234,7 +234,6 @@ docs/
 ├── DEPENDENCY_UPDATE_PLAN.md
 ├── DYNAMIC_VERSIONING_SPEC.md
 ├── IMPROVEMENT_AREAS.md                 ← UPDATE
-├── NGINX_PROXY.md
 ├── PAYEE_CATEGORY_NOT_SUPPORTED.md
 ├── PROJECT_OVERVIEW.md                  ← UPDATE
 ├── PROJECT_REASSESSMENT_REPORT.md       ← ARCHIVE
@@ -258,7 +257,6 @@ docs/
 ├── DEPENDENCY_UPDATE_PLAN.md            ✅
 ├── DYNAMIC_VERSIONING_SPEC.md           ✅
 ├── IMPROVEMENT_AREAS.md                 ✅ (updated)
-├── NGINX_PROXY.md                       ✅
 ├── PAYEE_CATEGORY_NOT_SUPPORTED.md      ✅
 ├── PROJECT_OVERVIEW.md                  ✅ (updated)
 ├── README.md                            ✅ (updated index)

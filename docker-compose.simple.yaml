@@ -10,42 +10,17 @@ networks:
 
 services:
   # --------------------------------------------------------------------------
-  # Nginx Reverse Proxy
+  # Actual MCP Server
   # --------------------------------------------------------------------------
-  # Provides connection pooling, keepalive, and reduces reconnect frequency
+  # MCP server directly exposed on port 3600
   
-  nginx-proxy:
-    image: nginx:alpine
-    container_name: actual-mcp-nginx
-    restart: unless-stopped
-    ports:
-      - "3600:3600"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-    depends_on:
-      - actual-mcp-server-backend
-    networks:
-      - librechat-net
-      - actual-net
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3600/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
-  # --------------------------------------------------------------------------
-  # Actual MCP Server Backend
-  # --------------------------------------------------------------------------
-  # The actual MCP server - not directly exposed, accessed through nginx
-  
-  actual-mcp-server-backend:
+  actual-mcp-server:
     image: ghcr.io/agigante80/actual-mcp-server:development
-    container_name: actual-mcp-server-backend
+    container_name: actual-mcp-server
     env_file:
       - .env
-    expose:
-      - "3600"
+    ports:
+      - "3600:3600"
     environment:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-server:3000}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD}
