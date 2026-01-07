@@ -1,9 +1,9 @@
 # Improvement Areas
 
 **Project:** Actual MCP Server  
-**Version:** 0.1.0  
+**Version:** 0.4.7  
 **Purpose:** Track known technical debt, missing features, and weak areas  
-**Last Updated:** 2025-12-10
+**Last Updated:** 2026-01-07
 
 ---
 
@@ -46,6 +46,35 @@ This document identifies **known gaps, technical debt, and areas needing improve
 - Tool count documentation updated throughout
 
 **Impact**: MEDIUM - Documentation accuracy and tool tracking
+
+**Status**: ✅ FIXED and verified working
+
+### 3. **LobeChat Session Management** (RESOLVED 2026-01-07)
+
+**Previous Issue**: LobeChat showing "0 tools" during discovery phase
+
+**Resolution**:
+- Fixed session handling to allow `tools/list` with expired sessions
+- LobeChat caches session IDs and expects graceful handling of stale sessions
+- Tool execution (`tools/call`) still requires valid sessions for security
+- Implemented discovery vs execution phase distinction
+
+**Impact**: HIGH - LobeChat compatibility restored
+
+**Status**: ✅ FIXED and verified working (v0.4.7)
+
+### 4. **Docker Build Timeout on Main Branch** (RESOLVED 2026-01-07)
+
+**Previous Issue**: Main branch Docker builds timing out after 10 minutes
+
+**Root Cause**: Cache miss after merges, no fallback to develop cache
+
+**Resolution**:
+- Added develop cache as fallback for main branch builds
+- Cache strategy: current branch → develop → main
+- Build time reduced from 12m+ timeout to ~6m
+
+**Impact**: HIGH - CI/CD reliability for main branch
 
 **Status**: ✅ FIXED and verified working
 

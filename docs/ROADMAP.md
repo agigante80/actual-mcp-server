@@ -1,9 +1,9 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.1.0  
+**Version:** 0.4.7  
 **Purpose:** Future improvements and feature planning  
-**Last Updated:** 2025-12-10
+**Last Updated:** 2026-01-07
 
 ---
 
@@ -15,10 +15,10 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ## 📊 Roadmap Overview
 
-### Current State (v0.1.0)
+### Current State (v0.4.7)
 
-- ✅ **49 MCP tools** covering ~87.5% of Actual Budget API
-- ✅ **LibreChat verified** - all tools working
+- ✅ **51 MCP tools** covering ~91% of Actual Budget API
+- ✅ **LibreChat & LobeChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
 - ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
 - ✅ **Well-documented** - Comprehensive documentation ecosystem
