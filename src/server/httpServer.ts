@@ -193,9 +193,22 @@ export async function startHttpServer(
   app.use(httpPath, (req: Request, _res: Response, next: () => void) => {
     const accept = req.get('Accept');
     logger.debug(`[ACCEPT HEADER MIDDLEWARE] Original: ${accept || 'undefined'}`);
-    if (!accept || accept === '*/*' || (!accept.includes('application/json') || !accept.includes('text/event-stream'))) {
+    // Fix Accept header if it's missing, */* , or doesn't include BOTH required types
+    const needsFix = !accept || 
+                     accept === '*/*' || 
+                     !accept.includes('application/json') || 
+                     !accept.includes('text/event-stream');
+    if (needsFix) {
       logger.debug('[ACCEPT HEADER MIDDLEWARE] Modifying Accept header for MCP SDK compatibility');
-      req.headers['accept'] = 'application/json, text/event-stream';
+      // Use setHeader to properly modify the request headers
+      req.headers.accept = 'application/json, text/event-stream';
+      // Also try modifying the raw headers object
+      if (req.rawHeaders) {
+        const acceptIndex = req.rawHeaders.findIndex((h: string) => h.toLowerCase() === 'accept');
+        if (acceptIndex >= 0 && acceptIndex + 1 < req.rawHeaders.length) {
+          req.rawHeaders[acceptIndex + 1] = 'application/json, text/event-stream';
+        }
+      }
     }
     next();
   });
@@ -210,6 +223,40 @@ export async function startHttpServer(
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     const payload = (req.body && Object.keys(req.body).length) ? req.body : {};
     const method = payload?.method;
+
+    // Special handling for tools/list without session (LobeChat compatibility)
+    // LobeChat sends Accept: */* or Accept: application/json which the MCP SDK rejects
+    // Handle this case directly without going through the transport
+    if (!sessionId && method === 'tools/list') {
+      logger.debug('[LOBECHAT COMPAT] Handling tools/list without session directly');
+      const tools = toolsList.map((name: string) => {
+        const schemaFromParam = toolSchemas && toolSchemas[name];
+        const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
+        const schema = schemaFromParam || schemaFromManager;
+        
+        // Ensure inputSchema is a valid JSON Schema object with required properties
+        const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
+          ? schema
+          : { type: 'object', properties: {}, additionalProperties: false };
+        
+        // Get the actual tool description from the tool definition
+        const tool = actualToolsManager.getTool(name);
+        const description = tool?.description || `Tool ${name}`;
+        
+        return {
+          name,
+          description,
+          inputSchema,
+        };
+      });
+      
+      res.json({
+        jsonrpc: '2.0',
+        id: payload?.id ?? null,
+        result: { tools }
+      });
+      return;
+    }
 
     try {
       if (!sessionId) {
@@ -291,7 +338,39 @@ export async function startHttpServer(
       let transport = transports.get(sessionId);
       if (!transport) {
         // Session doesn't exist (expired, server restarted, or invalid)
-        // Reject the request and tell client to re-initialize
+        // For tools/list, handle it directly for LobeChat compatibility (they cache session IDs)
+        if (method === 'tools/list') {
+          logger.debug('[LOBECHAT COMPAT] Handling tools/list with invalid session directly');
+          const tools = toolsList.map((name: string) => {
+            const schemaFromParam = toolSchemas && toolSchemas[name];
+            const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
+            const schema = schemaFromParam || schemaFromManager;
+            
+            // Ensure inputSchema is a valid JSON Schema object with required properties
+            const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
+              ? schema
+              : { type: 'object', properties: {}, additionalProperties: false };
+            
+            // Get the actual tool description from the tool definition
+            const tool = actualToolsManager.getTool(name);
+            const description = tool?.description || `Tool ${name}`;
+            
+            return {
+              name,
+              description,
+              inputSchema,
+            };
+          });
+          
+          res.json({
+            jsonrpc: '2.0',
+            id: payload?.id ?? null,
+            result: { tools }
+          });
+          return;
+        }
+        
+        // For other methods, reject the request and tell client to re-initialize
         logger.warn(`[SESSION] Session ${sessionId} not found (method: ${method}). Client must re-initialize.`);
         res.status(400).json({
           jsonrpc: '2.0',
