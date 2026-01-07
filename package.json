@@ -16,6 +16,7 @@
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
     "test:mcp-client": "npm run build && node scripts/register-tsconfig-paths.js -- --http --test-mcp-client",
+    "test:query": "node tests/test-mcp-query.mjs",
     "version:current": "cat VERSION",
     "version:dev": "node scripts/version-dev.js",
     "version:bump": "node scripts/version-bump.js",

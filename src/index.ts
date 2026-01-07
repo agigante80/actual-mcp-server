@@ -1,4 +1,6 @@
 // Add global error handlers
+let isHandlingQueryError = false;
+
 process.on('unhandledRejection', (reason, promise) => {
   console.error('=== UNHANDLED REJECTION ===');
   console.error('Promise:', promise);
@@ -7,6 +9,19 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Stack:', reason.stack);
   }
   console.error('===========================');
+  
+  // Check if this is a known query error from @actual-app/api
+  const reasonStr = String(reason);
+  if (reasonStr.includes('does not exist in table') || 
+      reasonStr.includes('Field') && reasonStr.includes('does not exist') ||
+      reasonStr.includes('Expression stack')) {
+    console.error('⚠️  Known issue: Query field validation error from @actual-app/api');
+    console.error('⚠️  Server will continue running. User will see connection error.');
+    // Don't crash - this is a known issue with @actual-app/api query validation
+    return;
+  }
+  
+  // For all other unhandled rejections, exit
   process.exit(1);
 });
 

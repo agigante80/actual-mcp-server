@@ -652,14 +652,15 @@ export async function resetBudgetHold(month: string, categoryId: string): Promis
   });
 }
 export async function runQuery(queryString: string | any): Promise<unknown> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.query.run').catch(() => {});
-    
-    try {
-      // The Actual Budget runQuery expects an ActualQL query object with serialize() method
-      // Import the q builder dynamically
-      const api = await import('@actual-app/api');
-      const q = (api as any).q;
+  try {
+    return await withActualApi(async () => {
+      observability.incrementToolCall('actual.query.run').catch(() => {});
+      
+      try {
+        // The Actual Budget runQuery expects an ActualQL query object with serialize() method
+        // Import the q builder dynamically
+        const api = await import('@actual-app/api');
+        const q = (api as any).q;
       
       if (!q) {
         throw new Error('ActualQL query builder not available. Ensure @actual-app/api is properly installed and the budget is loaded.');
@@ -668,7 +669,19 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       // If already a serialized query object, use it directly
       if (typeof queryString === 'object' && queryString !== null) {
         try {
-          return await withConcurrency(() => retry(() => rawRunQuery(queryString) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+          return await withConcurrency(async () => {
+            try {
+              return await rawRunQuery(queryString) as Promise<unknown>;
+            } catch (err: any) {
+              // Catch errors from the query execution to prevent unhandled rejections
+              const msg = err?.message || String(err);
+              logger.error(`[ADAPTER] Query execution error: ${msg}`);
+              if (msg.includes('does not exist in table') || msg.includes('Field') || msg.includes('does not exist')) {
+                throw new Error(`Invalid field in query: ${msg}`);
+              }
+              throw err;
+            }
+          });
         } catch (error: any) {
           throw new Error(`Query execution failed: ${error.message}`);
         }
@@ -730,7 +743,12 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
         
         // Apply SELECT fields (if not *)
         if (fields.trim() !== '*') {
-          const fieldList = fields.split(',').map((f: string) => f.trim());
+          // Strip SQL aliases (AS alias_name) since ActualQL doesn't support them
+          const fieldList = fields.split(',').map((f: string) => {
+            const field = f.trim();
+            // Remove "AS alias" part if present (case-insensitive)
+            return field.replace(/\s+AS\s+\w+$/i, '').trim();
+          });
           query = query.select(fieldList);
         }
         
@@ -755,13 +773,25 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
     }
     
     try {
-      return await withConcurrency(() => retry(() => rawRunQuery(query) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+      return await withConcurrency(async () => {
+        try {
+          return await rawRunQuery(query) as Promise<unknown>;
+        } catch (err: any) {
+          // Catch errors from the query execution to prevent unhandled rejections
+          const msg = err?.message || String(err);
+          logger.error(`[ADAPTER] Query execution error: ${msg}`);
+          if (msg.includes('does not exist in table') || msg.includes('Field') || msg.includes('does not exist')) {
+            throw new Error(`Invalid field in query: ${msg}`);
+          }
+          throw err;
+        }
+      });
     } catch (error: any) {
       // Enhance error messages with helpful context
       const errorMsg = error?.message || String(error);
       
-      if (errorMsg.includes('does not exist in the schema')) {
-        throw new Error(`Table or field does not exist. Query: "${trimmed}". Available tables: transactions, accounts, categories, payees, category_groups, schedules, rules. Original error: ${errorMsg}`);
+      if (errorMsg.includes('does not exist in the schema') || errorMsg.includes('Invalid field in query') || errorMsg.includes('does not exist in table')) {
+        throw new Error(`Table or field does not exist. Query: "${trimmed}". Available tables: transactions, accounts, categories, payees, category_groups, schedules, rules. Use dot notation for joins (e.g., payee.name, category.name). Original error: ${errorMsg}`);
       }
       
       // Re-throw with original error if no specific handling
@@ -778,6 +808,12 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       throw error;
     }
   });
+  } catch (error: any) {
+    // Top-level catch to ensure no unhandled rejections escape
+    const errorMsg = error?.message || String(error);
+    logger.error(`[ADAPTER] Query execution failed: ${errorMsg}`);
+    throw new Error(`Query execution failed: ${errorMsg}`);
+  }
 }
 
 // Helper function to parse WHERE clause conditions

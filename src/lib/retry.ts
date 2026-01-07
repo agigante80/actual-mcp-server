@@ -9,7 +9,9 @@ export async function retry<T>(fn: () => Promise<T>, opts?: { retries?: number; 
   let attempt = 0;
   while (true) {
     try {
-      return await fn();
+      // Ensure the promise from fn() is properly awaited and any rejection is caught
+      const result = await Promise.resolve().then(() => fn());
+      return result;
     } catch (err) {
       attempt++;
       if (attempt > retries) {
