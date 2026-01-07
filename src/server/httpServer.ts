@@ -37,6 +37,7 @@ export async function startHttpServer(
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
   const sessionLastActivity = new Map<string, number>();
+  const sessionInitPromises = new Map<string, Promise<void>>();  // Track session init completion
   // Use same timeout as ConnectionPool (SESSION_IDLE_TIMEOUT_MINUTES env var, default: 2 minutes)
   const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '2', 10);
   const SESSION_TIMEOUT_MS = idleTimeoutMinutes * 60 * 1000;
@@ -60,6 +61,7 @@ export async function startHttpServer(
       logger.info(`[SESSION] Cleaning up idle session: ${sessionId}`);
       transports.delete(sessionId);
       sessionLastActivity.delete(sessionId);
+      sessionInitPromises.delete(sessionId);
       await shutdownActualForSession(sessionId);
     }
   }, SESSION_CLEANUP_INTERVAL_MS);
@@ -298,11 +300,21 @@ export async function startHttpServer(
         logger.debug('[SESSION] Creating new MCP server + transport for initialize');
         const { server } = createServerInstance();
 
+        // Create a promise to track session initialization completion
+        let resolveInit: (() => void) | undefined;
+        let rejectInit: ((err: unknown) => void) | undefined;
+        const initPromise = new Promise<void>((resolve, reject) => {
+          resolveInit = resolve;
+          rejectInit = reject;
+        });
+
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           enableJsonResponse: true,
           onsessioninitialized: async (sid: string) => {
             logger.debug(`Session initialized: ${sid}`);
+            // Store the promise before starting initialization
+            sessionInitPromises.set(sid, initPromise);
             // Initialize connection pool for this session
             try {
               await connectToActualForSession(sid);
@@ -310,10 +322,15 @@ export async function startHttpServer(
               transports.set(sid, transport);
               sessionLastActivity.set(sid, Date.now());
               logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
+              resolveInit?.();
             } catch (err) {
               logger.error(`[SESSION] Failed to initialize Actual for session ${sid}:`, err);
               // Don't add failed sessions to transports map - they won't be usable anyway
               // This prevents accumulation of dead sessions
+              rejectInit?.(err);
+            } finally {
+              // Clean up the promise after a short delay to allow pending requests to complete
+              setTimeout(() => sessionInitPromises.delete(sid), 1000);
             }
           },
         });
@@ -337,49 +354,68 @@ export async function startHttpServer(
       // sessionId present -> reuse
       let transport = transports.get(sessionId);
       if (!transport) {
-        // Session doesn't exist (expired, server restarted, or invalid)
-        // For tools/list, return tools for LobeChat discovery (they cache session IDs)
-        // This allows LobeChat's backend to discover available tools even with expired sessions
-        if (method === 'tools/list') {
-          logger.debug('[LOBECHAT COMPAT] Handling tools/list with expired/invalid session - returning tools for discovery');
-          const tools = toolsList.map((name: string) => {
-            const schemaFromParam = toolSchemas && toolSchemas[name];
-            const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
-            const schema = schemaFromParam || schemaFromManager;
+        // Check if session is currently being initialized
+        const initPromise = sessionInitPromises.get(sessionId);
+        if (initPromise) {
+          logger.debug(`[SESSION] Waiting for session ${sessionId} initialization to complete...`);
+          try {
+            // Wait for initialization to complete
+            await initPromise;
+            transport = transports.get(sessionId);
+            if (transport) {
+              logger.debug(`[SESSION] Session ${sessionId} initialization complete, proceeding with request`);
+            }
+          } catch (err) {
+            logger.error(`[SESSION] Session ${sessionId} initialization failed:`, err);
+            // Fall through to session not found handling
+          }
+        }
+        
+        if (!transport) {
+          // Session doesn't exist (expired, server restarted, or invalid)
+          // For tools/list, return tools for LobeChat discovery (they cache session IDs)
+          // This allows LobeChat's backend to discover available tools even with expired sessions
+          if (method === 'tools/list') {
+            logger.debug('[LOBECHAT COMPAT] Handling tools/list with expired/invalid session - returning tools for discovery');
+            const tools = toolsList.map((name: string) => {
+              const schemaFromParam = toolSchemas && toolSchemas[name];
+              const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
+              const schema = schemaFromParam || schemaFromManager;
+              
+              const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
+                ? schema
+                : { type: 'object', properties: {}, additionalProperties: false };
+              
+              const tool = actualToolsManager.getTool(name);
+              const description = tool?.description || `Tool ${name}`;
+              
+              return {
+                name,
+                description,
+                inputSchema,
+              };
+            });
             
-            const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
-              ? schema
-              : { type: 'object', properties: {}, additionalProperties: false };
-            
-            const tool = actualToolsManager.getTool(name);
-            const description = tool?.description || `Tool ${name}`;
-            
-            return {
-              name,
-              description,
-              inputSchema,
-            };
-          });
-          
-          res.json({
+            res.json({
+              jsonrpc: '2.0',
+              id: payload?.id ?? null,
+              result: { tools }
+            });
+            return;
+          }
+        
+          // For other methods, reject the request and tell client to re-initialize
+          logger.warn(`[SESSION] Session ${sessionId} not found (method: ${method}). Client must re-initialize.`);
+          res.status(400).json({
             jsonrpc: '2.0',
             id: payload?.id ?? null,
-            result: { tools }
+            error: { 
+              code: -32000, 
+              message: 'Session expired or invalid. Please re-initialize by calling initialize without mcp-session-id header.' 
+            },
           });
           return;
         }
-        
-        // For other methods, reject the request and tell client to re-initialize
-        logger.warn(`[SESSION] Session ${sessionId} not found (method: ${method}). Client must re-initialize.`);
-        res.status(400).json({
-          jsonrpc: '2.0',
-          id: payload?.id ?? null,
-          error: { 
-            code: -32000, 
-            message: 'Session expired or invalid. Please re-initialize by calling initialize without mcp-session-id header.' 
-          },
-        });
-        return;
       }
       
       // Update activity timestamp for valid session
@@ -389,7 +425,7 @@ export async function startHttpServer(
       await requestContext.run({ sessionId }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
-      } catch (err: unknown) {
+    } catch (err: unknown) {
       logger.error('POST handler error: %o', err);
       const e2 = err as Error | { stack?: unknown } | undefined;
       if (e2 && typeof e2.stack === 'string') logger.error(e2.stack);
@@ -493,6 +529,7 @@ export async function startHttpServer(
     }
     transports.clear();
     sessionLastActivity.clear();
+    sessionInitPromises.clear();
     // Also shut down the shared/pooled connections
     await shutdownActual();
   };
