@@ -1,0 +1,96 @@
+# Docker Compose configuration for E2E testing
+# This spins up a complete stack: Actual Budget server + MCP server + test runner
+# Usage: docker-compose -f docker-compose.test.yaml up --abort-on-container-exit
+
+version: '3.8'
+
+services:
+  # Actual Budget server for testing
+  actual-budget-test:
+    image: actualbudget/actual-server:24.12.0
+    container_name: actual-budget-e2e-test
+    ports:
+      - "5007:5006"  # Use port 5007 to avoid conflicts with dev instances
+    volumes:
+      - actual-test-data:/data
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5006"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    networks:
+      - e2e-test-network
+
+  # MCP server under test (built from current source)
+  mcp-server-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mcp-server-e2e-test
+    ports:
+      - "3602:3600"  # Use port 3602 to avoid conflicts
+    depends_on:
+      actual-budget-test:
+        condition: service_healthy
+    environment:
+      - ACTUAL_SERVER_URL=http://actual-budget-test:5006
+      - ACTUAL_PASSWORD=test-e2e-password
+      - ACTUAL_BUDGET_SYNC_ID=test-sync-id-e2e
+      - MCP_BRIDGE_PORT=3600
+      - MCP_BRIDGE_DATA_DIR=/app/data
+      - LOG_LEVEL=info
+      - NODE_ENV=test
+      # Allow connections without auth for testing
+      - MCP_SSE_AUTHORIZATION=
+    volumes:
+      - mcp-test-data:/app/data
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3600/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+    networks:
+      - e2e-test-network
+
+  # Playwright test runner
+  e2e-test-runner:
+    image: mcr.microsoft.com/playwright:v1.57.0-jammy
+    container_name: e2e-test-runner
+    depends_on:
+      mcp-server-test:
+        condition: service_healthy
+    working_dir: /workspace
+    command: >
+      sh -c "
+        npm install &&
+        npx playwright test --config=playwright.config.docker.ts
+      "
+    environment:
+      - MCP_SERVER_URL=http://mcp-server-test:3600
+      - ACTUAL_SERVER_URL=http://actual-budget-test:5006
+      - CI=true
+    volumes:
+      - ./tests:/workspace/tests
+      - ./playwright.config.docker.ts:/workspace/playwright.config.docker.ts
+      - ./package.json:/workspace/package.json
+      - ./package-lock.json:/workspace/package-lock.json
+      - e2e-test-results:/workspace/test-results
+    networks:
+      - e2e-test-network
+
+volumes:
+  actual-test-data:
+    name: actual-e2e-test-data
+  mcp-test-data:
+    name: mcp-e2e-test-data
+  e2e-test-results:
+    name: e2e-test-results
+
+networks:
+  e2e-test-network:
+    name: e2e-test-network
+    driver: bridge
