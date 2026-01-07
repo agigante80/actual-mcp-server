@@ -338,20 +338,19 @@ export async function startHttpServer(
       let transport = transports.get(sessionId);
       if (!transport) {
         // Session doesn't exist (expired, server restarted, or invalid)
-        // For tools/list, handle it directly for LobeChat compatibility (they cache session IDs)
+        // For tools/list, return tools for LobeChat discovery (they cache session IDs)
+        // This allows LobeChat's backend to discover available tools even with expired sessions
         if (method === 'tools/list') {
-          logger.debug('[LOBECHAT COMPAT] Handling tools/list with invalid session directly');
+          logger.debug('[LOBECHAT COMPAT] Handling tools/list with expired/invalid session - returning tools for discovery');
           const tools = toolsList.map((name: string) => {
             const schemaFromParam = toolSchemas && toolSchemas[name];
             const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
             const schema = schemaFromParam || schemaFromManager;
             
-            // Ensure inputSchema is a valid JSON Schema object with required properties
             const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
               ? schema
               : { type: 'object', properties: {}, additionalProperties: false };
             
-            // Get the actual tool description from the tool definition
             const tool = actualToolsManager.getTool(name);
             const description = tool?.description || `Tool ${name}`;
             
