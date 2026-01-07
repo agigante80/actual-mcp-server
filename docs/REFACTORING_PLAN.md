@@ -62,7 +62,7 @@ Reorganized test files into logical categories based on purpose:
 
 #### Migration Process
 
-1. ✅ Created comprehensive [FILE_ORGANIZATION_PLAN.md](../FILE_ORGANIZATION_PLAN.md)
+1. ✅ Created comprehensive [FILE_ORGANIZATION_PLAN.md](archive/2026-01-07-cleanup/FILE_ORGANIZATION_PLAN.md)
 2. ✅ Analyzed all 10 files to determine categorization
 3. ✅ Verified no references in package.json, CI workflows, or docs
 4. ✅ Created automated migration script `migrate-test-files.sh`
