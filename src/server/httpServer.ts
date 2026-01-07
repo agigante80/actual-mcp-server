@@ -213,12 +213,13 @@ export async function startHttpServer(
 
     try {
       if (!sessionId) {
-        // allow only initialize without session id
-        if (method !== 'initialize') {
+        // Allow initialize or tools/list without session id (LobeChat compatibility)
+        // For tools/list, we'll auto-create a session
+        if (method !== 'initialize' && method !== 'tools/list') {
           res.status(400).json({
             jsonrpc: '2.0',
             id: payload?.id ?? null,
-            error: { code: -32000, message: 'Missing session id; only initialize allowed' },
+            error: { code: -32000, message: 'Missing session id; only initialize or tools/list allowed without session' },
           });
           return;
         }
@@ -287,30 +288,24 @@ export async function startHttpServer(
       }
 
       // sessionId present -> reuse
-      sessionLastActivity.set(sessionId, Date.now()); // Track activity
       let transport = transports.get(sessionId);
       if (!transport) {
-        // If the client connects SSE first (rare), create a transport pinned to sessionId
-        logger.debug(`[SESSION] No transport for session ${sessionId}, creating pinned transport for method: ${method}`);
-        const { server } = createServerInstance();
-        transport = new StreamableHTTPServerTransport({
-          sessionIdGenerator: () => sessionId,
-          enableJsonResponse: true,
-          onsessioninitialized: async (sid: string) => {
-            transports.set(sid, transport!);
-            sessionLastActivity.set(sid, Date.now());
-            logger.debug(`Session initialized (pinned): ${sid}`);
-            // Initialize connection pool for this session
-            try {
-              await connectToActualForSession(sid);
-              logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
-            } catch (err) {
-              logger.error(`[SESSION] Failed to initialize Actual for session ${sid}:`, err);
-            }
+        // Session doesn't exist (expired, server restarted, or invalid)
+        // Reject the request and tell client to re-initialize
+        logger.warn(`[SESSION] Session ${sessionId} not found (method: ${method}). Client must re-initialize.`);
+        res.status(400).json({
+          jsonrpc: '2.0',
+          id: payload?.id ?? null,
+          error: { 
+            code: -32000, 
+            message: 'Session expired or invalid. Please re-initialize by calling initialize without mcp-session-id header.' 
           },
         });
-        await server.connect(transport);
+        return;
       }
+      
+      // Update activity timestamp for valid session
+      sessionLastActivity.set(sessionId, Date.now());
 
       // Run in AsyncLocalStorage context so tools can access sessionId
       await requestContext.run({ sessionId }, async () => {
