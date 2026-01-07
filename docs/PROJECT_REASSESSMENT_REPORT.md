@@ -93,7 +93,7 @@ tools/call endpoint returns 400 status
   * `test-search-tools-direct.cjs`
 - ✅ Git history preserved using `git mv` for tracked files
 - ✅ All test suites passing after migration
-- ✅ Created comprehensive [FILE_ORGANIZATION_PLAN.md](../FILE_ORGANIZATION_PLAN.md)
+- ✅ Created comprehensive [FILE_ORGANIZATION_PLAN.md](archive/2026-01-07-cleanup/FILE_ORGANIZATION_PLAN.md)
 
 **Status**: ✅ **COMPLETED**
 
@@ -132,7 +132,7 @@ tools/call endpoint returns 400 status
 
 **Duplicate Topics Identified**:
 - **Versioning**: `VERSIONING_STRATEGY.md` + `DYNAMIC_VERSIONING_SPEC.md`
-- **Refactoring**: `REFACTORING_STATUS.md` + `FILE_ORGANIZATION_PLAN.md`
+- **Refactoring**: `REFACTORING_STATUS.md` + `FILE_ORGANIZATION_PLAN.md` (archived)
 - **Dependencies**: `DEPENDENCY_UPDATE_PLAN.md` + `AUTOMATED_UPDATES.md`
 
 **Recommendation**: Consolidate overlapping documents
