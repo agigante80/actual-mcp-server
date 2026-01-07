@@ -1251,31 +1251,50 @@ See [`docs/api-coverage.md`](docs/api-coverage.md) for complete API documentatio
 
 ## 🧪 Testing
 
-### Run Tests
+### Quick Test Commands
 
 ```bash
-# Unit tests
-npm run test:unit
+# Run all tests (adapter + unit + Docker E2E)
+npm run test:all
 
-# Integration tests
-npm run test:adapter
-
-# End-to-end tests
+# Run protocol tests only (fast)
 npm run test:e2e
 
-# Test connection only
-npm run dev -- --test-actual-connection
-
-# Test all tools
-npm run dev -- --test-actual-tools
+# Run Docker integration tests (full stack)
+npm run test:e2e:docker
 ```
 
-### Test Coverage
+### Test Types
 
-- **Unit Tests**: >80% coverage
-- **Integration Tests**: Core workflows tested
-- **E2E Tests**: Playwright-based full-stack tests
-- **Smoke Tests**: All 37 tools validated
+| Command | What It Tests | Speed | Requires Docker |
+|---------|---------------|-------|-----------------|
+| `test:adapter` | Adapter layer, retry logic, concurrency | ⚡ 30s | No |
+| `test:unit-js` | Unit tests (transactions) | ⚡ 5s | No |
+| `test:e2e` | MCP protocol compliance | ⚡ 10s | No |
+| `test:e2e:docker` | Full stack integration | 🐢 60s | Yes |
+| `test:all` | All of the above | 🐢 90s | Yes |
+
+### Docker E2E Tests
+
+The Docker E2E tests provide comprehensive full-stack validation:
+
+```bash
+# Run Docker-based integration tests
+npm run test:e2e:docker
+
+# Advanced options
+./tests/e2e/run-docker-e2e.sh --no-cleanup   # Leave containers for debugging
+./tests/e2e/run-docker-e2e.sh --verbose      # Show detailed output
+```
+
+**What's tested:**
+- ✅ Docker build correctness
+- ✅ Container networking
+- ✅ Real Actual Budget integration (all 51 tools)
+- ✅ Session management
+- ✅ Production deployment scenario
+
+See [docs/DOCKER_E2E_TESTING.md](docs/DOCKER_E2E_TESTING.md) for complete documentation.
 
 ---
 

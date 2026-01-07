@@ -15,6 +15,8 @@
     "test:unit-js": "node tests/unit/transactions_create.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
+    "test:e2e:docker": "./tests/e2e/run-docker-e2e.sh",
+    "test:all": "npm run test:adapter && npm run test:unit-js && npm run test:e2e:docker",
     "test:mcp-client": "npm run build && node scripts/register-tsconfig-paths.js -- --http --test-mcp-client",
     "test:query": "node tests/test-mcp-query.mjs",
     "test:validation": "node tests/test-query-validation.mjs",

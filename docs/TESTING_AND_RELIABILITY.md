@@ -41,23 +41,50 @@
 ### Test Categories
 
 ```
-test/
+tests/
 ├── unit/                    # Unit tests (fast, isolated)
 │   └── transactions_create.test.js
 ├── integration/             # Integration tests (real dependencies)
-│   └── (planned)
-├── e2e/                     # End-to-end tests (full stack)
-│   └── (Playwright tests)
-└── docker-actual-test/      # Docker environment tests
+│   ├── (migrated from root)
+│   └── actual-mcp-integration-test.js
+├── e2e/                     # End-to-end tests
+│   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast)
+│   ├── docker.e2e.spec.ts                 # Docker integration (full stack)
+│   └── run-docker-e2e.sh                  # Docker test orchestrator
+└── manual/                  # Manual test scripts
+    └── (migrated from root)
 ```
+
+**New: Docker-based E2E Tests** - See [DOCKER_E2E_TESTING.md](./DOCKER_E2E_TESTING.md) for full documentation.
 
 ---
 
 ## 🏃 Running Tests
 
-**⚠️ NOTE:** Test infrastructure is currently being consolidated. A unified `npm test` command is planned but not yet implemented. Use individual test commands below.
+### Quick Start
 
-### Quick Test Suite (Pre-Commit)
+```bash
+# Run all tests (recommended)
+npm run test:all
+
+# Run protocol tests (fast, ~10s)
+npm run test:e2e
+
+# Run Docker integration tests (thorough, ~60s)
+npm run test:e2e:docker
+```
+
+### Test Types
+
+| Command | Type | Speed | Scope | When to Use |
+|---------|------|-------|-------|-------------|
+| `npm run test:adapter` | Smoke | ⚡ 30s | Adapter layer | Pre-commit |
+| `npm run test:unit-js` | Unit | ⚡ 5s | Single unit | Development |
+| `npm run test:e2e` | Protocol | ⚡ 10s | MCP protocol | Pre-commit |
+| `npm run test:e2e:docker` | Integration | 🐢 60s | Full stack | Pre-merge |
+| `npm run test:all` | All | 🐢 90s | Everything | Before release |
+
+### Pre-Commit Tests (Essential)
 
 ```bash
 # Essential tests before commit
@@ -66,18 +93,44 @@ npm run test:adapter         # Adapter smoke tests (30s)
 npm audit --audit-level=moderate  # Security check
 ```
 
-### Full Test Suite (Manual Execution)
+### Full Test Suite
 
 ```bash
-# Complete test suite - must run individually
+# Complete test suite
+npm run test:all             # Runs: adapter + unit + Docker E2E
+
+# Or run individually:
 npm run build                # Build TypeScript
 npm run test:adapter         # Adapter tests
-npm run test:unit-js         # Individual unit test (transactions_create)
-npm run test:e2e             # End-to-end tests (Playwright)
-npm audit                    # Full security audit
-
-# Note: More comprehensive test runner coming soon
+npm run test:unit-js         # Unit test (transactions_create)
+npm run test:e2e             # Protocol tests (fast)
+npm run test:e2e:docker      # Docker integration (thorough)
+npm audit                    # Security audit
 ```
+
+### Docker E2E Tests
+
+**Full stack integration testing with real Actual Budget server:**
+
+```bash
+# Run Docker-based E2E tests
+npm run test:e2e:docker
+
+# Advanced options
+./tests/e2e/run-docker-e2e.sh --no-cleanup   # Leave containers for debugging
+./tests/e2e/run-docker-e2e.sh --verbose      # Detailed output
+./tests/e2e/run-docker-e2e.sh --build-only   # Just build, don't test
+```
+
+**What Docker E2E tests verify:**
+- ✅ Docker build works correctly
+- ✅ Container networking (MCP ↔ Actual Budget)
+- ✅ Real tool execution (all 51 tools)
+- ✅ Session management and persistence
+- ✅ Production-like deployment
+- ✅ Error handling and validation
+
+See [DOCKER_E2E_TESTING.md](./DOCKER_E2E_TESTING.md) for complete documentation.
 
 ### Individual Test Commands
 
@@ -91,8 +144,11 @@ npm run test:adapter
 # Unit tests
 npm run test:unit-js
 
-# End-to-end tests
+# Protocol E2E tests (no Docker required)
 npm run test:e2e
+
+# Docker integration tests (requires Docker)
+npm run test:e2e:docker
 
 # Test Actual connection
 npm run dev -- --test-actual-connection
