@@ -238,8 +238,7 @@ export function formatValidationErrors(result: ValidationResult): string {
       if (error.type === 'invalid_table') {
         messages.push(`   Available tables: ${error.suggestions.join(', ')}`);
       } else if (error.type === 'invalid_field') {
-        const topSuggestions = error.suggestions.slice(0, 10);
-        messages.push(`   Available fields: ${topSuggestions.join(', ')}${error.suggestions.length > 10 ? '...' : ''}`);
+        messages.push(`   Available fields: ${error.suggestions.join(', ')}`);
       }
     }
   }
