@@ -868,27 +868,136 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     }
   });
 
-  test('actual_query_run - should execute query', async ({ request }) => {
-    console.log('🔍 Testing actual_query_run...');
+  test('actual_query_run - should execute SELECT * query', async ({ request }) => {
+    console.log('🔍 Testing actual_query_run with SELECT *...');
     const result = await callTool(request, sessionId, 'actual_query_run', {
-      query: 'SELECT * FROM accounts LIMIT 1',
+      query: 'SELECT * FROM transactions LIMIT 10',
     });
     const queryResult = extractResult(result);
     
     expect(queryResult).toBeTruthy();
-    console.log('✅ Query executed successfully');
+    console.log('✅ SELECT * query executed');
   });
 
-  test('actual_query_run - ERROR: should fail with invalid query', async ({ request }) => {
-    console.log('⚠️  Testing query validation...');
+  test('actual_query_run - should execute query with specific fields', async ({ request }) => {
+    console.log('🔍 Testing query with specific fields...');
+    const result = await callTool(request, sessionId, 'actual_query_run', {
+      query: 'SELECT id, date, amount, account FROM transactions LIMIT 10',
+    });
+    const queryResult = extractResult(result);
+    
+    expect(queryResult).toBeTruthy();
+    console.log('✅ Query with specific fields executed');
+  });
+
+  test('actual_query_run - should execute query with join path (payee.name)', async ({ request }) => {
+    console.log('🔍 Testing query with payee.name join...');
+    const result = await callTool(request, sessionId, 'actual_query_run', {
+      query: 'SELECT id, date, amount, payee.name FROM transactions LIMIT 10',
+    });
+    const queryResult = extractResult(result);
+    
+    expect(queryResult).toBeTruthy();
+    console.log('✅ Query with payee.name join executed');
+  });
+
+  test('actual_query_run - should execute query with join path (category.name)', async ({ request }) => {
+    console.log('🔍 Testing query with category.name join...');
+    const result = await callTool(request, sessionId, 'actual_query_run', {
+      query: 'SELECT id, amount, category.name FROM transactions WHERE amount < 0 LIMIT 10',
+    });
+    const queryResult = extractResult(result);
+    
+    expect(queryResult).toBeTruthy();
+    console.log('✅ Query with category.name join executed');
+  });
+
+  test('actual_query_run - should execute query with WHERE and ORDER BY', async ({ request }) => {
+    console.log('🔍 Testing query with WHERE and ORDER BY...');
+    const result = await callTool(request, sessionId, 'actual_query_run', {
+      query: 'SELECT id, date, amount FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 20',
+    });
+    const queryResult = extractResult(result);
+    
+    expect(queryResult).toBeTruthy();
+    console.log('✅ Query with WHERE and ORDER BY executed');
+  });
+
+  test('actual_query_run - ERROR: should reject invalid field (payee_name)', async ({ request }) => {
+    console.log('⚠️  Testing invalid field validation (payee_name)...');
     try {
       await callTool(request, sessionId, 'actual_query_run', {
-        query: 'SELECT * FROM nonexistent_table',
+        query: 'SELECT id, payee_name FROM transactions LIMIT 5',
+      });
+      throw new Error('Should have failed with invalid field');
+    } catch (error: any) {
+      expect(error.message).toMatch(/payee_name|Available fields|invalid/i);
+      console.log('✅ Invalid field payee_name rejected');
+    }
+  });
+
+  test('actual_query_run - ERROR: should reject invalid field (category_name)', async ({ request }) => {
+    console.log('⚠️  Testing invalid field validation (category_name)...');
+    try {
+      await callTool(request, sessionId, 'actual_query_run', {
+        query: 'SELECT id, category_name FROM transactions LIMIT 5',
+      });
+      throw new Error('Should have failed with invalid field');
+    } catch (error: any) {
+      expect(error.message).toMatch(/category_name|Available fields|invalid/i);
+      console.log('✅ Invalid field category_name rejected');
+    }
+  });
+
+  test('actual_query_run - ERROR: should reject invalid table name', async ({ request }) => {
+    console.log('⚠️  Testing invalid table validation...');
+    try {
+      await callTool(request, sessionId, 'actual_query_run', {
+        query: 'SELECT * FROM transaction LIMIT 10',
       });
       throw new Error('Should have failed with invalid table');
     } catch (error: any) {
-      expect(error.message).toMatch(/table|invalid|error/i);
-      console.log('✅ Invalid query rejected');
+      expect(error.message).toMatch(/transaction|table|Available tables|invalid/i);
+      console.log('✅ Invalid table name rejected');
+    }
+  });
+
+  test('actual_query_run - ERROR: should reject invalid field in WHERE clause', async ({ request }) => {
+    console.log('⚠️  Testing invalid field in WHERE clause...');
+    try {
+      await callTool(request, sessionId, 'actual_query_run', {
+        query: 'SELECT id, amount FROM transactions WHERE payee_name = "Test"',
+      });
+      throw new Error('Should have failed with invalid field in WHERE');
+    } catch (error: any) {
+      expect(error.message).toMatch(/payee_name|Available fields|invalid/i);
+      console.log('✅ Invalid field in WHERE clause rejected');
+    }
+  });
+
+  test('actual_query_run - ERROR: should reject multiple invalid fields', async ({ request }) => {
+    console.log('⚠️  Testing multiple invalid fields...');
+    try {
+      await callTool(request, sessionId, 'actual_query_run', {
+        query: 'SELECT id, payee_name, category_name FROM transactions',
+      });
+      throw new Error('Should have failed with multiple invalid fields');
+    } catch (error: any) {
+      expect(error.message).toMatch(/payee_name|category_name|Available fields|invalid/i);
+      console.log('✅ Multiple invalid fields rejected');
+    }
+  });
+
+  test('actual_query_run - ERROR: should reject invalid join path (account.id)', async ({ request }) => {
+    console.log('⚠️  Testing invalid join path (account.id)...');
+    try {
+      await callTool(request, sessionId, 'actual_query_run', {
+        query: 'SELECT * FROM transactions WHERE account.id = \'bff82978-3f20-4956-860b-fa2cb069a144\' ORDER BY date DESC LIMIT 5',
+      });
+      throw new Error('Should have failed - account is not a join, just a field');
+    } catch (error: any) {
+      expect(error.message).toMatch(/account|Available fields|invalid/i);
+      console.log('✅ Invalid join path account.id rejected');
     }
   });
 
