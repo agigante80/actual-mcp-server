@@ -819,7 +819,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | 10 | Handle invalid tool name | ✅ Error: Tool not found | ❌ Unexpected behavior |
 | 11 | Handle invalid arguments | ✅ Validation error returned | ❌ Server crash |
 
-**Comprehensive All-Tools Tests (docker-all-tools.e2e.spec.ts - 70+ tests, ~120s):**
+**Comprehensive All-Tools Tests (docker-all-tools.e2e.spec.ts - 80+ tests, ~120s):**
 
 | Category | Tools Tested | Success Tests | Error Tests |
 |----------|--------------|---------------|-------------|
@@ -833,9 +833,9 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | **Transactions** | 10 | ✅ 7 | ❌ 2 (invalid date/amount) |
 | **Budgets** | 9 | ✅ 9 | - |
 | **Rules** | 4 | ✅ 4 | - |
-| **Advanced** | 2 | ✅ 1 | ❌ 1 (invalid query) |
+| **Advanced/Query** | 2 | ✅ 6 | ❌ 6 (invalid queries) |
 | **Cleanup** | - | ✅ Auto-cleanup | - |
-| **TOTAL** | **50** | **✅ 41** | **❌ 7** |
+| **TOTAL** | **50** | **✅ 46** | **❌ 12** |
 
 **Success Criteria:**
 - All 50 tools execute successfully
@@ -849,9 +849,24 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ❌ Missing required arguments (name, group_id, date)
 - ❌ Invalid argument types (date format, amount format)
 - ❌ Invalid field names (strict validation)
-- ❌ Invalid queries (non-existent tables)
+- ❌ Invalid queries (non-existent tables, invalid fields)
+- ❌ Invalid join paths (account.id - account is field not join)
+- ❌ Multiple invalid fields in query
+- ❌ Invalid fields in WHERE clause
 - ❌ Server not initialized (Health check fails)
 - ❌ Session timeout (Network error)
+
+**Query Validation Tests (11 scenarios):**
+- ✅ Valid: SELECT * FROM transactions
+- ✅ Valid: Specific fields (id, date, amount, account)
+- ✅ Valid: Join paths (payee.name, category.name)
+- ✅ Valid: WHERE and ORDER BY clauses
+- ❌ Invalid: payee_name field (should suggest payee)
+- ❌ Invalid: category_name field (should suggest category.name)
+- ❌ Invalid: table name (transaction vs transactions)
+- ❌ Invalid: field in WHERE clause
+- ❌ Invalid: multiple invalid fields
+- ❌ Invalid: join path account.id (account is not a join)
 
 **Regression Scenarios Verified:**
 - ✅ Strict validation on accounts_update (reject invalid fields)
