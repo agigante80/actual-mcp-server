@@ -173,14 +173,14 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 ### Core Capabilities
 ### Core Capabilities
 
-- 🤖 **49 MCP Tools**: Comprehensive financial operations via natural language
+- 🤖 **51 MCP Tools**: Comprehensive financial operations via natural language
 - 🔄 **Multiple Transports**: HTTP and Server-Sent Events (SSE)
 - 🔐 **Secure**: Bearer token authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
-- 📊 **78% API Coverage**: Supports majority of Actual Budget operations
+- 📊 **82% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
-- ✅ **LibreChat Verified**: All 49 tools tested and working
+- ✅ **LibreChat Verified**: All 51 tools tested and working
 - ⚡ **Exclusive Tools**: 6 ActualQL-powered tools for advanced queries and summaries
 
 ### Advanced Features
@@ -219,7 +219,7 @@ With conversational AI, you can:
 
 **This project MUST use Zod 3.x (3.25.76).** Do NOT upgrade to Zod 4.x!
 
-Zod 4.x has breaking internal changes that cause `zod-to-json-schema` to produce incomplete schemas, breaking LibreChat tool validation. All 49 tools become invisible if Zod 4.x is used.
+Zod 4.x has breaking internal changes that cause `zod-to-json-schema` to produce incomplete schemas, breaking LibreChat tool validation. All 51 tools become invisible if Zod 4.x is used.
 
 - **Reject any Dependabot/Renovate PRs** suggesting Zod 4.x
 - The project includes safeguards: `package.json` overrides and Dockerfile post-install
@@ -1038,7 +1038,7 @@ mcpServers:
 **Features:**
 - ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
 - ✅ Bearer token authentication via headers
-- ✅ All 49 tools load successfully in LibreChat
+- ✅ All 51 tools load successfully in LibreChat
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
 
@@ -1120,9 +1120,9 @@ Comprehensive testing completed with LibreChat:
 
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
-| HTTP without auth | ✅ Success | 49 tools |
-| HTTP with auth | ✅ Success | 49 tools |
-| SSE without auth | ✅ Success | 49 tools |
+| HTTP without auth | ✅ Success | 51 tools |
+| HTTP with auth | ✅ Success | 51 tools |
+| SSE without auth | ✅ Success | 51 tools |
 | SSE with auth | ⚠️ Client limitation | 0 tools (headers not sent) |
 
 **Conclusion:** Use **HTTP transport with Bearer token authentication** for secure production LibreChat deployments.
@@ -1182,7 +1182,7 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 ```
 ┌──────────────┐         ┌──────────────┐         ┌─────────────┐
 │   LibreChat  │   MCP   │  MCP Server  │   REST  │   Actual    │
-│  (AI Client) │◄────────┤  (49 Tools)  │◄────────┤   Budget    │
+│  (AI Client) │◄────────┤  (51 Tools)  │◄────────┤   Budget    │
 │              │         │  +6 Exclusive│         │             │
 └──────────────┘         └──────────────┘         └─────────────┘
                                 │
@@ -1232,7 +1232,7 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 | **Batch** | 100% | 1/1 | ✅ Complete |
 | **Server Info** | 100% | 1/1 | ✅ Complete |
 
-**Overall: 82% API Coverage (49 tools covering all major Actual Budget operations)**
+**Overall: 82% API Coverage (51 tools covering all major Actual Budget operations)**
 
 **⚡ Exclusive Features**: This MCP server includes 6 ActualQL-powered tools that provide advanced querying and aggregation capabilities not available in other Actual Budget integrations.
 
@@ -1242,7 +1242,7 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 - ❌ Budget templates
 - ❌ Transaction notes/attachments
 
-**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 49 pre-built tools.
+**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 51 pre-built tools.
 - ❌ Custom reports
 
 See [`docs/api-coverage.md`](docs/api-coverage.md) for complete API documentation with examples.

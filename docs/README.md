@@ -1,8 +1,8 @@
 # Actual MCP Server Documentation
 
-**Version:** 0.1.0  
+**Version:** 0.4.7  
 **Project:** Model Context Protocol bridge for Actual Budget  
-**Last Updated:** 2025-11-11
+**Last Updated:** 2026-01-08
 
 ---
 
@@ -47,7 +47,7 @@ This directory contains comprehensive documentation for the Actual MCP Server pr
 - ✅ Updated PROJECT_OVERVIEW.md with accurate metrics (85/100 score)
 
 **Tool Registration**:
-- ✅ All 49 tools now properly registered in IMPLEMENTED_TOOLS array
+- ✅ All 51 tools now properly registered in IMPLEMENTED_TOOLS array
 - ✅ Tool count consistency verified across codebase
 
 **Previous Updates (November 2025)**:

@@ -138,7 +138,7 @@
 
 ### Tool Definitions
 
-49 tools organized by category:
+51 tools organized by category:
 
 ```
 src/tools/
@@ -371,7 +371,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 49 tools with MCP capabilities
+   └─> Registers 51 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance
@@ -419,7 +419,7 @@ npm run dev -- --test-actual-connection
 
 # Test all tool implementations
 npm run dev -- --test-actual-tools
-  └─> Runs smoke tests for all 49 tools
+  └─> Runs smoke tests for all 51 tools
 
 # Test MCP client interaction
 npm run dev -- --http --test-mcp-client

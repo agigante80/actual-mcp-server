@@ -82,6 +82,14 @@ class ActualConnectionPool {
   }
 
   /**
+   * Check if connection pool has completed initialization
+   * Returns true if pool is ready to accept connections
+   */
+  isInitialized(): boolean {
+    return this.initializationPromise !== null && this.cleanupInterval !== null;
+  }
+
+  /**
    * Check if a session has an active connection
    */
   hasConnection(sessionId: string): boolean {

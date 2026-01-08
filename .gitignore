@@ -43,10 +43,15 @@ build/
 # Ad-hoc test and development files (root level only)
 /test-*.mjs
 /test-*.js
-*.backup
 /check-*.js
 /cleanup-*.js
 /verify-*.js
+
+# Backup and temporary files (all directories)
+**/*.backup
+**/*.old
+**/*.bak
+**/*.tmp
 
 # Test infrastructure data (regeneratable)
 tests/manual/test-stack/librechat/mongo-data/

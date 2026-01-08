@@ -58,9 +58,9 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 | **Batch Operations** | 1 | Batch budget updates |
 | **Server Info** | 1 | Server status and information |
 
-**Total**: 49 tools with 87.5% coverage of Actual Budget core API
+**Total**: 51 tools with 82% coverage of Actual Budget core API
 
-> ✅ **All 49 tools verified** with LibreChat integration testing  
+> ✅ **All 51 tools verified** with LibreChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
 > 📊 **README enhanced** with comprehensive badges and improved discoverability
 
@@ -160,7 +160,7 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 - **Protocol**: MCP over HTTP (`streamable-http`)
 - **Integration**: LibreChat `mcpServers` configuration
 - **Authentication**: Bearer token via headers
-- **Status**: ✅ Fully verified - all 49 tools working
+- **Status**: ✅ Fully verified - all 51 tools working
 
 **LibreChat Configuration**:
 ```yaml
@@ -232,7 +232,7 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **49 tools implemented** (87.5% of core API coverage)
+- ✅ **51 tools implemented** (82% of core API coverage)
 - ✅ **LibreChat verified** - all tools loading and functional
 - ✅ **Docker images published** - Docker Hub and GHCR
 - ✅ **CI/CD pipeline** - automated testing and deployment

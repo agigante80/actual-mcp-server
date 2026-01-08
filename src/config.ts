@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 export const configSchema = z.object({
   ACTUAL_SERVER_URL: z.string().url(),
-  ACTUAL_PASSWORD: z.string().min(1),
+  ACTUAL_PASSWORD: z.string().default(''),
   ACTUAL_BUDGET_SYNC_ID: z.string().min(1),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
   MCP_BRIDGE_PORT: z.string().default('3000'),

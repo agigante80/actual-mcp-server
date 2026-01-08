@@ -801,6 +801,11 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       // Enhance error messages with helpful context
       const errorMsg = error?.message || String(error);
       
+      // If the error already contains formatted validation errors (with suggestions), preserve them
+      if (errorMsg.includes('Invalid SQL query:') && (errorMsg.includes('Available fields:') || errorMsg.includes('Available tables:'))) {
+        throw error; // Re-throw the well-formatted validation error as-is
+      }
+      
       if (errorMsg.includes('does not exist in the schema') || errorMsg.includes('Invalid field in query') || errorMsg.includes('does not exist in table')) {
         throw new Error(`Table or field does not exist. Query: "${trimmed}". Available tables: transactions, accounts, categories, payees, category_groups, schedules, rules. Use dot notation for joins (e.g., payee.name, category.name). Original error: ${errorMsg}`);
       }
@@ -823,6 +828,12 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
     // Top-level catch to ensure no unhandled rejections escape
     const errorMsg = error?.message || String(error);
     logger.error(`[ADAPTER] Query execution failed: ${errorMsg}`);
+    
+    // If the error already contains formatted validation errors with suggestions, preserve them
+    if (errorMsg.includes('Invalid SQL query:') && (errorMsg.includes('Available fields:') || errorMsg.includes('Available tables:'))) {
+      throw error; // Re-throw the well-formatted validation error without wrapping
+    }
+    
     throw new Error(`Query execution failed: ${errorMsg}`);
   }
 }
