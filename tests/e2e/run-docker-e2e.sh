@@ -75,11 +75,11 @@ cleanup() {
   if [ "$NO_CLEANUP" = false ]; then
     log_info "Cleaning up Docker resources..."
     cd "$PROJECT_ROOT"
-    docker-compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+    docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
     log_success "Cleanup complete"
   else
     log_warn "Skipping cleanup (--no-cleanup flag set)"
-    log_info "To manually cleanup: cd $PROJECT_ROOT && docker-compose -f docker-compose.test.yaml down -v"
+    log_info "To manually cleanup: cd $PROJECT_ROOT && docker compose -f docker-compose.test.yaml down -v"
   fi
 }
 
@@ -115,7 +115,7 @@ wait_for_service() {
   echo ""
   log_error "$service failed to become healthy after $max_attempts attempts"
   log_info "Showing $service logs:"
-  docker-compose -f "$COMPOSE_FILE" logs "$service" | tail -50
+  docker compose -f "$COMPOSE_FILE" logs "$service" | tail -50
   return 1
 }
 
@@ -130,16 +130,16 @@ echo ""
 
 # Step 0: Clean up any existing containers and volumes
 log_info "Step 0/5: Cleaning up previous test environment..."
-docker-compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 log_success "Previous environment cleaned"
 echo ""
 
 # Step 1: Build MCP server Docker image
 log_info "Step 1/5: Building MCP server Docker image..."
 if [ "$VERBOSE" = true ]; then
-  docker-compose -f "$COMPOSE_FILE" build mcp-server-test
+  docker compose -f "$COMPOSE_FILE" build mcp-server-test
 else
-  docker-compose -f "$COMPOSE_FILE" build mcp-server-test > /dev/null 2>&1
+  docker compose -f "$COMPOSE_FILE" build mcp-server-test > /dev/null 2>&1
 fi
 log_success "Docker image built successfully"
 
@@ -150,7 +150,7 @@ fi
 
 # Step 2: Start Actual Budget server and bootstrap
 log_info "Step 2/5: Starting Actual Budget server..."
-docker-compose -f "$COMPOSE_FILE" up -d actual-budget-test
+docker compose -f "$COMPOSE_FILE" up -d actual-budget-test
 
 log_info "Step 3/5: Waiting for Actual Budget to be ready..."
 sleep 3
@@ -159,7 +159,7 @@ COUNT=0
 while ! curl -sf http://localhost:5007/health > /dev/null 2>&1; do
   if [ $COUNT -ge $MAX_WAIT ]; then
     log_error "Actual Budget failed to start after ${MAX_WAIT} seconds"
-    docker-compose -f "$COMPOSE_FILE" logs actual-budget-test | tail -50
+    docker compose -f "$COMPOSE_FILE" logs actual-budget-test | tail -50
     exit 1
   fi
   echo -n "."
@@ -170,18 +170,18 @@ echo ""
 log_success "Actual Budget is ready"
 
 log_info "Step 4/5: Bootstrapping Actual Budget and importing test data..."
-if docker-compose -f "$COMPOSE_FILE" up actual-budget-bootstrap; then
+if docker compose -f "$COMPOSE_FILE" up actual-budget-bootstrap; then
   log_success "Bootstrap complete"
 else
   log_error "Bootstrap failed!"
-  docker-compose -f "$COMPOSE_FILE" logs actual-budget-bootstrap | tail -50
+  docker compose -f "$COMPOSE_FILE" logs actual-budget-bootstrap | tail -50
   exit 1
 fi
 
 # Step 5: Start MCP server
 log_info "Starting MCP server..."
 # Use 'create' then 'docker start' (not compose start) to avoid depends_on check
-docker-compose -f "$COMPOSE_FILE" create mcp-server-test
+docker compose -f "$COMPOSE_FILE" create mcp-server-test
 docker start mcp-server-e2e-test
 
 # Wait for MCP server to be ready
@@ -215,7 +215,7 @@ log_info "Step 6/6: Running E2E tests..."
 echo ""
 
 # Create and run Playwright container without depends_on check
-docker-compose -f "$COMPOSE_FILE" create e2e-test-runner
+docker compose -f "$COMPOSE_FILE" create e2e-test-runner
 
 if [ "$VERBOSE" = true ]; then
   docker start -a e2e-test-runner
@@ -241,8 +241,8 @@ else
   log_info ""
   log_info "Debug tips:"
   echo "  1. Check service logs:"
-  echo "     docker-compose -f $COMPOSE_FILE logs mcp-server-test"
-  echo "     docker-compose -f $COMPOSE_FILE logs actual-budget-test"
+  echo "     docker compose -f $COMPOSE_FILE logs mcp-server-test"
+  echo "     docker compose -f $COMPOSE_FILE logs actual-budget-test"
   echo ""
   echo "  2. Access services directly:"
   echo "     curl http://localhost:3602/health"
