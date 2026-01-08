@@ -7,6 +7,7 @@ README.md
 .env.*
 tests/
 test-*/
+!test-data/
 *.md
 logs/
 app/logs/

@@ -88,43 +88,18 @@ if [ "$NO_CLEANUP" = false ]; then
   trap cleanup EXIT
 fi
 
-# Main execution
-cd "$PROJECT_ROOT"
-
-echo ""
-log_info "=========================================="
-log_info "Docker-based E2E Test Suite"
-log_info "=========================================="
-echo ""
-
-# Step 1: Build MCP server Docker image
-log_info "Step 1/4: Building MCP server Docker image..."
-if [ "$VERBOSE" = true ]; then
-  docker-compose -f "$COMPOSE_FILE" build mcp-server-test
-else
-  docker-compose -f "$COMPOSE_FILE" build mcp-server-test > /dev/null 2>&1
-fi
-log_success "Docker image built successfully"
-
-if [ "$BUILD_ONLY" = true ]; then
-  log_success "Build complete (--build-only flag set)"
-  exit 0
-fi
-
-# Step 2: Start services
-log_info "Step 2/4: Starting services (Actual Budget + MCP Server)..."
-docker-compose -f "$COMPOSE_FILE" up -d actual-budget-test mcp-server-test
-
-# Step 3: Wait for services to be healthy
-log_info "Step 3/4: Waiting for services to be ready..."
-
+# Function to wait for service health
 wait_for_service() {
   local service=$1
+  local container_name=$2
   local max_attempts=30
   local attempt=1
   
   while [ $attempt -le $max_attempts ]; do
-    if docker-compose -f "$COMPOSE_FILE" ps | grep "$service" | grep -q "healthy"; then
+    # Check health status directly with docker inspect
+    health_status=$(docker inspect "$container_name" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+    
+    if [ "$health_status" = "healthy" ]; then
       log_success "$service is healthy"
       return 0
     fi
@@ -144,8 +119,75 @@ wait_for_service() {
   return 1
 }
 
-wait_for_service "actual-budget-test" || exit 1
-wait_for_service "mcp-server-test" || exit 1
+# Main execution
+cd "$PROJECT_ROOT"
+
+echo ""
+log_info "=========================================="
+log_info "Docker-based E2E Test Suite"
+log_info "=========================================="
+echo ""
+
+# Step 0: Clean up any existing containers and volumes
+log_info "Step 0/5: Cleaning up previous test environment..."
+docker-compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+log_success "Previous environment cleaned"
+echo ""
+
+# Step 1: Build MCP server Docker image
+log_info "Step 1/5: Building MCP server Docker image..."
+if [ "$VERBOSE" = true ]; then
+  docker-compose -f "$COMPOSE_FILE" build mcp-server-test
+else
+  docker-compose -f "$COMPOSE_FILE" build mcp-server-test > /dev/null 2>&1
+fi
+log_success "Docker image built successfully"
+
+if [ "$BUILD_ONLY" = true ]; then
+  log_success "Build complete (--build-only flag set)"
+  exit 0
+fi
+
+# Step 2: Start Actual Budget server and bootstrap
+log_info "Step 2/5: Starting Actual Budget server..."
+docker-compose -f "$COMPOSE_FILE" up -d actual-budget-test
+
+log_info "Step 3/5: Waiting for Actual Budget to be ready..."
+sleep 3
+MAX_WAIT=30
+COUNT=0
+while ! curl -sf http://localhost:5007/health > /dev/null 2>&1; do
+  if [ $COUNT -ge $MAX_WAIT ]; then
+    log_error "Actual Budget failed to start after ${MAX_WAIT} seconds"
+    docker-compose -f "$COMPOSE_FILE" logs actual-budget-test | tail -50
+    exit 1
+  fi
+  echo -n "."
+  sleep 2
+  COUNT=$((COUNT + 2))
+done
+echo ""
+log_success "Actual Budget is ready"
+
+log_info "Step 4/5: Bootstrapping Actual Budget and importing test data..."
+if docker-compose -f "$COMPOSE_FILE" up actual-budget-bootstrap; then
+  log_success "Bootstrap complete"
+else
+  log_error "Bootstrap failed!"
+  docker-compose -f "$COMPOSE_FILE" logs actual-budget-bootstrap | tail -50
+  exit 1
+fi
+
+# Step 5: Start MCP server
+log_info "Starting MCP server..."
+# Use 'create' then 'docker start' (not compose start) to avoid depends_on check
+docker-compose -f "$COMPOSE_FILE" create mcp-server-test
+docker start mcp-server-e2e-test
+
+# Wait for MCP server to be ready
+log_info "Waiting for MCP server to be ready..."
+
+wait_for_service "mcp-server-test" "mcp-server-e2e-test" || exit 1
 
 echo ""
 log_success "All services are ready"
@@ -158,15 +200,28 @@ echo "  • MCP Server:    http://localhost:3602/http"
 echo "  • Health Check:  http://localhost:3602/health"
 echo ""
 
-# Step 4: Run E2E tests
-log_info "Step 4/4: Running E2E tests..."
+# Test MCP server is actually responding
+log_info "Testing MCP server..."
+if curl -sf http://localhost:3602/health > /dev/null; then
+  log_success "MCP server is responding"
+else
+  log_error "MCP server is not responding"
+  exit 1
+fi
 echo ""
 
+# Step 6: Run E2E tests
+log_info "Step 6/6: Running E2E tests..."
+echo ""
+
+# Create and run Playwright container without depends_on check
+docker-compose -f "$COMPOSE_FILE" create e2e-test-runner
+
 if [ "$VERBOSE" = true ]; then
-  docker-compose -f "$COMPOSE_FILE" run --rm e2e-test-runner
+  docker start -a e2e-test-runner
   TEST_EXIT_CODE=$?
 else
-  docker-compose -f "$COMPOSE_FILE" run --rm e2e-test-runner 2>&1 | tee /tmp/e2e-docker-test-output.log
+  docker start -a e2e-test-runner 2>&1 | tee /tmp/e2e-docker-test-output.log
   TEST_EXIT_CODE=${PIPESTATUS[0]}
 fi
 

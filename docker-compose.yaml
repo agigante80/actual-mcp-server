@@ -5,49 +5,13 @@
 # with Docker Compose, including both development and production setups.
 #
 # Usage:
-#   Development:  docker compose up
+#   Development:  docker compose --profile dev up
 #   Production:   docker compose --profile production up
-#   Full Stack:   docker compose --profile fullstack up
 # ============================================================================
 
 version: '3.8'
 
 services:
-  # --------------------------------------------------------------------------
-  # Actual Budget Server (Optional - Full Stack)
-  # --------------------------------------------------------------------------
-  # Uncomment this service if you don't have an existing Actual Budget server
-  # This will run the official Actual Budget server locally
-  
-  actual-server:
-    image: actualbudget/actual-server:latest
-    container_name: actual-budget-server
-    profiles:
-      - fullstack
-    restart: unless-stopped
-    ports:
-      - "5006:5006"
-    volumes:
-      # Persist Actual Budget data
-      - actual-data:/data
-    environment:
-      # Timezone (set to your local timezone)
-      - TZ=${TZ:-UTC}
-      
-      # Optional: Set a password for file uploads
-      # ACTUAL_UPLOAD_FILE_SYNC_PASSWORD: your-upload-password
-      
-      # Optional: Trusted proxies (if behind reverse proxy)
-      # ACTUAL_TRUSTED_PROXIES: 172.17.0.0/16
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5006"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    networks:
-      - actual-network
-
   # --------------------------------------------------------------------------
   # Actual MCP Server - Development Mode
   # --------------------------------------------------------------------------
@@ -205,11 +169,6 @@ networks:
 # Volumes
 # ----------------------------------------------------------------------------
 volumes:
-  # Actual Budget server data
-  actual-data:
-    driver: local
-    name: actual-budget-data
-  
   # MCP server data (production)
   mcp-data:
     driver: local
@@ -234,28 +193,27 @@ secrets:
 # Usage Examples
 # ============================================================================
 #
-# 1. Development with existing Actual server:
+# Prerequisites: Have an Actual Budget server running (self-hosted or cloud)
+#
+# 1. Development mode:
 #    $ docker compose --profile dev up
 #
-# 2. Full stack (Actual + MCP Server):
-#    $ docker compose --profile fullstack --profile dev up
-#
-# 3. Production deployment:
+# 2. Production deployment:
 #    $ mkdir -p secrets
 #    $ echo "your-actual-password" > secrets/actual_password.txt
 #    $ chmod 600 secrets/actual_password.txt
 #    $ docker compose --profile production up -d
 #
-# 4. Build custom image:
+# 3. Build custom image:
 #    $ docker compose build mcp-server-dev
 #
-# 5. View logs:
+# 4. View logs:
 #    $ docker compose logs -f mcp-server-dev
 #
-# 6. Stop all services:
+# 5. Stop all services:
 #    $ docker compose down
 #
-# 7. Remove all data (CAUTION: This deletes all data):
+# 6. Remove all data (CAUTION: This deletes all data):
 #    $ docker compose down -v
 #
 # ============================================================================

@@ -62,6 +62,11 @@ const tests = [
     query: 'SELECT id, payee_name, category_name FROM transactions',
     shouldPass: false,
   },
+  {
+    name: 'Invalid join path: account.id (account is not a join, just a field)',
+    query: 'SELECT * FROM transactions WHERE account.id = \'bff82978-3f20-4956-860b-fa2cb069a144\' ORDER BY date DESC LIMIT 5',
+    shouldPass: false,
+  },
 ];
 
 let passed = 0;

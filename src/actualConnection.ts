@@ -151,8 +151,13 @@ export async function shutdownActualForSession(sessionId: string) {
 }
 
 export function getConnectionState() {
+  // When using connection pooling, consider server initialized if pool is ready
+  // (even with 0 active connections, pool being initialized means server is ready to accept sessions)
+  const isPoolInitialized = useConnectionPool && connectionPool.isInitialized();
+  const effectivelyInitialized = useConnectionPool ? isPoolInitialized : initialized;
+  
   return {
-    initialized,
+    initialized: effectivelyInitialized,
     initializationError,
     connectionPool: useConnectionPool ? connectionPool.getStats() : null,
     idleTimeoutMinutes: useConnectionPool ? connectionPool.getIdleTimeoutMinutes() : null,

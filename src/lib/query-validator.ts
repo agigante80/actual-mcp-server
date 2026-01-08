@@ -174,13 +174,25 @@ export function validateQuery(sql: string): ValidationResult {
       const targetTable = table || primaryTable;
       if (!isValidField(targetTable, field)) {
         const availableFields = getTableFields(targetTable);
-        errors.push({
-          type: 'invalid_field',
-          message: `Field "${field}" does not exist in table "${targetTable}"`,
-          table: targetTable,
-          field,
-          suggestions: availableFields || [],
-        });
+        
+        // If table doesn't exist, suggest valid tables instead of empty field list
+        if (availableFields === null) {
+          errors.push({
+            type: 'invalid_table',
+            message: `Table "${targetTable}" does not exist (referenced in "${table ? table + '.' + field : field}")`,
+            table: targetTable,
+            field,
+            suggestions: getTableNames(),
+          });
+        } else {
+          errors.push({
+            type: 'invalid_field',
+            message: `Field "${field}" does not exist in table "${targetTable}"`,
+            table: targetTable,
+            field,
+            suggestions: availableFields,
+          });
+        }
       }
     }
     
@@ -198,13 +210,25 @@ export function validateQuery(sql: string): ValidationResult {
       const targetTable = table || primaryTable;
       if (!isValidField(targetTable, field)) {
         const availableFields = getTableFields(targetTable);
-        errors.push({
-          type: 'invalid_field',
-          message: `Field "${field}" does not exist in table "${targetTable}"`,
-          table: targetTable,
-          field,
-          suggestions: availableFields || [],
-        });
+        
+        // If table doesn't exist, suggest valid tables instead of empty field list
+        if (availableFields === null) {
+          errors.push({
+            type: 'invalid_table',
+            message: `Table "${targetTable}" does not exist (referenced in "${table ? table + '.' + field : field}")`,
+            table: targetTable,
+            field,
+            suggestions: getTableNames(),
+          });
+        } else {
+          errors.push({
+            type: 'invalid_field',
+            message: `Field "${field}" does not exist in table "${targetTable}"`,
+            table: targetTable,
+            field,
+            suggestions: availableFields,
+          });
+        }
       }
     }
     

@@ -7,7 +7,7 @@ version: '3.8'
 services:
   # Actual Budget server for testing
   actual-budget-test:
-    image: actualbudget/actual-server:24.12.0
+    image: actualbudget/actual-server:latest
     container_name: actual-budget-e2e-test
     ports:
       - "5007:5006"  # Use port 5007 to avoid conflicts with dev instances
@@ -15,12 +15,41 @@ services:
       - actual-test-data:/data
     environment:
       - NODE_ENV=production
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:5006"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-      start_period: 10s
+    networks:
+      - e2e-test-network
+
+  # Bootstrap & init: Sets password and imports test budget with data
+  actual-budget-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: actual-budget-bootstrap
+    depends_on:
+      - actual-budget-test
+    environment:
+      - ACTUAL_SERVER_URL=http://actual-budget-test:5006
+      - ACTUAL_PASSWORD=test123
+    working_dir: /app
+    volumes:
+      - bootstrap-data:/tmp
+      - ./test-data:/app/test-data:ro
+    user: root
+    entrypoint: ["/bin/sh"]
+    command:
+      - -c
+      - |
+        echo "Waiting for Actual Budget server..."
+        for i in $$(seq 1 30); do
+          if wget --spider -q http://actual-budget-test:5006/health 2>/dev/null; then
+            echo "Server is ready!"
+            break
+          fi
+          echo "Waiting... ($$i/30)"
+          sleep 2
+        done
+        # Skip the wait in bootstrap script since we already waited
+        export SKIP_SERVER_WAIT=true
+        sh scripts/bootstrap-and-init.sh
     networks:
       - e2e-test-network
 
@@ -33,22 +62,36 @@ services:
     ports:
       - "3602:3600"  # Use port 3602 to avoid conflicts
     depends_on:
-      actual-budget-test:
-        condition: service_healthy
+      actual-budget-bootstrap:
+        condition: service_completed_successfully
     environment:
       - ACTUAL_SERVER_URL=http://actual-budget-test:5006
-      - ACTUAL_PASSWORD=test-e2e-password
-      - ACTUAL_BUDGET_SYNC_ID=test-sync-id-e2e
+      - ACTUAL_PASSWORD=test123
       - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_DATA_DIR=/app/data
       - LOG_LEVEL=info
       - NODE_ENV=test
+      # Transport mode: Using HTTP (recommended)
+      # Note: To use SSE instead, change '--http' to '--sse' in the entrypoint command below
       # Allow connections without auth for testing
       - MCP_SSE_AUTHORIZATION=
     volumes:
       - mcp-test-data:/app/data
+      - bootstrap-data:/tmp:ro
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ -f /tmp/actual-sync-id.txt ]; then
+          export ACTUAL_BUDGET_SYNC_ID=$$(cat /tmp/actual-sync-id.txt)
+          echo "Using sync ID: $$ACTUAL_BUDGET_SYNC_ID"
+        else
+          echo "ERROR: No sync ID found at /tmp/actual-sync-id.txt"
+          exit 1
+        fi
+        exec node dist/src/index.js --http
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3600/health"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3600/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -87,6 +130,8 @@ volumes:
     name: actual-e2e-test-data
   mcp-test-data:
     name: mcp-e2e-test-data
+  bootstrap-data:
+    name: bootstrap-e2e-data
   e2e-test-results:
     name: e2e-test-results
 

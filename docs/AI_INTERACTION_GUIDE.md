@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.4.7  
 **Purpose:** Define operational boundaries and rules for AI agents  
-**Last Updated:** 2025-12-10
+**Last Updated:** 2026-01-08
 
 ---
 
@@ -17,12 +17,12 @@ This document establishes **mandatory rules and policies** for AI agents working
 
 ## 🛠️ Tool Count Reference
 
-**Current Tool Count**: **49 tools** (all registered in IMPLEMENTED_TOOLS array as of 2025-12-10)
+**Current Tool Count**: **51 tools** (all registered in IMPLEMENTED_TOOLS array as of 2026-01-08)
 
 **Tool Categories**:
 - Accounts: 7 tools
-- Transactions: 12 tools (including 4 search + 2 summary tools)
-- Budgets: 8 tools
+- Transactions: 12 tools (including 6 search + 2 summary tools)
+- Budgets: 9 tools
 - Categories: 4 tools
 - Category Groups: 4 tools
 - Payees: 6 tools

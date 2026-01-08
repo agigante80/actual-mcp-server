@@ -197,18 +197,72 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
+  # Job 3.5: Docker E2E Tests
+  # --------------------------------------------------------------------------
+  docker-e2e:
+    name: Docker E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: version
+    if: ${{ github.event.inputs.skip_tests != 'true' }}
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🎭 Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: 🐳 Start Docker Compose test stack
+        run: |
+          docker compose -f docker-compose.test.yaml up -d
+          echo "Waiting for services to be ready..."
+          sleep 15
+
+      - name: 🧪 Run Docker E2E tests
+        run: npm run test:e2e:docker
+
+      - name: 📸 Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: 🧹 Cleanup Docker containers
+        if: always()
+        run: docker compose -f docker-compose.test.yaml down -v
+
+      - name: 📋 Docker E2E summary
+        if: always()
+        run: |
+          echo "### 🐳 Docker E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # --------------------------------------------------------------------------
   # Job 4: Build Application
   # --------------------------------------------------------------------------
   build:
     name: Build Application
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, lint, test]
+    needs: [version, lint, test, docker-e2e]
     if: |
       always() &&
       needs.version.result == 'success' &&
       needs.lint.result == 'success' &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped')
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.docker-e2e.result == 'success' || needs.docker-e2e.result == 'skipped')
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -668,7 +722,7 @@ jobs:
     name: Pipeline Summary
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, lint, test, build, validate-short-description, docker-test,
+    needs: [version, lint, test, docker-e2e, build, validate-short-description, docker-test,
             docker-publish, security-scan, deployment-test, release]
     if: always()
     steps:
@@ -681,6 +735,7 @@ jobs:
           echo "| Version Generation | ${{ needs.version.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docker E2E | ${{ needs.docker-e2e.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Build | ${{ needs.build.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate Description | ${{ needs.validate-short-description.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker Test | ${{ needs.docker-test.result }} |" >> $GITHUB_STEP_SUMMARY

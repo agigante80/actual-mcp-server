@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **49 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **51 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
 
 **Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
 
-**Current Status**: Production-ready, 49 tools implemented, 82% Actual Budget API coverage
+**Current Status**: Production-ready, 51 tools implemented, 82% Actual Budget API coverage
 
 ## Architecture Essentials
 
@@ -28,7 +28,7 @@ await rawAddTransactions(data);
 
 ### Tool Structure
 
-All 49 tools follow this pattern (`src/tools/*.ts`):
+All 51 tools follow this pattern (`src/tools/*.ts`):
 
 ```typescript
 import { z } from 'zod';
@@ -67,7 +67,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (49 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (51 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── lib/
 │   ├── actual-adapter.ts       # ⚠️ CRITICAL: withActualApi wrapper, retry logic
 │   ├── ActualMCPConnection.ts  # MCP protocol implementation (EventEmitter-based)
@@ -363,10 +363,10 @@ If transactions/budgets don't persist:
 1. Verify `withActualApi` wrapper is used (grep for `rawAdd*` calls)
 2. Check `api.shutdown()` is called after operations
 3. Review logs for "tombstone" errors
-4. Reference [TOMBSTONE_ISSUE_RESOLVED.md](../docs/TOMBSTONE_ISSUE_RESOLVED.md)
+4. Reference [TOMBSTONE_ISSUE_RESOLVED.md](../docs/archive/docs-backup-2026-01-08/TOMBSTONE_ISSUE_RESOLVED.md)
 
 ---
 
-**Last Updated**: 2025-12-10  
-**Version**: 0.1.0  
-**Tool Count**: 49 (verified LibreChat-compatible)
+**Last Updated**: 2026-01-08  
+**Version**: 0.4.7  
+**Tool Count**: 51 (verified LibreChat-compatible)
