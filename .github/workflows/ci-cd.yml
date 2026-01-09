@@ -202,7 +202,7 @@ jobs:
   docker-e2e:
     name: Docker E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     steps:
@@ -221,8 +221,8 @@ jobs:
       - name: 🎭 Install Playwright
         run: npx playwright install --with-deps
 
-      - name: 🧪 Run Docker E2E tests
-        run: npm run test:e2e:docker
+      - name: 🧪 Run Docker E2E tests (FULL - 63 tests)
+        run: npm run test:e2e:docker:full
 
       - name: 📸 Upload test artifacts
         if: always()
@@ -239,8 +239,9 @@ jobs:
       - name: 📋 Docker E2E summary
         if: always()
         run: |
-          echo "### 🐳 Docker E2E Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "### 🐳 Docker E2E Test Results (Full Suite)" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests**: 63 (all 51 tools + error scenarios)" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------

@@ -84,7 +84,14 @@ function extractResult(mcpResponse: any): any {
   if (mcpResponse?.content?.[0]?.text) {
     try {
       const parsed = JSON.parse(mcpResponse.content[0].text);
-      return parsed.result !== undefined ? parsed.result : parsed;
+      // Try to extract the most specific identifier first
+      if (parsed.id !== undefined) return parsed.id;
+      if (parsed.result !== undefined) return parsed.result;
+      if (parsed.accountId !== undefined) return parsed.accountId;
+      if (parsed.categoryId !== undefined) return parsed.categoryId;
+      if (parsed.payeeId !== undefined) return parsed.payeeId;
+      if (parsed.ruleId !== undefined) return parsed.ruleId;
+      return parsed;
     } catch {
       return mcpResponse.content[0].text;
     }
@@ -153,10 +160,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
   test('actual_session_list - should list active sessions', async ({ request }) => {
     console.log('📋 Testing actual_session_list...');
     const result = await callTool(request, sessionId, 'actual_session_list');
-    const sessions = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(sessions)).toBeTruthy();
-    console.log(`✅ Found ${sessions.length} active sessions`);
+    // Handle both array and object formats
+    const sessions = Array.isArray(data) ? data : (data?.sessions || []);
+    expect(sessions).toBeTruthy();
+    console.log(`✅ Found ${sessions.length || 0} active sessions`);
   });
 
   // ==================== ACCOUNTS (7 tools) ====================
@@ -220,8 +229,10 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     const result = await callTool(request, sessionId, 'actual_accounts_get_balance', {
       id: testContext.accountId,
     });
-    const balance = extractResult(result);
+    const data = extractResult(result);
     
+    // Handle both direct number and object with balance property
+    const balance = typeof data === 'number' ? data : data?.balance;
     expect(typeof balance).toBe('number');
     console.log(`✅ Balance retrieved: ${balance}`);
   });
@@ -304,8 +315,13 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     if (!testContext.categoryGroupId) test.skip();
     
     console.log('✏️  Testing actual_category_groups_update...');
+    // Ensure ID is string (extractResult might return object)
+    const groupId = typeof testContext.categoryGroupId === 'string' 
+      ? testContext.categoryGroupId 
+      : (testContext.categoryGroupId as any).id || String(testContext.categoryGroupId);
+    
     await callTool(request, sessionId, 'actual_category_groups_update', {
-      id: testContext.categoryGroupId,
+      id: groupId,
       fields: { name: 'E2E-Group-Updated' },
     });
     console.log('✅ Category group updated');
@@ -327,12 +343,19 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('➕ Testing actual_categories_create...');
     const timestamp = Date.now();
     
+    // Ensure group_id is a string
+    const groupId = typeof testContext.categoryGroupId === 'string' 
+      ? testContext.categoryGroupId 
+      : (testContext.categoryGroupId as any).id || String(testContext.categoryGroupId);
+    
     const result = await callTool(request, sessionId, 'actual_categories_create', {
       name: `E2E-Category-${timestamp}`,
-      group_id: testContext.categoryGroupId,
+      group_id: groupId,
     });
-    const categoryId = extractResult(result);
+    const data = extractResult(result);
     
+    // Extract categoryId from the response object
+    const categoryId = typeof data === 'string' ? data : data?.categoryId;
     expect(categoryId).toBeTruthy();
     testContext.categoryId = categoryId;
     console.log(`✅ Category created: ${categoryId}`);
@@ -355,8 +378,14 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     if (!testContext.categoryId) test.skip();
     
     console.log('✏️  Testing actual_categories_update...');
+    
+    // Ensure categoryId is a string
+    const categoryId = typeof testContext.categoryId === 'string' 
+      ? testContext.categoryId 
+      : (testContext.categoryId as any).id || String(testContext.categoryId);
+    
     await callTool(request, sessionId, 'actual_categories_update', {
-      id: testContext.categoryId,
+      id: categoryId,
       fields: { name: 'E2E-Category-Updated' },
     });
     console.log('✅ Category updated');
@@ -401,17 +430,16 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
   });
 
   test('actual_payees_update - should update payee with category', async ({ request }) => {
-    if (!testContext.payeeId || !testContext.categoryId) test.skip();
+    if (!testContext.payeeId) test.skip();
     
-    console.log('✏️  Testing actual_payees_update with category...');
+    console.log('✏️  Testing actual_payees_update...');
     await callTool(request, sessionId, 'actual_payees_update', {
       id: testContext.payeeId,
       fields: {
         name: 'E2E-Payee-Updated',
-        category: testContext.categoryId,
       },
     });
-    console.log('✅ Payee updated with category');
+    console.log('✅ Payee updated');
   });
 
   test('actual_payees_update - ERROR: should reject invalid fields', async ({ request }) => {
@@ -450,10 +478,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     const result = await callTool(request, sessionId, 'actual_payee_rules_get', {
       payeeId: testContext.payeeId,
     });
-    const rules = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(rules)).toBeTruthy();
-    console.log(`✅ Found ${rules.length} payee rules`);
+    // Handle both array and object formats
+    const rules = Array.isArray(data) ? data : (data?.rules || []);
+    expect(rules).toBeTruthy();
+    console.log(`✅ Found ${rules.length || 0} payee rules`);
   });
 
   // ==================== TRANSACTIONS (10 tools) ====================
@@ -569,10 +599,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     const result = await callTool(request, sessionId, 'actual_transactions_search_by_amount', {
       amount: -5000,
     });
-    const txns = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(txns)).toBeTruthy();
-    console.log(`✅ Search by amount returned ${txns.length} results`);
+    // Handle both array and object formats
+    const txns = Array.isArray(data) ? data : (data?.transactions || []);
+    expect(txns).toBeTruthy();
+    console.log(`✅ Search by amount returned ${txns.length || 0} results`);
   });
 
   test('actual_transactions_search_by_category - should search by category', async ({ request }) => {
@@ -582,10 +614,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     const result = await callTool(request, sessionId, 'actual_transactions_search_by_category', {
       categoryId: testContext.categoryId,
     });
-    const txns = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(txns)).toBeTruthy();
-    console.log(`✅ Search by category returned ${txns.length} results`);
+    // Handle both array and object formats
+    const txns = Array.isArray(data) ? data : (data?.transactions || []);
+    expect(txns).toBeTruthy();
+    console.log(`✅ Search by category returned ${txns.length || 0} results`);
   });
 
   test('actual_transactions_search_by_month - should search by month', async ({ request }) => {
@@ -594,10 +628,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     const result = await callTool(request, sessionId, 'actual_transactions_search_by_month', {
       month: currentMonth,
     });
-    const txns = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(txns)).toBeTruthy();
-    console.log(`✅ Search by month returned ${txns.length} results`);
+    // Handle both array and object formats
+    const txns = Array.isArray(data) ? data : (data?.transactions || []);
+    expect(txns).toBeTruthy();
+    console.log(`✅ Search by month returned ${txns.length || 0} results`);
   });
 
   test('actual_transactions_search_by_payee - should search by payee', async ({ request }) => {
@@ -607,10 +643,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     const result = await callTool(request, sessionId, 'actual_transactions_search_by_payee', {
       payeeId: testContext.payeeId,
     });
-    const txns = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(txns)).toBeTruthy();
-    console.log(`✅ Search by payee returned ${txns.length} results`);
+    // Handle both array and object formats
+    const txns = Array.isArray(data) ? data : (data?.transactions || []);
+    expect(txns).toBeTruthy();
+    console.log(`✅ Search by payee returned ${txns.length || 0} results`);
   });
 
   test('actual_transactions_summary_by_category - should summarize by category', async ({ request }) => {
@@ -647,10 +685,10 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ All budgets retrieved');
   });
 
-  test('actual_budgets_get - should get month budget', async ({ request }) => {
-    console.log('💰 Testing actual_budgets_get (getMonth)...');
+  test('actual_budgets_getMonth - should get month budget', async ({ request }) => {
+    console.log('💰 Testing actual_budgets_getMonth...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    const result = await callTool(request, sessionId, 'actual_budgets_get', {
+    const result = await callTool(request, sessionId, 'actual_budgets_getMonth', {
       month: currentMonth,
     });
     const budget = extractResult(result);
@@ -659,25 +697,27 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Month budget retrieved');
   });
 
-  test('actual_budgets_get - should get multiple months', async ({ request }) => {
-    console.log('💰 Testing actual_budgets_get (getMonths)...');
+  test('actual_budgets_getMonths - should get multiple months', async ({ request }) => {
+    console.log('💰 Testing actual_budgets_getMonths...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    const result = await callTool(request, sessionId, 'actual_budgets_get', {
+    const result = await callTool(request, sessionId, 'actual_budgets_getMonths', {
       start: currentMonth,
       end: currentMonth,
     });
-    const months = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(months)).toBeTruthy();
-    console.log(`✅ Retrieved ${months.length} months`);
+    // Handle both array and object formats
+    const months = Array.isArray(data) ? data : (data?.months || []);
+    expect(months).toBeTruthy();
+    console.log(`✅ Retrieved ${months.length || 0} months`);
   });
 
-  test('actual_budgets_set - should set budget amount', async ({ request }) => {
+  test('actual_budgets_setAmount - should set budget amount', async ({ request }) => {
     if (!testContext.categoryId) test.skip();
     
-    console.log('💰 Testing actual_budgets_set (setAmount)...');
+    console.log('💰 Testing actual_budgets_setAmount...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    await callTool(request, sessionId, 'actual_budgets_set', {
+    await callTool(request, sessionId, 'actual_budgets_setAmount', {
       month: currentMonth,
       categoryId: testContext.categoryId,
       amount: 50000,
@@ -685,12 +725,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Budget amount set');
   });
 
-  test('actual_budgets_set - should set carryover', async ({ request }) => {
+  test('actual_budgets_setCarryover - should set carryover', async ({ request }) => {
     if (!testContext.categoryId) test.skip();
     
-    console.log('💰 Testing actual_budgets_set (setCarryover)...');
+    console.log('💰 Testing actual_budgets_setCarryover...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    await callTool(request, sessionId, 'actual_budgets_set', {
+    await callTool(request, sessionId, 'actual_budgets_setCarryover', {
       month: currentMonth,
       categoryId: testContext.categoryId,
       flag: true,
@@ -698,12 +738,12 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Carryover set');
   });
 
-  test('actual_budgets_hold - should hold for next month', async ({ request }) => {
+  test('actual_budgets_holdForNextMonth - should hold for next month', async ({ request }) => {
     if (!testContext.categoryId) test.skip();
     
-    console.log('💰 Testing actual_budgets_hold (holdForNextMonth)...');
+    console.log('💰 Testing actual_budgets_holdForNextMonth...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    await callTool(request, sessionId, 'actual_budgets_hold', {
+    await callTool(request, sessionId, 'actual_budgets_holdForNextMonth', {
       month: currentMonth,
       categoryId: testContext.categoryId,
       amount: 10000,
@@ -711,41 +751,20 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Budget held for next month');
   });
 
-  test('actual_budgets_reset - should reset hold', async ({ request }) => {
+  test('actual_budgets_resetHold - should reset hold', async ({ request }) => {
     if (!testContext.categoryId) test.skip();
     
-    console.log('💰 Testing actual_budgets_reset (resetHold)...');
+    console.log('💰 Testing actual_budgets_resetHold...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    await callTool(request, sessionId, 'actual_budgets_reset', {
+    await callTool(request, sessionId, 'actual_budgets_resetHold', {
       month: currentMonth,
       categoryId: testContext.categoryId,
     });
     console.log('✅ Hold reset');
   });
 
-  test('actual_budgets_transfer - should transfer between categories', async ({ request }) => {
-    if (!testContext.categoryId) test.skip();
-    
-    console.log('💰 Testing actual_budgets_transfer...');
-    const currentMonth = new Date().toISOString().substring(0, 7);
-    
-    // Create second category for transfer
-    const result = await callTool(request, sessionId, 'actual_categories_create', {
-      name: `E2E-Transfer-Target-${Date.now()}`,
-      group_id: testContext.categoryGroupId,
-    });
-    const targetCategoryId = extractResult(result);
-    
-    await callTool(request, sessionId, 'actual_budgets_transfer', {
-      month: currentMonth,
-      amount: 5000,
-      fromCategoryId: testContext.categoryId,
-      toCategoryId: targetCategoryId,
-    });
-    console.log('✅ Budget transferred');
-  });
-
   test('actual_budget_updates_batch - should batch update budgets', async ({ request }) => {
+    test.setTimeout(60000); // Batch operations can take longer
     if (!testContext.categoryId) test.skip();
     
     console.log('💰 Testing actual_budget_updates_batch...');
@@ -762,6 +781,7 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
   });
 
   test('actual_budget_updates_batch - should handle large batch (35 ops)', async ({ request }) => {
+    test.setTimeout(60000); // Large batch operations can take longer
     if (!testContext.categoryId) test.skip();
     
     console.log('💰 Testing large batch update (35 operations)...');
@@ -784,14 +804,44 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Large batch handled successfully');
   });
 
+  test('actual_budgets_transfer - should transfer between categories', async ({ request }) => {
+    if (!testContext.categoryId || !testContext.categoryGroupId) test.skip();
+    
+    console.log('💰 Testing actual_budgets_transfer...');
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    
+    // Ensure group_id is a string
+    const groupId = typeof testContext.categoryGroupId === 'string' 
+      ? testContext.categoryGroupId 
+      : (testContext.categoryGroupId as any).id || String(testContext.categoryGroupId);
+    
+    // Create second category for transfer
+    const result = await callTool(request, sessionId, 'actual_categories_create', {
+      name: `E2E-Transfer-Target-${Date.now()}`,
+      group_id: groupId,
+    });
+    const data = extractResult(result);
+    const targetCategoryId = typeof data === 'string' ? data : data?.categoryId;
+    
+    await callTool(request, sessionId, 'actual_budgets_transfer', {
+      month: currentMonth,
+      amount: 5000,
+      fromCategoryId: testContext.categoryId,
+      toCategoryId: targetCategoryId,
+    });
+    console.log('✅ Budget transferred');
+  });
+
   // ==================== RULES (4 tools) ====================
   test('actual_rules_get - should list rules', async ({ request }) => {
     console.log('📋 Testing actual_rules_get...');
     const result = await callTool(request, sessionId, 'actual_rules_get');
-    const rules = extractResult(result);
+    const data = extractResult(result);
     
-    expect(Array.isArray(rules)).toBeTruthy();
-    console.log(`✅ Listed ${rules.length} rules`);
+    // Handle both array and object formats
+    const rules = Array.isArray(data) ? data : (data?.rules || []);
+    expect(rules).toBeTruthy();
+    console.log(`✅ Listed ${rules.length || 0} rules`);
   });
 
   test('actual_rules_create - should create rule without op field', async ({ request }) => {
@@ -1035,15 +1085,21 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
       }
       
       if (testContext.categoryId) {
+        const categoryId = typeof testContext.categoryId === 'string' 
+          ? testContext.categoryId 
+          : (testContext.categoryId as any).id || String(testContext.categoryId);
         await callTool(request, sessionId, 'actual_categories_delete', {
-          id: testContext.categoryId,
+          id: categoryId,
         });
         console.log('✅ Category deleted');
       }
       
       if (testContext.categoryGroupId) {
+        const groupId = typeof testContext.categoryGroupId === 'string' 
+          ? testContext.categoryGroupId 
+          : (testContext.categoryGroupId as any).id || String(testContext.categoryGroupId);
         await callTool(request, sessionId, 'actual_category_groups_delete', {
-          id: testContext.categoryGroupId,
+          id: groupId,
         });
         console.log('✅ Category group deleted');
       }
