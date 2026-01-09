@@ -380,11 +380,12 @@ jobs:
     name: Security Scan
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, docker-test]
+    needs: [version, lint, test]
     if: |
       always() &&
       needs.version.result == 'success' &&
-      needs.docker-test.result == 'success'
+      needs.lint.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
     permissions:
       contents: read
       security-events: write
