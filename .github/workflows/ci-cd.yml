@@ -152,7 +152,7 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 3: Run Tests
+  # Job 3: Run Tests (Unit & Smoke)
   # --------------------------------------------------------------------------
   test:
     name: Run Tests
@@ -197,7 +197,7 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 3.5: Docker E2E Tests
+  # Job 3.5: Docker E2E Tests (Runs in Parallel with Lint & Test)
   # --------------------------------------------------------------------------
   docker-e2e:
     name: Docker E2E Tests
@@ -227,20 +227,27 @@ jobs:
       - name: � Extract test results from Docker volume
         if: always()
         run: |
-          # Create a temporary container to copy test results from the volume
+          echo "🔍 Checking for Docker volumes..."
+          docker volume ls | grep e2e-test-results || echo "Volume not found"
+          
+          echo "📦 Creating output directory..."
+          mkdir -p ${{ github.workspace }}/test-results-output
+          
+          echo "📋 Extracting test results..."
           docker run --rm \
             -v e2e-test-results:/source:ro \
-            -v ${{ github.workspace }}/playwright-report:/dest \
-            alpine sh -c "cp -r /source/* /dest/ 2>/dev/null || echo 'No test results found'"
+            -v ${{ github.workspace }}/test-results-output:/dest \
+            alpine sh -c "ls -la /source/ && cp -r /source/* /dest/ 2>/dev/null || echo 'No files to copy'"
+          
+          echo "✅ Contents of output directory:"
+          ls -la ${{ github.workspace }}/test-results-output/ || echo "Directory is empty"
 
       - name: �📸 Upload test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: docker-e2e-test-results
-          path: |
-            playwright-report/
-            test-results/
+          path: test-results-output/
           retention-days: 7
           if-no-files-found: warn
 
@@ -257,7 +264,7 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 4: Build Application
+  # Job 4: Build Application (Waits for ALL tests to pass)
   # --------------------------------------------------------------------------
   build:
     name: Build Application
