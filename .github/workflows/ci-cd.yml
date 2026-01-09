@@ -397,17 +397,18 @@ jobs:
           echo "- **Image**: \`${{ env.DOCKER_IMAGE_NAME }}:test\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 7: Docker Build and Publish (Consolidated)
+  # Job 7: Docker Build and Publish (Waits for Test Build AND E2E Tests)
   # --------------------------------------------------------------------------
   docker-publish:
     name: Build & Publish Docker Images
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, docker-test]
+    needs: [version, docker-test, docker-e2e]
     if: |
       always() &&
       needs.version.result == 'success' &&
       needs.docker-test.result == 'success' &&
+      (needs.docker-e2e.result == 'success' || needs.docker-e2e.result == 'skipped') &&
       github.event.inputs.skip_docker_publish != 'true' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' ||
        github.ref == 'refs/heads/development' || startsWith(github.ref, 'refs/tags/'))
