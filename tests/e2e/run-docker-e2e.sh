@@ -19,9 +19,14 @@ COMPOSE_FILE="$PROJECT_ROOT/docker-compose.test.yaml"
 NO_CLEANUP=false
 BUILD_ONLY=false
 VERBOSE=false
+TEST_LEVEL="smoke"  # Default to smoke tests
 
 for arg in "$@"; do
   case $arg in
+    smoke|full)
+      TEST_LEVEL=$arg
+      shift
+      ;;
     --no-cleanup)
       NO_CLEANUP=true
       shift
@@ -35,13 +40,23 @@ for arg in "$@"; do
       shift
       ;;
     --help|-h)
-      echo "Usage: $0 [OPTIONS]"
+      echo "Usage: $0 [LEVEL] [OPTIONS]"
+      echo ""
+      echo "Levels:"
+      echo "  smoke           Run quick smoke tests (11 tests, ~20s) [default]"
+      echo "  full            Run comprehensive tests (63 tests, ~120s)"
       echo ""
       echo "Options:"
       echo "  --no-cleanup    Leave containers running after tests (for debugging)"
       echo "  --build-only    Build images but don't run tests"
       echo "  --verbose, -v   Show detailed output"
       echo "  --help, -h      Show this help message"
+      echo ""
+      echo "Examples:"
+      echo "  $0                    # Run smoke tests"
+      echo "  $0 smoke              # Run smoke tests"
+      echo "  $0 full               # Run all 63 comprehensive tests"
+      echo "  $0 full --no-cleanup  # Run full tests, leave containers running"
       exit 0
       ;;
   esac
@@ -211,17 +226,25 @@ fi
 echo ""
 
 # Step 6: Run E2E tests
-log_info "Step 6/6: Running E2E tests..."
+if [ "$TEST_LEVEL" = "full" ]; then
+  log_info "Step 6/6: Running FULL E2E tests (63 tests - all 51 tools + errors)..."
+  PLAYWRIGHT_PROJECT="docker-e2e-full"
+else
+  log_info "Step 6/6: Running SMOKE E2E tests (11 quick tests)..."
+  PLAYWRIGHT_PROJECT="docker-e2e-smoke"
+fi
 echo ""
 
-# Create and run Playwright container without depends_on check
-docker compose -f "$COMPOSE_FILE" create e2e-test-runner
+# Export environment variable for docker compose
+export PLAYWRIGHT_PROJECT
 
+# Run test container with proper environment variable
+# Note: Using 'docker compose run --no-deps' to skip dependency checks (already started manually)
 if [ "$VERBOSE" = true ]; then
-  docker start -a e2e-test-runner
+  docker compose -f "$COMPOSE_FILE" run --rm --no-deps e2e-test-runner
   TEST_EXIT_CODE=$?
 else
-  docker start -a e2e-test-runner 2>&1 | tee /tmp/e2e-docker-test-output.log
+  docker compose -f "$COMPOSE_FILE" run --rm --no-deps e2e-test-runner 2>&1 | tee /tmp/e2e-docker-test-output.log
   TEST_EXIT_CODE=${PIPESTATUS[0]}
 fi
 

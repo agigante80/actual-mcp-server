@@ -110,12 +110,13 @@ services:
     command: >
       sh -c "
         npm install &&
-        npx playwright test --config=playwright.config.docker.ts
+        npx playwright test --config=playwright.config.docker.ts --project=$${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
       "
     environment:
       - MCP_SERVER_URL=http://mcp-server-test:3600
       - ACTUAL_SERVER_URL=http://actual-budget-test:5006
       - CI=true
+      - PLAYWRIGHT_PROJECT=${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
     volumes:
       - ./tests:/workspace/tests
       - ./playwright.config.docker.ts:/workspace/playwright.config.docker.ts

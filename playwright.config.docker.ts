@@ -6,10 +6,10 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: /docker\.e2e\.spec\.ts/,
+  testMatch: /docker.*\.e2e\.spec\.ts/,
   
   // Longer timeout for Docker-based tests (service startup, network latency)
-  timeout: 60000,
+  timeout: 120000,
   
   // No retries - we want to catch real issues
   retries: 0,
@@ -40,8 +40,12 @@ export default defineConfig({
   
   projects: [
     {
-      name: 'docker-e2e-full-stack',
-      testMatch: /docker\.e2e\.spec\.ts/,
+      name: 'docker-e2e-smoke',
+      testMatch: /docker\.e2e\.spec\.ts$/,
+    },
+    {
+      name: 'docker-e2e-full',
+      testMatch: /docker-all-tools\.e2e\.spec\.ts$/,
     },
   ],
 });

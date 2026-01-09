@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { 
+  setBudgetAmount as rawSetBudgetAmount, 
+  setBudgetCarryover as rawSetBudgetCarryover 
+} from '@actual-app/api/dist/methods.js';
 
 const BudgetOperationSchema = z.object({
   month: z.string().describe('Budget month in YYYY-MM format'),
@@ -47,15 +51,17 @@ Example: Set health insurance budget for 12 months:
     // Track successes and failures
     const results = { successful: 0, failed: 0, errors: [] as string[] };
     
+    // Use batchBudgetUpdates to wrap all operations in a single transaction
     await adapter.batchBudgetUpdates(async () => {
       for (let i = 0; i < input.operations.length; i++) {
         const op = input.operations[i];
         try {
+          // Use raw API calls directly to avoid nested queueing/deadlock
           if (op.amount !== undefined) {
-            await adapter.setBudgetAmount(op.month, op.categoryId, op.amount);
+            await rawSetBudgetAmount(op.month, op.categoryId, op.amount);
           }
           if (op.carryover !== undefined) {
-            await adapter.setBudgetCarryover(op.month, op.categoryId, op.carryover);
+            await rawSetBudgetCarryover(op.month, op.categoryId, op.carryover);
           }
           results.successful++;
         } catch (error) {
