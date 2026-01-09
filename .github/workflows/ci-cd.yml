@@ -224,30 +224,14 @@ jobs:
       - name: 🧪 Run Docker E2E tests (FULL - 63 tests)
         run: npm run test:e2e:docker:full
 
-      - name: � Extract test results from Docker volume
-        if: always()
-        run: |
-          echo "🔍 Checking for Docker volumes..."
-          docker volume ls | grep e2e-test-results || echo "Volume not found"
-          
-          echo "📦 Creating output directory..."
-          mkdir -p ${{ github.workspace }}/test-results-output
-          
-          echo "📋 Extracting test results..."
-          docker run --rm \
-            -v e2e-test-results:/source:ro \
-            -v ${{ github.workspace }}/test-results-output:/dest \
-            alpine sh -c "ls -la /source/ && cp -r /source/* /dest/ 2>/dev/null || echo 'No files to copy'"
-          
-          echo "✅ Contents of output directory:"
-          ls -la ${{ github.workspace }}/test-results-output/ || echo "Directory is empty"
-
-      - name: �📸 Upload test artifacts
+      - name: 📸 Upload Playwright test artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: docker-e2e-test-results
-          path: test-results-output/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
           if-no-files-found: warn
 
