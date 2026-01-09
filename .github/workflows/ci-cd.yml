@@ -264,87 +264,20 @@ jobs:
           echo "- **Remaining**: $((100 - CHAR_COUNT))" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 5: Docker Test Build
-  # --------------------------------------------------------------------------
-  docker-test:
-    name: Docker Test Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [version, lint, test, validate-short-description]
-    if: |
-      always() &&
-      needs.version.result == 'success' &&
-      needs.lint.result == 'success' &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
-      needs.validate-short-description.result == 'success'
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: 🐳 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: 🧪 Test Docker build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          load: true
-          tags: ${{ env.DOCKER_IMAGE_NAME }}:test
-          build-args: |
-            VERSION=${{ needs.version.outputs.version }}
-
-      - name: ✅ Test container startup (validates it starts)
-        run: |
-          # Create minimal test config
-          mkdir -p test-config
-          echo '{}' > test-config/config.json
-          
-          docker run --rm -d --name test-container \
-            -v $(pwd)/test-config:/app/config:ro \
-            -e VERSION=${{ needs.version.outputs.version }} \
-            ${{ env.DOCKER_IMAGE_NAME }}:test
-          
-          # Give container a moment to start
-          sleep 5
-          
-          # Check if container started and show logs
-          echo "Container logs:"
-          docker logs test-container 2>&1 | head -n 20 || true
-          
-          # Check if the application logged the version
-          if docker logs test-container 2>&1 | grep -q "Starting Actual"; then
-            echo "✅ Container started successfully"
-            docker stop test-container 2>/dev/null || true
-          else
-            echo "⚠️  Container started but may have validation issues (expected without full config)"
-            docker stop test-container 2>/dev/null || true
-          fi
-          
-          # Clean up
-          rm -rf test-config
-
-      - name: 📋 Docker test summary
-        if: always()
-        run: |
-          echo "### 🐳 Docker Test Build" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Image**: \`${{ env.DOCKER_IMAGE_NAME }}:test\`" >> $GITHUB_STEP_SUMMARY
-
-  # --------------------------------------------------------------------------
-  # Job 6: Docker Build and Publish (Waits for Test Build AND E2E Tests)
+  # Job 5: Docker Build and Publish (Waits for ALL tests)
   # --------------------------------------------------------------------------
   docker-publish:
     name: Build & Publish Docker Images
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, docker-test, docker-e2e]
+    needs: [version, lint, test, docker-e2e, validate-short-description]
     if: |
       always() &&
       needs.version.result == 'success' &&
-      needs.docker-test.result == 'success' &&
+      needs.lint.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
       (needs.docker-e2e.result == 'success' || needs.docker-e2e.result == 'skipped') &&
+      needs.validate-short-description.result == 'success' &&
       github.event.inputs.skip_docker_publish != 'true' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' ||
        github.ref == 'refs/heads/development' || startsWith(github.ref, 'refs/tags/'))
@@ -673,7 +606,7 @@ jobs:
     name: Pipeline Summary
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, lint, test, docker-e2e, validate-short-description, docker-test,
+    needs: [version, lint, test, docker-e2e, validate-short-description,
             docker-publish, security-scan, deployment-test, release]
     if: always()
     steps:
@@ -688,7 +621,6 @@ jobs:
           echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker E2E | ${{ needs.docker-e2e.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate Description | ${{ needs.validate-short-description.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker Test | ${{ needs.docker-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker Publish | ${{ needs.docker-publish.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Deployment Test | ${{ needs.deployment-test.result }} |" >> $GITHUB_STEP_SUMMARY
