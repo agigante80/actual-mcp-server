@@ -31,7 +31,7 @@
     "release:patch": "npm run version:bump -- patch"
   },
   "dependencies": {
-    "@actual-app/api": "^26.1.0",
+    "@actual-app/api": "^26.2.0",
     "@jlongster/sql.js": "^1.6.7",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "axios": "^1.12.2",
