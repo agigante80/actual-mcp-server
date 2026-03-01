@@ -76,6 +76,7 @@ jobs:
           
       - name: Create Pull Request
         if: steps.compare.outputs.update_needed == 'true'
+        id: create-pr
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ steps.generate-token.outputs.token }}
@@ -96,17 +97,15 @@ jobs:
             ### Release Info
             ${{ steps.changelog.outputs.info }}
             
-            ### Testing Required
-            - [ ] Verify migration compatibility
-            - [ ] Test with existing budget files
-            - [ ] Run `npm test` to ensure tests pass
-            - [ ] Check all 49 MCP tools work correctly
+            ### 🤖 Fully Automated Process
+            This PR will:
+            1. ✅ Run all CI/CD tests automatically
+            2. ✅ Auto-merge when all checks pass
+            3. ✅ Auto-bump patch version
+            4. ✅ Auto-create GitHub release
+            5. ✅ Auto-publish Docker images
             
-            ### Auto-Release
-            Once merged to develop, the CI/CD pipeline will:
-            1. Run all tests and validations
-            2. Build and publish Docker images
-            3. Create a new release tag automatically
+            **No manual intervention needed** - the automation handles everything!
             
             ---
             🤖 This PR was automatically created by the dependency update workflow.
@@ -115,16 +114,33 @@ jobs:
             automated
             actual-api
           reviewers: agigante80
+      
+      - name: Enable auto-merge
+        if: steps.compare.outputs.update_needed == 'true' && steps.create-pr.outputs.pull-request-number != ''
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+        run: |
+          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
+            --auto --squash --delete-branch
+          echo "✅ Auto-merge enabled - will merge when CI passes"
           
       - name: Summary
         if: steps.compare.outputs.update_needed == 'true'
         run: |
-          echo "### ✅ Update PR Created" >> $GITHUB_STEP_SUMMARY
+          echo "### 🤖 Fully Automated Update Initiated" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **From:** ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- **To:** ${{ steps.latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR:** #${{ steps.create-pr.outputs.pull-request-number }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Review and merge the PR, then the CI/CD pipeline will handle the release." >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Automation Pipeline" >> $GITHUB_STEP_SUMMARY
+          echo "1. ⏳ CI/CD tests running..." >> $GITHUB_STEP_SUMMARY
+          echo "2. ⏳ Will auto-merge when tests pass" >> $GITHUB_STEP_SUMMARY
+          echo "3. ⏳ Will auto-bump patch version" >> $GITHUB_STEP_SUMMARY
+          echo "4. ⏳ Will auto-create GitHub release" >> $GITHUB_STEP_SUMMARY
+          echo "5. ⏳ Will auto-publish Docker images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**No manual intervention needed!** 🎉" >> $GITHUB_STEP_SUMMARY
           
       - name: No update needed
         if: steps.compare.outputs.update_needed == 'false'
