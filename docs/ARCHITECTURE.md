@@ -641,7 +641,7 @@ queueDelay: 100ms between requests
 ### Core Dependencies
 
 **Production Runtime:**
-- **@actual-app/api** (^25.11.0): Official Actual Budget API client
+- **@actual-app/api** (^26.2.1): Official Actual Budget API client
   - Purpose: Core integration with Actual Budget server
   - License: MIT
   - Status: ✅ Current, actively maintained
