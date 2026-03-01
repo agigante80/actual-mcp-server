@@ -109,8 +109,8 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 
 | Dependency | Version | Purpose |
 |------------|---------|---------|
-| `@actual-app/api` | ^25.11.0 | Official Actual Budget API client |
-| `@modelcontextprotocol/sdk` | ^1.18.2 | MCP protocol implementation |
+| `@actual-app/api` | ^26.2.1 | Official Actual Budget API client |
+| `@modelcontextprotocol/sdk` | ^1.25.2 | MCP protocol implementation |
 | `express` | ^4.21.2 | HTTP/SSE server framework |
 | `winston` | ^3.18.3 | Structured logging |
 | `zod` | (bundled) | Runtime type validation |
@@ -215,7 +215,7 @@ mcpServers:
 ### Technical Constraints
 
 1. **Database**: SQLite only (via Actual Budget)
-2. **Actual Budget Version**: Requires compatible API version (25.11.0+)
+2. **Actual Budget Version**: Requires compatible API version (26.2.1+)
 3. **Node.js**: Requires v20.x or higher
 4. **Memory**: Minimum 512MB RAM recommended for production
 

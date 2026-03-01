@@ -65,13 +65,28 @@ jobs:
           LATEST="${{ steps.latest.outputs.version }}"
           npm install --package-lock-only @actual-app/api@^$LATEST
           
-      - name: Update README.md
+      - name: Update README.md and documentation
         if: steps.compare.outputs.update_needed == 'true'
         run: |
           LATEST="${{ steps.latest.outputs.version }}"
-          # Update @actual-app/api version in README.md Tech Stack section
+          
+          # Update README.md Tech Stack section
           sed -i "s/@actual-app\/api \^[0-9.]*/@actual-app\/api ^$LATEST/" README.md
-          echo "✅ Updated README.md with @actual-app/api ^$LATEST"
+          echo "✅ Updated README.md"
+          
+          # Update docs/PROJECT_OVERVIEW.md - dependency table
+          sed -i "s/\`@actual-app\/api\` | \^[0-9.]*/\`@actual-app\/api\` | ^$LATEST/" docs/PROJECT_OVERVIEW.md
+          echo "✅ Updated docs/PROJECT_OVERVIEW.md (table)"
+          
+          # Update docs/PROJECT_OVERVIEW.md - technical constraints
+          sed -i "s/Requires compatible API version ([0-9.]*+)/Requires compatible API version ($LATEST+)/" docs/PROJECT_OVERVIEW.md
+          echo "✅ Updated docs/PROJECT_OVERVIEW.md (constraints)"
+          
+          # Update docs/ARCHITECTURE.md - core dependencies
+          sed -i "s/@actual-app\/api\*\* (\^[0-9.]*)/@actual-app\/api** (^$LATEST)/" docs/ARCHITECTURE.md
+          echo "✅ Updated docs/ARCHITECTURE.md"
+          
+          echo "📝 All documentation updated to @actual-app/api ^$LATEST"
           
       - name: Get changelog
         if: steps.compare.outputs.update_needed == 'true'
@@ -106,6 +121,8 @@ jobs:
             - ✅ `package.json` - Dependency version
             - ✅ `package-lock.json` - Lock file
             - ✅ `README.md` - Tech Stack section
+            - ✅ `docs/PROJECT_OVERVIEW.md` - Dependency table & constraints
+            - ✅ `docs/ARCHITECTURE.md` - Core dependencies
             
             ### Release Info
             ${{ steps.changelog.outputs.info }}
