@@ -692,10 +692,10 @@ queueDelay: 100ms between requests
 - **Major updates** (X.x.x): Dedicated migration sprint with breaking change analysis
 
 **Monitoring:**
-- Weekly dependency audits (Mondays 9 AM UTC)
-- Automated security vulnerability alerts
-- Dependency dashboard in GitHub Issues
-- Full audit report: `docs/DEPENDENCY_AUDIT_REPORT.md`
+- Daily automated dependency checks (1 AM UTC)
+- Automated security vulnerability alerts (Dependabot)
+- Automated dependency update PRs with auto-merge
+- See `.github/workflows/dependency-update.yml` for automation details
 
 **Pending Updates (as of 2025-11-24):**
 1. Batch patch updates (6 packages): Ready for auto-merge
@@ -724,8 +724,7 @@ queueDelay: 100ms between requests
 ## Next Steps
 
 For more details:
-- [Dependency Audit Report](./DEPENDENCY_AUDIT_REPORT.md) - Complete dependency analysis
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
-- [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies (including dependency security)
-- [Refactoring Plan](./REFACTORING_PLAN.md) - Dependency update roadmap
+- [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies
+- [Roadmap](./ROADMAP.md) - Future improvements
 - [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - AI agent rules
