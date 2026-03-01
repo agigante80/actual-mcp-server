@@ -1,9 +1,9 @@
 # AI Interaction Guide
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.7  
+**Version:** 0.4.9  
 **Purpose:** Define operational boundaries and rules for AI agents  
-**Last Updated:** 2026-01-08
+**Last Updated:** 2026-03-01
 
 ---
 
@@ -201,10 +201,7 @@ Before modifying, read [SECURITY_AND_PRIVACY.md](./SECURITY_AND_PRIVACY.md):
 | **New API route/endpoint** | • `ARCHITECTURE.md` (update endpoints)<br>• `PROJECT_OVERVIEW.md` (if user-facing feature) |
 | **Environment variable added** | • `.env.example` (add variable with comment)<br>• `ARCHITECTURE.md` (Configuration section)<br>• `AI_INTERACTION_GUIDE.md` (this file, Common Commands if relevant) |
 | **Test changes** | • `TESTING_AND_RELIABILITY.md` (update test commands/coverage) |
-| **Refactor completed** | • `REFACTORING_PLAN.md` (check off completed item) |
 | **Security/auth changes** | • `SECURITY_AND_PRIVACY.md` (update security policies)<br>• `AI_INTERACTION_GUIDE.md` (update safe modification rules) |
-| **Performance optimization** | • `ARCHITECTURE.md` (update Performance & Reliability)<br>• `IMPROVEMENT_AREAS.md` (mark as resolved) |
-| **Bug fix** | • `IMPROVEMENT_AREAS.md` (remove from known issues if listed) |
 | **New feature** | • `PROJECT_OVERVIEW.md` (add to features)<br>• `ROADMAP.md` (mark as completed, move from planned)<br>• Main `README.md` (update feature list) |
 | **Dependency update** | • `PROJECT_OVERVIEW.md` (update technology stack) |
 | **Docker changes** | • `ARCHITECTURE.md` (update deployment info)<br>• Main `README.md` (update Docker commands if changed) |
@@ -359,7 +356,7 @@ Requirements:
 1. Extract retry logic to src/lib/retry.ts
 2. Maintain existing behavior
 3. Add unit tests for retry utility
-4. Update REFACTORING_PLAN.md
+4. Update documentation if needed
 5. No breaking changes
 ```
 
@@ -368,7 +365,7 @@ Requirements:
 - [ ] Existing functionality preserved
 - [ ] Tests added for new module
 - [ ] All existing tests still pass
-- [ ] REFACTORING_PLAN.md updated
+- [ ] Documentation updated if needed
 - [ ] ARCHITECTURE.md updated if structure changed
 - [ ] Committed with clear refactor message
 
@@ -382,7 +379,7 @@ Requirements:
 1. Identify root cause
 2. Fix in src/tools/transactions_filter.ts
 3. Add test case for the bug
-4. Update IMPROVEMENT_AREAS.md if this was a known issue
+4. Document fix in commit message
 5. Verify fix doesn't break existing tests
 ```
 
@@ -391,7 +388,7 @@ Requirements:
 - [ ] Fix implemented
 - [ ] Regression test added
 - [ ] All tests pass
-- [ ] IMPROVEMENT_AREAS.md updated
+- [ ] Fix documented in commit message
 - [ ] Committed with "fix:" prefix
 
 ---
@@ -498,7 +495,7 @@ For more details:
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies and incident response
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Comprehensive testing guide
 - [Architecture](./ARCHITECTURE.md) - System design and components
-- [Refactoring Plan](./REFACTORING_PLAN.md) - Ongoing improvement tasks
+- [Roadmap](./ROADMAP.md) - Future improvements and feature planning
 
 ---
 
