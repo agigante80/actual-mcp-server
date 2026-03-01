@@ -1,9 +1,9 @@
 # Testing & Reliability
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.7  
+**Version:** 0.4.9  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
-**Last Updated:** 2026-01-08
+**Last Updated:** 2026-03-01
 
 ---
 
@@ -55,7 +55,7 @@ tests/
     └── (migrated from root)
 ```
 
-**New: Docker-based E2E Tests** - See [DOCKER_E2E_TESTING.md](./DOCKER_E2E_TESTING.md) for full documentation.
+**Docker-based E2E Tests**: Full stack integration testing with real Actual Budget server in Docker.
 
 ---
 
@@ -137,8 +137,6 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 **Test Suites:**
 - **docker.e2e.spec.ts**: Basic smoke tests (11 tests)
 - **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (70+ tests)
-
-See [DOCKER_E2E_TESTING.md](./DOCKER_E2E_TESTING.md) for complete documentation.
 
 ### Individual Test Commands
 
@@ -575,7 +573,7 @@ test('myFeature handles edge cases', async () => {
 
 ### Test Debt
 
-Track test improvements in [REFACTORING_PLAN.md](./REFACTORING_PLAN.md):
+Track test improvements:
 - Missing test coverage
 - Flaky tests
 - Slow tests
@@ -1089,12 +1087,9 @@ node tests/manual/actual-mcp-integration-test.js \
 ## 🔗 Related Documentation
 
 - [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - Testing enforcement rules
-- [Refactoring Plan](./REFACTORING_PLAN.md) - Test improvement tasks
 - [Architecture](./ARCHITECTURE.md) - System design and components
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security testing policies
-- [Docker E2E Testing](./DOCKER_E2E_TESTING.md) - Complete Docker E2E test documentation
-- [Regression Testing](./REGRESSION_TESTING.md) - Fixed tools regression tests
-- [Manual Test Coverage](../tests/manual/TEST_COVERAGE.md) - Manual integration test details
+- [Roadmap](./ROADMAP.md) - Future testing improvements
 
 ---
 
