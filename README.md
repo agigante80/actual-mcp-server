@@ -1197,8 +1197,8 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 
 - **Runtime**: Node.js 20 (Alpine Linux in Docker)
 - **Language**: TypeScript 5.9 (ES2020 + ESM modules)
-- **MCP SDK**: @modelcontextprotocol/sdk ^1.18.2
-- **API Client**: @actual-app/api ^25.9.0
+- **MCP SDK**: @modelcontextprotocol/sdk ^1.25.2
+- **API Client**: @actual-app/api ^26.2.1
 - **Validation**: Zod (runtime type checking + JSON Schema)
 - **Transport**: Express (HTTP), EventEmitter (SSE)
 - **Logging**: Winston with daily rotation

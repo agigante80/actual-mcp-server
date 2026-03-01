@@ -65,6 +65,14 @@ jobs:
           LATEST="${{ steps.latest.outputs.version }}"
           npm install --package-lock-only @actual-app/api@^$LATEST
           
+      - name: Update README.md
+        if: steps.compare.outputs.update_needed == 'true'
+        run: |
+          LATEST="${{ steps.latest.outputs.version }}"
+          # Update @actual-app/api version in README.md Tech Stack section
+          sed -i "s/@actual-app\/api \^[0-9.]*/@actual-app\/api ^$LATEST/" README.md
+          echo "✅ Updated README.md with @actual-app/api ^$LATEST"
+          
       - name: Get changelog
         if: steps.compare.outputs.update_needed == 'true'
         id: changelog
@@ -93,6 +101,11 @@ jobs:
             - **Current version:** `${{ steps.current.outputs.version }}`
             - **New version:** `${{ steps.latest.outputs.version }}`
             - **Package:** [@actual-app/api on npm](https://www.npmjs.com/package/@actual-app/api)
+            
+            ### Files Updated
+            - ✅ `package.json` - Dependency version
+            - ✅ `package-lock.json` - Lock file
+            - ✅ `README.md` - Tech Stack section
             
             ### Release Info
             ${{ steps.changelog.outputs.info }}
