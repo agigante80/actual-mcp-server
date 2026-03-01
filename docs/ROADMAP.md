@@ -1,9 +1,9 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.7  
+**Version:** 0.4.9  
 **Purpose:** Future improvements and feature planning  
-**Last Updated:** 2026-01-07
+**Last Updated:** 2026-03-01
 
 ---
 
@@ -808,10 +808,10 @@ AI agents can help with:
 
 ## 🔗 Related Documentation
 
-- [Refactoring Plan](./REFACTORING_PLAN.md) - Detailed task tracking
-- [Improvement Areas](./IMPROVEMENT_AREAS.md) - Known gaps and technical debt
 - [Project Overview](./PROJECT_OVERVIEW.md) - Current state
+- [Architecture](./ARCHITECTURE.md) - Technical design
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security roadmap
+- [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
 
 ---
 

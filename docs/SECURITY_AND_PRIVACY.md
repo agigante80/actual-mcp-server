@@ -1,9 +1,9 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.7  
+**Version:** 0.4.9  
 **Purpose:** Define security policies, privacy practices, and incident response  
-**Last Updated:** 2025-11-11
+**Last Updated:** 2026-03-01
 
 ---
 
@@ -121,7 +121,7 @@ chown $USER:$USER ./actual-data
 **Protection**:
 - ✅ File permissions (0600)
 - ✅ Log rotation with retention limits
-- ⚠️ Sanitization needed (see [IMPROVEMENT_AREAS.md](./IMPROVEMENT_AREAS.md))
+- ⚠️ Sanitization needed (ongoing improvement)
 
 **Best Practices**:
 ```bash
@@ -492,7 +492,7 @@ npm audit fix
 3. **Impact Analysis:** Determine if vulnerability affects our usage
 4. **Remediation:** Apply patch or workaround
 5. **Verification:** Test fix, deploy, monitor
-6. **Documentation:** Update DEPENDENCY_AUDIT_REPORT.md
+6. **Documentation:** Automated via dependency update workflow
 
 **Recent CVE Resolutions:**
 - ✅ **2025-11-24:** js-yaml prototype pollution (CVE-2024-XXXXX) - Patched to v4.1.0
@@ -520,12 +520,11 @@ npm audit fix
 
 ### Dependency Audit Reports
 
-**Location:** `docs/DEPENDENCY_AUDIT_REPORT.md`
-
-**Contents:**
-- Current dependency inventory (production + dev)
-- Security vulnerability status
-- Outdated packages analysis
+**Automated Audits:**
+- Weekly dependency audits (automated via GitHub Actions)
+- Continuous security vulnerability scanning (Dependabot)
+- Automated dependency updates and PRs
+- See `.github/workflows/dependency-update.yml` for automation details
 - Breaking change assessments
 - Update recommendations and roadmap
 
@@ -714,8 +713,8 @@ docker run -e ACTUAL_PASSWORD_FILE=/run/secrets/password
 
 - [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - AI security rules
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Security testing
-- [Improvement Areas](./IMPROVEMENT_AREAS.md) - Security debt tracking
-- [Refactoring Plan](./REFACTORING_PLAN.md) - Security improvements
+- [Architecture](./ARCHITECTURE.md) - Technical security design
+- [Roadmap](./ROADMAP.md) - Security improvements
 
 ---
 
@@ -741,4 +740,4 @@ docker run -e ACTUAL_PASSWORD_FILE=/run/secrets/password
 - **Team use**: Add rate limiting and audit logging
 - **Enterprise use**: Add RBAC, SIEM integration, compliance auditing
 
-See [IMPROVEMENT_AREAS.md](./IMPROVEMENT_AREAS.md) for tracked security improvements.
+See [ROADMAP.md](./ROADMAP.md) for planned security improvements.
