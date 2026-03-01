@@ -150,7 +150,7 @@ Default ports: HTTP (3000), Nginx proxy (3600), Actual Budget (5006)
 
 **When Dependabot/Renovate Suggests Zod 4.x**:
 1. **REJECT the PR immediately**
-2. Add comment: "Zod 4.x breaks zod-to-json-schema compatibility. See docs/ZOD_VERSION_CONSTRAINT.md"
+2. Add comment: "Zod 4.x breaks zod-to-json-schema compatibility. Zod 3.x is required for zod-to-json-schema support."
 3. Update pin rules if needed
 
 **Testing After Any Dependency Update**:
@@ -363,10 +363,10 @@ If transactions/budgets don't persist:
 1. Verify `withActualApi` wrapper is used (grep for `rawAdd*` calls)
 2. Check `api.shutdown()` is called after operations
 3. Review logs for "tombstone" errors
-4. Reference [TOMBSTONE_ISSUE_RESOLVED.md](../docs/archive/docs-backup-2026-01-08/TOMBSTONE_ISSUE_RESOLVED.md)
+4. Ensure `withActualApi` wrapper properly handles init/shutdown lifecycle
 
 ---
 
-**Last Updated**: 2026-01-08  
-**Version**: 0.4.7  
+**Last Updated**: 2026-03-01  
+**Version**: 0.4.9  
 **Tool Count**: 51 (verified LibreChat-compatible)
