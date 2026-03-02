@@ -639,16 +639,16 @@ export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void>
     await withConcurrency(() => retry(() => rawBatchBudgetUpdates(fn) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
-export async function holdBudgetForNextMonth(month: string, categoryId: string): Promise<void> {
+export async function holdBudgetForNextMonth(month: string, amount: number): Promise<void> {
   observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
-export async function resetBudgetHold(month: string, categoryId: string): Promise<void> {
+export async function resetBudgetHold(month: string): Promise<void> {
   observability.incrementToolCall('actual.budgets.resetHold').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawResetBudgetHold(month, categoryId) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawResetBudgetHold(month) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function runQuery(queryString: string | any): Promise<unknown> {

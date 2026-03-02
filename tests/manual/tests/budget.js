@@ -88,7 +88,6 @@ export async function budgetTests(client, context) {
   const toBudgetBefore = (beforeHold.result || beforeHold)?.toBudget ?? null;
   await callTool("actual_budgets_holdForNextMonth", {
     month: currentDate,
-    categoryId: context.categoryId,
     amount: 10000,
   });
   console.log("✓ Held 100.00 for next month");
@@ -105,7 +104,7 @@ export async function budgetTests(client, context) {
 
   // Reset hold
   console.log("\nResetting hold...");
-  await callTool("actual_budgets_resetHold", { month: currentDate, categoryId: context.categoryId });
+  await callTool("actual_budgets_resetHold", { month: currentDate });
   console.log("✓ Hold reset");
   {
     const afterReset = await callTool("actual_budgets_getMonth", { month: currentDate });
@@ -181,29 +180,20 @@ export async function budgetTests(client, context) {
   }
 
   // REGRESSION: batch error resilience
-  console.log("\nREGRESSION: Testing batch error resilience (should continue on failures)...");
+  console.log("\nREGRESSION: Testing batch error resilience (invalid-date should be rejected by Zod)...");
   const mixedBatch = [
     { month: currentDate, categoryId: context.categoryId, amount: 70000 },       // valid
-    { month: "invalid-date", categoryId: context.categoryId, amount: 80000 },    // invalid month
+    { month: "invalid-date", categoryId: context.categoryId, amount: 80000 },    // invalid month — Zod should reject
     { month: currentDate, categoryId: context.categoryId, amount: 90000 },       // valid
   ];
   try {
     const mixedResult = await callTool("actual_budget_updates_batch", { operations: mixedBatch });
-    console.log("✓ Batch with errors processed:", mixedResult);
-    // API may accept or reject the invalid-date entry — both are valid behaviours;
-    // what matters is that the batch call doesn't throw and returns a structured result.
-    const succeeded = mixedResult.successful ?? mixedResult.successCount ?? null;
-    const failed    = mixedResult.failed    ?? mixedResult.failureCount ?? null;
-    if (succeeded === 2 && failed === 1) {
-      console.log("  ✓ Error resilience: 2 succeeded, 1 failed (invalid-date rejected as expected)");
-    } else if (succeeded === 3 && failed === 0) {
-      console.log("  ⚠ Error resilience: all 3 accepted (API did not reject invalid-date — KNOWN ISSUE)");
-    } else if (succeeded !== null) {
-      console.log(`  ❌ Error resilience: unexpected result — succeeded=${succeeded}, failed=${failed}`);
-    } else {
-      console.log("  ✓ Batch call completed (success/failure counts not available in response)");
-    }
+    console.log("❌ REGRESSION FAILED: batch accepted invalid-date (Zod month regex not enforced):", mixedResult);
   } catch (err) {
-    console.log("⚠ Batch error handling:", err.message);
+    if (err.message.includes("YYYY-MM") || err.message.includes("invalid-date") || err.message.includes("month")) {
+      console.log("✓ Error resilience: invalid-date correctly rejected by schema validation");
+    } else {
+      console.log("⚠ Batch rejected but with unexpected error:", err.message);
+    }
   }
 }

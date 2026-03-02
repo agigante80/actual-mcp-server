@@ -7,7 +7,7 @@ import {
 } from '@actual-app/api/dist/methods.js';
 
 const BudgetOperationSchema = z.object({
-  month: z.string().describe('Budget month in YYYY-MM format'),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format (e.g. 2025-01)').describe('Budget month in YYYY-MM format'),
   categoryId: z.string().describe('Category ID'),
   amount: z.number().optional().describe('Budget amount in cents (if setting amount)'),
   carryover: z.boolean().optional().describe('Carryover flag (if setting carryover)'),

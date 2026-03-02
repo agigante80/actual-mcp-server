@@ -52,19 +52,15 @@ export async function payeeTests(client, context) {
     else console.log(`  ❌ Verify payee2 create: expected "MCP-Payee2-${timestamp}", got "${found.name}"`);
   }
 
-  // REGRESSION: set default category on payee (known issue — schema may not support 'category' yet)
+  // REGRESSION: set default category on payee
   if (context.categoryId) {
     console.log("\nREGRESSION: Setting default category on payee...");
     try {
       await callTool("actual_payees_update", { id: payeeId, fields: { category: context.categoryId } });
       console.log("✓ Payee updated with default category");
+      // Verify — payee_rules_get won't show it, but the call succeeding is the assertion
     } catch (err) {
-      if (err.message.includes("Unrecognized key") && err.message.includes("category")) {
-        console.log("⚠ KNOWN ISSUE: actual_payees_update does not support 'category' field yet");
-        console.log("  (upstream Actual API supports it — MCP tool schema needs updating)");
-      } else {
-        console.log("❌ REGRESSION FAILED (unexpected error):", err.message);
-      }
+      console.log("❌ REGRESSION FAILED: actual_payees_update rejected category field:", err.message);
     }
   }
 
