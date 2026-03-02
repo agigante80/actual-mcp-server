@@ -5,7 +5,7 @@ PURPOSE
   session (LibreChat, LobeChat, or any MCP-enabled client) that already has
   the actual-mcp-server connected.
 
-  The AI will then autonomously invoke all 51 MCP tools one by one, report
+  The AI will then autonomously invoke all 53 MCP tools one by one, report
   pass/fail for each, and produce a final summary.
 
 HOW TO USE
@@ -17,8 +17,8 @@ HOW TO USE
      continue through all 12 phases without stopping for confirmation.
   5. Review the final summary for any failures (✗) or informational items (ℹ).
 
-WHAT IT TESTS (12 phases, 51 tools)
-  Phase 1  – Server & Read-Only    (5 tools)
+WHAT IT TESTS (12 phases, 53 tools)
+  Phase 1  – Server & Read-Only    (7 tools)
   Phase 2  – Accounts              (7 tools)
   Phase 3  – Category Groups & Categories (8 tools)
   Phase 4  – Payees                (6 tools)
@@ -48,7 +48,7 @@ Example: `2026-03-02T14-30-22-456Z`
 Store this as `{TS}` and use it for every test-data name below.
 This matches the naming convention used by the automated manual test scripts in this project.
 
-I want you to systematically test all 51 Actual Budget MCP tools available to you. Follow these rules:
+I want you to systematically test all 53 Actual Budget MCP tools available to you. Follow these rules:
 
 **Preflight Assumptions:**
 - An Actual Budget file is already open and writable
@@ -74,7 +74,7 @@ A tool test is considered FAILED if:
 7. Use realistic test data named with the MCP prefix convention: MCP-{Type}-{TS} (e.g. MCP-Test-{TS}, MCP-Group-{TS}, MCP-Cat-{TS}, MCP-Payee-{TS})
 8. After each tool test, output exactly one line: [Phase X] tool_name — ✓ success OR [Phase X] tool_name — ✗ failure: <error summary>
 9. DO NOT provide explanatory text between tests - just the status line and continue to next tool
-10. Continue testing automatically until you hit a failure or complete all 51 tools
+10. Continue testing automatically until you hit a failure or complete all 53 tools
 
 **ID Handling Rules:**
 - Persist every returned ID immediately after creation
@@ -93,12 +93,18 @@ If a destructive operation would affect non-test data:
 
 **Testing Order:**
 
-**Phase 1 - Server & Read-Only (5 tools):**
+**Phase 1 - Server & Read-Only (7 tools):**
 - actual_server_info (expect: server metadata, no error)
+- actual_server_get_version (expect: { version: string } on success OR { error: string } on version error — both are non-failure responses; only an exception counts as failure)
 - actual_accounts_list (expect: array possibly empty, no error)
 - actual_category_groups_get (expect: category groups array, no error)
 - actual_categories_get (expect: categories grouped or flat per API contract)
 - actual_payees_get (expect: payees array possibly empty, no error)
+- actual_get_id_by_name — test all 4 supported types using pre-existing budget data (all 4 calls count as 1 tool):
+  * type='accounts': pick first account name from actual_accounts_list result → call actual_get_id_by_name and verify returned id matches
+  * type='categories': pick first category name from actual_categories_get result → call actual_get_id_by_name and verify id
+  * type='payees': pick first non-transfer payee name from actual_payees_get result → call actual_get_id_by_name and verify id
+  * type='schedules': if no schedules exist report as ✓ informational (expected for most test budgets)
 
 **Phase 2 - Accounts (7 tools):**
 - actual_accounts_create (name: "MCP-Test-{TS}") → Save account ID
@@ -196,7 +202,7 @@ If a destructive operation would affect non-test data:
 - Verify cleanup with list commands (expect test items removed)
 
 **After completing all tests, provide:**
-1. Total tools tested: X/51 (51 tools available)
+1. Total tools tested: X/53 (53 tools available)
 2. Successful: X (✓)
 3. Failed: X (✗) with error details
 4. Informational: X (unsupported features, skipped operations)

@@ -30,6 +30,8 @@ export { default as payees_delete } from './payees_delete.js';
 export { default as payees_get } from './payees_get.js';
 export { default as payees_merge } from './payees_merge.js';
 export { default as payees_update } from './payees_update.js';
+export { default as get_id_by_name } from './get_id_by_name.js';
+export { default as server_get_version } from './server_get_version.js';
 export { default as query_run } from './query_run.js';
 export { default as rules_create } from './rules_create.js';
 export { default as rules_delete } from './rules_delete.js';

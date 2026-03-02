@@ -20,7 +20,7 @@ tests/manual/
 │                                 MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-*
 │                                 / MCP-Rule-* data left by test runs
 └── tests/
-    ├── sanity.js              ← read-only protocol checks (tool count, SQL, etc.)
+    ├── sanity.js              ← read-only protocol checks (tool count, server version, SQL, etc.)
     ├── smoke.js               ← sanity + account balances, categories, recent txns
     ├── account.js             ← account lifecycle: create → update → close → reopen
     ├── category-group.js      ← category group: create, update
@@ -39,7 +39,7 @@ tests/manual/
 
 | Level | Writes? | What runs |
 |---|---|---|
-| `sanity` | No | Protocol checks: tool count, server info, SQL validation, GraphQL rejection |
+| `sanity` | No | Protocol checks: tool count, server info, Actual Budget server version, SQL validation, GraphQL rejection |
 | `smoke` | No | Sanity + account balances, category/group listing, last 3 transactions |
 | `normal` | Yes | Smoke + full account lifecycle (create → update → close → reopen) |
 | `extended` | Yes | Normal + category groups, categories, payees, transactions |
@@ -85,7 +85,7 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 | `MCP_AUTH_TOKEN` | Bearer token |
 | `MCP_TEST_LEVEL` | Test level |
 | `ACTUAL_SERVER_URL` | Shown in cleanup prompt (default `http://localhost:5006`) |
-| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `51`) |
+| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `53`) |
 
 Variables are loaded from the project root `.env` automatically.
 
