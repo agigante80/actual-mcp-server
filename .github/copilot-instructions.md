@@ -137,42 +137,6 @@ docker compose --profile fullstack up
 
 Default ports: HTTP (3000), Nginx proxy (3600), Actual Budget (5006)
 
-## Critical Dependency Constraints
-
-### Zod Version MUST Be 3.x
-
-**⚠️ DO NOT upgrade Zod to 4.x under any circumstances!**
-
-**Problem**: Zod 4.x has breaking internal changes:
-- Removed `typeName` property from schema `_def` objects
-- Changed internal schema structure from `{ typeName, ...}` to `{ type, ...}`
-- This breaks `zod-to-json-schema@3.25.0` which relies on `typeName` to determine schema type
-- Result: `zodToJsonSchema()` returns only `{"$schema": "..."}` without type/properties
-- LibreChat's Zod validation rejects these incomplete schemas: "invalid_literal, expected: object"
-- **All 56 tools become invisible to LibreChat**
-
-**Solution Implemented**:
-1. `package.json`: `"zod": "3.25.76"` (exact version, no caret)
-2. `package.json`: `"overrides": { "zod": "3.25.76" }` (force all dependencies)
-3. `Dockerfile`: Post-install step removes Zod 4.x and reinstalls 3.25.76
-4. `renovate.json`: Should pin Zod to 3.x range
-
-**When Dependabot/Renovate Suggests Zod 4.x**:
-1. **REJECT the PR immediately**
-2. Add comment: "Zod 4.x breaks zod-to-json-schema compatibility. Zod 3.x is required for zod-to-json-schema support."
-3. Update pin rules if needed
-
-**Testing After Any Dependency Update**:
-```bash
-# Verify Zod version in container
-docker exec <container> cat /app/node_modules/zod/package.json | grep version
-# Must show "3.25.76" or "3.25.x" (NOT 4.x)
-
-# Test schema conversion
-node -e "(async()=>{const{z}=await import('zod');const{zodToJsonSchema}=await import('zod-to-json-schema');console.log(JSON.stringify(zodToJsonSchema(z.object({id:z.string()})),null,2));})()"
-# Must show full schema with type, properties, NOT just $schema
-```
-
 ## Common Patterns & Gotchas
 
 ### 1. Amount Handling
