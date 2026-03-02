@@ -87,6 +87,27 @@ export async function transactionTests(client, context) {
     console.log("\n  ⚠ Skipping update/verify (transaction not found by notes filter)");
   }
 
+  // Get transactions by date range (actual_transactions_get)
+  console.log("\nGetting transactions by date range (actual_transactions_get)...");
+  {
+    const today = new Date().toISOString().split('T')[0];
+    const yearStart = `${new Date().getFullYear()}-01-01`;
+    const getTxnsResult = await callTool("actual_transactions_get", {
+      accountId: context.accountId,
+      startDate: yearStart,
+      endDate: today,
+    });
+    const getTxnsArr = Array.isArray(getTxnsResult) ? getTxnsResult
+      : Array.isArray(getTxnsResult?.result) ? getTxnsResult.result : null;
+    if (getTxnsArr !== null && getTxnsArr.length >= 1) {
+      console.log(`  ✓ Verify get: returned ${getTxnsArr.length} transaction(s) for year-to-date`);
+    } else if (getTxnsArr !== null && getTxnsArr.length === 0) {
+      console.log(`  ⚠ Verify get: returned 0 transactions YTD (account may be empty before today)`);
+    } else {
+      console.log(`  ❌ Verify get: expected array, got ${JSON.stringify(getTxnsResult).slice(0, 120)}`);
+    }
+  }
+
   // Filter (with correct param name and count assertion)
   console.log("\nFiltering transactions for account...");
   const filteredTxns = await callTool("actual_transactions_filter", { accountId: context.accountId });
