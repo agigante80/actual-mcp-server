@@ -167,9 +167,16 @@ export async function advancedTests(client, context) {
   }
 
   // Bank sync (optional — expected to fail on local budgets)
+  // Use callMCP directly with maxRetries=1 to avoid infinite reconnect loop.
   console.log("\nChecking bank sync status...");
   try {
-    const syncStatus = await callTool("actual_bank_sync", {});
+    const raw = await client.callMCP("tools/call", {
+      name: "actual_bank_sync",
+      arguments: {},
+    }, 1 /* maxRetries */);
+    // Unwrap MCP envelope
+    const syncText = raw?.content?.[0]?.text;
+    const syncStatus = syncText ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })() : raw;
     console.log("✓ Bank sync status retrieved:", syncStatus);
   } catch (err) {
     console.log("⚠ Bank sync not available (expected for local budgets):", err.message);
