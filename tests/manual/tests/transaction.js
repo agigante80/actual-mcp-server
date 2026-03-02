@@ -94,13 +94,20 @@ export async function transactionTests(client, context) {
   if (filteredArr.length >= 1) console.log(`  ✓ Found ${filteredArr.length} transaction(s) for account`);
   else console.log("  ❌ Filter returned 0 transactions (expected at least 1 after create)");
 
-  // Import (empty — tests the tool is callable)
+  // Import (empty — tests the tool is callable and returns no errors)
   console.log("\nTesting transaction import (empty)...");
   const importResult = await callTool("actual_transactions_import", {
     accountId: context.accountId,
     txs: [],
   });
-  console.log("✓ Import test completed:", importResult);
+  const importErrors = importResult?.errors ?? importResult?.result?.errors ?? null;
+  if (importErrors === null) {
+    console.log("✓ Import test completed (no errors field to assert)");
+  } else if (Array.isArray(importErrors) && importErrors.length === 0) {
+    console.log("  ✓ Verify import: errors=[] (no import errors)");
+  } else {
+    console.log(`  ❌ Verify import: expected errors=[], got ${JSON.stringify(importErrors)}`);
+  }
 
   console.log("  (Transaction deletion tested in cleanup phase)");
 }

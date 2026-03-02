@@ -121,5 +121,7 @@ export async function payeeTests(client, context) {
   // Payee rules
   console.log("\nGetting payee rules...");
   const rules = await callTool("actual_payee_rules_get", { payeeId });
-  console.log("✓ Payee rules found:", Array.isArray(rules) ? rules.length : 0);
+  const rulesArr = Array.isArray(rules) ? rules : (rules?.rules ?? rules?.result ?? null);
+  if (!Array.isArray(rulesArr)) console.log("  ❌ Verify payee rules: expected array, got", typeof rulesArr);
+  else console.log(`  ✓ Payee rules: ${rulesArr.length} rule(s) (expected 0 for new payee)`);
 }
