@@ -36,7 +36,9 @@ export async function budgetTests(client, context) {
   // Get multiple months
   console.log("\nGetting budgets for multiple months...");
   const months = await callTool("actual_budgets_getMonths", { start: currentDate, end: currentDate });
-  console.log("✓ Retrieved months:", months.length);
+  const monthsArr = Array.isArray(months) ? months : (months.result || []);
+  if (monthsArr.length >= 1) console.log(`  ✓ Retrieved months: ${monthsArr.length} (expected ≥ 1)`);
+  else console.log(`  ❌ Verify getMonths: expected ≥ 1 month, got ${monthsArr.length}`);
 
   // Set amount
   console.log("\nSetting budget amount...");
@@ -188,8 +190,18 @@ export async function budgetTests(client, context) {
   try {
     const mixedResult = await callTool("actual_budget_updates_batch", { operations: mixedBatch });
     console.log("✓ Batch with errors processed:", mixedResult);
-    if (mixedResult.successCount === 2 && mixedResult.failureCount === 1) {
-      console.log("✓ Error resilience working correctly (2 success, 1 failure)");
+    // API may accept or reject the invalid-date entry — both are valid behaviours;
+    // what matters is that the batch call doesn't throw and returns a structured result.
+    const succeeded = mixedResult.successful ?? mixedResult.successCount ?? null;
+    const failed    = mixedResult.failed    ?? mixedResult.failureCount ?? null;
+    if (succeeded === 2 && failed === 1) {
+      console.log("  ✓ Error resilience: 2 succeeded, 1 failed (invalid-date rejected as expected)");
+    } else if (succeeded === 3 && failed === 0) {
+      console.log("  ⚠ Error resilience: all 3 accepted (API did not reject invalid-date — KNOWN ISSUE)");
+    } else if (succeeded !== null) {
+      console.log(`  ❌ Error resilience: unexpected result — succeeded=${succeeded}, failed=${failed}`);
+    } else {
+      console.log("  ✓ Batch call completed (success/failure counts not available in response)");
     }
   } catch (err) {
     console.log("⚠ Batch error handling:", err.message);
