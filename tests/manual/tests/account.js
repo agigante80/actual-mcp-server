@@ -122,4 +122,21 @@ export async function accountTests(client, context) {
 
   await listAndVerify("After reopen", accountId, true,
     a => (a.closed === false) || `expected closed=false, got closed=${a.closed}`);
+
+  // actual_accounts_delete — uses a separate disposable account (no transactions)
+  // so Actual hard-deletes it cleanly without tombstoning.
+  console.log("\nTesting actual_accounts_delete...");
+  const deleteTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const deleteAccName = `MCP-Test-Del-${deleteTimestamp}`;
+  const newDelAcc = await callTool("actual_accounts_create", { name: deleteAccName, balance: 0 });
+  const deleteAccId = newDelAcc.id || newDelAcc.result || newDelAcc;
+  console.log(`✓ Created disposable account: ${deleteAccName} (${deleteAccId})`);
+  await callTool("actual_accounts_delete", { id: deleteAccId });
+  console.log("✓ Account deleted");
+  {
+    const all = await callTool("actual_accounts_list", {});
+    const found = Array.isArray(all) ? all.find(a => a.id === deleteAccId) : null;
+    if (!found) console.log(`  ✓ Verify delete: account no longer present in list`);
+    else console.log(`  ❌ Verify delete: account still present after delete! ${JSON.stringify(found)}`);
+  }
 }

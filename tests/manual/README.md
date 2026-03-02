@@ -184,6 +184,9 @@ These rules apply to everyone adding or modifying tests in this directory.
 
 ### Client usage
 - Always use `client.callTool(name, args)` — never call `fetch()` directly.
+- Use `client.callMCP(method, params, maxRetries)` when you need to control retry
+  behaviour (e.g. bank sync, which passes `maxRetries=1` to avoid an infinite
+  reconnect loop on `ECONNRESET`).
 - Never import `mcp-client.js` from inside `tests/*.js` — the client is injected
   by the caller. Test modules are pure functions of `(client, context)`.
 
