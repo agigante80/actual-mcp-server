@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.4.9  
 **Purpose:** Future improvements and feature planning  
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -439,6 +439,59 @@ throw new Error(
 - 50% reduction in response time for cached operations
 - Handle 10k+ transactions efficiently
 - Load testing passes
+
+---
+
+#### 6b. **New APIs Discovered in Official Docs (2026-03-02)**
+**Target**: v0.5.x (Q2 2026)
+
+During a review of the [official Actual Budget API reference](https://actualbudget.org/docs/api/reference) on 2026-03-02, the following APIs were found to be present in the upstream library but **not yet exposed as MCP tools**. These are lower-priority additions scheduled for a later release.
+
+---
+
+##### Tags CRUD (4 new tools)
+The API exposes a full Tags domain that is not yet implemented.
+
+**New tools**:
+- [ ] `actual_tags_get` — `getTags()` → `Promise<Tag[]>`
+- [ ] `actual_tags_create` — `createTag(tag)` → `Promise<id>`
+- [ ] `actual_tags_update` — `updateTag(id, fields)` → `Promise<null>`
+- [ ] `actual_tags_delete` — `deleteTag(id)` → `Promise<null>`
+
+**Tag object shape**:
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | id | no | Auto-generated |
+| `tag` | string | yes | The tag text |
+| `color` | string | no | Hex color string |
+| `description` | string | no | Free-text description |
+
+**Example**:
+```typescript
+await createTag({ tag: 'groceries', color: '#ff0000', description: 'Grocery shopping expenses' });
+```
+
+---
+
+##### Lookup by Name (1 new tool)
+- [ ] `actual_get_id_by_name` — `getIDByName(type, name)` → `Promise<string>`
+
+Resolves a human-readable name to a UUID for any of the following entity types: `accounts`, `schedules`, `categories`, `payees`. Useful for AI agents that receive a name from the user and need to pass an ID to other tools.
+
+**Parameters**: `type` (one of `accounts | schedules | categories | payees`), `name` (string)
+
+---
+
+##### Server Version (1 new tool)
+- [ ] `actual_server_get_version` — `getServerVersion()` → `Promise<{version: string} | {error: string}>`
+
+Returns the running Actual Budget server version string. Complements the existing `actual_server_info` tool with authoritative upstream version data.
+
+---
+
+**Total new tools**: 6  
+**Priority**: 🟡 Low — additive, no breaking changes  
+**Effort**: ~1 day implementation + tests per domain
 
 ---
 
