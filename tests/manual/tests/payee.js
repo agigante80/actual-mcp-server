@@ -44,6 +44,14 @@ export async function payeeTests(client, context) {
   console.log("✓ Created second payee:", payeeId2);
   context.payeeId2 = payeeId2;
 
+  // Verify payeeId2 create
+  {
+    const found = (await allPayees()).find(p => p.id === payeeId2);
+    if (!found) console.log("  ❌ Verify payee2 create: not found in list (id:", payeeId2, ")");
+    else if (found.name === `MCP-Payee2-${timestamp}`) console.log(`  ✓ Verify payee2 create: name="${found.name}"`);
+    else console.log(`  ❌ Verify payee2 create: expected "MCP-Payee2-${timestamp}", got "${found.name}"`);
+  }
+
   // REGRESSION: set default category on payee (known issue — schema may not support 'category' yet)
   if (context.categoryId) {
     console.log("\nREGRESSION: Setting default category on payee...");

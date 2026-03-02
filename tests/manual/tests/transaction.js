@@ -40,50 +40,59 @@ export async function transactionTests(client, context) {
 
   console.log("\nCreating test transaction with MCP payee and category...");
   const txn = await callTool("actual_transactions_create", txnParams);
-  const txnId = txn.id || txn.result || null;
-  console.log("✓ Created transaction:", txnId || "(ID not available - transaction created successfully)");
-  context.transactionId = txnId;
+  console.log("✓ Created transaction (finding via notes filter...)");
 
-  if (txnId && typeof txnId === 'string' && txnId.length > 10) {
-    // Get and verify
-    console.log("\nGetting transaction...");
-    const txnData = await callTool("actual_transactions_get", { id: txnId });
-    const txn0 = txnData.transaction || txnData.result || txnData;
-    if (!txn0 || !txn0.id) {
-      console.log("  ❌ Verify create: transaction not found by ID");
-    } else {
-      console.log("✓ Retrieved transaction:", txn0.id);
-      if (txn0.amount === -5000) console.log(`  ✓ Verify create: amount=${txn0.amount} (-$50.00)`);
-      else console.log(`  ❌ Verify create: expected amount -5000, got ${txn0.amount}`);
-      if (context.categoryId) {
-        if (txn0.category === context.categoryId) console.log(`  ✓ Verify create: category="${txn0.category}"`);
-        else console.log(`  ❌ Verify create: expected category "${context.categoryId}", got "${txn0.category}"`);
-      }
-    }
-
-    // Update amount
-    console.log("\nUpdating transaction amount...");
-    await callTool("actual_transactions_update", { id: txnId, fields: { amount: -7500 } });
-    console.log("✓ Transaction updated");
-
-    // Verify update
-    const txnData2 = await callTool("actual_transactions_get", { id: txnId });
-    const txn1 = txnData2.transaction || txnData2.result || txnData2;
-    if (!txn1 || !txn1.id) {
-      console.log("  ❌ Verify update: transaction not found after update");
-    } else if (txn1.amount === -7500) {
-      console.log(`  ✓ Verify update: amount=${txn1.amount} (-$75.00)`);
-    } else {
-      console.log(`  ❌ Verify update: expected amount -7500, got ${txn1.amount}`);
-    }
+  // actual_transactions_create does not return an ID — locate it by notes filter
+  console.log("\nVerifying create: searching by notes...");
+  const noteFilter = await callTool("actual_transactions_filter", {
+    accountId: context.accountId,
+    notes: `MCP-Transaction-${timestamp}`,
+  });
+  const noteResults = Array.isArray(noteFilter) ? noteFilter : (noteFilter.result || []);
+  const createdTxn = noteResults.find(t => t.notes === `MCP-Transaction-${timestamp}`);
+  if (!createdTxn) {
+    console.log("  ❌ Verify create: transaction not found by notes filter");
   } else {
-    console.log("\n  ⚠ Skipping get/update/verify tests (ID not available from API)");
+    context.transactionId = createdTxn.id;
+    console.log(`  ✓ Verify create: found id="${createdTxn.id}"`);
+    if (createdTxn.amount === -5000) console.log(`  ✓ Verify create: amount=${createdTxn.amount} (-$50.00)`);
+    else console.log(`  ❌ Verify create: expected amount -5000, got ${createdTxn.amount}`);
+    if (context.categoryId) {
+      if (createdTxn.category === context.categoryId) console.log(`  ✓ Verify create: category="${createdTxn.category}"`);
+      else console.log(`  ❌ Verify create: expected category "${context.categoryId}", got "${createdTxn.category}"`);
+    }
   }
 
-  // Filter
+  // Get and update using the recovered ID
+  if (context.transactionId) {
+    console.log("\nUpdating transaction amount...");
+    await callTool("actual_transactions_update", { id: context.transactionId, fields: { amount: -7500 } });
+    console.log("✓ Transaction updated");
+
+    // Verify update — re-filter by notes since there's no get-by-id tool
+    const updateFilter = await callTool("actual_transactions_filter", {
+      accountId: context.accountId,
+      notes: `MCP-Transaction-${timestamp}`,
+    });
+    const updateResults = Array.isArray(updateFilter) ? updateFilter : (updateFilter.result || []);
+    const updatedTxn = updateResults.find(t => t.id === context.transactionId);
+    if (!updatedTxn) {
+      console.log("  ❌ Verify update: transaction not found by notes filter after update");
+    } else if (updatedTxn.amount === -7500) {
+      console.log(`  ✓ Verify update: amount=${updatedTxn.amount} (-$75.00)`);
+    } else {
+      console.log(`  ❌ Verify update: expected amount -7500, got ${updatedTxn.amount}`);
+    }
+  } else {
+    console.log("\n  ⚠ Skipping update/verify (transaction not found by notes filter)");
+  }
+
+  // Filter (with correct param name and count assertion)
   console.log("\nFiltering transactions for account...");
-  const filteredTxns = await callTool("actual_transactions_filter", { account_id: context.accountId });
-  console.log("✓ Found transactions:", filteredTxns.length);
+  const filteredTxns = await callTool("actual_transactions_filter", { accountId: context.accountId });
+  const filteredArr = Array.isArray(filteredTxns) ? filteredTxns : (filteredTxns.result || []);
+  if (filteredArr.length >= 1) console.log(`  ✓ Found ${filteredArr.length} transaction(s) for account`);
+  else console.log("  ❌ Filter returned 0 transactions (expected at least 1 after create)");
 
   // Import (empty — tests the tool is callable)
   console.log("\nTesting transaction import (empty)...");

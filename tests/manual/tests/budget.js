@@ -82,17 +82,39 @@ export async function budgetTests(client, context) {
 
   // Hold for next month
   console.log("\nHolding budget for next month...");
+  const beforeHold = await callTool("actual_budgets_getMonth", { month: currentDate });
+  const toBudgetBefore = (beforeHold.result || beforeHold)?.toBudget ?? null;
   await callTool("actual_budgets_holdForNextMonth", {
     month: currentDate,
     categoryId: context.categoryId,
     amount: 10000,
   });
   console.log("✓ Held 100.00 for next month");
+  {
+    const afterHold = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const toBudgetAfter = (afterHold.result || afterHold)?.toBudget ?? null;
+    if (toBudgetBefore !== null && toBudgetAfter !== null) {
+      if (toBudgetAfter === toBudgetBefore - 10000) console.log(`  ✓ Verify hold: toBudget ${toBudgetBefore} → ${toBudgetAfter} (decreased by 100.00)`);
+      else console.log(`  ❌ Verify hold: expected toBudget ${toBudgetBefore - 10000}, got ${toBudgetAfter}`);
+    } else {
+      console.log(`  ⚠ Verify hold: toBudget field not available in response (skipped)`);
+    }
+  }
 
   // Reset hold
   console.log("\nResetting hold...");
   await callTool("actual_budgets_resetHold", { month: currentDate, categoryId: context.categoryId });
   console.log("✓ Hold reset");
+  {
+    const afterReset = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const toBudgetAfterReset = (afterReset.result || afterReset)?.toBudget ?? null;
+    if (toBudgetBefore !== null && toBudgetAfterReset !== null) {
+      if (toBudgetAfterReset === toBudgetBefore) console.log(`  ✓ Verify resetHold: toBudget restored to ${toBudgetAfterReset}`);
+      else console.log(`  ❌ Verify resetHold: expected toBudget ${toBudgetBefore}, got ${toBudgetAfterReset}`);
+    } else {
+      console.log(`  ⚠ Verify resetHold: toBudget field not available in response (skipped)`);
+    }
+  }
 
   // Transfer between categories
   console.log("\nTesting budget transfer...");
@@ -101,6 +123,10 @@ export async function budgetTests(client, context) {
   if (targetCategoryId === context.categoryId) {
     console.log("⚠ Skipping transfer test (need two different categories)");
   } else {
+    const preTransfer = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const preData = preTransfer.result || preTransfer;
+    const srcBefore = (preData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === context.categoryId)?.budgeted ?? null;
+    const dstBefore = (preData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
     await callTool("actual_budgets_transfer", {
       month: currentDate,
       amount: 5000,
@@ -108,6 +134,14 @@ export async function budgetTests(client, context) {
       toCategoryId: targetCategoryId,
     });
     console.log("✓ Budget transfer completed");
+    const postTransfer = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const postData = postTransfer.result || postTransfer;
+    const srcAfter = (postData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === context.categoryId)?.budgeted ?? null;
+    const dstAfter = (postData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
+    if (srcBefore !== null && srcAfter !== null && srcAfter === srcBefore - 5000) console.log(`  ✓ Verify transfer: source budgeted ${srcBefore} → ${srcAfter} (-50.00)`);
+    else if (srcBefore !== null) console.log(`  ❌ Verify transfer: source expected ${srcBefore - 5000}, got ${srcAfter}`);
+    if (dstBefore !== null && dstAfter !== null && dstAfter === dstBefore + 5000) console.log(`  ✓ Verify transfer: destination budgeted ${dstBefore} → ${dstAfter} (+50.00)`);
+    else if (dstBefore !== null) console.log(`  ❌ Verify transfer: destination expected ${dstBefore + 5000}, got ${dstAfter}`);
   }
 
   // Batch updates
@@ -116,6 +150,14 @@ export async function budgetTests(client, context) {
     operations: [{ month: currentDate, categoryId: context.categoryId, amount: 60000 }],
   });
   console.log("✓ Batch updates completed");
+  {
+    const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const d = check.result || check;
+    const cat = (d.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === context.categoryId);
+    if (!cat) console.log("  ❌ Verify batch: category not found in month budget");
+    else if (cat.budgeted === 60000) console.log(`  ✓ Verify batch: budgeted=${cat.budgeted} (600.00)`);
+    else console.log(`  ❌ Verify batch: expected 60000, got ${cat.budgeted}`);
+  }
 
   // REGRESSION: large batch (35 ops)
   console.log("\nREGRESSION: Testing large batch with 35 operations (should handle gracefully)...");
@@ -124,8 +166,17 @@ export async function budgetTests(client, context) {
     categoryId: context.categoryId,
     amount: 10000 + (i * 100),
   }));
+  const lastAmount = 10000 + (34 * 100); // 13400
   const batchResult = await callTool("actual_budget_updates_batch", { operations: largeBatch });
   console.log("✓ Large batch handled:", batchResult);
+  {
+    const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const d = check.result || check;
+    const cat = (d.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === context.categoryId);
+    if (!cat) console.log("  ❌ Verify large batch: category not found in month budget");
+    else if (cat.budgeted === lastAmount) console.log(`  ✓ Verify large batch: budgeted=${cat.budgeted} (final op applied)`);
+    else console.log(`  ❌ Verify large batch: expected ${lastAmount}, got ${cat.budgeted}`);
+  }
 
   // REGRESSION: batch error resilience
   console.log("\nREGRESSION: Testing batch error resilience (should continue on failures)...");
