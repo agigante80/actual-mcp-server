@@ -195,6 +195,15 @@ npm run test:unit-js
 
 Manual tests run against a **real, live Actual Budget instance** over HTTP. They live in `tests/manual/tests/`.
 
+> **Code quality reminder**: Before writing or editing any file under `tests/manual/`, read the **Technical Guidelines** section in [`tests/manual/README.md`](../tests/manual/README.md). Key rules that are easy to miss:
+> - Hard limit of **400 lines per file** (evaluate a split before reaching 300)
+> - Each test file exports exactly **one primary function** `fooTests(client, context)`
+> - Always use `client.callTool()` — never call `fetch()` directly
+> - Wrap checks in `try/catch`; log `✓` / `❌` / `⚠` but only rethrow fatal errors
+> - Re-fetch and assert after every create/update (**read-back verification**)
+> - New entities must follow the `MCP-{Type}-{timestamp}` naming pattern so `cleanup` can find them
+> - Never add shared mutable state outside the `context` object
+
 Choose the right module based on the tool's domain:
 
 | Domain | File |
