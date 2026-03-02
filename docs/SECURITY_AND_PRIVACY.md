@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.4.9  
 **Purpose:** Define security policies, privacy practices, and incident response  
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -46,7 +46,7 @@ MCP_SSE_AUTHORIZATION=your_generated_token
 
 **Security Properties**:
 - ✅ Stateless - no session management needed
-- ✅ Works with HTTP and WebSocket transports
+- ✅ Works with HTTP transport (recommended) and SSE transport
 - ✅ Can be rotated without restarting server
 - ⚠️ SSE transport: Server validates but LibreChat client doesn't send headers
 
@@ -495,8 +495,8 @@ npm audit fix
 6. **Documentation:** Automated via dependency update workflow
 
 **Recent CVE Resolutions:**
-- ✅ **2025-11-24:** js-yaml prototype pollution (CVE-2024-XXXXX) - Patched to v4.1.0
-- Status: 0 known vulnerabilities in current dependency tree
+- See CI/CD audit results and GitHub Dependabot alerts for current vulnerability status.
+- Run `npm audit` locally at any time for an up-to-date report.
 
 ### Dependency Update Policy
 
@@ -530,10 +530,8 @@ npm audit fix
 
 **Update Frequency:** Monthly (automated generation via CI/CD)
 
-**Last Audit:** November 24, 2025
-- **Security Status:** ✅ CLEAN (0 vulnerabilities)
-- **Outdated Packages:** 9 (1 major, 8 minor/patch)
-- **Project Health:** 82/100 (GOOD)
+**Last Audit:** See CI/CD pipeline for current status (automatically audited on every push).
+- Run `npm audit` locally to get an up-to-date report at any time.
 
 ### Dependency Pinning Strategy
 
@@ -555,6 +553,8 @@ npm audit fix
   }
 }
 ```
+
+> ⚠️ **Critical override — do not remove**: Zod is pinned to `3.x` via the `overrides` field. Upgrading Zod to 4.x will break `zod-to-json-schema` compatibility, causing all 51 MCP tools to become invisible to LibreChat. Reject any Dependabot/Renovate PR that bumps Zod past `3.x`.
 
 ### Supply Chain Security
 
