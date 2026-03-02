@@ -436,7 +436,7 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 |------|-------------|------------|
 | `actual_payees_get` | List all payees | - |
 | `actual_payees_create` | Create new payee | `name` |
-| `actual_payees_update` | Update payee | `id`, `name?` |
+| `actual_payees_update` | Update payee | `id`, `name?`, `category?` |
 | `actual_payees_delete` | Delete payee | `id` |
 | `actual_payees_merge` | Merge duplicate payees | `targetId`, `mergeIds[]` |
 | `actual_payee_rules_get` | Get rules for a payee | `payeeId` |
@@ -451,8 +451,8 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 | `actual_budgets_setAmount` | Set category budget amount | `month`, `categoryId`, `amount` |
 | `actual_budgets_transfer` | Transfer amount between categories | `month`, `fromCategoryId`, `toCategoryId`, `amount` |
 | `actual_budgets_setCarryover` | Enable/disable carryover | `month`, `categoryId`, `flag` |
-| `actual_budgets_holdForNextMonth` | Hold funds for next month | `month`, `categoryId` |
-| `actual_budgets_resetHold` | Reset hold status | `month`, `categoryId` |
+| `actual_budgets_holdForNextMonth` | Hold funds for next month | `month`, `amount` |
+| `actual_budgets_resetHold` | Reset hold status | `month` |
 
 ### Rules (4 tools)
 
@@ -1273,6 +1273,33 @@ npm run test:e2e:docker
 | `test:e2e` | MCP protocol compliance | ⚡ 10s | No |
 | `test:e2e:docker` | Full stack integration | 🐢 60s | Yes |
 | `test:all` | All of the above | 🐢 90s | Yes |
+
+### Integration Tests (Live Server)
+
+The `tests/manual/` suite connects to a **running MCP server** over HTTP and exercises the full JSON-RPC protocol — no mocking. Six test levels cascade upward:
+
+| Level | Writes? | What runs |
+|-------|---------|----------|
+| `sanity` | No | Protocol checks: tool count, server info, SQL, GraphQL rejection |
+| `smoke` | No | Sanity + account balances, categories, recent transactions |
+| `normal` | Yes | Account lifecycle (create → update → close → reopen) |
+| `extended` | Yes | Normal + category groups, categories, payees, transactions |
+| `full` | Yes | Extended + budgets, rules, batch operations, advanced queries |
+| `cleanup` | Yes | Finds and removes all `MCP-Test-*` / `MCP-Cat-*` / `MCP-Group-*` / `MCP-Payee-*` data |
+
+```bash
+# Via npm scripts
+npm run test:integration              # sanity (default)
+npm run test:integration:full        # full test run
+npm run test:integration:cleanup     # delete all test data
+
+# Direct invocation
+node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
+# Example:
+node tests/manual/index.js http://localhost:3600/http mytoken full yes
+```
+
+See [`tests/manual/README.md`](tests/manual/README.md) for complete documentation.
 
 ### Docker E2E Tests
 
