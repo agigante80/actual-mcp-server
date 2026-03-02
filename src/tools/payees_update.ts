@@ -9,6 +9,7 @@ const InputSchema = z.object({
   fields: z.object({
     name: CommonSchemas.name.optional(),
     transfer_acct: CommonSchemas.accountId.optional().describe('Transfer account if payee represents account transfer'),
+    category: CommonSchemas.categoryId.optional().nullable().describe('Default category ID for this payee (null to clear)'),
   }).strict().optional().describe('Fields to update - only recognized fields allowed'),
 });
 
@@ -21,6 +22,7 @@ const tool: ToolDefinition = {
 Updatable fields:
 - name: Payee name (1-255 chars)
 - transfer_acct: Transfer account ID if this payee represents an account transfer (optional)
+- category: Default category ID to auto-assign to transactions from this payee (optional, null to clear)
 
 Example: Update payee name:
 {
