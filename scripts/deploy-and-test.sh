@@ -118,7 +118,7 @@ done
 # ── 7. Run integration tests ───────────────────────────────────────────────
 info "Step 7/7 — Running integration tests (level=${TEST_LEVEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
-node "$DEV_DIR/tests/manual/index.js" \
+EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" node "$DEV_DIR/tests/manual/index.js" \
   "$MCP_SERVER_URL" \
   "$MCP_AUTH_TOKEN" \
   "$TEST_LEVEL" \
