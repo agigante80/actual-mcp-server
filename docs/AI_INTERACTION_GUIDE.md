@@ -17,7 +17,7 @@ This document establishes **mandatory rules and policies** for AI agents working
 
 ## 🛠️ Tool Count Reference
 
-**Current Tool Count**: **56 tools** (all registered in IMPLEMENTED_TOOLS array as of 2026-03-02)
+**Tool Count:** 56 tools (all registered in IMPLEMENTED_TOOLS array as of 2026-03-02)
 
 **Tool Categories**:
 - Accounts: 7 tools
