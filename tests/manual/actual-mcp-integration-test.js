@@ -141,6 +141,21 @@ async function callMCP(method, params = {}) {
       token = `Bearer ${t.trim()}`;
       return callMCP(method, params); // retry
     }
+    // Auto-reconnect on session expiry (e.g. after server restart during heavy batch tests)
+    if (err.message.includes('Session expired') || err.message.includes('Session invalid') || err.message.includes('re-initialize')) {
+      console.log("  ⚠ Session expired — re-initializing...");
+      sessionId = null;
+      await initialize();
+      return callMCP(method, params); // retry with new session
+    }
+    // Auto-reconnect on socket hang up (server briefly restarted after heavy operations)
+    if (err.message.includes('socket hang up') || err.message.includes('ECONNRESET') || err.message.includes('ECONNREFUSED')) {
+      console.log("  ⚠ Connection lost — pausing 5s then re-initializing...");
+      await new Promise(r => setTimeout(r, 5000));
+      sessionId = null;
+      await initialize();
+      return callMCP(method, params); // retry with new session
+    }
     throw err;
   }
 }
@@ -433,7 +448,20 @@ async function categoryTests(context) {
   const categoryId = newCat.categoryId || newCat.id || newCat.result || newCat;
   console.log("✓ Created category:", categoryId);
   context.categoryId = categoryId;
-  
+
+  // Verify creation
+  {
+    const catsData = await callTool("actual_categories_get", {});
+    const catsResult = catsData.result || catsData || [];
+    const flatCats = Array.isArray(catsResult)
+      ? catsResult.flatMap(g => g.categories || [g]).filter(c => c && c.id)
+      : [];
+    const found = flatCats.find(c => c.id === categoryId);
+    if (!found) console.log("  ❌ Verify create: category not found in list (id:", categoryId, ")");
+    else if (found.name === `MCP-Cat-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
+    else console.log(`  ❌ Verify create: expected "MCP-Cat-${timestamp}", got "${found.name}"`);
+  }
+
   // Update category (keeping timestamp)
   console.log("\nUpdating category...");
   await callTool("actual_categories_update", { 
@@ -441,6 +469,19 @@ async function categoryTests(context) {
     fields: { name: `MCP-Cat-${timestamp}-Updated` }
   });
   console.log("✓ Category updated");
+
+  // Verify update
+  {
+    const catsData = await callTool("actual_categories_get", {});
+    const catsResult = catsData.result || catsData || [];
+    const flatCats = Array.isArray(catsResult)
+      ? catsResult.flatMap(g => g.categories || [g]).filter(c => c && c.id)
+      : [];
+    const found = flatCats.find(c => c.id === categoryId);
+    if (!found) console.log("  ❌ Verify update: category not found in list");
+    else if (found.name === `MCP-Cat-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
+    else console.log(`  ❌ Verify update: expected "MCP-Cat-${timestamp}-Updated", got "${found.name}"`);
+  }
   
   // Delete category will be done in cleanup
   console.log("  (Category deletion tested in cleanup phase)");
@@ -498,6 +539,16 @@ async function payeeTests(context) {
     }
   }
   
+  // Verify payee creation
+  {
+    const pd = await callTool("actual_payees_get", {});
+    const all = pd.result || pd || [];
+    const found = Array.isArray(all) ? all.find(p => p.id === payeeId) : null;
+    if (!found) console.log("  ❌ Verify create: payee not found in list (id:", payeeId, ")");
+    else if (found.name === `MCP-Payee-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
+    else console.log(`  ❌ Verify create: expected "MCP-Payee-${timestamp}", got "${found.name}"`);
+  }
+
   // Update payee
   console.log("\nUpdating payee name...");
   await callTool("actual_payees_update", { 
@@ -505,6 +556,16 @@ async function payeeTests(context) {
     fields: { name: `MCP-Payee-${timestamp}-Updated` }
   });
   console.log("✓ Payee updated");
+
+  // Verify payee update
+  {
+    const pd = await callTool("actual_payees_get", {});
+    const all = pd.result || pd || [];
+    const found = Array.isArray(all) ? all.find(p => p.id === payeeId) : null;
+    if (!found) console.log("  ❌ Verify update: payee not found in list");
+    else if (found.name === `MCP-Payee-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
+    else console.log(`  ❌ Verify update: expected "MCP-Payee-${timestamp}-Updated", got "${found.name}"`);
+  }
   
   // REGRESSION TEST: Test strict validation on payee update
   console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
@@ -530,6 +591,15 @@ async function payeeTests(context) {
   });
   console.log("✓ Payees merged (payee2 merged into payee1)");
   context.payeeId2 = null; // No longer exists after merge
+
+  // Verify merge: payeeId2 should be gone
+  {
+    const pd = await callTool("actual_payees_get", {});
+    const all = pd.result || pd || [];
+    const gone = Array.isArray(all) ? all.find(p => p.id === payeeId2) : null;
+    if (gone) console.log(`  ❌ Verify merge: payee2 still exists (should have been merged away)`);
+    else console.log(`  ✓ Verify merge: payee2 no longer in list (confirmed deleted by merge)`);
+  }
   
   // Get payee rules for our test payee
   console.log("\nGetting payee rules...");
@@ -574,11 +644,22 @@ async function transactionTests(context) {
   
   // Only test get/update if we have an ID
   if (txnId && typeof txnId === 'string' && txnId.length > 10) {
-    // Get transaction
+    // Get transaction and verify fields
     console.log("\nGetting transaction...");
     const txnData = await callTool("actual_transactions_get", { id: txnId });
-    console.log("✓ Retrieved transaction:", txnData.id);
-    
+    const txn0 = txnData.transaction || txnData.result || txnData;
+    if (!txn0 || !txn0.id) {
+      console.log("  ❌ Verify create: transaction not found by ID");
+    } else {
+      console.log("✓ Retrieved transaction:", txn0.id);
+      if (txn0.amount === -5000) console.log(`  ✓ Verify create: amount=${txn0.amount} (-$50.00)`);
+      else console.log(`  ❌ Verify create: expected amount -5000, got ${txn0.amount}`);
+      if (context.categoryId) {
+        if (txn0.category === context.categoryId) console.log(`  ✓ Verify create: category="${txn0.category}"`);
+        else console.log(`  ❌ Verify create: expected category "${context.categoryId}", got "${txn0.category}"`);
+      }
+    }
+
     // Update transaction
     console.log("\nUpdating transaction amount...");
     await callTool("actual_transactions_update", { 
@@ -586,8 +667,19 @@ async function transactionTests(context) {
       fields: { amount: -7500 }
     });
     console.log("✓ Transaction updated");
+
+    // Verify update
+    const txnData2 = await callTool("actual_transactions_get", { id: txnId });
+    const txn1 = txnData2.transaction || txnData2.result || txnData2;
+    if (!txn1 || !txn1.id) {
+      console.log("  ❌ Verify update: transaction not found after update");
+    } else if (txn1.amount === -7500) {
+      console.log(`  ✓ Verify update: amount=${txn1.amount} (-$75.00)`);
+    } else {
+      console.log(`  ❌ Verify update: expected amount -7500, got ${txn1.amount}`);
+    }
   } else {
-    console.log("\n  ⚠ Skipping get/update tests (ID not available from API)");
+    console.log("\n  ⚠ Skipping get/update/verify tests (ID not available from API)");
   }
   
   // Filter transactions
@@ -630,7 +722,17 @@ async function categoryGroupTests(context) {
   const groupId = newGroup.id || newGroup.result || newGroup;
   console.log("✓ Created category group:", groupId);
   context.categoryGroupId = groupId;
-  
+
+  // Verify creation
+  {
+    const gd = await callTool("actual_category_groups_get", {});
+    const all = gd.groups || gd || [];
+    const found = Array.isArray(all) ? all.find(g => g.id === groupId) : null;
+    if (!found) console.log("  ❌ Verify create: group not found in list (id:", groupId, ")");
+    else if (found.name === `MCP-Group-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
+    else console.log(`  ❌ Verify create: expected "MCP-Group-${timestamp}", got "${found.name}"`);
+  }
+
   // Update category group (keeping timestamp)
   console.log("\nUpdating category group...");
   await callTool("actual_category_groups_update", { 
@@ -638,6 +740,16 @@ async function categoryGroupTests(context) {
     fields: { name: `MCP-Group-${timestamp}-Updated` }
   });
   console.log("✓ Category group updated");
+
+  // Verify update
+  {
+    const gd = await callTool("actual_category_groups_get", {});
+    const all = gd.groups || gd || [];
+    const found = Array.isArray(all) ? all.find(g => g.id === groupId) : null;
+    if (!found) console.log("  ❌ Verify update: group not found in list");
+    else if (found.name === `MCP-Group-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
+    else console.log(`  ❌ Verify update: expected "MCP-Group-${timestamp}-Updated", got "${found.name}"`);
+  }
   
   // Delete will be tested in cleanup
   console.log("  (Category group deletion tested in cleanup phase)");
@@ -680,6 +792,17 @@ async function budgetTests(context) {
     amount: 50000
   });
   console.log("✓ Budget amount set to 500.00");
+
+  // Verify setAmount
+  {
+    const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const monthData = check.result || check;
+    const catGroups = monthData.categoryGroups || [];
+    const catEntry = catGroups.flatMap(g => g.categories || []).find(c => c.id === context.categoryId);
+    if (!catEntry) console.log("  ❌ Verify setAmount: category not found in month budget");
+    else if (catEntry.budgeted === 50000) console.log(`  ✓ Verify setAmount: budgeted=${catEntry.budgeted} (500.00)`);
+    else console.log(`  ❌ Verify setAmount: expected 50000, got ${catEntry.budgeted}`);
+  }
   
   // Set carryover
   console.log("\nSetting carryover...");
@@ -689,6 +812,17 @@ async function budgetTests(context) {
     flag: true
   });
   console.log("✓ Carryover enabled");
+
+  // Verify setCarryover
+  {
+    const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const monthData = check.result || check;
+    const catGroups = monthData.categoryGroups || [];
+    const catEntry = catGroups.flatMap(g => g.categories || []).find(c => c.id === context.categoryId);
+    if (!catEntry) console.log("  ⚠ Verify carryover: category not found in month budget (carryover field check skipped)");
+    else if (catEntry.carryover === true || catEntry.carryover === 1) console.log(`  ✓ Verify carryover: carryover=${catEntry.carryover} (enabled)`);
+    else console.log(`  ⚠ Verify carryover: carryover=${JSON.stringify(catEntry.carryover)} (API may use different field — check actual_budgets_getMonth response shape)`);
+  }
   
   // Hold for next month
   console.log("\nHolding budget for next month...");
@@ -777,8 +911,8 @@ async function rulesTests(context) {
   // Get all rules
   console.log("\nGetting all rules...");
   const rulesData = await callTool("actual_rules_get", {});
-  const rules = rulesData.result || rulesData || [];
-  console.log("✓ Rules found:", rules.length);
+  const rules = rulesData.rules || rulesData.result || rulesData || [];
+  console.log("✓ Rules found:", Array.isArray(rules) ? rules.length : 0);
   
   // REGRESSION TEST: Create rule without 'op' field (should default to 'set')
   // This tests the fix for AI agent error where 'op' was required but AI omitted it
@@ -812,6 +946,19 @@ async function rulesTests(context) {
   const ruleId = newRule.id || newRule.result || newRule;
   console.log("✓ Created rule:", ruleId);
   context.ruleId = ruleId;
+
+  // Verify rule creation
+  {
+    const rd = await callTool("actual_rules_get", {});
+    const allRules = rd.rules || rd.result || rd || [];
+    const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleId) : null;
+    if (!found) console.log("  ❌ Verify create: rule not found in list (id:", ruleId, ")");
+    else {
+      const cond = found.conditions && found.conditions[0];
+      if (cond && cond.value === "test-rule-marker") console.log(`  ✓ Verify create: condition value="${cond.value}"`);
+      else console.log(`  ❌ Verify create: expected condition value "test-rule-marker", got "${cond && cond.value}"`);
+    }
+  }
   
   // Update rule
   console.log("\nUpdating rule...");
@@ -829,6 +976,19 @@ async function rulesTests(context) {
     }
   });
   console.log("✓ Rule updated");
+
+  // Verify rule update
+  {
+    const rd = await callTool("actual_rules_get", {});
+    const allRules = rd.rules || rd.result || rd || [];
+    const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleId) : null;
+    if (!found) console.log("  ❌ Verify update: rule not found in list");
+    else {
+      const cond = found.conditions && found.conditions[0];
+      if (cond && cond.value === "updated-test-marker") console.log(`  ✓ Verify update: condition value="${cond.value}"`);
+      else console.log(`  ❌ Verify update: expected condition value "updated-test-marker", got "${cond && cond.value}"`);
+    }
+  }
   
   // Delete will be tested in cleanup
   console.log("  (Rule deletion tested in cleanup phase)");
@@ -875,6 +1035,8 @@ async function fullTests(context) {
   console.log("========================================");
 
   await budgetTests(context);
+  // Brief pause to let Actual Budget server recover after heavy batch operations
+  await new Promise(r => setTimeout(r, 3000));
   await rulesTests(context);
   await advancedTests(context);
 }
