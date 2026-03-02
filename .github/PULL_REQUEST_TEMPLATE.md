@@ -38,9 +38,11 @@ Please describe the tests that you ran to verify your changes:
 **Test Details:**
 
 ```bash
-# Commands you ran for testing
-npm run test:unit
-npm run dev -- --test-actual-tools
+# Pre-commit mandatory checks
+npm run build                    # No TypeScript errors
+npm run test:adapter             # Adapter + retry + concurrency tests
+npm run test:unit-js             # Unit tests
+npm audit --audit-level=moderate # No critical vulnerabilities
 ```
 
 ## ✅ Checklist
@@ -57,8 +59,9 @@ npm run dev -- --test-actual-tools
 
 - [ ] I have made corresponding changes to the documentation
 - [ ] I have updated the README if needed
-- [ ] I have updated API documentation in docs/api-coverage.md if needed
+- [ ] I have updated `docs/` files relevant to the change (ARCHITECTURE, PROJECT_OVERVIEW, etc.)
 - [ ] I have added JSDoc comments for new functions
+- [ ] If adding a tool, I ran `npm run docs:sync` to update **Tool Count:** markers
 
 ### Testing
 
