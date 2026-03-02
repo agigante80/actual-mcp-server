@@ -12,6 +12,22 @@ export const configSchema = z.object({
   MCP_HTTPS_CERT: z.string().optional(),
   MCP_HTTPS_KEY: z.string().optional(),
   MAX_CONCURRENT_SESSIONS: z.string().default('1').transform(val => parseInt(val, 10)),
+
+  // --- OIDC / mcp-auth (CF-5) ---
+  // Set AUTH_PROVIDER=oidc to enable JWT validation via mcp-auth.
+  // When 'none' (default), the legacy MCP_SSE_AUTHORIZATION static Bearer token is used.
+  AUTH_PROVIDER: z.enum(['none', 'oidc']).default('none'),
+  // OIDC issuer URL (e.g. https://auth.example.com/realms/myrealm). Required when AUTH_PROVIDER=oidc.
+  OIDC_ISSUER: z.string().optional(),
+  // This server's resource identifier URL (e.g. https://actual-mcp.example.com). Required when AUTH_PROVIDER=oidc.
+  OIDC_RESOURCE: z.string().optional(),
+  // Comma-separated required scopes (e.g. "read,write"). Optional.
+  OIDC_SCOPES: z.string().optional(),
+  // JSON map of principal → budget sync-ID list for per-user budget ACL.
+  // Keys: email, sub, or "group:<name>". Values: array of sync IDs or ["*"] for all.
+  // Example: {"alice@example.com":["budget-1"],"group:admin":["*"]}
+  // Leave unset to allow all authenticated users to access all budgets.
+  AUTH_BUDGET_ACL: z.string().optional(),
 });
 
 export type Config = z.infer<typeof configSchema>;
