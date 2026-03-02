@@ -9,7 +9,6 @@
     "build": "tsc",
     "dev": "npm run build && node scripts/register-tsconfig-paths.js -- --debug",
     "start": "node dist/src/index.js",
-    "generate-tools": "node scripts/generate-tools-node.js",
     "verify-tools": "npm run build && node scripts/verify-tools.js",
     "check:coverage": "node scripts/list-actual-api-methods.mjs",
     "test:unit-js": "node tests/unit/transactions_create.test.js",

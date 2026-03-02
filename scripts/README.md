@@ -2,11 +2,10 @@
 
 Utility and build scripts. All are invoked via `package.json` scripts or from within the Docker stack — none need to be run directly during normal development.
 
-## Tool generation & verification
+## Tool verification
 
 | Script | npm script | Purpose |
 |---|---|---|
-| `generate-tools-node.js` | `npm run generate-tools` | Reads `scripts/openapi/actual-openapi.yaml` and auto-generates tool stub `.ts` files under `src/tools/`. Run this when the OpenAPI spec changes. |
 | `verify-tools.js` | `npm run verify-tools` | Loads every tool from `dist/src/tools/` and cross-checks that each is listed in `IMPLEMENTED_TOOLS` in `actualToolsManager.ts`. Exits non-zero on mismatch. |
 | `list-actual-api-methods.mjs` | `npm run check:coverage` | Introspects `@actual-app/api` and prints all available methods, useful for spotting uncovered API surface. |
 
@@ -31,6 +30,3 @@ Utility and build scripts. All are invoked via `package.json` scripts or from wi
 | `version-check.js` | `npm run version:check` | Asserts `VERSION` file matches `package.json` version. Used in CI. |
 | `version-dev.js` | `npm run version:dev` | Prints a dev version string: `x.y.z-dev-<git-hash>`. |
 
-## openapi/
-
-Contains `actual-openapi.yaml` — the OpenAPI spec that `generate-tools-node.js` reads to produce tool stubs.

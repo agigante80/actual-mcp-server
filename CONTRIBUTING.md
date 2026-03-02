@@ -113,14 +113,12 @@ actual-mcp-server/
 │   ├── integration/         # Integration tests
 │   └── unit/                # Unit tests
 ├── scripts/                  # Build and utility scripts (see scripts/README.md)
-│   ├── generate-tools-node.js  # Auto-generate tool stubs from OpenAPI spec
 │   ├── verify-tools.js         # Verify all tools are registered correctly
 │   ├── bootstrap-and-init.sh   # Docker: bootstrap Actual server + import test budget
 │   ├── import-test-budget.sh   # Import test-data/*.zip into Actual server
 │   ├── register-tsconfig-paths.js  # Path alias resolver for dist/ runtime
 │   ├── list-actual-api-methods.mjs # API coverage checker
-│   ├── version-bump.js / version-check.js / version-dev.js  # Versioning helpers
-│   └── openapi/             # OpenAPI specification used by generate-tools-node.js
+│   └── version-bump.js / version-check.js / version-dev.js  # Versioning helpers
 ├── docs/                     # Documentation
 └── .github/                  # GitHub Actions workflows
 ```
