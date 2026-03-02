@@ -117,11 +117,19 @@ async function callMCP(method, params = {}) {
   };
 
   try {
-    const response = await fetch(MCP_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(payload),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s per-call timeout
+    let response;
+    try {
+      response = await fetch(MCP_URL, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const text = await response.text();
@@ -158,6 +166,14 @@ async function callMCP(method, params = {}) {
     // Auto-reconnect on socket hang up (server briefly restarted after heavy operations)
     if (err.message.includes('socket hang up') || err.message.includes('ECONNRESET') || err.message.includes('ECONNREFUSED')) {
       console.log("  ⚠ Connection lost — pausing 5s then re-initializing...");
+      await new Promise(r => setTimeout(r, 5000));
+      sessionId = null;
+      await initialize();
+      return callMCP(method, params); // retry with new session
+    }
+    // Auto-reconnect on request timeout (server hung without disconnecting)
+    if (err.name === 'AbortError' || err.message.includes('aborted') || err.message.includes('timed out')) {
+      console.log("  ⚠ Request timed out — pausing 5s then re-initializing...");
       await new Promise(r => setTimeout(r, 5000));
       sessionId = null;
       await initialize();
