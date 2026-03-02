@@ -392,6 +392,8 @@ throw new Error(
 - No data loss during switch
 - LibreChat integration verified
 
+**Community Reference**: The [ahmadrazach fork](https://github.com/ahmadrazach/actual-mcp-server) prototyped this as [`actual_budgets_auto_select`](https://github.com/ahmadrazach/actual-mcp-server/blob/main/src/tools/budgets_auto_select.ts) with a [`BudgetRouter`](https://github.com/ahmadrazach/actual-mcp-server/blob/main/src/utils/budget-router.ts) utility. The approach: take a free-text `query` + optional `budget_arg`, keyword-match against a mapping table, then call `adapter.setActiveBudget(id)`. **Limitation**: the routing table is hardcoded to the author's personal budget names (`Faqir Farms`, `Azhar Home`, `Nadeem Home`) — a production implementation should drive the keyword→budget map from an env var or config file, or simply rely on `actual_budgets_get_all` + `actual_get_id_by_name` to let the AI resolve the budget name without a hardcoded mapping.
+
 ---
 
 ### 🟠 Medium Priority
