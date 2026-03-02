@@ -87,6 +87,25 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     console.log(`  ✓ NEGATIVE: threw as expected for unknown account: ${err.message}`);
   }
 
+  // EDGE CASE: date range guaranteed to have zero uncategorized transactions
+  console.log("\nEDGE CASE: listing uncategorized for far-future date range (expect empty list)...");
+  const emptyRangeResult = await callTool("actual_transactions_uncategorized", {
+    startDate: "2099-01-01",
+    endDate: "2099-01-31",
+  });
+  const emptyRangeTxns = emptyRangeResult?.transactions ?? [];
+  if (Array.isArray(emptyRangeTxns) && emptyRangeTxns.length === 0) {
+    console.log(`  ✓ EDGE CASE: transactions=[] for future date range (count=${emptyRangeResult?.count ?? 0})`);
+  } else {
+    console.log(`  ⚠ EDGE CASE: expected empty list for 2099, got ${emptyRangeTxns.length} items`);
+  }
+  if (emptyRangeResult?.count === 0) {
+    console.log(`  ✓ EDGE CASE: count=0`);
+  }
+  if (emptyRangeResult?.summary?.totalAmount === 0) {
+    console.log(`  ✓ EDGE CASE: summary.totalAmount=0`);
+  }
+
   // ──────────────────────────────────────────────────────────────────────────
   // 2. actual_transactions_update_batch
   // ──────────────────────────────────────────────────────────────────────────
@@ -152,6 +171,33 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       console.log(`  ⚠ NEGATIVE: Actual accepted update for unknown ID (adapter may not validate existence)`);
     } else {
       console.log(`  ⚠ NEGATIVE: unexpected result: ${JSON.stringify(negBatch).slice(0, 120)}`);
+    }
+
+    // PARTIAL FAILURE: mixed batch — one valid ID + one bad ID — proves the loop
+    // does NOT abort on failure; the valid item must still appear in succeeded[].
+    console.log("\nPARTIAL FAILURE: mixed batch (1 valid + 1 bad ID) — valid should still succeed...");
+    const mixedNotes = `${batchNotes}-mixed`;
+    const mixedBatch = await callTool("actual_transactions_update_batch", {
+      updates: [
+        { id: uncatTxnId, fields: { notes: mixedNotes } },
+        { id: "__nonexistent_MCP_test_value__", fields: { notes: "should-fail" } },
+      ],
+    });
+    const mixedSucceeded = mixedBatch?.succeeded ?? [];
+    const mixedFailed = mixedBatch?.failed ?? [];
+    if (mixedBatch?.total === 2 && mixedBatch?.successCount === 1 && mixedBatch?.failureCount === 1) {
+      console.log(`  ✓ PARTIAL FAILURE: total=2 successCount=1 failureCount=1 (failure isolated, loop continued)`);
+    } else if (mixedBatch?.successCount === 2) {
+      // Actual does not validate existence on updateTransaction — both silently succeed
+      console.log(`  ⚠ PARTIAL FAILURE: both succeeded — Actual accepts updates for non-existent IDs (no error thrown)`);
+    } else {
+      console.log(`  ⚠ PARTIAL FAILURE: unexpected result: ${JSON.stringify(mixedBatch).slice(0, 120)}`);
+    }
+    if (mixedSucceeded.some(s => s?.id === uncatTxnId)) {
+      console.log(`  ✓ PARTIAL FAILURE: valid transaction id in succeeded[]`);
+    }
+    if (mixedFailed.some(f => f?.id === "__nonexistent_MCP_test_value__")) {
+      console.log(`  ✓ PARTIAL FAILURE: bad ID in failed[] with error message`);
     }
   }
 
