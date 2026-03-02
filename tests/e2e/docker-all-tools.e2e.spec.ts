@@ -168,6 +168,19 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log(`✅ Found ${sessions.length || 0} active sessions`);
   });
 
+  test('actual_session_close - should handle close request gracefully', async ({ request }) => {
+    console.log('🔒 Testing actual_session_close...');
+    // Call with no sessionId: tool will try to close oldest idle session other than the current one.
+    // In a single-session test environment it returns a non-error informational response — both
+    // success and "no idle sessions / won't close current session" are acceptable outcomes.
+    const result = await callTool(request, sessionId, 'actual_session_close', {});
+    const data = extractResult(result);
+    // Tool must return a structured response (not throw / not return null)
+    expect(data).toBeTruthy();
+    expect(typeof data).toBe('object');
+    console.log(`✅ actual_session_close responded: ${data?.message ?? data?.success ?? JSON.stringify(data)}`);
+  });
+
   // ==================== ACCOUNTS (7 tools) ====================
   test('actual_accounts_list - should list all accounts', async ({ request }) => {
     console.log('📁 Testing actual_accounts_list...');
