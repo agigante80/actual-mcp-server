@@ -11,7 +11,7 @@
     "start": "node dist/src/index.js",
     "verify-tools": "npm run build && node scripts/verify-tools.js",
     "check:coverage": "node scripts/list-actual-api-methods.mjs",
-    "test:unit-js": "node tests/unit/transactions_create.test.js",
+    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
     "test:e2e:docker": "./tests/e2e/run-docker-e2e.sh",
