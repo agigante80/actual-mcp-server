@@ -5,7 +5,7 @@
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-02  
 **Assessment Score:** 88/100 (EXCELLENT)  
-**Tool Count:** 53 MCP tools (verified LibreChat and LobeChat compatible)  
+**Tool Count:** 56 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---
@@ -58,9 +58,9 @@ Comprehensive coverage of Actual Budget functionality across 12 categories:
 | **Lookup & Server** | 3 | Server info, Actual Budget server version, name→UUID lookup |
 | **Session Management** | 2 | List and close active MCP sessions |
 
-**Total**: 53 tools with 84% coverage of Actual Budget core API
+**Total**: 56 tools with 84% coverage of Actual Budget core API
 
-> ✅ **All 53 tools verified** with LibreChat integration testing  
+> ✅ **All 56 tools verified** with LibreChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
 > 📊 **README enhanced** with comprehensive badges and improved discoverability
 
@@ -157,7 +157,7 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 - **Protocol**: MCP over HTTP (`streamable-http`)
 - **Integration**: LibreChat `mcpServers` configuration
 - **Authentication**: Bearer token via headers
-- **Status**: ✅ Fully verified - all 53 tools working
+- **Status**: ✅ Fully verified - all 56 tools working
 
 **LibreChat Configuration**:
 ```yaml
@@ -224,12 +224,12 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **53 tools implemented** (84% of core API coverage)
+- ✅ **56 tools implemented** (84% of core API coverage)
 - ✅ **LibreChat verified** - all tools loading and functional
 - ✅ **Docker images published** - Docker Hub and GHCR
 - ✅ **CI/CD pipeline** - automated testing and deployment
 - ✅ **Security hardened** - Bearer auth, HTTPS, non-root container
-- ✅ **Test coverage** - unit tests (53 tools), Playwright E2E, and live integration suite
+- ✅ **Test coverage** - unit tests (56 tools), Playwright E2E, and live integration suite
 
 ### Future Goals
 

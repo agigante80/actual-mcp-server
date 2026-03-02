@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.15  
+**Version:** 0.4.16  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-03
 
@@ -17,9 +17,9 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ## 📊 Roadmap Overview
 
-### Current State (v0.4.15)
+### Current State (v0.4.16)
 
-- ✅ **53 MCP tools** covering ~84% of Actual Budget API
+- ✅ **56 MCP tools** covering ~84% of Actual Budget API
 - ✅ **LibreChat & LobeChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
 - ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
@@ -520,7 +520,7 @@ The ZanzyTHEbar fork introduced several tools and architectural features that ar
 
 ### 🟢 Short-Term Ports (1-2 days each — adapter methods already in place)
 
-#### CF-1. `actual_transactions_update_batch`
+#### CF-1. `actual_transactions_update_batch` — ✅ IMPLEMENTED in v0.4.16
 
 **Fork source**: [`src/tools/transactions_update_batch.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/transactions_update_batch.ts) (76 lines)
 
@@ -573,7 +573,7 @@ The ZanzyTHEbar fork introduced several tools and architectural features that ar
 
 ---
 
-#### CF-2. `actual_transactions_uncategorized`
+#### CF-2. `actual_transactions_uncategorized` — ✅ IMPLEMENTED in v0.4.16
 
 **Fork source**: [`src/tools/transactions_uncategorized.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/transactions_uncategorized.ts) (58 lines)
 
@@ -618,7 +618,7 @@ The ZanzyTHEbar fork introduced several tools and architectural features that ar
 
 ---
 
-#### CF-3. `actual_rules_create_or_update`
+#### CF-3. `actual_rules_create_or_update` — ✅ IMPLEMENTED in v0.4.16
 
 **Fork source**: [`src/tools/rules_create_or_update.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/rules_create_or_update.ts) (196 lines)
 
@@ -1030,7 +1030,14 @@ AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
 
 ## 🎯 Version Milestones
 
-### v0.4.13–v0.4.14 (March 2026) — Actual current state
+### v0.4.15–v0.4.16 (March 2026) — Community ports + batch tools
+- ✅ 56 tools (84% API coverage, +3 from community fork ports)
+- ✅ `actual_transactions_update_batch` — batch-update up to 100 transactions in one call (adapted from [ZanzyTHEbar fork](https://github.com/ZanzyTHEbar/actual-mcp-server))
+- ✅ `actual_transactions_uncategorized` — list transactions with no category, ideal for AI-driven cleanup (adapted from ZanzyTHEbar fork)
+- ✅ `actual_rules_create_or_update` — idempotent rule upsert, prevents duplicate rules (adapted from ZanzyTHEbar fork)
+- ✅ `docs/NEW_TOOL_CHECKLIST.md` — 9-step checklist for adding new tools
+
+### v0.4.13–v0.4.14 (March 2026) — Lookup tools + version info
 - ✅ 53 tools (84% API coverage)
 - ✅ Session management tools (`actual_session_list`, `actual_session_close`)
 - ✅ Server info tool (`actual_server_info`)
