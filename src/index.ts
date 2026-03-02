@@ -1,3 +1,4 @@
+import { z } from 'zod';
 // Add global error handlers
 let isHandlingQueryError = false;
 
@@ -86,21 +87,18 @@ export {};
     osModule,
     utilsModule,
     actualToolsManagerModule,
-    zodToJsonSchemaModule,
   ] = await Promise.all([
     import('./server/httpServer.js'),
     import('./logger.js'),
     import('os'),
     import('./utils.js'),
     import('./actualToolsManager.js'),
-    import('zod-to-json-schema'),
   ]);
 
   const logger = (loggerModule as unknown as { default: typeof console }).default;
   const os = osModule as typeof import('os');
   const { getLocalIp } = (utilsModule as unknown as { getLocalIp: () => string });
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
-  const zodToJsonSchema = (zodToJsonSchemaModule as unknown as { zodToJsonSchema: Function }).zodToJsonSchema;
 
   // Load version from environment (Docker build-time) or package.json (local dev)
   let VERSION = process.env.VERSION;
@@ -183,7 +181,7 @@ export {};
     for (const toolName of implementedTools) {
       const tool = actualToolsManager.getTool(toolName);
       if (tool?.inputSchema) {
-        toolSchemas[toolName] = zodToJsonSchema(tool.inputSchema);
+        toolSchemas[toolName] = z.toJSONSchema(tool.inputSchema as any);
       }
     }
 

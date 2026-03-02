@@ -2,7 +2,6 @@
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import { z } from 'zod';
 import { randomUUID } from 'crypto';
-import { zodToJsonSchema } from "zod-to-json-schema";
 import express, { Request, Response } from 'express';
 import { Server } from './streamable-http.js';
 import { StreamableHTTPServerTransport } from './streamable-http.js';
@@ -78,22 +77,22 @@ export async function startHttpServer(mcp: ActualMCPConnection, port: number, ht
         {
           name: ToolName.HELLO_WORLD,
           description: "A simple tool that returns a greeting",
-          inputSchema: zodToJsonSchema(HelloWorldSchema as any) as any,
+          inputSchema: z.toJSONSchema(HelloWorldSchema as any) as any,
         },
         {
           name: ToolName.GET_SERVER_INFO,
           description: "Get information about the server",
-          inputSchema: zodToJsonSchema(GetServerInfoSchema as any) as any,
+          inputSchema: z.toJSONSchema(GetServerInfoSchema as any) as any,
         },
         {
           name: ToolName.LONG_RUNNING_TEST,
           description: "A test tool that demonstrates long-running operations with progress updates",
-          inputSchema: zodToJsonSchema(LongRunningTestSchema as any) as any,
+          inputSchema: z.toJSONSchema(LongRunningTestSchema as any) as any,
         },
         {
           name: ToolName.SLOW_TEST,
           description: "A test tool that takes 10 minutes to complete and returns timing information",
-          inputSchema: zodToJsonSchema(SlowTestSchema as any) as any,
+          inputSchema: z.toJSONSchema(SlowTestSchema as any) as any,
         }
       ];
       

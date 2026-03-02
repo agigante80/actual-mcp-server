@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import * as actual from '@actual-app/api';
 import actualToolsManager from '../actualToolsManager.js';
 import adapter from './actual-adapter.js';
-import { zodToJsonSchema } from 'zod-to-json-schema';
+import { z } from 'zod';
 
 
 /**
@@ -50,7 +50,7 @@ export class ActualMCPConnection extends EventEmitter {
           name: tool.name,
           title: tool.name,
           description: tool.description,
-          inputSchema: tool.inputSchema ? zodToJsonSchema(tool.inputSchema as any) : { type: 'object' },
+          inputSchema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : { type: 'object' },
         };
       });
     } catch (e) {
