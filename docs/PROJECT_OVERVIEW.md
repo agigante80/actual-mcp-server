@@ -1,7 +1,7 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.14  
+**Version:** 0.4.15  
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-02  
 **Assessment Score:** 88/100 (EXCELLENT)  
