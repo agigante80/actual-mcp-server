@@ -15,6 +15,8 @@ import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
 import observability from '../observability.js';
 import config from '../config.js';
+import { createMcpAuth } from '../auth/setup.js';
+import { budgetAclMiddleware } from '../auth/budget-acl.js';
 
 // AsyncLocalStorage for request context (sessionId accessible to tools)
 export const requestContext = new AsyncLocalStorage<{ sessionId?: string }>();
@@ -34,6 +36,33 @@ export async function startHttpServer(
 ) {
   const app = express();
   app.use(express.json());
+
+  // --- OIDC / mcp-auth (CF-5) ---
+  // When AUTH_PROVIDER=oidc, validate JWTs and enforce budget ACL.
+  // When AUTH_PROVIDER=none (default), the existing static Bearer token check applies.
+  let mcpAuth: ReturnType<typeof createMcpAuth> = null;
+  if (config.AUTH_PROVIDER === 'oidc') {
+    mcpAuth = createMcpAuth();   // throws if OIDC_ISSUER / OIDC_RESOURCE missing
+    if (mcpAuth) {
+      // Serve RFC 8707 Protected Resource Metadata (/.well-known/oauth-protected-resource/...)
+      app.use(mcpAuth.protectedResourceMetadataRouter());
+      // Protect ALL httpPath routes with JWT validation + budget ACL
+      const requiredScopes = config.OIDC_SCOPES
+        ? config.OIDC_SCOPES.split(',').map((s) => s.trim()).filter(Boolean)
+        : [];
+      app.use(
+        httpPath,
+        mcpAuth.bearerAuth('jwt', {
+          resource: config.OIDC_RESOURCE,
+          audience: config.OIDC_RESOURCE,
+          requiredScopes,
+          showErrorDetails: process.env.NODE_ENV !== 'production',
+        }),
+        budgetAclMiddleware as express.RequestHandler,
+      );
+      logger.info(`[OIDC] JWT authentication enabled — issuer: ${config.OIDC_ISSUER}`);
+    }
+  }
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
   const sessionLastActivity = new Map<string, number>();
@@ -68,6 +97,10 @@ export async function startHttpServer(
 
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {
+    // OIDC mode: mcp-auth middleware has already validated the JWT and populated req.auth.
+    if (config.AUTH_PROVIDER === 'oidc') return true;
+
+    // Legacy static Bearer token mode (default).
     // If MCP_SSE_AUTHORIZATION is not configured, allow all requests
     if (!config.MCP_SSE_AUTHORIZATION) {
       return true;
@@ -508,10 +541,12 @@ export async function startHttpServer(
     console.info(`MCP Streamable HTTP Server listening on ${port}`);
     console.info(`📨 MCP endpoint: ${advertised}`);
     console.info(`❤️ Health check: http://localhost:${port}/health`);
-    if (config.MCP_SSE_AUTHORIZATION) {
-      logger.info(`🔒 HTTP authentication enabled (Bearer token required)`);
+    if (config.AUTH_PROVIDER === 'oidc') {
+      logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required — issuer: ${config.OIDC_ISSUER})`);
+    } else if (config.MCP_SSE_AUTHORIZATION) {
+      logger.info(`🔒 HTTP authentication enabled (static Bearer token required)`);
     } else {
-      logger.warn(`⚠️  HTTP authentication disabled (no MCP_SSE_AUTHORIZATION set)`);
+      logger.warn(`⚠️  HTTP authentication disabled (no MCP_SSE_AUTHORIZATION or OIDC configured)`);
     }
   });
 
