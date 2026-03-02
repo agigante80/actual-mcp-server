@@ -41,6 +41,8 @@ import {
   runQuery as rawRunQuery,
   runBankSync as rawRunBankSync,
   getBudgets as rawGetBudgets,
+  getIDByName as rawGetIDByName,
+  getServerVersion as rawGetServerVersion,
 } from '@actual-app/api/dist/methods.js';
 import api from '@actual-app/api';
 import { EventEmitter } from 'events';
@@ -920,6 +922,28 @@ export async function getBudgets(): Promise<unknown[]> {
   });
 }
 
+/**
+ * Get the UUID for any Account, Payee, Category or Schedule by name.
+ * Allowed types: 'accounts', 'schedules', 'categories', 'payees'
+ */
+export async function getIDByName(type: string, name: string): Promise<string> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.getIDByName').catch(() => {});
+    return await withConcurrency(() => retry(() => rawGetIDByName(type, name) as Promise<string>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
+/**
+ * Get the current Actual Budget server version.
+ * Returns { version: string } on success, { error: string } on failure.
+ */
+export async function getServerVersion(): Promise<{ version: string } | { error: string }> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.getServerVersion').catch(() => {});
+    return await withConcurrency(() => retry(() => rawGetServerVersion() as Promise<{ version: string } | { error: string }>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
 export default {
   getAccounts,
   addTransactions,
@@ -961,5 +985,7 @@ export default {
   runQuery,
   runBankSync,
   getBudgets,
+  getIDByName,
+  getServerVersion,
   notifications,
 };

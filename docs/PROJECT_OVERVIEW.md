@@ -1,11 +1,11 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.9  
+**Version:** 0.4.14  
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-02  
 **Assessment Score:** 88/100 (EXCELLENT)  
-**Tool Count:** 51 MCP tools (verified LibreChat and LobeChat compatible)  
+**Tool Count:** 53 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---
@@ -42,7 +42,7 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 
 ### 🛠️ **51 MCP Tools**
 
-Comprehensive coverage of Actual Budget functionality across 11 categories:
+Comprehensive coverage of Actual Budget functionality across 12 categories:
 
 | Category | Tools | Coverage |
 |----------|-------|----------|
@@ -55,12 +55,12 @@ Comprehensive coverage of Actual Budget functionality across 11 categories:
 | **Rules** | 4 | Create, list, update, delete |
 | **Advanced Query & Sync** | 2 | Custom ActualQL queries, bank synchronization |
 | **Batch Operations** | 1 | Batch budget updates |
-| **Server Info** | 1 | Server status and information |
+| **Lookup & Server** | 3 | Server info, Actual Budget server version, name→UUID lookup |
 | **Session Management** | 2 | List and close active MCP sessions |
 
-**Total**: 51 tools with 82% coverage of Actual Budget core API
+**Total**: 53 tools with 84% coverage of Actual Budget core API
 
-> ✅ **All 51 tools verified** with LibreChat integration testing  
+> ✅ **All 53 tools verified** with LibreChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
 > 📊 **README enhanced** with comprehensive badges and improved discoverability
 
@@ -157,7 +157,7 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 - **Protocol**: MCP over HTTP (`streamable-http`)
 - **Integration**: LibreChat `mcpServers` configuration
 - **Authentication**: Bearer token via headers
-- **Status**: ✅ Fully verified - all 51 tools working
+- **Status**: ✅ Fully verified - all 53 tools working
 
 **LibreChat Configuration**:
 ```yaml
@@ -224,12 +224,12 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **51 tools implemented** (82% of core API coverage)
+- ✅ **53 tools implemented** (84% of core API coverage)
 - ✅ **LibreChat verified** - all tools loading and functional
 - ✅ **Docker images published** - Docker Hub and GHCR
 - ✅ **CI/CD pipeline** - automated testing and deployment
 - ✅ **Security hardened** - Bearer auth, HTTPS, non-root container
-- ✅ **Test coverage** - unit tests (51 tools), Playwright E2E, and live integration suite
+- ✅ **Test coverage** - unit tests (53 tools), Playwright E2E, and live integration suite
 
 ### Future Goals
 

@@ -166,6 +166,92 @@ export async function advancedTests(client, context) {
     console.log("⚠ summary_by_payee failed:", err.message);
   }
 
+  // ── actual_get_id_by_name — all 4 supported types ──────────────────────────
+  console.log("\nTesting actual_get_id_by_name (all 4 supported types)...");
+
+  // Type: 'accounts' — list accounts, pick first
+  try {
+    const accts = await callTool("actual_accounts_list", {});
+    const firstAcct = Array.isArray(accts) && accts.length > 0 ? accts[0] : null;
+    if (firstAcct?.name) {
+      const res = await callTool("actual_get_id_by_name", { type: 'accounts', name: firstAcct.name });
+      const resolvedId = res?.id ?? res?.result?.id;
+      if (resolvedId === firstAcct.id) {
+        console.log(`  ✓ get_id_by_name [accounts]: "${firstAcct.name}" → ${resolvedId}`);
+      } else {
+        console.log(`  ❌ get_id_by_name [accounts]: expected id=${firstAcct.id}, got ${JSON.stringify(res).slice(0, 120)}`);
+      }
+    } else {
+      console.log("  ℹ get_id_by_name [accounts]: no accounts found to resolve — skipped");
+    }
+  } catch (err) {
+    console.log("  ❌ get_id_by_name [accounts]:", err.message);
+  }
+
+  // Type: 'categories' — list categories, pick first
+  try {
+    const cats = await callTool("actual_categories_get", {});
+    const flatCats = Array.isArray(cats) ? cats : [];
+    const firstCat = flatCats.find(c => c?.name);
+    if (firstCat?.name) {
+      const res = await callTool("actual_get_id_by_name", { type: 'categories', name: firstCat.name });
+      const resolvedId = res?.id ?? res?.result?.id;
+      if (resolvedId === firstCat.id) {
+        console.log(`  ✓ get_id_by_name [categories]: "${firstCat.name}" → ${resolvedId}`);
+      } else {
+        console.log(`  ❌ get_id_by_name [categories]: expected id=${firstCat.id}, got ${JSON.stringify(res).slice(0, 120)}`);
+      }
+    } else {
+      console.log("  ℹ get_id_by_name [categories]: no categories found to resolve — skipped");
+    }
+  } catch (err) {
+    console.log("  ❌ get_id_by_name [categories]:", err.message);
+  }
+
+  // Type: 'payees' — list payees, pick first non-transfer payee
+  try {
+    const payees = await callTool("actual_payees_get", {});
+    const flatPayees = Array.isArray(payees) ? payees : [];
+    // Transfer payees have transfer_acct set — skip them
+    const firstPayee = flatPayees.find(p => p?.name && !p?.transfer_acct);
+    if (firstPayee?.name) {
+      const res = await callTool("actual_get_id_by_name", { type: 'payees', name: firstPayee.name });
+      const resolvedId = res?.id ?? res?.result?.id;
+      if (resolvedId === firstPayee.id) {
+        console.log(`  ✓ get_id_by_name [payees]: "${firstPayee.name}" → ${resolvedId}`);
+      } else {
+        console.log(`  ❌ get_id_by_name [payees]: expected id=${firstPayee.id}, got ${JSON.stringify(res).slice(0, 120)}`);
+      }
+    } else {
+      console.log("  ℹ get_id_by_name [payees]: no non-transfer payees found to resolve — skipped");
+    }
+  } catch (err) {
+    console.log("  ❌ get_id_by_name [payees]:", err.message);
+  }
+
+  // Type: 'schedules' — list first, then resolve by name (may be empty in any budget)
+  try {
+    // actual_get_id_by_name for schedules — we must find a real schedule name to look up
+    // Use actual_query_run to get the first schedule name from the DB
+    const schedResult = await callTool("actual_query_run", { query: "SELECT id, name FROM schedules LIMIT 1" });
+    const schedRows = schedResult?.result ?? (Array.isArray(schedResult) ? schedResult : []);
+    const firstSched = Array.isArray(schedRows) && schedRows.length > 0 ? schedRows[0] : null;
+    if (firstSched?.name) {
+      const res = await callTool("actual_get_id_by_name", { type: 'schedules', name: firstSched.name });
+      const resolvedId = res?.id ?? res?.result?.id;
+      if (typeof resolvedId === 'string' && resolvedId.length > 0) {
+        console.log(`  ✓ get_id_by_name [schedules]: "${firstSched.name}" → ${resolvedId}`);
+      } else {
+        console.log(`  ❌ get_id_by_name [schedules]: could not resolve "${firstSched.name}", got ${JSON.stringify(res).slice(0, 120)}`);
+      }
+    } else {
+      console.log("  ℹ get_id_by_name [schedules]: no schedules in budget — skipped (expected for new/test budgets)");
+    }
+  } catch (err) {
+    // DB query failure or schedule lookup failure — informational
+    console.log("  ℹ get_id_by_name [schedules]: could not test — informational:", err.message);
+  }
+
   // Bank sync (optional — expected to fail on local budgets)
   // Use callMCP directly with maxRetries=1 to avoid infinite reconnect loop.
   console.log("\nChecking bank sync status...");

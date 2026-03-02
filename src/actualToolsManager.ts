@@ -60,6 +60,8 @@ const IMPLEMENTED_TOOLS = [
   'actual_server_info',
   'actual_session_close',
   'actual_session_list',
+  'actual_get_id_by_name',
+  'actual_server_get_version',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names
@@ -102,6 +104,8 @@ const API_TOOL_MAP: Record<string, string> = {
   createCategoryGroup: 'actual_category_groups_create',
   updateCategoryGroup: 'actual_category_groups_update',
   deleteCategoryGroup: 'actual_category_groups_delete',
+  getIDByName: 'actual_get_id_by_name',
+  getServerVersion: 'actual_server_get_version',
 };
 
 // Define Account schema for validation (simplified example)
