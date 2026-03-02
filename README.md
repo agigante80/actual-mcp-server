@@ -1029,7 +1029,7 @@ MCP_SSE_AUTHORIZATION=your_token npm run dev -- --http
 mcpServers:
   actual-mcp:
     type: "streamable-http"
-    url: "http://192.168.8.245:3600/http"
+    url: "http://your-server-ip:3600/http"
     headers:
       Authorization: "Bearer your_token_here"
     serverInstructions: true
@@ -1058,7 +1058,7 @@ npm run dev -- --sse
 mcpServers:
   actual-mcp:
     type: "sse"
-    url: "http://192.168.8.245:3600/sse"
+    url: "http://your-server-ip:3600/sse"
     serverInstructions: true
 ```
 
