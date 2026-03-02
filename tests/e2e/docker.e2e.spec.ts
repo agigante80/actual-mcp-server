@@ -334,13 +334,6 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     console.log('✅ Session persistence verified');
   });
 
-  test.skip('should handle SSE endpoint - SKIPPED (using HTTP transport)', async ({ request }) => {
-    // This test is skipped because the server is configured to use HTTP transport only.
-    // SSE transport is disabled in docker-compose.test.yaml (--http flag).
-    // To enable SSE testing, change the server command to use --sse flag instead.
-    console.log('⏭️  SSE endpoint test skipped (server running in HTTP-only mode)');
-  });
-
   test('should verify Docker build includes all required files', async ({ request }) => {
     console.log('📦 Verifying Docker build...');
     // This test verifies the Docker image was built correctly

@@ -11,7 +11,7 @@ A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budge
 - **Advanced Features** - Custom ActualQL queries, bank sync, multi-budget support
 - **HTTPS Support** - Secure connections with self-signed or CA certificates
 - **LibreChat Ready** - Tested and verified with all 51 tools loading successfully
-- **Multiple Transports** - HTTP, SSE (Server-Sent Events) with authentication
+- **Multiple Transports** - HTTP transport with authentication
 - **Production-Grade** - Retry logic, concurrency control, observability
 - **Type-Safe** - Full TypeScript implementation with generated types
 - **Secure** - Non-root container, secrets management, rate limiting
@@ -32,9 +32,6 @@ docker run -d \
   -v actual-mcp-data:/data \
   agigante80/actual-mcp-server:latest
   
-# Note: HTTP transport is the default. To use SSE instead:
-# -e MCP_TRANSPORT_MODE=--sse  (Server-Sent Events)
-
 # Or use GitHub Container Registry
 docker run -d ... ghcr.io/agigante80/actual-mcp-server:latest
 ```
@@ -74,7 +71,7 @@ docker run -d \
 
 ### Server Configuration
 - `MCP_BRIDGE_PORT` - Server port (default: 3600)
-- `MCP_TRANSPORT_MODE` - Transport protocol: --http (default) or --sse
+- `MCP_TRANSPORT_MODE` - Transport protocol: --http (only supported mode)
 - `MCP_SSE_AUTHORIZATION` - Bearer token for authentication (generate with `openssl rand -hex 32`)
 
 ### HTTPS Configuration (Optional but Recommended)

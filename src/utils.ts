@@ -21,7 +21,7 @@ export function shouldDebugTransport(): boolean {
 
 /**
  * Log transport-level request/response objects when debug is enabled.
- * - prefix: short label like "HTTP REQ" / "HTTP RES" / "SSE OUT"
+ * - prefix: short label like "HTTP REQ" / "HTTP RES"
  * - obj: any serializable data (headers, body, meta)
  *
  * This uses console.debug (falls through to console if no structured logger available).

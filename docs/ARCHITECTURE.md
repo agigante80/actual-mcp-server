@@ -47,14 +47,14 @@
 │              Client Layer (LibreChat, etc.)               │
 └───────────────────────────────────────────────────────────┘
                             │
-                   HTTP / WebSocket / SSE
+                   HTTP / WebSocket
                             ▼
 ┌───────────────────────────────────────────────────────────┐
 │               Transport Layer                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐               │
-│  │   HTTP   │  │   WSS    │  │   SSE    │               │
-│  │ Server   │  │  Server  │  │  Server  │               │
-│  └──────────┘  └──────────┘  └──────────┘               │
+│  ┌──────────┐                                     │
+│  │   HTTP   │                                     │
+│  │  Server  │                                     │
+│  └──────────┘                                     │
 └───────────────────────────────────────────────────────────┘
                             │
                        MCP Protocol
@@ -131,10 +131,8 @@
 | Transport | File | Status | Authentication | LibreChat Support |
 |-----------|------|--------|----------------|-------------------|
 | **HTTP** | `src/server/httpServer.ts` | ✅ Production | Bearer token | ✅ Fully supported |
-| **SSE** | `src/server/sseServer.ts` | ✅ Production | Bearer token* | ⚠️ Headers not sent |
 | **WebSocket** | *(removed)* | ❌ Removed | N/A | ❌ Not supported |
-
-*SSE authentication works server-side but LibreChat client doesn't send custom headers
+| **SSE** | *(removed)* | ❌ Removed | N/A | N/A |
 
 ### Tool Definitions
 
@@ -206,7 +204,7 @@ src/tools/
 1. Client sends MCP request
    │
    ├──> HTTP POST /http
-   └──> SSE connection + POST
+
    │
 2. Transport layer receives request
    │
@@ -309,9 +307,8 @@ actual-mcp-server/
 │   │   └── schemas/                # Per-domain Zod schemas
 │   │
 │   ├── server/                   # Transport implementations
-│   │   ├── httpServer.ts         # HTTP transport (recommended)
-│   │   ├── httpServer_testing.ts # HTTP server for test environments
-│   │   ├── sseServer.ts          # Server-Sent Events transport
+   │   ├── httpServer.ts         # HTTP transport
+   │   ├── httpServer_testing.ts # HTTP server for test environments
 │   │   ├── streamable-http.ts    # Streamable HTTP protocol implementation
 │   │   ├── streamable-http.js    # Compiled JS companion
 │   │   └── streamable-http.d.ts  # Type definitions
@@ -381,7 +378,7 @@ actual-mcp-server/
 
 ```
 1. CLI Argument Parsing
-   └─> src/index.ts parses --help, --debug, --sse, --http
+   └─┾ src/index.ts parses --help, --debug, --http
    └─> --help exits early (before loading environment)
 
 2. Environment Loading
@@ -409,7 +406,7 @@ actual-mcp-server/
    └─> Build capabilities object (tools, resources, prompts)
 
 7. Transport Server Startup
-   └─> Start HTTP / SSE / WebSocket server
+   └─┾ Start HTTP server
    └─> Bind to MCP_BRIDGE_PORT
    └─> Register health endpoints
 
@@ -424,7 +421,7 @@ actual-mcp-server/
 1. SIGINT / SIGTERM received
    │
 2. Graceful shutdown initiated
-   ├─> Close transport server (HTTP/SSE/WS)
+   ├─┾ Close transport server (HTTP)
    ├─> Stop accepting new requests
    ├─> Wait for pending requests (timeout: 10s)
    │
@@ -483,7 +480,7 @@ MCP_BRIDGE_DATA_DIR=./actual-data       # Budget cache directory
 MCP_BRIDGE_BIND_HOST=0.0.0.0            # Bind address
 
 # Transport mode (Docker only)
-MCP_TRANSPORT_MODE=--http               # --http or --sse
+MCP_TRANSPORT_MODE=--http               # Only --http is supported
 ```
 
 #### Security
@@ -526,7 +523,7 @@ export const configSchema = z.object({
   ACTUAL_BUDGET_SYNC_ID: z.string().min(1),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
   MCP_BRIDGE_PORT: z.string().default('3000'),
-  MCP_TRANSPORT_MODE: z.enum(['--http', '--sse']).default('--http'),
+  MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),
@@ -571,27 +568,9 @@ mcpServers:
     serverInstructions: true
 ```
 
-### SSE Transport
+> ⚠️ **Removed**: WebSocket transport (`wsServer.ts`) has been removed. Use HTTP transport instead.
 
-**Type**: Server-Sent Events
-
-**Endpoints**:
-- `GET /sse` - Event stream
-- `POST /sse` - Send messages
-
-**Authentication**: Bearer token (server-side only)
-
-**LibreChat Status**: ⚠️ Client doesn't send auth headers
-
-**Use Case**: Development without authentication
-
-### WebSocket Transport
-
-> ⚠️ **Removed**: WebSocket transport (`wsServer.ts`) has been removed from the codebase. Use HTTP transport instead.
-
-**LibreChat Status**: ❌ Not supported
-
-**Migration**: Replace `--ws` flag with `--http` flag. Update any custom MCP clients to use HTTP POST to `/http`.
+> ⚠️ **Removed**: SSE transport (`sseServer.ts`) has been removed. Use HTTP transport instead.
 
 ---
 
@@ -682,7 +661,7 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
   - Action: Scheduled for minor update
 
 - **express** (^4.21.2): Web server framework
-  - Purpose: HTTP/SSE transport layer
+  - Purpose: HTTP transport layer
   - License: MIT
   - Status: ✅ Current (Express v5 available but deferred)
   - Note: Major v5 migration planned for Q1 2026
@@ -735,9 +714,7 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 - Automatic sync on startup
 
 **LibreChat / MCP Clients:**
-- HTTP transport (recommended, default)
-- Server-Sent Events (SSE) for streaming
-- WebSocket: removed (use HTTP instead)
+- HTTP transport (default and only supported transport)
 
 **Monitoring & Observability:**
 - Prometheus metrics (`/metrics` endpoint)
