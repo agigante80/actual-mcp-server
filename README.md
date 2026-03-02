@@ -6,7 +6,7 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-1.18-orange)](https://modelcontextprotocol.io/)
 [![Docker Pulls](https://img.shields.io/docker/pulls/agigante80/actual-mcp-server)](https://hub.docker.com/r/agigante80/actual-mcp-server)
 [![Docker Image Size](https://img.shields.io/docker/image-size/agigante80/actual-mcp-server/latest)](https://hub.docker.com/r/agigante80/actual-mcp-server)
-[![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
+[![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
 A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **51 specialized tools** covering 82% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
@@ -189,7 +189,7 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 - **Observability**: Prometheus metrics, structured logging with Winston
 - **Flexible Deployment**: Docker, Kubernetes, bare metal, or Docker Compose
 - **HTTPS Support**: TLS encryption with self-signed or CA-signed certificates
-- **Tested**: >80% test coverage with unit, integration, and E2E tests
+- **Tested**: Unit tests (51 tools + schema), Playwright E2E, and live integration suite
 
 ### Financial Operations
 
@@ -335,23 +335,23 @@ docker pull agigante80/actual-mcp-server:development
 docker pull agigante80/actual-mcp-server:latest-abc1234
 ```
 
-#### Using docker-compose.prod.yml
+#### Using docker-compose.yaml (Production profile)
 
-For production deployments, use the provided `docker-compose.prod.yml`:
+For production deployments, use the `production` profile in the provided `docker-compose.yaml`:
 
 ```bash
 # Copy and configure environment
 cp .env.example .env
 # Edit .env with your Actual Budget server details
 
-# Start using GHCR image
-docker-compose -f docker-compose.prod.yml up -d
+# Start production stack (Nginx proxy + MCP server)
+docker compose --profile production up -d
 
 # View logs
-docker-compose -f docker-compose.prod.yml logs -f
+docker compose --profile production logs -f
 
 # Stop
-docker-compose -f docker-compose.prod.yml down
+docker compose --profile production down
 ```
 
 ### Run with Docker Compose
@@ -436,7 +436,7 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 |------|-------------|------------|
 | `actual_payees_get` | List all payees | - |
 | `actual_payees_create` | Create new payee | `name` |
-| `actual_payees_update` | Update payee | `id`, `name?` |
+| `actual_payees_update` | Update payee | `id`, `name?`, `category?` |
 | `actual_payees_delete` | Delete payee | `id` |
 | `actual_payees_merge` | Merge duplicate payees | `targetId`, `mergeIds[]` |
 | `actual_payee_rules_get` | Get rules for a payee | `payeeId` |
@@ -451,8 +451,8 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 | `actual_budgets_setAmount` | Set category budget amount | `month`, `categoryId`, `amount` |
 | `actual_budgets_transfer` | Transfer amount between categories | `month`, `fromCategoryId`, `toCategoryId`, `amount` |
 | `actual_budgets_setCarryover` | Enable/disable carryover | `month`, `categoryId`, `flag` |
-| `actual_budgets_holdForNextMonth` | Hold funds for next month | `month`, `categoryId` |
-| `actual_budgets_resetHold` | Reset hold status | `month`, `categoryId` |
+| `actual_budgets_holdForNextMonth` | Hold funds for next month | `month`, `amount` |
+| `actual_budgets_resetHold` | Reset hold status | `month` |
 
 ### Rules (4 tools)
 
@@ -780,7 +780,7 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 MCP_SSE_AUTHORIZATION=your_bearer_token_here
 
 # Transport mode (Docker only - defaults to --http)
-# Options: --http (recommended), --sse, --ws
+# Options: --http (recommended), --sse
 MCP_TRANSPORT_MODE=--http
 
 # HTTPS (optional but recommended)
@@ -1029,7 +1029,7 @@ MCP_SSE_AUTHORIZATION=your_token npm run dev -- --http
 mcpServers:
   actual-mcp:
     type: "streamable-http"
-    url: "http://192.168.8.245:3600/http"
+    url: "http://your-server-ip:3600/http"
     headers:
       Authorization: "Bearer your_token_here"
     serverInstructions: true
@@ -1058,7 +1058,7 @@ npm run dev -- --sse
 mcpServers:
   actual-mcp:
     type: "sse"
-    url: "http://192.168.8.245:3600/sse"
+    url: "http://your-server-ip:3600/sse"
     serverInstructions: true
 ```
 
@@ -1269,10 +1269,37 @@ npm run test:e2e:docker
 | Command | What It Tests | Speed | Requires Docker |
 |---------|---------------|-------|-----------------|
 | `test:adapter` | Adapter layer, retry logic, concurrency | ⚡ 30s | No |
-| `test:unit-js` | Unit tests (transactions) | ⚡ 5s | No |
+| `test:unit-js` | Unit tests (schema, 51-tool smoke, negative-path) | ⚡ 5s | No |
 | `test:e2e` | MCP protocol compliance | ⚡ 10s | No |
 | `test:e2e:docker` | Full stack integration | 🐢 60s | Yes |
 | `test:all` | All of the above | 🐢 90s | Yes |
+
+### Integration Tests (Live Server)
+
+The `tests/manual/` suite connects to a **running MCP server** over HTTP and exercises the full JSON-RPC protocol — no mocking. Six test levels cascade upward:
+
+| Level | Writes? | What runs |
+|-------|---------|----------|
+| `sanity` | No | Protocol checks: tool count, server info, SQL, GraphQL rejection |
+| `smoke` | No | Sanity + account balances, categories, recent transactions |
+| `normal` | Yes | Account lifecycle (create → update → close → reopen) |
+| `extended` | Yes | Normal + category groups, categories, payees, transactions |
+| `full` | Yes | Extended + budgets, rules, batch operations, advanced queries |
+| `cleanup` | Yes | Finds and removes all `MCP-Test-*` / `MCP-Cat-*` / `MCP-Group-*` / `MCP-Payee-*` data |
+
+```bash
+# Via npm scripts
+npm run test:integration              # sanity (default)
+npm run test:integration:full        # full test run
+npm run test:integration:cleanup     # delete all test data
+
+# Direct invocation
+node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
+# Example:
+node tests/manual/index.js http://localhost:3600/http mytoken full yes
+```
+
+See [`tests/manual/README.md`](tests/manual/README.md) for complete documentation.
 
 ### Docker E2E Tests
 

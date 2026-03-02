@@ -1,8 +1,8 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.7  
-**Last Updated:** 2025-11-11
+**Version:** 0.4.9  
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -77,7 +77,7 @@
 │  └────────────────────────────────────────────────────┘  │
 │                                                           │
 │  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐           │
-│  │Tool1│  │Tool2│  │Tool3│  │ ... │  │ 42  │           │
+│  │Tool1│  │Tool2│  │Tool3│  │ ... │  │ 51  │           │
 │  └─────┘  └─────┘  └─────┘  └─────┘  └─────┘           │
 └───────────────────────────────────────────────────────────┘
                             │
@@ -132,7 +132,7 @@
 |-----------|------|--------|----------------|-------------------|
 | **HTTP** | `src/server/httpServer.ts` | ✅ Production | Bearer token | ✅ Fully supported |
 | **SSE** | `src/server/sseServer.ts` | ✅ Production | Bearer token* | ⚠️ Headers not sent |
-| **WebSocket** | `src/server/wsServer.ts` | ✅ Production | Bearer token | ❌ Not supported |
+| **WebSocket** | *(removed)* | ❌ Removed | N/A | ❌ Not supported |
 
 *SSE authentication works server-side but LibreChat client doesn't send custom headers
 
@@ -142,20 +142,29 @@
 
 ```
 src/tools/
-├── accounts_create.ts
+├── server_info.ts                      # Server version / connection info
+├── session_list.ts                     # Session management (2 tools)
+├── session_close.ts
+├── accounts_create.ts                  # Accounts (7 tools)
 ├── accounts_list.ts
 ├── accounts_update.ts
 ├── accounts_delete.ts
 ├── accounts_close.ts
 ├── accounts_reopen.ts
 ├── accounts_get_balance.ts
-├── transactions_create.ts
+├── transactions_create.ts              # Transactions (13 tools)
 ├── transactions_get.ts
 ├── transactions_update.ts
 ├── transactions_delete.ts
 ├── transactions_import.ts
 ├── transactions_filter.ts
-├── budgets_getMonth.ts
+├── transactions_search_by_amount.ts
+├── transactions_search_by_category.ts
+├── transactions_search_by_month.ts
+├── transactions_search_by_payee.ts
+├── transactions_summary_by_category.ts
+├── transactions_summary_by_payee.ts
+├── budgets_getMonth.ts                 # Budgets (9 tools)
 ├── budgets_getMonths.ts
 ├── budgets_get_all.ts
 ├── budgets_setAmount.ts
@@ -163,28 +172,28 @@ src/tools/
 ├── budgets_setCarryover.ts
 ├── budgets_holdForNextMonth.ts
 ├── budgets_resetHold.ts
-├── budgets_batch_updates.ts
-├── categories_get.ts
+├── budget_updates_batch.ts
+├── categories_get.ts                   # Categories (4 tools)
 ├── categories_create.ts
 ├── categories_update.ts
 ├── categories_delete.ts
-├── category_groups_get.ts
+├── category_groups_get.ts              # Category Groups (4 tools)
 ├── category_groups_create.ts
 ├── category_groups_update.ts
 ├── category_groups_delete.ts
-├── payees_get.ts
+├── payees_get.ts                       # Payees (5 tools)
 ├── payees_create.ts
 ├── payees_update.ts
 ├── payees_delete.ts
 ├── payees_merge.ts
-├── payee_rules_get.ts
-├── rules_get.ts
+├── payee_rules_get.ts                  # Payee Rules (1 tool)
+├── rules_get.ts                        # Rules (4 tools)
 ├── rules_create.ts
 ├── rules_update.ts
 ├── rules_delete.ts
-├── query_run.ts
-├── bank_sync.ts
-└── index.ts (exports all tools)
+├── query_run.ts                        # Advanced ActualQL queries
+├── bank_sync.ts                        # Bank synchronization
+└── index.ts                            # Tool exports
 ```
 
 ---
@@ -197,7 +206,6 @@ src/tools/
 1. Client sends MCP request
    │
    ├──> HTTP POST /http
-   ├──> WebSocket message
    └──> SSE connection + POST
    │
 2. Transport layer receives request
@@ -288,24 +296,38 @@ actual-mcp-server/
 │   ├── tests_adapter_runner.ts   # Adapter test executor
 │   │
 │   ├── lib/                      # Core libraries
-│   │   ├── actual-adapter.ts     # Actual API wrapper
-│   │   ├── ActualMCPConnection.ts # MCP protocol handler
-│   │   └── retry.ts              # Retry logic utilities
+│   │   ├── actual-adapter.ts     # Actual API wrapper (withActualApi, callWithRetry)
+│   │   ├── actual-schema.ts      # Shared Zod schema definitions
+│   │   ├── ActualConnectionPool.ts # Connection pool management
+│   │   ├── ActualMCPConnection.ts  # MCP protocol handler (EventEmitter-based)
+│   │   ├── ActualMCPConnection.js  # Compiled JS companion
+│   │   ├── constants.ts            # Configuration constants and limits
+│   │   ├── loggerFactory.ts        # Module-scoped logger factory
+│   │   ├── query-validator.ts      # ActualQL query validation
+│   │   ├── retry.ts                # Exponential backoff retry logic
+│   │   ├── toolFactory.ts          # Tool definition factory helpers
+│   │   └── schemas/                # Per-domain Zod schemas
 │   │
 │   ├── server/                   # Transport implementations
 │   │   ├── httpServer.ts         # HTTP transport (recommended)
-│   │   ├── sseServer.ts          # Server-Sent Events
-│   │   ├── wsServer.ts           # WebSocket transport
+│   │   ├── httpServer_testing.ts # HTTP server for test environments
+│   │   ├── sseServer.ts          # Server-Sent Events transport
+│   │   ├── streamable-http.ts    # Streamable HTTP protocol implementation
+│   │   ├── streamable-http.js    # Compiled JS companion
 │   │   └── streamable-http.d.ts  # Type definitions
 │   │
-│   ├── tools/                    # MCP tool definitions (42 files)
-│   │   ├── accounts_*.ts         # 7 account tools
-│   │   ├── transactions_*.ts     # 6 transaction tools
-│   │   ├── budgets_*.ts          # 8 budget tools
-│   │   ├── categories_*.ts       # 4 category tools
-│   │   ├── category_groups_*.ts  # 4 category group tools
-│   │   ├── payees_*.ts           # 6 payee tools
-│   │   ├── rules_*.ts            # 4 rule tools
+│   ├── tools/                    # MCP tool definitions (51 tools + index.ts)
+│   │   ├── server_info.ts        # Server info (1 tool)
+│   │   ├── session_*.ts          # Session management (2 tools)
+│   │   ├── accounts_*.ts         # Accounts (7 tools)
+│   │   ├── transactions_*.ts     # Transactions (13 tools, incl. search/summary)
+│   │   ├── budgets_*.ts          # Budgets (9 tools)
+│   │   ├── budget_updates_batch.ts # Batch budget operations
+│   │   ├── categories_*.ts       # Categories (4 tools)
+│   │   ├── category_groups_*.ts  # Category groups (4 tools)
+│   │   ├── payees_*.ts           # Payees (5 tools)
+│   │   ├── payee_rules_get.ts    # Payee rules (1 tool)
+│   │   ├── rules_*.ts            # Rules (4 tools)
 │   │   ├── query_run.ts          # Advanced ActualQL queries
 │   │   ├── bank_sync.ts          # Bank synchronization
 │   │   └── index.ts              # Tool exports
@@ -319,16 +341,25 @@ actual-mcp-server/
 │   └── resources/                # MCP resources
 │       └── accountsSummary.ts
 │
-├── test/                         # Tests and scripts
+├── tests/                        # Tests
 │   ├── e2e/                      # End-to-end tests (Playwright)
-│   ├── integration/              # Integration tests
-│   ├── unit/                     # Unit tests
-│   └── docker-actual-test/       # Docker test setup
+│   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
+│   │   ├── docker.e2e.spec.ts             # Docker smoke tests
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (51 tools)
+│   │   └── run-docker-e2e.sh              # Docker test orchestrator
+│   ├── unit/                     # Unit tests (offline, stub adapter)
+│   │   ├── transactions_create.test.js
+│   │   ├── generated_tools.smoke.test.js
+│   │   └── schema_validation.test.js
+│   └── manual/                   # Live integration tests (real Actual Budget)
 │
-├── scripts/                      # Build and utility scripts
-│   ├── generate-tools.ts         # Tool generator from OpenAPI
+├── scripts/                      # Build and utility scripts (see scripts/README.md)
 │   ├── verify-tools.js           # Tool coverage verification
-│   └── openapi/                  # OpenAPI specifications
+│   ├── bootstrap-and-init.sh     # Docker: bootstrap Actual server + import test budget
+│   ├── import-test-budget.sh     # Upload test-data/*.zip to Actual server
+│   ├── register-tsconfig-paths.js # Path alias resolver for dist/ runtime
+│   ├── list-actual-api-methods.mjs # API method coverage checker
+│   └── version-bump.js / version-check.js / version-dev.js  # Versioning
 │
 ├── docs/                         # Documentation (this folder)
 ├── generated/                    # Generated TypeScript types
@@ -336,7 +367,7 @@ actual-mcp-server/
 ├── logs/                         # Application logs (gitignored)
 │
 ├── Dockerfile                    # Production container
-├── docker-compose.prod.yml       # Production Docker Compose
+├── docker-compose.yaml           # Docker Compose (dev/production profiles)
 ├── package.json                  # Dependencies and scripts
 ├── tsconfig.json                 # TypeScript configuration
 └── .env.example                  # Environment variable template
@@ -350,7 +381,7 @@ actual-mcp-server/
 
 ```
 1. CLI Argument Parsing
-   └─> src/index.ts parses --help, --debug, --ws, --sse, --http
+   └─> src/index.ts parses --help, --debug, --sse, --http
    └─> --help exits early (before loading environment)
 
 2. Environment Loading
@@ -383,7 +414,7 @@ actual-mcp-server/
    └─> Register health endpoints
 
 8. Ready State
-   └─> Log "🚀 Actual MCP Server v0.1.0"
+   └─> Log current server version and transport mode
    └─> Accept MCP requests
 ```
 
@@ -556,15 +587,11 @@ mcpServers:
 
 ### WebSocket Transport
 
-**Type**: Full-duplex WebSocket
-
-**Endpoint**: `ws://your-server:3600`
-
-**Authentication**: Bearer token in initial handshake
+> ⚠️ **Removed**: WebSocket transport (`wsServer.ts`) has been removed from the codebase. Use HTTP transport instead.
 
 **LibreChat Status**: ❌ Not supported
 
-**Use Case**: Custom MCP clients
+**Migration**: Replace `--ws` flag with `--http` flag. Update any custom MCP clients to use HTTP POST to `/http`.
 
 ---
 
@@ -596,18 +623,20 @@ Error Response Format:
 Implemented in `src/lib/actual-adapter.ts`:
 
 ```typescript
-// Exponential backoff retry
-maxRetries: 3
-baseDelay: 1000ms
-backoff: exponential (1s, 2s, 4s)
+// Exponential backoff retry (src/lib/constants.ts)
+DEFAULT_RETRY_ATTEMPTS = 3
+DEFAULT_RETRY_BACKOFF_MS = 200   // 200ms base delay
+MAX_RETRY_DELAY_MS = 10000       // cap at 10s
+// backoff sequence: 200ms → 400ms → 800ms (capped at 10s)
 ```
 
 ### Concurrency Control
 
 ```typescript
-// Prevent overwhelming Actual Budget server
-maxConcurrentRequests: 5
-queueDelay: 100ms between requests
+// Prevent overwhelming Actual Budget server (src/lib/constants.ts)
+DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
+// Overflow requests are queued and drained FIFO
+// Configurable via ACTUAL_API_CONCURRENCY env var
 ```
 
 ---
@@ -681,8 +710,7 @@ queueDelay: 100ms between requests
 - **CI/CD**: Automated testing on dependency changes
 
 **Security Posture:**
-- ✅ 0 known vulnerabilities (as of 2025-11-24)
-- ✅ 306 total dependencies (207 production, 99 dev)
+- ✅ No known critical/high vulnerabilities (run `npm audit` for current status)
 - ✅ All packages actively maintained
 - ✅ Permissive licenses only (MIT, Apache-2.0, ISC, BSD)
 
@@ -697,10 +725,7 @@ queueDelay: 100ms between requests
 - Automated dependency update PRs with auto-merge
 - See `.github/workflows/dependency-update.yml` for automation details
 
-**Pending Updates (as of 2025-11-24):**
-1. Batch patch updates (6 packages): Ready for auto-merge
-2. MCP SDK (1.18.2 → 1.22.0): Scheduled for minor update
-3. Express v5 migration: Deferred to Q1 2026 (requires 8-16 hour migration)
+> ⚠️ **Zod version**: Zod is pinned to `3.x` via `package.json` overrides. Do NOT upgrade to Zod 4.x — it breaks `zod-to-json-schema` compatibility and makes all tools invisible to LibreChat.
 
 ### Third-Party Integrations
 
@@ -710,9 +735,9 @@ queueDelay: 100ms between requests
 - Automatic sync on startup
 
 **LibreChat / MCP Clients:**
-- HTTP transport (recommended)
+- HTTP transport (recommended, default)
 - Server-Sent Events (SSE) for streaming
-- WebSocket (deprecated, legacy support)
+- WebSocket: removed (use HTTP instead)
 
 **Monitoring & Observability:**
 - Prometheus metrics (`/metrics` endpoint)

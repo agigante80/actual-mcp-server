@@ -25,7 +25,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_budgets_setAmount',
   'actual_budgets_setCarryover',
   'actual_budgets_transfer',
-  'actual_budgets_updates_batch',
+  'actual_budget_updates_batch',
   'actual_categories_create',
   'actual_categories_delete',
   'actual_categories_get',

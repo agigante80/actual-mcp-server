@@ -527,12 +527,14 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, docker-publish, security-scan]
+    needs: [version, docker-publish, security-scan, docker-hub-description, deployment-test]
     if: |
       always() &&
       needs.version.outputs.is_release == 'true' &&
       needs.docker-publish.result == 'success' &&
-      (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped')
+      (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped') &&
+      (needs.docker-hub-description.result == 'success' || needs.docker-hub-description.result == 'skipped') &&
+      (needs.deployment-test.result == 'success' || needs.deployment-test.result == 'skipped')
     permissions:
       contents: write
     steps:

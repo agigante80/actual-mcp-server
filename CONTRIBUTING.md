@@ -112,9 +112,13 @@ actual-mcp-server/
 │   ├── e2e/                 # End-to-end tests (Playwright)
 │   ├── integration/         # Integration tests
 │   └── unit/                # Unit tests
-├── scripts/                  # Build and generation scripts
-│   ├── generate-tools.ts    # Auto-generate tools from OpenAPI
-│   └── openapi/             # OpenAPI specifications
+├── scripts/                  # Build and utility scripts (see scripts/README.md)
+│   ├── verify-tools.js         # Verify all tools are registered correctly
+│   ├── bootstrap-and-init.sh   # Docker: bootstrap Actual server + import test budget
+│   ├── import-test-budget.sh   # Import test-data/*.zip into Actual server
+│   ├── register-tsconfig-paths.js  # Path alias resolver for dist/ runtime
+│   ├── list-actual-api-methods.mjs # API coverage checker
+│   └── version-bump.js / version-check.js / version-dev.js  # Versioning helpers
 ├── docs/                     # Documentation
 └── .github/                  # GitHub Actions workflows
 ```

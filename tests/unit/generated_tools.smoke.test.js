@@ -1,3 +1,9 @@
+// Stub required env vars so the test runs offline (adapter is monkeypatched below;
+// real connection is never attempted). Real vars take precedence if already set.
+process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL ?? 'http://localhost:5006';
+process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
+process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-unit-test';
+
 console.log('Running generated tools smoke tests');
 
 (async () => {
@@ -107,19 +113,85 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_setAmount')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.amount = 100;
   if (name.includes('budgets_getMonth')) inputExample.month = '2025-12';
   if (name.includes('budget_updates_batch')) inputExample.operations = [{ month: '2025-12', categoryId: 'cat_1', amount: 100 }];
-  if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1';
-  if (name.includes('budgets_resetHold')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1';
+  if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-12', inputExample.amount = 10000;
+  if (name.includes('budgets_resetHold')) inputExample.month = '2025-12'; // no categoryId — tool operates on whole month
   if (name.includes('budgets_setCarryover')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.flag = true;
   if (name.includes('budgets_transfer')) inputExample.month = '2025-12', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
   if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
   if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
 
-      // Validate input parsing
-  try { mod.inputSchema.parse(inputExample); } catch (e) { /* ignore parse errors for optional inputs */ }
+      // Validate input parsing — only silently skip when no example was provided (tool may have required fields);
+      // if an example IS provided it must parse correctly, otherwise the test stub is wrong.
+  try {
+    mod.inputSchema.parse(inputExample);
+  } catch (e) {
+    if (Object.keys(inputExample).length > 0) {
+      throw new Error(`Schema parse failed for ${name} with provided example: ${e && e.message}`);
+    }
+    // empty example + schema requires fields: acceptable (no example provided for this tool)
+  }
 
   const res = await mod.call(inputExample);
       // ensure result serializable
       JSON.stringify(res);
+
+      // ── Correctness assertions ──────────────────────────────────────────
+      const n = name;
+      const shapeErr = (msg) => { throw new Error(`${n}: ${msg} (got: ${JSON.stringify(res).slice(0, 120)})`); };
+
+      // List/get tools that return a { result } wrapper
+      const resultWrappers = ['accounts_list', 'categories_get',
+        'payees_get', 'budgets_getMonth', 'budgets_getMonths', 'budgets_get_all',
+        'query_run', 'transactions_filter', 'transactions_get', 'transactions_import',
+        'bank_sync', 'budgets_setAmount', 'budgets_transfer'];
+      if (resultWrappers.includes(n)) {
+        if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
+      }
+
+      // Mutate / delete tools that return { success: true }
+      const successTools = ['accounts_close', 'accounts_delete', 'accounts_reopen', 'accounts_update',
+        'categories_delete', 'categories_update', 'category_groups_delete', 'category_groups_update',
+        'payees_delete', 'payees_merge', 'payees_update',
+        'rules_delete', 'rules_update',
+        'transactions_delete', 'transactions_update',
+        'budgets_resetHold', 'budgets_holdForNextMonth',
+        'budgets_setCarryover', 'budget_updates_batch'];
+      if (successTools.includes(n)) {
+        if (!res || res.success !== true) shapeErr(`expected success=true`);
+      }
+
+      // Tools with custom named keys (not { result })
+      if (n === 'category_groups_get') {
+        if (!Array.isArray(res?.groups)) shapeErr(`expected groups array`);
+      }
+      if (n === 'rules_get') {
+        if (!Array.isArray(res?.rules)) shapeErr(`expected rules array`);
+      }
+      if (n === 'payee_rules_get') {
+        if (!Array.isArray(res?.rules)) shapeErr(`expected rules array`);
+        if (typeof res?.count !== 'number') shapeErr(`expected count number`);
+      }
+
+      // Shape-specific assertions
+      if (n === 'accounts_get_balance') {
+        if (typeof res?.balance !== 'number') shapeErr(`expected numeric balance`);
+      }
+      if (n === 'server_info') {
+        if (!res?.server?.name) shapeErr(`expected server.name`);
+      }
+      if (n === 'session_list') {
+        if (typeof res?.totalSessions !== 'number') shapeErr(`expected totalSessions number`);
+      }
+      if (n.startsWith('transactions_search_by_')) {
+        if (!Array.isArray(res?.transactions)) shapeErr(`expected transactions array`);
+        if (typeof res?.count !== 'number') shapeErr(`expected count number`);
+      }
+      if (n.startsWith('transactions_summary_by_')) {
+        if (!Array.isArray(res?.summary)) shapeErr(`expected summary array`);
+        if (typeof res?.totalAmount !== 'number') shapeErr(`expected totalAmount number`);
+      }
+      // ────────────────────────────────────────────────────────────────────
+
       console.log('OK', name);
     } catch (e) {
       console.error('Tool failed:', name, e && e.message);

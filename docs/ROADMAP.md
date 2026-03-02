@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.4.9  
 **Purpose:** Future improvements and feature planning  
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -15,9 +15,9 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ## 📊 Roadmap Overview
 
-### Current State (v0.4.7)
+### Current State (v0.4.9)
 
-- ✅ **51 MCP tools** covering ~91% of Actual Budget API
+- ✅ **51 MCP tools** covering ~82% of Actual Budget API
 - ✅ **LibreChat & LobeChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
 - ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
@@ -38,7 +38,7 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 ### 🔴 High Priority
 
 #### 1. **Complete API Coverage (4 tools)**
-**Target**: v0.2.0 (January 2026)
+**Target**: v0.5.x (Q2 2026)
 
 **Features**:
 - [ ] Implement `actual_schedules_get`
@@ -308,14 +308,14 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 - Add comprehensive tests for schedule tools
 
 **Success Criteria**:
-- All 46 tools implemented
+- All 55 tools implemented (51 current + 4 schedules)
 - LibreChat integration verified
 - Documentation updated
 
 ---
 
 #### 2. **Security Hardening**
-**Target**: v0.2.0 (December 2025)
+**Target**: v0.5.x (Q2 2026)
 
 **Features**:
 - [ ] Add rate limiting middleware
@@ -339,7 +339,7 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 ---
 
 #### 3. **Improved Error Messages**
-**Target**: v0.2.0 (December 2025)
+**Target**: v0.5.x (Q2 2026)
 
 **Features**:
 - [ ] Actionable error messages for all tools
@@ -370,7 +370,7 @@ throw new Error(
 ---
 
 #### 4. **Multi-Budget Switching**
-**Target**: v0.2.0 (December 2025)
+**Target**: v0.5.x (Q2 2026)
 
 **Features**:
 - [ ] Add `actual_budgets_switch` tool
@@ -396,7 +396,9 @@ throw new Error(
 ### 🟠 Medium Priority
 
 #### 5. **Integration Test Suite**
-**Target**: v0.3.0 (January 2026)
+**Target**: v0.5.x (Q2 2026)
+
+> **Status (2026-03-02)**: The `tests/manual/` suite covers all 51 tools against a live MCP server across 6 levels (sanity → full). Playwright E2E covers 51/51 tools in Docker. The old `tests/integration/` directory was removed and replaced with comprehensive manual + Docker E2E coverage.
 
 **Features**:
 - [ ] Test multi-step workflows
@@ -419,7 +421,9 @@ throw new Error(
 ---
 
 #### 6. **Performance Optimization**
-**Target**: v0.3.0 (January 2026)
+**Target**: v0.5.x (Q2 2026)
+
+> **Status (2026-03-02)**: Connection pooling is implemented (`src/lib/ActualConnectionPool.ts`). Concurrency limiting (5 parallel ops) is active. Remaining items: response caching, pagination for large result sets.
 
 **Features**:
 - [ ] Add caching layer for read-heavy operations
@@ -439,6 +443,59 @@ throw new Error(
 - 50% reduction in response time for cached operations
 - Handle 10k+ transactions efficiently
 - Load testing passes
+
+---
+
+#### 6b. **New APIs Discovered in Official Docs (2026-03-02)**
+**Target**: v0.5.x (Q2 2026)
+
+During a review of the [official Actual Budget API reference](https://actualbudget.org/docs/api/reference) on 2026-03-02, the following APIs were found to be present in the upstream library but **not yet exposed as MCP tools**. These are lower-priority additions scheduled for a later release.
+
+---
+
+##### Tags CRUD (4 new tools)
+The API exposes a full Tags domain that is not yet implemented.
+
+**New tools**:
+- [ ] `actual_tags_get` — `getTags()` → `Promise<Tag[]>`
+- [ ] `actual_tags_create` — `createTag(tag)` → `Promise<id>`
+- [ ] `actual_tags_update` — `updateTag(id, fields)` → `Promise<null>`
+- [ ] `actual_tags_delete` — `deleteTag(id)` → `Promise<null>`
+
+**Tag object shape**:
+| Field | Type | Required | Notes |
+|-------|------|----------|-------|
+| `id` | id | no | Auto-generated |
+| `tag` | string | yes | The tag text |
+| `color` | string | no | Hex color string |
+| `description` | string | no | Free-text description |
+
+**Example**:
+```typescript
+await createTag({ tag: 'groceries', color: '#ff0000', description: 'Grocery shopping expenses' });
+```
+
+---
+
+##### Lookup by Name (1 new tool)
+- [ ] `actual_get_id_by_name` — `getIDByName(type, name)` → `Promise<string>`
+
+Resolves a human-readable name to a UUID for any of the following entity types: `accounts`, `schedules`, `categories`, `payees`. Useful for AI agents that receive a name from the user and need to pass an ID to other tools.
+
+**Parameters**: `type` (one of `accounts | schedules | categories | payees`), `name` (string)
+
+---
+
+##### Server Version (1 new tool)
+- [ ] `actual_server_get_version` — `getServerVersion()` → `Promise<{version: string} | {error: string}>`
+
+Returns the running Actual Budget server version string. Complements the existing `actual_server_info` tool with authoritative upstream version data.
+
+---
+
+**Total new tools**: 6  
+**Priority**: 🟡 Low — additive, no breaking changes  
+**Effort**: ~1 day implementation + tests per domain
 
 ---
 
@@ -671,41 +728,40 @@ throw new Error(
 
 ## 🎯 Version Milestones
 
-### v0.2.0 - "Complete & Secure" (December 2025)
-- ✅ 100% API coverage (46 tools)
-- ✅ Security hardening
-- ✅ Improved error messages
-- ✅ Multi-budget switching
+### v0.4.9 (March 2026) — Actual current state
+- ✅ 51 tools (82% API coverage)
+- ✅ Session management tools (`actual_session_list`, `actual_session_close`)
+- ✅ Server info tool (`actual_server_info`)
+- ✅ 6 exclusive ActualQL-powered search/summary tools
+- ✅ Connection pooling (`ActualConnectionPool.ts`)
+- ✅ Comprehensive test suite (unit, Docker E2E 51/51, manual integration)
+- [ ] Schedules tools — still pending
+- [ ] Security hardening (rate limiting, CSRF) — still pending
 
-### v0.3.0 - "Performance & Quality" (January 2026)
-- ✅ Integration test suite
-- ✅ Performance optimization
-- ✅ Caching layer
-- ✅ Connection pooling
+### v0.5.x - "API Complete + Security" (Q2 2026)
+- [ ] Schedules CRUD (4 tools)
+- [ ] Tags CRUD (4 tools)
+- [ ] `actual_get_id_by_name` lookup helper
+- [ ] Rate limiting + CSRF protection
+- [ ] Improved error messages
+- [ ] Multi-budget switching
 
-### v0.4.0 - "Feature Complete" (March 2026)
-- ✅ Report generation tools
-- ✅ Goal tracking tools
-- ✅ Advanced search
-- ✅ Natural language queries
+### v0.6.0 - "Feature Complete" (Q3 2026)
+- [ ] Report generation tools
+- [ ] Goal tracking tools
+- [ ] Advanced search & filtering
+- [ ] Natural language date ranges
 
-### v0.5.0 - "Production Grade" (May 2026)
-- ✅ Enhanced observability
-- ✅ Load testing
-- ✅ High availability
-- ✅ Documentation complete
+### v0.7.0 - "Production Grade" (Q4 2026)
+- [ ] Enhanced observability (OpenTelemetry, Grafana)
+- [ ] Load testing & benchmarks
+- [ ] Documentation complete
 
-### v0.6.0 - "Multi-Client" (August 2026)
-- ✅ Claude Desktop support
-- ✅ Custom client SDKs
-- ✅ REST API wrapper
-- ✅ Example applications
-
-### v1.0.0 - "Enterprise Ready" (August 2027)
-- ✅ RBAC & multi-tenant
-- ✅ Advanced integrations
-- ✅ ML/AI features
-- ✅ Full ecosystem
+### v1.0.0 - "Enterprise Ready" (2027)
+- [ ] RBAC & multi-tenant
+- [ ] Advanced integrations
+- [ ] ML/AI features
+- [ ] Full ecosystem
 
 ---
 
@@ -744,23 +800,24 @@ AI agents can help with:
 
 ## 🔄 Quarterly Reviews
 
-### Q4 2025 (October-December)
-**Focus**: Complete API coverage & security
+### Q4 2025 (October-December) — Completed
+**Actual delivered**:
+- ✅ 51 tools (above original 46-tool plan)
+- ✅ Session management tools added
+- ✅ 6 exclusive ActualQL search/summary tools added
+- ✅ Comprehensive Docker E2E test suite (51/51 tools)
+- ❌ Schedules tools — deferred
+- ❌ Rate limiting / CSRF — deferred
 
-**Deliverables**:
-- v0.2.0 release
-- 46 tools implemented
-- Security audit passed
-- Documentation updated
+### Q1 2026 (January-March) — In progress
+**Focus**: Test quality, documentation, remaining API coverage
 
-### Q1 2026 (January-March)
-**Focus**: Performance & quality
-
-**Deliverables**:
-- v0.3.0 & v0.4.0 releases
-- Integration tests complete
-- Performance benchmarks met
-- Report tools implemented
+**Delivered so far**:
+- ✅ Unit test suite (3 files, 51-tool smoke + 23 schema assertions)
+- ✅ Documentation audit and updates (ARCHITECTURE, TESTING, SECURITY)
+- ⏳ Tags CRUD tools (planned)
+- ⏳ Schedules tools (planned)
+- ⏳ Rate limiting (planned)
 
 ### Q2 2026 (April-June)
 **Focus**: Production readiness
@@ -788,8 +845,8 @@ AI agents can help with:
 
 | Metric | Current | v0.5.0 Target | v1.0.0 Target |
 |--------|---------|---------------|---------------|
-| **API Coverage** | 80% (42/46) | 100% (46/46) | 100% + reports |
-| **Test Coverage** | ~80% | 90% | 95% |
+| **API Coverage** | 82% (51 tools, missing schedules/tags) | ~90% (+ schedules, tags) | 100% + reports |
+| **Test Coverage** | 51/51 E2E, 3 unit files, 23 schema assertions | 90% | 95% |
 | **Response Time (p95)** | <500ms | <200ms | <100ms |
 | **Uptime** | N/A | 99.5% | 99.9% |
 | **Concurrent Users** | ~10 | ~100 | ~1000 |
@@ -854,4 +911,4 @@ AI agents can help with:
 
 **Timeline**: v1.0.0 targeted for August 2027 (21 months)
 
-**Next Milestone**: v0.2.0 "Complete & Secure" - December 2025
+**Next Milestone**: v0.5.x — Schedules, Tags, GetIDByName tools + security hardening (Q2 2026)
