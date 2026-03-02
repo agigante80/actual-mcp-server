@@ -27,7 +27,7 @@ export async function rulesTests(client, context) {
   const ruleWithoutOp = await callTool("actual_rules_create", {
     stage: "pre",
     conditionsOp: "and",
-    conditions: [{ field: "notes", op: "contains", value: "no-op-test" }],
+    conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-no-op-test" }],
     actions: [{ field: "category", value: context.categoryId }], // no 'op' — should default to 'set'
   });
   const ruleWithoutOpId = ruleWithoutOp.id || ruleWithoutOp.result || ruleWithoutOp;
@@ -53,7 +53,7 @@ export async function rulesTests(client, context) {
   const newRule = await callTool("actual_rules_create", {
     stage: "pre",
     conditionsOp: "and",
-    conditions: [{ field: "notes", op: "contains", value: "test-rule-marker" }],
+    conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-test-marker" }],
     actions: [{ op: "set", field: "category", value: context.categoryId }],
   });
   const ruleId = newRule.id || newRule.result || newRule;
@@ -69,8 +69,8 @@ export async function rulesTests(client, context) {
       console.log("  ❌ Verify create: rule not found in list (id:", ruleId, ")");
     } else {
       const cond = found.conditions?.[0];
-      if (cond?.value === "test-rule-marker") console.log(`  ✓ Verify create: condition value="${cond.value}"`);
-      else console.log(`  ❌ Verify create: expected condition value "test-rule-marker", got "${cond?.value}"`);
+      if (cond?.value === "MCP-Rule-test-marker") console.log(`  ✓ Verify create: condition value="${cond.value}"`);
+      else console.log(`  ❌ Verify create: expected condition value "MCP-Rule-test-marker", got "${cond?.value}"`);
     }
   }
 
@@ -81,7 +81,7 @@ export async function rulesTests(client, context) {
     fields: {
       stage: "pre",
       conditionsOp: "and",
-      conditions: [{ field: "notes", op: "contains", value: "updated-test-marker" }],
+      conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-updated-marker" }],
       actions: [{ op: "set", field: "category", value: context.categoryId }],
     },
   });
@@ -96,8 +96,8 @@ export async function rulesTests(client, context) {
       console.log("  ❌ Verify update: rule not found in list");
     } else {
       const cond = found.conditions?.[0];
-      if (cond?.value === "updated-test-marker") console.log(`  ✓ Verify update: condition value="${cond.value}"`);
-      else console.log(`  ❌ Verify update: expected condition value "updated-test-marker", got "${cond?.value}"`);
+      if (cond?.value === "MCP-Rule-updated-marker") console.log(`  ✓ Verify update: condition value="${cond.value}"`);
+      else console.log(`  ❌ Verify update: expected condition value "MCP-Rule-updated-marker", got "${cond?.value}"`);
     }
   }
 

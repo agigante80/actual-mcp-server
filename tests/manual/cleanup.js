@@ -57,6 +57,27 @@ export async function cleanupMcpTestAccounts(client) {
     closedCount++;
   }
 
+  // ---------- Rules ----------
+  // Rules have no name field — detected by any condition with value starting with "MCP-Rule-"
+  console.log("\n-- Scanning for MCP-Rule-* rules --");
+  const rulesData = await callTool("actual_rules_get", {});
+  const rulesList = rulesData.rules || rulesData.result || rulesData || [];
+  const mcpRules = Array.isArray(rulesList)
+    ? rulesList.filter(r =>
+        Array.isArray(r.conditions) &&
+        r.conditions.some(c => c.value && String(c.value).startsWith('MCP-Rule-'))
+      )
+    : [];
+  console.log(`✓ Found ${mcpRules.length} MCP-Rule-* rule(s)`);
+  let rulesDeleted = 0;
+  for (const rule of mcpRules) {
+    const marker = rule.conditions.find(c => c.value && String(c.value).startsWith('MCP-Rule-'))?.value;
+    await callTool("actual_rules_delete", { id: rule.id });
+    console.log(`  ✓ Deleted rule: condition value="${marker}"`);
+    rulesDeleted++;
+  }
+  if (rulesDeleted === 0) console.log("  (none found)");
+
   // ---------- Categories ----------
   console.log("\n-- Scanning for MCP-Cat-* categories --");
   const catsData = await callTool("actual_categories_get", {});
@@ -113,6 +134,7 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`  Accounts closed:          ${closedCount}`);
   console.log(`  Transactions deleted:      ${totalDeleted}`);
   console.log(`  Already closed (skipped):  ${alreadyClosedCount}`);
+  console.log(`  Rules deleted:             ${rulesDeleted}`);
   console.log(`  Categories deleted:        ${catsDeleted}`);
   console.log(`  Category groups deleted:   ${groupsDeleted}`);
   console.log(`  Payees deleted:            ${payeesDeleted}`);
@@ -158,4 +180,16 @@ export async function cleanupMcpTestAccounts(client) {
     : [];
   if (mcpPayeesAfter.length === 0) console.log(`  ✓ No MCP-Payee-* payees remain`);
   else mcpPayeesAfter.forEach(p => console.log(`  ❌ [STILL EXISTS] payee: "${p.name}"`));
-}
+  const rulesAfterData = await callTool("actual_rules_get", {});
+  const rulesAfterList = rulesAfterData.rules || rulesAfterData.result || rulesAfterData || [];
+  const mcpRulesAfter = Array.isArray(rulesAfterList)
+    ? rulesAfterList.filter(r =>
+        Array.isArray(r.conditions) &&
+        r.conditions.some(c => c.value && String(c.value).startsWith('MCP-Rule-'))
+      )
+    : [];
+  if (mcpRulesAfter.length === 0) console.log(`  ✓ No MCP-Rule-* rules remain`);
+  else mcpRulesAfter.forEach(r => {
+    const marker = r.conditions.find(c => c.value && String(c.value).startsWith('MCP-Rule-'))?.value;
+    console.log(`  ❌ [STILL EXISTS] rule: condition value="${marker}"`);
+  });}
