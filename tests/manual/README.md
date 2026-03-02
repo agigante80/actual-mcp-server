@@ -18,7 +18,7 @@ tests/manual/
 │                                 AbortController timeout, auto-reconnect/retry
 ├── cleanup.js                 ← standalone cleanup: finds and removes all
 │                                 MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-*
-│                                 data left by test runs
+│                                 / MCP-Rule-* data left by test runs
 └── tests/
     ├── sanity.js              ← read-only protocol checks (tool count, SQL, etc.)
     ├── smoke.js               ← sanity + account balances, categories, recent txns
@@ -44,7 +44,7 @@ tests/manual/
 | `normal` | Yes | Smoke + full account lifecycle (create → update → close → reopen) |
 | `extended` | Yes | Normal + category groups, categories, payees, transactions |
 | `full` | Yes | Extended + budgets, rules, advanced queries |
-| `cleanup` | Yes | Standalone: finds and deletes all MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-* data |
+| `cleanup` | Yes | Standalone: finds and deletes all MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-* / MCP-Rule-* data |
 
 Tests cascade upward — `extended` always includes `normal` which includes `smoke`.
 
@@ -118,6 +118,7 @@ cleaned up safely even after a partial or failed run.
 | Category group | `MCP-Group-{ISO-timestamp}` |
 | Category | `MCP-Cat-{ISO-timestamp}` |
 | Payee | `MCP-Payee-{ISO-timestamp}` |
+| Rule condition value | `MCP-Rule-{description}` |
 | Transaction notes | `MCP-Transaction-{ISO-timestamp}` |
 
 The `cleanup` level matches on these prefixes and is safe to run repeatedly.
