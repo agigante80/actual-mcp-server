@@ -709,47 +709,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 ---
 
-### Level 3: Integration Tests 🔄 (Medium: ~30s)
-
-**Purpose:** Test component interactions and real API behavior  
-**Location:** `tests/integration/`  
-**Command:** `npm run test:integration` (planned)
-
-**Coverage:**
-- ✅ Multiple tools working together
-- ✅ Session state management
-- ✅ Connection pooling behavior
-- ✅ Real Actual Budget API responses
-
-**Test Files (8 existing):**
-
-| Test File | Integration Scenario | Success Tests | Error Tests |
-|-----------|---------------------|---------------|-------------|
-| `test-account-validation.cjs` | Account field validation | ✅ Valid fields accepted | ❌ Invalid fields rejected |
-| `test-account-filtering.cjs` | Account filtering logic | ✅ Filter by criteria | ❌ Invalid filter params |
-| `test-amount-search-scenarios.cjs` | Transaction amount search | ✅ Range queries | ❌ Invalid amounts |
-| `test-search-tools-direct.cjs` | ActualQL search tools | ✅ Query execution | ❌ Malformed queries |
-| `e2e-smoke.test.ts` | Basic E2E flow | ✅ Initialize → Call tool | ❌ Connection failures |
-| `librechat-probe.test.ts` | LibreChat compatibility | ✅ Tool loading | ❌ Schema incompatibility |
-| `mcp-http.test.ts` | HTTP transport | ✅ Request/response | ❌ Malformed JSON-RPC |
-| `mock-actual-server.ts` | Mock server setup | ✅ Mock responses | ❌ N/A |
-
-**Success Criteria:**
-- Multi-tool workflows complete successfully
-- Session IDs persist across calls
-- Connection pool manages sessions correctly
-
-**Error Scenarios Tested:**
-- ❌ Session timeout handling
-- ❌ Connection pool exhaustion
-- ❌ Actual Budget server unavailable
-- ❌ Network timeout errors
-- ❌ Invalid session IDs
-- ❌ Concurrent request conflicts
-
----
-
-### Level 4: Protocol E2E Tests ⚡ (Fast: ~10s)
+### Level 3: Protocol E2E Tests ⚡ (Fast: ~10s)
 
 **Purpose:** Verify MCP protocol compliance  
 **Location:** `tests/e2e/mcp-client.playwright.spec.ts`  
