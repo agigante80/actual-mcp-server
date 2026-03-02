@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.16  
+**Version:** 0.4.17  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-03
 
