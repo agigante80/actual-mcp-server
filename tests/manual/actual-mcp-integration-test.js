@@ -1079,8 +1079,7 @@ async function cleanupMcpTestAccounts() {
   console.log(`\n✓ Found ${mcpTestAccounts.length} MCP-Test-* account(s)`);
 
   if (mcpTestAccounts.length === 0) {
-    console.log("  Nothing to clean up.");
-    return;
+    console.log("  (none found)");
   }
 
   let totalDeleted = 0;
@@ -1120,12 +1119,64 @@ async function cleanupMcpTestAccounts() {
     closedCount++;
   }
 
+  // ---------- Categories ----------
+  console.log("\n-- Scanning for MCP-Cat-* categories --");
+  const catsData = await callTool("actual_categories_get", {});
+  const catsResult = catsData.result || catsData || [];
+  const flatCats = Array.isArray(catsResult)
+    ? catsResult.flatMap(g => (g.categories && Array.isArray(g.categories)) ? g.categories : (g.id ? [g] : []))
+    : [];
+  const mcpCats = flatCats.filter(c => c && c.id && c.name && c.name.startsWith("MCP-Cat-"));
+  console.log(`✓ Found ${mcpCats.length} MCP-Cat-* categorie(s)`);
+  let catsDeleted = 0;
+  for (const cat of mcpCats) {
+    await callTool("actual_categories_delete", { id: cat.id });
+    console.log(`  ✓ Deleted category: "${cat.name}"`);
+    catsDeleted++;
+  }
+  if (catsDeleted === 0) console.log("  (none found)");
+
+  // ---------- Category Groups ----------
+  console.log("\n-- Scanning for MCP-Group-* category groups --");
+  const groupsData = await callTool("actual_category_groups_get", {});
+  const groupsList = groupsData.groups || groupsData || [];
+  const mcpGroups = Array.isArray(groupsList)
+    ? groupsList.filter(g => g && g.id && g.name && g.name.startsWith("MCP-Group-"))
+    : [];
+  console.log(`✓ Found ${mcpGroups.length} MCP-Group-* group(s)`);
+  let groupsDeleted = 0;
+  for (const grp of mcpGroups) {
+    await callTool("actual_category_groups_delete", { id: grp.id });
+    console.log(`  ✓ Deleted category group: "${grp.name}"`);
+    groupsDeleted++;
+  }
+  if (groupsDeleted === 0) console.log("  (none found)");
+
+  // ---------- Payees ----------
+  console.log("\n-- Scanning for MCP-Payee-* payees --");
+  const payeesData = await callTool("actual_payees_get", {});
+  const payeesList = payeesData.result || payeesData || [];
+  const mcpPayees = Array.isArray(payeesList)
+    ? payeesList.filter(p => p && p.id && p.name && p.name.startsWith("MCP-Payee"))
+    : [];
+  console.log(`✓ Found ${mcpPayees.length} MCP-Payee-* payee(s)`);
+  let payeesDeleted = 0;
+  for (const payee of mcpPayees) {
+    await callTool("actual_payees_delete", { id: payee.id });
+    console.log(`  ✓ Deleted payee: "${payee.name}"`);
+    payeesDeleted++;
+  }
+  if (payeesDeleted === 0) console.log("  (none found)");
+
   console.log(`\n========================================`);
   console.log(`CLEANUP SUMMARY`);
   console.log(`========================================`);
   console.log(`  Accounts closed:          ${closedCount}`);
   console.log(`  Transactions deleted:      ${totalDeleted}`);
   console.log(`  Already closed (skipped):  ${alreadyClosedCount}`);
+  console.log(`  Categories deleted:        ${catsDeleted}`);
+  console.log(`  Category groups deleted:   ${groupsDeleted}`);
+  console.log(`  Payees deleted:            ${payeesDeleted}`);
 
   // Post-cleanup verification: re-fetch and show current state of all MCP-Test-* accounts
   console.log(`\n-- Verifying account state post-cleanup --`);
@@ -1149,6 +1200,42 @@ async function cleanupMcpTestAccounts() {
     console.log(`\n✓ All ${mcpAfter.length} MCP-Test-* account(s) confirmed closed.`);
   } else {
     console.log(`\n❌ ${verifyFailed} account(s) are still open — manual intervention may be needed.`);
+  }
+
+  // Post-cleanup verification: categories, groups, payees
+  console.log(`\n-- Verifying category/group/payee state post-cleanup --`);
+  const catsAfterData = await callTool("actual_categories_get", {});
+  const catsAfterResult = catsAfterData.result || catsAfterData || [];
+  const flatCatsAfter = Array.isArray(catsAfterResult)
+    ? catsAfterResult.flatMap(g => (g.categories && Array.isArray(g.categories)) ? g.categories : (g.id ? [g] : []))
+    : [];
+  const mcpCatsAfter = flatCatsAfter.filter(c => c && c.id && c.name && c.name.startsWith("MCP-Cat-"));
+  if (mcpCatsAfter.length === 0) {
+    console.log(`  ✓ No MCP-Cat-* categories remain`);
+  } else {
+    mcpCatsAfter.forEach(c => console.log(`  ❌ [STILL EXISTS] category: "${c.name}"`));
+  }
+
+  const groupsAfterData = await callTool("actual_category_groups_get", {});
+  const groupsAfterList = groupsAfterData.groups || groupsAfterData || [];
+  const mcpGroupsAfter = Array.isArray(groupsAfterList)
+    ? groupsAfterList.filter(g => g && g.id && g.name && g.name.startsWith("MCP-Group-"))
+    : [];
+  if (mcpGroupsAfter.length === 0) {
+    console.log(`  ✓ No MCP-Group-* category groups remain`);
+  } else {
+    mcpGroupsAfter.forEach(g => console.log(`  ❌ [STILL EXISTS] group: "${g.name}"`));
+  }
+
+  const payeesAfterData = await callTool("actual_payees_get", {});
+  const payeesAfterList = payeesAfterData.result || payeesAfterData || [];
+  const mcpPayeesAfter = Array.isArray(payeesAfterList)
+    ? payeesAfterList.filter(p => p && p.id && p.name && p.name.startsWith("MCP-Payee"))
+    : [];
+  if (mcpPayeesAfter.length === 0) {
+    console.log(`  ✓ No MCP-Payee-* payees remain`);
+  } else {
+    mcpPayeesAfter.forEach(p => console.log(`  ❌ [STILL EXISTS] payee: "${p.name}"`));
   }
 }
 
