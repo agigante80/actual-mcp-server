@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
 # deploy-and-test.sh
-# Periodic maintenance script:
+# Periodic maintenance / update script.
+#
+# PREREQUISITES — all four services must already be installed, configured,
+# and running before this script is used for the first time:
+#
+#   • Actual Budget   (Finance-actual-budget/docker-compose.yml)
+#   • Actual MCP Server (actual-mcp-server/docker-compose-local-build.yaml)
+#   • LibreChat       (LibreChat/docker-compose.yml)
+#   • LobeChat        (lobechatAI/docker-compose.yml)
+#
+# This script does NOT perform first-time installation. It simply keeps
+# everything up to date and verifies the MCP server is working correctly:
+#
 #   1. Sync latest dev code → docker build folder & rebuild MCP image
 #   2. Pull latest upstream images (actual-budget, librechat, lobechat)
-#   3. Recreate MCP server container
-#   4. Independently restart LibreChat
-#   5. Independently restart LobeChat
-#   6. Wait for MCP server health
+#   3. Recreate MCP server container          (new code takes effect)
+#   4. Independently restart LibreChat        (picks up new image if any)
+#   5. Independently restart LobeChat         (picks up new image if any)
+#   6. Wait for MCP server health check to pass
 #   7. Run full integration test suite with auto-cleanup
 #
 # Usage:
