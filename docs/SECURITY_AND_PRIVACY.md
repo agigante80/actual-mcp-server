@@ -46,9 +46,8 @@ MCP_SSE_AUTHORIZATION=your_generated_token
 
 **Security Properties**:
 - ✅ Stateless - no session management needed
-- ✅ Works with HTTP transport (recommended) and SSE transport
+- ✅ Works with HTTP transport
 - ✅ Can be rotated without restarting server
-- ⚠️ SSE transport: Server validates but LibreChat client doesn't send headers
 
 #### 2. **Password-Based (Actual Budget)**
 

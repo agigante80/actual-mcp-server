@@ -38,11 +38,10 @@ const argsEarly = process.argv.slice(2);
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const usageEarly = `
-Usage: npm run dev -- [--sse | --http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: npm run dev -- [--http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
-  --sse                    Start SSE MCP server
-  --http                   Start HTTP MCP server (recommended)
+  --http                   Start HTTP MCP server
   --test-actual-connection Test connecting to Actual and exit
   --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
@@ -83,7 +82,6 @@ export {};
 
   const [
     { startHttpServer },
-    { startSseServer },
     loggerModule,
     osModule,
     utilsModule,
@@ -91,7 +89,6 @@ export {};
     zodToJsonSchemaModule,
   ] = await Promise.all([
     import('./server/httpServer.js'),
-    import('./server/sseServer.js'),
     import('./logger.js'),
     import('os'),
     import('./utils.js'),
@@ -129,11 +126,9 @@ export {};
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;
-  const SSE_PATH = process.env.MCP_SSE_PATH || '/sse';
   const HTTP_PATH = process.env.MCP_HTTP_PATH || '/http';
 
   const args = process.argv.slice(2);
-  const useSSE = args.includes('--sse');
   const useHttp = args.includes('--http');
 
   const useTestActualConnection = args.includes('--test-actual-connection');
@@ -294,26 +289,13 @@ export {};
         // advertised URL shown to clients
         advertisedUrl
       );
-    } else if (useSSE) {
-      logger.info('Mode: SSE');
-      await startSseServer(
-        mcp,
-        PORT,
-        SSE_PATH,
-        capabilities,
-        implementedTools,
-        SERVER_DESCRIPTION,
-        SERVER_INSTRUCTIONS,
-        toolSchemas,
-        version
-      );
     }
 
     logger.info('---------');
     logger.info('Starting MCP bridge server...');
 
-    if ([useSSE, useHttp].filter(Boolean).length !== 1) {
-      logger.error('❌ Please specify exactly one mode: --sse or --http');
+    if (!useHttp) {
+      logger.error('❌ Please specify a transport mode: --http');
       process.exit(1);
     }
   }

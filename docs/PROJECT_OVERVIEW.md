@@ -21,7 +21,6 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 - **Conversational Finance Management**: Users can manage their budget, transactions, and financial data by simply talking to an AI assistant
 - **AI-Native API Bridge**: Standardized MCP tools make Actual Budget accessible to any MCP-compatible AI client
 - **Production-Ready Integration**: Fully tested and verified with LibreChat, ready for deployment
-- **Multi-Transport Support**: HTTP and Server-Sent Events (SSE) transport protocols
 - **Secure by Default**: Bearer token authentication, HTTPS support, and privacy-first design
 
 ### Problem Being Solved
@@ -65,12 +64,9 @@ Comprehensive coverage of Actual Budget functionality across 11 categories:
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
 > 📊 **README enhanced** with comprehensive badges and improved discoverability
 
-### 🔄 **Transport Protocols**
+### 🔄 **Transport Protocol**
 
-- **HTTP (Recommended)**: `streamable-http` transport with Bearer token auth - **fully verified with LibreChat**
-- **Server-Sent Events (SSE)**: Alternative streaming transport (auth limitations in LibreChat)
-
-**Docker Default**: HTTP transport enabled by default, configurable via `MCP_TRANSPORT_MODE` environment variable
+- **HTTP**: `streamable-http` transport with Bearer token auth - **fully verified with LibreChat**
 
 ### 🔐 **Security & Authentication**
 
@@ -112,7 +108,7 @@ Comprehensive coverage of Actual Budget functionality across 11 categories:
 |------------|---------|---------|
 | `@actual-app/api` | ^26.2.1 | Official Actual Budget API client |
 | `@modelcontextprotocol/sdk` | ^1.25.2 | MCP protocol implementation |
-| `express` | ^5.2.1 | HTTP/SSE server framework |
+| `express` | ^5.2.1 | HTTP server framework |
 | `winston` | ^3.18.3 | Structured logging |
 | `zod` | 3.25.76 ⚠️ | Runtime type validation (pinned — do NOT upgrade to 4.x) |
 | `date-fns` | ^4.1.0 | Date manipulation |
@@ -185,7 +181,7 @@ mcpServers:
 - **Tool Registry**: `ActualToolsManager` - Dynamic tool registration and dispatch
 - **Connection Manager**: `actualConnection.ts` - API lifecycle management
 - **Adapter Layer**: `actual-adapter.ts` - Error handling, retry logic, concurrency control
-- **Transport Servers**: HTTP and SSE implementations using official MCP SDK
+- **Transport Servers**: HTTP transport using official MCP SDK
 
 ---
 
@@ -203,12 +199,7 @@ mcpServers:
    - Switching budgets requires reconnection
    - Multi-budget support exists but requires workflow improvements
 
-3. **LibreChat SSE Authentication**
-   - LibreChat's SSE client doesn't send custom headers
-   - Workaround: Use HTTP transport for authenticated deployments
-   - Status: LibreChat limitation, not MCP server issue
-
-4. **Alpine Native Module Warnings**
+3. **Alpine Native Module Warnings**
    - `@actual-app/api` shows native module warnings on Alpine Linux
    - Impact: Non-blocking warnings, functionality not affected
    - Status: Known issue, considered acceptable
