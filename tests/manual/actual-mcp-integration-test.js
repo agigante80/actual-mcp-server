@@ -3,10 +3,20 @@
 //   This script connects to an MCP (Model Context Protocol) server exposing the
 //   Actual Budget API. It supports multiple testing levels:
 //
+//   SANITY TESTS:
+//     Protocol-level checks with zero writes. Fastest way to verify a deployment:
+//     - Initialize MCP session and assert session ID
+//     - Assert exact tool count (EXPECTED_TOOL_COUNT env var, default 51)
+//     - actual_server_info
+//     - actual_accounts_list (assert response has content)
+//     - actual_transactions_filter (read-only)
+//     - actual_query_run with valid SQL
+//     - Assert GraphQL syntax is rejected
+//     - Assert invalid SQL field is rejected
+//
 //   SMOKE TESTS:
 //     Quick connectivity and core API checks. Focused on basic functionality:
-//     - Initialize MCP session
-//     - List available tools (49 tools)
+//     - All SANITY tests
 //     - List accounts
 //     - List categories
 //
@@ -34,25 +44,36 @@
 //     Parameters:
 //       MCP_URL  - MCP server URL (default: http://localhost:3600/http)
 //       TOKEN    - Bearer token for authentication
-//       LEVEL    - Test level: smoke, normal, or full
+//       LEVEL    - Test level: sanity, smoke, normal, or full
 //       CLEANUP  - Optional cleanup behavior:
 //                  'yes' or 'y' - Auto-delete test data
 //                  'no' or 'n'  - Preserve test data
 //                  (omitted)    - Interactive prompt with 10s timeout
 //     
+//     Environment variables:
+//       EXPECTED_TOOL_COUNT  Expected number of registered tools (default: 51)
+//
 //     Examples:
+//       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN sanity
 //       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN smoke
 //       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN normal no
 //       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN full yes
+//       EXPECTED_TOOL_COUNT=51 node actual-mcp-integration-test.js http://localhost:3600/http TOKEN sanity
 
 import fetch from 'node-fetch';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { config as loadDotenv } from 'dotenv';
 
-const MCP_URL = process.argv[2] || "http://localhost:3600/http";
+// Load .env from project root (works when run via npm scripts or from project root)
+loadDotenv();
+
+const MCP_URL = process.argv[2] || process.env.MCP_SERVER_URL || "http://localhost:3600/http";
 let token = process.argv[3] ? `Bearer ${process.argv[3]}` : (process.env.MCP_AUTH_TOKEN ? `Bearer ${process.env.MCP_AUTH_TOKEN}` : null);
-let level = process.argv[4] ? process.argv[4].toLowerCase() : null;
+let level = (process.argv[4] || process.env.MCP_TEST_LEVEL || '').toLowerCase() || null;
 let cleanup = process.argv[5] ? process.argv[5].toLowerCase() : null; // 'yes', 'no', or null for prompt
+
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '51', 10);
 
 // Get Actual Budget server URL from environment
 const ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL || "http://localhost:5006";
@@ -164,21 +185,99 @@ async function callTool(toolName, args = {}) {
 // TEST GROUPS
 // -------------------------------
 
+async function sanityTests() {
+  console.log("\n-- Running SANITY TESTS (read-only protocol checks) --");
+
+  // 1. Tool count
+  const tools = await listTools();
+  if (tools.length !== EXPECTED_TOOL_COUNT) {
+    throw new Error(`Expected ${EXPECTED_TOOL_COUNT} tools, got ${tools.length}`);
+  }
+  console.log(`✓ Tool count: ${tools.length} (expected ${EXPECTED_TOOL_COUNT})`);
+
+  // 2. Server info
+  console.log("\nChecking server info...");
+  await callTool("actual_server_info", {});
+  console.log("✓ Server info returned successfully");
+
+  // 3. Accounts list (assert content)
+  console.log("\nListing accounts...");
+  const accounts = await callTool("actual_accounts_list", {});
+  if (!Array.isArray(accounts)) throw new Error("actual_accounts_list did not return an array");
+  console.log(`✓ Accounts listed: ${accounts.length}`);
+
+  // 4. Transactions filter (read-only)
+  console.log("\nFiltering transactions...");
+  await callTool("actual_transactions_filter", { account: null });
+  console.log("✓ Transactions filter returned successfully");
+
+  // 5. Valid SQL query
+  console.log("\nRunning SQL query...");
+  await callTool("actual_query_run", { query: "SELECT id FROM accounts LIMIT 1" });
+  console.log("✓ SQL query executed successfully");
+
+  // 6. GraphQL must be rejected
+  console.log("\nChecking GraphQL rejection...");
+  try {
+    await callTool("actual_query_run", { query: "{transactions{id}}" });
+    throw new Error("GraphQL syntax was accepted - should have been rejected");
+  } catch (err) {
+    if (err.message.includes("GraphQL syntax was accepted")) throw err;
+    console.log("✓ GraphQL syntax correctly rejected");
+  }
+
+  // 7. Invalid SQL field must be rejected
+  console.log("\nChecking invalid field rejection...");
+  try {
+    await callTool("actual_query_run", { query: "SELECT payee_name FROM transactions LIMIT 1" });
+    throw new Error("Invalid field 'payee_name' was accepted - should have been rejected");
+  } catch (err) {
+    if (err.message.includes("payee_name' was accepted")) throw err;
+    if (!err.message.includes("payee_name")) throw new Error(`Wrong error for invalid field: ${err.message}`);
+    console.log("✓ Invalid SQL field correctly rejected");
+  }
+
+  console.log("\n✓ All sanity checks passed");
+}
+
 async function smokeTests() {
   console.log("\n-- Running SMOKE TESTS --");
-  
-  const tools = await listTools();
-  console.log("Available tools sample:", tools.slice(0, 5).map(t => t.name).join(", "), "...");
-  
-  // Test basic account listing
-  console.log("\nTesting account list...");
-  const accounts = await callTool("actual_accounts_list", {});
-  console.log(`✓ Found ${accounts.length} accounts`);
-  
-  // Test category listing
+
+  await sanityTests();
+
+  // Additional read checks
   console.log("\nTesting category list...");
   const categories = await callTool("actual_categories_get", {});
-  console.log(`✓ Found ${categories.grouped ? Object.keys(categories.grouped).length : 0} category groups`);
+  const categoryCount = Array.isArray(categories) ? categories.length : 0;
+  console.log(`\u2713 Found ${categoryCount} categories`);
+
+  console.log("\nTesting category groups...");
+  const groups = await callTool("actual_category_groups_get", {});
+  const groupCount = Array.isArray(groups) ? groups.length : (groups && typeof groups === 'object' ? Object.keys(groups).length : 0);
+  console.log(`\u2713 Found ${groupCount} category groups`);
+
+  // List accounts with balances
+  console.log("\nListing accounts...");
+  const accounts = await callTool("actual_accounts_list", {});
+  if (!Array.isArray(accounts) || accounts.length === 0) {
+    console.log("  (no accounts found)");
+  } else {
+    for (const a of accounts) {
+      const balData = await callTool("actual_accounts_get_balance", { id: a.id });
+      const bal = typeof balData?.balance === 'number' ? (balData.balance / 100).toFixed(2) : 'n/a';
+      console.log(`  • ${a.name}  [${a.id}]  balance: ${bal}`);
+    }
+  }
+
+  // Last 3 transactions across all accounts
+  console.log("\nLast 3 transactions...");
+  const txns = await callTool("actual_transactions_filter", { account: null });
+  const recent = Array.isArray(txns) ? txns.slice(0, 3) : [];
+  if (recent.length === 0) {
+    console.log("  (no transactions found)");
+  } else {
+    recent.forEach(t => console.log(`  • ${t.date}  ${(t.amount / 100).toFixed(2)}  ${t.notes || t.imported_payee || t.payee_name || ''}`.trimEnd()));
+  }
 }
 
 async function accountTests(context) {
@@ -192,6 +291,35 @@ async function accountTests(context) {
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const accountName = `MCP-Test-${timestamp}`;
   
+  // Helper: list all accounts and verify presence/absence of a specific account.
+  // expectPresent=true  → account must be in list; check(account) must return true
+  // expectPresent=false → account must NOT be in list (closed accounts are excluded by the API)
+  async function listAndVerify(label, id, expectPresent, check) {
+    const all = await callTool("actual_accounts_list", {});
+    const found = Array.isArray(all) ? all.find(a => a.id === id) : null;
+    const total = Array.isArray(all) ? all.length : 0;
+    if (!expectPresent) {
+      if (!found) {
+        console.log(`  ✓ ${label}: account correctly absent from list (closed accounts excluded) [${total} open accounts]`);
+      } else {
+        console.log(`  ❌ ${label}: expected account to be absent but it was found`);
+        console.log(`     Account: ${JSON.stringify(found)}`);
+      }
+    } else {
+      if (!found) {
+        console.log(`  ❌ ${label}: account NOT found in list (${total} accounts)`);
+      } else {
+        const ok = check(found);
+        if (ok === true) {
+          console.log(`  ✓ ${label}: account found [ name="${found.name}", offbudget=${found.offbudget}, closed=${found.closed} ] [${total} accounts]`);
+        } else {
+          console.log(`  ❌ ${label}: account found but assertion failed — ${ok}`);
+          console.log(`     Account: ${JSON.stringify(found)}`);
+        }
+      }
+    }
+  }
+
   console.log("\nCreating test account...");
   const newAcc = await callTool("actual_accounts_create", { 
     name: accountName,
@@ -202,6 +330,9 @@ async function accountTests(context) {
   console.log("  Account ID:", accountId);
   context.accountId = accountId;
   context.accountName = accountName;
+
+  await listAndVerify("After creation", accountId, true,
+    a => (a.name === accountName && !a.closed) || `expected name="${accountName}" closed=false`);
   
   // Get balance
   console.log("\nGetting account balance...");
@@ -210,14 +341,18 @@ async function accountTests(context) {
   
   // REGRESSION TEST: Update multiple account fields (tests strict validation)
   console.log("\nREGRESSION: Updating multiple account fields (name, offbudget)...");
+  const updatedName = accountName + "-Updated";
   await callTool("actual_accounts_update", { 
     id: accountId,
     fields: { 
-      name: accountName + "-Updated",
+      name: updatedName,
       offbudget: true
     }
   });
   console.log("✓ Account updated with multiple fields");
+
+  await listAndVerify("After update", accountId, true,
+    a => (a.name === updatedName && a.offbudget === true) || `expected name="${updatedName}" offbudget=true, got name="${a.name}" offbudget=${a.offbudget}`);
   
   // REGRESSION TEST: Try to update with invalid field (should fail with clear error)
   console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
@@ -234,16 +369,39 @@ async function accountTests(context) {
       console.log("⚠ Different error than expected:", err.message);
     }
   }
-  
+
+  // Add a dummy transaction so the account has numTransactions > 0.
+  // IMPORTANT: closeAccount() in the Actual API tombstones (hard-deletes) accounts
+  // with zero transactions instead of marking them closed=1. A tombstoned account
+  // is invisible to getAccounts (tombstone=0 filter) and cannot be reopened.
+  // Adding a transaction (even amount=0) forces the proper close path (sets closed=1).
+  // We use amount=0 so the balance stays at 0, allowing close without transferAccountId.
+  console.log("\nAdding dummy transaction (amount=0) to prevent tombstone-on-close...");
+  const today = new Date().toISOString().slice(0, 10);
+  await callTool("actual_transactions_create", {
+    account: accountId,
+    date: today,
+    amount: 0,
+    notes: "Test transaction for close/reopen lifecycle"
+  });
+  console.log("✓ Dummy transaction added (balance stays 0)");
+
   // Close account
   console.log("\nClosing account...");
   await callTool("actual_accounts_close", { id: accountId });
   console.log("✓ Account closed");
-  
+
+  // After close with numTransactions > 0: account stays in the list with closed=true
+  await listAndVerify("After close", accountId, true,
+    a => (a.closed === true) || `expected closed=true, got closed=${a.closed}`);
+
   // Reopen account
   console.log("\nReopening account...");
   await callTool("actual_accounts_reopen", { id: accountId });
   console.log("✓ Account reopened");
+
+  await listAndVerify("After reopen", accountId, true,
+    a => (a.closed === false) || `expected closed=false, got closed=${a.closed}`);
 }
 
 async function categoryTests(context) {
@@ -706,7 +864,7 @@ async function run() {
   }
 
   if (!level) {
-    level = (await rl.question("Select test level (smoke / normal / full) [default: smoke]: ")).toLowerCase() || "smoke";
+    level = (await rl.question("Select test level (sanity / smoke / normal / full) [default: sanity]: ")).toLowerCase() || "sanity";
   }
 
   console.log(`Test level: ${level.toUpperCase()}\n`);
@@ -717,7 +875,15 @@ async function run() {
 
     const context = {};
 
-    // Basic smoke test
+    // Sanity: protocol-only, no writes
+    if (level === "sanity") {
+      await sanityTests();
+      console.log("\n✓ Sanity checks completed successfully!");
+      await rl.close();
+      return;
+    }
+
+    // Smoke: sanity + extra read checks
     await smokeTests();
 
     if (level === "smoke") {

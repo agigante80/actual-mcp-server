@@ -1,3 +1,45 @@
+─────────────────────────────────────────────────────────────────────────────────
+PURPOSE
+  This file is a manual E2E test prompt for the Actual MCP Server.
+  Copy the entire content below the separator and paste it into an AI chat
+  session (LibreChat, LobeChat, or any MCP-enabled client) that already has
+  the actual-mcp-server connected.
+
+  The AI will then autonomously invoke all 51 MCP tools one by one, report
+  pass/fail for each, and produce a final summary.
+
+HOW TO USE
+  1. Make sure the MCP server is running and connected to the chat platform.
+  2. Open a new chat session with a model that has MCP tool access.
+  3. Copy everything below the "─── PROMPT START" line and paste it as your
+     message. Do not edit the prompt content.
+  4. The AI will start automatically with Phase 1 (actual_server_info) and
+     continue through all 12 phases without stopping for confirmation.
+  5. Review the final summary for any failures (✗) or informational items (ℹ).
+
+WHAT IT TESTS (12 phases, 51 tools)
+  Phase 1  – Server & Read-Only    (5 tools)
+  Phase 2  – Accounts              (7 tools)
+  Phase 3  – Category Groups & Categories (8 tools)
+  Phase 4  – Payees                (6 tools)
+  Phase 5  – Rules                 (4 tools)
+  Phase 6  – Transactions         (11 tools)
+  Phase 7  – Transaction Summaries (2 tools)
+  Phase 8  – Budgets               (9 tools)
+  Phase 9  – Advanced Query & Sync (2 tools)
+  Phase 10 – Session Management    (2 tools)
+  Phase 11 – Concurrency (optional, skipped by default)
+  Phase 12 – Cleanup
+
+NOTES
+  - Test data is named with timestamps (e.g. "Test-Account-2025-12-16").
+    Update the timestamp references inside the prompt if you want cleaner logs.
+  - The prompt instructs the AI to clean up all created data at the end.
+  - Failed phases halt execution; informational results (e.g. no bank
+    connection) do not count as failures.
+─────────────────────────────────────────────────────────────────────────────────
+─── PROMPT START ────────────────────────────────────────────────────────────────
+
 I want you to systematically test all 51 Actual Budget MCP tools available to you. Follow these rules:
 
 **Preflight Assumptions:**
