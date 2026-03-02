@@ -6,9 +6,9 @@
  *   node scripts/version-bump.js [major|minor|patch|sync]
  *
  * Modes:
- *   major / minor / patch  — bump VERSION + package.json + sync **Version:** in docs
- *   sync                   — only update **Version:** markers in docs to match
- *                            the current VERSION file (no bump)
+ *   major / minor / patch  — bump VERSION + package.json + sync **Version:** and **Tool Count:** in docs
+ *   sync                   — only update **Version:** and **Tool Count:** markers in docs
+ *                            to match the current VERSION file and actualToolsManager.ts (no bump)
  *
  * npm scripts:
  *   npm run release:major    →  node scripts/version-bump.js major
@@ -48,9 +48,16 @@ if (!syncOnly) {
   console.log(`Syncing **Version:** markers to current version: ${currentVersion}`);
 }
 
-// ── Auto-update **Version:** markers in docs ────────────────────────────────
-// Matches: `**Version:** X.Y.Z`  anywhere in a markdown file
-const versionPattern = /(\*\*Version:\*\*\s*)\d+\.\d+\.\d+/g;
+// ── Compute current tool count from actualToolsManager.ts ──────────────────
+const managerSrc = fs.readFileSync(path.join('src', 'actualToolsManager.ts'), 'utf8');
+const toolCount = (managerSrc.match(/^\s*'actual_/gm) || []).length;
+console.log(`Tool count (from actualToolsManager.ts): ${toolCount}`);
+
+// ── Auto-update **Version:** and **Tool Count:** markers in docs ─────────────
+// **Version:** X.Y.Z  — version marker
+// **Tool Count:** N   — tool count marker (number immediately after the colon+space)
+const versionPattern   = /(\*\*Version:\*\*\s*)\d+\.\d+\.\d+/g;
+const toolCountPattern = /(\*\*Tool Count:\*\*\s*)\d+/g;
 
 const docsToUpdate = [
   'README.md',
@@ -62,7 +69,8 @@ const updatedDocs = [];
 for (const file of docsToUpdate) {
   if (!fs.existsSync(file)) continue;
   const original = fs.readFileSync(file, 'utf8');
-  const updated = original.replace(versionPattern, `$1${targetVersion}`);
+  let updated = original.replace(versionPattern, `$1${targetVersion}`);
+  updated = updated.replace(toolCountPattern, `$1${toolCount}`);
   if (updated !== original) {
     fs.writeFileSync(file, updated);
     updatedDocs.push(file);
@@ -70,9 +78,9 @@ for (const file of docsToUpdate) {
 }
 
 if (updatedDocs.length > 0) {
-  console.log(`📝 Updated **Version:** in: ${updatedDocs.join(', ')}`);
+  console.log(`📝 Updated markers in: ${updatedDocs.join(', ')}`);
 } else {
-  console.log(`ℹ️  No **Version:** markers needed updating`);
+  console.log(`ℹ️  No markers needed updating`);
 }
 
 if (!syncOnly) {
@@ -82,5 +90,5 @@ if (!syncOnly) {
   console.log(`   git commit -m "chore(release): bump version to ${targetVersion}"`);
   console.log(`   git tag -a "v${targetVersion}" -m "Release v${targetVersion}"`);
 } else {
-  console.log(`✅ Docs synced to v${targetVersion}`);
+  console.log(`✅ Docs synced to v${targetVersion} / ${toolCount} tools`);
 }
