@@ -167,19 +167,41 @@ The `context` object is a plain mutable object passed by reference through the t
 
 ## Refactoring Steps (ordered)
 
-1. **Extract `mcp-client.js`** — move transport code, wire `createClient`. All globals become closure state. Run `npm run test:integration:sanity` to confirm parity.
+> **Status: COMPLETE** — committed `3bbb3f9` on `develop` (2026-03-02).
+> All steps were performed in a single pass. The monolith is preserved as
+> `actual-mcp-integration-test.MONOLITH.js` until a live end-to-end test
+> confirms the new entry point (`index.js`) works correctly, after which
+> it can be deleted.
 
-2. **Extract `cleanup.js`** — move `cleanupMcpTestAccounts`. Run `npm run test:integration:cleanup`.
+1. ✅ **Extract `mcp-client.js`** — `createClient({ url, rl })` owns all transport globals.
+2. ✅ **Extract `cleanup.js`** — `cleanupMcpTestAccounts(client)`, no context dependency.
+3. ✅ **Extract `tests/sanity.js`** — `sanityTests(client)`.
+4. ✅ **Extract `tests/smoke.js`** — `smokeTests(client)`, imports sanity.
+5. ✅ **Extract `tests/account.js` → `tests/advanced.js`** — one file per domain; composites in `advanced.js`.
+6. ✅ **Extract `runner.js`** — orchestrates all modules; only file that calls `process.exit()`.
+7. ✅ **`index.js`** created as 7-line entry point.
+8. ⏳ **Delete the monolith** — run `npm run test:integration:sanity` to confirm parity, then `git rm tests/manual/actual-mcp-integration-test.MONOLITH.js`.
 
-3. **Extract `tests/sanity.js`** — smallest, safest module. Verify via sanity run.
+### Actual file sizes (vs planned estimates)
 
-4. **Extract `tests/smoke.js`** — depends only on sanity. Verify via smoke run.
+| File | Estimated | Actual |
+|---|---|---|
+| `mcp-client.js` | ~100 | 180 |
+| `cleanup.js` | ~140 | 161 |
+| `runner.js` | ~120 | 208 |
+| `index.js` | ≤5 | 7 |
+| `tests/sanity.js` | ~80 | 73 |
+| `tests/smoke.js` | ~60 | 62 |
+| `tests/account.js` | ~130 | 123 |
+| `tests/category-group.js` | ~60 | 62 |
+| `tests/category.js` | ~70 | 69 |
+| `tests/payee.js` | ~100 | 117 |
+| `tests/transaction.js` | ~90 | 97 |
+| `tests/budget.js` | ~120 | 146 |
+| `tests/rules.js` | ~90 | 91 |
+| `tests/advanced.js` | ~50 | 81 |
 
-5. **Extract `tests/account.js`** through **`tests/advanced.js`** — one module at a time, running the corresponding level after each extraction.
-
-6. **Extract `runner.js`** — wire all modules together, keep `index.js` as thin entry point.
-
-7. **Delete the original monolith** after all levels pass.
+All files remain well under the 400-line limit.
 
 ---
 
@@ -194,21 +216,26 @@ The `context` object is a plain mutable object passed by reference through the t
 
 ---
 
-## npm Scripts to Add
+## npm Scripts (as implemented)
 
 ```jsonc
-// package.json scripts (additions)
-"test:integration:sanity":   "node tests/manual/index.js $MCP_SANITY_ARGS",
-"test:integration:smoke":    "node tests/manual/index.js $MCP_SMOKE_ARGS",
-"test:integration:normal":   "node tests/manual/index.js $MCP_NORMAL_ARGS",
-"test:integration:extended": "node tests/manual/index.js $MCP_EXTENDED_ARGS",
-"test:integration:full":     "node tests/manual/index.js $MCP_FULL_ARGS",
-"test:integration:cleanup":  "node tests/manual/index.js $MCP_URL $MCP_TOKEN cleanup"
+// package.json scripts (current state)
+"test:integration":          "MCP_TEST_LEVEL=sanity node tests/manual/index.js",
+"test:integration:sanity":   "MCP_TEST_LEVEL=sanity node tests/manual/index.js",
+"test:integration:smoke":    "MCP_TEST_LEVEL=smoke node tests/manual/index.js",
+"test:integration:normal":   "MCP_TEST_LEVEL=normal node tests/manual/index.js",
+"test:integration:extended": "MCP_TEST_LEVEL=extended node tests/manual/index.js",
+"test:integration:full":     "MCP_TEST_LEVEL=full node tests/manual/index.js",
+"test:integration:cleanup":  "MCP_TEST_LEVEL=cleanup node tests/manual/index.js"
 ```
 
-The args can be set via `.env`:
+Additional runtime parameters (passed as positional args or env vars):
 ```
-MCP_SANITY_ARGS=http://localhost:3600/http MY_TOKEN sanity
+node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
+
+MCP_SERVER_URL   MCP server URL
+MCP_AUTH_TOKEN   Bearer token
+MCP_TEST_LEVEL   Test level
 ```
 
 ---
