@@ -8,10 +8,10 @@
  * Writes to context:   (none)
  *
  * Environment:
- *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 51)
+ *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 53)
  */
 
-const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '51', 10);
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '53', 10);
 
 /**
  * @param {{ listTools: Function, callTool: Function }} client
@@ -27,28 +27,40 @@ export async function sanityTests(client) {
   }
   console.log(`✓ Tool count: ${tools.length} (expected ${EXPECTED_TOOL_COUNT})`);
 
-  // 2. Server info
-  console.log("\nChecking server info...");
+  // 2. Server info (MCP server)
+  console.log("\nChecking MCP server info...");
   await callTool("actual_server_info", {});
   console.log("✓ Server info returned successfully");
 
-  // 3. Accounts list (assert array)
+  // 3. Actual Budget server version
+  console.log("\nChecking Actual Budget server version...");
+  const versionResult = await callTool("actual_server_get_version", {});
+  if (typeof versionResult?.version === 'string') {
+    console.log(`✓ Actual Budget server version: ${versionResult.version}`);
+  } else if (typeof versionResult?.error === 'string') {
+    // Non-fatal: version endpoint may not exist in older self-hosted builds
+    console.log(`⚠ actual_server_get_version: server reported error: ${versionResult.error}`);
+  } else {
+    throw new Error(`actual_server_get_version: unexpected response: ${JSON.stringify(versionResult).slice(0, 120)}`);
+  }
+
+  // 4. Accounts list (assert array)
   console.log("\nListing accounts...");
   const accounts = await callTool("actual_accounts_list", {});
   if (!Array.isArray(accounts)) throw new Error("actual_accounts_list did not return an array");
   console.log(`✓ Accounts listed: ${accounts.length}`);
 
-  // 4. Transactions filter (read-only)
+  // 5. Transactions filter (read-only)
   console.log("\nFiltering transactions...");
   await callTool("actual_transactions_filter", { account: null });
   console.log("✓ Transactions filter returned successfully");
 
-  // 5. Valid SQL query
+  // 6. Valid SQL query
   console.log("\nRunning SQL query...");
   await callTool("actual_query_run", { query: "SELECT id FROM accounts LIMIT 1" });
   console.log("✓ SQL query executed successfully");
 
-  // 6. GraphQL must be rejected
+  // 7. GraphQL must be rejected
   console.log("\nChecking GraphQL rejection...");
   try {
     await callTool("actual_query_run", { query: "{transactions{id}}" });
@@ -58,7 +70,7 @@ export async function sanityTests(client) {
     console.log("✓ GraphQL syntax correctly rejected");
   }
 
-  // 7. Invalid SQL field must be rejected
+  // 8. Invalid SQL field must be rejected
   console.log("\nChecking invalid field rejection...");
   try {
     await callTool("actual_query_run", { query: "SELECT payee_name FROM transactions LIMIT 1" });
