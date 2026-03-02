@@ -325,10 +325,15 @@ actual-mcp-server/
 │   ├── unit/                     # Unit tests
 │   └── docker-actual-test/       # Docker test setup
 │
-├── scripts/                      # Build and utility scripts
-│   ├── generate-tools.ts         # Tool generator from OpenAPI
+├── scripts/                      # Build and utility scripts (see scripts/README.md)
+│   ├── generate-tools-node.js    # Auto-generate tool stubs from OpenAPI spec
 │   ├── verify-tools.js           # Tool coverage verification
-│   └── openapi/                  # OpenAPI specifications
+│   ├── bootstrap-and-init.sh     # Docker: bootstrap Actual server + import test budget
+│   ├── import-test-budget.sh     # Upload test-data/*.zip to Actual server
+│   ├── register-tsconfig-paths.js # Path alias resolver for dist/ runtime
+│   ├── list-actual-api-methods.mjs # API method coverage checker
+│   ├── version-bump.js / version-check.js / version-dev.js  # Versioning
+│   └── openapi/                  # OpenAPI specification used by generate-tools-node.js
 │
 ├── docs/                         # Documentation (this folder)
 ├── generated/                    # Generated TypeScript types
