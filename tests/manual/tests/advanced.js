@@ -182,14 +182,46 @@ export async function advancedTests(client, context) {
     console.log("⚠ Bank sync not available (expected for local budgets):", err.message);
   }
 
-  // Raw SQL query
-  console.log("\nExecuting test query...");
-  try {
-    await callTool("actual_query_run", { query: "SELECT * FROM accounts LIMIT 1" });
-    console.log("✓ Query executed successfully");
-  } catch (err) {
-    console.log("⚠ Query execution failed:", err.message);
+  // SQL query validation — exercises the query-validator middleware via actual_query_run.
+  // Valid queries should succeed; invalid ones should be rejected before execution.
+  console.log("\nTesting query validation (actual_query_run)...");
+  const queryValidationTests = [
+    // valid
+    { query: "SELECT * FROM transactions LIMIT 10",                                                              shouldPass: true,  label: "SELECT * with LIMIT" },
+    { query: "SELECT id, date, amount, account FROM transactions",                                              shouldPass: true,  label: "specific fields" },
+    { query: "SELECT id, date, amount, payee.name FROM transactions LIMIT 10",                                 shouldPass: true,  label: "join path payee.name" },
+    { query: "SELECT id, amount, category.name FROM transactions WHERE amount < 0",                            shouldPass: true,  label: "join path category.name" },
+    { query: "SELECT id, date, amount FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 20",         shouldPass: true,  label: "WHERE + ORDER BY" },
+    // invalid — validator should reject before hitting Actual
+    { query: "SELECT id, payee_name FROM transactions LIMIT 5",                                                shouldPass: false, label: "invalid field payee_name" },
+    { query: "SELECT id, category_name FROM transactions",                                                     shouldPass: false, label: "invalid field category_name" },
+    { query: "SELECT * FROM transaction LIMIT 10",                                                             shouldPass: false, label: "singular table name" },
+    { query: "SELECT id, amount FROM transactions WHERE payee_name = 'Test'",                                  shouldPass: false, label: "invalid field in WHERE" },
+    { query: "SELECT id, payee_name, category_name FROM transactions",                                         shouldPass: false, label: "multiple invalid fields" },
+    { query: "SELECT * FROM transactions WHERE account.id = '00000000-0000-0000-0000-000000000001'",           shouldPass: false, label: "invalid join path account.id" },
+  ];
+  let qvPassed = 0, qvFailed = 0;
+  for (const { query, shouldPass, label } of queryValidationTests) {
+    try {
+      await callTool("actual_query_run", { query });
+      if (shouldPass) {
+        console.log(`  ✓ ${label}`);
+        qvPassed++;
+      } else {
+        console.log(`  ❌ ${label}: expected rejection but query succeeded`);
+        qvFailed++;
+      }
+    } catch (err) {
+      if (!shouldPass) {
+        console.log(`  ✓ ${label}: correctly rejected`);
+        qvPassed++;
+      } else {
+        console.log(`  ❌ ${label}: expected success but got: ${err.message}`);
+        qvFailed++;
+      }
+    }
   }
+  console.log(`  Query validation: ${qvPassed}/${queryValidationTests.length} passed${qvFailed ? ` (${qvFailed} failed)` : ''}`);
 }
 
 /**
