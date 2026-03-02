@@ -52,13 +52,14 @@
     "zod": "3.25.76",
     "ajv": "8.18.0",
     "qs": "6.14.2",
+    "diff": "8.0.3",
     "@redocly/openapi-core": {
       "minimatch": "5.1.9"
     }
   },
   "comments": {
     "zod-version": "CRITICAL: Must use Zod 3.x. Zod 4.x breaks zod-to-json-schema causing LibreChat validation to fail. See docs/ZOD_VERSION_CONSTRAINT.md",
-    "security-overrides": "ajv>=8.18.0 (CVE alert #21), qs>=6.14.2 (alert #17), minimatch>=5.1.9 scoped to @redocly/openapi-core (alert #25)"
+    "security-overrides": "ajv>=8.18.0 (CVE alert #21), qs>=6.14.2 (alert #17), minimatch>=5.1.9 scoped to @redocly/openapi-core (alert #25), diff>=8.0.3 (code scan #16, dev-only)"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
