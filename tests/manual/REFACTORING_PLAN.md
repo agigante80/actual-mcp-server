@@ -167,11 +167,7 @@ The `context` object is a plain mutable object passed by reference through the t
 
 ## Refactoring Steps (ordered)
 
-> **Status: COMPLETE** — committed `3bbb3f9` on `develop` (2026-03-02).
-> All steps were performed in a single pass. The monolith is preserved as
-> `actual-mcp-integration-test.MONOLITH.js` until a live end-to-end test
-> confirms the new entry point (`index.js`) works correctly, after which
-> it can be deleted.
+> **Status: COMPLETE** — all 8 steps done, monolith deleted (`b92f18c`).
 
 1. ✅ **Extract `mcp-client.js`** — `createClient({ url, rl })` owns all transport globals.
 2. ✅ **Extract `cleanup.js`** — `cleanupMcpTestAccounts(client)`, no context dependency.
@@ -180,7 +176,7 @@ The `context` object is a plain mutable object passed by reference through the t
 5. ✅ **Extract `tests/account.js` → `tests/advanced.js`** — one file per domain; composites in `advanced.js`.
 6. ✅ **Extract `runner.js`** — orchestrates all modules; only file that calls `process.exit()`.
 7. ✅ **`index.js`** created as 7-line entry point.
-8. ⏳ **Delete the monolith** — run `npm run test:integration:sanity` to confirm parity, then `git rm tests/manual/actual-mcp-integration-test.MONOLITH.js`.
+8. ✅ **Delete the monolith** — committed `b92f18c`.
 
 ### Actual file sizes (vs planned estimates)
 
