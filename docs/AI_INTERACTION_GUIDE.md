@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.4.9  
 **Purpose:** Define operational boundaries and rules for AI agents  
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-02
 
 ---
 
@@ -21,13 +21,16 @@ This document establishes **mandatory rules and policies** for AI agents working
 
 **Tool Categories**:
 - Accounts: 7 tools
-- Transactions: 12 tools (including 6 search + 2 summary tools)
-- Budgets: 9 tools
+- Transactions: 12 tools (6 standard + 4 search + 2 summary — all ActualQL-powered exclusives)
+- Budgets: 8 tools
 - Categories: 4 tools
 - Category Groups: 4 tools
 - Payees: 6 tools
 - Rules: 4 tools
-- Advanced: 3 tools (query, bank sync, server info)
+- Query & Sync: 2 tools (query_run, bank_sync)
+- Batch: 1 tool (budget_updates_batch)
+- Server Info: 1 tool (server_info)
+- Session Management: 2 tools (session_list, session_close)
 
 **Location**: `src/actualToolsManager.ts` - IMPLEMENTED_TOOLS array
 
@@ -132,7 +135,7 @@ Before `git commit`:
   - Update when code changes
   - Keep examples current
 
-- **Configuration** (`.env.example`, `docker-compose.prod.yml`)
+- **Configuration** (`.env.example`, `docker-compose.yaml`)
   - Add new environment variables
   - Document all changes
 
@@ -245,9 +248,8 @@ cp .env.example .env
 npm run build                    # TypeScript compilation
 
 # 3. Run development server
-npm run dev -- --debug --http    # HTTP transport with debug logging
+npm run dev -- --debug --http    # HTTP transport with debug logging (recommended)
 npm run dev -- --sse             # SSE transport
-npm run dev -- --ws              # WebSocket transport
 
 # 4. Test
 npm run test:adapter             # Adapter smoke tests
@@ -328,11 +330,12 @@ Add a new MCP tool called "actual_reports_generate" that generates financial rep
 Requirements:
 1. Create src/tools/reports_generate.ts
 2. Follow existing tool patterns
-3. Add to src/tools/index.ts
-4. Add smoke test in src/tests/actualToolsTests.ts
-5. Update PROJECT_OVERVIEW.md tool count
-6. Update ARCHITECTURE.md tool list
-7. Run full test suite before committing
+3. Export from src/tools/index.ts
+4. Add tool name to IMPLEMENTED_TOOLS in src/actualToolsManager.ts
+5. Add smoke test in src/tests/actualToolsTests.ts
+6. Update PROJECT_OVERVIEW.md tool count
+7. Update ARCHITECTURE.md tool list
+8. Run full test suite before committing
 ```
 
 **AI Response Checklist:**
@@ -341,6 +344,7 @@ Requirements:
 - [ ] Adapter function called correctly
 - [ ] Error handling implemented
 - [ ] Exported from src/tools/index.ts
+- [ ] Added to IMPLEMENTED_TOOLS in src/actualToolsManager.ts
 - [ ] Test added
 - [ ] Documentation updated
 - [ ] Tests pass locally
