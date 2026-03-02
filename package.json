@@ -27,6 +27,8 @@
     "test:integration:full": "MCP_TEST_LEVEL=full node tests/manual/index.js",
     "test:integration:crud": "MCP_TEST_LEVEL=full node tests/manual/index.js",
     "test:integration:cleanup": "MCP_TEST_LEVEL=cleanup node tests/manual/index.js",
+    "deploy:full": "bash scripts/deploy-and-test.sh full",
+    "deploy:smoke": "bash scripts/deploy-and-test.sh smoke",
     "version:current": "cat VERSION",
     "version:dev": "node scripts/version-dev.js",
     "version:bump": "node scripts/version-bump.js",
