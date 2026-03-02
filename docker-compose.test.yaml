@@ -10,7 +10,7 @@ services:
     image: actualbudget/actual-server:latest
     container_name: actual-budget-e2e-test
     ports:
-      - "5007:5006"  # Use port 5007 to avoid conflicts with dev instances
+      - "5007:5006" # Use port 5007 to avoid conflicts with dev instances
     volumes:
       - actual-test-data:/data
     environment:
@@ -34,7 +34,7 @@ services:
       - bootstrap-data:/tmp
       - ./test-data:/app/test-data:ro
     user: root
-    entrypoint: ["/bin/sh"]
+    entrypoint: [ "/bin/sh" ]
     command:
       - -c
       - |
@@ -60,7 +60,7 @@ services:
       dockerfile: Dockerfile
     container_name: mcp-server-e2e-test
     ports:
-      - "3602:3600"  # Use port 3602 to avoid conflicts
+      - "3602:3600" # Use port 3602 to avoid conflicts
     depends_on:
       actual-budget-bootstrap:
         condition: service_completed_successfully
@@ -71,8 +71,7 @@ services:
       - MCP_BRIDGE_DATA_DIR=/app/data
       - LOG_LEVEL=info
       - NODE_ENV=test
-      # Transport mode: Using HTTP (recommended)
-      # Note: To use SSE instead, change '--http' to '--sse' in the entrypoint command below
+      # Transport mode: HTTP
       # Allow connections without auth for testing
       - MCP_SSE_AUTHORIZATION=
     volumes:
@@ -91,7 +90,7 @@ services:
         fi
         exec node dist/src/index.js --http
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3600/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      test: [ "CMD", "node", "-e", "require('http').get('http://localhost:3600/health', r => process.exit(r.statusCode === 200 ? 0 : 1))" ]
       interval: 5s
       timeout: 3s
       retries: 10

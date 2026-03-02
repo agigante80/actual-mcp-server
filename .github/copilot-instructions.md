@@ -76,8 +76,7 @@ src/
 │   ├── schemas/common.ts       # Shared Zod schemas (accountId, amountCents, etc.)
 │   └── loggerFactory.ts        # Module-scoped loggers (winston)
 ├── server/
-│   ├── httpServer.ts           # HTTP transport (recommended for LibreChat)
-│   └── sseServer.ts            # SSE transport (LibreChat header limitation)
+│   └── httpServer.ts           # HTTP transport
 └── tools/                      # 53 tool definitions (see actualToolsManager.ts)
 ```
 
@@ -93,7 +92,7 @@ npm run start                   # Production mode (requires build first)
 # Testing
 npm run test:adapter            # Adapter smoke tests (concurrency, retry logic)
 npm run test:unit-js            # Unit tests for transactions
-npm run test:e2e                # Playwright E2E tests (initialize → tools/call → SSE)
+npm run test:e2e                # Playwright E2E tests (initialize → tools/call → streaming)
 
 # Tool Management
 npm run generate-tools          # Auto-generate tool definitions from Actual API
@@ -210,7 +209,7 @@ ACTUAL_SERVER_URL=http://localhost:5006  # Actual Budget server
 ACTUAL_PASSWORD=your_password
 ACTUAL_BUDGET_SYNC_ID=uuid-from-actual   # Settings → Sync ID
 ACTUAL_BUDGET_PASSWORD=                  # Optional budget encryption password
-MCP_TRANSPORT_MODE=http                  # http|sse (http recommended)
+MCP_TRANSPORT_MODE=http                  # only http is supported
 MCP_SSE_AUTHORIZATION=Bearer token123    # Optional Bearer token auth
 ```
 
@@ -279,7 +278,7 @@ npm run test:e2e  # Spawns server, tests full MCP flow
 
 **Common LibreChat Issues**:
 1. **Tools don't load**: Check `MCP_TRANSPORT_MODE=http` in server env
-2. **Auth failures**: LibreChat doesn't send SSE headers - use server-side auth only
+2. **Auth failures**: Verify `MCP_SSE_AUTHORIZATION` token is correct
 3. **Timeout errors**: Increase `DEFAULT_OPERATION_TIMEOUT_MS` in `src/lib/constants.ts`
 4. **Silent failures**: Tool succeeded but no UI feedback - check LibreChat logs
 
@@ -290,7 +289,7 @@ npm run test:e2e  # Spawns server, tests full MCP flow
 Located in `tests/e2e/mcp-client.playwright.spec.ts`:
 
 - Spawns MCP server as child process
-- Tests full MCP protocol flow: initialize → tools/list → tools/call → SSE
+- Tests full MCP protocol flow: initialize → tools/list → tools/call → streaming response
 - Waits for server readiness (30s timeout)
 - Validates JSON-RPC responses
 
@@ -336,7 +335,7 @@ npm run dev -- --test-actual-tools
 When working on specific areas, reference these files:
 
 **Adding Tools**: `src/actualToolsManager.ts`, `src/tools/*.ts`, `src/lib/schemas/common.ts`  
-**Transport Issues**: `src/server/httpServer.ts`, `src/server/sseServer.ts`  
+**Transport Issues**: `src/server/httpServer.ts`  
 **API Integration**: `src/lib/actual-adapter.ts` (withActualApi pattern), `src/lib/retry.ts`  
 **Testing**: `tests/e2e/mcp-client.playwright.spec.ts`, `src/tests_adapter_runner.ts`  
 **Configuration**: `src/config.ts`, `.env.example`, `docker-compose.yaml`
@@ -353,7 +352,6 @@ When working on specific areas, reference these files:
 ### Fix LibreChat Integration Issue
 
 - **Check transport**: LibreChat requires HTTP transport (`--http` flag)
-- **Verify auth**: LibreChat doesn't send custom SSE headers (auth works server-side only)
 - **Review logs**: Debug mode (`--debug`) shows all MCP requests/responses
 - **Test locally**: Use `tests/e2e/mcp-client.playwright.spec.ts` to reproduce
 

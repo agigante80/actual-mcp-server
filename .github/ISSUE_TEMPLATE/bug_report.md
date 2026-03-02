@@ -43,7 +43,7 @@ A clear and concise description of what actually happened.
 - Docker Version: [e.g., 24.0.7]
 
 **Transport:**
-- Protocol: [HTTP / WebSocket / SSE]
+- Protocol: [HTTP]
 - Client: [LibreChat / Custom / Other]
 
 ## 📊 Logs

@@ -105,7 +105,6 @@ export function createModuleLogger(moduleName: string): ModuleLogger {
  */
 export const ModuleLoggers = {
   HTTP: createModuleLogger('HTTP'),
-  SSE: createModuleLogger('SSE'),
   ADAPTER: createModuleLogger('ADAPTER'),
   TOOLS: createModuleLogger('TOOLS'),
   SESSION: createModuleLogger('SESSION'),
