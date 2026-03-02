@@ -19,7 +19,7 @@ export type Config = z.infer<typeof configSchema>;
 function getConfig(): Config {
   const result = configSchema.safeParse(process.env);
   if (!result.success) {
-    console.error('Invalid or missing environment variables:', result.error.format());
+    console.error('Invalid or missing environment variables:', result.error.issues);
     process.exit(1);
   }
   return result.data;

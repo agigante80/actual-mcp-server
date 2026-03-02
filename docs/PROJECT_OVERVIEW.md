@@ -1,7 +1,7 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.17  
+**Version:** 0.4.18  
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-02  
 **Assessment Score:** 88/100 (EXCELLENT)  
@@ -110,7 +110,7 @@ Comprehensive coverage of Actual Budget functionality across 12 categories:
 | `@modelcontextprotocol/sdk` | ^1.25.2 | MCP protocol implementation |
 | `express` | ^5.2.1 | HTTP server framework |
 | `winston` | ^3.18.3 | Structured logging |
-| `zod` | 3.25.76 ⚠️ | Runtime type validation (pinned — do NOT upgrade to 4.x) |
+| `zod` | ^4.0.0 | Runtime type validation + native JSON Schema generation (`z.toJSONSchema()`) |
 | `date-fns` | ^4.1.0 | Date manipulation |
 | `dotenv` | ^17.2.2 | Environment configuration |
 
