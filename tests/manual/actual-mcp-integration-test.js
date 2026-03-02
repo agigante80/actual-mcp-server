@@ -1110,7 +1110,30 @@ async function cleanupMcpTestAccounts() {
   console.log(`  Accounts closed:          ${closedCount}`);
   console.log(`  Transactions deleted:      ${totalDeleted}`);
   console.log(`  Already closed (skipped):  ${alreadyClosedCount}`);
-  console.log(`\n✓ Done.`);
+
+  // Post-cleanup verification: re-fetch and show current state of all MCP-Test-* accounts
+  console.log(`\n-- Verifying account state post-cleanup --`);
+  const accountsAfter = await callTool("actual_accounts_list", {});
+  const allAfter = Array.isArray(accountsAfter) ? accountsAfter : [];
+  const mcpAfter = allAfter.filter(a => a.name && a.name.startsWith("MCP-Test-"));
+
+  let verifyFailed = 0;
+  for (const a of mcpAfter) {
+    if (a.closed) {
+      console.log(`  ✓ [CLOSED] "${a.name}"`);
+    } else {
+      console.log(`  ❌ [STILL OPEN] "${a.name}" (id: ${a.id})`);
+      verifyFailed++;
+    }
+  }
+
+  if (mcpAfter.length === 0) {
+    console.log(`  (no MCP-Test-* accounts found in budget)`);
+  } else if (verifyFailed === 0) {
+    console.log(`\n✓ All ${mcpAfter.length} MCP-Test-* account(s) confirmed closed.`);
+  } else {
+    console.log(`\n❌ ${verifyFailed} account(s) are still open — manual intervention may be needed.`);
+  }
 }
 
 // -------------------------------
