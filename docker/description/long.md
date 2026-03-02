@@ -10,7 +10,7 @@ A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budge
 - **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
 - **Advanced Features** - Custom ActualQL queries, bank sync, multi-budget support
 - **HTTPS Support** - Secure connections with self-signed or CA certificates
-- **LibreChat Ready** - Tested and verified with all 49 tools loading successfully
+- **LibreChat Ready** - Tested and verified with all 51 tools loading successfully
 - **Multiple Transports** - HTTP, SSE (Server-Sent Events) with authentication
 - **Production-Grade** - Retry logic, concurrency control, observability
 - **Type-Safe** - Full TypeScript implementation with generated types
@@ -82,7 +82,7 @@ docker run -d \
 - `MCP_HTTPS_CERT` - Path to SSL certificate (default: /app/certs/cert.pem)
 - `MCP_HTTPS_KEY` - Path to SSL private key (default: /app/certs/key.pem)
 
-## 📚 Available Tools (49 Total)
+## 📚 Available Tools (51 Total)
 
 ### Account Management (7 tools)
 create, list, update, delete, close, reopen, get balance
@@ -112,6 +112,9 @@ Batch multiple budget updates in a single transaction
 
 ### Server Information (1 tool)
 Get Actual Budget server version and build information
+
+### Session Management (2 tools)
+List all active MCP sessions, close specific sessions by ID
 
 ## ⚡ Exclusive ActualQL Features
 
@@ -149,26 +152,24 @@ curl -k https://localhost:3600/health
 
 # Check logs
 docker logs actual-mcp-server
-# Should show: "🚀 Actual MCP Server v0.1.0"
+# Should show startup message with current version
 ```
 
 ## 🤖 LibreChat Integration
 
 1. Generate HTTPS certificates (self-signed or CA-signed)
 2. Run container with HTTPS enabled
-3. Configure LibreChat with:
-   ```json
-   {
-     "actualMcpServer": {
-       "url": "https://YOUR_SERVER_IP:3600",
-       "transport": "http",
-       "headers": {
-         "Authorization": "Bearer YOUR_TOKEN"
-       }
-     }
-   }
+3. Configure LibreChat (`librechat.yaml`) with:
+   ```yaml
+   mcpServers:
+     actual-mcp:
+       type: "streamable-http"
+       url: "https://YOUR_SERVER_IP:3600/http"
+       headers:
+         Authorization: "Bearer YOUR_TOKEN"
+       serverInstructions: true
    ```
-4. All 49 tools will load automatically (including 6 exclusive ActualQL tools)
+4. All 51 tools will load automatically (including 6 exclusive ActualQL tools)
 
 **Verified**: HTTP transport with Bearer token authentication works perfectly with LibreChat.
 
