@@ -754,123 +754,81 @@ EMBEDDING_MODEL=default
 
 ---
 
-### 🔵 Long-Term (High Complexity — 2-4 weeks)
+### 🔵 Long-Term (High Complexity — 1-2 weeks)
 
-#### CF-5. Multi-User Authentication (OIDC / LDAP)
+#### CF-5. Multi-User Authentication via OIDC
 
-**Fork source**: [ZanzyTHEbar/actual-mcp-server](https://github.com/ZanzyTHEbar/actual-mcp-server) — `src/auth/` module **fully implemented** (not inferred). Reviewed 2026-03-02. Complete with OIDC, LDAP, middleware, ACL, factory, and tests.
+**Fork source**: [ZanzyTHEbar/actual-mcp-server](https://github.com/ZanzyTHEbar/actual-mcp-server) — `src/auth/` module fully reviewed 2026-03-02. Port the OIDC provider, middleware, ACL, and factory. **Direct LDAP dropped** — OIDC subsumes it (see rationale below).
 
-**Purpose**: Enterprise multi-user support — authenticate individual users via OIDC or LDAP instead of a single shared Bearer token (`MCP_SSE_AUTHORIZATION`), with optional per-user budget ACLs.
+**Purpose**: Enterprise multi-user support — authenticate individual users via OIDC (OpenID Connect) instead of a single shared Bearer token (`MCP_SSE_AUTHORIZATION`), with optional per-user budget ACLs.
 
-**OIDC configuration**:
+**OIDC covers all practical LDAP/AD needs:**
+
+OIDC is the identity layer on top of OAuth 2.0. Every major IdP that enterprises already operate speaks OIDC natively and federates LDAP/AD behind the scenes transparently:
+
+| User directory | Path to OIDC |
+|---|---|
+| Azure AD / Entra ID | Already OIDC-native — just configure `OIDC_ISSUER` |
+| Active Directory | Keycloak in front of AD → OIDC (one Docker container, LDAP wizard built-in) |
+| OpenLDAP | Keycloak / Authentik / Dex in front → OIDC |
+| Google Workspace | Already OIDC-native |
+| Okta / Auth0 | Already OIDC-native |
+
+The MCP server never needs to speak LDAP directly. The IdP handles LDAP federation. Implementing direct LDAP would add a decommissioned-library dependency (`ldapjs` archived 2024-05-14) for a use case better served by a one-Docker-container Keycloak.
+
+**Configuration**:
 ```bash
 AUTH_PROVIDER=oidc
-OIDC_ISSUER=https://auth.example.com/realms/myapp
+OIDC_ISSUER=https://auth.example.com/realms/myapp   # any OIDC-compliant IdP
 OIDC_CLIENT_ID=actual-mcp-server
-OIDC_AUDIENCE=actual-mcp-server
+OIDC_AUDIENCE=actual-mcp-server                      # optional, defaults to client ID
 AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
 ```
 
-**LDAP configuration**:
-```bash
-AUTH_PROVIDER=ldap
-LDAP_URL=ldap://ldap.example.com:389
-LDAP_BIND_DN=cn=admin,dc=example,dc=com
-LDAP_BIND_PASSWORD=admin-password
-LDAP_SEARCH_BASE=ou=users,dc=example,dc=com
-LDAP_SEARCH_FILTER=(uid={{username}})       # optional, default shown
-LDAP_GROUP_SEARCH_BASE=ou=groups,dc=...     # optional, for group-based ACLs
-LDAP_GROUP_SEARCH_FILTER=(member={{dn}})    # optional, default shown
-AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
-```
+**Compatible IdPs** (tested by ZanzyTHEbar fork): Keycloak, Azure AD, Auth0, Okta, Google.
 
-**LDAP credential format**: `Authorization: Bearer <base64(username:password)>` — standard Basic auth style, base64-encoded.
+**How it works**: The MCP client sends `Authorization: Bearer <JWT>`. The OIDC provider validates it against the IdP's JWKS endpoint (auto-discovered via `/.well-known/openid-configuration`), extracts `sub`/`email`/`groups` claims, and enforces the `AUTH_BUDGET_ACL` map. No username/password ever touches the MCP server.
 
-**Fork module structure** (all files reviewed):
+**Fork module structure** (all reviewed, porting OIDC subset):
 
-| File | Purpose |
-|---|---|
-| `src/auth/types.ts` | `AuthProvider` interface + `AuthIdentity` shape (`userId`, `displayName`, `email`, `groups`, `claims`) |
-| `src/auth/oidc-provider.ts` | `OidcAuthProvider` — JWT validation via `jose`, JWKS discovery from `/.well-known/jwks.json` |
-| `src/auth/ldap-provider.ts` | `LdapAuthProvider` — 4-step flow using `ldapjs` (see library note below) |
-| `src/auth/auth-middleware.ts` | Express middleware: `createAuthMiddleware()`, `getIdentityFromLocals()` |
-| `src/auth/auth-factory.ts` | `createAuthProvider()` — returns OIDC/LDAP/null based on `AUTH_PROVIDER` |
-| `src/auth/budget-acl.ts` | `canAccessBudget()`, `getAllowedBudgets()`, `resetAclCache()` — per-request ACL enforcement |
-| `src/auth/index.ts` | Re-exports all types and functions |
-| `tests/auth/*.test.ts` | Full test suite: middleware, factory, OIDC provider |
+| File | Purpose | Include? |
+|---|---|---|
+| `src/auth/types.ts` | `AuthProvider` interface + `AuthIdentity` shape | ✅ Port |
+| `src/auth/oidc-provider.ts` | `OidcAuthProvider` — JWT validation via `jose` + JWKS | ✅ Port |
+| `src/auth/auth-middleware.ts` | Express middleware: `createAuthMiddleware()`, `getIdentityFromLocals()` | ✅ Port |
+| `src/auth/auth-factory.ts` | `createAuthProvider()` — returns provider or null | ✅ Port (OIDC only) |
+| `src/auth/budget-acl.ts` | `canAccessBudget()`, `getAllowedBudgets()`, `resetAclCache()` | ✅ Port |
+| `src/auth/index.ts` | Re-exports | ✅ Port |
+| `src/auth/ldap-provider.ts` | Direct LDAP bind | ❌ Drop |
+| `tests/auth/*.test.ts` | Full test suite: middleware, factory, OIDC provider | ✅ Port |
 
-**Integration points in the fork**:
-- `src/index.ts` calls `createAuthProvider()` and passes it to `startHttpServer()`
-- `src/server/httpServer.ts` mounts `createAuthMiddleware(authProvider, ['/health', '/metrics', '/.well-known'])` before routes
-- `src/lib/requestContext.ts` extends `RequestContextData` with `identity?: AuthIdentity`
+**Integration points**:
+- `src/index.ts` → call `createAuthProvider()`, pass to `startHttpServer()`
+- `src/server/httpServer.ts` → mount `createAuthMiddleware(authProvider, ['/health', '/metrics', '/.well-known'])` before routes
+- `src/lib/requestContext.ts` → extend `RequestContextData` with `identity?: AuthIdentity`
 - Session-to-identity binding prevents session hijacking across users
 
 **Features**:
-- Replace the single `MCP_SSE_AUTHORIZATION` Bearer token with OIDC/LDAP identity validation
-- Per-user budget access control via `AUTH_BUDGET_ACL` JSON map
+- Replace `MCP_SSE_AUTHORIZATION` static token with per-user OIDC JWT validation
+- Per-user budget ACL via `AUTH_BUDGET_ACL` JSON map
 - Group-based ACLs (`"group:admin": ["*"]` = admin group accesses all budgets)
 - Access resolution order: wildcard `*` → `userId` → `email` → `group:*`
-- Backward-compatible: default `AUTH_PROVIDER=none` leaves existing `MCP_SSE_AUTHORIZATION` behaviour untouched
+- Backward-compatible: `AUTH_PROVIDER=none` (default) leaves existing behaviour untouched
 
----
-
-#### 🔑 LDAP Library Decision: `ldapts` (NOT `ldapjs`)
-
-The ZanzyTHEbar fork uses `ldapjs`. **Do not use `ldapjs`** — it was officially **decommissioned on 2024-05-14**: repo archived, read-only, no further maintenance.
-
-Use **`ldapts`** instead:
-- TypeScript-native (built-in types, no `@types/` needed)
-- Full async/await — no callback hell
-- First-class LDAPS + STARTTLS support
-- Supports TypeScript 5.2 `using` declaration for resource management
-- Actively maintained: v8.1.7, 194k weekly downloads, published 2026-02-28
-
-Our `ldap-provider.ts` will rewrite the ZanzyTHEbar implementation using `ldapts`, making the code cleaner (no manual callback→Promise wrapping):
-
-```typescript
-// ldapts version (our port) — clean async/await
-import { Client } from 'ldapts';
-
-await using client = new Client({ url: options.url });
-await client.bind(options.bindDN, options.bindPassword);
-const { searchEntries } = await client.search(options.searchBase, { filter });
-// client.unbind() called automatically via `using`
-```
-
-vs the ZanzyTHEbar callback-wrapping style:
-```typescript
-// ldapjs version (fork) — verbose callback wrappers
-private bind(client: ldap.Client, dn: string, password: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    client.bind(dn, password, (err) => { if (err) reject(err); else resolve(); });
-  });
-}
-```
-
----
-
-#### Pioneer status
-
-ZanzyTHEbar is the **first implementation** of LDAP auth inside an MCP server in the Actual Budget ecosystem. No other MCP server npm package implements LDAP directly — only Casdoor (a full IAM gateway that exposes an MCP endpoint, a very different scope). We would be the **second** implementation, with the improvement of using a maintained library.
-
----
-
-**Implementation scope** (for our port):
-- `src/auth/` module — 7 files (port from ZanzyTHEbar, credit in file headers)
-- Replace `ldapjs` → `ldapts` in `ldap-provider.ts`
+**Implementation scope**:
+- `src/auth/` — 6 files (types, oidc-provider, middleware, factory, budget-acl, index)
 - Extend `src/lib/requestContext.ts` with `identity?: AuthIdentity`
-- Wire `createAuthProvider()` into `src/index.ts`
-- Wire `createAuthMiddleware()` into `src/server/httpServer.ts`
-- Add `AUTH_PROVIDER`, `OIDC_*`, `LDAP_*`, `AUTH_BUDGET_ACL` to `src/config.ts` Zod schema
-- Unit tests for middleware, factory, OIDC provider (port from fork's `tests/auth/`)
-- LDAP test with `ldap-server-mock` (a mocked LDAP server for CI)
-- Add LDAPS + STARTTLS config option (improvement over fork)
-- Documentation updates
+- Wire into `src/index.ts` and `src/server/httpServer.ts`
+- Add `AUTH_PROVIDER`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_AUDIENCE`, `AUTH_BUDGET_ACL` to `src/config.ts` Zod schema
+- Unit tests for middleware, factory, and OIDC provider (port from fork's `tests/auth/`)
+- Documentation updates + Keycloak quick-start guide for LDAP/AD users
 
-**Estimated Effort**: 2-4 weeks (reduction from original 1-3 month estimate — the fork provides the complete blueprint, we only need to substitute `ldapts` and adapt to our codebase)
+**Estimated Effort**: 1-2 weeks (OIDC-only scope is simpler than the fork's dual OIDC+LDAP)
 
-**New dependencies**: `ldapts`, `jose` (for OIDC; already in many projects)
+**New dependencies**: `jose` (OIDC JWT validation — well-maintained, 0 sub-dependencies)
 **No breaking changes**: `AUTH_PROVIDER` defaults to `none`
+
+**For users with bare LDAP/AD and no OIDC IdP**: Run Keycloak as a sidecar (`docker compose`). It provides an LDAP federation wizard in its admin UI and exposes a standard OIDC endpoint in under 10 minutes. This is a better solution than implementing LDAP directly in the MCP server.
 
 **Priority**: 🔵 Low for single-user deployments; **High** for self-hosted teams sharing one Actual Budget instance
 
