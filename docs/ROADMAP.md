@@ -754,15 +754,15 @@ EMBEDDING_MODEL=default
 
 ---
 
-### 🔵 Long-Term (High Complexity — 1-3 months)
+### 🔵 Long-Term (High Complexity — 2-4 weeks)
 
 #### CF-5. Multi-User Authentication (OIDC / LDAP)
 
-**Fork source**: Fork README + inferred `src/auth/` module (from env var patterns in fork README; auth source not directly reviewed)
+**Fork source**: [ZanzyTHEbar/actual-mcp-server](https://github.com/ZanzyTHEbar/actual-mcp-server) — `src/auth/` module **fully implemented** (not inferred). Reviewed 2026-03-02. Complete with OIDC, LDAP, middleware, ACL, factory, and tests.
 
 **Purpose**: Enterprise multi-user support — authenticate individual users via OIDC or LDAP instead of a single shared Bearer token (`MCP_SSE_AUTHORIZATION`), with optional per-user budget ACLs.
 
-**OIDC configuration** (from fork README):
+**OIDC configuration**:
 ```bash
 AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://auth.example.com/realms/myapp
@@ -778,24 +778,99 @@ LDAP_URL=ldap://ldap.example.com:389
 LDAP_BIND_DN=cn=admin,dc=example,dc=com
 LDAP_BIND_PASSWORD=admin-password
 LDAP_SEARCH_BASE=ou=users,dc=example,dc=com
+LDAP_SEARCH_FILTER=(uid={{username}})       # optional, default shown
+LDAP_GROUP_SEARCH_BASE=ou=groups,dc=...     # optional, for group-based ACLs
+LDAP_GROUP_SEARCH_FILTER=(member={{dn}})    # optional, default shown
 AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
 ```
+
+**LDAP credential format**: `Authorization: Bearer <base64(username:password)>` — standard Basic auth style, base64-encoded.
+
+**Fork module structure** (all files reviewed):
+
+| File | Purpose |
+|---|---|
+| `src/auth/types.ts` | `AuthProvider` interface + `AuthIdentity` shape (`userId`, `displayName`, `email`, `groups`, `claims`) |
+| `src/auth/oidc-provider.ts` | `OidcAuthProvider` — JWT validation via `jose`, JWKS discovery from `/.well-known/jwks.json` |
+| `src/auth/ldap-provider.ts` | `LdapAuthProvider` — 4-step flow using `ldapjs` (see library note below) |
+| `src/auth/auth-middleware.ts` | Express middleware: `createAuthMiddleware()`, `getIdentityFromLocals()` |
+| `src/auth/auth-factory.ts` | `createAuthProvider()` — returns OIDC/LDAP/null based on `AUTH_PROVIDER` |
+| `src/auth/budget-acl.ts` | `canAccessBudget()`, `getAllowedBudgets()`, `resetAclCache()` — per-request ACL enforcement |
+| `src/auth/index.ts` | Re-exports all types and functions |
+| `tests/auth/*.test.ts` | Full test suite: middleware, factory, OIDC provider |
+
+**Integration points in the fork**:
+- `src/index.ts` calls `createAuthProvider()` and passes it to `startHttpServer()`
+- `src/server/httpServer.ts` mounts `createAuthMiddleware(authProvider, ['/health', '/metrics', '/.well-known'])` before routes
+- `src/lib/requestContext.ts` extends `RequestContextData` with `identity?: AuthIdentity`
+- Session-to-identity binding prevents session hijacking across users
 
 **Features**:
 - Replace the single `MCP_SSE_AUTHORIZATION` Bearer token with OIDC/LDAP identity validation
 - Per-user budget access control via `AUTH_BUDGET_ACL` JSON map
 - Group-based ACLs (`"group:admin": ["*"]` = admin group accesses all budgets)
-- Backward-compatible: falls back to Bearer token if `AUTH_PROVIDER` is not set
+- Access resolution order: wildcard `*` → `userId` → `email` → `group:*`
+- Backward-compatible: default `AUTH_PROVIDER=none` leaves existing `MCP_SSE_AUTHORIZATION` behaviour untouched
 
-**Implementation scope**:
-- New auth middleware module (`src/auth/`)
-- OIDC token validation (`openid-client` or `passport-oauth2`)
-- LDAP bind + user search (`ldapjs`)
-- ACL enforcement in HTTP request pipeline
-- Docker secrets integration for credentials
-- Security audit + documentation
+---
 
-**Estimated Effort**: 1-3 months
+#### 🔑 LDAP Library Decision: `ldapts` (NOT `ldapjs`)
+
+The ZanzyTHEbar fork uses `ldapjs`. **Do not use `ldapjs`** — it was officially **decommissioned on 2024-05-14**: repo archived, read-only, no further maintenance.
+
+Use **`ldapts`** instead:
+- TypeScript-native (built-in types, no `@types/` needed)
+- Full async/await — no callback hell
+- First-class LDAPS + STARTTLS support
+- Supports TypeScript 5.2 `using` declaration for resource management
+- Actively maintained: v8.1.7, 194k weekly downloads, published 2026-02-28
+
+Our `ldap-provider.ts` will rewrite the ZanzyTHEbar implementation using `ldapts`, making the code cleaner (no manual callback→Promise wrapping):
+
+```typescript
+// ldapts version (our port) — clean async/await
+import { Client } from 'ldapts';
+
+await using client = new Client({ url: options.url });
+await client.bind(options.bindDN, options.bindPassword);
+const { searchEntries } = await client.search(options.searchBase, { filter });
+// client.unbind() called automatically via `using`
+```
+
+vs the ZanzyTHEbar callback-wrapping style:
+```typescript
+// ldapjs version (fork) — verbose callback wrappers
+private bind(client: ldap.Client, dn: string, password: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    client.bind(dn, password, (err) => { if (err) reject(err); else resolve(); });
+  });
+}
+```
+
+---
+
+#### Pioneer status
+
+ZanzyTHEbar is the **first implementation** of LDAP auth inside an MCP server in the Actual Budget ecosystem. No other MCP server npm package implements LDAP directly — only Casdoor (a full IAM gateway that exposes an MCP endpoint, a very different scope). We would be the **second** implementation, with the improvement of using a maintained library.
+
+---
+
+**Implementation scope** (for our port):
+- `src/auth/` module — 7 files (port from ZanzyTHEbar, credit in file headers)
+- Replace `ldapjs` → `ldapts` in `ldap-provider.ts`
+- Extend `src/lib/requestContext.ts` with `identity?: AuthIdentity`
+- Wire `createAuthProvider()` into `src/index.ts`
+- Wire `createAuthMiddleware()` into `src/server/httpServer.ts`
+- Add `AUTH_PROVIDER`, `OIDC_*`, `LDAP_*`, `AUTH_BUDGET_ACL` to `src/config.ts` Zod schema
+- Unit tests for middleware, factory, OIDC provider (port from fork's `tests/auth/`)
+- LDAP test with `ldap-server-mock` (a mocked LDAP server for CI)
+- Add LDAPS + STARTTLS config option (improvement over fork)
+- Documentation updates
+
+**Estimated Effort**: 2-4 weeks (reduction from original 1-3 month estimate — the fork provides the complete blueprint, we only need to substitute `ldapts` and adapt to our codebase)
+
+**New dependencies**: `ldapts`, `jose` (for OIDC; already in many projects)
+**No breaking changes**: `AUTH_PROVIDER` defaults to `none`
 
 **Priority**: 🔵 Low for single-user deployments; **High** for self-hosted teams sharing one Actual Budget instance
 
