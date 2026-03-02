@@ -64,4 +64,6 @@ declare module '@actual-app/api/dist/methods.js' {
   export function createAccount(...args: unknown[]): Promise<unknown>;
   export function updateAccount(...args: unknown[]): Promise<unknown>;
   export function getAccountBalance(...args: unknown[]): Promise<unknown>;
+  export function getIDByName(...args: unknown[]): Promise<unknown>;
+  export function getServerVersion(...args: unknown[]): Promise<unknown>;
 }

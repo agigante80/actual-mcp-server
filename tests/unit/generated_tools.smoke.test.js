@@ -65,6 +65,8 @@ console.log('Running generated tools smoke tests');
     runQuery: [{ id: 'result1', value: 100 }],
     runBankSync: null,
     getBudgets: [{ id: 'budget1', name: 'My Budget' }],
+    getIDByName: '00000000-0000-0000-0000-000000000001',
+    getServerVersion: { version: '26.2.1' },
   };
 
   // Patch adapter default export functions
@@ -119,6 +121,8 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_transfer')) inputExample.month = '2025-12', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
   if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
   if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
+  if (name.includes('get_id_by_name')) inputExample.type = 'accounts', inputExample.name = 'Cash';
+  // server_get_version takes no parameters
 
       // Validate input parsing — only silently skip when no example was provided (tool may have required fields);
       // if an example IS provided it must parse correctly, otherwise the test stub is wrong.
@@ -178,6 +182,14 @@ console.log('Running generated tools smoke tests');
       }
       if (n === 'server_info') {
         if (!res?.server?.name) shapeErr(`expected server.name`);
+      }
+      if (n === 'get_id_by_name') {
+        if (typeof res?.id !== 'string') shapeErr(`expected id string`);
+        if (!res?.type) shapeErr(`expected type field`);
+        if (!res?.name) shapeErr(`expected name field`);
+      }
+      if (n === 'server_get_version') {
+        if (!('version' in res) && !('error' in res)) shapeErr(`expected version or error field`);
       }
       if (n === 'session_list') {
         if (typeof res?.totalSessions !== 'number') shapeErr(`expected totalSessions number`);

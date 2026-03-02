@@ -17,7 +17,7 @@ This document establishes **mandatory rules and policies** for AI agents working
 
 ## 🛠️ Tool Count Reference
 
-**Current Tool Count**: **51 tools** (all registered in IMPLEMENTED_TOOLS array as of 2026-01-08)
+**Current Tool Count**: **53 tools** (all registered in IMPLEMENTED_TOOLS array as of 2026-03-02)
 
 **Tool Categories**:
 - Accounts: 7 tools
@@ -29,7 +29,7 @@ This document establishes **mandatory rules and policies** for AI agents working
 - Rules: 4 tools
 - Query & Sync: 2 tools (query_run, bank_sync)
 - Batch: 1 tool (budget_updates_batch)
-- Server Info: 1 tool (server_info)
+- Lookup & Server: 3 tools (server_info, server_get_version, get_id_by_name)
 - Session Management: 2 tools (session_list, session_close)
 
 **Location**: `src/actualToolsManager.ts` - IMPLEMENTED_TOOLS array
@@ -200,7 +200,7 @@ Before modifying, read [SECURITY_AND_PRIVACY.md](./SECURITY_AND_PRIVACY.md):
 
 | Code Change | Required Documentation Updates |
 |-------------|-------------------------------|
-| **New MCP tool** | • `PROJECT_OVERVIEW.md` (increment tool count)<br>• `ARCHITECTURE.md` (add to tool list)<br>• Update tool table in main `README.md` |
+| **New MCP tool** | • `PROJECT_OVERVIEW.md` (increment tool count)<br>• `ARCHITECTURE.md` (add to tool list and file tree)<br>• Update tool table in main `README.md`<br>• Update smoke test stubs in `tests/unit/generated_tools.smoke.test.js` |
 | **New API route/endpoint** | • `ARCHITECTURE.md` (update endpoints)<br>• `PROJECT_OVERVIEW.md` (if user-facing feature) |
 | **Environment variable added** | • `.env.example` (add variable with comment)<br>• `ARCHITECTURE.md` (Configuration section)<br>• `AI_INTERACTION_GUIDE.md` (this file, Common Commands if relevant) |
 | **Test changes** | • `TESTING_AND_RELIABILITY.md` (update test commands/coverage) |

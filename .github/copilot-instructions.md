@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **51 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **53 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
 
 **Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
 
-**Current Status**: Production-ready, 51 tools implemented, 82% Actual Budget API coverage
+**Current Status**: Production-ready, 53 tools implemented, 84% Actual Budget API coverage
 
 ## Architecture Essentials
 
@@ -28,7 +28,7 @@ await rawAddTransactions(data);
 
 ### Tool Structure
 
-All 51 tools follow this pattern (`src/tools/*.ts`):
+All 53 tools follow this pattern (`src/tools/*.ts`):
 
 ```typescript
 import { z } from 'zod';
@@ -67,7 +67,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (51 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (53 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── lib/
 │   ├── actual-adapter.ts       # ⚠️ CRITICAL: withActualApi wrapper, retry logic
 │   ├── ActualMCPConnection.ts  # MCP protocol implementation (EventEmitter-based)
@@ -365,6 +365,6 @@ If transactions/budgets don't persist:
 
 ---
 
-**Last Updated**: 2026-03-01  
-**Version**: 0.4.9  
-**Tool Count**: 51 (verified LibreChat-compatible)
+**Last Updated**: 2026-03-02  
+**Version**: 0.4.15  
+**Tool Count**: 53 (verified LibreChat-compatible)

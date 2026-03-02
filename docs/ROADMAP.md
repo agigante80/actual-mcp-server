@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.14  
+**Version:** 0.4.15  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-02
 
@@ -15,9 +15,9 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ## 📊 Roadmap Overview
 
-### Current State (v0.4.14)
+### Current State (v0.4.15)
 
-- ✅ **51 MCP tools** covering ~82% of Actual Budget API
+- ✅ **53 MCP tools** covering ~84% of Actual Budget API
 - ✅ **LibreChat & LobeChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
 - ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
@@ -309,7 +309,7 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 - Add comprehensive tests for schedule tools
 
 **Success Criteria**:
-- All 55 tools implemented (51 current + 4 schedules)
+- All 57 tools implemented (53 current + 4 schedules)
 - LibreChat integration verified
 - Documentation updated
 
@@ -399,7 +399,7 @@ throw new Error(
 #### 5. **Integration Test Suite**
 **Target**: v0.5.x (Q2 2026)
 
-> **Status (2026-03-02)**: The `tests/manual/` suite covers all 51 tools against a live MCP server across 6 levels (sanity → full). Playwright E2E covers 51/51 tools in Docker. The old `tests/integration/` directory was removed and replaced with comprehensive manual + Docker E2E coverage.
+> **Status (2026-03-02)**: The `tests/manual/` suite covers all 53 tools against a live MCP server across 6 levels (sanity → full). Playwright E2E covers 53/53 tools in Docker. The old `tests/integration/` directory was removed and replaced with comprehensive manual + Docker E2E coverage.
 
 **Features**:
 - [ ] Test multi-step workflows
@@ -478,25 +478,29 @@ await createTag({ tag: 'groceries', color: '#ff0000', description: 'Grocery shop
 
 ---
 
-##### Lookup by Name (1 new tool)
-- [ ] `actual_get_id_by_name` — `getIDByName(type, name)` → `Promise<string>`
+##### Lookup by Name (1 new tool) — ✅ IMPLEMENTED in v0.4.14
+- ✅ `actual_get_id_by_name` — `getIDByName(type, name)` → `Promise<string>`
 
 Resolves a human-readable name to a UUID for any of the following entity types: `accounts`, `schedules`, `categories`, `payees`. Useful for AI agents that receive a name from the user and need to pass an ID to other tools.
 
-**Parameters**: `type` (one of `accounts | schedules | categories | payees`), `name` (string)
+**Parameters**: `type` (one of `accounts | schedules | categories | payees`), `name` (string)  
+**Status**: Implemented and registered. Tests cover all 4 entity types.
 
 ---
 
-##### Server Version (1 new tool)
-- [ ] `actual_server_get_version` — `getServerVersion()` → `Promise<{version: string} | {error: string}>`
+##### Server Version (1 new tool) — ✅ IMPLEMENTED in v0.4.14
+- ✅ `actual_server_get_version` — `getServerVersion()` → `Promise<{version: string} | {error: string}>`
 
-Returns the running Actual Budget server version string. Complements the existing `actual_server_info` tool with authoritative upstream version data.
+Returns the running Actual Budget server version string. Complements the existing `actual_server_info` tool with authoritative upstream version data.  
+**Status**: Implemented and registered.
 
 ---
 
-**Total new tools**: 6  
+**Implemented**: 2 of 6 tools (`actual_get_id_by_name`, `actual_server_get_version`) — shipped in v0.4.14  
+**Pending (Tags CRUD)**: 4 tools (`actual_tags_get`, `actual_tags_create`, `actual_tags_update`, `actual_tags_delete`) — blocked pending stable API release  
+**Note**: Tags CRUD (`getTags`, `createTag`, `updateTag`, `deleteTag`) is only available in the Actual Budget **nightly build** (`26.3.0-nightly`). This project pins `@actual-app/api ^26.2.1` (stable). Tags tools will be implemented once Tags are included in a stable release.  
 **Priority**: 🟡 Low — additive, no breaking changes  
-**Effort**: ~1 day implementation + tests per domain
+**Effort**: ~1 day implementation + tests (Tags, once stable API available)
 
 ---
 
@@ -730,21 +734,23 @@ Returns the running Actual Budget server version string. Complements the existin
 ## 🎯 Version Milestones
 
 ### v0.4.13–v0.4.14 (March 2026) — Actual current state
-- ✅ 51 tools (82% API coverage)
+- ✅ 53 tools (84% API coverage)
 - ✅ Session management tools (`actual_session_list`, `actual_session_close`)
 - ✅ Server info tool (`actual_server_info`)
+- ✅ `actual_server_get_version` — Actual Budget server version (new in v0.4.14)
+- ✅ `actual_get_id_by_name` — name→UUID lookup for accounts/categories/payees/schedules (new in v0.4.14)
 - ✅ 6 exclusive ActualQL-powered search/summary tools
 - ✅ Connection pooling (`ActualConnectionPool.ts`)
-- ✅ Comprehensive test suite (unit, Docker E2E 51/51, manual integration)
+- ✅ Comprehensive test suite (unit, Docker E2E 53/53, manual integration)
 - ✅ SSE transport removed — HTTP is the sole supported transport
 - ✅ Security fixes: ajv, qs, minimatch, diff CVEs resolved
 - [ ] Schedules tools — still pending
+- [ ] Tags CRUD tools — blocked on nightly API (stable release awaited)
 - [ ] Security hardening (rate limiting, CSRF) — still pending
 
 ### v0.5.x - "API Complete + Security" (Q2 2026)
 - [ ] Schedules CRUD (4 tools)
-- [ ] Tags CRUD (4 tools)
-- [ ] `actual_get_id_by_name` lookup helper
+- [ ] Tags CRUD (4 tools) — waiting for stable `@actual-app/api` release (currently nightly-only)
 - [ ] Rate limiting + CSRF protection
 - [ ] Improved error messages
 - [ ] Multi-budget switching
@@ -812,15 +818,23 @@ AI agents can help with:
 - ❌ Schedules tools — deferred
 - ❌ Rate limiting / CSRF — deferred
 
+### Q1 2026 (March early) — Additional deliveries
+- ✅ `actual_get_id_by_name` — name→UUID entity lookup (accounts/categories/payees/schedules)
+- ✅ `actual_server_get_version` — Actual Budget server version
+- ✅ All docs updated to 53 tools / 84% API coverage
+- ✅ Manual test suite expanded to cover all 53 tools
+
 ### Q1 2026 (January-March) — In progress
 **Focus**: Test quality, documentation, remaining API coverage
 
 **Delivered so far**:
-- ✅ Unit test suite (3 files, 51-tool smoke + 23 schema assertions)
+- ✅ Unit test suite (3 files, 53-tool smoke + 23 schema assertions)
 - ✅ Documentation audit and updates (ARCHITECTURE, TESTING, SECURITY)
 - ✅ SSE transport removed (HTTP-only, cleaner codebase)
 - ✅ Security: CVEs resolved for ajv, qs, minimatch, diff
-- ⏳ Tags CRUD tools (planned)
+- ✅ `actual_get_id_by_name` — name→UUID lookup (all 4 entity types)
+- ✅ `actual_server_get_version` — Actual Budget server version tool
+- ⏳ Tags CRUD tools — waiting for stable API (currently nightly `26.3.0-nightly` only)
 - ⏳ Schedules tools (planned)
 - ⏳ Rate limiting (planned)
 
@@ -850,8 +864,8 @@ AI agents can help with:
 
 | Metric | Current | v0.5.0 Target | v1.0.0 Target |
 |--------|---------|---------------|---------------|
-| **API Coverage** | 82% (51 tools, missing schedules/tags) | ~90% (+ schedules, tags) | 100% + reports |
-| **Test Coverage** | 51/51 E2E, 3 unit files, 23 schema assertions | 90% | 95% |
+| **API Coverage** | 84% (53 tools, missing schedules/tags) | ~90% (+ schedules, tags) | 100% + reports |
+| **Test Coverage** | 53/53 E2E, 3 unit files, 23 schema assertions | 90% | 95% |
 | **Response Time (p95)** | <500ms | <200ms | <100ms |
 | **Uptime** | N/A | 99.5% | 99.9% |
 | **Concurrent Users** | ~10 | ~100 | ~1000 |
@@ -916,4 +930,4 @@ AI agents can help with:
 
 **Timeline**: v1.0.0 targeted for August 2027 (21 months)
 
-**Next Milestone**: v0.5.x — Schedules, Tags, GetIDByName tools + security hardening (Q2 2026)
+**Next Milestone**: v0.5.x — Schedules + Tags (once stable API available) + security hardening (Q2 2026)
