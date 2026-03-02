@@ -1,7 +1,7 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.9  
+**Version:** 0.4.17  
 **Purpose:** Define security policies, privacy practices, and incident response  
 **Last Updated:** 2026-03-02
 
@@ -553,7 +553,7 @@ npm audit fix
 }
 ```
 
-> ⚠️ **Critical override — do not remove**: Zod is pinned to `3.x` via the `overrides` field. Upgrading Zod to 4.x will break `zod-to-json-schema` compatibility, causing all 51 MCP tools to become invisible to LibreChat. Reject any Dependabot/Renovate PR that bumps Zod past `3.x`.
+> ⚠️ **Critical override — do not remove**: Zod is pinned to `3.x` via the `overrides` field. Upgrading Zod to 4.x will break `zod-to-json-schema` compatibility, causing all 56 MCP tools to become invisible to LibreChat. Reject any Dependabot/Renovate PR that bumps Zod past `3.x`.
 
 ### Supply Chain Security
 

@@ -30,7 +30,7 @@ interface ActualConnection {
 class ActualConnectionPool {
   private connections: Map<string, ActualConnection> = new Map();
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private readonly IDLE_TIMEOUT: number; // Configurable via SESSION_IDLE_TIMEOUT_MINUTES env var (default: 10 minutes)
+  private readonly IDLE_TIMEOUT: number; // Configurable via SESSION_IDLE_TIMEOUT_MINUTES env var (default: 5 minutes)
   private readonly CLEANUP_INTERVAL: number; // Check frequency (default: 2 minutes)
   private readonly MAX_CONCURRENT_SESSIONS: number; // Configurable via MAX_CONCURRENT_SESSIONS env var (default: 1)
   private sharedConnection: ActualConnection | null = null;

@@ -1,7 +1,7 @@
 # AI Interaction Guide
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.9  
+**Version:** 0.4.17  
 **Purpose:** Define operational boundaries and rules for AI agents  
 **Last Updated:** 2026-03-02
 
@@ -17,7 +17,7 @@ This document establishes **mandatory rules and policies** for AI agents working
 
 ## 🛠️ Tool Count Reference
 
-**Current Tool Count**: **53 tools** (all registered in IMPLEMENTED_TOOLS array as of 2026-03-02)
+**Tool Count:** 56 tools (all registered in IMPLEMENTED_TOOLS array as of 2026-03-02)
 
 **Tool Categories**:
 - Accounts: 7 tools

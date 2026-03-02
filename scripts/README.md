@@ -2,6 +2,12 @@
 
 Utility and build scripts. All are invoked via `package.json` scripts or from within the Docker stack — none need to be run directly during normal development.
 
+## Deployment & maintenance
+
+| Script | npm script | Purpose |
+|---|---|---|
+| `deploy-and-test.sh` | `npm run deploy:full` / `npm run deploy:smoke` | **Periodic maintenance script.** Syncs latest dev code → rebuilds MCP Docker image → pulls latest upstream images (Actual Budget, LibreChat, LobeChat) → independently restarts each service → waits for MCP health → runs the full integration test suite with auto-cleanup. Requires all four services to already be installed and running. See `$DOCKER_DIR/README.md` and sub-folder READMEs for setup instructions. |
+
 ## Tool verification
 
 | Script | npm script | Purpose |

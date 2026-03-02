@@ -9,9 +9,9 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **53 specialized tools** covering 84% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **56 specialized tools** covering 84% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
 
-> **🧪 Tested with Multiple AI Clients**: This MCP server has been extensively tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 53 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+> **🧪 Tested with Multiple AI Clients**: This MCP server has been extensively tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 56 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
@@ -172,13 +172,13 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 ### Core Capabilities
 ### Core Capabilities
 
-- 🤖 **53 MCP Tools**: Comprehensive financial operations via natural language
+- 🤖 **56 MCP Tools**: Comprehensive financial operations via natural language
 -  **Secure**: Bearer token authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **84% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
-- ✅ **LibreChat Verified**: All 53 tools tested and working
+- ✅ **LibreChat Verified**: All 56 tools tested and working
 - ⚡ **Exclusive Tools**: 6 ActualQL-powered tools for advanced queries and summaries
 
 ### Advanced Features
@@ -187,7 +187,7 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 - **Observability**: Prometheus metrics, structured logging with Winston
 - **Flexible Deployment**: Docker, Kubernetes, bare metal, or Docker Compose
 - **HTTPS Support**: TLS encryption with self-signed or CA-signed certificates
-- **Tested**: Unit tests (53 tools + schema), Playwright E2E, and live integration suite
+- **Tested**: Unit tests (56 tools + schema), Playwright E2E, and live integration suite
 
 ### Financial Operations
 
@@ -217,7 +217,7 @@ With conversational AI, you can:
 
 **This project MUST use Zod 3.x (3.25.76).** Do NOT upgrade to Zod 4.x!
 
-Zod 4.x has breaking internal changes that cause `zod-to-json-schema` to produce incomplete schemas, breaking LibreChat tool validation. All 53 tools become invisible if Zod 4.x is used.
+Zod 4.x has breaking internal changes that cause `zod-to-json-schema` to produce incomplete schemas, breaking LibreChat tool validation. All 56 tools become invisible if Zod 4.x is used.
 
 - **Reject any Dependabot/Renovate PRs** suggesting Zod 4.x
 - The project includes safeguards: `package.json` overrides and Dockerfile post-install
@@ -368,7 +368,7 @@ docker compose --profile fullstack --profile dev up
 
 ## 🛠️ Available Tools
 
-The MCP server exposes **53 tools** organized into 12 categories. All tools follow the naming convention `actual_<category>_<action>`.
+The MCP server exposes **56 tools** organized into 12 categories. All tools follow the naming convention `actual_<category>_<action>`.
 
 > **⚡ Exclusive ActualQL Tools**: This MCP server includes 6 specialized tools powered by ActualQL that are **unique to this implementation** and not available in standard Actual Budget integrations. These tools provide advanced querying, aggregation, and analysis capabilities.
 
@@ -489,7 +489,7 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 | `actual_session_list` | List all active MCP sessions | - |
 | `actual_session_close` | Close a specific MCP session | `sessionId` |
 
-**Total: 53 tools across 12 categories** (including 6 exclusive ActualQL-powered tools)
+**Total: 56 tools across 12 categories** (including 6 exclusive ActualQL-powered tools)
 
 ---
 
@@ -510,7 +510,7 @@ These methods require access to Actual's internal API and are not directly expor
 - `downloadBudget()` - Download budget from server
 - `runImport()` - Create and populate new budgets
 
-**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 53 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
+**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 56 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
 
 ## 📦 Installation
 
@@ -582,7 +582,7 @@ docker compose --profile production up -d
 
 ## 💬 AI Client Integration (LibreChat & LobeChat)
 
-This MCP server has been tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 53 tools work correctly with both clients.
+This MCP server has been tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 56 tools work correctly with both clients.
 
 ### Quick Setup (Docker Environment)
 
@@ -643,7 +643,7 @@ In LobeChat UI:
    - **Authorization**: `Bearer YOUR_TOKEN_HERE`
 4. Click **Save**
 
-LobeChat will automatically discover all 53 tools.
+LobeChat will automatically discover all 56 tools.
 
 ### Network Configuration
 
@@ -802,7 +802,7 @@ curl -k https://localhost:3600/health
 ```
 
 In your AI client, you should see:
-- ✅ **53 tools loaded** in the MCP servers list
+- ✅ **56 tools loaded** in the MCP servers list
 - ✅ All tools available with `actual_` prefix
 - ✅ Natural language queries working
 
@@ -883,7 +883,7 @@ curl -X POST http://localhost:3000/http \
 4. AI client calls appropriate tools (`actual_accounts_list`, `actual_accounts_get_balance`)
 5. You get conversational responses: "Your checking account balance is $1,234.56"
 
-Both LibreChat and LobeChat work identically - all 53 tools are available for conversational financial management.
+Both LibreChat and LobeChat work identically - all 56 tools are available for conversational financial management.
 
 ---
 
@@ -1024,7 +1024,7 @@ mcpServers:
 **Features:**
 - ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
 - ✅ Bearer token authentication via headers
-- ✅ All 53 tools load successfully in LibreChat
+- ✅ All 56 tools load successfully in LibreChat
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
 
@@ -1076,8 +1076,8 @@ ACTUAL_SERVER_URL=https://actual.yourdomain.com
 
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
-| HTTP without auth | ✅ Success | 53 tools |
-| HTTP with auth | ✅ Success | 53 tools |
+| HTTP without auth | ✅ Success | 56 tools |
+| HTTP with auth | ✅ Success | 56 tools |
 
 ---
 
@@ -1132,7 +1132,7 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 ```
 ┌──────────────┐         ┌──────────────┐         ┌─────────────┐
 │   LibreChat  │   MCP   │  MCP Server  │   REST  │   Actual    │
-│  (AI Client) │◄────────┤  (53 Tools)  │◄────────┤   Budget    │
+│  (AI Client) │◄────────┤  (56 Tools)  │◄────────┤   Budget    │
 │              │         │  +6 Exclusive│         │             │
 └──────────────┘         └──────────────┘         └─────────────┘
                                 │
@@ -1182,7 +1182,7 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 | **Batch** | 100% | 1/1 | ✅ Complete |
 | **Server Info & Lookup** | 100% | 3/3 | ✅ Complete |
 
-**Overall: 84% API Coverage (53 tools covering all major Actual Budget operations)**
+**Overall: 84% API Coverage (56 tools covering all major Actual Budget operations)**
 
 **⚡ Exclusive Features**: This MCP server includes 6 ActualQL-powered tools that provide advanced querying and aggregation capabilities not available in other Actual Budget integrations.
 
@@ -1192,7 +1192,7 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 - ❌ Budget templates
 - ❌ Transaction notes/attachments
 
-**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 53 pre-built tools.
+**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 56 pre-built tools.
 - ❌ Custom reports
 
 See [`docs/api-coverage.md`](docs/api-coverage.md) for complete API documentation with examples.
@@ -1219,7 +1219,7 @@ npm run test:e2e:docker
 | Command | What It Tests | Speed | Requires Docker |
 |---------|---------------|-------|-----------------|
 | `test:adapter` | Adapter layer, retry logic, concurrency | ⚡ 30s | No |
-| `test:unit-js` | Unit tests (schema, 53-tool smoke, negative-path) | ⚡ 5s | No |
+| `test:unit-js` | Unit tests (schema, 56-tool smoke, negative-path) | ⚡ 5s | No |
 | `test:e2e` | MCP protocol compliance | ⚡ 10s | No |
 | `test:e2e:docker` | Full stack integration | 🐢 60s | Yes |
 | `test:all` | All of the above | 🐢 90s | Yes |
@@ -1267,7 +1267,7 @@ npm run test:e2e:docker
 **What's tested:**
 - ✅ Docker build correctness
 - ✅ Container networking
-- ✅ Real Actual Budget integration (all 53 tools)
+- ✅ Real Actual Budget integration (all 56 tools)
 - ✅ Session management
 - ✅ Production deployment scenario
 

@@ -1,9 +1,11 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.15  
+**Version:** 0.4.17  
 **Purpose:** Future improvements and feature planning  
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-03
+
+> 📋 **Implementing a planned item?** Follow the step-by-step process in [docs/NEW_TOOL_CHECKLIST.md](./NEW_TOOL_CHECKLIST.md) — it covers tool file, registration, unit tests, manual tests (positive + negative), AI prompt update, and all documentation files that must be updated before committing.
 
 ---
 
@@ -15,9 +17,9 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ## 📊 Roadmap Overview
 
-### Current State (v0.4.15)
+### Current State (v0.4.16)
 
-- ✅ **53 MCP tools** covering ~84% of Actual Budget API
+- ✅ **56 MCP tools** covering ~84% of Actual Budget API
 - ✅ **LibreChat & LobeChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
 - ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
@@ -392,6 +394,8 @@ throw new Error(
 - No data loss during switch
 - LibreChat integration verified
 
+**Community Reference**: The [ahmadrazach fork](https://github.com/ahmadrazach/actual-mcp-server) prototyped this as [`actual_budgets_auto_select`](https://github.com/ahmadrazach/actual-mcp-server/blob/main/src/tools/budgets_auto_select.ts) with a [`BudgetRouter`](https://github.com/ahmadrazach/actual-mcp-server/blob/main/src/utils/budget-router.ts) utility. The approach: take a free-text `query` + optional `budget_arg`, keyword-match against a mapping table, then call `adapter.setActiveBudget(id)`. **Limitation**: the routing table is hardcoded to the author's personal budget names (`Faqir Farms`, `Azhar Home`, `Nadeem Home`) — a production implementation should drive the keyword→budget map from an env var or config file, or simply rely on `actual_budgets_get_all` + `actual_get_id_by_name` to let the AI resolve the budget name without a hardcoded mapping.
+
 ---
 
 ### 🟠 Medium Priority
@@ -501,6 +505,299 @@ Returns the running Actual Budget server version string. Complements the existin
 **Note**: Tags CRUD (`getTags`, `createTag`, `updateTag`, `deleteTag`) is only available in the Actual Budget **nightly build** (`26.3.0-nightly`). This project pins `@actual-app/api ^26.2.1` (stable). Tags tools will be implemented once Tags are included in a stable release.  
 **Priority**: 🟡 Low — additive, no breaking changes  
 **Effort**: ~1 day implementation + tests (Tags, once stable API available)
+
+---
+
+## 🌿 Community Fork Improvements (ZanzyTHEbar)
+
+**Reference fork**: [ZanzyTHEbar/actual-mcp-server](https://github.com/ZanzyTHEbar/actual-mcp-server) — v0.4.8, 305 commits ahead of `agigante80:main` at time of analysis (2026-03-02)
+
+The ZanzyTHEbar fork introduced several tools and architectural features that are worth evaluating and porting. Three tools are straightforward ports (all required adapter methods already exist in `src/lib/actual-adapter.ts`). The hybrid search engine is significant new infrastructure. Multi-user auth is a long-term enterprise feature.
+
+**Key commit**: [`909399a`](https://github.com/ZanzyTHEbar/actual-mcp-server/commit/909399af35233fdf1d82c03a3fc1e38c1dce44b0) — "feat(tools): add rules upsert, batch update, uncategorized, search, a…"
+
+---
+
+### 🟢 Short-Term Ports (1-2 days each — adapter methods already in place)
+
+#### CF-1. `actual_transactions_update_batch` — ✅ IMPLEMENTED in v0.4.16
+
+**Fork source**: [`src/tools/transactions_update_batch.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/transactions_update_batch.ts) (76 lines)
+
+**Purpose**: Update multiple transactions in a single MCP call with per-item success/failure isolation. Reduces AI round-trips by up to 100× for bulk re-categorization workflows.
+
+**Input schema** (`updates` array, min 1, max 100 items):
+```typescript
+{
+  updates: Array<{
+    id: string;              // Transaction UUID to update
+    fields: {
+      account?: string;        // Account ID
+      date?: string;           // YYYY-MM-DD
+      amount?: number;         // Cents (negative = expense, positive = income)
+      payee?: string;          // Payee UUID
+      payee_name?: string;     // Payee display name
+      imported_payee?: string; // Original imported payee string
+      category?: string;       // Category UUID
+      notes?: string;
+      cleared?: boolean;
+    }
+  }>  // min: 1, max: 100
+}
+```
+
+**Return shape**:
+```json
+{
+  "succeeded": [{"id": "txn-uuid-1"}],
+  "failed":    [{"id": "txn-uuid-2", "error": "Not found"}],
+  "total": 2,
+  "successCount": 1,
+  "failureCount": 1
+}
+```
+
+**Implementation details**:
+- Calls `adapter.updateTransaction(id, fields)` for each item **sequentially** (not parallel) for clean error isolation
+- Per-item `try/catch` — partial failures do not abort the batch
+- `adapter.updateTransaction()` already exists in `src/lib/actual-adapter.ts` (line 495)
+
+**Use case**: "Categorize all of these 30 transactions as Groceries" — the AI gets all transaction IDs from `actual_transactions_uncategorized` and fires a single batch call.
+
+**Estimated Effort**: ~1 day
+- Port Zod schema + tool definition → `src/tools/transactions_update_batch.ts`
+- Register in `actualToolsManager.ts`
+- Unit tests
+
+**Priority**: 🟢 High — significant UX improvement
+
+---
+
+#### CF-2. `actual_transactions_uncategorized` — ✅ IMPLEMENTED in v0.4.16
+
+**Fork source**: [`src/tools/transactions_uncategorized.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/transactions_uncategorized.ts) (58 lines)
+
+**Purpose**: List uncategorized transactions (`category == null`) with summary totals for a date range. Designed as the entry point for AI-driven cleanup workflows — pair it with `actual_transactions_update_batch` and `actual_rules_create_or_update` for a complete categorization loop.
+
+**Input schema**:
+```typescript
+{
+  startDate?: string;  // YYYY-MM-DD (default: first day of current month)
+  endDate?: string;    // YYYY-MM-DD (default: today)
+  accountId?: string;  // Optional: filter to one account
+  limit?: number;      // Max results, default 500
+}
+```
+
+**Return shape**:
+```json
+{
+  "result": {
+    "transactions": [...],
+    "summary": {
+      "count": 42,
+      "totalAmount": -123456
+    },
+    "dateRange": {
+      "startDate": "2026-03-01",
+      "endDate": "2026-03-31"
+    }
+  }
+}
+```
+
+**Implementation details**:
+- Calls `adapter.getTransactions(accountId, startDate, endDate)` (already exists)
+- Client-side filter: `txns.filter(txn => txn.category == null)`
+- Slices to `limit`, computes `totalAmount` via `reduce`
+- No new adapter methods required
+
+**Estimated Effort**: ~0.5 day (trivially simple)
+
+**Priority**: 🟢 High — common workflow entry point
+
+---
+
+#### CF-3. `actual_rules_create_or_update` — ✅ IMPLEMENTED in v0.4.16
+
+**Fork source**: [`src/tools/rules_create_or_update.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/rules_create_or_update.ts) (196 lines)
+
+**Purpose**: Idempotent rule creation — upsert semantics that deduplicate by condition set. An AI agent can safely call this repeatedly without creating duplicate rules.
+
+**Input schema**:
+```typescript
+{
+  stage?: 'pre' | 'post';          // default: 'pre'
+  conditionsOp?: 'and' | 'or';     // default: 'and'
+  conditions: Array<{
+    field: string;   // 'imported_payee', 'payee', 'account', 'category', 'notes', 'amount', 'date'
+    op: string;      // 'is', 'contains', 'matches', 'doesNotContain', 'isNot',
+                     // 'gte', 'lte', 'gt', 'lt', 'isapprox', 'oneOf', 'notOneOf'
+    value: string | number;
+    type?: string;   // 'string', 'number', 'id'
+  }>;
+  actions: Array<{
+    op: string;      // 'set', 'set-split-amount', 'link-schedule', 'prepend-notes', 'append-notes'
+    field?: string;  // required for 'set': 'category', 'payee', 'notes', 'cleared', 'account'
+    value: string | number | boolean | object;
+    type?: string;   // 'id', 'string', 'number', 'boolean'
+    options?: object;
+  }>;
+}
+```
+
+**Return shape**:
+```json
+{ "id": "rule-uuid", "created": true }
+```
+`created: true` → new rule created; `created: false` → existing rule updated (actions replaced).
+
+**Upsert matching logic**:
+1. Fetch all existing rules via `adapter.getRules()`
+2. Match by: same `conditionsOp` **AND** identical set of `(field, op, value)` triples (order-independent — uses `Set<canonicalize(condition)>`)
+3. On match: call `adapter.updateRule(id, {stage, conditionsOp, conditions, actions})` — actions are **replaced**, not merged
+4. No match: call `adapter.createRule(data)` — returns new rule UUID
+
+**Built-in validation** (from field/operator compatibility matrix):
+- `imported_payee`, `notes`, `description` (string): `contains`, `matches`, `doesNotContain`, `is`, `isNot`
+- `payee`, `account`, `category` (UUID/id): `is`, `isNot`, `oneOf`, `notOneOf` — value must be a UUID
+- `amount` (number): `is`, `gte`, `lte`, `gt`, `lt`, `isapprox`
+- `date`: `is`, `gte`, `lte`, `gt`, `lt`
+- `oneOf`/`notOneOf` require array values
+
+**Adapter methods**: All three already exist in `src/lib/actual-adapter.ts`:
+- `adapter.getRules()` — line 532
+- `adapter.createRule()` — line 539
+- `adapter.updateRule()` — line 547
+
+**Use case**: "Create a rule: any transaction imported as 'STARBUCKS*' → set category to Coffee." Running the same call twice leaves only one rule.
+
+**Estimated Effort**: ~1.5 days
+- Port upsert logic + validation + `canonicalize()` helper
+- Register in `actualToolsManager.ts`
+- Unit tests (create path, update path, validation errors)
+
+**Priority**: 🟢 High — enables safe AI-driven rule management
+
+---
+
+### 🟡 Medium-Term (Significant Infrastructure — 2-4 weeks)
+
+#### CF-4. Hybrid Search Engine (`actual_hybrid_search`, `actual_search_similar`, `actual_search_index_info`)
+
+**Fork sources**:
+- [`src/tools/hybrid_search.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/hybrid_search.ts) (265 lines)
+- [`src/tools/search_similar.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/search_similar.ts) (151 lines)
+- [`src/tools/search_index_info.ts`](https://github.com/ZanzyTHEbar/actual-mcp-server/blob/main/src/tools/search_index_info.ts) (58 lines)
+- `src/lib/search/` — full `SearchIndex`, `HybridSearchEngine`, `EmbeddingProvider`, `syncState` infrastructure (not yet fetched; substantial module)
+
+**Purpose**: Intelligent natural-language transaction search combining three scoring dimensions with **Reciprocal Rank Fusion (RRF)**:
+1. **BM25 full-text search** — SQLite FTS5 keyword matching
+2. **Vector similarity** — cosine distance on stored embedding vectors (`vector_distance_cos()` SQLite extension)
+3. **Metadata filters** — account / category / payee / date / amount structured filters
+
+**`actual_hybrid_search` input schema**:
+```typescript
+{
+  query?: string;       // Natural language: "groceries last month", "Amazon over $50"
+  accountId?: string;
+  categoryId?: string;
+  payeeId?: string;
+  startDate?: string;   // YYYY-MM-DD
+  endDate?: string;     // YYYY-MM-DD
+  minAmount?: number;   // cents
+  maxAmount?: number;   // cents
+  limit?: number;       // default 25
+  mode?: 'hybrid' | 'fulltext' | 'vector' | 'metadata';  // default 'hybrid'
+}
+```
+
+Auto-downgrade: if embedding provider unavailable, `hybrid`/`vector` modes automatically fall back to `fulltext`.
+
+**`actual_search_similar` input schema**:
+```typescript
+{
+  transactionId: string;    // Find transactions similar to this one by vector cosine distance
+  excludeSamePayee?: boolean;
+  limit?: number;
+}
+```
+Requires the search index to be populated first (call `actual_hybrid_search` to trigger sync).
+
+**`actual_search_index_info`**: No inputs. Returns index health: transaction count, last sync time, index size, embedding provider name/status, and active config values (`SEARCH_ENABLED`, `EMBEDDING_PROVIDER`, `EMBEDDING_MODEL`, `SEARCH_INDEX_DIR`).
+
+**Architecture**:
+- Separate SQLite database stored in `SEARCH_INDEX_DIR` (not Actual Budget's DB)
+- `SearchIndex` manages FTS5 + vector column storage and incremental sync
+- `HybridSearchEngine` executes multi-mode queries, merges results with RRF scoring
+- `EmbeddingProvider` interface — supports `local` (bundled model) and remote providers (OpenAI, etc.)
+- Response cache (TTL-based) for accounts/categories/payees reference data
+- `isSearchIndexSynced()` / `ensureSynced()` — lazy population on first search call
+
+**New env vars required**:
+```bash
+SEARCH_ENABLED=true
+SEARCH_INDEX_DIR=./actual-data      # Where the SQLite search index is stored
+EMBEDDING_PROVIDER=local            # or 'openai', 'ollama', etc.
+EMBEDDING_MODEL=default
+```
+
+**Estimated Effort**: 2-4 weeks
+- Week 1: SQLite FTS5 search index infrastructure + BM25 search
+- Week 2: Embedding provider integration + vector search (`vector_distance_cos`)
+- Week 3: RRF scoring merger, `search_similar`, `search_index_info` tools
+- Week 4: Incremental sync, Docker volume integration, tests, documentation
+
+**Priority**: 🟡 Medium — powerful capability but substantial complexity trade-off
+
+> **Note**: Our existing [Pattern Matching Enhancement Roadmap](#2-pattern-matching-enhancement-roadmap) achieves ~70% of the `actual_hybrid_search` use cases (keyword search by payee/category) with far less infrastructure. Recommend completing Phases 1-2 of that roadmap before committing to the full search engine.
+
+---
+
+### 🔵 Long-Term (High Complexity — 1-3 months)
+
+#### CF-5. Multi-User Authentication (OIDC / LDAP)
+
+**Fork source**: Fork README + inferred `src/auth/` module (from env var patterns in fork README; auth source not directly reviewed)
+
+**Purpose**: Enterprise multi-user support — authenticate individual users via OIDC or LDAP instead of a single shared Bearer token (`MCP_SSE_AUTHORIZATION`), with optional per-user budget ACLs.
+
+**OIDC configuration** (from fork README):
+```bash
+AUTH_PROVIDER=oidc
+OIDC_ISSUER=https://auth.example.com/realms/myapp
+OIDC_CLIENT_ID=actual-mcp-server
+OIDC_AUDIENCE=actual-mcp-server
+AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
+```
+
+**LDAP configuration**:
+```bash
+AUTH_PROVIDER=ldap
+LDAP_URL=ldap://ldap.example.com:389
+LDAP_BIND_DN=cn=admin,dc=example,dc=com
+LDAP_BIND_PASSWORD=admin-password
+LDAP_SEARCH_BASE=ou=users,dc=example,dc=com
+AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
+```
+
+**Features**:
+- Replace the single `MCP_SSE_AUTHORIZATION` Bearer token with OIDC/LDAP identity validation
+- Per-user budget access control via `AUTH_BUDGET_ACL` JSON map
+- Group-based ACLs (`"group:admin": ["*"]` = admin group accesses all budgets)
+- Backward-compatible: falls back to Bearer token if `AUTH_PROVIDER` is not set
+
+**Implementation scope**:
+- New auth middleware module (`src/auth/`)
+- OIDC token validation (`openid-client` or `passport-oauth2`)
+- LDAP bind + user search (`ldapjs`)
+- ACL enforcement in HTTP request pipeline
+- Docker secrets integration for credentials
+- Security audit + documentation
+
+**Estimated Effort**: 1-3 months
+
+**Priority**: 🔵 Low for single-user deployments; **High** for self-hosted teams sharing one Actual Budget instance
 
 ---
 
@@ -733,7 +1030,14 @@ Returns the running Actual Budget server version string. Complements the existin
 
 ## 🎯 Version Milestones
 
-### v0.4.13–v0.4.14 (March 2026) — Actual current state
+### v0.4.15–v0.4.16 (March 2026) — Community ports + batch tools
+- ✅ 56 tools (84% API coverage, +3 from community fork ports)
+- ✅ `actual_transactions_update_batch` — batch-update up to 100 transactions in one call (adapted from [ZanzyTHEbar fork](https://github.com/ZanzyTHEbar/actual-mcp-server))
+- ✅ `actual_transactions_uncategorized` — list transactions with no category, ideal for AI-driven cleanup (adapted from ZanzyTHEbar fork)
+- ✅ `actual_rules_create_or_update` — idempotent rule upsert, prevents duplicate rules (adapted from ZanzyTHEbar fork)
+- ✅ `docs/NEW_TOOL_CHECKLIST.md` — 9-step checklist for adding new tools
+
+### v0.4.13–v0.4.14 (March 2026) — Lookup tools + version info
 - ✅ 53 tools (84% API coverage)
 - ✅ Session management tools (`actual_session_list`, `actual_session_close`)
 - ✅ Server info tool (`actual_server_info`)
@@ -898,7 +1202,7 @@ AI agents can help with:
 1. Check this roadmap for upcoming features
 2. Pick a high-priority item
 3. Create GitHub issue discussing approach
-4. Implement with tests and documentation
+4. Follow **[docs/NEW_TOOL_CHECKLIST.md](./NEW_TOOL_CHECKLIST.md)** — mandatory step-by-step checklist covering implementation, unit tests, manual integration tests, AI prompt update, and all documentation files
 5. Submit pull request
 
 ### For Users

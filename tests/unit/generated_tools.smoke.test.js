@@ -91,7 +91,8 @@ console.log('Running generated tools smoke tests');
   if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.transactions = [{ amount: 100 }];
   if (name.includes('transactions_get')) inputExample.accountId = '00000000-0000-0000-0000-000000000001';
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
-  if (name.includes('transactions_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
+  if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
+  if (name.includes('transactions_update_batch')) inputExample.updates = [{ id: '00000000-0000-0000-0000-000000000001', fields: { notes: 'batch-test' } }];
   if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_create')) inputExample.name = 'New';
   if (name.includes('accounts_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated Name' };
@@ -109,7 +110,8 @@ console.log('Running generated tools smoke tests');
   if (name.includes('payees_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated' };
   if (name.includes('payees_merge')) inputExample.targetId = 'p_1', inputExample.mergeIds = ['p_2', 'p_3'];
   if (name.includes('payee_rules_get')) inputExample.payeeId = 'p_1';
-  if (name.includes('rules_create')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
+  if (name.includes('rules_create') && !name.includes('or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
+  if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_delete')) inputExample.id = 'rule_1';
   if (name.includes('rules_update')) inputExample.id = 'rule_1', inputExample.fields = { conditions: [] };
   if (name.includes('budgets_setAmount')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.amount = 100;
@@ -201,6 +203,22 @@ console.log('Running generated tools smoke tests');
       if (n.startsWith('transactions_summary_by_')) {
         if (!Array.isArray(res?.summary)) shapeErr(`expected summary array`);
         if (typeof res?.totalAmount !== 'number') shapeErr(`expected totalAmount number`);
+      }
+      if (n === 'rules_create_or_update') {
+        if (typeof res?.id !== 'string') shapeErr(`expected id string`);
+        if (typeof res?.created !== 'boolean') shapeErr(`expected created boolean`);
+      }
+      if (n === 'transactions_update_batch') {
+        if (!Array.isArray(res?.succeeded)) shapeErr(`expected succeeded array`);
+        if (!Array.isArray(res?.failed)) shapeErr(`expected failed array`);
+        if (typeof res?.total !== 'number') shapeErr(`expected total number`);
+        if (typeof res?.successCount !== 'number') shapeErr(`expected successCount number`);
+        if (typeof res?.failureCount !== 'number') shapeErr(`expected failureCount number`);
+      }
+      if (n === 'transactions_uncategorized') {
+        if (!Array.isArray(res?.transactions)) shapeErr(`expected transactions array`);
+        if (typeof res?.count !== 'number') shapeErr(`expected count number`);
+        if (typeof res?.summary?.totalAmount !== 'number') shapeErr(`expected summary.totalAmount number`);
       }
       // ────────────────────────────────────────────────────────────────────
 

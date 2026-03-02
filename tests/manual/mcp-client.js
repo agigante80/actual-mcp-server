@@ -96,26 +96,22 @@ export function createClient({ url, rl }) {
         await initialize();
         return callMCP(method, params, _maxRetries, _attempt);
       }
-      // --- Connection lost: pause + re-initialize then retry ---
+      // --- Connection lost: pause then retry with SAME session (TCP dropped, not session expired) ---
       if (
         err.message.includes('socket hang up') ||
         err.message.includes('ECONNRESET') ||
         err.message.includes('ECONNREFUSED')
       ) {
         if (_attempt >= _maxRetries) throw err;
-        console.log("  ⚠ Connection lost — pausing 5s then re-initializing...");
+        console.log("  ⚠ Connection lost — pausing 5s then retrying (session preserved)...");
         await new Promise(r => setTimeout(r, 5000));
-        sessionId = null;
-        await initialize();
         return callMCP(method, params, _maxRetries, _attempt + 1);
       }
-      // --- Request timeout: pause + re-initialize then retry ---
+      // --- Request timeout: pause then retry with SAME session ---
       if (err.name === 'AbortError' || err.message.includes('aborted') || err.message.includes('timed out')) {
         if (_attempt >= _maxRetries) throw err;
-        console.log("  ⚠ Request timed out — pausing 5s then re-initializing...");
+        console.log("  ⚠ Request timed out — pausing 5s then retrying (session preserved)...");
         await new Promise(r => setTimeout(r, 5000));
-        sessionId = null;
-        await initialize();
         return callMCP(method, params, _maxRetries, _attempt + 1);
       }
       throw err;
