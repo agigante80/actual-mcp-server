@@ -754,81 +754,118 @@ EMBEDDING_MODEL=default
 
 ---
 
-### 🔵 Long-Term (High Complexity — 1-2 weeks)
+### 🔵 Long-Term (High Complexity — 1 week)
 
-#### CF-5. Multi-User Authentication via OIDC
+#### CF-5. Multi-User Authentication via OIDC (`mcp-auth`)
 
-**Fork source**: [ZanzyTHEbar/actual-mcp-server](https://github.com/ZanzyTHEbar/actual-mcp-server) — `src/auth/` module fully reviewed 2026-03-02. Port the OIDC provider, middleware, ACL, and factory. **Direct LDAP dropped** — OIDC subsumes it (see rationale below).
+**Library**: [`mcp-auth`](https://www.npmjs.com/package/mcp-auth) v0.2.0 — provider-agnostic OAuth 2.1 / OIDC library built specifically for MCP servers. Replaces a hand-rolled OIDC implementation (ZanzyTHEbar's 6-file `src/auth/` module using `jose`) with a single maintained dependency that is fully compliant with the **MCP spec 2025-03-26 authorization requirements**.
 
-**Purpose**: Enterprise multi-user support — authenticate individual users via OIDC (OpenID Connect) instead of a single shared Bearer token (`MCP_SSE_AUTHORIZATION`), with optional per-user budget ACLs.
+**Why `mcp-auth` instead of porting ZanzyTHEbar's hand-rolled approach**:
+
+The MCP specification (2025-03-26) formally **requires OAuth 2.1** for authorization. `mcp-auth` is purpose-built to implement exactly this spec:
+
+| Capability | ZanzyTHEbar (`jose`) | `mcp-auth` |
+|---|---|---|
+| JWT validation | ✅ manual JWKS fetch | ✅ automatic |
+| Authorization Server Discovery | ❌ not implemented | ✅ `fetchServerConfig()` auto-discovers |
+| `/.well-known/oauth-protected-resource` endpoint | ❌ not implemented | ✅ `protectedResourceMetadataRouter()` |
+| Scope enforcement | ❌ not implemented | ✅ `requiredScopes` in `bearerAuth()` |
+| MCP spec 2025-03-26 compliance | ❌ partial | ✅ full |
+| Custom code to maintain | ~300 lines | ~50 lines wiring |
+| Dependencies | `jose` | `mcp-auth` (6 transitive deps) |
+
+**Purpose**: Enterprise multi-user support — authenticate individual users via OIDC instead of a single shared Bearer token (`MCP_SSE_AUTHORIZATION`), with optional per-user budget ACLs.
 
 **OIDC covers all practical LDAP/AD needs:**
 
-OIDC is the identity layer on top of OAuth 2.0. Every major IdP that enterprises already operate speaks OIDC natively and federates LDAP/AD behind the scenes transparently:
+OIDC is the identity layer on top of OAuth 2.0. Every major IdP federates LDAP/AD internally:
 
 | User directory | Path to OIDC |
 |---|---|
-| Azure AD / Entra ID | Already OIDC-native — just configure `OIDC_ISSUER` |
-| Active Directory | Keycloak in front of AD → OIDC (one Docker container, LDAP wizard built-in) |
-| OpenLDAP | Keycloak / Authentik / Dex in front → OIDC |
+| Azure AD / Entra ID | Already OIDC-native |
+| Active Directory | Keycloak (one Docker container, built-in LDAP wizard) |
+| OpenLDAP | Keycloak / Authentik / Dex → OIDC |
 | Google Workspace | Already OIDC-native |
 | Okta / Auth0 | Already OIDC-native |
-
-The MCP server never needs to speak LDAP directly. The IdP handles LDAP federation. Implementing direct LDAP would add a decommissioned-library dependency (`ldapjs` archived 2024-05-14) for a use case better served by a one-Docker-container Keycloak.
 
 **Configuration**:
 ```bash
 AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://auth.example.com/realms/myapp   # any OIDC-compliant IdP
-OIDC_CLIENT_ID=actual-mcp-server
-OIDC_AUDIENCE=actual-mcp-server                      # optional, defaults to client ID
+OIDC_RESOURCE=https://actual-mcp.example.com         # this server's resource identifier URL
+OIDC_SCOPES=read,write                               # comma-separated required scopes
 AUTH_BUDGET_ACL={"alice@example.com": ["budget-sync-1"], "group:admin": ["*"]}
 ```
 
-**Compatible IdPs** (tested by ZanzyTHEbar fork): Keycloak, Azure AD, Auth0, Okta, Google.
+**How it works**: `mcp-auth` auto-discovers the JWKS endpoint from `OIDC_ISSUER/.well-known/openid-configuration`, validates incoming `Authorization: Bearer <JWT>` tokens, and enforces `requiredScopes`. Our thin wrapper then applies `AUTH_BUDGET_ACL` per-user budget filtering on top.
 
-**How it works**: The MCP client sends `Authorization: Bearer <JWT>`. The OIDC provider validates it against the IdP's JWKS endpoint (auto-discovered via `/.well-known/openid-configuration`), extracts `sub`/`email`/`groups` claims, and enforces the `AUTH_BUDGET_ACL` map. No username/password ever touches the MCP server.
+**Integration wiring** (approximate — full API is the server's Express app):
+```typescript
+// src/auth/setup.ts
+import { MCPAuth, fetchServerConfig } from 'mcp-auth';
 
-**Fork module structure** (all reviewed, porting OIDC subset):
+export async function createMcpAuth() {
+  if (process.env.AUTH_PROVIDER !== 'oidc') return null;
 
-| File | Purpose | Include? |
-|---|---|---|
-| `src/auth/types.ts` | `AuthProvider` interface + `AuthIdentity` shape | ✅ Port |
-| `src/auth/oidc-provider.ts` | `OidcAuthProvider` — JWT validation via `jose` + JWKS | ✅ Port |
-| `src/auth/auth-middleware.ts` | Express middleware: `createAuthMiddleware()`, `getIdentityFromLocals()` | ✅ Port |
-| `src/auth/auth-factory.ts` | `createAuthProvider()` — returns provider or null | ✅ Port (OIDC only) |
-| `src/auth/budget-acl.ts` | `canAccessBudget()`, `getAllowedBudgets()`, `resetAclCache()` | ✅ Port |
-| `src/auth/index.ts` | Re-exports | ✅ Port |
-| `src/auth/ldap-provider.ts` | Direct LDAP bind | ❌ Drop |
-| `tests/auth/*.test.ts` | Full test suite: middleware, factory, OIDC provider | ✅ Port |
+  const authServerConfig = await fetchServerConfig(process.env.OIDC_ISSUER!, { type: 'oidc' });
+  const resource = process.env.OIDC_RESOURCE!;
+  const scopes = (process.env.OIDC_SCOPES ?? 'read').split(',');
 
-**Integration points**:
-- `src/index.ts` → call `createAuthProvider()`, pass to `startHttpServer()`
-- `src/server/httpServer.ts` → mount `createAuthMiddleware(authProvider, ['/health', '/metrics', '/.well-known'])` before routes
-- `src/lib/requestContext.ts` → extend `RequestContextData` with `identity?: AuthIdentity`
-- Session-to-identity binding prevents session hijacking across users
+  return new MCPAuth({
+    protectedResources: {
+      metadata: {
+        resource,
+        authorizationServers: [authServerConfig],
+        scopesSupported: scopes,
+      },
+    },
+  });
+}
+
+// src/server/httpServer.ts — add before routes:
+const mcpAuth = await createMcpAuth();
+if (mcpAuth) {
+  app.use(mcpAuth.protectedResourceMetadataRouter());   // serves /.well-known/oauth-protected-resource
+  app.use(mcpAuth.bearerAuth('jwt', {
+    resource: process.env.OIDC_RESOURCE!,
+    audience: process.env.OIDC_RESOURCE!,
+    requiredScopes: scopes,
+  }));
+}
+// req.auth.claims now available in every tool call
+```
+
+**Budget ACL** — thin custom layer on top (not provided by `mcp-auth`):
+```typescript
+// src/auth/budget-acl.ts — minimal, ~60 lines
+// Uses req.auth.claims.sub / email / groups to enforce AUTH_BUDGET_ACL map
+// canAccessBudget(claims, budgetId): boolean
+```
+
+**Implementation scope** (much smaller than porting ZanzyTHEbar):
+- `src/auth/setup.ts` — `createMcpAuth()` factory (~40 lines)
+- `src/auth/budget-acl.ts` — per-user budget ACL enforcement (~60 lines)
+- `src/server/httpServer.ts` — wire `protectedResourceMetadataRouter()` + `bearerAuth()` (~10 lines)
+- `src/config.ts` — add `AUTH_PROVIDER`, `OIDC_ISSUER`, `OIDC_RESOURCE`, `OIDC_SCOPES`, `AUTH_BUDGET_ACL` to Zod schema
+- Unit tests: ACL logic + middleware wiring (mock `mcp-auth`)
+- Documentation + Keycloak quick-start guide for LDAP/AD users
 
 **Features**:
-- Replace `MCP_SSE_AUTHORIZATION` static token with per-user OIDC JWT validation
+- Full MCP spec 2025-03-26 OAuth 2.1 compliance (Authorization Server Discovery, JWKS, scopes)
+- `/.well-known/oauth-protected-resource` endpoint served automatically
 - Per-user budget ACL via `AUTH_BUDGET_ACL` JSON map
 - Group-based ACLs (`"group:admin": ["*"]` = admin group accesses all budgets)
-- Access resolution order: wildcard `*` → `userId` → `email` → `group:*`
-- Backward-compatible: `AUTH_PROVIDER=none` (default) leaves existing behaviour untouched
+- Backward-compatible: `AUTH_PROVIDER=none` (default) leaves existing `MCP_SSE_AUTHORIZATION` untouched
 
-**Implementation scope**:
-- `src/auth/` — 6 files (types, oidc-provider, middleware, factory, budget-acl, index)
-- Extend `src/lib/requestContext.ts` with `identity?: AuthIdentity`
-- Wire into `src/index.ts` and `src/server/httpServer.ts`
-- Add `AUTH_PROVIDER`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_AUDIENCE`, `AUTH_BUDGET_ACL` to `src/config.ts` Zod schema
-- Unit tests for middleware, factory, and OIDC provider (port from fork's `tests/auth/`)
-- Documentation updates + Keycloak quick-start guide for LDAP/AD users
+**New dependency**: `mcp-auth` v0.2.0 (MIT, 2,168 weekly downloads, TypeScript-native, actively tracking MCP spec changes)
 
-**Estimated Effort**: 1-2 weeks (OIDC-only scope is simpler than the fork's dual OIDC+LDAP)
+**Zod compatibility note**: Verify `mcp-auth`'s transitive deps don't pull Zod 4.x. The `package.json` `overrides.zod` field already pins 3.25.76 — enforce before installing.
 
-**New dependencies**: `jose` (OIDC JWT validation — well-maintained, 0 sub-dependencies)
 **No breaking changes**: `AUTH_PROVIDER` defaults to `none`
 
-**For users with bare LDAP/AD and no OIDC IdP**: Run Keycloak as a sidecar (`docker compose`). It provides an LDAP federation wizard in its admin UI and exposes a standard OIDC endpoint in under 10 minutes. This is a better solution than implementing LDAP directly in the MCP server.
+**For users with bare LDAP/AD and no OIDC IdP**: Run Keycloak as a sidecar (`docker compose`). LDAP federation wizard in admin UI, OIDC endpoint ready in ~10 minutes.
+
+**Estimated Effort**: ~1 week (significantly reduced vs. hand-rolling — `mcp-auth` handles the hard OAuth 2.1 plumbing)
 
 **Priority**: 🔵 Low for single-user deployments; **High** for self-hosted teams sharing one Actual Budget instance
 
