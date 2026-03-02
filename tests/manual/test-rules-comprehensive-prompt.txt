@@ -32,8 +32,9 @@ WHAT IT TESTS (12 phases, 51 tools)
   Phase 12 – Cleanup
 
 NOTES
-  - Test data is named with timestamps (e.g. "Test-Account-2025-12-16").
-    Update the timestamp references inside the prompt if you want cleaner logs.
+  - Test data uses a timestamp placeholder (YYYY-MM-DD). Before pasting,
+    replace all occurrences of YYYY-MM-DD with today's date (e.g. 2026-03-02).
+    Find-and-replace in your editor: YYYY-MM-DD → today's date.
   - The prompt instructs the AI to clean up all created data at the end.
   - Failed phases halt execution; informational results (e.g. no bank
     connection) do not count as failures.
@@ -63,7 +64,7 @@ A tool test is considered FAILED if:
 4. NEVER ASK if user wants to continue - just continue automatically to the next tool
 5. ONLY STOP if a tool fails per the Failure Definition above - report the failure and wait for instructions
 6. Start with read-only/safe operations, then move to write operations
-7. Use realistic test data with clear naming (include timestamp: 2025-12-16)
+7. Use realistic test data with clear naming (include timestamp: YYYY-MM-DD)
 8. After each tool test, output exactly one line: [Phase X] tool_name — ✓ success OR [Phase X] tool_name — ✗ failure: <error summary>
 9. DO NOT provide explanatory text between tests - just the status line and continue to next tool
 10. Continue testing automatically until you hit a failure or complete all 51 tools
@@ -93,7 +94,7 @@ If a destructive operation would affect non-test data:
 - actual_payees_get (expect: payees array possibly empty, no error)
 
 **Phase 2 - Accounts (7 tools):**
-- actual_accounts_create (name: "Test-Account-2025-12-16") → Save account ID
+- actual_accounts_create (name: "Test-Account-YYYY-MM-DD") → Save account ID
 - actual_accounts_get_balance (use saved account ID)
 - actual_accounts_update (use saved ID, change name to "Test-Account-Updated")
 - actual_accounts_close (use saved ID)
@@ -102,17 +103,17 @@ If a destructive operation would affect non-test data:
 - Verify with actual_accounts_list (confirm deletion)
 
 **Phase 3 - Category Groups & Categories (8 tools):**
-- actual_category_groups_create (name: "Test-Group-2025-12-16") → Save group ID
+- actual_category_groups_create (name: "Test-Group-YYYY-MM-DD") → Save group ID
 - actual_category_groups_update (use saved ID, rename to "Test-Group-Updated")
-- actual_categories_create (name: "Test-Category-2025-12-16", use saved group ID) → Save category ID
+- actual_categories_create (name: "Test-Category-YYYY-MM-DD", use saved group ID) → Save category ID
 - actual_categories_update (use saved category ID, rename to "Test-Category-Updated")
 - actual_categories_delete (use saved category ID)
 - actual_category_groups_delete (use saved group ID)
 - Verify with actual_category_groups_get and actual_categories_get (confirm deletions)
 
 **Phase 4 - Payees (6 tools):**
-- actual_payees_create (name: "Test-Payee-2025-12-16") → Save payee1 ID
-- actual_payees_create (name: "Test-Payee-2-2025-12-16") → Save payee2 ID
+- actual_payees_create (name: "Test-Payee-YYYY-MM-DD") → Save payee1 ID
+- actual_payees_create (name: "Test-Payee-2-YYYY-MM-DD") → Save payee2 ID
 - actual_payees_update (use saved payee1 ID, rename to "Test-Payee-Updated")
 - actual_payee_rules_get (expect: rules array possibly empty)
 - actual_payees_merge (merge payee2 into payee1 using saved IDs)
@@ -126,14 +127,16 @@ If a destructive operation would affect non-test data:
 - actual_rules_delete (use saved rule ID)
 
 **Phase 6 - Transactions (11 tools):**
-- actual_transactions_create (expense: -5000 cents in saved account) → Save transaction1 ID
-- actual_transactions_create (income: 10000 cents in saved account) → Save transaction2 ID
+- IMPORTANT: Phase 2 deleted the test account. Create a NEW account for transactions:
+  actual_accounts_create (name: "Test-Txn-Account-YYYY-MM-DD") → Save txn-account ID
+- actual_transactions_create (expense: -5000 cents in txn-account) → Save transaction1 ID
+- actual_transactions_create (income: 10000 cents in txn-account) → Save transaction2 ID
 - actual_transactions_get (use saved transaction1 ID)
-- actual_transactions_filter (filter by saved account ID)
+- actual_transactions_filter (filter by txn-account ID)
 - actual_transactions_update (use saved transaction1 ID, change amount or notes)
 - actual_transactions_search_by_amount (search for amounts around -5000 cents)
 - actual_transactions_search_by_category (search using existing category)
-- actual_transactions_search_by_month (search month: 2025-12)
+- actual_transactions_search_by_month (search month: 2026-03)
 - actual_transactions_search_by_payee (search using existing payee)
 - actual_transactions_import (empty array - expect no-op success OR validation error, both acceptable)
 - actual_transactions_delete (use saved transaction IDs)
@@ -144,21 +147,21 @@ If a destructive operation would affect non-test data:
 
 **Phase 8 - Budgets (9 tools):**
 - actual_budgets_get_all (expect: budget data for all months)
-- actual_budgets_getMonth (current month: 2025-12)
-- actual_budgets_getMonths (get 3 months: 2025-10, 2025-11, 2025-12)
+- actual_budgets_getMonth (current month: 2026-03)
+- actual_budgets_getMonths (get 3 months: 2026-01, 2026-02, 2026-03)
 - actual_budgets_setAmount (set budget 50000 cents for existing category)
 - actual_budgets_setCarryover (enable carryover for same category)
-- actual_budgets_holdForNextMonth (hold 10000 cents for same category)
-- actual_budgets_resetHold (reset the hold for same category)
+- actual_budgets_holdForNextMonth (hold 10000 cents for current month — operates on the whole month, no categoryId)
+- actual_budgets_resetHold (reset the hold for current month — no categoryId)
 - actual_budgets_transfer (transfer budget between two existing categories - create temp category if needed)
-- actual_budgets_updates_batch (update multiple budgets at once using existing categories)
+- actual_budget_updates_batch (update multiple budgets at once using existing categories)
 
 **Phase 9 - Advanced Query & Sync (2 tools):**
-- actual_bank_sync (use saved account ID)
+- actual_bank_sync (use txn-account ID from Phase 6)
   * If no bank connection exists: Report "Skipped (no bank connection)" as ✓ success
   * Do NOT treat missing bank connection as failure
 - actual_query_run - Test with these queries (if unsupported SQL features cause errors, report as ✓ informational):
-  1. "SELECT COUNT(*) as total_transactions FROM transactions WHERE date >= '2025-01-01'" (simple count)
+  1. "SELECT COUNT(*) as total_transactions FROM transactions WHERE date >= '2026-01-01'" (simple count)
   2. "SELECT account, COUNT(*) as count, SUM(amount) as total FROM transactions GROUP BY account LIMIT 10" (basic aggregation)
   3. "SELECT payee, amount, date FROM transactions WHERE amount < 0 ORDER BY amount ASC LIMIT 5" (simple filter and sort)
 
@@ -207,7 +210,7 @@ Ready? Start testing automatically with Phase 1, Tool 1: actual_server_info
 - You have direct access to 51 Actual Budget MCP tools via the MCP protocol
 - DO NOT use actual_query_run to call other tools
 - Call each tool directly using its proper MCP tool interface
-- For example, to call actual_rules_help, invoke the MCP tool "actual_rules_help" with parameter {"topic": "all"}
+- For example, to call actual_accounts_list, invoke the MCP tool "actual_accounts_list" with no parameters
 - Each tool is a separate MCP tool that can be invoked directly
 - The tools are NOT SQL queries - they are MCP protocol tools
 
