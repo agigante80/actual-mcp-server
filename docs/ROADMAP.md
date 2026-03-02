@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.17  
+**Version:** 0.4.18  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-03
 
@@ -859,7 +859,7 @@ if (mcpAuth) {
 
 **New dependency**: `mcp-auth` v0.2.0 (MIT, 2,168 weekly downloads, TypeScript-native, actively tracking MCP spec changes)
 
-**Zod compatibility note**: Verify `mcp-auth`'s transitive deps don't pull Zod 4.x. The `package.json` `overrides.zod` field already pins 3.25.76 — enforce before installing.
+**Zod compatibility note**: Project runs Zod 4.x natively (`z.toJSONSchema()` built in). Verify `mcp-auth`'s transitive deps are compatible with Zod 4.x before installing.
 
 **No breaking changes**: `AUTH_PROVIDER` defaults to `none`
 
