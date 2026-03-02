@@ -5,6 +5,8 @@
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-03
 
+> 📋 **Implementing a planned item?** Follow the step-by-step process in [docs/NEW_TOOL_CHECKLIST.md](./NEW_TOOL_CHECKLIST.md) — it covers tool file, registration, unit tests, manual tests (positive + negative), AI prompt update, and all documentation files that must be updated before committing.
+
 ---
 
 ## 🎯 Vision
@@ -1193,7 +1195,7 @@ AI agents can help with:
 1. Check this roadmap for upcoming features
 2. Pick a high-priority item
 3. Create GitHub issue discussing approach
-4. Implement with tests and documentation
+4. Follow **[docs/NEW_TOOL_CHECKLIST.md](./NEW_TOOL_CHECKLIST.md)** — mandatory step-by-step checklist covering implementation, unit tests, manual integration tests, AI prompt update, and all documentation files
 5. Submit pull request
 
 ### For Users
