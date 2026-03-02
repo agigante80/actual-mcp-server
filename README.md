@@ -136,8 +136,7 @@ AI: [Uses categories_create] "Pet Supplies category created"
 
 ### Transport Protocols
 
-- **HTTP/HTTPS**: Production-ready with Bearer token authentication (recommended)
-- **SSE (Server-Sent Events)**: Streaming updates (compatible with LibreChat and LobeChat)
+- **HTTP/HTTPS**: Production-ready with Bearer token authentication
 
 ### 🐳 Docker Networking Best Practices
 
@@ -174,8 +173,7 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 ### Core Capabilities
 
 - 🤖 **51 MCP Tools**: Comprehensive financial operations via natural language
-- 🔄 **Multiple Transports**: HTTP and Server-Sent Events (SSE)
-- 🔐 **Secure**: Bearer token authentication + HTTPS/TLS encryption
+-  **Secure**: Bearer token authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **82% API Coverage**: Supports majority of Actual Budget operations
@@ -259,7 +257,7 @@ Available tags:
 
 Both registries have identical images. Use Docker Hub for public access, or GHCR for integration with GitHub workflows.
 
-> **Note**: Docker images default to HTTP transport mode. To use SSE instead, set `MCP_TRANSPORT_MODE=--sse`.
+> **Note**: Docker images use HTTP transport mode.
 
 #### Quick Start (HTTP)
 
@@ -779,8 +777,7 @@ ACTUAL_BUDGET_SYNC_ID=your_sync_id
 # Security (generate with: openssl rand -hex 32)
 MCP_SSE_AUTHORIZATION=your_bearer_token_here
 
-# Transport mode (Docker only - defaults to --http)
-# Options: --http (recommended), --sse
+# Transport mode (Docker only)
 MCP_TRANSPORT_MODE=--http
 
 # HTTPS (optional but recommended)
@@ -915,8 +912,7 @@ All configuration is managed via environment variables. See [`.env.example`](.en
 | `MCP_BRIDGE_USE_TLS` | `false` | ❌ No | Legacy TLS flag (use `MCP_ENABLE_HTTPS` instead) |
 | `MCP_BRIDGE_ADVERTISED_URL` | - | ❌ No | Human-friendly URL displayed to users |
 | **Transport Configuration** ||||
-| `MCP_TRANSPORT_MODE` | `--http` | ❌ No | Transport mode (`--http` or `--sse`) - Docker only |
-| `MCP_SSE_PATH` | `/sse` | ❌ No | SSE endpoint path |
+| `MCP_TRANSPORT_MODE` | `--http` | ❌ No | Transport mode (only `--http` supported) - Docker only |
 | `MCP_HTTP_PATH` | `/http` | ❌ No | HTTP endpoint path |
 | **Session Management** ||||
 | `USE_CONNECTION_POOL` | `true` | ❌ No | Enable session-based connection pooling |
@@ -992,27 +988,18 @@ SESSION_IDLE_TIMEOUT_MINUTES=5
 
 Docker images use these defaults (can be overridden):
 - `MCP_BRIDGE_PORT=3600` (instead of 3000)
-- `MCP_TRANSPORT_MODE=--http` (set in CMD)
+- `MCP_TRANSPORT_MODE=--http`
 - `MCP_BRIDGE_DATA_DIR=/data` (recommended for volume mount)
 
 ---
 
-## 🔌 Transports & Authentication
+## 🔌 Transport & Authentication
 
-The MCP server supports **two transport protocols** with optional Bearer token authentication.
+The MCP server uses **HTTP transport** with optional Bearer token authentication.
 
-> **Docker Note**: When running in Docker, HTTP transport is the default. Override with `MCP_TRANSPORT_MODE` environment variable (`--http` or `--sse`). For local development, specify the transport mode using command-line flags.
+### HTTP Transport
 
-### Available Transports
-
-| Transport | Type | LibreChat Support | Authentication | Recommended |
-|-----------|------|-------------------|----------------|-------------|
-| **HTTP** | `streamable-http` | ✅ Full support | ✅ Working | **✅ RECOMMENDED** |
-| **SSE** | `sse` | ✅ Supported | ⚠️ Headers not sent by client | Use without auth |
-
-### 1. HTTP Transport (Recommended)
-
-**Best for:** Production deployments with LibreChat
+**Best for:** All deployments (only transport supported)
 
 ```bash
 # Start server with HTTP
@@ -1041,34 +1028,6 @@ mcpServers:
 - ✅ All 51 tools load successfully in LibreChat
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
-
-### 2. SSE Transport (Alternative)
-
-**Best for:** Development or non-authenticated environments
-
-```bash
-# Start server with SSE
-npm run dev -- --sse
-```
-
-**LibreChat Configuration:**
-
-```yaml
-# librechat.yaml (without authentication)
-mcpServers:
-  actual-mcp:
-    type: "sse"
-    url: "http://your-server-ip:3600/sse"
-    serverInstructions: true
-```
-
-**Features:**
-- ✅ Full MCP protocol support
-- ✅ Server-side authentication implemented
-- ⚠️ LibreChat SSE client doesn't send custom headers
-- ✅ Works perfectly without authentication
-
-**Known Limitation:** While the server supports Bearer token authentication for SSE, LibreChat's SSE client implementation does not send custom headers specified in the configuration. Use HTTP transport for authenticated deployments.
 
 ### Authentication Configuration
 
@@ -1116,18 +1075,10 @@ ACTUAL_SERVER_URL=https://actual.yourdomain.com
 
 ### Testing Results
 
-Comprehensive testing completed with LibreChat:
-
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
 | HTTP without auth | ✅ Success | 51 tools |
 | HTTP with auth | ✅ Success | 51 tools |
-| SSE without auth | ✅ Success | 51 tools |
-| SSE with auth | ⚠️ Client limitation | 0 tools (headers not sent) |
-
-**Conclusion:** Use **HTTP transport with Bearer token authentication** for secure production LibreChat deployments.
-
-See [`docs/transport-testing-final-report.md`](docs/transport-testing-final-report.md) for detailed test results.
 
 ---
 
@@ -1200,7 +1151,7 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 - **MCP SDK**: @modelcontextprotocol/sdk ^1.25.2
 - **API Client**: @actual-app/api ^26.2.1
 - **Validation**: Zod (runtime type checking + JSON Schema)
-- **Transport**: Express (HTTP), EventEmitter (SSE)
+- **Transport**: Express (HTTP)
 - **Logging**: Winston with daily rotation
 - **Testing**: Playwright, unit tests, integration tests
 
@@ -1352,8 +1303,6 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 - **[API Coverage](docs/api-coverage.md)**: Complete tool reference with examples
 - **[Deployment](docs/deployment.md)**: Docker, Kubernetes, bare metal guides
 - **[Development](docs/development.md)**: Local development and debugging
-- **[Transport Testing](docs/transport-testing-final-report.md)**: Complete transport and authentication test results
-- **[SSE Authentication](docs/sse-authentication.md)**: SSE-specific authentication guide
 - **[Contributing](CONTRIBUTING.md)**: Contribution guidelines and workflow
 
 ---

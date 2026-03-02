@@ -722,7 +722,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | 5 | List accounts | ✅ Account array returned | ❌ Database error |
 | 6 | Create test account | ✅ Account ID returned | ❌ Duplicate name, validation error |
 | 7 | Verify session persistence | ✅ 3 consecutive calls work | ❌ Session timeout |
-| 8 | SSE endpoint | ⏭️ SKIPPED (HTTP mode) | ❌ (N/A) |
+| 8 | *(removed — SSE transport removed)* | N/A | N/A |
 | 9 | Docker build verification | ✅ All files present | ❌ Missing dependencies |
 | 10 | Handle invalid tool name | ✅ Error: Tool not found | ❌ Unexpected behavior |
 | 11 | Handle invalid arguments | ✅ Validation error returned | ❌ Server crash |

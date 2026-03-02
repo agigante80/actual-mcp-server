@@ -248,8 +248,7 @@ cp .env.example .env
 npm run build                    # TypeScript compilation
 
 # 3. Run development server
-npm run dev -- --debug --http    # HTTP transport with debug logging (recommended)
-npm run dev -- --sse             # SSE transport
+npm run dev -- --debug --http    # HTTP transport with debug logging
 
 # 4. Test
 npm run test:adapter             # Adapter smoke tests

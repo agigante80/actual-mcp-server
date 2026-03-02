@@ -416,6 +416,6 @@ class ActualConnectionPool {
 // Export singleton instance
 export const connectionPool = new ActualConnectionPool();
 
-// NOTE: Process shutdown handlers are managed by the server (httpServer.ts, wsServer.ts, sseServer.ts)
+// NOTE: Process shutdown handlers are managed by the server (httpServer.ts)
 // to ensure proper cleanup order. The connection pool should NOT have its own SIGTERM/SIGINT handlers
 // as they would call process.exit() and prevent the server's cleanup from running.

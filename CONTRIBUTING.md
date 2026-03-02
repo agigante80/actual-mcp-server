@@ -105,7 +105,7 @@ actual-mcp-server/
 │   ├── lib/                 # Core libraries
 │   │   ├── actual-adapter.ts # API wrapper with retry logic
 │   │   └── ActualMCPConnection.ts # MCP protocol implementation
-│   ├── server/              # Transport implementations (HTTP/WS/SSE)
+│   ├── server/              # Transport implementations (HTTP)
 │   ├── tools/               # MCP tool definitions (37 tools)
 │   └── types/               # TypeScript type definitions
 ├── test/                     # Test suites

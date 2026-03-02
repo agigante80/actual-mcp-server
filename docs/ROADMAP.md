@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.9  
+**Version:** 0.4.14  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-02
 
@@ -15,13 +15,14 @@ Transform the Actual MCP Server from a **functional bridge** into a **production
 
 ## 📊 Roadmap Overview
 
-### Current State (v0.4.9)
+### Current State (v0.4.14)
 
 - ✅ **51 MCP tools** covering ~82% of Actual Budget API
 - ✅ **LibreChat & LobeChat verified** - all tools working
 - ✅ **Production-ready** - Docker images, CI/CD, HTTPS
 - ✅ **Security-conscious** - Bearer auth, input validation, 0 vulnerabilities
 - ✅ **Well-documented** - Comprehensive documentation ecosystem
+- ✅ **HTTP-only transport** - SSE transport removed; HTTP is the sole supported transport
 
 ### Target State (v1.0.0)
 
@@ -728,13 +729,15 @@ Returns the running Actual Budget server version string. Complements the existin
 
 ## 🎯 Version Milestones
 
-### v0.4.9 (March 2026) — Actual current state
+### v0.4.13–v0.4.14 (March 2026) — Actual current state
 - ✅ 51 tools (82% API coverage)
 - ✅ Session management tools (`actual_session_list`, `actual_session_close`)
 - ✅ Server info tool (`actual_server_info`)
 - ✅ 6 exclusive ActualQL-powered search/summary tools
 - ✅ Connection pooling (`ActualConnectionPool.ts`)
 - ✅ Comprehensive test suite (unit, Docker E2E 51/51, manual integration)
+- ✅ SSE transport removed — HTTP is the sole supported transport
+- ✅ Security fixes: ajv, qs, minimatch, diff CVEs resolved
 - [ ] Schedules tools — still pending
 - [ ] Security hardening (rate limiting, CSRF) — still pending
 
@@ -815,6 +818,8 @@ AI agents can help with:
 **Delivered so far**:
 - ✅ Unit test suite (3 files, 51-tool smoke + 23 schema assertions)
 - ✅ Documentation audit and updates (ARCHITECTURE, TESTING, SECURITY)
+- ✅ SSE transport removed (HTTP-only, cleaner codebase)
+- ✅ Security: CVEs resolved for ajv, qs, minimatch, diff
 - ⏳ Tags CRUD tools (planned)
 - ⏳ Schedules tools (planned)
 - ⏳ Rate limiting (planned)
