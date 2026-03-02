@@ -32,14 +32,21 @@ WHAT IT TESTS (12 phases, 51 tools)
   Phase 12 – Cleanup
 
 NOTES
-  - Test data uses a timestamp placeholder (YYYY-MM-DD). Before pasting,
-    replace all occurrences of YYYY-MM-DD with today's date (e.g. 2026-03-02).
-    Find-and-replace in your editor: YYYY-MM-DD → today's date.
+  - Test data naming follows the same MCP-{Type}-{TS} convention used by the
+    automated manual test scripts (e.g. account.js, category.js, payee.js).
+    The AI is instructed to compute a session timestamp at the start and use it
+    for every created item — no manual find-replace needed before pasting.
   - The prompt instructs the AI to clean up all created data at the end.
   - Failed phases halt execution; informational results (e.g. no bank
     connection) do not count as failures.
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
+
+**Preamble — Session Timestamp:**
+Before invoking any tool, generate a session timestamp by taking today's date and time in ISO 8601 format and replacing every `:` and `.` with `-`.
+Example: `2026-03-02T14-30-22-456Z`
+Store this as `{TS}` and use it for every test-data name below.
+This matches the naming convention used by the automated manual test scripts in this project.
 
 I want you to systematically test all 51 Actual Budget MCP tools available to you. Follow these rules:
 
@@ -64,7 +71,7 @@ A tool test is considered FAILED if:
 4. NEVER ASK if user wants to continue - just continue automatically to the next tool
 5. ONLY STOP if a tool fails per the Failure Definition above - report the failure and wait for instructions
 6. Start with read-only/safe operations, then move to write operations
-7. Use realistic test data with clear naming (include timestamp: YYYY-MM-DD)
+7. Use realistic test data named with the MCP prefix convention: MCP-{Type}-{TS} (e.g. MCP-Test-{TS}, MCP-Group-{TS}, MCP-Cat-{TS}, MCP-Payee-{TS})
 8. After each tool test, output exactly one line: [Phase X] tool_name — ✓ success OR [Phase X] tool_name — ✗ failure: <error summary>
 9. DO NOT provide explanatory text between tests - just the status line and continue to next tool
 10. Continue testing automatically until you hit a failure or complete all 51 tools
@@ -94,7 +101,7 @@ If a destructive operation would affect non-test data:
 - actual_payees_get (expect: payees array possibly empty, no error)
 
 **Phase 2 - Accounts (7 tools):**
-- actual_accounts_create (name: "Test-Account-YYYY-MM-DD") → Save account ID
+- actual_accounts_create (name: "MCP-Test-{TS}") → Save account ID
 - actual_accounts_get_balance (use saved account ID)
 - actual_accounts_update (use saved ID, change name to "Test-Account-Updated")
 - actual_accounts_close (use saved ID)
@@ -103,17 +110,17 @@ If a destructive operation would affect non-test data:
 - Verify with actual_accounts_list (confirm deletion)
 
 **Phase 3 - Category Groups & Categories (8 tools):**
-- actual_category_groups_create (name: "Test-Group-YYYY-MM-DD") → Save group ID
+- actual_category_groups_create (name: "MCP-Group-{TS}") → Save group ID
 - actual_category_groups_update (use saved ID, rename to "Test-Group-Updated")
-- actual_categories_create (name: "Test-Category-YYYY-MM-DD", use saved group ID) → Save category ID
+- actual_categories_create (name: "MCP-Cat-{TS}", use saved group ID) → Save category ID
 - actual_categories_update (use saved category ID, rename to "Test-Category-Updated")
 - actual_categories_delete (use saved category ID)
 - actual_category_groups_delete (use saved group ID)
 - Verify with actual_category_groups_get and actual_categories_get (confirm deletions)
 
 **Phase 4 - Payees (6 tools):**
-- actual_payees_create (name: "Test-Payee-YYYY-MM-DD") → Save payee1 ID
-- actual_payees_create (name: "Test-Payee-2-YYYY-MM-DD") → Save payee2 ID
+- actual_payees_create (name: "MCP-Payee-{TS}") → Save payee1 ID
+- actual_payees_create (name: "MCP-Payee2-{TS}") → Save payee2 ID
 - actual_payees_update (use saved payee1 ID, rename to "Test-Payee-Updated")
 - actual_payee_rules_get (expect: rules array possibly empty)
 - actual_payees_merge (merge payee2 into payee1 using saved IDs)
@@ -128,7 +135,7 @@ If a destructive operation would affect non-test data:
 
 **Phase 6 - Transactions (11 tools):**
 - IMPORTANT: Phase 2 deleted the test account. Create a NEW account for transactions:
-  actual_accounts_create (name: "Test-Txn-Account-YYYY-MM-DD") → Save txn-account ID
+  actual_accounts_create (name: "MCP-Txn-{TS}") → Save txn-account ID
 - actual_transactions_create (expense: -5000 cents in txn-account) → Save transaction1 ID
 - actual_transactions_create (income: 10000 cents in txn-account) → Save transaction2 ID
 - actual_transactions_get (use saved transaction1 ID)
