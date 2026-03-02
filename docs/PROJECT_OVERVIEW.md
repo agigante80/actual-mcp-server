@@ -1,9 +1,9 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.7  
+**Version:** 0.4.9  
 **Status:** Production-ready with ongoing enhancements  
-**Last Updated:** 2026-01-07  
+**Last Updated:** 2026-03-02  
 **Assessment Score:** 88/100 (EXCELLENT)  
 **Tool Count:** 51 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
@@ -41,9 +41,9 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 
 ## ✨ Core Features
 
-### 🛠️ **49 MCP Tools**
+### 🛠️ **51 MCP Tools**
 
-Comprehensive coverage of Actual Budget functionality across 9 categories:
+Comprehensive coverage of Actual Budget functionality across 11 categories:
 
 | Category | Tools | Coverage |
 |----------|-------|----------|
@@ -57,6 +57,7 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 | **Advanced Query & Sync** | 2 | Custom ActualQL queries, bank synchronization |
 | **Batch Operations** | 1 | Batch budget updates |
 | **Server Info** | 1 | Server status and information |
+| **Session Management** | 2 | List and close active MCP sessions |
 
 **Total**: 51 tools with 82% coverage of Actual Budget core API
 
@@ -111,9 +112,9 @@ Comprehensive coverage of Actual Budget functionality across 9 categories:
 |------------|---------|---------|
 | `@actual-app/api` | ^26.2.1 | Official Actual Budget API client |
 | `@modelcontextprotocol/sdk` | ^1.25.2 | MCP protocol implementation |
-| `express` | ^4.21.2 | HTTP/SSE server framework |
+| `express` | ^5.2.1 | HTTP/SSE server framework |
 | `winston` | ^3.18.3 | Structured logging |
-| `zod` | (bundled) | Runtime type validation |
+| `zod` | 3.25.76 ⚠️ | Runtime type validation (pinned — do NOT upgrade to 4.x) |
 | `date-fns` | ^4.1.0 | Date manipulation |
 | `dotenv` | ^17.2.2 | Environment configuration |
 
@@ -237,7 +238,7 @@ mcpServers:
 - ✅ **Docker images published** - Docker Hub and GHCR
 - ✅ **CI/CD pipeline** - automated testing and deployment
 - ✅ **Security hardened** - Bearer auth, HTTPS, non-root container
-- ✅ **Test coverage** - >80% unit test coverage
+- ✅ **Test coverage** - unit tests (51 tools), Playwright E2E, and live integration suite
 
 ### Future Goals
 
