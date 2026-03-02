@@ -1,7 +1,7 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.15  
+**Version:** 0.4.16  
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-02  
 **Assessment Score:** 88/100 (EXCELLENT)  
@@ -40,7 +40,7 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 
 ## ✨ Core Features
 
-### 🛠️ **51 MCP Tools**
+### 🛠️ **56 MCP Tools**
 
 Comprehensive coverage of Actual Budget functionality across 12 categories:
 

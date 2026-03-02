@@ -21,6 +21,15 @@
 #   6. Wait for MCP server health check to pass
 #   7. Run full integration test suite with auto-cleanup
 #
+# DOCUMENTATION
+#   Each service has its own README in $DOCKER_DIR and its subdirectories.
+#   Consult them if a service needs first-time setup or troubleshooting:
+#     $DOCKER_DIR/README.md                          ← environment overview
+#     $DOCKER_DIR/actual-mcp-server/DEPLOYMENT.md   ← MCP server deploy guide
+#     $DOCKER_DIR/Finance-actual-budget/README.md    ← Actual Budget setup
+#     $DOCKER_DIR/LibreChat/                         ← LibreChat config files
+#     $DOCKER_DIR/lobechatAI/                        ← LobeChat config files
+#
 # Usage:
 #   bash scripts/deploy-and-test.sh [TEST_LEVEL]
 #   TEST_LEVEL: sanity | smoke | normal | extended | full (default: full)
