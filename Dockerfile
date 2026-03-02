@@ -4,12 +4,6 @@ WORKDIR /app
 RUN npm install -g npm@latest
 COPY package.json package-lock.json* ./
 RUN npm ci --production=false
-# CRITICAL FIX: Force Zod 3.x (DO NOT REMOVE)
-# Problem: npm chooses Zod 4.x for @modelcontextprotocol/sdk peer dependency (^3.25 || ^4.0)
-# Impact: Zod 4.x breaks zod-to-json-schema, causing LibreChat to detect 0 tools instead of 53
-# Solution: Remove npm's choice and force install Zod 3.25.76
-# See: docs/ZOD_VERSION_CONSTRAINT.md for full details
-RUN rm -rf node_modules/zod && npm install --no-save zod@3.25.76
 COPY . ./
 RUN npm run build
 
