@@ -34,6 +34,20 @@ export async function rulesTests(client, context) {
   console.log("✓ Rule created without 'op' (defaulted to 'set'):", ruleWithoutOpId);
   context.ruleWithoutOpId = ruleWithoutOpId;
 
+  // Verify ruleWithoutOp — action should have op='set' defaulted by the server
+  {
+    const rd = await callTool("actual_rules_get", {});
+    const allRules = rd.rules || rd.result || rd || [];
+    const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleWithoutOpId) : null;
+    if (!found) {
+      console.log("  ❌ Verify ruleWithoutOp: not found in list (id:", ruleWithoutOpId, ")");
+    } else {
+      const action = found.actions?.[0];
+      if (action?.op === 'set') console.log(`  ✓ Verify ruleWithoutOp: action.op defaulted to "set"`);
+      else console.log(`  ❌ Verify ruleWithoutOp: expected action.op="set", got "${action?.op}" (rule: ${JSON.stringify(action)})`);
+    }
+  }
+
   // Create rule with explicit 'op'
   console.log("\nCreating test rule...");
   const newRule = await callTool("actual_rules_create", {

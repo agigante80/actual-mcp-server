@@ -64,7 +64,9 @@ export async function accountTests(client, context) {
   // Balance
   console.log("\nGetting account balance...");
   const balance = await callTool("actual_accounts_get_balance", { id: accountId });
-  console.log("✓ Balance:", balance);
+  const balanceVal = typeof balance === 'object' ? (balance.balance ?? balance.result) : balance;
+  if (balanceVal === 0) console.log(`  ✓ Balance: ${balanceVal} (expected 0 for new account)`);
+  else console.log(`  ❌ Balance: expected 0 for new account, got ${balanceVal}`);
 
   // REGRESSION: multi-field update
   console.log("\nREGRESSION: Updating multiple account fields (name, offbudget)...");
