@@ -25,6 +25,7 @@
     "test:integration:extended": "MCP_TEST_LEVEL=extended node tests/manual/actual-mcp-integration-test.js",
     "test:integration:full": "MCP_TEST_LEVEL=full node tests/manual/actual-mcp-integration-test.js",
     "test:integration:crud": "MCP_TEST_LEVEL=full node tests/manual/actual-mcp-integration-test.js",
+    "test:integration:cleanup": "MCP_TEST_LEVEL=cleanup node tests/manual/actual-mcp-integration-test.js",
     "test:query": "node tests/test-mcp-query.mjs",
     "test:validation": "node tests/test-query-validation.mjs",
     "version:current": "cat VERSION",

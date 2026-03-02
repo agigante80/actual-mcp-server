@@ -46,6 +46,12 @@
 //     - Advanced: SQL queries, payee rules, mergePayees, batchBudgetUpdates
 //     - Cleanup prompt with 10-second auto-delete timeout
 //
+//   CLEANUP (standalone, no test run):
+//     Finds every open account whose name starts with "MCP-Test-", deletes all
+//     its transactions, then closes the account. Safe to run repeatedly.
+//     - Skips accounts that are already closed
+//     - Reports totals: accounts closed, transactions deleted, skipped
+//
 //   The script uses proper MCP JSON-RPC 2.0 protocol with session management.
 //
 //   Usage:
@@ -54,8 +60,8 @@
 //     Parameters:
 //       MCP_URL  - MCP server URL (default: http://localhost:3600/http)
 //       TOKEN    - Bearer token for authentication
-//       LEVEL    - Test level: sanity, smoke, normal, extended, or full
-//       CLEANUP  - Optional cleanup behavior:
+//       LEVEL    - Test level: sanity, smoke, normal, extended, full, or cleanup
+//       CLEANUP  - Optional cleanup behavior (for test levels, not for cleanup level):
 //                  'yes' or 'y' - Auto-delete test data
 //                  'no' or 'n'  - Preserve test data
 //                  (omitted)    - Interactive prompt with 10s timeout
@@ -69,6 +75,7 @@
 //       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN normal no
 //       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN extended no
 //       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN full yes
+//       node actual-mcp-integration-test.js http://localhost:3600/http TOKEN cleanup
 //       EXPECTED_TOOL_COUNT=51 node actual-mcp-integration-test.js http://localhost:3600/http TOKEN sanity
 
 import fetch from 'node-fetch';
@@ -1042,6 +1049,71 @@ async function fullTests(context) {
 }
 
 // -------------------------------
+// MCP-TEST ACCOUNT CLEANUP
+// -------------------------------
+
+async function cleanupMcpTestAccounts() {
+  console.log("\n-- Running MCP TEST ACCOUNT CLEANUP --");
+  console.log("Scanning for accounts whose name starts with \"MCP-Test-\"...");
+
+  const accounts = await callTool("actual_accounts_list", {});
+  const allAccounts = Array.isArray(accounts) ? accounts : [];
+
+  const mcpTestAccounts = allAccounts.filter(a => a.name && a.name.startsWith("MCP-Test-"));
+  console.log(`\n✓ Found ${mcpTestAccounts.length} MCP-Test-* account(s)`);
+
+  if (mcpTestAccounts.length === 0) {
+    console.log("  Nothing to clean up.");
+    return;
+  }
+
+  let totalDeleted = 0;
+  let closedCount = 0;
+  let alreadyClosedCount = 0;
+
+  for (const account of mcpTestAccounts) {
+    const closedLabel = account.closed ? " [already closed]" : "";
+    console.log(`\nAccount: "${account.name}"${closedLabel}`);
+    console.log(`  ID: ${account.id}`);
+
+    if (account.closed) {
+      console.log("  ⚠ Already closed — skipping");
+      alreadyClosedCount++;
+      continue;
+    }
+
+    // Get all transactions for this account
+    const txns = await callTool("actual_transactions_filter", { accountId: account.id });
+    const txnList = Array.isArray(txns) ? txns : [];
+    console.log(`  Transactions: ${txnList.length}`);
+
+    // Delete each transaction
+    let deleted = 0;
+    for (const txn of txnList) {
+      if (!txn.id) continue;
+      await callTool("actual_transactions_delete", { id: txn.id });
+      deleted++;
+    }
+    if (deleted > 0) console.log(`  ✓ Deleted ${deleted} transaction(s)`);
+    else console.log(`  (no transactions to delete)`);
+    totalDeleted += deleted;
+
+    // Close the account
+    await callTool("actual_accounts_close", { id: account.id });
+    console.log(`  ✓ Account closed`);
+    closedCount++;
+  }
+
+  console.log(`\n========================================`);
+  console.log(`CLEANUP SUMMARY`);
+  console.log(`========================================`);
+  console.log(`  Accounts closed:          ${closedCount}`);
+  console.log(`  Transactions deleted:      ${totalDeleted}`);
+  console.log(`  Already closed (skipped):  ${alreadyClosedCount}`);
+  console.log(`\n✓ Done.`);
+}
+
+// -------------------------------
 // MAIN RUNNER
 // -------------------------------
 
@@ -1055,7 +1127,7 @@ async function run() {
   }
 
   if (!level) {
-    level = (await rl.question("Select test level (sanity / smoke / normal / extended / full) [default: sanity]: ")).toLowerCase() || "sanity";
+    level = (await rl.question("Select test level (sanity / smoke / normal / extended / full / cleanup) [default: sanity]: ")).toLowerCase() || "sanity";
   }
 
   console.log(`Test level: ${level.toUpperCase()}\n`);
@@ -1065,6 +1137,13 @@ async function run() {
     await initialize();
 
     const context = {};
+
+    // Cleanup: delete transactions from all MCP-Test-* accounts, then close them
+    if (level === "cleanup") {
+      await cleanupMcpTestAccounts();
+      await rl.close();
+      return;
+    }
 
     // Sanity: protocol-only, no writes
     if (level === "sanity") {
