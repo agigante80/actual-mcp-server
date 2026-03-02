@@ -16,13 +16,14 @@
 set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────────
-DOCKER_DIR="/home/alien/docker/librechat-MCP-actual"
-DEV_DIR="/home/alien/dev/actual-mcp-server"
+DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
+DEV_DIR="$HOME/dev/actual-mcp-server"
 MCP_SERVER_URL="http://localhost:3600/http"
 MCP_AUTH_TOKEN="TEST-TOKEN-FOR-AUTOMATED-TESTING-ONLY"
 TEST_LEVEL="${1:-full}"
 HEALTH_RETRIES=30          # × 3s = 90s max wait
-EXPECTED_TOOL_COUNT=56
+# Count registered tools directly from source — stays correct automatically
+EXPECTED_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts")
 
 # ── Colours ────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
