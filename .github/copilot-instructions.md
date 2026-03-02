@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **53 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **56 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
 
 **Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
 
-**Current Status**: Production-ready, 53 tools implemented, 84% Actual Budget API coverage
+**Current Status**: Production-ready, 56 tools implemented, 84% Actual Budget API coverage
 
 ## Architecture Essentials
 
@@ -28,7 +28,7 @@ await rawAddTransactions(data);
 
 ### Tool Structure
 
-All 53 tools follow this pattern (`src/tools/*.ts`):
+All 56 tools follow this pattern (`src/tools/*.ts`):
 
 ```typescript
 import { z } from 'zod';
@@ -67,7 +67,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (53 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (56 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── lib/
 │   ├── actual-adapter.ts       # ⚠️ CRITICAL: withActualApi wrapper, retry logic
 │   ├── ActualMCPConnection.ts  # MCP protocol implementation (EventEmitter-based)
@@ -77,7 +77,7 @@ src/
 │   └── loggerFactory.ts        # Module-scoped loggers (winston)
 ├── server/
 │   └── httpServer.ts           # HTTP transport
-└── tools/                      # 53 tool definitions (see actualToolsManager.ts)
+└── tools/                      # 56 tool definitions (see actualToolsManager.ts)
 ```
 
 ## Development Workflow
@@ -96,7 +96,17 @@ npm run test:e2e                # Playwright E2E tests (initialize → tools/cal
 
 # Tool Management
 npm run generate-tools          # Auto-generate tool definitions from Actual API
-npm run verify-tools            # Verify all 53 tools are correctly registered
+npm run verify-tools            # Verify all 56 tools are correctly registered
+
+# Docs & Release
+npm run docs:sync               # Sync **Version:** and **Tool Count:** markers in all docs
+npm run release:patch           # Bump patch version + auto-sync docs markers
+npm run release:minor           # Bump minor version + auto-sync docs markers
+npm run release:major           # Bump major version + auto-sync docs markers
+
+# Deployment (periodic maintenance)
+npm run deploy:full             # Full redeploy: build image → pull → recreate → health check
+npm run deploy:smoke            # Smoke-only: health check + integration tests (no rebuild)
 ```
 
 ### Pre-Commit Testing Policy
@@ -139,7 +149,7 @@ Default ports: HTTP (3000), Nginx proxy (3600), Actual Budget (5006)
 - This breaks `zod-to-json-schema@3.25.0` which relies on `typeName` to determine schema type
 - Result: `zodToJsonSchema()` returns only `{"$schema": "..."}` without type/properties
 - LibreChat's Zod validation rejects these incomplete schemas: "invalid_literal, expected: object"
-- **All 53 tools become invisible to LibreChat**
+- **All 56 tools become invisible to LibreChat**
 
 **Solution Implemented**:
 1. `package.json`: `"zod": "3.25.76"` (exact version, no caret)
@@ -234,15 +244,10 @@ const IMPLEMENTED_TOOLS = [
 npm run verify-tools
 ```
 
-**Note**: 6 search/summary tools exist but aren't in IMPLEMENTED_TOOLS array:
-- `actual_transactions_search_by_amount`
-- `actual_transactions_search_by_category`  
-- `actual_transactions_search_by_month`
-- `actual_transactions_search_by_payee`
-- `actual_transactions_summary_by_category`
-- `actual_transactions_summary_by_payee`
-
-These work fine but should be added to the array for consistency.
+All 6 ActualQL-powered search/summary tools are registered:
+`actual_transactions_search_by_amount`, `actual_transactions_search_by_category`,
+`actual_transactions_search_by_month`, `actual_transactions_search_by_payee`,
+`actual_transactions_summary_by_category`, `actual_transactions_summary_by_payee`.
 
 ### 6. LibreChat Testing Pain Points
 
@@ -312,7 +317,7 @@ Located in `src/tests_adapter_runner.ts`:
 # Test Actual connection only
 npm run dev -- --test-actual-connection
 
-# Test all 53 tools
+# Test all 56 tools
 npm run dev -- --test-actual-tools
 ```
 
@@ -325,29 +330,43 @@ npm run dev -- --test-actual-tools
 - **Testing changes** → Update `docs/TESTING_AND_RELIABILITY.md`
 - **Security changes** → Update `docs/SECURITY_AND_PRIVACY.md`
 
+**Version & Tool Count Sync**: `scripts/version-bump.js` auto-updates `**Version:**` and
+`**Tool Count:**` markers across all docs on every `release:*` bump or `docs:sync` run.
+Never manually edit these markers — run `npm run docs:sync` instead.
+
 **Documentation Location**: Comprehensive docs in `/docs/` directory:
 - `AI_INTERACTION_GUIDE.md` - AI agent rules (mandatory testing policies)
 - `ARCHITECTURE.md` - Component layers, data flow, transport protocols
-- `PROJECT_OVERVIEW.md` - Features, roadmap, assessment (82/100 score)
+- `PROJECT_OVERVIEW.md` - Features, roadmap, assessment (88/100 score)
+- `NEW_TOOL_CHECKLIST.md` - Step-by-step checklist for adding a new tool (9 steps)
 
 ## Key Files to Review
 
 When working on specific areas, reference these files:
 
-**Adding Tools**: `src/actualToolsManager.ts`, `src/tools/*.ts`, `src/lib/schemas/common.ts`  
+**Adding Tools**: `src/actualToolsManager.ts`, `src/tools/*.ts`, `src/lib/schemas/common.ts`, `docs/NEW_TOOL_CHECKLIST.md`  
 **Transport Issues**: `src/server/httpServer.ts`  
 **API Integration**: `src/lib/actual-adapter.ts` (withActualApi pattern), `src/lib/retry.ts`  
-**Testing**: `tests/e2e/mcp-client.playwright.spec.ts`, `src/tests_adapter_runner.ts`  
-**Configuration**: `src/config.ts`, `.env.example`, `docker-compose.yaml`
+**Testing**: `tests/e2e/mcp-client.playwright.spec.ts`, `src/tests_adapter_runner.ts`, `tests/manual/` (live integration suite)  
+**Deployment**: `scripts/deploy-and-test.sh`, `docker-compose.yaml`  
+**Configuration**: `src/config.ts`, `.env.example`
 
 ## Common Tasks
 
 ### Add a New Tool
 
-1. Create `src/tools/new_tool.ts` using pattern above
+> **Follow `docs/NEW_TOOL_CHECKLIST.md`** — the canonical 9-step guide covering
+> implementation, unit tests (positive + negative), manual integration tests,
+> AI prompt update, all required doc files, and final validation.
+
+Quick summary:
+1. Create `src/tools/new_tool.ts` using the pattern above
 2. Add tool name to `IMPLEMENTED_TOOLS` in `src/actualToolsManager.ts`
-3. Run `npm run verify-tools` to confirm registration
-4. Run `npm run build && npm run test:adapter` before committing
+3. Add unit tests in `tests/unit/` (positive + at least one negative case)
+4. Add integration test entry in `tests/manual/tests/` following `tests/manual/README.md`
+5. Run `npm run verify-tools` to confirm registration
+6. Run `npm run build && npm run test:adapter && npm run test:unit-js` before committing
+7. Run `npm run docs:sync` to update **Tool Count:** markers in all docs
 
 ### Fix LibreChat Integration Issue
 
@@ -366,5 +385,5 @@ If transactions/budgets don't persist:
 ---
 
 **Last Updated**: 2026-03-02  
-**Version**: 0.4.15  
-**Tool Count**: 53 (verified LibreChat-compatible)
+**Version:** 0.4.17  
+**Tool Count:** 56 (verified LibreChat-compatible)

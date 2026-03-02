@@ -5,7 +5,7 @@ PURPOSE
   session (LibreChat, LobeChat, or any MCP-enabled client) that already has
   the actual-mcp-server connected.
 
-  The AI will then autonomously invoke all 53 MCP tools one by one, report
+  The AI will then autonomously invoke all 56 MCP tools one by one, report
   pass/fail for each, and produce a final summary.
 
 HOW TO USE
@@ -17,12 +17,13 @@ HOW TO USE
      continue through all 12 phases without stopping for confirmation.
   5. Review the final summary for any failures (✗) or informational items (ℹ).
 
-WHAT IT TESTS (12 phases, 53 tools)
+WHAT IT TESTS (13 phases, 56 tools)
   Phase 1  – Server & Read-Only    (7 tools)
   Phase 2  – Accounts              (7 tools)
   Phase 3  – Category Groups & Categories (8 tools)
   Phase 4  – Payees                (6 tools)
   Phase 5  – Rules                 (4 tools)
+  Phase 5b – Batch, Uncategorized & Rules-Upsert (3 tools)
   Phase 6  – Transactions         (11 tools)
   Phase 7  – Transaction Summaries (2 tools)
   Phase 8  – Budgets               (9 tools)
@@ -139,6 +140,11 @@ If a destructive operation would affect non-test data:
 - actual_rules_update (use saved rule ID, modify conditions or actions)
 - actual_rules_delete (use saved rule ID)
 
+**Phase 5b - Batch, Uncategorized & Rules-Upsert (3 tools):**
+- actual_transactions_uncategorized (list transactions with no category for current month; expectedshape: { transactions, count, summary.totalAmount, dateRange })
+- actual_transactions_update_batch (batch-update 1+ transactions: updates: [{id: ‘<any existing txn ID>’, fields: { notes: "MCP-Batch-{TS}" }}]; expect: { succeeded, failed, total, successCount, failureCount })
+- actual_rules_create_or_update (FIRST call: create a new rule with conditions matching notes containing "MCP-RulesUpsert-{TS}", action sets category; expect created=true; SECOND call with SAME conditions: expect created=false and same id; verify only 1 rule exists with that marker) → Save upsert rule ID for cleanup
+
 **Phase 6 - Transactions (11 tools):**
 - IMPORTANT: Phase 2 deleted the test account. Create a NEW account for transactions:
   actual_accounts_create (name: "MCP-Txn-{TS}") → Save txn-account ID
@@ -202,7 +208,7 @@ If a destructive operation would affect non-test data:
 - Verify cleanup with list commands (expect test items removed)
 
 **After completing all tests, provide:**
-1. Total tools tested: X/53 (53 tools available)
+1. Total tools tested: X/56 (56 tools available)
 2. Successful: X (✓)
 3. Failed: X (✗) with error details
 4. Informational: X (unsupported features, skipped operations)

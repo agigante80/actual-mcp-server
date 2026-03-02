@@ -17,6 +17,7 @@ import { payeeTests } from './payee.js';
 import { transactionTests } from './transaction.js';
 import { budgetTests } from './budget.js';
 import { rulesTests } from './rules.js';
+import { batchUncategorizedRulesUpsertTests } from './batch_uncategorized_rules_upsert.js';
 
 /**
  * @param {{ callTool: Function }} client
@@ -342,5 +343,6 @@ export async function fullTests(client, context) {
   // Brief pause to let Actual Budget server recover after heavy batch operations
   await new Promise(r => setTimeout(r, 3000));
   await rulesTests(client, context);
+  await batchUncategorizedRulesUpsertTests(client, context);
   await advancedTests(client, context);
 }

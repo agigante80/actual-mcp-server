@@ -30,7 +30,7 @@ A clear and concise description of what actually happened.
 ## 📋 Environment
 
 **MCP Server Version:**
-- Version: [e.g., 0.1.0]
+- Version: [e.g., 0.4.16]
 - Installation Method: [npm / Docker / Docker Compose]
 
 **Actual Budget:**

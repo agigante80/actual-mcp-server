@@ -85,7 +85,7 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 | `MCP_AUTH_TOKEN` | Bearer token |
 | `MCP_TEST_LEVEL` | Test level |
 | `ACTUAL_SERVER_URL` | Shown in cleanup prompt (default `http://localhost:5006`) |
-| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `53`) |
+| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `56`) |
 
 Variables are loaded from the project root `.env` automatically.
 

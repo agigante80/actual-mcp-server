@@ -163,6 +163,11 @@ export async function run() {
         await callTool("actual_rules_delete", { id: context.ruleWithoutOpId });
         console.log("✓ Rule (without op) deleted");
       }
+      if (context.rulesUpsertId) {
+        console.log("\nDeleting test rule (upsert)...");
+        await callTool("actual_rules_delete", { id: context.rulesUpsertId });
+        console.log("✓ Rule (upsert) deleted");
+      }
       if (context.ruleId) {
         console.log("\nDeleting test rule...");
         await callTool("actual_rules_delete", { id: context.ruleId });
