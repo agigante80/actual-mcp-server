@@ -1,36 +1,86 @@
 #!/usr/bin/env node
+/**
+ * version-bump.js
+ *
+ * Usage:
+ *   node scripts/version-bump.js [major|minor|patch|sync]
+ *
+ * Modes:
+ *   major / minor / patch  — bump VERSION + package.json + sync **Version:** in docs
+ *   sync                   — only update **Version:** markers in docs to match
+ *                            the current VERSION file (no bump)
+ *
+ * npm scripts:
+ *   npm run release:major    →  node scripts/version-bump.js major
+ *   npm run release:minor    →  node scripts/version-bump.js minor
+ *   npm run release:patch    →  node scripts/version-bump.js patch
+ *   npm run docs:sync        →  node scripts/version-bump.js sync
+ */
 import fs from 'fs';
+import path from 'path';
 
 const bumpType = process.argv[2] || 'patch';
+const syncOnly = bumpType === 'sync';
 const currentVersion = fs.readFileSync('VERSION', 'utf8').trim();
-const [major, minor, patch] = currentVersion.split('.').map(Number);
 
-let newVersion;
-switch (bumpType) {
-  case 'major':
-    newVersion = `${major + 1}.0.0`;
-    break;
-  case 'minor':
-    newVersion = `${major}.${minor + 1}.0`;
-    break;
-  case 'patch':
-  default:
-    newVersion = `${major}.${minor}.${patch + 1}`;
-    break;
+let targetVersion = currentVersion;
+let major, minor, patch;
+if (!syncOnly) {
+  [major, minor, patch] = currentVersion.split('.').map(Number);
 }
 
-console.log(`Bumping version: ${currentVersion} → ${newVersion}`);
+if (!syncOnly) {
+  switch (bumpType) {
+    case 'major': targetVersion = `${major + 1}.0.0`; break;
+    case 'minor': targetVersion = `${major}.${minor + 1}.0`; break;
+    case 'patch':
+    default:      targetVersion = `${major}.${minor}.${patch + 1}`; break;
+  }
 
-// Update VERSION file
-fs.writeFileSync('VERSION', newVersion + '\n');
+  console.log(`Bumping version: ${currentVersion} → ${targetVersion}`);
 
-// Update package.json
-const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-packageJson.version = newVersion;
-fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');
+  fs.writeFileSync('VERSION', targetVersion + '\n');
 
-console.log(`✅ Version bumped to ${newVersion}`);
-console.log('📝 Next steps:');
-console.log('   git add VERSION package.json');
-console.log(`   git commit -m "chore(release): bump version to ${newVersion}"`);
-console.log(`   git tag -a "v${newVersion}" -m "Release v${newVersion}"`);
+  const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  packageJson.version = targetVersion;
+  fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');
+} else {
+  console.log(`Syncing **Version:** markers to current version: ${currentVersion}`);
+}
+
+// ── Auto-update **Version:** markers in docs ────────────────────────────────
+// Matches: `**Version:** X.Y.Z`  anywhere in a markdown file
+const versionPattern = /(\*\*Version:\*\*\s*)\d+\.\d+\.\d+/g;
+
+const docsToUpdate = [
+  'README.md',
+  ...fs.readdirSync('docs').filter(f => f.endsWith('.md')).map(f => path.join('docs', f)),
+  path.join('.github', 'copilot-instructions.md'),
+];
+
+const updatedDocs = [];
+for (const file of docsToUpdate) {
+  if (!fs.existsSync(file)) continue;
+  const original = fs.readFileSync(file, 'utf8');
+  const updated = original.replace(versionPattern, `$1${targetVersion}`);
+  if (updated !== original) {
+    fs.writeFileSync(file, updated);
+    updatedDocs.push(file);
+  }
+}
+
+if (updatedDocs.length > 0) {
+  console.log(`📝 Updated **Version:** in: ${updatedDocs.join(', ')}`);
+} else {
+  console.log(`ℹ️  No **Version:** markers needed updating`);
+}
+
+if (!syncOnly) {
+  console.log(`✅ Version bumped to ${targetVersion}`);
+  console.log('📝 Next steps:');
+  console.log(`   git add VERSION package.json docs/ README.md .github/`);
+  console.log(`   git commit -m "chore(release): bump version to ${targetVersion}"`);
+  console.log(`   git tag -a "v${targetVersion}" -m "Release v${targetVersion}"`);
+} else {
+  console.log(`✅ Docs synced to v${targetVersion}`);
+}
