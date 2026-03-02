@@ -213,16 +213,6 @@ With conversational AI, you can:
 - **Actual Budget server** (running locally or hosted)
 - Actual Budget credentials (password and sync ID)
 
-### ⚠️ Critical: Zod Version Constraint
-
-**This project MUST use Zod 3.x (3.25.76).** Do NOT upgrade to Zod 4.x!
-
-Zod 4.x has breaking internal changes that cause `zod-to-json-schema` to produce incomplete schemas, breaking LibreChat tool validation. All 56 tools become invisible if Zod 4.x is used.
-
-- **Reject any Dependabot/Renovate PRs** suggesting Zod 4.x
-- The project includes safeguards: `package.json` overrides and Dockerfile post-install
-- See `docs/ZOD_VERSION_CONSTRAINT.md` for technical details
-
 ### Install with npm
 
 ```bash
