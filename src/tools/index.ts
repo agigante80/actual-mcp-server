@@ -34,6 +34,7 @@ export { default as get_id_by_name } from './get_id_by_name.js';
 export { default as server_get_version } from './server_get_version.js';
 export { default as query_run } from './query_run.js';
 export { default as rules_create } from './rules_create.js';
+export { default as rules_create_or_update } from './rules_create_or_update.js';
 export { default as rules_delete } from './rules_delete.js';
 export { default as rules_get } from './rules_get.js';
 export { default as rules_update } from './rules_update.js';
@@ -49,6 +50,8 @@ export { default as transactions_search_by_month } from './transactions_search_b
 export { default as transactions_search_by_payee } from './transactions_search_by_payee.js';
 export { default as transactions_summary_by_category } from './transactions_summary_by_category.js';
 export { default as transactions_summary_by_payee } from './transactions_summary_by_payee.js';
+export { default as transactions_uncategorized } from './transactions_uncategorized.js';
 export { default as transactions_update } from './transactions_update.js';
+export { default as transactions_update_batch } from './transactions_update_batch.js';
 export { default as session_close } from './session_close.js';
 export { default as session_list } from './session_list.js';
