@@ -15,7 +15,7 @@ const InputSchema = z.object({
   imported_id: z.string().optional().describe('Original imported transaction ID'),
 });
 
-type Output = { id: string };
+type Output = { success: true; id: string | null };
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_create',
@@ -26,21 +26,20 @@ const tool: ToolDefinition = {
     
     try {
       // Use addTransactions - it reliably creates transactions
-      // Note: API returns "ok" string instead of ID, which is a known Actual API behavior
+      // Note: API may return "ok" string instead of an ID, which is a known Actual API behavior
       const result = await adapter.addTransactions(input as any);
       
       if (!result || result.length === 0) {
         throw new Error('Failed to create transaction - no result returned');
       }
       
-      // If API returns actual ID (starts with UUID pattern), return it
-      if (result[0] && result[0] !== 'ok' && result[0].length > 10) {
-        return { id: result[0] };
-      }
+      // Always return the same shape: { success: true, id: <uuid> | null }
+      // The API sometimes returns a UUID and sometimes "ok" depending on version.
+      const maybeId = result[0] && result[0] !== 'ok' && result[0].length > 10
+        ? result[0]
+        : null;
       
-      // API returned "ok" - transaction was created successfully
-      // Return success without ID (test will need to handle this)
-      return { success: true, message: 'Transaction created successfully' };
+      return { success: true as const, id: maybeId };
     } catch (error) {
       throw new Error(`Failed to create transaction: ${error instanceof Error ? error.message : String(error)}`);
     }

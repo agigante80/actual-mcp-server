@@ -1,7 +1,7 @@
 # Testing & Reliability
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.21  
+**Version:** 0.4.22  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
 **Last Updated:** 2026-03-02
 
@@ -997,7 +997,6 @@ npm run test:integration:cleanup
 
 ## 🔗 Related Documentation
 
-- [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - Testing enforcement rules
 - [Architecture](./ARCHITECTURE.md) - System design and components
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security testing policies
 - [Roadmap](./ROADMAP.md) - Future testing improvements

@@ -41,8 +41,31 @@ services:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-main:5006}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
-      # Optional: encryption password for E2E-encrypted budgets
+      # Optional: encryption password for E2E-encrypted default budget
       # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
+      # Optional: friendly name for the default budget (default: "Default")
+      # - BUDGET_DEFAULT_NAME=My Main Budget
+
+      # ── Multi-Budget Switching (optional) ─────────────────────────────────
+      # The AI can switch between budgets at runtime with actual_budgets_switch.
+      # BUDGET_N_SERVER_URL and BUDGET_N_PASSWORD fall back to ACTUAL_* if omitted,
+      # so budgets on the same server need only NAME and SYNC_ID.
+      #
+      # Budget 1 — same server, same password → SERVER_URL and PASSWORD omitted
+      # - BUDGET_1_NAME=Shared Family Account
+      # - BUDGET_1_SYNC_ID=${BUDGET_1_SYNC_ID}
+      #
+      # Budget 2 — same server, different password → only PASSWORD overridden
+      # - BUDGET_2_NAME=Business
+      # - BUDGET_2_PASSWORD=${BUDGET_2_PASSWORD}
+      # - BUDGET_2_SYNC_ID=${BUDGET_2_SYNC_ID}
+      #
+      # Budget 3 — entirely separate Actual server → full override
+      # - BUDGET_3_NAME=Remote Office
+      # - BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
+      # - BUDGET_3_PASSWORD=${BUDGET_3_PASSWORD}
+      # - BUDGET_3_SYNC_ID=${BUDGET_3_SYNC_ID}
+      # - BUDGET_3_ENCRYPTION_PASSWORD=${BUDGET_3_ENCRYPTION_PASSWORD}
 
       # MCP Bridge settings
       - MCP_BRIDGE_DATA_DIR=/data
@@ -98,8 +121,31 @@ services:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
-      # Optional: encryption password for E2E-encrypted budgets
+      # Optional: encryption password for E2E-encrypted default budget
       # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
+      # Optional: friendly name for the default budget (default: "Default")
+      # - BUDGET_DEFAULT_NAME=My Main Budget
+
+      # ── Multi-Budget Switching (optional) ─────────────────────────────────
+      # The AI can switch between budgets at runtime with actual_budgets_switch.
+      # BUDGET_N_SERVER_URL and BUDGET_N_PASSWORD fall back to ACTUAL_* if omitted,
+      # so budgets on the same server need only NAME and SYNC_ID.
+      #
+      # Budget 1 — same server, same password → SERVER_URL and PASSWORD omitted
+      # - BUDGET_1_NAME=Shared Family Account
+      # - BUDGET_1_SYNC_ID=${BUDGET_1_SYNC_ID}
+      #
+      # Budget 2 — same server, different password → only PASSWORD overridden
+      # - BUDGET_2_NAME=Business
+      # - BUDGET_2_PASSWORD=${BUDGET_2_PASSWORD}
+      # - BUDGET_2_SYNC_ID=${BUDGET_2_SYNC_ID}
+      #
+      # Budget 3 — entirely separate Actual server → full override
+      # - BUDGET_3_NAME=Remote Office
+      # - BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
+      # - BUDGET_3_PASSWORD=${BUDGET_3_PASSWORD}
+      # - BUDGET_3_SYNC_ID=${BUDGET_3_SYNC_ID}
+      # - BUDGET_3_ENCRYPTION_PASSWORD=${BUDGET_3_ENCRYPTION_PASSWORD}
 
       # MCP Bridge settings
       - MCP_BRIDGE_DATA_DIR=/data

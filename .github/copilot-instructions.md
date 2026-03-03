@@ -111,9 +111,27 @@ npm run deploy:full             # Full redeploy: build image → pull → recrea
 npm run deploy:smoke            # Smoke-only: health check + integration tests (no rebuild)
 ```
 
+### Copilot Agent Validation Sequence
+
+When Copilot coding agent validates its own changes, run these commands in order:
+
+```bash
+npm run build                    # Step 1: TypeScript must compile cleanly
+npm run verify-tools             # Step 2: All tools registered (reads dist/ — build first)
+npm run test:unit-js             # Step 3: Unit + schema tests pass
+npm audit --audit-level=moderate # Step 4: No new vulnerabilities
+```
+
+**Do NOT run in Copilot's default ephemeral environment:**
+- `npm run test:e2e` / `npm run test:integration:*` — requires live server (OK if issue provides one)
+- `tests/manual-prompt/` — **never** — human copy-paste into LibreChat/LobeChat only
+- `npm run dev` / `npm run start` — requires `.env` with real credentials
+- `npm run release:*` / `npm run docs:sync` — version bumping is human responsibility
+- `npm run deploy:*` — requires live Docker environment
+
 ### Pre-Commit Testing Policy
 
-**MANDATORY before every commit** (from `docs/AI_INTERACTION_GUIDE.md`):
+**MANDATORY before every commit**:
 
 ```bash
 npm run build                   # ✅ No TypeScript errors
@@ -289,22 +307,73 @@ npm run dev -- --test-actual-tools
 
 ## Documentation Standards
 
-**Sync Policy**: Update docs when changing code behavior (from `docs/AI_INTERACTION_GUIDE.md`):
+**Sync Policy**: Update docs when changing code behavior:
 
-- **Architecture changes** → Update `docs/ARCHITECTURE.md`
-- **New features** → Update `README.md` + `docs/PROJECT_OVERVIEW.md`
-- **Testing changes** → Update `docs/TESTING_AND_RELIABILITY.md`
-- **Security changes** → Update `docs/SECURITY_AND_PRIVACY.md`
+| Code Change | Required Documentation Updates |
+|-------------|-------------------------------|
+| **New MCP tool** | `README.md` (tool count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list |
+| **New API route/endpoint** | `docs/ARCHITECTURE.md` (endpoints), `docs/PROJECT_OVERVIEW.md` if user-facing |
+| **Environment variable added** | `.env.example` (with comment), `docs/ARCHITECTURE.md` Configuration section |
+| **Test changes** | `docs/TESTING_AND_RELIABILITY.md` (commands/coverage) |
+| **Security/auth changes** | `docs/SECURITY_AND_PRIVACY.md` |
+| **New feature** | `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md` (mark completed), `README.md` |
+| **Dependency update** | `docs/PROJECT_OVERVIEW.md` (tech stack) |
+| **Docker changes** | `docs/ARCHITECTURE.md`, `README.md` Docker commands |
 
 **Version & Tool Count Sync**: `scripts/version-bump.js` auto-updates `**Version:**` and
 `**Tool Count:**` markers across all docs on every `release:*` bump or `docs:sync` run.
 Never manually edit these markers — run `npm run docs:sync` instead.
 
 **Documentation Location**: Comprehensive docs in `/docs/` directory:
-- `AI_INTERACTION_GUIDE.md` - AI agent rules (mandatory testing policies)
 - `ARCHITECTURE.md` - Component layers, data flow, transport protocols
 - `PROJECT_OVERVIEW.md` - Features, roadmap, assessment (88/100 score)
 - `NEW_TOOL_CHECKLIST.md` - Step-by-step checklist for adding a new tool (9 steps)
+
+## ⚠️ Danger Zones (Never Do These)
+
+| Action | Why it's dangerous |
+|--------|-------------------|
+| Call `@actual-app/api` directly (skipping adapter) | Data won't persist — Tombstone issue |
+| Add a tool without updating `IMPLEMENTED_TOOLS` | Tool silently missing from count |
+| Use decimal dollars (e.g. `50.00`) instead of cents (`5000`) | Creates wrong transaction amounts |
+| Use `Date.now()` for a date field | Produces a number, not YYYY-MM-DD string |
+| Delete `withActualApi` wrapper from adapter | Breaks data persistence for all callers |
+| Change `ACTUAL_BUDGET_SYNC_ID` in any source file | Ties code to a specific budget instance |
+| Run `npm run release:*` or `npm run docs:sync` | Version bumping is human responsibility only |
+| Commit without running `npm run build` + `npm run test:unit-js` | May push broken TypeScript |
+| Hardcode secrets or tokens in source files | Security vulnerability |
+| Use `any` type without strong justification | Bypasses TypeScript safety |
+
+## 📄 Documentation Hygiene — Delete, Don't Archive
+
+> **Prefer deletion over archiving.** Git history is the archive.
+
+- When a feature is fully implemented: **delete** its `docs/feature/*.md` spec file and remove its row from `docs/ROADMAP.md`
+- When a document's content is merged elsewhere: **delete** the source file and remove all references to it
+- Do NOT move files to `archive/` or `deprecated/` folders
+- Do NOT leave `<!-- TODO -->` or `[PLANNED]` markers in files describing live behaviour
+- Do NOT keep stale "planned" sections in docs once the code ships
+- When in doubt: if the information already exists in code, tests, or another doc — delete the redundant file
+
+## File Modification Safety Tiers
+
+### ✅ Safe to Modify
+- `src/tools/*.ts` — follow existing tool patterns, validate with Zod
+- `tests/**` — add tests for new features, update when behaviour changes
+- `docs/**/*.md`, `README.md` — update when code changes
+- `.env.example`, `docker-compose.yaml` — document all changes
+
+### ⚠️ Modify With Caution
+- `src/index.ts`, `src/actualConnection.ts` — high-risk, require thorough testing
+- `src/lib/actual-adapter.ts` — affects all tool calls, test extensively
+- `src/server/*.ts` — protocol-level changes, verify with MCP client
+- `src/actualToolsManager.ts` — tool registry, run `verify-tools` after every change
+
+### ❌ Do Not Modify Without Explicit Permission
+- `types/*.d.ts` — generated from external sources, changes will be overwritten
+- `generated/**/*` — auto-generated from OpenAPI specs, modify the source not output
+- `.gitignore`, `.npmrc` — only with clear justification
+- `scripts/version-bump.js`, `VERSION` — version bumping is human responsibility
 
 ## Key Files to Review
 
@@ -352,5 +421,5 @@ If transactions/budgets don't persist:
 ---
 
 **Last Updated**: 2026-03-03  
-**Version:** 0.4.21  
-**Tool Count:** 60 (verified LibreChat-compatible)
+**Version:** 0.4.22  
+**Tool Count:** 62 (verified LibreChat-compatible)

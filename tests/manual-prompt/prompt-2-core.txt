@@ -1,0 +1,276 @@
+─────────────────────────────────────────────────────────────────────────────────
+PROMPT 2 OF 3 — CORE CRUD
+  Tests ~39 tools covering accounts, categories, payees, rules, transactions,
+  and schedules. Paste this into the SAME chat session after Prompt 1 passes.
+
+PRE-CONDITIONS
+  - Prompt 1 already passed in this session
+  - {TS} was generated and is remembered by the AI from Prompt 1
+  - All Phase 1 read results (account1_id, cat1_name, payee1_name) are retained
+
+HOW TO USE
+  1. In the SAME chat session where Prompt 1 passed, paste everything below
+     the "─── PROMPT START" line.
+  2. The AI will resume with Phase 2, using the {TS} from Prompt 1.
+  3. If ALL phases in this prompt pass → paste prompt-3-advanced.txt.
+  4. If any tool fails → fix and re-paste this prompt (start fresh from Phase 2).
+
+WHAT IT TESTS
+  Phase 2  — Accounts                        (6 tools)
+  Phase 3  — Category Groups & Categories    (6 tools)
+  Phase 4  — Payees                          (5 tools)
+  Phase 5  — Rules                           (4 tools)
+  Phase 5b — Batch, Uncategorized, Upsert    (3 tools)
+  Phase 6  — Transactions                   (11 tools)
+  Phase 6b — Schedules                       (4 tools)
+─────────────────────────────────────────────────────────────────────────────────
+─── PROMPT START ────────────────────────────────────────────────────────────────
+
+**Continuing from Prompt 1 — {TS} and all saved IDs from Phase 1 are still active.**
+
+Use the SAME testing rules as Prompt 1:
+- ONE tool at a time, wait for each response, continue automatically
+- ONLY STOP on actual failure
+- One status line per tool: [Phase X] tool_name — ✓/✗/ℹ
+- ACTUALLY INVOKE each tool — do not simulate
+- NEVER call multiple tools in parallel
+
+---
+
+**Phase 2 — Accounts (6 tools):**
+
+- actual_accounts_create
+  Input: { name: "MCP-Account-{TS}" }
+  Expect: created account object with id
+  Save as `{acct_id}`
+
+- actual_accounts_get_balance
+  Input: { id: "{acct_id}" }
+  Expect: { balance: 0 } (new account)
+
+- actual_accounts_update
+  Input: { id: "{acct_id}", name: "MCP-Account-{TS}-Updated", offbudget: true }
+  Expect: success with updated fields
+  Verify with actual_accounts_list: confirm name and offbudget fields changed
+
+- actual_accounts_close
+  First add a $0 dummy transaction to prevent tombstone issue:
+    actual_transactions_create: { account: "{acct_id}", amount: 0, date: today in YYYY-MM-DD, payee_name: "MCP-Dummy" }
+  Then: actual_accounts_close { id: "{acct_id}" }
+  Expect: account closed=true
+
+- actual_accounts_reopen
+  Input: { id: "{acct_id}" }
+  Expect: account closed=false
+
+- actual_accounts_delete
+  Input: { id: "{acct_id}" }
+  Expect: success
+  Verify with actual_accounts_list: "{acct_id}" no longer present
+
+---
+
+**Phase 3 — Category Groups & Categories (6 tools):**
+
+- actual_category_groups_create
+  Input: { name: "MCP-Group-{TS}" }
+  Expect: created with id
+  Save as `{group_id}`
+
+- actual_category_groups_update
+  Input: { id: "{group_id}", name: "MCP-Group-{TS}-Updated" }
+  Expect: success
+  Verify: confirm name changed in actual_category_groups_get
+
+- actual_categories_create
+  Input: { name: "MCP-Cat-{TS}", group_id: "{group_id}" }
+  Expect: created with id
+  Save as `{cat_id}`
+
+- actual_categories_update
+  Input: { id: "{cat_id}", name: "MCP-Cat-{TS}-Updated" }
+  Expect: success
+  Verify: confirm name changed in actual_categories_get
+
+- actual_categories_delete
+  Input: { id: "{cat_id}" }
+  Expect: success (category deleted or tombstoned)
+
+- actual_category_groups_delete
+  Input: { id: "{group_id}" }
+  Expect: success
+  Verify both deletions with actual_category_groups_get and actual_categories_get
+
+---
+
+**Phase 4 — Payees (5 tools):**
+
+- actual_payees_create
+  Input: { name: "MCP-Payee-{TS}" }
+  Expect: created with id
+  Save as `{payee_id}`
+
+- actual_payees_create (second)
+  Input: { name: "MCP-Payee2-{TS}" }
+  Expect: created with id
+  Save as `{payee2_id}`
+
+- actual_payees_update
+  Input: { id: "{payee_id}", name: "MCP-Payee-{TS}-Updated" }
+  Expect: success
+  Verify name changed in actual_payees_get
+
+- actual_payee_rules_get
+  Input: { id: "{payee_id}" }
+  Expect: rules array (possibly empty for new payee)
+
+- actual_payees_merge
+  Input: merge "{payee2_id}" into "{payee_id}"
+  Expect: success; verify payee2 no longer in actual_payees_get list
+
+Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is used in transactions).
+
+---
+
+**Phase 5 — Rules (4 tools):**
+
+- actual_rules_get
+  Expect: rules array (possibly empty), no error
+
+- actual_rules_create
+  Input: create rule with condition: field=notes, op=contains, value="MCP-Rule-{TS}"
+         action: op=set, field=notes, value="MCP-Rule-{TS}-matched"
+  Expect: created with id
+  Save as `{rule_id}`
+  Verify: confirm rule appears in actual_rules_get with the condition value
+
+- actual_rules_update
+  Input: { id: "{rule_id}", conditions updated to value="MCP-Rule-{TS}-updated" }
+  Expect: success
+  Verify: updated condition value reflected in actual_rules_get
+
+- actual_rules_delete
+  Input: { id: "{rule_id}" }
+  Expect: success
+
+---
+
+**Phase 5b — Batch, Uncategorized & Rules-Upsert (3 tools):**
+
+- actual_transactions_uncategorized
+  Input: no parameters (defaults to current month)
+  Expect: { transactions: [...], count: N, summary: { totalAmount: N }, dateRange: {...} }
+  Report count as ✓ informational
+
+- actual_transactions_update_batch
+  Use first existing transaction ID from actual_accounts_list result (or any visible from earlier calls):
+  Input: { updates: [{ id: "<any existing txn id>", fields: { notes: "MCP-Batch-{TS}" } }] }
+  Expect: { succeeded: [...], failed: [...], total: 1, successCount: 1, failureCount: 0 }
+
+- actual_rules_create_or_update (idempotent upsert — 2 sub-calls, counts as 1 tool):
+  First call: create rule with condition notes contains "MCP-Upsert-{TS}"
+    Expect: { created: true, id: "<new-uuid>" }
+    Save as `{upsert_rule_id}`
+  Second call: same conditions again
+    Expect: { created: false, id: "{upsert_rule_id}" } (same id, no duplicate)
+  Verify: actual_rules_get contains exactly 1 rule with that marker
+
+---
+
+**Phase 6 — Transactions (11 tools):**
+
+Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
+
+- actual_accounts_create
+  Input: { name: "MCP-Txn-{TS}" }
+  Save as `{txn_acct_id}`
+
+- actual_transactions_create (expense)
+  Input: { account: "{txn_acct_id}", amount: -5000, date: today YYYY-MM-DD, notes: "MCP-Txn-Expense-{TS}" }
+  Expect: created with id
+  Save as `{txn1_id}`
+
+- actual_transactions_create (income)
+  Input: { account: "{txn_acct_id}", amount: 10000, date: today YYYY-MM-DD, notes: "MCP-Txn-Income-{TS}" }
+  Save as `{txn2_id}`
+
+- actual_transactions_get
+  Input: { id: "{txn1_id}" }
+  Expect: transaction object with amount=-5000
+
+- actual_transactions_filter
+  Input: filter by account="{txn_acct_id}"
+  Expect: array containing at least {txn1_id} and {txn2_id}
+
+- actual_transactions_update
+  Input: { id: "{txn1_id}", fields: { amount: -7500, notes: "MCP-Txn-Updated-{TS}" } }
+  Expect: success; verify amount changed by re-fetching
+
+- actual_transactions_search_by_amount
+  Input: search around -7500 cents (±500 tolerance)
+  Expect: array containing {txn1_id}
+
+- actual_transactions_search_by_category
+  Input: use first available category from Phase 1
+  Expect: array (possibly empty if no match), no error
+
+- actual_transactions_search_by_month
+  Input: month = current month (YYYY-MM)
+  Expect: array containing recently created transactions
+
+- actual_transactions_search_by_payee
+  Input: use first available payee name from Phase 1
+  Expect: array (possibly empty if no match), no error
+
+- actual_transactions_import
+  Input: empty array []
+  Expect: success with no errors (no-op import)
+
+Note: actual_transactions_delete will be handled in Phase 12 cleanup.
+
+---
+
+**Phase 6b — Schedules (4 tools):**
+
+- actual_schedules_get
+  Expect: schedules array (possibly empty), no error
+  Save count as `{sched_count_before}`
+
+- actual_schedules_create
+  Input: one-off schedule:
+    { name: "MCP-Schedule-{TS}", next_date: "2026-06-15", account: "{txn_acct_id}", amount: -2000, payee_name: "MCP-Sched-Payee-{TS}" }
+  Expect: created with id
+  Save as `{sched_id}`
+  Verify: actual_schedules_get returns count = {sched_count_before} + 1
+
+- actual_schedules_update
+  Input: { id: "{sched_id}", name: "MCP-Schedule-{TS}-Updated" }
+  Expect: success
+  Verify: updated name visible in actual_schedules_get
+
+- actual_schedules_delete
+  Input: { id: "{sched_id}" }
+  Expect: success
+  Verify: actual_schedules_get returns count = {sched_count_before} (restored)
+
+---
+
+**Phase 2–6b Summary:**
+After completing all phases, output:
+```
+=== PROMPT 2 RESULTS ===
+Phase 2  Accounts:         X / 6
+Phase 3  Categories:       X / 6
+Phase 4  Payees:           X / 5
+Phase 5  Rules:            X / 4
+Phase 5b Batch/Upsert:     X / 3
+Phase 6  Transactions:     X / 11
+Phase 6b Schedules:        X / 4
+Total:                     X / 39
+Failed:        X
+Informational: X
+Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}
+```
+
+If all passed: "✅ Prompt 2 complete — paste prompt-3-advanced.txt to continue."
+If any failed:  "❌ Prompt 2 failure — fix issues before pasting Prompt 3."
