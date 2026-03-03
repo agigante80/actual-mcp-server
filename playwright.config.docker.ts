@@ -1,43 +1,38 @@
 import { defineConfig } from '@playwright/test';
 
 /**
- * Playwright configuration for Docker-based E2E tests
- * Tests run inside a container against a real Actual Budget + MCP server stack
+ * Playwright configuration for Docker-based E2E tests.
+ *
+ * Used exclusively by the `e2e-test-runner` service in docker-compose.test.yaml.
+ * Tests run inside a container against the full Actual Budget + MCP server stack.
+ *
+ * Note: Both docker spec files read process.env.MCP_SERVER_URL directly for the
+ * MCP server URL — they are API-only tests (no browser) so browser-oriented
+ * settings (baseURL, screenshot, video, navigationTimeout, actionTimeout) are
+ * intentionally absent here.
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  testMatch: /docker.*\.e2e\.spec\.ts/,
-  
+
   // Longer timeout for Docker-based tests (service startup, network latency)
   timeout: 120000,
-  
-  // No retries - we want to catch real issues
+
+  // No retries — catch real failures, don't mask flakiness in CI
   retries: 0,
-  
+
   // Single worker for deterministic test execution
   workers: 1,
-  
-  // Reporter configuration
+
   reporter: [
     ['list'],
     ['html', { outputFolder: 'test-results/docker-e2e-report', open: 'never' }],
     ['json', { outputFile: 'test-results/docker-e2e-results.json' }],
   ],
-  
+
   use: {
-    // Base URL from environment variable
-    baseURL: process.env.MCP_SERVER_URL || 'http://mcp-server-test:3600',
-    
-    // Capture traces on failure for debugging
     trace: 'retain-on-failure',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    
-    // Increase action timeout for Docker environment
-    actionTimeout: 15000,
-    navigationTimeout: 30000,
   },
-  
+
   projects: [
     {
       name: 'docker-e2e-smoke',
