@@ -1,8 +1,8 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.18  
-**Last Updated:** 2026-03-02
+**Version:** 0.4.20  
+**Last Updated:** 2026-03-03
 
 ---
 
@@ -130,7 +130,7 @@
 
 | Transport | File | Status | Authentication | LibreChat Support |
 |-----------|------|--------|----------------|-------------------|
-| **HTTP** | `src/server/httpServer.ts` | ✅ Production | Bearer token | ✅ Fully supported |
+| **HTTP** | `src/server/httpServer.ts` | ✅ Production | Bearer token OR OIDC/JWT | ✅ Fully supported |
 | **WebSocket** | *(removed)* | ❌ Removed | N/A | ❌ Not supported |
 | **SSE** | *(removed)* | ❌ Removed | N/A | N/A |
 
@@ -488,8 +488,17 @@ MCP_TRANSPORT_MODE=--http               # Only --http is supported
 #### Security
 
 ```bash
-# Authentication
+# Authentication mode (default: none = static Bearer)
+AUTH_PROVIDER=none                       # 'none' or 'oidc'
+
+# Static Bearer token (AUTH_PROVIDER=none)
 MCP_SSE_AUTHORIZATION=your_bearer_token  # Bearer token (optional)
+
+# OIDC / JWT authentication (AUTH_PROVIDER=oidc)
+OIDC_ISSUER=https://sso.yourdomain.com   # OIDC issuer URL
+OIDC_RESOURCE=your-client-id             # Expected 'aud' claim
+OIDC_SCOPES=                             # Required scopes (empty = none)
+AUTH_BUDGET_ACL=user@example.com:sync-id # Per-user budget ACL (optional)
 
 # HTTPS
 MCP_ENABLE_HTTPS=true                    # Enable TLS
@@ -527,6 +536,11 @@ export const configSchema = z.object({
   MCP_BRIDGE_PORT: z.string().default('3000'),
   MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),
+  AUTH_PROVIDER: z.enum(['none', 'oidc']).default('none'),
+  OIDC_ISSUER: z.string().optional(),
+  OIDC_RESOURCE: z.string().optional(),
+  OIDC_SCOPES: z.string().optional(),
+  AUTH_BUDGET_ACL: z.string().optional(),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),
   MCP_HTTPS_KEY: z.string().optional(),
@@ -546,7 +560,7 @@ export const configSchema = z.object({
 - `GET /health` - Health check
 - `GET /metrics` - Prometheus metrics
 
-**Authentication**: Bearer token in `Authorization` header
+**Authentication**: Bearer token OR OIDC/JWT in `Authorization` header
 
 **LibreChat Status**: ✅ Fully supported and verified
 

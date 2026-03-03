@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.18  
+**Version:** 0.4.20  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-03
 
@@ -754,9 +754,29 @@ EMBEDDING_MODEL=default
 
 ---
 
+### ✅ Completed (CF-5 — v0.4.19)
+
+#### CF-5. Multi-User Authentication via OIDC (`mcp-auth`) — **IMPLEMENTED in v0.4.19**
+
+**Status**: ✅ Shipped. Branch `feat/cf5-oidc-auth` merged to `develop`.
+
+**Files created/modified**:
+- `src/auth/setup.ts` — `createMcpAuth()` factory with lazy discovery config
+- `src/auth/budget-acl.ts` — per-user budget ACL (email / sub / group principals), ~170 lines
+- `src/server/httpServer.ts` — wired `protectedResourceMetadataRouter()` + `bearerAuth()` + `budgetAclMiddleware`
+- `src/config.ts` — `AUTH_PROVIDER`, `OIDC_ISSUER`, `OIDC_RESOURCE`, `OIDC_SCOPES`, `AUTH_BUDGET_ACL`
+- `tests/unit/auth-acl.test.js` — 21 ACL test assertions (8 scenarios)
+- `.env.example` — full OIDC documentation section with Keycloak / Azure AD / Auth0 examples
+
+**Backward compatible**: `AUTH_PROVIDER=none` (default) leaves `MCP_SSE_AUTHORIZATION` static token behavior unchanged.
+
+**Casdoor v2.13 compatibility** (v0.4.20): Casdoor auth-code flow JWTs omit the `scope` claim, causing `missing_required_scopes` with the `mcp-auth` default validator. Resolution: custom `jose` JWKS verifier in `httpServer.ts` bypasses `fetchServerConfig()` PKCE validation entirely, and `OIDC_SCOPES=` (empty) disables scope enforcement. Server logs `Scopes required: (none)`. Verified end-to-end with LibreChat + Casdoor v2.13 — 56 tools loading in both OIDC and static-Bearer instances simultaneously.
+
+---
+
 ### 🔵 Long-Term (High Complexity — 1 week)
 
-#### CF-5. Multi-User Authentication via OIDC (`mcp-auth`)
+#### CF-5. Multi-User Authentication via OIDC (`mcp-auth`) [original planning notes below]
 
 **Library**: [`mcp-auth`](https://www.npmjs.com/package/mcp-auth) v0.2.0 — provider-agnostic OAuth 2.1 / OIDC library built specifically for MCP servers. Replaces a hand-rolled OIDC implementation (ZanzyTHEbar's 6-file `src/auth/` module using `jose`) with a single maintained dependency that is fully compliant with the **MCP spec 2025-03-26 authorization requirements**.
 

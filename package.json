@@ -1,8 +1,8 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.4.18",
-  "description": "MCP server providing 51 tools for AI-driven financial management with Actual Budget - session management, query, bank sync, and multi-budget support",
+  "version": "0.4.20",
+  "description": "MCP server providing 56 tools for AI-driven financial management with Actual Budget - session management, query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
@@ -11,7 +11,7 @@
     "start": "node dist/src/index.js",
     "verify-tools": "npm run build && node scripts/verify-tools.js",
     "check:coverage": "node scripts/list-actual-api-methods.mjs",
-    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js",
+    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js && node tests/unit/auth-acl.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
     "test:e2e:docker": "./tests/e2e/run-docker-e2e.sh",
@@ -46,6 +46,7 @@
     "date-fns": "^4.1.0",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "mcp-auth": "^0.2.0",
     "mitt": "^3.0.1",
     "winston": "^3.18.3",
     "winston-daily-rotate-file": "^5.0.0",
