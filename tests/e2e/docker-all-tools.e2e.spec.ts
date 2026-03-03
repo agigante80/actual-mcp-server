@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 60 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 62 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests

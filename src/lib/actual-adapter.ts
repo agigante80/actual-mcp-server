@@ -53,6 +53,38 @@ import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import retry from './retry.js';
 import logger from '../logger.js';
+import config from '../config.js';
+import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
+
+/**
+ * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
+ * Built once at startup; used by every withActualApi call.
+ */
+const budgetRegistry = parseBudgetRegistry(process.env, {
+  serverUrl: config.ACTUAL_SERVER_URL,
+  password: config.ACTUAL_PASSWORD,
+  syncId: config.ACTUAL_BUDGET_SYNC_ID,
+  encryptionPassword: config.ACTUAL_BUDGET_PASSWORD,
+});
+
+logger.info(
+  `[ADAPTER] Budget registry: ${budgetRegistry.size} budget(s) — ` +
+  [...budgetRegistry.values()].map(b => `"${b.name}" (${b.serverUrl})`).join(', '),
+);
+
+/**
+ * Key (lowercased budget name) of the currently active budget.
+ * Null = use the first entry in the registry (the default budget).
+ */
+let activeBudgetKey: string | null = null;
+
+function getActiveBudgetConfig(): BudgetConfig {
+  if (activeBudgetKey) {
+    const found = budgetRegistry.get(activeBudgetKey);
+    if (found) return found;
+  }
+  return [...budgetRegistry.values()][0];
+}
 
 /**
  * Helper to init and shutdown Actual API around each operation
@@ -79,29 +111,26 @@ async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
  */
 async function initActualApiForOperation(): Promise<void> {
   try {
-    const SERVER_URL = process.env.ACTUAL_SERVER_URL || 'http://localhost:5006';
-    const PASSWORD = process.env.ACTUAL_PASSWORD;
-    const BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID;
-    const BUDGET_PASSWORD = process.env.ACTUAL_BUDGET_PASSWORD;
-    const DATA_DIR = process.env.MCP_BRIDGE_DATA_DIR || './test-actual-data';
+    const budget = getActiveBudgetConfig();
+    const DATA_DIR = config.MCP_BRIDGE_DATA_DIR;
 
-    logger.debug('[ADAPTER] Initializing Actual API for operation');
-    
+    logger.debug(`[ADAPTER] Initializing Actual API for operation (budget: "${budget.name}", server: ${budget.serverUrl})`);
+
     await api.init({
       dataDir: DATA_DIR,
-      serverURL: SERVER_URL,
-      password: PASSWORD || '',
+      serverURL: budget.serverUrl,
+      password: budget.password || '',
     });
 
     logger.debug('[ADAPTER] Downloading budget');
-    
-    if (BUDGET_PASSWORD) {
+
+    if (budget.encryptionPassword) {
       const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-      await apiWithOptions.downloadBudget(BUDGET_SYNC_ID!, { password: BUDGET_PASSWORD });
+      await apiWithOptions.downloadBudget(budget.syncId, { password: budget.encryptionPassword });
     } else {
-      await api.downloadBudget(BUDGET_SYNC_ID!);
+      await api.downloadBudget(budget.syncId);
     }
-    
+
     logger.debug('[ADAPTER] Actual API initialized for operation');
   } catch (err) {
     logger.error('[ADAPTER] Error initializing Actual API:', err);
@@ -111,9 +140,9 @@ async function initActualApiForOperation(): Promise<void> {
 
 async function shutdownActualApi(): Promise<void> {
   try {
-    const maybeApi = api as unknown as { shutdown?: Function };
+    const maybeApi = api as unknown as { shutdown?: () => Promise<void> };
     if (typeof maybeApi.shutdown === 'function') {
-      await (maybeApi.shutdown as () => Promise<unknown>)();
+      await maybeApi.shutdown();
       logger.debug('[ADAPTER] Actual API shutdown complete');
     }
   } catch (err) {
@@ -121,7 +150,7 @@ async function shutdownActualApi(): Promise<void> {
   }
 }
 
-import { DEFAULT_CONCURRENCY_LIMIT } from './constants.js';
+import { DEFAULT_CONCURRENCY_LIMIT, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 /**
  * Very small concurrency limiter for adapter calls. This prevents bursts from
@@ -145,7 +174,6 @@ interface WriteOperation<T> {
 let writeQueue: WriteOperation<any>[] = [];
 let isProcessingWrites = false;
 let writeSessionTimeout: NodeJS.Timeout | null = null;
-const WRITE_SESSION_DELAY = 100; // Wait 100ms for more writes before closing session
 
 async function processWriteQueue() {
   // Atomically check and set processing flag to prevent race conditions
@@ -210,7 +238,7 @@ async function processWriteQueue() {
     if (writeQueue.length > 0 && writeSessionTimeout === null) {
       writeSessionTimeout = setTimeout(() => {
         processWriteQueue();
-      }, WRITE_SESSION_DELAY);
+      }, WRITE_SESSION_DELAY_MS);
     }
   }
 }
@@ -227,7 +255,7 @@ function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
     // Set new timeout to process queue
     writeSessionTimeout = setTimeout(() => {
       processWriteQueue();
-    }, WRITE_SESSION_DELAY);
+    }, WRITE_SESSION_DELAY_MS);
   });
 }
 
@@ -956,6 +984,51 @@ export async function getBudgets(): Promise<unknown[]> {
 }
 
 /**
+ * Switch the active budget by name (case-insensitive, partial match supported).
+ * The budget must be pre-configured via BUDGET_n_NAME env vars.
+ * Switching is instant — no API call required; the next withActualApi
+ * call will automatically connect to the new budget's server and sync ID.
+ */
+export function switchBudget(name: string): { name: string; syncId: string; serverUrl: string } {
+  const key = name.toLowerCase();
+  let found: BudgetConfig | undefined = budgetRegistry.get(key);
+  let foundKey = key;
+  if (!found) {
+    // Partial / substring match
+    for (const [k, v] of budgetRegistry) {
+      if (k.includes(key) || key.includes(k)) {
+        found = v;
+        foundKey = k;
+        break;
+      }
+    }
+  }
+  if (!found) {
+    const available = [...budgetRegistry.values()].map(b => `"${b.name}"`).join(', ');
+    throw new Error(
+      `Budget "${name}" not found in configuration. ` +
+      `Available budgets: ${available}. ` +
+      `Add BUDGET_n_NAME/SYNC_ID/SERVER_URL vars to configure additional budgets.`,
+    );
+  }
+  activeBudgetKey = foundKey;
+  logger.info(`[ADAPTER] Active budget switched to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`);
+  return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+}
+
+/**
+ * Return all configured budgets from the registry (for listing in actual_budgets_list_available).
+ */
+export function getBudgetRegistry(): Array<{ name: string; syncId: string; serverUrl: string; hasEncryption: boolean }> {
+  return [...budgetRegistry.values()].map(b => ({
+    name: b.name,
+    syncId: b.syncId,
+    serverUrl: b.serverUrl,
+    hasEncryption: !!b.encryptionPassword,
+  }));
+}
+
+/**
  * Get the UUID for any Account, Payee, Category or Schedule by name.
  * Allowed types: 'accounts', 'schedules', 'categories', 'payees'
  */
@@ -1018,6 +1091,8 @@ export default {
   runQuery,
   runBankSync,
   getBudgets,
+  switchBudget,
+  getBudgetRegistry,
   getIDByName,
   getServerVersion,
   getSchedules,
