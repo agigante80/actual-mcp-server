@@ -58,11 +58,17 @@ async function expectCallError(tool, input, label) {
     batch,
     transfer,
     setAmount,
+    schedules_create_tool,
+    schedules_update_tool,
+    schedules_delete_tool,
   ] = await Promise.all([
     import('../../dist/src/tools/rules_create.js').then(m => m.default),
     import('../../dist/src/tools/budget_updates_batch.js').then(m => m.default),
     import('../../dist/src/tools/budgets_transfer.js').then(m => m.default),
     import('../../dist/src/tools/budgets_setAmount.js').then(m => m.default),
+    import('../../dist/src/tools/schedules_create.js').then(m => m.default),
+    import('../../dist/src/tools/schedules_update.js').then(m => m.default),
+    import('../../dist/src/tools/schedules_delete.js').then(m => m.default),
   ]);
 
   let failures = 0;
@@ -139,6 +145,67 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(setAmount,
     { month: '2026-03', categoryId: 'cat_1', amount: 50000 },
     'valid setAmount')) fail();
+
+  // ── actual_schedules_create ─────────────────────────────────────────────
+  console.log('\n[actual_schedules_create]');
+
+  if (!expectParseError(schedules_create_tool, {}, 'empty input — date is required')) fail();
+  if (!expectParseError(schedules_create_tool,
+    { date: '2026-1-1' },
+    'invalid date format (single-digit month/day)')) fail();
+  if (!expectParseError(schedules_create_tool,
+    { date: { frequency: 'hourly', start: '2026-01-01', endMode: 'never' } },
+    'invalid RecurConfig frequency (hourly not in enum)')) fail();
+  if (!expectParseError(schedules_create_tool,
+    { date: { frequency: 'monthly', start: '2026-01-01', endMode: 'every_time' } },
+    'invalid RecurConfig endMode (every_time not in enum)')) fail();
+  if (!expectParseError(schedules_create_tool,
+    { date: { start: '2026-01-01', endMode: 'never' } },
+    'RecurConfig missing required frequency')) fail();
+  if (!expectParseError(schedules_create_tool,
+    { date: '2026-04-01', amountOp: 'invalid' },
+    'invalid amountOp value')) fail();
+  // Valid one-off
+  if (!expectParseOk(schedules_create_tool,
+    { date: '2026-04-01' },
+    'valid one-off schedule (date string only)')) fail();
+  // Valid recurring
+  if (!expectParseOk(schedules_create_tool,
+    { date: { frequency: 'monthly', start: '2026-01-01', endMode: 'never' } },
+    'valid recurring schedule (monthly, never ends)')) fail();
+  // Valid recurring with endDate
+  if (!expectParseOk(schedules_create_tool,
+    { date: { frequency: 'weekly', start: '2026-01-01', endMode: 'on_date', endDate: '2026-12-31' }, amount: -5000, amountOp: 'is' },
+    'valid recurring with endDate')) fail();
+
+  // ── actual_schedules_update ─────────────────────────────────────────────
+  console.log('\n[actual_schedules_update]');
+
+  if (!expectParseError(schedules_update_tool, {}, 'empty input — id is required')) fail();
+  if (!expectParseError(schedules_update_tool,
+    { id: 'not-a-uuid' },
+    'invalid UUID for id')) fail();
+  if (!expectParseError(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', amountOp: 'wrong' },
+    'invalid amountOp on update')) fail();
+  // Valid — id only (no other fields required on update)
+  if (!expectParseOk(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001' },
+    'valid update with id only')) fail();
+  if (!expectParseOk(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', name: 'Rent', resetNextDate: true },
+    'valid update with name + resetNextDate')) fail();
+
+  // ── actual_schedules_delete ─────────────────────────────────────────────
+  console.log('\n[actual_schedules_delete]');
+
+  if (!expectParseError(schedules_delete_tool, {}, 'empty input — id is required')) fail();
+  if (!expectParseError(schedules_delete_tool,
+    { id: 'not-a-uuid' },
+    'invalid UUID for id')) fail();
+  if (!expectParseOk(schedules_delete_tool,
+    { id: '00000000-0000-0000-0000-000000000001' },
+    'valid delete with correct UUID')) fail();
 
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');
