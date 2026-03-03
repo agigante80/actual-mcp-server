@@ -11,14 +11,6 @@ actual-data/
 logs/
 *.log
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
 
 # Coverage reports
 coverage/
@@ -26,12 +18,8 @@ coverage/
 # npm cache
 .npm
 
-# ESLint cache
-.eslintcache
-
 # TypeScript output
 dist/
-build/
 
 # VS Code settings
 .vscode/
