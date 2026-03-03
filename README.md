@@ -541,9 +541,8 @@ docker run -d \
   --name actual-mcp-server \
   -p 3000:3000 \
   -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD_FILE=/run/secrets/actual_password \
+  -e ACTUAL_PASSWORD=your_actual_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -v $(pwd)/secrets/actual_password.txt:/run/secrets/actual_password:ro \
   -v actual-mcp-data:/data \
   ghcr.io/agigante80/actual-mcp-server:latest
 ```
@@ -917,7 +916,6 @@ All configuration is managed via environment variables. See [`.env.example`](.en
 | `MCP_ENABLE_HTTPS` | `false` | ❌ No | Enable HTTPS/TLS encryption |
 | `MCP_HTTPS_CERT` | - | ⚠️ If HTTPS | Path to TLS certificate file (PEM format) |
 | `MCP_HTTPS_KEY` | - | ⚠️ If HTTPS | Path to TLS private key file (PEM format) |
-| `ACTUAL_PASSWORD_FILE` | - | ❌ No | Path to file containing password (Docker secrets) |
 | **Logging Configuration** ||||
 | `MCP_BRIDGE_STORE_LOGS` | `false` | ❌ No | Enable file logging (vs console only) |
 | `MCP_BRIDGE_LOG_DIR` | `./logs` | ❌ No | Directory for log files (if `STORE_LOGS=true`) |
