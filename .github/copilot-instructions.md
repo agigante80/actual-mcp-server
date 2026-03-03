@@ -68,6 +68,9 @@ src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
 ├── actualToolsManager.ts       # Tool registry (56 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── auth/
+│   ├── setup.ts                # createMcpAuth() factory (MCPAuth singleton, AUTH_PROVIDER=oidc)
+│   └── budget-acl.ts           # Per-user budget ACL (email/sub/group principals, AUTH_BUDGET_ACL)
 ├── lib/
 │   ├── actual-adapter.ts       # ⚠️ CRITICAL: withActualApi wrapper, retry logic
 │   ├── ActualMCPConnection.ts  # MCP protocol implementation (EventEmitter-based)
@@ -310,6 +313,7 @@ When working on specific areas, reference these files:
 
 **Adding Tools**: `src/actualToolsManager.ts`, `src/tools/*.ts`, `src/lib/schemas/common.ts`, `docs/NEW_TOOL_CHECKLIST.md`  
 **Transport Issues**: `src/server/httpServer.ts`  
+**OIDC/Auth**: `src/auth/setup.ts`, `src/auth/budget-acl.ts`, `src/config.ts` (AUTH_PROVIDER etc.)  
 **API Integration**: `src/lib/actual-adapter.ts` (withActualApi pattern), `src/lib/retry.ts`  
 **Testing**: `tests/e2e/mcp-client.playwright.spec.ts`, `src/tests_adapter_runner.ts`, `tests/manual/` (live integration suite)  
 **Deployment**: `scripts/deploy-and-test.sh`, `docker-compose.yaml`  
@@ -348,6 +352,6 @@ If transactions/budgets don't persist:
 
 ---
 
-**Last Updated**: 2026-03-02  
-**Version:** 0.4.18  
+**Last Updated**: 2026-03-03  
+**Version:** 0.4.20  
 **Tool Count:** 56 (verified LibreChat-compatible)

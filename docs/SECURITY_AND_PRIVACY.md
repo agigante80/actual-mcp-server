@@ -1,9 +1,9 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.18  
+**Version:** 0.4.20  
 **Purpose:** Define security policies, privacy practices, and incident response  
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-03-03
 
 ---
 
@@ -49,7 +49,41 @@ MCP_SSE_AUTHORIZATION=your_generated_token
 - ✅ Works with HTTP transport
 - ✅ Can be rotated without restarting server
 
-#### 2. **Password-Based (Actual Budget)**
+#### 2. **OIDC / JWT Authentication**
+
+**Status**: ✅ Implemented (`AUTH_PROVIDER=oidc`)
+
+**How it works**: The server validates JWTs using JWKS from the OIDC issuer.
+No PKCE flow runs on the server — the MCP client (e.g., LibreChat) handles the OAuth code exchange.
+
+**Configuration**:
+```bash
+AUTH_PROVIDER=oidc
+OIDC_ISSUER=https://sso.yourdomain.com
+OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
+OIDC_SCOPES=                          # leave empty for Casdoor (no scope claim)
+AUTH_BUDGET_ACL=alice@example.com:budget-uuid-1
+```
+
+**Casdoor compatibility**: Casdoor auth-code flow JWTs omit the `scope` claim.
+Set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements and logs `Scopes required: (none)`.
+
+**Per-user Budget ACL** (`AUTH_BUDGET_ACL`):
+```
+# Format: principal:budget-sync-id (comma-separated)
+AUTH_BUDGET_ACL=alice@example.com:aaa-bbb-ccc,group:admins:ddd-eee-fff
+```
+Principals are matched against JWT claims `email`, `sub`, and `groups`.
+If `AUTH_BUDGET_ACL` is not set, all authenticated users access the single configured budget.
+
+**Security Properties**:
+- ✅ JWKS-validated JWT — cryptographically verified
+- ✅ Per-user budget isolation via `AUTH_BUDGET_ACL`
+- ✅ Compatible with Casdoor v2.13, Keycloak, Auth0
+- ✅ Group-based access control
+- ⚠️ Requires OIDC issuer reachable from MCP server
+
+#### 3. **Password-Based (Actual Budget)**
 
 **Purpose**: Authenticate with Actual Budget server
 
@@ -66,7 +100,9 @@ ACTUAL_PASSWORD=your_actual_budget_password
 
 ### Authorization Model
 
-**Current**: Single-user, full access
+**Default** (`AUTH_PROVIDER=none`): Single-user, full access
+
+**OIDC mode** (`AUTH_PROVIDER=oidc`): Per-user budget ACL via `AUTH_BUDGET_ACL`
 
 **All authenticated users can**:
 - Read all financial data
@@ -74,12 +110,15 @@ ACTUAL_PASSWORD=your_actual_budget_password
 - Delete accounts and budgets
 - Access all tools
 
-**No role-based access control (RBAC)**:
-- All-or-nothing access model
-- Suitable for personal use
-- Not suitable for multi-user deployments
+**With `AUTH_BUDGET_ACL` configured**:
+- Each user is mapped to a specific budget sync ID
+- Users can only access their own budget
+- Group principals (`group:admins`) give shared access
+- Suitable for household or small-team deployments
 
-**Future Enhancement**: RBAC (see [ROADMAP.md](./ROADMAP.md))
+**Without `AUTH_BUDGET_ACL`**:
+- All authenticated users share the single configured budget
+- Suitable for personal use
 
 ---
 
