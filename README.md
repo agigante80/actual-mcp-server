@@ -173,7 +173,7 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 ### Core Capabilities
 
 - 🤖 **56 MCP Tools**: Comprehensive financial operations via natural language
--  **Secure**: Bearer token authentication + HTTPS/TLS encryption
+-  **Secure**: Bearer token OR OIDC/JWT authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **84% API Coverage**: Supports majority of Actual Budget operations
@@ -908,7 +908,12 @@ All configuration is managed via environment variables. See [`.env.example`](.en
 | `MAX_CONCURRENT_SESSIONS` | `15` | ❌ No | Maximum concurrent MCP sessions allowed |
 | `SESSION_IDLE_TIMEOUT_MINUTES` | `5` (pool)<br/>`2` (HTTP) | ❌ No | Minutes before idle session cleanup |
 | **Security & Authentication** ||||
-| `MCP_SSE_AUTHORIZATION` | - | ❌ No | Bearer token for authentication (highly recommended) |
+| `AUTH_PROVIDER` | `none` | ❌ No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
+| `MCP_SSE_AUTHORIZATION` | - | ❌ No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended) |
+| `OIDC_ISSUER` | - | ⚠️ If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
+| `OIDC_RESOURCE` | - | ❌ No | Expected `aud` claim in JWT (your client ID) |
+| `OIDC_SCOPES` | - | ❌ No | Comma-separated required scopes; leave empty for Casdoor |
+| `AUTH_BUDGET_ACL` | - | ❌ No | Per-user budget ACL (see [OIDC Authentication](#oidc-authentication-multi-user)) |
 | `MCP_ENABLE_HTTPS` | `false` | ❌ No | Enable HTTPS/TLS encryption |
 | `MCP_HTTPS_CERT` | - | ⚠️ If HTTPS | Path to TLS certificate file (PEM format) |
 | `MCP_HTTPS_KEY` | - | ⚠️ If HTTPS | Path to TLS private key file (PEM format) |
@@ -1062,12 +1067,50 @@ ACTUAL_SERVER_URL=https://actual.yourdomain.com
 # ❌ DON'T: Share tokens between environments
 ```
 
+### OIDC Authentication (Multi-User)
+
+For multi-user deployments with an OIDC provider (Casdoor, Keycloak, Auth0, etc.), set `AUTH_PROVIDER=oidc`.
+The server validates JWTs using JWKS from the issuer and optionally enforces per-user budget ACLs.
+
+```bash
+# .env — OIDC mode
+AUTH_PROVIDER=oidc
+OIDC_ISSUER=https://sso.yourdomain.com
+OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
+OIDC_SCOPES=                          # leave empty for Casdoor (no 'scope' claim)
+AUTH_BUDGET_ACL=alice@example.com:budget-uuid-1,bob@example.com:budget-uuid-2
+```
+
+**Casdoor compatibility note**: Casdoor auth-code flow JWTs do not include a `scope` claim.
+Set `OIDC_SCOPES=` (empty) to disable scope enforcement. The server logs `Scopes required: (none)`.
+
+**LibreChat with OIDC** — configure the OIDC MCP instance via the LibreChat admin UI (OAuth flow).
+For a static-token fallback instance, add to `librechat.yaml`:
+
+```yaml
+mcpServers:
+  actual-bearer:
+    type: "http"
+    url: "http://your-mcp-server:3600/http"
+    headers:
+      Authorization: "Bearer your_token_here"
+    serverInstructions: false
+```
+
+**`AUTH_BUDGET_ACL` format**: comma-separated `principal:budget-sync-id` pairs.
+Principals can be email addresses, OIDC `sub` values, or `group:groupname`.
+
+```
+AUTH_BUDGET_ACL=alice@example.com:aaa-bbb-ccc,group:admins:ddd-eee-fff
+```
+
 ### Testing Results
 
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
 | HTTP without auth | ✅ Success | 56 tools |
-| HTTP with auth | ✅ Success | 56 tools |
+| HTTP with auth (Bearer) | ✅ Success | 56 tools |
+| HTTP with OIDC (Casdoor v2.13) | ✅ Success | 56 tools |
 
 ---
 

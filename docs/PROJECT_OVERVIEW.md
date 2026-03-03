@@ -1,9 +1,9 @@
 # Project Overview
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.19  
+**Version:** 0.4.20  
 **Status:** Production-ready with ongoing enhancements  
-**Last Updated:** 2026-03-02  
+**Last Updated:** 2026-03-03  
 **Assessment Score:** 88/100 (EXCELLENT)  
 **Tool Count:** 56 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
@@ -66,11 +66,12 @@ Comprehensive coverage of Actual Budget functionality across 12 categories:
 
 ### 🔄 **Transport Protocol**
 
-- **HTTP**: `streamable-http` transport with Bearer token auth - **fully verified with LibreChat**
+- **HTTP**: `streamable-http` transport with Bearer token or OIDC/JWT auth - **fully verified with LibreChat**
 
 ### 🔐 **Security & Authentication**
 
-- **Bearer Token Authentication**: Optional `MCP_SSE_AUTHORIZATION` for secure API access
+- **Bearer Token Authentication** (`AUTH_PROVIDER=none`): Static `MCP_SSE_AUTHORIZATION` for secure single-user access
+- **OIDC / JWT Authentication** (`AUTH_PROVIDER=oidc`): JWKS-validated JWTs with per-user budget ACL; verified with Casdoor v2.13
 - **HTTPS Support**: TLS/SSL encryption for production deployments
 - **Environment-Based Secrets**: No hardcoded credentials, Docker secrets support
 - **Non-Root Container**: Security-hardened Docker image
