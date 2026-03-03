@@ -541,9 +541,8 @@ docker run -d \
   --name actual-mcp-server \
   -p 3000:3000 \
   -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD_FILE=/run/secrets/actual_password \
+  -e ACTUAL_PASSWORD=your_actual_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -v $(pwd)/secrets/actual_password.txt:/run/secrets/actual_password:ro \
   -v actual-mcp-data:/data \
   ghcr.io/agigante80/actual-mcp-server:latest
 ```
@@ -899,7 +898,6 @@ All configuration is managed via environment variables. See [`.env.example`](.en
 | `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | ❌ No | Public hostname/IP for server (shown in logs) |
 | `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | ❌ No | Public scheme (`http` or `https`) |
 | `MCP_BRIDGE_USE_TLS` | `false` | ❌ No | Legacy TLS flag (use `MCP_ENABLE_HTTPS` instead) |
-| `MCP_BRIDGE_ADVERTISED_URL` | - | ❌ No | Human-friendly URL displayed to users |
 | **Transport Configuration** ||||
 | `MCP_TRANSPORT_MODE` | `--http` | ❌ No | Transport mode (only `--http` supported) - Docker only |
 | `MCP_HTTP_PATH` | `/http` | ❌ No | HTTP endpoint path |
@@ -917,29 +915,22 @@ All configuration is managed via environment variables. See [`.env.example`](.en
 | `MCP_ENABLE_HTTPS` | `false` | ❌ No | Enable HTTPS/TLS encryption |
 | `MCP_HTTPS_CERT` | - | ⚠️ If HTTPS | Path to TLS certificate file (PEM format) |
 | `MCP_HTTPS_KEY` | - | ⚠️ If HTTPS | Path to TLS private key file (PEM format) |
-| `ACTUAL_PASSWORD_FILE` | - | ❌ No | Path to file containing password (Docker secrets) |
 | **Logging Configuration** ||||
 | `MCP_BRIDGE_STORE_LOGS` | `false` | ❌ No | Enable file logging (vs console only) |
 | `MCP_BRIDGE_LOG_DIR` | `./logs` | ❌ No | Directory for log files (if `STORE_LOGS=true`) |
-| `MCP_BRIDGE_LOG_LEVEL` | `info` | ❌ No | Log level: `error`, `warn`, `info`, `debug` |
-| `LOG_LEVEL` | `info` | ❌ No | Alternative log level variable (overrides default) |
-| `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | ❌ No | Enable transport-level debug logging |
+| `MCP_BRIDGE_LOG_LEVEL` | `debug` | ❌ No | Log level: `error`, `warn`, `info`, `debug` |
 | **Log Rotation** (when `MCP_BRIDGE_STORE_LOGS=true`) ||||
 | `MCP_BRIDGE_MAX_FILES` | `14d` | ❌ No | Keep rotated logs for N days (e.g., `14d`, `30d`) |
 | `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | ❌ No | Rotate when file reaches size (e.g., `20m`, `100m`) |
-| `MCP_BRIDGE_COMPRESS_AFTER_HOURS` | `24` | ❌ No | Compress logs older than N hours |
 | `MCP_BRIDGE_ROTATE_DATEPATTERN` | `YYYY-MM-DD` | ❌ No | Date pattern for rotated log filenames |
-| **Development & Testing** ||||
-| `DEBUG` | `false` | ❌ No | Enable debug mode (verbose logging) |
-| `SKIP_BUDGET_DOWNLOAD` | `false` | ❌ No | Skip budget sync on startup (testing) |
-| `TEST_ACTUAL_CONNECTION` | `false` | ❌ No | Test connection only and exit |
-| `TEST_ACTUAL_TOOLS` | `false` | ❌ No | Run all tools test and exit |
-| `USE_TEST_DATA` | `false` | ❌ No | Use mock data instead of real Actual server |
+| **Development & Debugging** ||||
+| `DEBUG` | `false` | ❌ No | Enable debug mode (verbose logging, sets `--debug` flag) |
+| `LOG_LEVEL` | `info` | ❌ No | Log level override: `error`, `warn`, `info`, `debug` |
+| `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | ❌ No | Enable transport-level debug logging |
 | **Advanced/Internal** ||||
 | `ACTUAL_API_CONCURRENCY` | `5` | ❌ No | Max concurrent Actual API operations |
+| `USE_CONNECTION_POOL` | `true` | ❌ No | Enable session-based connection pooling |
 | `VERSION` | auto-detected | ❌ No | Server version (auto-set by build/Docker) |
-| `ENABLE_METRICS` | `false` | ❌ No | Enable Prometheus metrics endpoint |
-| `METRICS_PORT` | `9090` | ❌ No | Port for metrics endpoint |
 | `TZ` | `UTC` | ❌ No | Timezone for timestamps (e.g., `America/New_York`) |
 
 #### Quick Start Configuration

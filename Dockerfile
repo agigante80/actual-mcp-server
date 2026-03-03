@@ -9,8 +9,6 @@ RUN npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
-# Install curl for healthchecks and bootstrap scripts
-RUN apk add --no-cache curl
 # Upgrade npm to latest version to fix security vulnerabilities in npm's dependencies
 RUN npm install -g npm@latest
 ENV NODE_ENV=production
@@ -21,12 +19,6 @@ COPY --from=build /app/package.json ./
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/scripts ./scripts
-COPY --from=build /app/generated ./generated
-COPY --from=build /app/src/lib ./src/lib
-COPY --from=build /app/test-data ./test-data
-
-# Make bootstrap script executable (for E2E testing)
-RUN chmod +x scripts/bootstrap-actual-server.sh 2>/dev/null || true
 
 # Run as non-root
 RUN addgroup -S app && adduser -S app -G app
@@ -36,7 +28,7 @@ RUN mkdir -p /app/data && chown -R app:app /app/data
 
 USER app
 
-EXPOSE 3000 3600
+EXPOSE 3600
 
 # Healthcheck: Verify the MCP server is responding
 # Use $MCP_BRIDGE_PORT if set, otherwise default to 3600 (HTTP mode default)

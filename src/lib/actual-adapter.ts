@@ -43,6 +43,10 @@ import {
   getBudgets as rawGetBudgets,
   getIDByName as rawGetIDByName,
   getServerVersion as rawGetServerVersion,
+  getSchedules as rawGetSchedules,
+  createSchedule as rawCreateSchedule,
+  updateSchedule as rawUpdateSchedule,
+  deleteSchedule as rawDeleteSchedule,
 } from '@actual-app/api/dist/methods.js';
 import api from '@actual-app/api';
 import { EventEmitter } from 'events';
@@ -577,6 +581,35 @@ export async function deleteRule(id: string): Promise<void> {
     await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
+export async function getSchedules(): Promise<unknown[]> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.schedules.get').catch(() => {});
+    const raw = await withConcurrency(() => retry(() => rawGetSchedules() as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+    return Array.isArray(raw) ? raw : [];
+  });
+}
+export async function createSchedule(schedule: unknown): Promise<string> {
+  observability.incrementToolCall('actual.schedules.create').catch(() => {});
+  return queueWriteOperation(async () => {
+    // Note: rawCreateSchedule(schedule) passes the external schedule object directly.
+    // Do NOT wrap in { schedule: ... } — that would double-nest and break date parsing.
+    const raw = await withConcurrency(() => retry(() => rawCreateSchedule(schedule as Record<string, unknown>) as Promise<string>, { retries: 0, backoffMs: 200 }));
+    const id = normalizeToId(raw);
+    return id;
+  });
+}
+export async function updateSchedule(id: string, fields: unknown, resetNextDate?: boolean): Promise<void> {
+  observability.incrementToolCall('actual.schedules.update').catch(() => {});
+  return queueWriteOperation(async () => {
+    await withConcurrency(() => retry(() => rawUpdateSchedule(id, fields as Record<string, unknown>, resetNextDate) as Promise<void>, { retries: 0, backoffMs: 200 }));
+  });
+}
+export async function deleteSchedule(id: string): Promise<void> {
+  observability.incrementToolCall('actual.schedules.delete').catch(() => {});
+  return queueWriteOperation(async () => {
+    await withConcurrency(() => retry(() => rawDeleteSchedule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+  });
+}
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
   observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
   return queueWriteOperation(async () => {
@@ -987,5 +1020,9 @@ export default {
   getBudgets,
   getIDByName,
   getServerVersion,
+  getSchedules,
+  createSchedule,
+  updateSchedule,
+  deleteSchedule,
   notifications,
 };

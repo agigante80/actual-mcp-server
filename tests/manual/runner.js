@@ -9,17 +9,21 @@
  *   node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
  *
  * Parameters:
- *   MCP_URL  - MCP server URL (default: http://localhost:3600/http)
- *   TOKEN    - Bearer token for authentication
+ *   MCP_URL  - MCP server URL (default: http://localhost:3601/http  ← bearer instance)
+ *   TOKEN    - Bearer token (default: MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6)
  *   LEVEL    - sanity | smoke | normal | extended | full | cleanup
  *   CLEANUP  - yes | no | y | n  (default: interactive prompt with 10s timeout)
+ *
+ * Two MCP instances are running:
+ *   Port 3600  actual-mcp-server-backend  AUTH_PROVIDER=oidc    (LibreChat/LobeChat users)
+ *   Port 3601  actual-mcp-bearer-backend  AUTH_PROVIDER=none    (automated tests ← default)
  *
  * Environment variables:
  *   MCP_SERVER_URL        MCP server URL override
  *   MCP_AUTH_TOKEN        Bearer token override
  *   MCP_TEST_LEVEL        Test level override
  *   ACTUAL_SERVER_URL     Actual Budget server URL (shown in cleanup prompt)
- *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 51)
+ *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 60)
  */
 
 import readline from 'node:readline/promises';
@@ -36,8 +40,10 @@ import { cleanupMcpTestAccounts } from './cleanup.js';
 // Load .env from project root
 loadDotenv();
 
-const MCP_URL = process.argv[2] || process.env.MCP_SERVER_URL || "http://localhost:3600/http";
-const rawToken = process.argv[3] || process.env.MCP_AUTH_TOKEN || null;
+// Default targets the bearer instance (port 3601) — safe for automated tests.
+// The OIDC instance (port 3600) requires a Casdoor JWT and cannot be tested without a browser.
+const MCP_URL = process.argv[2] || process.env.MCP_SERVER_URL || "http://localhost:3601/http";
+const rawToken = process.argv[3] || process.env.MCP_AUTH_TOKEN || "MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6";
 let level = (process.argv[4] || process.env.MCP_TEST_LEVEL || '').toLowerCase() || null;
 let cleanup = process.argv[5] ? process.argv[5].toLowerCase() : null; // 'yes'|'no'|null
 
