@@ -27,7 +27,7 @@ tests/manual/
     ├── category.js            ← category: create, update (requires categoryGroupId)
     ├── payee.js               ← payee: create, update, merge, payee rules
     ├── transaction.js         ← transaction: create, get, update, filter, import
-    ├── budget.js              ← budget: amounts, carryover, hold, transfer, batch
+    ├── budget.js              ← budget: list/switch budgets, amounts, carryover, hold, transfer, batch
     ├── rules.js               ← rules: create (with/without op), update
     ├── schedule.js            ← schedules: get, create (one-off + recurring), update, delete, negative UUID test
     └── advanced.js            ← composite functions: extendedTests, fullTests,
@@ -90,7 +90,7 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 | `MCP_AUTH_TOKEN` | Bearer token |
 | `MCP_TEST_LEVEL` | Test level |
 | `ACTUAL_SERVER_URL` | Shown in cleanup prompt (default `http://localhost:5006`) |
-| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `60`) |
+| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `62`) |
 
 Variables are loaded from the project root `.env` automatically.
 

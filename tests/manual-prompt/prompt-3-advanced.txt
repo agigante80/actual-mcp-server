@@ -1,0 +1,220 @@
+─────────────────────────────────────────────────────────────────────────────────
+PROMPT 3 OF 3 — ADVANCED + FULL CLEANUP
+  Tests budget management, summaries, query engine, session management, and
+  cleans up ALL test data created in Prompts 1–3.
+  Paste into the SAME chat session after Prompt 2 passes.
+
+PRE-CONDITIONS
+  - Prompts 1 and 2 already passed in this session
+  - {TS} is still active
+  - {txn_acct_id}, {txn1_id}, {txn2_id}, {payee_id}, {upsert_rule_id} retained
+
+HOW TO USE
+  1. In the SAME chat session, paste everything below "─── PROMPT START".
+  2. The AI will run Phases 7–12, then clean up all test data.
+  3. Review the final summary for any ✗ failures or ℹ informational items.
+
+WHAT IT TESTS
+  Phase 7  — Transaction Summaries   (2 tools)
+  Phase 8  — Budgets                 (11 tools)
+  Phase 9  — Advanced Query & Sync   (2 tools)
+  Phase 10 — Session Management      (2 tools)
+  Phase 11 — Concurrency             (optional, skipped by default)
+  Phase 12 — Full Cleanup            (non-blocking)
+─────────────────────────────────────────────────────────────────────────────────
+─── PROMPT START ────────────────────────────────────────────────────────────────
+
+**Continuing from Prompt 2 — {TS} and all active IDs are still in scope.**
+
+Use the SAME testing rules:
+- ONE tool at a time, wait for each response, continue automatically
+- ONLY STOP on actual failure
+- One status line per tool: [Phase X] tool_name — ✓/✗/ℹ
+- ACTUALLY INVOKE each tool — do not simulate
+- NEVER call tools in parallel
+
+---
+
+**Phase 7 — Transaction Summaries (2 tools):**
+
+- actual_transactions_summary_by_category
+  Input: no required parameters (defaults to all months or current period)
+  Expect: array of category summary objects (possibly empty if no categorised transactions)
+  Report count as ✓ informational
+
+- actual_transactions_summary_by_payee
+  Input: no required parameters
+  Expect: array of payee summary objects (possibly empty)
+  Report count as ✓ informational
+
+---
+
+**Phase 8 — Budgets (11 tools):**
+
+Select a category to work with — use the first category returned by actual_categories_get.
+Save as `{budget_cat_id}`.
+Select a second different category for transfer test. Save as `{budget_cat2_id}`.
+
+- actual_budgets_list_available
+  Expect: object with `budgets` array and `count` number; each entry has `name`, `syncId`, `serverUrl`, `hasEncryption`
+  Save the name of the first budget as `{first_budget_name}`
+
+- actual_budgets_switch (positive)
+  Input: { budgetName: "{first_budget_name}" }  ← use the name from list_available
+  Expect: { success: true, budgetName: string, budgetId: UUID, serverUrl: string }
+
+- actual_budgets_switch (negative)
+  Input: { budgetName: "__nonexistent_budget_MCP_test__" }
+  Expect: error or response containing "not found" or an `available` list (✓ pass);
+  if response contains no error context → ✗ fail
+
+- actual_budgets_get_all
+  Expect: budget data for all months, no error
+
+- actual_budgets_getMonth
+  Input: month = current month (YYYY-MM format)
+  Expect: budget data object for the month
+
+- actual_budgets_getMonths
+  Input: months array = [3 consecutive months including current]
+  Expect: array of month budget objects (≥ 1 item)
+
+- actual_budgets_setAmount
+  Input: { month: current month, category: "{budget_cat_id}", amount: 50000 }
+  Expect: success (50000 cents = $500.00 budgeted)
+  Verify: re-fetch month budget and confirm budgeted=50000 for that category
+
+- actual_budgets_setCarryover
+  Input: { month: current month, category: "{budget_cat_id}", carryover: true }
+  Expect: success
+  Verify: carryover field=true in month budget for that category
+
+- actual_budgets_holdForNextMonth
+  Input: { month: current month, amount: 10000 }
+  Expect: success (holds $100.00 for next month)
+  Verify: toBudget for the month decreased by 10000 cents
+
+- actual_budgets_resetHold
+  Input: { month: current month }
+  Expect: success (hold released)
+  Verify: toBudget restored to pre-hold value
+
+- actual_budgets_transfer
+  Input: { month: current month, from: "{budget_cat_id}", to: "{budget_cat2_id}", amount: 5000 }
+  Expect: success
+  Verify: source budgeted decreased by 5000, destination increased by 5000
+
+- actual_budget_updates_batch
+  Input: batch of 2+ budget operations for current month using {budget_cat_id} and {budget_cat2_id}
+  Expect: { success: true, totalOperations: N, successful: N, failed: 0 }
+
+---
+
+**Phase 9 — Advanced Query & Sync (2 tools):**
+
+- actual_bank_sync
+  Input: { account: "{txn_acct_id}" }
+  If no bank connection: report ✓ informational "no bank connection" — NOT a failure
+  If bank connected: expect sync initiated successfully
+
+- actual_query_run
+  Run these 3 queries sequentially (each unsupported syntax → ✓ informational, not ✗ failure):
+
+  Query 1 (simple count):
+    "SELECT COUNT(*) as total FROM transactions WHERE date >= '2026-01-01'"
+
+  Query 2 (aggregation):
+    "SELECT account, SUM(amount) as total FROM transactions GROUP BY account LIMIT 10"
+
+  Query 3 (filter + sort):
+    "SELECT payee, amount, date FROM transactions WHERE amount < 0 ORDER BY amount ASC LIMIT 5"
+
+  Report each query result as ✓ success or ✓ informational (unsupported) — only an exception = ✗ failure
+
+---
+
+**Phase 10 — Session Management (2 tools):**
+
+- actual_session_list
+  Expect: { totalSessions: N, activeSessions: N, maxConcurrent: N }
+  Report counts as ✓ informational
+
+- actual_session_close
+  Input: no sessionId (let server decide oldest idle session)
+  If error "only current session active" or "no other sessions": report ✓ informational (expected)
+  If another session was closed: report ✓ success
+
+---
+
+**Phase 11 — Concurrency Test (SKIP by default — only run if explicitly requested):**
+
+If requested: create 10 transactions simultaneously in {txn_acct_id}:
+  Amounts: -1000, -2000, -3000, -4000, -5000, -6000, -7000, -8000, -9000, -10000 (cents)
+  Call them ONE AT A TIME sequentially (server enforces sequential writes)
+  Verify all 10 are present in actual_transactions_filter
+By default: output "[Phase 11] concurrency — ℹ skipped (not requested)" and proceed to Phase 12.
+
+---
+
+**Phase 12 — Full Cleanup (Non-Blocking):**
+
+Attempt to delete all test data created across Prompts 1–3.
+If any individual cleanup operation fails:
+  - Report it as ✓ informational
+  - Continue with remaining cleanup
+  - Do NOT mark overall test as failed
+
+Cleanup order (dependencies first):
+
+1. actual_transactions_delete — delete {txn1_id}, {txn2_id}
+2. actual_rules_delete — delete {upsert_rule_id}
+3. actual_payees_delete — delete {payee_id}
+4. actual_accounts_delete — delete {txn_acct_id}
+5. Verify: actual_accounts_list does not contain any "MCP-*-{TS}" entries
+6. Verify: actual_payees_get does not contain any "MCP-Payee-{TS}" entries
+7. Verify: actual_rules_get does not contain any rules with "MCP-Upsert-{TS}" marker
+
+---
+
+**Final Summary — output this exact block:**
+
+```
+═══════════════════════════════════════════════
+  ACTUAL MCP SERVER — FULL TEST RESULTS
+  Session: {TS}
+═══════════════════════════════════════════════
+
+PROMPT 1 (Smoke):
+  Phase 1  Server & Read-Only:        X / 7
+
+PROMPT 2 (Core CRUD):
+  Phase 2  Accounts:                  X / 6
+  Phase 3  Category Groups/Cats:      X / 6
+  Phase 4  Payees:                    X / 5
+  Phase 5  Rules:                     X / 4
+  Phase 5b Batch/Uncategorized/Ups.:  X / 3
+  Phase 6  Transactions:              X / 11
+  Phase 6b Schedules:                 X / 4
+
+PROMPT 3 (Advanced):
+  Phase 7  Transaction Summaries:     X / 2
+  Phase 8  Budgets:                   X / 11
+  Phase 9  Query & Sync:              X / 2
+  Phase 10 Session Management:        X / 2
+  Phase 11 Concurrency:               Skipped / Ran (X/10)
+
+─────────────────────────────────────────────
+  Total Tools Tested:   X / 62
+  Passed (✓):           X
+  Failed (✗):           X
+  Informational (ℹ):    X
+  Cleanup:              Complete / Partial
+─────────────────────────────────────────────
+
+FAILURES (if any):
+  [Phase X] tool_name — ✗ failure: <error>
+
+ITEMS NEEDING ATTENTION:
+  <list any patterns, timeouts, or unexpected behaviours>
+═══════════════════════════════════════════════
+```

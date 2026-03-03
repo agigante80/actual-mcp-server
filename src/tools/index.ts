@@ -9,6 +9,8 @@ export { default as accounts_update } from './accounts_update.js';
 export { default as bank_sync } from './bank_sync.js';
 export { default as budget_updates_batch } from './budget_updates_batch.js';
 export { default as budgets_get_all } from './budgets_get_all.js';
+export { default as budgets_list_available } from './budgets_list_available.js';
+export { default as budgets_switch } from './budgets_switch.js';
 export { default as budgets_getMonth } from './budgets_getMonth.js';
 export { default as budgets_getMonths } from './budgets_getMonths.js';
 export { default as budgets_holdForNextMonth } from './budgets_holdForNextMonth.js';

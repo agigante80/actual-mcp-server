@@ -64,7 +64,9 @@ console.log('Running generated tools smoke tests');
     updateTransaction: null,
     runQuery: [{ id: 'result1', value: 100 }],
     runBankSync: null,
-    getBudgets: [{ id: 'budget1', name: 'My Budget' }],
+    getBudgets: [{ name: 'My Budget', cloudFileId: '00000000-0000-0000-0000-000000000001', hasKey: false, state: 'remote' }],
+    switchBudget: { name: 'My Budget', syncId: '00000000-0000-0000-0000-000000000001', serverUrl: 'http://localhost:5006' },
+    getBudgetRegistry: [{ name: 'My Budget', syncId: '00000000-0000-0000-0000-000000000001', serverUrl: 'http://localhost:5006', hasEncryption: false }],
     getIDByName: '00000000-0000-0000-0000-000000000001',
     getServerVersion: { version: '26.2.1' },
     getSchedules: [{ id: '00000000-0000-0000-0000-000000000099', name: 'Rent', next_date: '2026-04-01' }],
@@ -127,6 +129,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_transfer')) inputExample.month = '2025-12', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
   if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
   if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
+  if (name.includes('budgets_switch')) inputExample.budgetName = 'My Budget';
   if (name.includes('get_id_by_name')) inputExample.type = 'accounts', inputExample.name = 'Cash';
   if (name.includes('schedules_create')) inputExample.date = '2026-06-01';
   if (name.includes('schedules_update')) inputExample.id = '00000000-0000-0000-0000-000000000099';
@@ -207,6 +210,16 @@ console.log('Running generated tools smoke tests');
       }
       if (n === 'server_get_version') {
         if (!('version' in res) && !('error' in res)) shapeErr(`expected version or error field`);
+      }
+      if (n === 'budgets_switch') {
+        if (res?.success !== true) shapeErr(`expected success=true`);
+        if (typeof res?.budgetName !== 'string') shapeErr(`expected budgetName string`);
+        if (typeof res?.budgetId !== 'string') shapeErr(`expected budgetId string`);
+        if (typeof res?.serverUrl !== 'string') shapeErr(`expected serverUrl string`);
+      }
+      if (n === 'budgets_list_available') {
+        if (!Array.isArray(res?.budgets)) shapeErr(`expected budgets array`);
+        if (typeof res?.count !== 'number') shapeErr(`expected count number`);
       }
       if (n === 'session_list') {
         if (typeof res?.totalSessions !== 'number') shapeErr(`expected totalSessions number`);

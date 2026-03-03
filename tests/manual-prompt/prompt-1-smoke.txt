@@ -1,0 +1,109 @@
+─────────────────────────────────────────────────────────────────────────────────
+PROMPT 1 OF 3 — SMOKE (Read-Only)
+  Tests 7 read-only tools to confirm the MCP server is connected and healthy.
+
+HOW TO USE
+  1. Make sure the MCP server is running and connected to the chat platform.
+  2. Open a NEW chat session with a model that has MCP tool access.
+  3. Copy everything below the "─── PROMPT START" line and paste it as your
+     first message.
+  4. The AI will generate a session timestamp, then test Phase 1 (7 tools).
+  5. If ALL tools pass → paste prompt-2-core.txt in the same chat session.
+  6. If any tool fails → fix the issue before continuing.
+
+WHAT IT TESTS (Phase 1 — 7 tools)
+  actual_server_info
+  actual_server_get_version
+  actual_accounts_list
+  actual_category_groups_get
+  actual_categories_get
+  actual_payees_get
+  actual_get_id_by_name (4 sub-calls, counts as 1 tool)
+─────────────────────────────────────────────────────────────────────────────────
+─── PROMPT START ────────────────────────────────────────────────────────────────
+
+**SESSION SETUP — Generate {TS} now:**
+Before invoking any tool, generate a session timestamp in ISO 8601 format with every `:` and `.` replaced by `-`.
+Example: `2026-03-03T14-30-22-456Z`
+Store this as `{TS}`. You will use it in Prompts 2 and 3 for every test-data name created in this session.
+
+---
+
+**Preflight Assumptions:**
+- An Actual Budget file is already open and writable
+- MCP server is connected to a single budget
+- No other concurrent clients are mutating the budget
+- Currency is cents-based integers throughout
+- Dates use YYYY-MM-DD format
+
+**Failure Definition:**
+A tool test FAILS if:
+- The tool returns an error, exception, or non-OK status
+- The response schema is missing required fields
+- Returned data contradicts expected effects
+- IDs expected to be returned are null or missing
+
+**Testing Rules:**
+1. Test ONE tool at a time — NEVER call multiple tools in parallel
+2. WAIT for each tool's response before proceeding to the next
+3. Continue AUTOMATICALLY — DO NOT stop for confirmation
+4. ONLY STOP on a failure (as defined above) and report it, then wait for instructions
+5. Output exactly ONE status line per tool:
+   [Phase 1] tool_name — ✓ success
+   [Phase 1] tool_name — ✗ failure: <brief error>
+   [Phase 1] tool_name — ℹ informational: <reason>
+6. NO explanatory text between tools — status line only, then immediately next tool
+7. ACTUALLY INVOKE each MCP tool — do NOT simulate or fabricate results
+
+**Safety Rule:**
+Abort immediately if a destructive operation would affect non-test data.
+
+---
+
+**Phase 1 — Server & Read-Only (7 tools):**
+
+- actual_server_info
+  Expect: server metadata object (name, version, etc.), no error
+
+- actual_server_get_version
+  Expect: { version: string } on success OR { error: string } on version mismatch — both are ✓ non-failures; only an exception counts as ✗ failure
+
+- actual_accounts_list
+  Expect: array (possibly empty), no error
+  Save the first account's name and id as `{account1_name}` and `{account1_id}` for use in actual_get_id_by_name below
+
+- actual_category_groups_get
+  Expect: category groups array, no error
+
+- actual_categories_get
+  Expect: categories array (grouped or flat per API contract), no error
+  Save the first category's name as `{cat1_name}`
+
+- actual_payees_get
+  Expect: payees array (possibly empty), no error
+  Save the first non-transfer payee's name as `{payee1_name}`
+
+- actual_get_id_by_name — test all 4 supported types (all 4 sub-calls count as 1 tool):
+  * type='accounts': use `{account1_name}` saved above → verify returned id matches `{account1_id}`
+  * type='categories': use `{cat1_name}` saved above → verify returned id is a UUID
+  * type='payees': use `{payee1_name}` saved above → verify returned id is a UUID
+  * type='schedules': if no schedules exist, report as ✓ informational (expected for most test budgets)
+
+---
+
+**Phase 1 Summary:**
+After completing all 7 tools, output:
+```
+=== PHASE 1 SMOKE RESULTS ===
+Passed:       X / 7
+Failed:       X
+Informational: X
+{TS}: <the generated timestamp>
+```
+
+If all 7 passed: output "✅ Phase 1 complete — paste prompt-2-core.txt to continue."
+If any failed:   output "❌ Phase 1 failure — fix issues before pasting Prompt 2."
+
+---
+
+**START NOW: Actually invoke "actual_server_info" with no parameters and wait for the real response before proceeding.**

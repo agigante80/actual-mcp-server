@@ -1,7 +1,7 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.21  
+**Version:** 0.4.22  
 **Purpose:** Define security policies, privacy practices, and incident response  
 **Last Updated:** 2026-03-03
 
@@ -736,7 +736,6 @@ docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
 
 ## 🔗 Related Documentation
 
-- [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - AI security rules
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Security testing
 - [Architecture](./ARCHITECTURE.md) - Technical security design
 - [Roadmap](./ROADMAP.md) - Security improvements
