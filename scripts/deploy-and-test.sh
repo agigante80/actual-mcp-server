@@ -2,11 +2,14 @@
 # deploy-and-test.sh
 # Periodic maintenance / update script.
 #
-# PREREQUISITES — all four services must already be installed, configured,
+# PREREQUISITES — all services must already be installed, configured,
 # and running before this script is used for the first time:
 #
 #   • Actual Budget   (Finance-actual-budget/docker-compose.yml)
-#   • Actual MCP Server (actual-mcp-server/docker-compose-local-build.yaml)
+#   • Actual MCP Server — TWO containers from the same image:
+#       - actual-mcp-server-backend  port 3600  OIDC/Casdoor  (LibreChat, LobeChat)
+#       - actual-mcp-bearer-backend  port 3601  Bearer token  (automated tests)
+#     Both defined in: actual-mcp-server/docker-compose-local-build.yaml
 #   • LibreChat       (LibreChat/docker-compose.yml)
 #   • LobeChat        (lobechatAI/docker-compose.yml)
 #
@@ -15,17 +18,17 @@
 #
 #   1. Sync latest dev code → docker build folder & rebuild MCP image
 #   2. Pull latest upstream images (actual-budget, librechat, lobechat)
-#   3. Recreate MCP server container          (new code takes effect)
+#   3. Recreate BOTH MCP containers (OIDC:3600 + Bearer:3601)
 #   4. Independently restart LibreChat        (picks up new image if any)
 #   5. Independently restart LobeChat         (picks up new image if any)
-#   6. Wait for MCP server health check to pass
-#   7. Run full integration test suite with auto-cleanup
+#   6. Wait for actual-mcp-bearer-backend (port 3601) to become healthy
+#   7. Run integration tests against bearer instance (port 3601)
 #
 # DOCUMENTATION
 #   Each service has its own README in $DOCKER_DIR and its subdirectories.
 #   Consult them if a service needs first-time setup or troubleshooting:
 #     $DOCKER_DIR/README.md                          ← environment overview
-#     $DOCKER_DIR/actual-mcp-server/DEPLOYMENT.md   ← MCP server deploy guide
+#     $DOCKER_DIR/actual-mcp-server/DEPLOYMENT.md   ← MCP server deploy guide (both instances)
 #     $DOCKER_DIR/Finance-actual-budget/README.md    ← Actual Budget setup
 #     $DOCKER_DIR/LibreChat/                         ← LibreChat config files
 #     $DOCKER_DIR/lobechatAI/                        ← LobeChat config files
@@ -39,8 +42,8 @@ set -euo pipefail
 # ── Config ─────────────────────────────────────────────────────────────────
 DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
 DEV_DIR="$HOME/dev/actual-mcp-server"
-MCP_SERVER_URL="http://localhost:3600/http"
-MCP_AUTH_TOKEN="TEST-TOKEN-FOR-AUTOMATED-TESTING-ONLY"
+MCP_SERVER_URL="http://localhost:3601/http"
+MCP_AUTH_TOKEN="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
 TEST_LEVEL="${1:-full}"
 HEALTH_RETRIES=30          # × 3s = 90s max wait
 # Count registered tools directly from source — stays correct automatically
@@ -86,12 +89,13 @@ pull_image "ghcr.io/danny-avila/librechat:latest"                   "LibreChat"
 pull_image "ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest"  "LibreChat RAG API"
 pull_image "lobehub/lobe-chat-database:latest"                      "LobeChat"
 
-# ── 3. Recreate MCP server ─────────────────────────────────────────────────
-info "Step 3/7 — Recreating MCP server container..."
+# ── 3. Recreate MCP server containers ─────────────────────────────────────
+info "Step 3/7 — Recreating both MCP server containers (OIDC:3600 + Bearer:3601)..."
 docker compose \
   -f "$DOCKER_DIR/actual-mcp-server/docker-compose-local-build.yaml" \
   up -d --force-recreate
-ok "actual-mcp-server-backend recreated"
+ok "actual-mcp-server-backend (OIDC, port 3600) recreated"
+ok "actual-mcp-bearer-backend (Bearer, port 3601) recreated"
 
 # ── 4. Restart LibreChat ────────────────────────────────────────────────────
 info "Step 4/7 — Restarting LibreChat (ai-librechat, ai-librechat-rag-api)..."
@@ -107,25 +111,25 @@ docker compose \
   up -d --force-recreate lobe
 ok "LobeChat restarted (postgres/minio/casdoor untouched)"
 
-# ── 6. Wait for MCP server health ─────────────────────────────────────────
-info "Step 6/7 — Waiting for MCP server to become healthy..."
+# ── 6. Wait for bearer MCP server health ─────────────────────────────────
+info "Step 6/7 — Waiting for actual-mcp-bearer-backend (port 3601) to become healthy..."
 for i in $(seq 1 "$HEALTH_RETRIES"); do
-  STATUS=$(docker inspect --format='{{.State.Health.Status}}' actual-mcp-server-backend 2>/dev/null || true)
+  STATUS=$(docker inspect --format='{{.State.Health.Status}}' actual-mcp-bearer-backend 2>/dev/null || true)
   if [ "$STATUS" = "healthy" ]; then
-    ok "MCP server healthy (attempt $i)"
+    ok "MCP bearer server healthy (attempt $i)"
     break
   fi
   if [ "$i" -eq "$HEALTH_RETRIES" ]; then
     err "MCP server did not become healthy after $((HEALTH_RETRIES * 3))s — aborting tests"
-    docker logs --tail 30 actual-mcp-server-backend >&2
+    docker logs --tail 30 actual-mcp-bearer-backend >&2
     exit 1
   fi
   echo "  ($i/${HEALTH_RETRIES}) status=${STATUS:-unknown} — waiting 3s..."
   sleep 3
 done
 
-# ── 7. Run integration tests ───────────────────────────────────────────────
-info "Step 7/7 — Running integration tests (level=${TEST_LEVEL}, tools=${EXPECTED_TOOL_COUNT})..."
+# ── 7. Run integration tests against bearer instance (port 3601) ───────────
+info "Step 7/7 — Running integration tests against bearer instance port 3601 (level=${TEST_LEVEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
 EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" node "$DEV_DIR/tests/manual/index.js" \
   "$MCP_SERVER_URL" \

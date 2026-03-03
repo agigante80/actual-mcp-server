@@ -73,10 +73,14 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 
 | Argument | Default | Description |
 |---|---|---|
-| `MCP_URL` | `http://localhost:3600/http` | MCP server URL |
-| `TOKEN` | *(prompt)* | Bearer token (without the `Bearer ` prefix) |
+| `MCP_URL` | `http://localhost:3601/http` | MCP server URL — bearer instance (port 3601) |
+| `TOKEN` | `MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6` | Bearer token (without the `Bearer ` prefix) |
 | `LEVEL` | *(prompt)* | `sanity` \| `smoke` \| `normal` \| `extended` \| `full` \| `cleanup` |
 | `CLEANUP` | *(10s prompt)* | `yes`/`y` auto-delete · `no`/`n` preserve · omit for interactive |
+
+> **Two MCP instances are running:**
+> - Port **3600** `actual-mcp-server-backend` — OIDC/Casdoor auth (for LibreChat/LobeChat human users)
+> - Port **3601** `actual-mcp-bearer-backend` — static bearer auth ← **default for automated tests**
 
 ### Environment variables
 
@@ -86,24 +90,28 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 | `MCP_AUTH_TOKEN` | Bearer token |
 | `MCP_TEST_LEVEL` | Test level |
 | `ACTUAL_SERVER_URL` | Shown in cleanup prompt (default `http://localhost:5006`) |
-| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `56`) |
+| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `60`) |
 
 Variables are loaded from the project root `.env` automatically.
 
 ### Examples
 
 ```bash
-# Quickest — sanity only, no writes
-node tests/manual/index.js http://localhost:3600/http MY-TOKEN sanity
+# Quickest — sanity only, no writes (bearer instance, default)
+BEARER="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
+node tests/manual/index.js http://localhost:3601/http "$BEARER" sanity
 
 # Extended CRUD, preserve data for inspection afterwards
-node tests/manual/index.js http://localhost:3600/http MY-TOKEN extended no
+node tests/manual/index.js http://localhost:3601/http "$BEARER" extended no
 
 # Full test run, auto-delete on completion
-node tests/manual/index.js http://localhost:3600/http MY-TOKEN full yes
+node tests/manual/index.js http://localhost:3601/http "$BEARER" full yes
 
 # Clean up leftover test data from interrupted runs
-node tests/manual/index.js http://localhost:3600/http MY-TOKEN cleanup
+node tests/manual/index.js http://localhost:3601/http "$BEARER" cleanup
+
+# Or rely on runner.js defaults (no args needed when running locally)
+node tests/manual/index.js
 ```
 
 ---
