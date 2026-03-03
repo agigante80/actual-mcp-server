@@ -78,6 +78,26 @@ export async function cleanupMcpTestAccounts(client) {
   }
   if (rulesDeleted === 0) console.log("  (none found)");
 
+  // ---------- Schedules ----------
+  console.log("\n-- Scanning for MCP-Schedule-* schedules --");
+  let schedulesDeleted = 0;
+  try {
+    const schedulesData = await callTool('actual_schedules_get', {});
+    const schedulesList = schedulesData?.schedules ?? schedulesData?.result?.schedules ?? schedulesData ?? [];
+    const mcpSchedules = Array.isArray(schedulesList)
+      ? schedulesList.filter(s => s && s.name && s.name.startsWith('MCP-Schedule-'))
+      : [];
+    console.log(`✓ Found ${mcpSchedules.length} MCP-Schedule-* schedules(s)`);
+    for (const sched of mcpSchedules) {
+      await callTool('actual_schedules_delete', { id: sched.id });
+      console.log(`  ✓ Deleted schedule: "${sched.name}"`);
+      schedulesDeleted++;
+    }
+    if (schedulesDeleted === 0) console.log('  (none found)');
+  } catch (err) {
+    console.log(`  ⚠ Schedule cleanup skipped (actual_schedules_get unavailable): ${err.message}`);
+  }
+
   // ---------- Categories ----------
   console.log("\n-- Scanning for MCP-Cat-* categories --");
   const catsData = await callTool("actual_categories_get", {});
@@ -135,6 +155,7 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`  Transactions deleted:      ${totalDeleted}`);
   console.log(`  Already closed (skipped):  ${alreadyClosedCount}`);
   console.log(`  Rules deleted:             ${rulesDeleted}`);
+  console.log(`  Schedules deleted:         ${schedulesDeleted}`);
   console.log(`  Categories deleted:        ${catsDeleted}`);
   console.log(`  Category groups deleted:   ${groupsDeleted}`);
   console.log(`  Payees deleted:            ${payeesDeleted}`);

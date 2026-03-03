@@ -29,6 +29,7 @@ tests/manual/
     ├── transaction.js         ← transaction: create, get, update, filter, import
     ├── budget.js              ← budget: amounts, carryover, hold, transfer, batch
     ├── rules.js               ← rules: create (with/without op), update
+    ├── schedule.js            ← schedules: get, create (one-off + recurring), update, delete, negative UUID test
     └── advanced.js            ← composite functions: extendedTests, fullTests,
                                   advancedTests (bank sync, raw SQL)
 ```
