@@ -591,7 +591,9 @@ export async function getSchedules(): Promise<unknown[]> {
 export async function createSchedule(schedule: unknown): Promise<string> {
   observability.incrementToolCall('actual.schedules.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreateSchedule({ schedule: schedule as Record<string, unknown> }) as Promise<string>, { retries: 2, backoffMs: 200 }));
+    // Note: rawCreateSchedule(schedule) passes the external schedule object directly.
+    // Do NOT wrap in { schedule: ... } — that would double-nest and break date parsing.
+    const raw = await withConcurrency(() => retry(() => rawCreateSchedule(schedule as Record<string, unknown>) as Promise<string>, { retries: 0, backoffMs: 200 }));
     const id = normalizeToId(raw);
     return id;
   });
