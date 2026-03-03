@@ -2,15 +2,16 @@
 
 A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budget APIs as conversational AI tools for LibreChat and other MCP-compatible clients.
 
-> **✅ LibreChat Verified**: All 51 tools tested and working with LibreChat over HTTPS with Bearer token authentication.
+> **✅ LibreChat Verified**: All 56 tools tested and working with LibreChat over HTTPS with Bearer token and OIDC authentication.
 
 ## 🚀 Features
 
-- **51 Implemented Tools** - Comprehensive coverage of core Actual Budget API
+- **56 Implemented Tools** - Comprehensive coverage of core Actual Budget API
 - **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
 - **Advanced Features** - Custom ActualQL queries, bank sync, multi-budget support
 - **HTTPS Support** - Secure connections with self-signed or CA certificates
-- **LibreChat Ready** - Tested and verified with all 51 tools loading successfully
+- **OIDC / JWT Auth** - Multi-user OIDC authentication with per-user budget ACL (Casdoor, Keycloak, etc.)
+- **LibreChat Ready** - Tested and verified with all 56 tools loading successfully
 - **Multiple Transports** - HTTP transport with authentication
 - **Production-Grade** - Retry logic, concurrency control, observability
 - **Type-Safe** - Full TypeScript implementation with generated types
@@ -79,7 +80,7 @@ docker run -d \
 - `MCP_HTTPS_CERT` - Path to SSL certificate (default: /app/certs/cert.pem)
 - `MCP_HTTPS_KEY` - Path to SSL private key (default: /app/certs/key.pem)
 
-## 📚 Available Tools (51 Total)
+## 📚 Available Tools (56 Total)
 
 ### Account Management (7 tools)
 create, list, update, delete, close, reopen, get balance
@@ -166,7 +167,7 @@ docker logs actual-mcp-server
          Authorization: "Bearer YOUR_TOKEN"
        serverInstructions: true
    ```
-4. All 51 tools will load automatically (including 6 exclusive ActualQL tools)
+4. All 56 tools will load automatically (including 6 exclusive ActualQL tools)
 
 **Verified**: HTTP transport with Bearer token authentication works perfectly with LibreChat.
 

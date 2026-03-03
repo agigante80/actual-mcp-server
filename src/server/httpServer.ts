@@ -15,6 +15,7 @@ import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
 import observability from '../observability.js';
 import config from '../config.js';
+import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createMcpAuth } from '../auth/setup.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 
@@ -50,11 +51,37 @@ export async function startHttpServer(
       const requiredScopes = config.OIDC_SCOPES
         ? config.OIDC_SCOPES.split(',').map((s) => s.trim()).filter(Boolean)
         : [];
+
+      // Custom jose-based JWT verifier — bypasses mcp-auth's strict PKCE/discovery
+      // validation that fails when the IdP (e.g. Casdoor v2.13) doesn't advertise
+      // code_challenge_methods_supported in its discovery document.
+      // JWKS is fetched lazily on the first request and cached by jose internally.
+      const jwks = createRemoteJWKSet(
+        new URL(`${config.OIDC_ISSUER}/.well-known/jwks`)
+      );
+      const customJwtVerify = async (token: string) => {
+        const { payload } = await jwtVerify(token, jwks, {
+          issuer: config.OIDC_ISSUER,
+        });
+        const rawAud = payload.aud;
+        const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
+        const rawScope = typeof payload.scope === 'string' ? payload.scope : '';
+        return {
+          token,
+          issuer: payload.iss ?? config.OIDC_ISSUER!,
+          clientId: audience[0] ?? '',
+          audience,
+          scopes: rawScope ? rawScope.split(' ') : [],
+          expiresAt: payload.exp,
+          claims: payload as Record<string, unknown>,
+        };
+      };
+
       app.use(
         httpPath,
-        mcpAuth.bearerAuth('jwt', {
+        mcpAuth.bearerAuth(customJwtVerify, {
           resource: config.OIDC_RESOURCE,
-          audience: config.OIDC_RESOURCE,
+          // audience intentionally omitted: Casdoor sets aud=clientId (not the resource URL)
           requiredScopes,
           showErrorDetails: process.env.NODE_ENV !== 'production',
         }),

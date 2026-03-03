@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.19  
+**Version:** 0.4.20  
 **Purpose:** Future improvements and feature planning  
 **Last Updated:** 2026-03-03
 
@@ -769,6 +769,8 @@ EMBEDDING_MODEL=default
 - `.env.example` — full OIDC documentation section with Keycloak / Azure AD / Auth0 examples
 
 **Backward compatible**: `AUTH_PROVIDER=none` (default) leaves `MCP_SSE_AUTHORIZATION` static token behavior unchanged.
+
+**Casdoor v2.13 compatibility** (v0.4.20): Casdoor auth-code flow JWTs omit the `scope` claim, causing `missing_required_scopes` with the `mcp-auth` default validator. Resolution: custom `jose` JWKS verifier in `httpServer.ts` bypasses `fetchServerConfig()` PKCE validation entirely, and `OIDC_SCOPES=` (empty) disables scope enforcement. Server logs `Scopes required: (none)`. Verified end-to-end with LibreChat + Casdoor v2.13 — 56 tools loading in both OIDC and static-Bearer instances simultaneously.
 
 ---
 
