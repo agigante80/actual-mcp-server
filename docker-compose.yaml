@@ -41,6 +41,8 @@ services:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-main:5006}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
+      # Optional: encryption password for E2E-encrypted budgets
+      # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
 
       # MCP Bridge settings
       - MCP_BRIDGE_DATA_DIR=/data
@@ -88,10 +90,10 @@ services:
     environment:
       # Actual Finance connection
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
-
-      # Use Docker secret for password
-      - ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
+      # Optional: encryption password for E2E-encrypted budgets
+      # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
 
       # MCP Bridge settings
       - MCP_BRIDGE_DATA_DIR=/data
@@ -111,8 +113,6 @@ services:
 
       # Production settings
       - NODE_ENV=production
-    secrets:
-      - actual_password
     networks:
       - actual-network
     healthcheck:
@@ -178,41 +178,28 @@ volumes:
     driver: local
     name: actual-mcp-logs
 
-# ----------------------------------------------------------------------------
-# Secrets (Production)
-# ----------------------------------------------------------------------------
-# For production, store sensitive data in Docker secrets
-secrets:
-  actual_password:
-    file: ./secrets/actual_password.txt
-    # In Docker Swarm, use:
-    # external: true
-
-    # ============================================================================
-    # Usage Examples
-    # ============================================================================
-    #
-    # Prerequisites: Have an Actual Budget server running (self-hosted or cloud)
-    #
-    # 1. Development mode:
-    #    $ docker compose --profile dev up
-    #
-    # 2. Production deployment:
-    #    $ mkdir -p secrets
-    #    $ echo "your-actual-password" > secrets/actual_password.txt
-    #    $ chmod 600 secrets/actual_password.txt
-    #    $ docker compose --profile production up -d
-    #
-    # 3. Build custom image:
-    #    $ docker compose build mcp-server-dev
-    #
-    # 4. View logs:
-    #    $ docker compose logs -f mcp-server-dev
-    #
-    # 5. Stop all services:
-    #    $ docker compose down
-    #
-    # 6. Remove all data (CAUTION: This deletes all data):
-    #    $ docker compose down -v
-    #
-    # ============================================================================
+# ============================================================================
+# Usage Examples
+# ============================================================================
+#
+# Prerequisites: Have an Actual Budget server running (self-hosted or cloud)
+#
+# 1. Development mode:
+#    $ docker compose --profile dev up
+#
+# 2. Production deployment:
+#    $ docker compose --profile production up -d
+#
+# 3. Build custom image:
+#    $ docker compose build mcp-server-dev
+#
+# 4. View logs:
+#    $ docker compose logs -f mcp-server-dev
+#
+# 5. Stop all services:
+#    $ docker compose down
+#
+# 6. Remove all data (CAUTION: This deletes all data):
+#    $ docker compose down -v
+#
+# ============================================================================

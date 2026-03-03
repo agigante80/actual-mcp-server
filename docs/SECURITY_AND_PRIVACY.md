@@ -228,12 +228,6 @@ MCP_HTTPS_KEY=/app/certs/key.pem
 const password = process.env.ACTUAL_PASSWORD;
 ```
 
-**Use Docker secrets**:
-```bash
-docker run -e ACTUAL_PASSWORD_FILE=/run/secrets/password \
-  -v ./secrets/password.txt:/run/secrets/password:ro
-```
-
 **Validate with Zod**:
 ```typescript
 const configSchema = z.object({
@@ -707,19 +701,14 @@ secrets:
 
 services:
   mcp:
-    secrets:
-      - actual_password
     environment:
-      ACTUAL_PASSWORD_FILE: /run/secrets/actual_password
+      ACTUAL_PASSWORD: ${ACTUAL_PASSWORD}
 ```
 
 **Environment variables**:
 ```bash
-# Secure: Read from file
+# Recommended: pass via .env file or shell environment
 docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
-
-# Secure: Use Docker secrets
-docker run -e ACTUAL_PASSWORD_FILE=/run/secrets/password
 ```
 
 ---
