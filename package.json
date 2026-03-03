@@ -2,7 +2,7 @@
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
   "version": "0.4.20",
-  "description": "MCP server providing 56 tools for AI-driven financial management with Actual Budget - session management, query, bank sync, and multi-budget support",
+  "description": "MCP server providing 60 tools for AI-driven financial management with Actual Budget - session management, query, bank sync, and multi-budget support",
   "main": "dist/src/index.js",
   "type": "module",
   "scripts": {
@@ -25,7 +25,6 @@
     "test:integration:normal": "MCP_TEST_LEVEL=normal node tests/manual/index.js",
     "test:integration:extended": "MCP_TEST_LEVEL=extended node tests/manual/index.js",
     "test:integration:full": "MCP_TEST_LEVEL=full node tests/manual/index.js",
-    "test:integration:crud": "MCP_TEST_LEVEL=full node tests/manual/index.js",
     "test:integration:cleanup": "MCP_TEST_LEVEL=cleanup node tests/manual/index.js",
     "deploy:full": "bash scripts/deploy-and-test.sh full",
     "deploy:smoke": "bash scripts/deploy-and-test.sh smoke",
@@ -76,9 +75,6 @@
     "yaml": "^2.8.1"
   },
   "license": "MIT",
-  "directories": {
-    "test": "test"
-  },
   "keywords": [
     "librechat",
     "actual-finance",
