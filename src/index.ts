@@ -11,14 +11,24 @@ process.on('unhandledRejection', (reason, promise) => {
   }
   console.error('===========================');
   
-  // Check if this is a known query error from @actual-app/api
+  // Check if this is a known domain-level error from @actual-app/api
+  // These indicate invalid user input, not server bugs — the error is properly
+  // returned to the caller; if it somehow escapes as an unhandled rejection
+  // we should log but NOT crash the server.
   const reasonStr = String(reason);
-  if (reasonStr.includes('does not exist in table') || 
-      reasonStr.includes('Field') && reasonStr.includes('does not exist') ||
-      reasonStr.includes('Expression stack')) {
-    console.error('⚠️  Known issue: Query field validation error from @actual-app/api');
-    console.error('⚠️  Server will continue running. User will see connection error.');
-    // Don't crash - this is a known issue with @actual-app/api query validation
+  if (
+    reasonStr.includes('does not exist in table') ||
+    (reasonStr.includes('Field') && reasonStr.includes('does not exist')) ||
+    reasonStr.includes('Expression stack') ||
+    reasonStr.includes('Date is required') ||
+    reasonStr.includes('date condition is required') ||
+    reasonStr.includes('Cannot create schedules with the same name') ||
+    reasonStr.includes('Schedule') && reasonStr.includes('not found') ||
+    reasonStr.includes('is system-managed and not user-editable')
+  ) {
+    console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
+    console.error('⚠️  ' + reasonStr);
+    console.error('⚠️  Server will continue running. The caller received an error response.');
     return;
   }
   
