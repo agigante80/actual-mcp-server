@@ -31,9 +31,9 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] `npm run test:integration:full` passes against a real server
 
 ### AI / LLM Prompt Test
-- [ ] New tool added to `tests/manual/test-rules-comprehensive-prompt.txt` under the correct phase
-- [ ] Phase header tool count updated (e.g., `Phase 1 – Server & Read-Only (7 tools)` → `(8 tools)`)
-- [ ] Preamble "WHAT IT TESTS" summary tool count updated
+- [ ] New tool added to the correct prompt file in `tests/manual-prompt/` (see Step 6 for which file)
+- [ ] Phase header tool count updated in that prompt file
+- [ ] `tests/manual-prompt/README.md` Phase Overview table total updated
 - [ ] Both a positive scenario and a not-found/negative scenario described in the prompt instructions
 
 ### E2E Tests
@@ -288,11 +288,18 @@ If you added a **new test module file**, add it to the "Directory Layout" table.
 
 ### Step 6 — Update the AI prompt test
 
-**File**: `tests/manual/test-rules-comprehensive-prompt.txt`
+**Folder**: `tests/manual-prompt/` — three sequentially-pasted prompt files.
+See [`tests/manual-prompt/README.md`](../tests/manual-prompt/README.md) for usage.
 
-This file is pasted into a live AI chat to drive a full 53-tool walkthrough. Every new tool must appear here.
+**Which file to edit** (based on domain):
 
-1. **Find the correct phase** — tools are grouped by domain (Phase 1 = Server, Phase 2 = Accounts, etc.)
+| Domain | File |
+|--------|------|
+| Server info, read-only lists, `actual_get_id_by_name` | `prompt-1-smoke.txt` — Phase 1 |
+| Accounts, Categories, Payees, Rules, Transactions, Schedules | `prompt-2-core.txt` — Phases 2–6b |
+| Budgets, Summaries, Query, Session Management, Cleanup | `prompt-3-advanced.txt` — Phases 7–12 |
+
+1. **Find the correct phase** in the right prompt file (by domain — see table above)
 2. **Add a positive scenario** — describe what the AI should call and what constitutes a pass
 3. **Add a negative scenario** — explicitly instruct the AI to test not-found / invalid inputs:
    ```
@@ -303,13 +310,8 @@ This file is pasted into a live AI chat to drive a full 53-tool walkthrough. Eve
        name='__nonexistent_MCP_test_value__' → verify response contains 'not found' or
        an 'available' list (✓ pass); if response contains no error context → ✗ fail
    ```
-4. **Update the phase header tool count**: `Phase N – Domain (X tools)` → `Phase N – Domain (X+1 tools)`
-5. **Update the preamble summary**:
-   ```
-   WHAT IT TESTS (12 phases, 53 tools)
-     Phase N – Domain   (X tools)   ← update this number
-   ```
-   and the total: `53 tools` → `54 tools`
+4. **Update the phase header tool count** in the prompt file: `Phase N – Domain (X tools)` → `Phase N – Domain (X+1 tools)`
+5. **Update `tests/manual-prompt/README.md`** — Phase Overview table: increment the count for the affected phase row and the Total row
 
 ---
 
@@ -379,7 +381,7 @@ git commit -m "feat(tools): add actual_<tool_name>
 - Adapter method: adapter.<methodName>()
 - Tests: unit smoke + negative path in tests/unit/
 - Manual tests: positive + negative in tests/manual/tests/<module>.js
-- Prompt: tests/manual/test-rules-comprehensive-prompt.txt Phase N updated
+- Prompt: tests/manual-prompt/prompt-{1|2|3}-*.txt Phase N updated + README total updated
 - Docs: README, PROJECT_OVERVIEW, ARCHITECTURE, ROADMAP, docker/description all updated
 - Total tools: N → N+1 (XX% API coverage)"
 ```
@@ -417,7 +419,8 @@ When implementing a new lookup tool, the `call` function should:
 | `tests/e2e/docker-all-tools.e2e.spec.ts` | **Update** `EXPECTED_TOOL_COUNT` |
 | `tests/manual/tests/<module>.js` | **Add** positive + negative test block |
 | `tests/manual/README.md` | **Update** module table if new file added |
-| `tests/manual/test-rules-comprehensive-prompt.txt` | **Add** tool to phase; update counts |
+| `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
+| `tests/manual-prompt/README.md` | **Update** Phase Overview table total |
 | `README.md` | **Update** tool count + tool table row |
 | `docs/PROJECT_OVERVIEW.md` | **Update** tool count + coverage % |
 | `docs/ARCHITECTURE.md` | **Update** domain table if applicable |
