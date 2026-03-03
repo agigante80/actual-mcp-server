@@ -1,7 +1,7 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.21  
+**Version:** 0.4.22  
 **Last Updated:** 2026-03-03
 
 ---
@@ -164,7 +164,9 @@ src/tools/
 ├── transactions_search_by_payee.ts
 ├── transactions_summary_by_category.ts
 ├── transactions_summary_by_payee.ts
-├── budgets_getMonth.ts                 # Budgets (9 tools)
+├── budgets_list_available.ts            # Budgets (11 tools)
+├── budgets_switch.ts
+├── budgets_getMonth.ts
 ├── budgets_getMonths.ts
 ├── budgets_get_all.ts
 ├── budgets_setAmount.ts
@@ -320,7 +322,7 @@ actual-mcp-server/
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
 │   │   ├── transactions_*.ts     # Transactions (13 tools, incl. search/summary)
-│   │   ├── budgets_*.ts          # Budgets (9 tools)
+│   │   ├── budgets_*.ts          # Budgets (11 tools)
 │   │   ├── budget_updates_batch.ts # Batch budget operations
 │   │   ├── categories_*.ts       # Categories (4 tools)
 │   │   ├── category_groups_*.ts  # Category groups (4 tools)

@@ -9,9 +9,9 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **56 specialized tools** covering 84% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
+A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **62 specialized tools** covering 84% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
 
-> **🧪 Tested with Multiple AI Clients**: This MCP server has been extensively tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 56 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+> **🧪 Tested with Multiple AI Clients**: This MCP server has been extensively tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools load and function correctly. Other MCP clients should work but have not been tested yet.
 
 ---
 
@@ -172,13 +172,13 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 ### Core Capabilities
 ### Core Capabilities
 
-- 🤖 **56 MCP Tools**: Comprehensive financial operations via natural language
+- 🤖 **62 MCP Tools**: Comprehensive financial operations via natural language
 -  **Secure**: Bearer token OR OIDC/JWT authentication + HTTPS/TLS encryption
 - 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
 - 🔁 **Resilient**: Automatic retry logic with exponential backoff
 - 📊 **84% API Coverage**: Supports majority of Actual Budget operations
 - 🚀 **Production-Ready**: Docker support, structured logging, health checks
-- ✅ **LibreChat Verified**: All 56 tools tested and working
+- ✅ **LibreChat Verified**: All 62 tools tested and working
 - ⚡ **Exclusive Tools**: 6 ActualQL-powered tools for advanced queries and summaries
 
 ### Advanced Features
@@ -187,7 +187,7 @@ Both containers must be on the same Docker network. See [Docker Deployment](#-do
 - **Observability**: Prometheus metrics, structured logging with Winston
 - **Flexible Deployment**: Docker, Kubernetes, bare metal, or Docker Compose
 - **HTTPS Support**: TLS encryption with self-signed or CA-signed certificates
-- **Tested**: Unit tests (56 tools + schema), Playwright E2E, and live integration suite
+- **Tested**: Unit tests (62 tools + schema), Playwright E2E, and live integration suite
 
 ### Financial Operations
 
@@ -358,7 +358,7 @@ docker compose --profile fullstack --profile dev up
 
 ## 🛠️ Available Tools
 
-The MCP server exposes **56 tools** organized into 12 categories. All tools follow the naming convention `actual_<category>_<action>`.
+The MCP server exposes **62 tools** organized into 12 categories. All tools follow the naming convention `actual_<category>_<action>`.
 
 > **⚡ Exclusive ActualQL Tools**: This MCP server includes 6 specialized tools powered by ActualQL that are **unique to this implementation** and not available in standard Actual Budget integrations. These tools provide advanced querying, aggregation, and analysis capabilities.
 
@@ -429,10 +429,12 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 | `actual_payees_merge` | Merge duplicate payees | `targetId`, `mergeIds[]` |
 | `actual_payee_rules_get` | Get rules for a payee | `payeeId` |
 
-### Budgets (8 tools)
+### Budgets (10 tools)
 
 | Tool | Description | Parameters |
 |------|-------------|------------|
+| `actual_budgets_list_available` | List all budget files on the server with their sync IDs | - |
+| `actual_budgets_switch` | Switch the active budget for all subsequent operations | `budgetName` (string) |
 | `actual_budgets_get_all` | List all available budget files | - |
 | `actual_budgets_getMonths` | List available budget months | - |
 | `actual_budgets_getMonth` | Get budget for specific month | `month` |
@@ -479,7 +481,7 @@ These exclusive tools use ActualQL's advanced features like `$transform`, `group
 | `actual_session_list` | List all active MCP sessions | - |
 | `actual_session_close` | Close a specific MCP session | `sessionId` |
 
-**Total: 56 tools across 12 categories** (including 6 exclusive ActualQL-powered tools)
+**Total: 62 tools across 12 categories** (including 6 exclusive ActualQL-powered tools)
 
 ---
 
@@ -495,12 +497,7 @@ The following Actual Budget API features are not yet exposed as MCP tools:
 
 These methods require access to Actual's internal API and are not directly exported from the standard methods module.
 
-### Additional Multi-Budget Tools
-- `loadBudget()` - Switch between budgets
-- `downloadBudget()` - Download budget from server
-- `runImport()` - Create and populate new budgets
-
-**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules) are fully implemented with 56 tools. The missing features represent specialized workflows requiring deeper API integration. Contributions welcome!
+**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules, schedules) are fully implemented. The missing features above represent specialized workflows requiring deeper API integration. Contributions welcome!
 
 ## 📦 Installation
 
@@ -571,7 +568,7 @@ docker compose --profile production up -d
 
 ## 💬 AI Client Integration (LibreChat & LobeChat)
 
-This MCP server has been tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 56 tools work correctly with both clients.
+This MCP server has been tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools work correctly with both clients.
 
 ### Quick Setup (Docker Environment)
 
@@ -632,7 +629,7 @@ In LobeChat UI:
    - **Authorization**: `Bearer YOUR_TOKEN_HERE`
 4. Click **Save**
 
-LobeChat will automatically discover all 56 tools.
+LobeChat will automatically discover all 62 tools.
 
 ### Network Configuration
 
@@ -791,11 +788,9 @@ curl -k https://localhost:3600/health
 ```
 
 In your AI client, you should see:
-- ✅ **56 tools loaded** in the MCP servers list
+- ✅ **62 tools loaded** in the MCP servers list
 - ✅ All tools available with `actual_` prefix
 - ✅ Natural language queries working
-
-**Note**: Tool count updated from 49 to 51 to reflect current implementation.
 
 ---
 
@@ -872,7 +867,7 @@ curl -X POST http://localhost:3000/http \
 4. AI client calls appropriate tools (`actual_accounts_list`, `actual_accounts_get_balance`)
 5. You get conversational responses: "Your checking account balance is $1,234.56"
 
-Both LibreChat and LobeChat work identically - all 56 tools are available for conversational financial management.
+Both LibreChat and LobeChat work identically - all 62 tools are available for conversational financial management.
 
 ---
 
@@ -978,6 +973,53 @@ Docker images use these defaults (can be overridden):
 
 ---
 
+### 💰 Multi-Budget Switching
+
+Configure multiple Actual Budget files (on the same server or on different servers) so the AI can switch between them at runtime using `actual_budgets_list_available` and `actual_budgets_switch`.
+
+**How fallback works:** `BUDGET_N_SERVER_URL` and `BUDGET_N_PASSWORD` automatically fall back to `ACTUAL_SERVER_URL` and `ACTUAL_PASSWORD` when omitted — so budgets on the same server need only `NAME` and `SYNC_ID`.
+
+| Variable | Required | Fallback |
+|----------|----------|----------|
+| `BUDGET_DEFAULT_NAME` | ❌ No | `"Default"` |
+| `BUDGET_N_NAME` | ✅ Yes (enables group) | — |
+| `BUDGET_N_SYNC_ID` | ✅ Yes | — |
+| `BUDGET_N_SERVER_URL` | ❌ No | `ACTUAL_SERVER_URL` |
+| `BUDGET_N_PASSWORD` | ❌ No | `ACTUAL_PASSWORD` |
+| `BUDGET_N_ENCRYPTION_PASSWORD` | ❌ No | — |
+
+```bash
+# .env — three budget example
+
+# Default budget (always present)
+ACTUAL_SERVER_URL=http://actual-main:5006
+ACTUAL_PASSWORD=my-password
+ACTUAL_BUDGET_SYNC_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
+BUDGET_DEFAULT_NAME=My Main Budget
+
+# Budget 1 — same server, same password (SERVER_URL + PASSWORD omitted)
+BUDGET_1_NAME=Shared Family Account
+BUDGET_1_SYNC_ID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
+
+# Budget 2 — same server, different password (SERVER_URL omitted)
+BUDGET_2_NAME=Business
+BUDGET_2_PASSWORD=business-password
+BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
+
+# Budget 3 — entirely separate Actual server (all fields provided)
+BUDGET_3_NAME=Remote Office
+BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
+BUDGET_3_PASSWORD=office-password
+BUDGET_3_SYNC_ID=dddddddd-dddd-dddd-dddd-dddddddddddd
+```
+
+Once configured the AI can ask:
+> *"Switch to the Business budget and show my uncategorized transactions this month."*
+
+and the server will call `actual_budgets_switch` then proceed in the selected budget context for all subsequent operations in that session.
+
+---
+
 ## 🔌 Transport & Authentication
 
 The MCP server uses **HTTP transport** with optional Bearer token authentication.
@@ -1010,7 +1052,7 @@ mcpServers:
 **Features:**
 - ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
 - ✅ Bearer token authentication via headers
-- ✅ All 56 tools load successfully in LibreChat
+- ✅ All 62 tools load successfully in LibreChat
 - ✅ Session management with `MCP-Session-Id` headers
 - ✅ Production-ready and tested
 
@@ -1099,9 +1141,9 @@ AUTH_BUDGET_ACL=alice@example.com:aaa-bbb-ccc,group:admins:ddd-eee-fff
 
 | Test Case | Result | Tools Loaded |
 |-----------|--------|--------------|
-| HTTP without auth | ✅ Success | 56 tools |
-| HTTP with auth (Bearer) | ✅ Success | 56 tools |
-| HTTP with OIDC (Casdoor v2.13) | ✅ Success | 56 tools |
+| HTTP without auth | ✅ Success | 62 tools |
+| HTTP with auth (Bearer) | ✅ Success | 62 tools |
+| HTTP with OIDC (Casdoor v2.13) | ✅ Success | 62 tools |
 
 ---
 
@@ -1156,7 +1198,7 @@ See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
 ```
 ┌──────────────┐         ┌──────────────┐         ┌─────────────┐
 │   LibreChat  │   MCP   │  MCP Server  │   REST  │   Actual    │
-│  (AI Client) │◄────────┤  (56 Tools)  │◄────────┤   Budget    │
+│  (AI Client) │◄────────┤  (62 Tools)  │◄────────┤   Budget    │
 │              │         │  +6 Exclusive│         │             │
 └──────────────┘         └──────────────┘         └─────────────┘
                                 │
@@ -1200,13 +1242,13 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 | **Categories** | 100% | 4/4 | ✅ Complete |
 | **Category Groups** | 100% | 4/4 | ✅ Complete |
 | **Payees** | 100% | 6/6 | ✅ Complete |
-| **Budgets** | 100% | 8/8 | ✅ Complete |
+| **Budgets** | 100% | 10/10 | ✅ Complete (incl. list available + switch) |
 | **Rules** | 100% | 4/4 | ✅ Complete |
 | **Query & Sync** | 100% | 2/2 | ✅ Complete |
 | **Batch** | 100% | 1/1 | ✅ Complete |
 | **Server Info & Lookup** | 100% | 3/3 | ✅ Complete |
 
-**Overall: 84% API Coverage (56 tools covering all major Actual Budget operations)**
+**Overall: 84% API Coverage (62 tools covering all major Actual Budget operations)**
 
 **⚡ Exclusive Features**: This MCP server includes 6 ActualQL-powered tools that provide advanced querying and aggregation capabilities not available in other Actual Budget integrations.
 
@@ -1216,7 +1258,7 @@ See [`docs/architecture.md`](docs/architecture.md) for detailed architecture doc
 - ❌ Budget templates
 - ❌ Transaction notes/attachments
 
-**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 56 pre-built tools.
+**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 62 pre-built tools.
 - ❌ Custom reports
 
 See [`docs/api-coverage.md`](docs/api-coverage.md) for complete API documentation with examples.
@@ -1243,7 +1285,7 @@ npm run test:e2e:docker
 | Command | What It Tests | Speed | Requires Docker |
 |---------|---------------|-------|-----------------|
 | `test:adapter` | Adapter layer, retry logic, concurrency | ⚡ 30s | No |
-| `test:unit-js` | Unit tests (schema, 56-tool smoke, negative-path) | ⚡ 5s | No |
+| `test:unit-js` | Unit tests (schema, 62-tool smoke, negative-path) | ⚡ 5s | No |
 | `test:e2e` | MCP protocol compliance | ⚡ 10s | No |
 | `test:e2e:docker` | Full stack integration | 🐢 60s | Yes |
 | `test:all` | All of the above | 🐢 90s | Yes |
@@ -1291,7 +1333,7 @@ npm run test:e2e:docker
 **What's tested:**
 - ✅ Docker build correctness
 - ✅ Container networking
-- ✅ Real Actual Budget integration (all 56 tools)
+- ✅ Real Actual Budget integration (all 62 tools)
 - ✅ Session management
 - ✅ Production deployment scenario
 

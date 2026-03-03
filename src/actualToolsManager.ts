@@ -18,6 +18,8 @@ const IMPLEMENTED_TOOLS = [
   'actual_accounts_update',
   'actual_bank_sync',
   'actual_budgets_get_all',
+  'actual_budgets_list_available',
+  'actual_budgets_switch',
   'actual_budgets_getMonth',
   'actual_budgets_getMonths',
   'actual_budgets_holdForNextMonth',

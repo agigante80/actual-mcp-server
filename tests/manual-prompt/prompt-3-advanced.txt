@@ -16,7 +16,7 @@ HOW TO USE
 
 WHAT IT TESTS
   Phase 7  — Transaction Summaries   (2 tools)
-  Phase 8  — Budgets                 (9 tools)
+  Phase 8  — Budgets                 (11 tools)
   Phase 9  — Advanced Query & Sync   (2 tools)
   Phase 10 — Session Management      (2 tools)
   Phase 11 — Concurrency             (optional, skipped by default)
@@ -49,11 +49,24 @@ Use the SAME testing rules:
 
 ---
 
-**Phase 8 — Budgets (9 tools):**
+**Phase 8 — Budgets (11 tools):**
 
 Select a category to work with — use the first category returned by actual_categories_get.
 Save as `{budget_cat_id}`.
 Select a second different category for transfer test. Save as `{budget_cat2_id}`.
+
+- actual_budgets_list_available
+  Expect: object with `budgets` array and `count` number; each entry has `name`, `syncId`, `serverUrl`, `hasEncryption`
+  Save the name of the first budget as `{first_budget_name}`
+
+- actual_budgets_switch (positive)
+  Input: { budgetName: "{first_budget_name}" }  ← use the name from list_available
+  Expect: { success: true, budgetName: string, budgetId: UUID, serverUrl: string }
+
+- actual_budgets_switch (negative)
+  Input: { budgetName: "__nonexistent_budget_MCP_test__" }
+  Expect: error or response containing "not found" or an `available` list (✓ pass);
+  if response contains no error context → ✗ fail
 
 - actual_budgets_get_all
   Expect: budget data for all months, no error
@@ -185,13 +198,13 @@ PROMPT 2 (Core CRUD):
 
 PROMPT 3 (Advanced):
   Phase 7  Transaction Summaries:     X / 2
-  Phase 8  Budgets:                   X / 9
+  Phase 8  Budgets:                   X / 11
   Phase 9  Query & Sync:              X / 2
   Phase 10 Session Management:        X / 2
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 60
+  Total Tools Tested:   X / 62
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

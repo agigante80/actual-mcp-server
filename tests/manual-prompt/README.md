@@ -1,7 +1,7 @@
 # AI Prompt Tests — Manual Copy-Paste Suite
 
 **Project:** Actual MCP Server  
-**Purpose:** Copy-paste prompts for manually testing all 60 MCP tools via an AI chat session  
+**Purpose:** Copy-paste prompts for manually testing all 62 MCP tools via an AI chat session  
 **Last Updated:** 2026-03-03
 
 ---
@@ -56,13 +56,13 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 6 | Prompt 2 | 11 | Transaction CRUD + search |
 | 6b | Prompt 2 | 4 | Schedule CRUD |
 | 7 | Prompt 3 | 2 | Transaction summaries |
-| 8 | Prompt 3 | 9 | Budget management |
+| 8 | Prompt 3 | 11 | Budget management |
 | 9 | Prompt 3 | 2 | Advanced query + bank sync |
 | 10 | Prompt 3 | 2 | Session management |
 | 11 | Prompt 3 | — | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 | — | Full cleanup |
 
-**Total: 60 tools across 3 prompts**
+**Total: 62 tools across 3 prompts**
 
 ---
 

@@ -1,3 +1,9 @@
+// Stub required env vars so config validation passes at import time.
+// The adapter is never actually called in these tests (only the Zod schema is exercised).
+process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL ?? 'http://localhost:5006';
+process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
+process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-unit-test';
+
 console.log('Running JS smoke tests for transactions_create');
 
 (async () => {

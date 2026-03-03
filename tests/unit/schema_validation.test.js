@@ -61,6 +61,7 @@ async function expectCallError(tool, input, label) {
     schedules_create_tool,
     schedules_update_tool,
     schedules_delete_tool,
+    budgets_switch_tool,
   ] = await Promise.all([
     import('../../dist/src/tools/rules_create.js').then(m => m.default),
     import('../../dist/src/tools/budget_updates_batch.js').then(m => m.default),
@@ -69,6 +70,7 @@ async function expectCallError(tool, input, label) {
     import('../../dist/src/tools/schedules_create.js').then(m => m.default),
     import('../../dist/src/tools/schedules_update.js').then(m => m.default),
     import('../../dist/src/tools/schedules_delete.js').then(m => m.default),
+    import('../../dist/src/tools/budgets_switch.js').then(m => m.default),
   ]);
 
   let failures = 0;
@@ -206,6 +208,21 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(schedules_delete_tool,
     { id: '00000000-0000-0000-0000-000000000001' },
     'valid delete with correct UUID')) fail();
+
+  // ── actual_budgets_switch ───────────────────────────────────────────────
+  console.log('\n[actual_budgets_switch]');
+
+  if (!expectParseError(budgets_switch_tool, {}, 'empty input — budgetName is required')) fail();
+  if (!expectParseError(budgets_switch_tool,
+    { budgetName: '' },
+    'empty string rejected for budgetName')) fail();
+  // Non-empty strings are now valid (name-based, not UUID-based)
+  if (!expectParseOk(budgets_switch_tool,
+    { budgetName: 'Shared Family Account' },
+    'plain name string accepted')) fail();
+  if (!expectParseOk(budgets_switch_tool,
+    { budgetName: 'office' },
+    'lowercase partial name accepted')) fail();
 
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');

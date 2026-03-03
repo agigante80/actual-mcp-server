@@ -48,6 +48,13 @@ export const DEFAULT_OPERATION_TIMEOUT_MS = 30000;
  */
 export const SHUTDOWN_GRACE_PERIOD_MS = 5000;
 
+/**
+ * How long (ms) to wait for additional queued writes before closing the
+ * shared budget session. Increasing this value batches more writes per
+ * session at the cost of slightly higher latency.
+ */
+export const WRITE_SESSION_DELAY_MS = 100;
+
 // ============================================================================
 // MCP SERVER
 // ============================================================================
@@ -69,11 +76,11 @@ export const DEFAULT_HTTP_PATH = '/';
 
 /**
  * Server information
+ * Note: version is read from package.json at startup and passed as a parameter.
  */
 export const SERVER_INFO = {
   name: 'actual-budget-mcp',
-  version: '1.0.0',
-  description: 'MCP server for Actual Budget - 49 tools for finance management',
+  description: 'MCP server for Actual Budget - 60 tools for finance management',
 } as const;
 
 // ============================================================================

@@ -23,6 +23,104 @@ export async function budgetTests(client, context) {
 
   const currentDate = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
 
+  // ── 1. actual_budgets_list_available ──────────────────────────────────────
+  console.log("\nTesting actual_budgets_list_available...");
+  let availableBudgets = [];
+  let originalBudgetName = null;
+  try {
+    const listRes = await callTool("actual_budgets_list_available", {});
+    if (listRes && Array.isArray(listRes.budgets) && typeof listRes.count === 'number') {
+      availableBudgets = listRes.budgets;
+      originalBudgetName = availableBudgets.length > 0 ? availableBudgets[0].name : null;
+      console.log(`✓ actual_budgets_list_available: returned ${listRes.count} budget(s)`);
+      if (listRes.count > 0) {
+        const b = listRes.budgets[0];
+        if (b.name && b.syncId && b.serverUrl && typeof b.hasEncryption === 'boolean') {
+          console.log(`  ✓ First budget shape OK: name="${b.name}", syncId=${b.syncId}`);
+        } else {
+          console.log("  ❌ First budget missing expected fields:", JSON.stringify(b));
+        }
+      }
+    } else {
+      console.log("  ❌ actual_budgets_list_available: unexpected shape:", JSON.stringify(listRes).slice(0, 200));
+    }
+  } catch (err) {
+    console.log("  ❌ actual_budgets_list_available threw:", err.message);
+  }
+
+  // ── 2. actual_budgets_switch (positive — prefer third budget if available, else second) ─
+  console.log("\nTesting actual_budgets_switch (positive)...");
+  const alternateBudget = availableBudgets.length > 2 ? availableBudgets[2]
+    : (availableBudgets.length > 1 ? availableBudgets[1] : availableBudgets[0]);
+  let switchedToAlternate = false;
+  if (alternateBudget) {
+    try {
+      const switchRes = await callTool("actual_budgets_switch", { budgetName: alternateBudget.name });
+      if (switchRes?.success === true && switchRes?.budgetName && switchRes?.budgetId && switchRes?.serverUrl) {
+        switchedToAlternate = availableBudgets.length > 1;
+        console.log(`  ✓ actual_budgets_switch: switched to "${switchRes.budgetName}" (${switchRes.budgetId})`);
+        if (availableBudgets.length === 1) {
+          console.log("  ℹ only one budget configured — switched to same budget to verify mechanism");
+        }
+      } else {
+        console.log("  ❌ actual_budgets_switch: unexpected response:", JSON.stringify(switchRes).slice(0, 200));
+      }
+    } catch (err) {
+      console.log("  ❌ actual_budgets_switch threw:", err.message);
+    }
+  } else {
+    console.log("  ℹ actual_budgets_switch (positive): no budgets available — skipped");
+  }
+
+  // ── 3. Get last 5 transactions in current budget (confirms switch context) ─
+  console.log("\nGetting last 5 transactions in switched budget (post-switch)...");
+  try {
+    const txRes = await callTool("actual_transactions_filter", { limit: 5 });
+    const txArr = Array.isArray(txRes) ? txRes : (txRes?.transactions ?? txRes?.result ?? []);
+    console.log(`  ✓ Retrieved ${txArr.length} transaction(s) from switched budget`);
+    for (const tx of txArr.slice(0, 5)) {
+      const date = tx.date ?? '?';
+      const amount = typeof tx.amount === 'number' ? (tx.amount / 100).toFixed(2) : '?';
+      const payee = tx.payee_name ?? tx.payee ?? '(no payee)';
+      console.log(`    • ${date}  ${amount}  ${payee}`);
+    }
+  } catch (err) {
+    console.log("  ⚠ Could not fetch transactions after switch:", err.message);
+  }
+
+  // ── 4. actual_budgets_switch (negative — non-existent budget name) ────────
+  console.log("\nTesting actual_budgets_switch (negative — unknown name)...");
+  try {
+    const badRes = await callTool("actual_budgets_switch", { budgetName: "__nonexistent_budget_MCP_test__" });
+    const text = JSON.stringify(badRes);
+    if (text.includes("not found") || text.includes("No budget") || text.includes("available") || badRes?.error) {
+      console.log("  ✓ actual_budgets_switch [negative]: correctly returned not-found with context");
+    } else {
+      console.log("  ❌ actual_budgets_switch [negative]: no useful error for unknown name:", text.slice(0, 200));
+    }
+  } catch (err) {
+    if (err.message.includes("not found") || err.message.includes("No budget") || err.message.includes("available")) {
+      console.log("  ✓ actual_budgets_switch [negative]: threw with useful message");
+    } else {
+      console.log("  ❌ actual_budgets_switch [negative]: unhelpful error:", err.message);
+    }
+  }
+
+  // ── 5. Switch back to original budget before mutation tests ───────────────
+  if (originalBudgetName && switchedToAlternate) {
+    console.log(`\nSwitching back to original budget "${originalBudgetName}" before continuing...`);
+    try {
+      const backRes = await callTool("actual_budgets_switch", { budgetName: originalBudgetName });
+      if (backRes?.success === true) {
+        console.log(`  ✓ Switched back to "${backRes.budgetName}"`);
+      } else {
+        console.log("  ❌ Failed to switch back:", JSON.stringify(backRes).slice(0, 200));
+      }
+    } catch (err) {
+      console.log("  ❌ Switch-back threw:", err.message);
+    }
+  }
+
   // Get all budgets
   console.log("\nGetting all budgets...");
   await callTool("actual_budgets_get_all", {});
@@ -196,4 +294,5 @@ export async function budgetTests(client, context) {
       console.log("⚠ Batch rejected but with unexpected error:", err.message);
     }
   }
+
 }
