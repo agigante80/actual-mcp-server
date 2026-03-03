@@ -51,9 +51,21 @@ services:
       - MCP_BRIDGE_LOG_LEVEL=debug
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs
+      # - MCP_BRIDGE_MAX_FILES=14d
+      # - MCP_BRIDGE_MAX_LOG_SIZE=20m
 
-      # Bearer token authentication (optional - leave commented for no auth)
+      # Session management
+      - MAX_CONCURRENT_SESSIONS=15
+      # - SESSION_IDLE_TIMEOUT_MINUTES=5
+      # - ACTUAL_API_CONCURRENCY=5
+
+      # Authentication — static Bearer token or OIDC (see README)
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
+      # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
+      # - OIDC_RESOURCE=${OIDC_RESOURCE}
+      # - OIDC_SCOPES=${OIDC_SCOPES}
+      # - AUTH_BUDGET_ACL=${AUTH_BUDGET_ACL}
 
       # Timezone (set to your local timezone)
       - TZ=${TZ:-UTC}
@@ -62,12 +74,6 @@ services:
       - NODE_ENV=development
     networks:
       - actual-net
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   # --------------------------------------------------------------------------
   # Actual MCP Server - Production Mode
@@ -103,10 +109,20 @@ services:
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs
       - MCP_BRIDGE_MAX_FILES=30d
+      # - MCP_BRIDGE_MAX_LOG_SIZE=20m
 
-      # Bearer token authentication (optional - leave commented for no auth)
-      # Uncomment and set a secure token to enable authentication
+      # Session management
+      - MAX_CONCURRENT_SESSIONS=15
+      # - SESSION_IDLE_TIMEOUT_MINUTES=5
+      # - ACTUAL_API_CONCURRENCY=5
+
+      # Authentication — static Bearer token or OIDC (see README)
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
+      # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
+      # - OIDC_RESOURCE=${OIDC_RESOURCE}
+      # - OIDC_SCOPES=${OIDC_SCOPES}
+      # - AUTH_BUDGET_ACL=${AUTH_BUDGET_ACL}
 
       # Timezone (set to your local timezone)
       - TZ=${TZ:-UTC}
@@ -115,12 +131,6 @@ services:
       - NODE_ENV=production
     networks:
       - actual-network
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     deploy:
       resources:
         limits:
