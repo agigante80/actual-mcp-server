@@ -736,7 +736,6 @@ docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
 
 ## 🔗 Related Documentation
 
-- [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - AI security rules
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Security testing
 - [Architecture](./ARCHITECTURE.md) - Technical security design
 - [Roadmap](./ROADMAP.md) - Security improvements

@@ -997,7 +997,6 @@ npm run test:integration:cleanup
 
 ## 🔗 Related Documentation
 
-- [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - Testing enforcement rules
 - [Architecture](./ARCHITECTURE.md) - System design and components
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security testing policies
 - [Roadmap](./ROADMAP.md) - Future testing improvements

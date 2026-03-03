@@ -20,6 +20,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 ### Unit Tests
 - [ ] Happy-path coverage in `tests/unit/generated_tools.smoke.test.js`
 - [ ] Negative-path / schema validation in `tests/unit/schema_validation.test.js` (if schema is complex)
+- [ ] **Error message quality**: for each applicable scenario from the [10-scenario table](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover), assert the error message is actionable (contains a next-step hint, format example, or allowed-values list) — not just that it throws
 - [ ] `EXPECTED_TOOL_COUNT` updated in `tests/unit/generated_tools.smoke.test.js`
 - [ ] `npm run test:unit-js` passes
 
@@ -27,6 +28,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Test block added to the appropriate `tests/manual/tests/*.js` module
 - [ ] **Positive test**: call with valid input, assert expected shape of result
 - [ ] **Negative test**: call with a name / ID that does not exist — assert error is returned AND that the response contains useful context (e.g., list of available values)
+- [ ] **Error scenario coverage**: for each scenario from the [10-scenario table](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover) that applies to this tool, add a negative-path block asserting the error message is actionable (not generic)
 - [ ] `tests/manual/README.md` test-module table updated if a new file was added
 - [ ] `npm run test:integration:full` passes against a real server
 
@@ -184,6 +186,21 @@ it('actual_example_tool rejects invalid type', () => {
 });
 ```
 
+**Error message quality — apply the 10-scenario table:**
+
+For each scenario from [`docs/feature/IMPROVED_ERROR_MESSAGES.md` § Negative Scenarios](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover) that is relevant to this tool's schema, add a dedicated `it()` block that asserts **both** that the error is thrown **and** that its message is actionable. Check the table below and tick applicable scenarios:
+
+| Scenario | Applies if tool has… | What to assert |
+|----------|---------------------|----------------|
+| 1 Wrong date format | any `date` field | message contains `YYYY-MM-DD` |
+| 2 Unknown / disallowed field | strict schema (no passthrough) | message contains `Unknown field` or lists allowed fields |
+| 4 Missing required field | any `required` field | message names the missing field |
+| 5 Wrong type | `amount`, `limit`, or other numeric field | message contains `integer` or `cents` |
+| 6 Invalid enum value | any `z.enum(...)` field | message lists allowed values |
+| 10 Value out of range | `limit`, amount constraints | message contains `positive` or the valid range |
+
+Scenarios 3, 7, 8, 9 are caught at API response time (not Zod) — cover those in Step 5 instead.
+
 Run with:
 ```bash
 npm run test:unit-js
@@ -246,6 +263,19 @@ try {
 Call the tool with a **name or ID that is guaranteed not to exist**. Assert:
 1. The tool returns an error (not a crash)
 2. The error message (or response body) includes a list of **available** values — so the AI can self-correct
+
+**Error scenario coverage — apply the 10-scenario table:**
+
+For each scenario from [`docs/feature/IMPROVED_ERROR_MESSAGES.md` § Negative Scenarios](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover) that is relevant to this tool's API behaviour, add a matching negative-path block. Check the table below and tick applicable scenarios:
+
+| Scenario | Applies if tool… | What to assert |
+|----------|-----------------|----------------|
+| 3 Invalid / non-existent ID | accepts a UUID and looks it up | error contains `not found` AND names a list tool (e.g. `actual_accounts_list`) |
+| 7 Conflicting fields | can close/delete/mutate state | error explains the conflict and suggests a remedy |
+| 8 Duplicate / already-exists | creates a named entity | error mentions the existing entity's ID or suggests `_update` tool |
+| 9 Dependency not found | accepts a foreign-key ID (e.g. `group_id`, `category_id`) | error names the missing dependency and a list tool |
+
+Scenarios 1, 2, 4, 5, 6, 10 are caught at Zod parse time — cover those in Step 4b instead.
 
 Use a sentinel name like `"__nonexistent_MCP_test_value__"` which can never collide with real data:
 

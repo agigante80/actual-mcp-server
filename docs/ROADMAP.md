@@ -12,7 +12,6 @@
 
 | Feature | Summary | Detail |
 |---------|---------|--------|
-| [Schedules CRUD](./feature/SCHEDULES_CRUD.md) | 4 tools to create, read, update, and delete recurring transactions — completes 100% API coverage. | [→](./feature/SCHEDULES_CRUD.md) |
 | [Tags CRUD](./feature/TAGS_CRUD.md) | 4 tools for managing transaction tags — blocked until Tags ship in a stable `@actual-app/api` release. | [→](./feature/TAGS_CRUD.md) |
 | [Multi-Budget Switching](./feature/MULTI_BUDGET_SWITCHING.md) | Switch between Actual Budget files mid-conversation without reconnecting. | [→](./feature/MULTI_BUDGET_SWITCHING.md) |
 | [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md) | Actionable errors across all tools — every failure tells the AI what went wrong and which tool to call next. | [→](./feature/IMPROVED_ERROR_MESSAGES.md) |
