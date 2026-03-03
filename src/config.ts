@@ -11,7 +11,7 @@ export const configSchema = z.object({
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),
   MCP_HTTPS_KEY: z.string().optional(),
-  MAX_CONCURRENT_SESSIONS: z.string().default('1').transform(val => parseInt(val, 10)),
+  MAX_CONCURRENT_SESSIONS: z.string().default('15').transform(val => parseInt(val, 10)),
 
   // --- OIDC / mcp-auth (CF-5) ---
   // Set AUTH_PROVIDER=oidc to enable JWT validation via mcp-auth.

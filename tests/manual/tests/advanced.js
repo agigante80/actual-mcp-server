@@ -18,6 +18,7 @@ import { transactionTests } from './transaction.js';
 import { budgetTests } from './budget.js';
 import { rulesTests } from './rules.js';
 import { batchUncategorizedRulesUpsertTests } from './batch_uncategorized_rules_upsert.js';
+import { scheduleTests } from './schedule.js';
 
 /**
  * @param {{ callTool: Function }} client
@@ -344,5 +345,6 @@ export async function fullTests(client, context) {
   await new Promise(r => setTimeout(r, 3000));
   await rulesTests(client, context);
   await batchUncategorizedRulesUpsertTests(client, context);
+  await scheduleTests(client, context);
   await advancedTests(client, context);
 }

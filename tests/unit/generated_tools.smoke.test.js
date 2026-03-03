@@ -67,6 +67,10 @@ console.log('Running generated tools smoke tests');
     getBudgets: [{ id: 'budget1', name: 'My Budget' }],
     getIDByName: '00000000-0000-0000-0000-000000000001',
     getServerVersion: { version: '26.2.1' },
+    getSchedules: [{ id: '00000000-0000-0000-0000-000000000099', name: 'Rent', next_date: '2026-04-01' }],
+    createSchedule: '00000000-0000-0000-0000-000000000099',
+    updateSchedule: null,
+    deleteSchedule: null,
   };
 
   // Patch adapter default export functions
@@ -124,6 +128,9 @@ console.log('Running generated tools smoke tests');
   if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
   if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
   if (name.includes('get_id_by_name')) inputExample.type = 'accounts', inputExample.name = 'Cash';
+  if (name.includes('schedules_create')) inputExample.date = '2026-06-01';
+  if (name.includes('schedules_update')) inputExample.id = '00000000-0000-0000-0000-000000000099';
+  if (name.includes('schedules_delete')) inputExample.id = '00000000-0000-0000-0000-000000000099';
   // server_get_version takes no parameters
 
       // Validate input parsing — only silently skip when no example was provided (tool may have required fields);
@@ -159,6 +166,7 @@ console.log('Running generated tools smoke tests');
         'categories_delete', 'categories_update', 'category_groups_delete', 'category_groups_update',
         'payees_delete', 'payees_merge', 'payees_update',
         'rules_delete', 'rules_update',
+        'schedules_delete', 'schedules_update',
         'transactions_delete', 'transactions_update',
         'budgets_resetHold', 'budgets_holdForNextMonth',
         'budgets_setCarryover', 'budget_updates_batch'];
@@ -172,6 +180,13 @@ console.log('Running generated tools smoke tests');
       }
       if (n === 'rules_get') {
         if (!Array.isArray(res?.rules)) shapeErr(`expected rules array`);
+      }
+      if (n === 'schedules_get') {
+        if (!Array.isArray(res?.schedules)) shapeErr(`expected schedules array`);
+        if (typeof res?.count !== 'number') shapeErr(`expected count number`);
+      }
+      if (n === 'schedules_create') {
+        if (typeof res?.id !== 'string') shapeErr(`expected id string`);
       }
       if (n === 'payee_rules_get') {
         if (!Array.isArray(res?.rules)) shapeErr(`expected rules array`);

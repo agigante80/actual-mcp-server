@@ -41,6 +41,8 @@ services:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-main:5006}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
+      # Optional: encryption password for E2E-encrypted budgets
+      # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
 
       # MCP Bridge settings
       - MCP_BRIDGE_DATA_DIR=/data
@@ -49,9 +51,21 @@ services:
       - MCP_BRIDGE_LOG_LEVEL=debug
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs
+      # - MCP_BRIDGE_MAX_FILES=14d
+      # - MCP_BRIDGE_MAX_LOG_SIZE=20m
 
-      # Bearer token authentication (optional - leave commented for no auth)
+      # Session management
+      - MAX_CONCURRENT_SESSIONS=15
+      # - SESSION_IDLE_TIMEOUT_MINUTES=5
+      # - ACTUAL_API_CONCURRENCY=5
+
+      # Authentication — static Bearer token or OIDC (see README)
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
+      # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
+      # - OIDC_RESOURCE=${OIDC_RESOURCE}
+      # - OIDC_SCOPES=${OIDC_SCOPES}
+      # - AUTH_BUDGET_ACL=${AUTH_BUDGET_ACL}
 
       # Timezone (set to your local timezone)
       - TZ=${TZ:-UTC}
@@ -60,12 +74,6 @@ services:
       - NODE_ENV=development
     networks:
       - actual-net
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
 
   # --------------------------------------------------------------------------
   # Actual MCP Server - Production Mode
@@ -88,10 +96,10 @@ services:
     environment:
       # Actual Finance connection
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
-
-      # Use Docker secret for password
-      - ACTUAL_PASSWORD_FILE=/run/secrets/actual_password
+      # Optional: encryption password for E2E-encrypted budgets
+      # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
 
       # MCP Bridge settings
       - MCP_BRIDGE_DATA_DIR=/data
@@ -101,26 +109,28 @@ services:
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs
       - MCP_BRIDGE_MAX_FILES=30d
+      # - MCP_BRIDGE_MAX_LOG_SIZE=20m
 
-      # Bearer token authentication (optional - leave commented for no auth)
-      # Uncomment and set a secure token to enable authentication
+      # Session management
+      - MAX_CONCURRENT_SESSIONS=15
+      # - SESSION_IDLE_TIMEOUT_MINUTES=5
+      # - ACTUAL_API_CONCURRENCY=5
+
+      # Authentication — static Bearer token or OIDC (see README)
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
+      # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
+      # - OIDC_RESOURCE=${OIDC_RESOURCE}
+      # - OIDC_SCOPES=${OIDC_SCOPES}
+      # - AUTH_BUDGET_ACL=${AUTH_BUDGET_ACL}
 
       # Timezone (set to your local timezone)
       - TZ=${TZ:-UTC}
 
       # Production settings
       - NODE_ENV=production
-    secrets:
-      - actual_password
     networks:
       - actual-network
-    healthcheck:
-      test: [ "CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/health" ]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     deploy:
       resources:
         limits:
@@ -178,41 +188,28 @@ volumes:
     driver: local
     name: actual-mcp-logs
 
-# ----------------------------------------------------------------------------
-# Secrets (Production)
-# ----------------------------------------------------------------------------
-# For production, store sensitive data in Docker secrets
-secrets:
-  actual_password:
-    file: ./secrets/actual_password.txt
-    # In Docker Swarm, use:
-    # external: true
-
-    # ============================================================================
-    # Usage Examples
-    # ============================================================================
-    #
-    # Prerequisites: Have an Actual Budget server running (self-hosted or cloud)
-    #
-    # 1. Development mode:
-    #    $ docker compose --profile dev up
-    #
-    # 2. Production deployment:
-    #    $ mkdir -p secrets
-    #    $ echo "your-actual-password" > secrets/actual_password.txt
-    #    $ chmod 600 secrets/actual_password.txt
-    #    $ docker compose --profile production up -d
-    #
-    # 3. Build custom image:
-    #    $ docker compose build mcp-server-dev
-    #
-    # 4. View logs:
-    #    $ docker compose logs -f mcp-server-dev
-    #
-    # 5. Stop all services:
-    #    $ docker compose down
-    #
-    # 6. Remove all data (CAUTION: This deletes all data):
-    #    $ docker compose down -v
-    #
-    # ============================================================================
+# ============================================================================
+# Usage Examples
+# ============================================================================
+#
+# Prerequisites: Have an Actual Budget server running (self-hosted or cloud)
+#
+# 1. Development mode:
+#    $ docker compose --profile dev up
+#
+# 2. Production deployment:
+#    $ docker compose --profile production up -d
+#
+# 3. Build custom image:
+#    $ docker compose build mcp-server-dev
+#
+# 4. View logs:
+#    $ docker compose logs -f mcp-server-dev
+#
+# 5. Stop all services:
+#    $ docker compose down
+#
+# 6. Remove all data (CAUTION: This deletes all data):
+#    $ docker compose down -v
+#
+# ============================================================================

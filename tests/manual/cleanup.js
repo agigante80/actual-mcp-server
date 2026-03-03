@@ -23,7 +23,6 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`\n✓ Found ${mcpTestAccounts.length} MCP-Test-* account(s)`);
   if (mcpTestAccounts.length === 0) console.log("  (none found)");
 
-  let totalDeleted = 0;
   let closedCount = 0;
   let alreadyClosedCount = 0;
 
@@ -38,23 +37,16 @@ export async function cleanupMcpTestAccounts(client) {
       continue;
     }
 
-    const txns = await callTool("actual_transactions_filter", { accountId: account.id });
-    const txnList = Array.isArray(txns) ? txns : [];
-    console.log(`  Transactions: ${txnList.length}`);
-
-    let deleted = 0;
-    for (const txn of txnList) {
-      if (!txn.id) continue;
-      await callTool("actual_transactions_delete", { id: txn.id });
-      deleted++;
+    // Close the account directly — Actual Budget retains transactions as historical data
+    // in closed accounts. Deleting individual transactions is unnecessary for cleanup and
+    // caused infinite retry loops when the delete timed out after the Actual API init cycle.
+    try {
+      await callTool("actual_accounts_close", { id: account.id });
+      console.log(`  ✓ Account closed`);
+      closedCount++;
+    } catch (err) {
+      console.log(`  ❌ Failed to close account: ${err.message}`);
     }
-    if (deleted > 0) console.log(`  ✓ Deleted ${deleted} transaction(s)`);
-    else console.log(`  (no transactions to delete)`);
-    totalDeleted += deleted;
-
-    await callTool("actual_accounts_close", { id: account.id });
-    console.log(`  ✓ Account closed`);
-    closedCount++;
   }
 
   // ---------- Rules ----------
@@ -77,6 +69,26 @@ export async function cleanupMcpTestAccounts(client) {
     rulesDeleted++;
   }
   if (rulesDeleted === 0) console.log("  (none found)");
+
+  // ---------- Schedules ----------
+  console.log("\n-- Scanning for MCP-Schedule-* schedules --");
+  let schedulesDeleted = 0;
+  try {
+    const schedulesData = await callTool('actual_schedules_get', {});
+    const schedulesList = schedulesData?.schedules ?? schedulesData?.result?.schedules ?? schedulesData ?? [];
+    const mcpSchedules = Array.isArray(schedulesList)
+      ? schedulesList.filter(s => s && s.name && s.name.startsWith('MCP-Schedule-'))
+      : [];
+    console.log(`✓ Found ${mcpSchedules.length} MCP-Schedule-* schedules(s)`);
+    for (const sched of mcpSchedules) {
+      await callTool('actual_schedules_delete', { id: sched.id });
+      console.log(`  ✓ Deleted schedule: "${sched.name}"`);
+      schedulesDeleted++;
+    }
+    if (schedulesDeleted === 0) console.log('  (none found)');
+  } catch (err) {
+    console.log(`  ⚠ Schedule cleanup skipped (actual_schedules_get unavailable): ${err.message}`);
+  }
 
   // ---------- Categories ----------
   console.log("\n-- Scanning for MCP-Cat-* categories --");
@@ -132,9 +144,9 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`CLEANUP SUMMARY`);
   console.log(`========================================`);
   console.log(`  Accounts closed:          ${closedCount}`);
-  console.log(`  Transactions deleted:      ${totalDeleted}`);
   console.log(`  Already closed (skipped):  ${alreadyClosedCount}`);
   console.log(`  Rules deleted:             ${rulesDeleted}`);
+  console.log(`  Schedules deleted:         ${schedulesDeleted}`);
   console.log(`  Categories deleted:        ${catsDeleted}`);
   console.log(`  Category groups deleted:   ${groupsDeleted}`);
   console.log(`  Payees deleted:            ${payeesDeleted}`);

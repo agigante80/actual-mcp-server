@@ -1,7 +1,7 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.20  
+**Version:** 0.4.21  
 **Purpose:** Define security policies, privacy practices, and incident response  
 **Last Updated:** 2026-03-03
 
@@ -226,12 +226,6 @@ MCP_HTTPS_KEY=/app/certs/key.pem
 **Use environment variables**:
 ```typescript
 const password = process.env.ACTUAL_PASSWORD;
-```
-
-**Use Docker secrets**:
-```bash
-docker run -e ACTUAL_PASSWORD_FILE=/run/secrets/password \
-  -v ./secrets/password.txt:/run/secrets/password:ro
 ```
 
 **Validate with Zod**:
@@ -707,19 +701,14 @@ secrets:
 
 services:
   mcp:
-    secrets:
-      - actual_password
     environment:
-      ACTUAL_PASSWORD_FILE: /run/secrets/actual_password
+      ACTUAL_PASSWORD: ${ACTUAL_PASSWORD}
 ```
 
 **Environment variables**:
 ```bash
-# Secure: Read from file
+# Recommended: pass via .env file or shell environment
 docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
-
-# Secure: Use Docker secrets
-docker run -e ACTUAL_PASSWORD_FILE=/run/secrets/password
 ```
 
 ---

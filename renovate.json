@@ -1,7 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:base",
+    "config:recommended",
     ":dependencyDashboard",
     ":semanticCommits",
     ":separateMajorReleases"
@@ -87,14 +87,6 @@
       "matchPackagePatterns": ["^@playwright/", "^playwright$"],
       "groupName": "testing dependencies",
       "groupSlug": "testing"
-    },
-    {
-      "description": "Separate major version updates for Express (v5 migration)",
-      "matchPackageNames": ["express", "@types/express"],
-      "matchUpdateTypes": ["major"],
-      "enabled": true,
-      "schedule": ["at any time"],
-      "labels": ["breaking-change", "express-v5-migration"]
     },
     {
       "description": "Keep Actual Budget API in sync",

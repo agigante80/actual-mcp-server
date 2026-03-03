@@ -66,4 +66,8 @@ declare module '@actual-app/api/dist/methods.js' {
   export function getAccountBalance(...args: unknown[]): Promise<unknown>;
   export function getIDByName(...args: unknown[]): Promise<unknown>;
   export function getServerVersion(...args: unknown[]): Promise<unknown>;
+  export function getSchedules(...args: unknown[]): Promise<unknown>;
+  export function createSchedule(...args: unknown[]): Promise<unknown>;
+  export function updateSchedule(...args: unknown[]): Promise<unknown>;
+  export function deleteSchedule(...args: unknown[]): Promise<unknown>;
 }
