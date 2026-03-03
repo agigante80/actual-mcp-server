@@ -743,4 +743,3 @@ For more details:
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies
 - [Roadmap](./ROADMAP.md) - Future improvements
-- [AI Interaction Guide](./AI_INTERACTION_GUIDE.md) - AI agent rules

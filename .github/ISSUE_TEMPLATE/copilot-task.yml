@@ -1,0 +1,72 @@
+name: Copilot Task
+description: A well-scoped task suitable for assignment to GitHub Copilot coding agent
+title: "[Copilot] "
+labels: ["copilot", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for tasks you intend to assign to Copilot coding agent.
+        A good Copilot task is **specific, bounded, and testable**.
+        See [best practices](https://docs.github.com/en/copilot/tutorials/coding-agent/get-the-best-results#making-sure-your-issues-are-well-scoped).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Background
+      description: What is wrong or missing? Why does it matter?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: |
+        List every condition that must be true for this issue to be considered done.
+        Include test expectations.
+      placeholder: |
+        - [ ] Tool `actual_foo_bar` exists in `src/tools/foo_bar.ts`
+        - [ ] Tool is registered in `IMPLEMENTED_TOOLS` and passes `npm run verify-tools`
+        - [ ] `npm run build` passes with zero TypeScript errors
+        - [ ] Unit smoke test added to `tests/unit/generated_tools.smoke.test.js`
+        - [ ] Schema validation test added (negative path) in `tests/unit/schema_validation.test.js`
+        - [ ] `npm run test:unit-js` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to Add / Modify
+      description: List specific files Copilot should touch (helps it scope the work correctly).
+      placeholder: |
+        - **Create** `src/tools/foo_bar.ts` — tool definition
+        - **Edit** `src/tools/index.ts` — add export
+        - **Edit** `src/actualToolsManager.ts` — add to IMPLEMENTED_TOOLS
+        - **Edit** `src/lib/actual-adapter.ts` — add adapter method if needed
+        - **Edit** `tests/unit/generated_tools.smoke.test.js` — update EXPECTED_TOOL_COUNT
+        - **Edit** `tests/unit/schema_validation.test.js` — add negative paths
+    validations:
+      required: true
+
+  - type: textarea
+    id: not-in-scope
+    attributes:
+      label: Out of Scope (optional)
+      description: Explicitly list anything Copilot should NOT change, to prevent scope creep.
+      placeholder: |
+        - Do not update README.md or doc files (handled separately)
+        - Do not change other existing tools
+
+  - type: dropdown
+    id: complexity
+    attributes:
+      label: Estimated Complexity
+      description: How complex is this task?
+      options:
+        - Small (≤ 2 files, straightforward logic)
+        - Medium (3–6 files, some domain knowledge needed)
+        - Large (7+ files — consider splitting into sub-issues)
+    validations:
+      required: true

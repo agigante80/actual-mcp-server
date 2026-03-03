@@ -1,0 +1,35 @@
+# Pre-installs dependencies into Copilot coding agent's ephemeral environment.
+# The job MUST be named 'copilot-setup-steps' — Copilot looks for this exact name.
+# Reference: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project (validates TypeScript)
+        run: npm run build
+
+      - name: Install Playwright browsers (for E2E tests)
+        run: npx playwright install --with-deps chromium
