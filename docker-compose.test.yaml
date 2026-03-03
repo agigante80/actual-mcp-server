@@ -69,10 +69,10 @@ services:
       - ACTUAL_PASSWORD=test123
       - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_DATA_DIR=/app/data
-      - LOG_LEVEL=info
+      - MCP_BRIDGE_LOG_LEVEL=info
+      - MAX_CONCURRENT_SESSIONS=15
       - NODE_ENV=test
-      # Transport mode: HTTP
-      # Allow connections without auth for testing
+      # No auth for testing — MCP_SSE_AUTHORIZATION left empty intentionally
       - MCP_SSE_AUTHORIZATION=
     volumes:
       - mcp-test-data:/app/data
