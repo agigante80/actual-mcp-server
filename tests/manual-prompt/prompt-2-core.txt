@@ -116,9 +116,20 @@ Use the SAME testing rules as Prompt 1:
   Save as `{payee2_id}`
 
 - actual_payees_update
-  Input: { id: "{payee_id}", name: "MCP-Payee-{TS}-Updated" }
+  Input: { id: "{payee_id}", fields: { name: "MCP-Payee-{TS}-Updated" } }
   Expect: success
   Verify name changed in actual_payees_get
+
+- actual_payees_update (set default category via rules)
+  Input: { id: "{payee_id}", fields: { category: "{category_id}" } }
+  Expect: success (adapter creates a "payee is X → set category" rule internally)
+  Verify: call actual_payee_rules_get with { payeeId: "{payee_id}" } and confirm
+          at least one rule has actions containing { op: "set", field: "category", value: "{category_id}" }
+
+- actual_payees_update (clear default category)
+  Input: { id: "{payee_id}", fields: { category: null } }
+  Expect: success (adapter deletes the "set category" rule)
+  Verify: call actual_payee_rules_get and confirm no rule with action field=category remains
 
 - actual_payee_rules_get
   Input: { id: "{payee_id}" }
