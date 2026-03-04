@@ -1308,44 +1308,161 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     console.log(`✅ actual_get_id_by_name: resolved "${firstAccount.name}" → ${resolvedId}`);
   });
 
-  // ==================== CLEANUP ====================
+  // ==================== DELETE OPERATIONS (6 tools) ====================
+  // Each test deletes a real object created earlier in the suite, then asserts
+  // it is absent from the corresponding list.  afterAll below acts as a safety
+  // fallback — if a delete test clears the context ID, afterAll skips it.
+  // Order matters: transactions → rules → payees → categories → groups → account.
+
+  test('actual_transactions_delete - should delete transaction and verify gone', async ({ request }) => {
+    if (!testContext.transactionId) test.skip();
+    console.log('🗑️  Testing actual_transactions_delete...');
+    await callTool(request, sessionId, 'actual_transactions_delete', {
+      id: testContext.transactionId,
+    });
+    // Verify it's gone — filter the owning account and confirm ID absent
+    if (testContext.accountId) {
+      const result = await callTool(request, sessionId, 'actual_transactions_filter', {
+        account_id: testContext.accountId,
+      });
+      const txns: any[] = extractResult(result) ?? [];
+      const stillThere = txns.find((t: any) => t.id === testContext.transactionId);
+      expect(stillThere).toBeFalsy();
+    }
+    testContext.transactionId = undefined;
+    console.log('✅ Transaction deleted and confirmed absent');
+  });
+
+  test('actual_rules_delete - should delete rules and verify gone', async ({ request }) => {
+    const idsToDelete = [
+      testContext.ruleWithoutOpId,
+      testContext.ruleId,
+      testContext.upsertRuleId,
+    ].filter(Boolean) as string[];
+    if (idsToDelete.length === 0) test.skip();
+    console.log(`🗑️  Testing actual_rules_delete (${idsToDelete.length} rules)...`);
+    for (const id of idsToDelete) {
+      await callTool(request, sessionId, 'actual_rules_delete', { id });
+    }
+    // Verify none appear in the rules list
+    const result = await callTool(request, sessionId, 'actual_rules_get');
+    const data = extractResult(result);
+    const rules: any[] = Array.isArray(data) ? data : (data?.rules ?? []);
+    const stillThere = rules.filter((r: any) => idsToDelete.includes(r.id));
+    expect(stillThere).toHaveLength(0);
+    testContext.ruleWithoutOpId = undefined;
+    testContext.ruleId = undefined;
+    testContext.upsertRuleId = undefined;
+    console.log(`✅ ${idsToDelete.length} rule(s) deleted and confirmed absent from list`);
+  });
+
+  test('actual_payees_delete - should delete payee and verify gone', async ({ request }) => {
+    if (!testContext.payeeId) test.skip();
+    console.log('🗑️  Testing actual_payees_delete...');
+    await callTool(request, sessionId, 'actual_payees_delete', {
+      id: testContext.payeeId,
+    });
+    // Verify absent from payees list
+    const result = await callTool(request, sessionId, 'actual_payees_get');
+    const payees: any[] = extractResult(result) ?? [];
+    const stillThere = Array.isArray(payees) ? payees.find((p: any) => p.id === testContext.payeeId) : null;
+    expect(stillThere).toBeFalsy();
+    testContext.payeeId = undefined;
+    console.log('✅ Payee deleted and confirmed absent from list');
+  });
+
+  test('actual_categories_delete - should delete category and verify gone', async ({ request }) => {
+    if (!testContext.categoryId) test.skip();
+    console.log('🗑️  Testing actual_categories_delete...');
+    const categoryId = typeof testContext.categoryId === 'string'
+      ? testContext.categoryId
+      : (testContext.categoryId as any).id || String(testContext.categoryId);
+    await callTool(request, sessionId, 'actual_categories_delete', {
+      id: categoryId,
+    });
+    // Verify absent from categories list
+    const result = await callTool(request, sessionId, 'actual_categories_get');
+    const data = extractResult(result);
+    const categories: any[] = Array.isArray(data) ? data : (data?.categories ?? []);
+    const stillThere = categories.find((c: any) => c.id === categoryId);
+    expect(stillThere).toBeFalsy();
+    testContext.categoryId = undefined;
+    console.log('✅ Category deleted and confirmed absent from list');
+  });
+
+  test('actual_category_groups_delete - should delete category group and verify gone', async ({ request }) => {
+    if (!testContext.categoryGroupId) test.skip();
+    console.log('🗑️  Testing actual_category_groups_delete...');
+    const groupId = typeof testContext.categoryGroupId === 'string'
+      ? testContext.categoryGroupId
+      : (testContext.categoryGroupId as any).id || String(testContext.categoryGroupId);
+    await callTool(request, sessionId, 'actual_category_groups_delete', {
+      id: groupId,
+    });
+    // Verify absent from category groups list
+    const result = await callTool(request, sessionId, 'actual_category_groups_get');
+    const groups: any[] = extractResult(result) ?? [];
+    const stillThere = Array.isArray(groups) ? groups.find((g: any) => g.id === groupId) : null;
+    expect(stillThere).toBeFalsy();
+    testContext.categoryGroupId = undefined;
+    console.log('✅ Category group deleted and confirmed absent from list');
+  });
+
+  test('actual_accounts_delete - should delete account and verify gone', async ({ request }) => {
+    if (!testContext.accountId) test.skip();
+    console.log('🗑️  Testing actual_accounts_delete...');
+    await callTool(request, sessionId, 'actual_accounts_delete', {
+      id: testContext.accountId,
+    });
+    // Verify absent from accounts list
+    const result = await callTool(request, sessionId, 'actual_accounts_list');
+    const accounts: any[] = extractResult(result) ?? [];
+    const stillThere = Array.isArray(accounts) ? accounts.find((a: any) => a.id === testContext.accountId) : null;
+    expect(stillThere).toBeFalsy();
+    testContext.accountId = undefined;
+    console.log('✅ Account deleted and confirmed absent from list');
+  });
+
+  // ==================== CLEANUP (safety fallback) ====================
+  // Each delete tool above clears its testContext ID on success.
+  // Guards below only fire if a delete test was skipped or failed mid-run.
   test.afterAll(async ({ request }) => {
-    console.log('\n🧹 Cleaning up test data...');
+    console.log('\n🧹 Fallback cleanup — removing any test data not cleaned by named tests...');
     
     try {
       if (testContext.transactionId) {
         await callTool(request, sessionId, 'actual_transactions_delete', {
           id: testContext.transactionId,
         });
-        console.log('✅ Transaction deleted');
+        console.log('✅ Transaction deleted (fallback)');
       }
       
       if (testContext.ruleWithoutOpId) {
         await callTool(request, sessionId, 'actual_rules_delete', {
           id: testContext.ruleWithoutOpId,
         });
-        console.log('✅ Rule (without op) deleted');
+        console.log('✅ Rule (without op) deleted (fallback)');
       }
       
       if (testContext.ruleId) {
         await callTool(request, sessionId, 'actual_rules_delete', {
           id: testContext.ruleId,
         });
-        console.log('✅ Rule deleted');
+        console.log('✅ Rule deleted (fallback)');
       }
 
       if (testContext.upsertRuleId) {
         await callTool(request, sessionId, 'actual_rules_delete', {
           id: testContext.upsertRuleId,
         });
-        console.log('✅ Upsert rule deleted');
+        console.log('✅ Upsert rule deleted (fallback)');
       }
       
       if (testContext.payeeId) {
         await callTool(request, sessionId, 'actual_payees_delete', {
           id: testContext.payeeId,
         });
-        console.log('✅ Payee deleted');
+        console.log('✅ Payee deleted (fallback)');
       }
       
       if (testContext.categoryId) {
@@ -1355,7 +1472,7 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
         await callTool(request, sessionId, 'actual_categories_delete', {
           id: categoryId,
         });
-        console.log('✅ Category deleted');
+        console.log('✅ Category deleted (fallback)');
       }
       
       if (testContext.categoryGroupId) {
@@ -1365,28 +1482,28 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
         await callTool(request, sessionId, 'actual_category_groups_delete', {
           id: groupId,
         });
-        console.log('✅ Category group deleted');
+        console.log('✅ Category group deleted (fallback)');
       }
 
-      // scheduleOneOffId is normally cleaned up by the delete test itself.
+      // scheduleOneOffId is normally cleaned up by the named delete test.
       // This guard handles the case where that test was skipped or failed.
       if (testContext.scheduleOneOffId) {
         await callTool(request, sessionId, 'actual_schedules_delete', {
           id: testContext.scheduleOneOffId,
         });
-        console.log('✅ Schedule deleted (fallback cleanup)');
+        console.log('✅ Schedule deleted (fallback)');
       }
       
       if (testContext.accountId) {
         await callTool(request, sessionId, 'actual_accounts_delete', {
           id: testContext.accountId,
         });
-        console.log('✅ Account deleted');
+        console.log('✅ Account deleted (fallback)');
       }
       
-      console.log('✅ All cleanup operations completed');
+      console.log('✅ Fallback cleanup completed');
     } catch (error: any) {
-      console.warn('⚠️  Some cleanup operations failed:', error.message);
+      console.warn('⚠️  Some fallback cleanup operations failed:', error.message);
     }
   });
 });
