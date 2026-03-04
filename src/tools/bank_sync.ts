@@ -14,8 +14,13 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    await adapter.runBankSync(input.accountId ?? undefined);
-    return { result: 'Bank sync initiated successfully' };
+    try {
+      await adapter.runBankSync(input.accountId ?? undefined);
+      return { result: 'Bank sync initiated successfully' };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(msg);
+    }
   },
 };
 
