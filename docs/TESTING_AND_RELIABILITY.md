@@ -343,10 +343,10 @@ Planned integrations:
 
 ### Current Coverage
 
-- **Unit Tests**: 53/56 tools (stub smoke + shape assertions) + 23 negative-path assertions
+- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 62 tools
 - **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle) — not per-tool
-- **Docker E2E**: 53/56 tools (100% tool coverage, real Actual Budget server)
-- **Live Integration**: 51/56 tools called against real budget (5 delete-only tools in cleanup.js)
+- **Docker E2E**: 60/62 tools with named tests (real Actual Budget server); 2 tools excluded — `budgets_list_available` and `budgets_switch` require ≥2 budgets (CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
+- **Live Integration**: 62/62 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
 
 ### Coverage Goals
 
@@ -818,7 +818,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ❌ Delete non-existent account
 - ❌ Reopen already-open account
 
-#### FULL Level (51 tools - 100% coverage)
+#### FULL Level (62 tools - 100% coverage)
 
 **Account Tools (7):**
 - ✅ All NORMAL account tests
@@ -952,7 +952,7 @@ npm run test:all                 # All automated tests (90s)
 
 **Pre-Release (Manual):**
 ```bash
-# Full manual integration test with all 51 tools
+# Full manual integration test with all 62 tools
 npm run test:integration:full
 
 # Cleanup only (remove leftover MCP-* test data)
@@ -966,11 +966,11 @@ npm run test:integration:cleanup
 | Test Level | Current Coverage | Target Coverage | Priority |
 |------------|-----------------|-----------------|----------|
 | **Level 1:** Adapter Smoke | 100% (adapter infra) | 100% | ✅ Maintain |
-| **Level 2:** Unit Tests | 51/51 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
-| **Level 3:** Live Integration | 46/51 tools called | 51/51 | 🟡 Medium |
+| **Level 2:** Unit Tests | 62/62 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
+| **Level 3:** Live Integration | 62/62 tools called | 62/62 | ✅ Maintain |
 | **Level 4:** Protocol E2E | 100% (MCP compliance) | 100% | ✅ Maintain |
-| **Level 5:** Docker E2E | **51/51 tools** (100%) | 100% | ✅ Maintain |
-| **Level 6:** Manual Full | 100% (51/51 tools) | 100% | ✅ Maintain |
+| **Level 5:** Docker E2E | **60/62 tools** (100% named; 2 excluded — single-budget CI) | 100% | ✅ Maintain |
+| **Level 6:** Manual Full | 100% (62/62 tools) | 100% | ✅ Maintain |
 | **Error Scenarios** | ~70% | 90% | 🟡 Medium |
 
 ---
@@ -978,10 +978,12 @@ npm run test:integration:cleanup
 ### Next Testing Improvements
 
 **High Priority:**
-1. ✅ **Completed:** Docker E2E tests — 51/51 tools (added `actual_session_close`)
-2. ✅ **Completed:** Unit test suite — 3 files, 51-tool smoke, 23 negative-path assertions
-3. ⏳ **TODO:** Add business logic error tests (duplicate accounts, insufficient funds)
-4. ⏳ **TODO:** Add concurrency tests (parallel tool execution)
+1. ✅ **Completed:** Docker E2E tests — 60/62 tools named (2 excluded: `budgets_list_available`, `budgets_switch` — single-budget CI constraint)
+2. ✅ **Completed:** Unit test suite — 3 files, 62-tool smoke, 23 negative-path assertions
+3. ✅ **Completed:** All 6 delete tools promoted to named E2E tests with list-absence assertions; `afterAll` is now fallback-only
+4. ✅ **Completed:** Shared `tests/shared/mcp-protocol.js` utility (MCP envelope parsing, reused across E2E and integration tests)
+5. ⏳ **TODO:** Add business logic error tests (duplicate accounts, insufficient funds)
+6. ⏳ **TODO:** Add concurrency tests (parallel tool execution)
 
 **Medium Priority:**
 5. ⏳ **TODO:** Add chaos testing (server failures, network issues)

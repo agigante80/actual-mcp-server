@@ -317,7 +317,7 @@ actual-mcp-server/
 │   │   ├── streamable-http.js    # Compiled JS companion
 │   │   └── streamable-http.d.ts  # Type definitions
 │   │
-│   ├── tools/                    # MCP tool definitions (51 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (62 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -346,12 +346,14 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (51 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (60/62 tools, 6 delete tests with list-absence assertions)
 │   │   └── run-docker-e2e.sh              # Docker test orchestrator
 │   ├── unit/                     # Unit tests (offline, stub adapter)
 │   │   ├── transactions_create.test.js
 │   │   ├── generated_tools.smoke.test.js
 │   │   └── schema_validation.test.js
+│   ├── shared/                   # Shared test utilities
+│   │   └── mcp-protocol.js       # MCP envelope parsing helpers (reused by E2E + integration)
 │   └── manual/                   # Live integration tests (real Actual Budget)
 │
 ├── scripts/                      # Build and utility scripts (see scripts/README.md)
@@ -403,7 +405,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 51 tools with MCP capabilities
+   └─> Registers 62 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance
@@ -451,7 +453,7 @@ npm run dev -- --test-actual-connection
 
 # Test all tool implementations
 npm run dev -- --test-actual-tools
-  └─> Runs smoke tests for all 51 tools
+  └─> Runs smoke tests for all 62 tools
 
 # Test MCP client interaction
 npm run dev -- --http --test-mcp-client
