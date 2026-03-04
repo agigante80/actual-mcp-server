@@ -556,7 +556,65 @@ export async function deleteCategory(id: string): Promise<void> {
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.payees.update').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdatePayee(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    const fieldsObj = fields as Record<string, unknown>;
+
+    // Extract `category` — it is NOT a direct column on the payees table in Actual Budget.
+    // The "default category" feature is implemented via rules (condition: payee is X → action: set category).
+    // Passing `category` to rawUpdatePayee would cause: "Field 'category' does not exist on table payees".
+    let categoryValue: string | null | undefined = undefined; // undefined = not provided
+    let directFields: Record<string, unknown> = fieldsObj;
+    if ('category' in fieldsObj) {
+      categoryValue = fieldsObj.category as string | null;
+      const { category: _stripped, ...rest } = fieldsObj;
+      directFields = rest;
+    }
+
+    // Update the payee's direct fields (name, transfer_acct, etc.)
+    if (Object.keys(directFields).length > 0) {
+      await withConcurrency(() => retry(() => rawUpdatePayee(id, directFields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    }
+
+    // Handle category via the rules mechanism (same approach Actual Budget uses internally)
+    if (categoryValue !== undefined) {
+      const existingRules = await withConcurrency(() =>
+        retry(() => rawGetPayeeRules(id) as Promise<unknown[]>, { retries: 2, backoffMs: 200 })
+      );
+
+      // Find an existing "set category" action rule for this payee
+      const setCategoryRule = (existingRules as any[]).find((rule: any) =>
+        Array.isArray(rule.actions) &&
+        rule.actions.some((a: any) => a.op === 'set' && a.field === 'category')
+      );
+
+      if (setCategoryRule) {
+        if (categoryValue === null) {
+          // null = clear the default category — delete the rule
+          await withConcurrency(() => retry(() => rawDeleteRule(setCategoryRule.id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+          logger.debug(`[UPDATE PAYEE] Cleared default category rule for payee ${id}`);
+        } else {
+          // Update existing rule's category action value
+          const updatedRule = {
+            ...setCategoryRule,
+            actions: setCategoryRule.actions.map((a: any) =>
+              a.op === 'set' && a.field === 'category' ? { ...a, value: categoryValue } : a
+            ),
+          };
+          await withConcurrency(() => retry(() => rawUpdateRule(updatedRule) as Promise<void>, { retries: 0, backoffMs: 200 }));
+          logger.debug(`[UPDATE PAYEE] Updated default category rule for payee ${id} to category ${categoryValue}`);
+        }
+      } else if (categoryValue !== null) {
+        // Create a new "set category" rule for this payee
+        const newRule = {
+          stage: null,
+          conditionsOp: 'and',
+          conditions: [{ op: 'is', field: 'payee', value: id }],
+          actions: [{ op: 'set', field: 'category', value: categoryValue }],
+        };
+        await withConcurrency(() => retry(() => rawCreateRule(newRule) as Promise<unknown>, { retries: 0, backoffMs: 200 }));
+        logger.debug(`[UPDATE PAYEE] Created default category rule for payee ${id} with category ${categoryValue}`);
+      }
+      // category=null + no existing rule = no-op (already clear)
+    }
   });
 }
 export async function deletePayee(id: string): Promise<void> {
