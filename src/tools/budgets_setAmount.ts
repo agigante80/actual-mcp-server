@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { notFoundMsg } from '../lib/errors.js';
 
 const InputSchema = z.object({ month: z.string().min(1), categoryId: z.string().min(1), amount: z.number() });
 
@@ -11,17 +10,19 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    // Pre-flight: verify category exists (BUG-6)
-    const categories = await adapter.getCategories();
-    const category = (categories as any[]).find((c: any) => c.id === input.categoryId);
-    if (!category) {
-      return {
-        error: notFoundMsg('Category', input.categoryId, 'actual_categories_get'),
-        result: null,
-      };
+    // Note: category existence is validated by the Actual API.
+    // Avoid mixing withActualApi (read) before queueWriteOperation (write) as
+    // it can disrupt the write queue's sync session.
+    try {
+      const result = await adapter.setBudgetAmount(input.month, input.categoryId, input.amount);
+      return { result };
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      if (msg.toLowerCase().includes('category') || msg.toLowerCase().includes('not found')) {
+        throw new Error(`Failed to set budget amount: ${msg}. Use actual_categories_get to verify the category ID.`);
+      }
+      throw new Error(`Failed to set budget amount: ${msg}`);
     }
-    const result = await adapter.setBudgetAmount(input.month, input.categoryId, input.amount);
-    return { result, categoryName: category.name };
   },
 };
 

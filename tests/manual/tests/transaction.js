@@ -63,22 +63,26 @@ export async function transactionTests(client, context) {
     }
   }
 
-  // FIXED(BUG-4): transactions_create with non-existent account UUID now returns actionable error
+  // T3: transactions_create with non-existent account UUID — API may reject or silently succeed
+  // Note: Pre-flight account check was removed (caused API session mixing that broke writes)
+  // Now relies on the Actual API to handle invalid accounts
   console.log("\nNEGATIVE T3: transactions_create with non-existent account UUID...");
   {
     const today = new Date().toISOString().split('T')[0];
-    const badTxn = await callTool("actual_transactions_create", {
-      account: '00000000-0000-0000-0000-000000000000',
-      date: today,
-      amount: -100,
-      notes: `MCP-T3-neg-${timestamp}`,
-    });
-    if (badTxn?.success === false && typeof badTxn?.error === 'string' && badTxn.error.includes('not found') && badTxn.error.includes('actual_accounts_list')) {
-      console.log(`  ✓ FIXED(BUG-4): transactions_create nil-UUID returns actionable error: ${badTxn.error.slice(0, 120)}`);
-    } else if (badTxn?.success === false && typeof badTxn?.error === 'string') {
-      console.log(`  ⚠ T3: error returned but message not actionable: ${badTxn.error.slice(0, 120)}`);
-    } else {
-      console.log(`  ⚠ T3: unexpected response: ${JSON.stringify(badTxn).slice(0, 120)}`);
+    try {
+      const badTxn = await callTool("actual_transactions_create", {
+        account: '00000000-0000-0000-0000-000000000000',
+        date: today,
+        amount: -100,
+        notes: `MCP-T3-neg-${timestamp}`,
+      });
+      if (badTxn?.success === false && typeof badTxn?.error === 'string') {
+        console.log(`  ✓ T3: error returned for nil-UUID account: ${badTxn.error.slice(0, 120)}`);
+      } else {
+        console.log(`  ⚠ T3: unexpected response (API may have accepted nil UUID): ${JSON.stringify(badTxn).slice(0, 120)}`);
+      }
+    } catch (e) {
+      console.log(`  ✓ T3: API rejected nil-UUID account (threw): ${String(e).slice(0, 120)}`);
     }
   }
 
