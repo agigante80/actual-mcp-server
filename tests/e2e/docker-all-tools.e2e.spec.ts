@@ -1051,6 +1051,12 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     const conditions = [{ field: 'notes', op: 'contains', value: marker }];
     const actions = [{ op: 'set', field: 'category', value: testContext.categoryId }];
 
+    // Parse raw MCP envelope directly to preserve the { id, created } shape.
+    // extractResult() reduces objects with an 'id' field down to just the id string,
+    // which would cause firstData?.created to be undefined.
+    const parseUpsert = (raw: any): { id: string; created: boolean } =>
+      raw?.content?.[0]?.text ? JSON.parse(raw.content[0].text) : raw;
+
     // First call: must create (created=true)
     const first = await callTool(request, sessionId, 'actual_rules_create_or_update', {
       stage: 'pre',
@@ -1058,12 +1064,11 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
       conditions,
       actions,
     });
-    const firstData = extractResult(first);
-    const upsertRuleId = firstData?.id ?? firstData;
-    expect(typeof upsertRuleId).toBe('string');
-    expect(firstData?.created).toBe(true);
-    testContext.upsertRuleId = String(upsertRuleId);
-    console.log(`✅ actual_rules_create_or_update: created=true, id=${upsertRuleId}`);
+    const firstData = parseUpsert(first);
+    expect(typeof firstData.id).toBe('string');
+    expect(firstData.created).toBe(true);
+    testContext.upsertRuleId = firstData.id;
+    console.log(`✅ actual_rules_create_or_update: created=true, id=${firstData.id}`);
 
     // Second call with identical conditions: must update (created=false, same id)
     const second = await callTool(request, sessionId, 'actual_rules_create_or_update', {
@@ -1072,9 +1077,9 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
       conditions,
       actions,
     });
-    const secondData = extractResult(second);
-    expect(secondData?.id ?? secondData).toBe(upsertRuleId);
-    expect(secondData?.created).toBe(false);
+    const secondData = parseUpsert(second);
+    expect(secondData.id).toBe(firstData.id);
+    expect(secondData.created).toBe(false);
     console.log('✅ actual_rules_create_or_update: second call created=false, same id (idempotent)');
   });
 
