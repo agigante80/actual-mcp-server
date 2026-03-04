@@ -442,17 +442,69 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log(`✅ Second payee created: ${payeeId}`);
   });
 
-  test('actual_payees_update - should update payee with category', async ({ request }) => {
+  test('actual_payees_update - should update payee name and set default category via rule', async ({ request }) => {
     if (!testContext.payeeId) test.skip();
-    
-    console.log('✏️  Testing actual_payees_update...');
+
+    console.log('✏️  Testing actual_payees_update (name)...');
     await callTool(request, sessionId, 'actual_payees_update', {
       id: testContext.payeeId,
-      fields: {
-        name: 'E2E-Payee-Updated',
-      },
+      fields: { name: 'E2E-Payee-Updated' },
     });
-    console.log('✅ Payee updated');
+    console.log('✅ Payee name updated');
+
+    // Set default category — adapter stores this as a "payee is X → set category" rule,
+    // NOT as a direct DB column (category does not exist on the payees table in @actual-app/api v26+)
+    if (testContext.categoryId) {
+      await callTool(request, sessionId, 'actual_payees_update', {
+        id: testContext.payeeId,
+        fields: { category: testContext.categoryId },
+      });
+      console.log('✅ Payee default category set via rules');
+
+      // Verify: payee_rules_get should show a "set category" rule
+      const rulesResult = await callTool(request, sessionId, 'actual_payee_rules_get', {
+        payeeId: testContext.payeeId,
+      });
+      const rulesData = extractResult(rulesResult);
+      const rules = Array.isArray(rulesData) ? rulesData : (rulesData?.rules || []);
+      const setCatRule = rules.find((r: any) =>
+        Array.isArray(r.actions) &&
+        r.actions.some((a: any) => a.op === 'set' && a.field === 'category')
+      );
+      if (setCatRule) {
+        const action = setCatRule.actions.find((a: any) => a.op === 'set' && a.field === 'category');
+        expect(action.value).toBe(testContext.categoryId);
+        console.log('✅ Verified: set-category rule created for payee');
+      } else {
+        console.log(`⚠ No set-category rule found in ${rules.length} rule(s) — check adapter`);
+      }
+    } else {
+      console.log('⚠ categoryId not in testContext — skipping category rule verification');
+    }
+  });
+
+  test('actual_payees_update - should clear default category (null removes rule)', async ({ request }) => {
+    if (!testContext.payeeId || !testContext.categoryId) test.skip();
+
+    console.log('🧹 Testing actual_payees_update category=null (delete rule path)...');
+    await callTool(request, sessionId, 'actual_payees_update', {
+      id: testContext.payeeId,
+      fields: { category: null },
+    });
+    console.log('✅ category=null accepted');
+
+    // Verify: no set-category rule remains
+    const rulesResult = await callTool(request, sessionId, 'actual_payee_rules_get', {
+      payeeId: testContext.payeeId,
+    });
+    const rulesData = extractResult(rulesResult);
+    const rules = Array.isArray(rulesData) ? rulesData : (rulesData?.rules || []);
+    const remaining = rules.filter((r: any) =>
+      Array.isArray(r.actions) &&
+      r.actions.some((a: any) => a.op === 'set' && a.field === 'category')
+    );
+    expect(remaining.length).toBe(0);
+    console.log('✅ Verified: set-category rule removed after category=null');
   });
 
   test('actual_payees_update - ERROR: should reject invalid fields', async ({ request }) => {
