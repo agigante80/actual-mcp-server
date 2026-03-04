@@ -1,7 +1,7 @@
 # Roadmap
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.23  
+**Version:** 0.4.24  
 **Last Updated:** 2026-03-03
 
 > 📋 **Implementing a planned item?** Follow [docs/NEW_TOOL_CHECKLIST.md](./NEW_TOOL_CHECKLIST.md) — mandatory 9-step process for all new tools.
@@ -13,7 +13,7 @@
 | Feature | Summary | Risk | Detail |
 |---------|---------|------|--------|
 | [Tags CRUD](./feature/TAGS_CRUD.md) | 4 tools for managing transaction tags — blocked until Tags ship in a stable `@actual-app/api` release. | 🟡 **External** — implementation is trivial; risk is that the upstream API shape changes between preview and stable, requiring rework after unblock | [→](./feature/TAGS_CRUD.md) |
-| [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md) | Actionable errors across all tools — every failure tells the AI what went wrong and which tool to call next. | 🟢 **Low** — purely additive response-shape changes; no architectural impact | [→](./feature/IMPROVED_ERROR_MESSAGES.md) |
+| [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md) | Actionable Zod-layer error messages across all tools — wrong date formats, invalid enums, wrong types all return hints like "use YYYY-MM-DD" or "allowed values: cleared, uncleared". API-layer not-found errors are covered by Fix Tool Reliability above. | 🟢 **Low** — purely additive response-shape changes; no architectural impact | [→](./feature/IMPROVED_ERROR_MESSAGES.md) |
 
 ---
 

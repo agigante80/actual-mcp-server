@@ -18,17 +18,19 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] `npm run build` passes with zero errors
 
 ### Unit Tests
-- [ ] Happy-path coverage in `tests/unit/generated_tools.smoke.test.js`
+- [ ] Input example added to `tests/unit/generated_tools.smoke.test.js` (required fields + stub response)
+- [ ] **Output shape asserted** in smoke test: tool added to `resultWrappers[]`, `successTools[]`, or a custom `if (n === '...')` block with `shapeErr()`
 - [ ] Negative-path / schema validation in `tests/unit/schema_validation.test.js` (if schema is complex)
-- [ ] **Error message quality**: for each applicable scenario from the [10-scenario table](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover), assert the error message is actionable (contains a next-step hint, format example, or allowed-values list) — not just that it throws
-- [ ] `EXPECTED_TOOL_COUNT` updated in `tests/unit/generated_tools.smoke.test.js`
+- [ ] **Error message quality**: for each applicable Zod-layer scenario (wrong date format, unknown field, missing required field, wrong type, invalid enum, out-of-range), assert the error message is actionable — not just that it throws
 - [ ] `npm run test:unit-js` passes
 
 ### Manual Integration Tests (JS scripts)
 - [ ] Test block added to the appropriate `tests/manual/tests/*.js` module
-- [ ] **Positive test**: call with valid input, assert expected shape of result
-- [ ] **Negative test**: call with a name / ID that does not exist — assert error is returned AND that the response contains useful context (e.g., list of available values)
-- [ ] **Error scenario coverage**: for each scenario from the [10-scenario table](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover) that applies to this tool, add a negative-path block asserting the error message is actionable (not generic)
+- [ ] **Positive test**: call with valid input, assert required output fields are present with correct types and values
+- [ ] **Read-back verification**: after every create/update, call the corresponding `_get` or `_list` tool and assert the entity exists with the values you supplied
+- [ ] **Optional fields**: each optional input that changes output is exercised in at least one positive call, and the response is asserted to reflect it
+- [ ] **Negative test**: call with a name / ID that does not exist — assert error is returned AND that the response contains useful context (e.g., list of available values). If the tool silently accepts the bad input (no error returned), record a `// GAP(error-messages): actual_<tool> with bad input — [observed behavior]` comment in the test file instead of asserting, and log a `⚠` warning line.
+- [ ] **Error scenario coverage**: for each API-layer scenario (invalid/non-existent ID, conflicting fields, duplicate/already-exists, dependency not found) that applies to this tool, add a negative-path block asserting the error message is actionable (not generic). Use `// GAP(error-messages):` comments for any silent failures discovered.
 - [ ] `tests/manual/README.md` test-module table updated if a new file was added
 - [ ] `npm run test:integration:full` passes against a real server
 
@@ -39,18 +41,18 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Both a positive scenario and a not-found/negative scenario described in the prompt instructions
 
 ### E2E Tests
+- [ ] Tool's happy-path call added to the appropriate `tests/e2e/suites/<domain>.ts` file
 - [ ] `EXPECTED_TOOL_COUNT` constant updated in `tests/e2e/mcp-client.playwright.spec.ts`
 - [ ] `EXPECTED_TOOL_COUNT` constant updated in `tests/e2e/docker-all-tools.e2e.spec.ts` (if present)
 - [ ] `npm run test:e2e` passes
 
 ### Documentation
-- [ ] `README.md` — tool count in badge/header, tool table in Available Tools section
-- [ ] `docs/PROJECT_OVERVIEW.md` — tool count, API coverage %, tool listed in feature table
+- [ ] `README.md` — new tool row added in Available Tools table
+- [ ] `docs/PROJECT_OVERVIEW.md` — API coverage % updated if changed
 - [ ] `docs/ARCHITECTURE.md` — tool listed in domain section (if relevant)
-- [ ] `docs/ROADMAP.md` — item marked ✅ IMPLEMENTED, version noted
+- [ ] `docs/ROADMAP.md` — updated only if this is a new capability (not incremental); see Step 7
 - [ ] `docs/TESTING_AND_RELIABILITY.md` — test file entries updated if new test module added
-- [ ] `docker/description/long.md` — tool count, feature bullet if significant
-- [ ] `docker/description/short.md` — tool count
+- [ ] `npm run docs:sync` run to batch-update all **Tool Count:** markers
 
 ### Final Validation
 - [ ] `npm run build` ✅
@@ -152,22 +154,53 @@ Then export the function from the adapter's default export object at the bottom 
 
 #### 4a. Smoke test in `tests/unit/generated_tools.smoke.test.js`
 
-This file stubs the adapter and runs every registered tool with a minimal valid input to assert it does not throw and returns a plausible shape.
+This file monkeypatches the adapter with predefined stub responses and runs every registered tool with a minimal valid input. It asserts both that the tool does not throw **and** that the response shape matches what the tool documents.
 
-1. **Update `EXPECTED_TOOL_COUNT`** (top of file) to the new total.
-2. Add a special-case input if the tool needs non-trivial required fields:
+**The file has no test framework — `assert` is not imported. Use the file's own `shapeErr()` helper inside `if (n === '...')` blocks, or add the tool to one of the existing membership arrays.**
+
+1. **Add a `stubResponses` entry** if the tool calls an adapter method not already listed:
+   ```javascript
+   // In the stubResponses map at the top of the file:
+   exampleMethod: { id: 'example-id-001', name: 'Example' },
+   ```
+   Without a stub entry the adapter returns `undefined`, which will cause shape assertions to fail with a confusing error.
+
+2. **Add a required-fields input example** if the tool has non-trivial required fields:
    ```javascript
    if (name.includes('example_tool')) {
      inputExample.name = 'SomeExistingName';
      inputExample.type = 'accounts';
    }
    ```
-3. Add a specific assertion block if the return shape is noteworthy:
+
+3. **Assert the output shape** using one of these approaches — pick whichever fits:
+
+   | Return type | Approach |
+   |-------------|----------|
+   | Returns `{ result: ... }` wrapper | Add tool name to `resultWrappers[]` array |
+   | Returns `{ success: true }` | Add tool name to `successTools[]` array |
+   | Unique shape (custom fields) | Add `if (n === 'example_tool') { ... }` block with `shapeErr()` |
+
    ```javascript
+   // Option A — add to the relevant array (preferred when response matches existing pattern):
+   const resultWrappers = ['accounts_list', /* ... */ 'example_tool'];
+
+   // Option B — custom block for unique shapes:
    if (n === 'example_tool') {
-     assert.ok(res?.id || res?.error, 'expected id or error in response');
+     if (typeof res?.id !== 'string') shapeErr('expected id string');
+     if (typeof res?.name !== 'string') shapeErr('expected name string');
    }
    ```
+
+   The minimum assertion by return type:
+
+   | Return type | What to assert |
+   |-------------|----------------|
+   | Single entity create | `typeof res?.id === 'string'` |
+   | List | `Array.isArray(res?.result)` or `Array.isArray(res?.items)` |
+   | Count + list | `typeof res?.count === 'number'` and array field present |
+   | Mutation (update/delete) | `res?.success === true` → add to `successTools[]` |
+   | Summary/total | `typeof res?.totalAmount === 'number'` |
 
 #### 4b. Negative / schema validation in `tests/unit/schema_validation.test.js`
 
@@ -186,20 +219,20 @@ it('actual_example_tool rejects invalid type', () => {
 });
 ```
 
-**Error message quality — apply the 10-scenario table:**
+**Error message quality — Zod-layer scenarios (apply where relevant):**
 
-For each scenario from [`docs/feature/IMPROVED_ERROR_MESSAGES.md` § Negative Scenarios](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover) that is relevant to this tool's schema, add a dedicated `it()` block that asserts **both** that the error is thrown **and** that its message is actionable. Check the table below and tick applicable scenarios:
+For each scenario below that applies to this tool's schema, add a dedicated `it()` block asserting **both** that the error is thrown **and** that the message is actionable:
 
-| Scenario | Applies if tool has… | What to assert |
-|----------|---------------------|----------------|
-| 1 Wrong date format | any `date` field | message contains `YYYY-MM-DD` |
-| 2 Unknown / disallowed field | strict schema (no passthrough) | message contains `Unknown field` or lists allowed fields |
-| 4 Missing required field | any `required` field | message names the missing field |
-| 5 Wrong type | `amount`, `limit`, or other numeric field | message contains `integer` or `cents` |
-| 6 Invalid enum value | any `z.enum(...)` field | message lists allowed values |
-| 10 Value out of range | `limit`, amount constraints | message contains `positive` or the valid range |
+| # | Scenario | Applies if tool has… | What to assert |
+|---|----------|---------------------|----------------|
+| 1 | **Wrong date format** | any `date` field | message contains `YYYY-MM-DD` and the received value |
+| 2 | **Unknown / disallowed field** | strict schema (no passthrough) | message contains `Unknown field` or lists allowed fields |
+| 4 | **Missing required field** | any required field | message names the missing field |
+| 5 | **Wrong type** | `amount`, `limit`, or numeric field | message contains `integer` or `cents` |
+| 6 | **Invalid enum value** | any `z.enum(...)` field | message lists allowed values |
+| 10 | **Value out of range** | `limit`, amount constraints | message contains `positive` or the valid range |
 
-Scenarios 3, 7, 8, 9 are caught at API response time (not Zod) — cover those in Step 5 instead.
+Scenarios 3, 7, 8, 9 are caught at API response time — cover those in Step 5b instead.
 
 Run with:
 ```bash
@@ -236,15 +269,27 @@ Choose the right module based on the tool's domain:
 
 #### 5a. Positive test
 
-Call the tool with a **valid** input drawn from data already present in the budget (use `callTool` on a known entity first to get its name/id):
+Call the tool with a **valid** input drawn from data already present in the budget (use `client.callTool()` on a known entity first to get its name/id).
+
+**Output-field assertions — "expected shape" means:**
+
+| Field type | Assert |
+|------------|--------|
+| `id` | non-empty string (UUID format preferred) |
+| `amount` | integer, not decimal (`Number.isInteger(res.amount)`) |
+| `date` | string matching `/^\d{4}-\d{2}-\d{2}$/` |
+| `name` | matches the value you supplied |
+| list result | `Array.isArray(res) && res.length >= 0` |
+| optional field supplied | field present in response with the value you set |
+| optional field omitted | field absent, `null`, or `undefined` |
 
 ```javascript
 // Positive: resolve an account by its real name
 try {
-  const accts = await callTool("actual_accounts_list", {});
+  const accts = await client.callTool("actual_accounts_list", {});
   const first = Array.isArray(accts) && accts.length > 0 ? accts[0] : null;
   if (first?.name) {
-    const res = await callTool("actual_example_tool", { type: 'accounts', name: first.name });
+    const res = await client.callTool("actual_example_tool", { type: 'accounts', name: first.name });
     if (res?.id === first.id) {
       console.log(`  ✓ example_tool [accounts]: "${first.name}" → ${res.id}`);
     } else {
@@ -258,22 +303,46 @@ try {
 }
 ```
 
+**Read-back verification (mandatory for create/update tools):**
+
+After any call that writes data, immediately call the corresponding `_get` or `_list` tool and assert the entity persists with the values you supplied. This catches tools that report success but do not actually write:
+
+```javascript
+// Read-back: verify the entity persisted with correct field values
+try {
+  const created = await client.callTool("actual_accounts_create", { name: accountName, type: 'checking' });
+  const accounts = await client.callTool("actual_accounts_list", {});
+  const found = accounts.find(a => a.id === created?.id);
+  if (found?.name === accountName && found?.type === 'checking') {
+    console.log(`  ✓ accounts_create [read-back]: persisted with correct name and type`);
+  } else {
+    console.log(`  ❌ accounts_create [read-back]: entity not found or fields wrong after create: ${JSON.stringify(found).slice(0,120)}`);
+  }
+} catch (err) {
+  console.log("  ❌ accounts_create [read-back]:", err.message);
+}
+```
+
+**Optional-input field coverage:**
+
+For each optional input that meaningfully changes the response (e.g. `note`, `cleared`, `category_id`): include one positive call with the field supplied and assert it appears in the result; include one positive call without it and assert the tool still succeeds and the field is absent or `null`.
+
 #### 5b. Negative test (mandatory for lookup/search tools)
 
 Call the tool with a **name or ID that is guaranteed not to exist**. Assert:
 1. The tool returns an error (not a crash)
 2. The error message (or response body) includes a list of **available** values — so the AI can self-correct
 
-**Error scenario coverage — apply the 10-scenario table:**
+**Error scenario coverage — API-layer scenarios (apply where relevant):**
 
-For each scenario from [`docs/feature/IMPROVED_ERROR_MESSAGES.md` § Negative Scenarios](../docs/feature/IMPROVED_ERROR_MESSAGES.md#negative-scenarios-to-cover) that is relevant to this tool's API behaviour, add a matching negative-path block. Check the table below and tick applicable scenarios:
+For each scenario below that applies to this tool's API behaviour, add a matching negative-path block:
 
-| Scenario | Applies if tool… | What to assert |
-|----------|-----------------|----------------|
-| 3 Invalid / non-existent ID | accepts a UUID and looks it up | error contains `not found` AND names a list tool (e.g. `actual_accounts_list`) |
-| 7 Conflicting fields | can close/delete/mutate state | error explains the conflict and suggests a remedy |
-| 8 Duplicate / already-exists | creates a named entity | error mentions the existing entity's ID or suggests `_update` tool |
-| 9 Dependency not found | accepts a foreign-key ID (e.g. `group_id`, `category_id`) | error names the missing dependency and a list tool |
+| # | Scenario | Applies if tool… | What to assert |
+|---|----------|-----------------|----------------|
+| 3 | **Invalid / non-existent ID** | accepts a UUID and looks it up | error contains `not found` AND names a list tool (e.g. `actual_accounts_list`) |
+| 7 | **Conflicting fields** | can close/delete/mutate state | error explains the conflict and suggests a remedy |
+| 8 | **Duplicate / already-exists** | creates a named entity | error mentions the existing entity's ID or suggests `_update` tool |
+| 9 | **Dependency not found** | accepts a foreign-key ID (e.g. `group_id`, `category_id`) | error names the missing dependency and a list tool |
 
 Scenarios 1, 2, 4, 5, 6, 10 are caught at Zod parse time — cover those in Step 4b instead.
 
@@ -282,7 +351,7 @@ Use a sentinel name like `"__nonexistent_MCP_test_value__"` which can never coll
 ```javascript
 // Negative: name that does not exist — response must include available list
 try {
-  const res = await callTool("actual_example_tool", {
+  const res = await client.callTool("actual_example_tool", {
     type: 'accounts',
     name: '__nonexistent_MCP_test_value__',
   });
@@ -290,7 +359,10 @@ try {
   if (text.includes('not found') || text.includes('available') || res?.error) {
     console.log(`  ✓ example_tool [negative]: correctly returned not-found (with context)`);
   } else {
-    console.log(`  ❌ example_tool [negative]: non-existent name did not produce a useful error: ${text.slice(0,200)}`);
+    // Tool silently accepted bad input — record a GAP comment and log a warning
+    // GAP(error-messages): actual_example_tool with non-existent name — silently returns [observed value]
+    console.log(`  ⚠ example_tool [negative]: accepted non-existent name without error: ${text.slice(0,200)}`);
+    console.log(`  // GAP(error-messages): actual_example_tool bad name accepted silently`);
   }
 } catch (err) {
   // If tool throws cleanly with a descriptive message, that also counts
@@ -347,37 +419,28 @@ See [`tests/manual-prompt/README.md`](../tests/manual-prompt/README.md) for usag
 
 ### Step 7 — Update documentation files
 
-Update every file below. The order does not matter but all must be done before the PR/commit.
+#### Tool counts — batch update with `docs:sync`
+
+Run `npm run docs:sync` to update all `**Tool Count:**` markers in `README.md`, `PROJECT_OVERVIEW.md`, `ARCHITECTURE.md`, `TESTING_AND_RELIABILITY.md`, `docker/description/long.md`, and `docker/description/short.md` in one pass. Do not edit these counts manually.
 
 #### `README.md`
-- Tool count in the intro paragraph and any badge text: `51 MCP tools` → `54 MCP tools`
-- Tool count in the "Available Tools" section header
-- Add a row for the new tool in the appropriate table (tool name, description, key parameters)
-- Update `API Coverage` percentage if it changed
+- Add a row for the new tool in the Available Tools table (tool name, description, key parameters)
 
 #### `docs/PROJECT_OVERVIEW.md`
-- Tool count (search for the current number and update all occurrences)
-- API coverage percentage
+- Update API coverage percentage if it changed
 - Add the tool to the feature list if it represents a new capability
 
 #### `docs/ARCHITECTURE.md`
 - Add the tool to the domain section table if the domain section lists tools explicitly
-- Update any tool-count summaries
 
 #### `docs/ROADMAP.md`
-- If this tool was a planned roadmap item: mark it `✅ IMPLEMENTED in v0.X.Y`
-- If it is a new capability not previously planned: add it to the "Implemented" history section
+- **Only update if this tool represents a new capability** — not for incremental tools (e.g. adding a `_get`, `_delete`, or `_update` variant in a domain that already has tools)
+- If it was a planned roadmap item: mark it `✅ IMPLEMENTED in v0.X.Y`
+- If it is a genuinely new capability not previously planned: add a single brief entry — do not enumerate every individual tool name
+- Skip ROADMAP entirely for incremental additions
 
 #### `docs/TESTING_AND_RELIABILITY.md`
 - If you added a new test module file to `tests/manual/tests/`, add it to the test-file table
-- Update any tool-count references (search for the old number)
-
-#### `docker/description/long.md`
-- Update tool count everywhere it appears
-- Add a bullet point for the new tool if it represents significant new functionality
-
-#### `docker/description/short.md`
-- Update tool count (short description typically has just a number)
 
 ---
 
@@ -412,7 +475,7 @@ git commit -m "feat(tools): add actual_<tool_name>
 - Tests: unit smoke + negative path in tests/unit/
 - Manual tests: positive + negative in tests/manual/tests/<module>.js
 - Prompt: tests/manual-prompt/prompt-{1|2|3}-*.txt Phase N updated + README total updated
-- Docs: README, PROJECT_OVERVIEW, ARCHITECTURE, ROADMAP, docker/description all updated
+- Docs: README tool row added; docs:sync run; ROADMAP updated if new capability
 - Total tools: N → N+1 (XX% API coverage)"
 ```
 
@@ -425,7 +488,7 @@ The table below summarises the negative test patterns for existing tools that al
 | Tool | Not-Found Response Pattern |
 |------|---------------------------|
 | `actual_get_id_by_name` | `{ error: "No <type> named '<name>' found.", available: ["Name1", "Name2", ...] }` |
-| `actual_accounts_get_balance` | `{ error: "Account '<id>' not found" }` |
+| `actual_accounts_get_balance` | ⚠ **GAP** — silently returns `{ balance: 0 }` for any non-existent id (expected: not-found error) |
 | `actual_query_run` | `{ error: "Unknown field '<field>'" }` with field suggestions |
 
 When implementing a new lookup tool, the `call` function should:
@@ -443,18 +506,18 @@ When implementing a new lookup tool, the `call` function should:
 | `src/tools/index.ts` | **Add** export line |
 | `src/actualToolsManager.ts` | **Add** tool name to `IMPLEMENTED_TOOLS` |
 | `src/lib/actual-adapter.ts` | **Add** adapter method if new API call needed |
-| `tests/unit/generated_tools.smoke.test.js` | **Update** `EXPECTED_TOOL_COUNT`; add input example |
+| `tests/unit/generated_tools.smoke.test.js` | **Add** stub response to `stubResponses` map (if new adapter method); add input example; add to `resultWrappers[]`, `successTools[]`, or custom `if (n === '...')` shape assertion |
 | `tests/unit/schema_validation.test.js` | **Add** negative schema tests for complex schemas |
+| `tests/e2e/suites/<domain>.ts` | **Add** happy-path call for the new tool |
 | `tests/e2e/mcp-client.playwright.spec.ts` | **Update** `EXPECTED_TOOL_COUNT` |
 | `tests/e2e/docker-all-tools.e2e.spec.ts` | **Update** `EXPECTED_TOOL_COUNT` |
 | `tests/manual/tests/<module>.js` | **Add** positive + negative test block |
 | `tests/manual/README.md` | **Update** module table if new file added |
 | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
 | `tests/manual-prompt/README.md` | **Update** Phase Overview table total |
-| `README.md` | **Update** tool count + tool table row |
-| `docs/PROJECT_OVERVIEW.md` | **Update** tool count + coverage % |
+| `README.md` | **Add** tool table row in Available Tools section |
+| `docs/PROJECT_OVERVIEW.md` | **Update** API coverage % if changed |
 | `docs/ARCHITECTURE.md` | **Update** domain table if applicable |
-| `docs/ROADMAP.md` | **Mark** item implemented OR add new entry |
+| `docs/ROADMAP.md` | **Update** only for new capabilities — skip for incremental tools |
 | `docs/TESTING_AND_RELIABILITY.md` | **Update** if new test module added |
-| `docker/description/long.md` | **Update** tool count + feature bullet |
-| `docker/description/short.md` | **Update** tool count |
+| `docker/description/long.md`, `short.md`, all tool-count docs | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers |

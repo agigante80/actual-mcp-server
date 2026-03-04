@@ -58,5 +58,48 @@ export async function categoryGroupTests(client, context) {
     else console.log(`  ❌ Verify update: expected "MCP-Group-${timestamp}-Updated", got "${found.name}"`);
   }
 
-  console.log("  (Category group deletion tested in cleanup phase)");
+  // category_groups_delete — create a disposable group, negative UUID test, delete, verify absence
+  // NOTE: We create a second group for the delete test so context.categoryGroupId (needed by category tests) remains intact.
+  // FIXED(BUG-10): actual_category_groups_delete with nil-UUID now returns { success: false, error } actionable error
+  console.log("\nTesting category_groups_delete (CG3): creating disposable group for delete test...");
+  const disposableGroup = await callTool("actual_category_groups_create", {
+    name: `MCP-Group-Del-${timestamp}`,
+  });
+  const disposableGroupId = disposableGroup.id || disposableGroup.result || disposableGroup;
+  console.log("✓ Created disposable group:", disposableGroupId);
+
+  console.log("\nTesting category_groups_delete (negative nil-UUID)...");
+  try {
+    const nilResult = await callTool("actual_category_groups_delete", {
+      id: '00000000-0000-0000-0000-000000000000',
+    });
+    const success = nilResult?.success ?? nilResult?.result?.success;
+    if (success === false || nilResult?.error) {
+      console.log("  ✓ Negative nil-UUID delete: returned error/false correctly");
+    } else {
+      console.log("  ⚠ Negative nil-UUID delete: unexpectedly accepted (result:", JSON.stringify(nilResult).slice(0, 120), ")");
+    }
+  } catch (err) {
+    console.log("  ✓ Negative nil-UUID delete: threw as expected:", err.message?.slice(0, 80));
+  }
+
+  if (disposableGroupId) {
+    console.log(`\nDeleting disposable category group (${disposableGroupId})...`);
+    try {
+      await callTool("actual_category_groups_delete", { id: disposableGroupId });
+      console.log("✓ Delete call completed");
+
+      // Verify absence
+      const gd = await callTool("actual_category_groups_get", {});
+      const all = gd.groups || gd || [];
+      const stillExists = Array.isArray(all) ? all.find(g => g.id === disposableGroupId) : null;
+      if (stillExists) {
+        console.log("  ❌ Verify delete: disposable group still present in list");
+      } else {
+        console.log("  ✓ Verify delete: disposable group no longer in list");
+      }
+    } catch (err) {
+      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+    }
+  }
 }

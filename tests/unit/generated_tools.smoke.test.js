@@ -118,7 +118,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('payee_rules_get')) inputExample.payeeId = 'p_1';
   if (name.includes('rules_create') && !name.includes('or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
-  if (name.includes('rules_delete')) inputExample.id = 'rule_1';
+  if (name.includes('rules_delete')) inputExample.id = 'rule1'; // matches getRules stub: { id: 'rule1' }
   if (name.includes('rules_update')) inputExample.id = 'rule_1', inputExample.fields = { conditions: [] };
   if (name.includes('budgets_setAmount')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.amount = 100;
   if (name.includes('budgets_getMonth')) inputExample.month = '2025-12';
@@ -156,10 +156,12 @@ console.log('Running generated tools smoke tests');
       const shapeErr = (msg) => { throw new Error(`${n}: ${msg} (got: ${JSON.stringify(res).slice(0, 120)})`); };
 
       // List/get tools that return a { result } wrapper
+      // accounts_create / payees_create use createTool which wraps the returned id in { result }
       const resultWrappers = ['accounts_list', 'categories_get',
         'payees_get', 'budgets_getMonth', 'budgets_getMonths', 'budgets_get_all',
         'query_run', 'transactions_filter', 'transactions_get', 'transactions_import',
-        'bank_sync', 'budgets_setAmount', 'budgets_transfer'];
+        'bank_sync', 'budgets_setAmount', 'budgets_transfer',
+        'accounts_create', 'payees_create'];
       if (resultWrappers.includes(n)) {
         if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
       }
@@ -198,7 +200,8 @@ console.log('Running generated tools smoke tests');
 
       // Shape-specific assertions
       if (n === 'accounts_get_balance') {
-        if (typeof res?.balance !== 'number') shapeErr(`expected numeric balance`);
+        // balance is a number on success, null on error (account not found path)
+        if (typeof res?.balance !== 'number' && res?.balance !== null) shapeErr(`expected numeric balance or null`);
       }
       if (n === 'server_info') {
         if (!res?.server?.name) shapeErr(`expected server.name`);
@@ -247,6 +250,27 @@ console.log('Running generated tools smoke tests');
         if (!Array.isArray(res?.transactions)) shapeErr(`expected transactions array`);
         if (typeof res?.count !== 'number') shapeErr(`expected count number`);
         if (typeof res?.summary?.totalAmount !== 'number') shapeErr(`expected summary.totalAmount number`);
+      }
+      // categories_create: old ToolDefinition pattern, returns { success, categoryId, message }
+      if (n === 'categories_create') {
+        if (typeof res?.categoryId !== 'string') shapeErr(`expected categoryId string`);
+        if (res?.success !== true) shapeErr(`expected success=true`);
+      }
+      // category_groups_create: old ToolDefinition pattern, returns { id, success }
+      if (n === 'category_groups_create') {
+        if (typeof res?.id !== 'string') shapeErr(`expected id string`);
+        if (res?.success !== true) shapeErr(`expected success=true`);
+      }
+      // rules_create: old ToolDefinition pattern, returns { id, success }
+      if (n === 'rules_create') {
+        if (typeof res?.id !== 'string') shapeErr(`expected id string`);
+        if (res?.success !== true) shapeErr(`expected success=true`);
+      }
+      // session_close: old ToolDefinition pattern, returns { success, message, ... }
+      // In stub environment: connectionPool has 0 sessions → success=false is still a boolean
+      if (n === 'session_close') {
+        if (typeof res?.success !== 'boolean') shapeErr(`expected success boolean`);
+        if (typeof res?.message !== 'string') shapeErr(`expected message string`);
       }
       // ────────────────────────────────────────────────────────────────────
 

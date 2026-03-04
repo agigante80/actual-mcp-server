@@ -550,7 +550,19 @@ export async function updateCategory(id: string, fields: Partial<components['sch
 export async function deleteCategory(id: string): Promise<void> {
   observability.incrementToolCall('actual.categories.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeleteCategory(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Pre-flight: verify category exists to avoid ECONNRESET on missing id (BUG-1)
+    const categories = await withConcurrency(() =>
+      retry(() => rawGetCategories() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    const exists = (categories as any[]).some((c: any) => c.id === id);
+    if (!exists) {
+      throw new Error(
+        `Category "${id}" not found. Use actual_categories_get to list available categories.`
+      );
+    }
+    await withConcurrency(() =>
+      retry(() => rawDeleteCategory(id) as Promise<void>, { retries: 0, backoffMs: 200 })
+    );
   });
 }
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
@@ -620,7 +632,19 @@ export async function updatePayee(id: string, fields: Partial<components['schema
 export async function deletePayee(id: string): Promise<void> {
   observability.incrementToolCall('actual.payees.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeletePayee(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Pre-flight: verify payee exists to avoid ECONNRESET on missing id (BUG-2)
+    const payees = await withConcurrency(() =>
+      retry(() => rawGetPayees() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    const exists = (payees as any[]).some((p: any) => p.id === id);
+    if (!exists) {
+      throw new Error(
+        `Payee "${id}" not found. Use actual_payees_get to list available payees.`
+      );
+    }
+    await withConcurrency(() =>
+      retry(() => rawDeletePayee(id) as Promise<void>, { retries: 0, backoffMs: 200 })
+    );
   });
 }
 export async function getRules(): Promise<unknown[]> {
@@ -754,8 +778,10 @@ export async function mergePayees(targetId: string, mergeIds: string[]): Promise
 export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.payees.getPayeeRules').catch(() => {});
-    const raw = await withConcurrency(() => retry(() => rawGetPayeeRules(payeeId) as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
-    return Array.isArray(raw) ? raw : [];
+    const allRules = await withConcurrency(() => retry(() => rawGetPayeeRules(payeeId) as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
+    if (!Array.isArray(allRules)) return [];
+    // API ignores payeeId filter — apply post-filter (BUG-3)
+    return allRules.filter((r: any) => r?.payee_id === payeeId);
   });
 }
 export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {

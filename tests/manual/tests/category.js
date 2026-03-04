@@ -65,5 +65,40 @@ export async function categoryTests(client, context) {
     else console.log(`  ❌ Verify update: expected "MCP-Cat-${timestamp}-Updated", got "${found.name}"`);
   }
 
-  console.log("  (Category deletion tested in cleanup phase)");
+  // FIXED(BUG-1): actual_categories_delete with nil-UUID now returns actionable error (pre-flight check in adapter)
+  console.log("\nNEGATIVE: categories_delete with nil-UUID...");
+  try {
+    const nilRes = await callTool("actual_categories_delete", { id: '00000000-0000-0000-0000-000000000000' });
+    // The adapter throws a descriptive error — this catch handles it
+    console.log("  ⚠ Expected an error but tool returned:", JSON.stringify(nilRes).slice(0, 120));
+  } catch (err) {
+    const msg = err.message || String(err);
+    if (msg.includes('not found') && msg.includes('actual_categories_get')) {
+      console.log(`  ✓ FIXED(BUG-1): categories_delete nil-UUID returns actionable error: ${msg.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+    }
+  }
+
+  if (context.categoryId) {
+    console.log("\nDeleting test category...");
+    try {
+      await callTool("actual_categories_delete", { id: context.categoryId });
+      console.log("✓ Delete call completed");
+
+      // Verify deletion
+      const afterCats = flattenCats(await callTool("actual_categories_get", {}));
+      const stillExists = afterCats.find(c => c.id === context.categoryId);
+      if (stillExists) {
+        console.log("  ❌ Verify delete: category still present in list");
+      } else {
+        console.log("  ✓ Verify delete: category no longer in list");
+        context.categoryId = null;
+      }
+    } catch (err) {
+      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+    }
+  } else {
+    console.log("  ⚠ Skipping delete (no categoryId in context)");
+  }
 }
