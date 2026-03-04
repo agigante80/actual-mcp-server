@@ -62,6 +62,7 @@ async function expectCallError(tool, input, label) {
     schedules_update_tool,
     schedules_delete_tool,
     budgets_switch_tool,
+    payees_update_tool,
   ] = await Promise.all([
     import('../../dist/src/tools/rules_create.js').then(m => m.default),
     import('../../dist/src/tools/budget_updates_batch.js').then(m => m.default),
@@ -71,6 +72,7 @@ async function expectCallError(tool, input, label) {
     import('../../dist/src/tools/schedules_update.js').then(m => m.default),
     import('../../dist/src/tools/schedules_delete.js').then(m => m.default),
     import('../../dist/src/tools/budgets_switch.js').then(m => m.default),
+    import('../../dist/src/tools/payees_update.js').then(m => m.default),
   ]);
 
   let failures = 0;
@@ -223,6 +225,32 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(budgets_switch_tool,
     { budgetName: 'office' },
     'lowercase partial name accepted')) fail();
+
+  // ── actual_payees_update — category field (regression: must not be rejected by schema) ──
+  console.log('\n[actual_payees_update — category field]');
+
+  const VALID_PAYEE_ID = '00000000-0000-0000-0000-000000000001';
+  const VALID_CAT_ID   = '00000000-0000-0000-0000-000000000002';
+
+  if (!expectParseOk(payees_update_tool,
+    { id: VALID_PAYEE_ID, fields: { category: VALID_CAT_ID } },
+    'category UUID accepted')) fail();
+
+  if (!expectParseOk(payees_update_tool,
+    { id: VALID_PAYEE_ID, fields: { category: null } },
+    'category null accepted (clearing default category)')) fail();
+
+  if (!expectParseOk(payees_update_tool,
+    { id: VALID_PAYEE_ID, fields: { name: 'Groceries', category: VALID_CAT_ID } },
+    'name + category accepted together')) fail();
+
+  if (!expectParseError(payees_update_tool,
+    { id: VALID_PAYEE_ID, fields: { unknownField: 'bad' } },
+    'unknown field rejected by strict schema')) fail();
+
+  if (!expectParseError(payees_update_tool,
+    { id: VALID_PAYEE_ID, fields: { category: 'not-a-uuid' } },
+    'non-UUID category rejected')) fail();
 
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');
