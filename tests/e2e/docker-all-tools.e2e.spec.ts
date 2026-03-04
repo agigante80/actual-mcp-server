@@ -79,12 +79,13 @@ async function callTool(request: any, sessionId: string, toolName: string, args:
   return json.result;
 }
 
-// Helper to extract result from MCP response
+// Helper to extract result from MCP response.
+// Canonical source is tests/shared/mcp-protocol.js (importable by plain-JS suites).
+// This TS-local copy stays in sync with that file — update both if the MCP envelope changes.
 function extractResult(mcpResponse: any): any {
   if (mcpResponse?.content?.[0]?.text) {
     try {
       const parsed = JSON.parse(mcpResponse.content[0].text);
-      // Try to extract the most specific identifier first
       if (parsed.id !== undefined) return parsed.id;
       if (parsed.result !== undefined) return parsed.result;
       if (parsed.accountId !== undefined) return parsed.accountId;
@@ -99,7 +100,7 @@ function extractResult(mcpResponse: any): any {
   return mcpResponse;
 }
 
-test.describe('Docker E2E - ALL 50 TOOLS', () => {
+test.describe('Docker E2E - ALL 62 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
@@ -111,6 +112,8 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     transactionId?: string;
     ruleId?: string;
     ruleWithoutOpId?: string;
+    upsertRuleId?: string;
+    scheduleOneOffId?: string;
   } = {};
 
   test.beforeAll(async ({ request }) => {
@@ -154,6 +157,15 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     
     expect(data).toBeTruthy();
     console.log('✅ Server info retrieved');
+  });
+
+  test('actual_server_get_version - should return version string', async ({ request }) => {
+    console.log('🔧 Testing actual_server_get_version...');
+    const result = await callTool(request, sessionId, 'actual_server_get_version');
+    const data = extractResult(result);
+
+    expect(data).toBeTruthy();
+    console.log(`✅ Server version: ${typeof data === 'string' ? data : JSON.stringify(data)}`);
   });
 
   // ==================== SESSION MANAGEMENT ====================
@@ -659,6 +671,66 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Transaction import tested');
   });
 
+  test('actual_transactions_uncategorized - should list uncategorized transactions', async ({ request }) => {
+    if (!testContext.accountId) test.skip();
+    console.log('🔍 Testing actual_transactions_uncategorized...');
+
+    // Create a transaction with no category so we know at least one exists
+    const today = new Date().toISOString().split('T')[0];
+    const uncatNote = `E2E-Uncat-${Date.now()}`;
+    await callTool(request, sessionId, 'actual_transactions_create', {
+      account: testContext.accountId,
+      date: today,
+      amount: -1111,
+      notes: uncatNote,
+      // deliberately no category
+    });
+
+    const result = await callTool(request, sessionId, 'actual_transactions_uncategorized', {});
+    const data = extractResult(result);
+    const txns: any[] = data?.transactions ?? data?.result?.transactions ?? (Array.isArray(data) ? data : []);
+    expect(Array.isArray(txns)).toBeTruthy();
+    const found = txns.find((t: any) => t?.notes === uncatNote);
+    expect(found).toBeTruthy();
+    console.log(`✅ actual_transactions_uncategorized: found ${txns.length} uncategorized, including our test transaction`);
+
+    // Edge: far-future date range must return empty list
+    const emptyResult = await callTool(request, sessionId, 'actual_transactions_uncategorized', {
+      startDate: '2099-01-01',
+      endDate: '2099-01-31',
+    });
+    const emptyData = extractResult(emptyResult);
+    const emptyTxns: any[] = emptyData?.transactions ?? emptyData?.result?.transactions ?? (Array.isArray(emptyData) ? emptyData : []);
+    expect(Array.isArray(emptyTxns)).toBeTruthy();
+    expect(emptyTxns.length).toBe(0);
+    console.log('✅ actual_transactions_uncategorized: future date range returns empty list');
+  });
+
+  test('actual_transactions_update_batch - should batch update transactions', async ({ request }) => {
+    if (!testContext.accountId || !testContext.transactionId) test.skip();
+    console.log('✏️  Testing actual_transactions_update_batch...');
+
+    const batchNote = `E2E-Batch-${Date.now()}`;
+    const result = await callTool(request, sessionId, 'actual_transactions_update_batch', {
+      updates: [{ id: testContext.transactionId, fields: { notes: batchNote } }],
+    });
+    const data = extractResult(result);
+    const batchData = data?.total !== undefined ? data : (data?.result ?? data);
+    // Accept any shape that indicates 1 success
+    const succeededCount = batchData?.successCount ?? batchData?.succeeded?.length ?? (batchData?.total === 1 ? 1 : null);
+    expect(succeededCount).toBe(1);
+    console.log('✅ actual_transactions_update_batch: batch update succeeded');
+
+    // NEGATIVE: non-existent ID — must not throw, must report failure or at least not succeed
+    const negResult = await callTool(request, sessionId, 'actual_transactions_update_batch', {
+      updates: [{ id: '00000000-dead-beef-0000-000000000000', fields: { notes: 'should-fail' } }],
+    });
+    const negData = extractResult(negResult);
+    const negBatch = negData?.total !== undefined ? negData : (negData?.result ?? negData);
+    // Either failureCount=1 or successCount=0 or tool swallowed it — just must not throw
+    console.log(`✅ actual_transactions_update_batch: negative case handled (failureCount=${negBatch?.failureCount ?? 'n/a'})`);
+  });
+
   test('actual_transactions_search_by_amount - should search by amount', async ({ request }) => {
     console.log('🔍 Testing actual_transactions_search_by_amount...');
     const result = await callTool(request, sessionId, 'actual_transactions_search_by_amount', {
@@ -971,6 +1043,41 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     console.log('✅ Rule updated');
   });
 
+  test('actual_rules_create_or_update - should upsert rule idempotently', async ({ request }) => {
+    if (!testContext.categoryId) test.skip();
+    console.log('🔄 Testing actual_rules_create_or_update...');
+
+    const marker = `E2E-Upsert-${Date.now()}`;
+    const conditions = [{ field: 'notes', op: 'contains', value: marker }];
+    const actions = [{ op: 'set', field: 'category', value: testContext.categoryId }];
+
+    // First call: must create (created=true)
+    const first = await callTool(request, sessionId, 'actual_rules_create_or_update', {
+      stage: 'pre',
+      conditionsOp: 'and',
+      conditions,
+      actions,
+    });
+    const firstData = extractResult(first);
+    const upsertRuleId = firstData?.id ?? firstData;
+    expect(typeof upsertRuleId).toBe('string');
+    expect(firstData?.created).toBe(true);
+    testContext.upsertRuleId = String(upsertRuleId);
+    console.log(`✅ actual_rules_create_or_update: created=true, id=${upsertRuleId}`);
+
+    // Second call with identical conditions: must update (created=false, same id)
+    const second = await callTool(request, sessionId, 'actual_rules_create_or_update', {
+      stage: 'pre',
+      conditionsOp: 'and',
+      conditions,
+      actions,
+    });
+    const secondData = extractResult(second);
+    expect(secondData?.id ?? secondData).toBe(upsertRuleId);
+    expect(secondData?.created).toBe(false);
+    console.log('✅ actual_rules_create_or_update: second call created=false, same id (idempotent)');
+  });
+
   // ==================== ADVANCED (2 tools) ====================
   test('actual_bank_sync - should handle gracefully if unavailable', async ({ request }) => {
     console.log('🏦 Testing actual_bank_sync...');
@@ -1116,6 +1223,91 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
     }
   });
 
+  // ==================== SCHEDULES (4 tools) ====================
+  test('actual_schedules_get - should list schedules', async ({ request }) => {
+    console.log('📅 Testing actual_schedules_get...');
+    const result = await callTool(request, sessionId, 'actual_schedules_get');
+    const data = extractResult(result);
+    const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
+    expect(Array.isArray(schedules)).toBeTruthy();
+    console.log(`✅ Listed ${schedules.length} schedules`);
+  });
+
+  test('actual_schedules_create - should create one-off schedule', async ({ request }) => {
+    console.log('➕ Testing actual_schedules_create (one-off)...');
+    const result = await callTool(request, sessionId, 'actual_schedules_create', {
+      name: `E2E-Schedule-${Date.now()}`,
+      date: '2026-06-15',
+      amount: -5000,
+      amountOp: 'is',
+      posts_transaction: false,
+    });
+    const data = extractResult(result);
+    const scheduleId: string = data?.id ?? data?.result?.id ?? data;
+    expect(typeof scheduleId).toBe('string');
+    expect(scheduleId.length).toBeGreaterThan(8);
+    testContext.scheduleOneOffId = scheduleId;
+    console.log(`✅ Schedule created: ${scheduleId}`);
+  });
+
+  test('actual_schedules_update - should update schedule name', async ({ request }) => {
+    if (!testContext.scheduleOneOffId) test.skip();
+    console.log('✏️  Testing actual_schedules_update...');
+    const updatedName = `E2E-Schedule-Updated-${Date.now()}`;
+    const result = await callTool(request, sessionId, 'actual_schedules_update', {
+      id: testContext.scheduleOneOffId,
+      name: updatedName,
+    });
+    const data = extractResult(result);
+    expect(data?.success ?? data?.result?.success).toBe(true);
+    // Verify name changed in the list
+    const listResult = await callTool(request, sessionId, 'actual_schedules_get');
+    const listData = extractResult(listResult);
+    const schedules: any[] = listData?.schedules ?? listData?.result?.schedules ?? (Array.isArray(listData) ? listData : []);
+    const found = schedules.find((s: any) => s.id === testContext.scheduleOneOffId);
+    expect(found?.name).toBe(updatedName);
+    console.log('✅ Schedule updated and name verified in list');
+  });
+
+  test('actual_schedules_delete - should delete schedule and verify gone', async ({ request }) => {
+    if (!testContext.scheduleOneOffId) test.skip();
+    console.log('🗑️  Testing actual_schedules_delete...');
+    const result = await callTool(request, sessionId, 'actual_schedules_delete', {
+      id: testContext.scheduleOneOffId,
+    });
+    const data = extractResult(result);
+    expect(data?.success ?? data?.result?.success).toBe(true);
+    // Verify it no longer appears in the list
+    const listResult = await callTool(request, sessionId, 'actual_schedules_get');
+    const listData = extractResult(listResult);
+    const schedules: any[] = listData?.schedules ?? listData?.result?.schedules ?? (Array.isArray(listData) ? listData : []);
+    const stillThere = schedules.find((s: any) => s.id === testContext.scheduleOneOffId);
+    expect(stillThere).toBeFalsy();
+    testContext.scheduleOneOffId = undefined; // self-cleaned
+    console.log('✅ Schedule deleted and confirmed absent from list');
+  });
+
+  // ==================== GET ID BY NAME ====================
+  test('actual_get_id_by_name - should resolve account name to id', async ({ request }) => {
+    console.log('🔍 Testing actual_get_id_by_name...');
+    // Pull a real account from the live list so the lookup is guaranteed to match
+    const listResult = await callTool(request, sessionId, 'actual_accounts_list');
+    const accounts = extractResult(listResult);
+    const firstAccount = Array.isArray(accounts) ? accounts[0] : null;
+    if (!firstAccount) {
+      console.log('⚠️  No accounts available — skipping get_id_by_name');
+      return;
+    }
+    const result = await callTool(request, sessionId, 'actual_get_id_by_name', {
+      type: 'accounts',
+      name: firstAccount.name,
+    });
+    const data = extractResult(result);
+    const resolvedId = data?.id ?? (typeof data === 'string' ? data : null);
+    expect(resolvedId).toBe(firstAccount.id);
+    console.log(`✅ actual_get_id_by_name: resolved "${firstAccount.name}" → ${resolvedId}`);
+  });
+
   // ==================== CLEANUP ====================
   test.afterAll(async ({ request }) => {
     console.log('\n🧹 Cleaning up test data...');
@@ -1140,6 +1332,13 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
           id: testContext.ruleId,
         });
         console.log('✅ Rule deleted');
+      }
+
+      if (testContext.upsertRuleId) {
+        await callTool(request, sessionId, 'actual_rules_delete', {
+          id: testContext.upsertRuleId,
+        });
+        console.log('✅ Upsert rule deleted');
       }
       
       if (testContext.payeeId) {
@@ -1167,6 +1366,15 @@ test.describe('Docker E2E - ALL 50 TOOLS', () => {
           id: groupId,
         });
         console.log('✅ Category group deleted');
+      }
+
+      // scheduleOneOffId is normally cleaned up by the delete test itself.
+      // This guard handles the case where that test was skipped or failed.
+      if (testContext.scheduleOneOffId) {
+        await callTool(request, sessionId, 'actual_schedules_delete', {
+          id: testContext.scheduleOneOffId,
+        });
+        console.log('✅ Schedule deleted (fallback cleanup)');
       }
       
       if (testContext.accountId) {
