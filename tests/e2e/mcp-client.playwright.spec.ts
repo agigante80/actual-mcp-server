@@ -3,56 +3,12 @@ import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { waitForMCPHealth, retryRequest } from '../shared/e2e-helpers.js';
 
 // ESM-safe __dirname replacement
 const __filename = fileURLToPath(import.meta.url);
 const ROOT = path.resolve(path.dirname(__filename), '..', '..');
 const START_TIMEOUT = 60_000;  // Increased for Docker environment
-const HEALTH_CHECK_RETRIES = 10;
-const HEALTH_CHECK_DELAY_MS = 2000;
-
-// Helper function to wait for MCP server health
-async function waitForMCPHealth(request: any, url: string, maxRetries = HEALTH_CHECK_RETRIES): Promise<boolean> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const healthRes = await request.get(url);
-      if (healthRes.ok()) {
-        const healthData = await healthRes.json();
-        console.log(`[HEALTH CHECK ${i + 1}/${maxRetries}] Status:`, healthData.status);
-        if (healthData.status === 'ok') {
-          console.log('✅ MCP server is healthy and ready');
-          return true;
-        }
-      }
-    } catch (error) {
-      console.log(`[HEALTH CHECK ${i + 1}/${maxRetries}] Error:`, error instanceof Error ? error.message : String(error));
-    }
-    
-    if (i < maxRetries - 1) {
-      console.log(`⏳ Waiting ${HEALTH_CHECK_DELAY_MS}ms before next health check...`);
-      await new Promise((r) => setTimeout(r, HEALTH_CHECK_DELAY_MS));
-    }
-  }
-  return false;
-}
-
-// Helper function to retry a request
-async function retryRequest(requestFn: () => Promise<any>, maxRetries = 3, delayMs = 1000): Promise<any> {
-  let lastError;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const result = await requestFn();
-      return result;
-    } catch (error) {
-      lastError = error;
-      console.warn(`Request attempt ${i + 1}/${maxRetries} failed:`, error instanceof Error ? error.message : String(error));
-      if (i < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, delayMs * (i + 1))); // Exponential backoff
-      }
-    }
-  }
-  throw lastError;
-}
 
 test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => {
   let serverProc: ChildProcessWithoutNullStreams | null = null;

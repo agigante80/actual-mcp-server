@@ -63,6 +63,25 @@ export async function transactionTests(client, context) {
     }
   }
 
+  // FIXED(BUG-4): transactions_create with non-existent account UUID now returns actionable error
+  console.log("\nNEGATIVE T3: transactions_create with non-existent account UUID...");
+  {
+    const today = new Date().toISOString().split('T')[0];
+    const badTxn = await callTool("actual_transactions_create", {
+      account: '00000000-0000-0000-0000-000000000000',
+      date: today,
+      amount: -100,
+      notes: `MCP-T3-neg-${timestamp}`,
+    });
+    if (badTxn?.success === false && typeof badTxn?.error === 'string' && badTxn.error.includes('not found') && badTxn.error.includes('actual_accounts_list')) {
+      console.log(`  ✓ FIXED(BUG-4): transactions_create nil-UUID returns actionable error: ${badTxn.error.slice(0, 120)}`);
+    } else if (badTxn?.success === false && typeof badTxn?.error === 'string') {
+      console.log(`  ⚠ T3: error returned but message not actionable: ${badTxn.error.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ T3: unexpected response: ${JSON.stringify(badTxn).slice(0, 120)}`);
+    }
+  }
+
   // Get and update using the recovered ID
   if (context.transactionId) {
     console.log("\nUpdating transaction amount...");
@@ -108,6 +127,25 @@ export async function transactionTests(client, context) {
     }
   }
 
+  // FIXED(BUG-7): transactions_get with non-existent accountId now returns actionable error
+  console.log("\nNEGATIVE T4: transactions_get with non-existent accountId...");
+  {
+    const today = new Date().toISOString().split('T')[0];
+    const yearStart = `${new Date().getFullYear()}-01-01`;
+    const badGet = await callTool("actual_transactions_get", {
+      accountId: '00000000-0000-0000-0000-000000000000',
+      startDate: yearStart,
+      endDate: today,
+    });
+    if (typeof badGet?.error === 'string' && badGet.error.includes('not found') && badGet.error.includes('actual_accounts_list')) {
+      console.log(`  ✓ FIXED(BUG-7): transactions_get nil-UUID returns actionable error: ${badGet.error.slice(0, 120)}`);
+    } else if (typeof badGet?.error === 'string') {
+      console.log(`  ⚠ T4: error returned but message not actionable: ${badGet.error.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ T4: unexpected response: ${JSON.stringify(badGet).slice(0, 120)}`);
+    }
+  }
+
   // Filter (with correct param name and count assertion)
   console.log("\nFiltering transactions for account...");
   const filteredTxns = await callTool("actual_transactions_filter", { accountId: context.accountId });
@@ -115,20 +153,91 @@ export async function transactionTests(client, context) {
   if (filteredArr.length >= 1) console.log(`  ✓ Found ${filteredArr.length} transaction(s) for account`);
   else console.log("  ❌ Filter returned 0 transactions (expected at least 1 after create)");
 
-  // Import (empty — tests the tool is callable and returns no errors)
-  console.log("\nTesting transaction import (empty)...");
+  // Import with real data — import one transaction then read it back (T6)
+  console.log("\nTesting transaction import (with data — T6 read-back)...");
+  const importDate = new Date().toISOString().split('T')[0];
+  const importAmount = -3300; // -$33.00, distinctive value
+  const importNotes = `MCP-Import-${timestamp}`;
   const importResult = await callTool("actual_transactions_import", {
     accountId: context.accountId,
-    txs: [],
+    txs: [
+      {
+        date: importDate,
+        amount: importAmount,
+        notes: importNotes,
+      },
+    ],
   });
   const importErrors = importResult?.errors ?? importResult?.result?.errors ?? null;
   if (importErrors === null) {
-    console.log("✓ Import test completed (no errors field to assert)");
+    console.log("✓ Import call completed (errors field not present)");
   } else if (Array.isArray(importErrors) && importErrors.length === 0) {
     console.log("  ✓ Verify import: errors=[] (no import errors)");
   } else {
     console.log(`  ❌ Verify import: expected errors=[], got ${JSON.stringify(importErrors)}`);
   }
 
-  console.log("  (Transaction deletion tested in cleanup phase)");
+  // T6: read-back — confirm imported transaction is present
+  {
+    const afterImport = await callTool("actual_transactions_filter", {
+      accountId: context.accountId,
+      notes: importNotes,
+    });
+    const afterArr = Array.isArray(afterImport) ? afterImport : (afterImport.result || []);
+    const imported = afterArr.find(t => t.notes === importNotes && t.amount === importAmount);
+    if (imported) {
+      console.log(`  ✓ T6 Verify import read-back: found imported txn id="${imported.id}" amount=${imported.amount}`);
+      // Delete the imported transaction so it doesn't pollute the account
+      try {
+        await callTool("actual_transactions_delete", { id: imported.id });
+        console.log(`  ✓ Cleaned up imported transaction`);
+      } catch (_) { /* best effort */ }
+    } else if (afterArr.length >= 1) {
+      console.log(`  ⚠ T6 Verify import read-back: ${afterArr.length} txn(s) found but none matched notes+amount (may be deduplicated)`);
+    } else {
+      console.log(`  ❌ T6 Verify import read-back: no transactions found after import`);
+    }
+  }
+
+  // transactions_delete — negative UUID test then real delete + verify
+  // NOTE(BUG-8): actual_transactions_delete with nil-UUID returns {success:true} — this is a known Actual API limitation.
+  // The API does not distinguish between a successful delete and a no-op. See tool description for details.
+  console.log("\nTesting transactions_delete (negative UUID)...");
+  {
+    const nilResult = await callTool("actual_transactions_delete", {
+      id: '00000000-0000-0000-0000-000000000000',
+    });
+    // This is expected to return { success: true } — Actual's CRDT store accepts the operation silently
+    if (nilResult?.success === true) {
+      console.log("  ✓ NOTE(BUG-8): transactions_delete nil-UUID returns success:true (known API limitation — CRDT no-op)");
+    } else {
+      console.log("  ⚠ Unexpected response for nil-UUID delete:", JSON.stringify(nilResult).slice(0, 120));
+    }
+  }
+
+  if (context.transactionId) {
+    console.log("\nDeleting test transaction...");
+    try {
+      await callTool("actual_transactions_delete", { id: context.transactionId });
+      console.log("✓ Delete call completed");
+
+      // Verify deletion
+      const afterDelete = await callTool("actual_transactions_filter", {
+        accountId: context.accountId,
+        notes: `MCP-Transaction-${timestamp}`,
+      });
+      const afterArr = Array.isArray(afterDelete) ? afterDelete : (afterDelete.result || []);
+      const stillExists = afterArr.find(t => t.id === context.transactionId);
+      if (stillExists) {
+        console.log("  ❌ Verify delete: transaction still present in filter results");
+      } else {
+        console.log("  ✓ Verify delete: transaction no longer in filter results");
+        context.transactionId = null;
+      }
+    } catch (err) {
+      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+    }
+  } else {
+    console.log("  ⚠ Skipping delete (no transactionId in context)");
+  }
 }

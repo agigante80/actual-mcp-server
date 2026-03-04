@@ -210,6 +210,11 @@ export async function payeeTests(client, context) {
     const gone = (await allPayees()).find(p => p.id === payeeId2);
     if (gone) console.log(`  ❌ Verify merge: payee2 still exists (should have been merged away)`);
     else console.log(`  ✓ Verify merge: payee2 no longer in list (confirmed deleted by merge)`);
+
+    // P5: also assert the target payee (payeeId) still exists
+    const target = (await allPayees()).find(p => p.id === payeeId);
+    if (!target) console.log(`  ❌ Verify merge: target payee1 absent after merge (should still exist)`);
+    else console.log(`  ✓ Verify merge: target payee1 still present (name="${target.name}")`);
   }
 
   // Payee rules — after category was set then cleared above, expect 0 rules
@@ -218,4 +223,56 @@ export async function payeeTests(client, context) {
   const rulesArr = Array.isArray(rules) ? rules : (rules?.rules ?? rules?.result ?? null);
   if (!Array.isArray(rulesArr)) console.log("  ❌ Verify payee rules: expected array, got", typeof rulesArr);
   else console.log(`  ✓ Payee rules: ${rulesArr.length} rule(s) (expected 0 for new payee)`);
+
+  // FIXED(BUG-3): actual_payee_rules_get with non-existent payeeId now returns actionable error with empty rules array
+  // The adapter post-filters by payee_id, and the tool verifies the payee exists first.
+  console.log("\nNEGATIVE P6: payee_rules_get with non-existent payeeId...");
+  {
+    const badRules = await callTool("actual_payee_rules_get", { payeeId: "00000000-0000-0000-0000-000000000000" });
+    const hasError = typeof badRules?.error === 'string';
+    if (hasError && badRules.error.includes('not found') && badRules.error.includes('actual_payees_get')) {
+      console.log(`  ✓ FIXED(BUG-3): payee_rules_get nil-UUID returns actionable error: ${badRules.error.slice(0, 120)}`);
+    } else if (hasError) {
+      console.log(`  ⚠ P6: error returned but message not actionable: ${badRules.error.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ P6: unexpected response: ${JSON.stringify(badRules).slice(0, 120)}`);
+    }
+  }
+
+  // FIXED(BUG-2): actual_payees_delete with non-existent UUID now returns actionable error (pre-flight check in adapter)
+  console.log("\nNEGATIVE: payees_delete with nil-UUID...");
+  try {
+    const nilRes = await callTool("actual_payees_delete", { id: '00000000-0000-0000-0000-000000000000' });
+    // The adapter throws a descriptive error — this catch handles it
+    console.log("  ⚠ Expected an error but tool returned:", JSON.stringify(nilRes).slice(0, 120));
+  } catch (err) {
+    const msg = err.message || String(err);
+    if (msg.includes('not found') && msg.includes('actual_payees_get')) {
+      console.log(`  ✓ FIXED(BUG-2): payees_delete nil-UUID returns actionable error: ${msg.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+    }
+  }
+
+  if (payeeId) {
+    console.log("\nDeleting test payee...");
+    try {
+      await callTool("actual_payees_delete", { id: payeeId });
+      console.log("✓ Delete call completed");
+
+      // Verify deletion
+      const afterPayees = await allPayees();
+      const stillExists = afterPayees.find(p => p.id === payeeId);
+      if (stillExists) {
+        console.log("  ❌ Verify delete: payee still present in list");
+      } else {
+        console.log("  ✓ Verify delete: payee no longer in list");
+        context.payeeId = null;
+      }
+    } catch (err) {
+      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+    }
+  } else {
+    console.log("  ⚠ Skipping delete (payeeId not available after merge)");
+  }
 }

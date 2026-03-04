@@ -16,9 +16,21 @@ export async function budgetTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running BUDGET TESTS --");
 
+  // Ensure we have a categoryId — fetch fallback from live server if context was cleared
   if (!context.categoryId) {
-    console.log("⚠ No category available - skipping budget tests");
-    return;
+    const catData = await callTool("actual_categories_get", {});
+    const raw = catData.result || catData.categories || catData;
+    const flatCats = Array.isArray(raw)
+      ? raw.flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
+      : [];
+    const firstCat = flatCats[0];
+    if (firstCat) {
+      context.categoryId = firstCat.id;
+      console.log(`  ℹ Using existing category for budget tests: "${firstCat.name}" (${firstCat.id})`);
+    } else {
+      console.log("⚠ No category available - skipping budget tests");
+      return;
+    }
   }
 
   const currentDate = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
@@ -157,6 +169,23 @@ export async function budgetTests(client, context) {
     if (!catEntry) console.log("  ❌ Verify setAmount: category not found in month budget");
     else if (catEntry.budgeted === 50000) console.log(`  ✓ Verify setAmount: budgeted=${catEntry.budgeted} (500.00)`);
     else console.log(`  ❌ Verify setAmount: expected 50000, got ${catEntry.budgeted}`);
+  }
+
+  // FIXED(BUG-6): budgets_setAmount with non-existent categoryId now returns actionable error
+  console.log("\nNEGATIVE B4: budgets_setAmount with non-existent categoryId...");
+  {
+    const badRes = await callTool("actual_budgets_setAmount", {
+      month: currentDate,
+      categoryId: "00000000-0000-0000-0000-000000000000",
+      amount: 99999,
+    });
+    if (typeof badRes?.error === 'string' && badRes.error.includes('not found') && badRes.error.includes('actual_categories_get')) {
+      console.log(`  ✓ FIXED(BUG-6): budgets_setAmount nil-UUID returns actionable error: ${badRes.error.slice(0, 120)}`);
+    } else if (typeof badRes?.error === 'string') {
+      console.log(`  ⚠ B4: error returned but message not actionable: ${badRes.error.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ B4: unexpected response: ${JSON.stringify(badRes).slice(0, 120)}`);
+    }
   }
 
   // Carryover

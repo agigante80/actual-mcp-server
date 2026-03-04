@@ -3,7 +3,7 @@
 **Status:** Planned — v0.5.x (Q2 2026)  
 **Priority:** 🟠 Medium  
 **Effort:** 2–3 days  
-**Blocker:** None
+**Blocker:** None — Test Coverage audit complete; work order in this document's "Concrete Work Order" section
 
 ---
 
@@ -276,6 +276,48 @@ is actionable (contains a "next step" or "allowed values" hint). Report ✓/✗/
 And update the **"Adding a New Tool"** section with a note:
 
 > When implementing the Improved Error Messages feature, also update Phase 1b in `prompt-1-smoke.txt` to add a check for any new error scenario added to the 10-scenario table in `docs/feature/IMPROVED_ERROR_MESSAGES.md`.
+
+---
+
+## Concrete Work Order (from Test Coverage Audit)
+
+The following gaps were discovered during the Test Coverage — Existing Tools audit (completed v0.4.23) by running negative-path integration tests against the live server. Each entry is a `GAP(error-messages)` comment in the corresponding test file.
+
+### Delete tools — silent acceptance of non-existent IDs
+
+| Tool | nil-UUID behavior | Test file | Severity |
+|------|------------------|-----------|---------|
+| `actual_category_groups_delete` | silently returns `{"success":true}` | `category-group.js` | Low |
+| `actual_transactions_delete` | silently returns `{"success":true}` | `transaction.js` | Low |
+| `actual_rules_delete` | silently returns `{"success":true}` | `rules.js` | Low |
+
+### Delete tools — ECONNRESET server crash (CRITICAL)
+
+| Tool | behavior | Test file | Severity |
+|------|---------|-----------|---------|
+| `actual_categories_delete` | any non-existent UUID → **ECONNRESET server crash** | `category.js` | 🔴 Critical |
+| `actual_payees_delete` | any non-existent UUID → **ECONNRESET server crash** | `payee.js` | 🔴 Critical |
+
+> These two must be fixed via a try/catch or existence check in the adapter **before** the Improved Error Messages changes, as they crash the server rather than return an error.
+
+### Read / query tools — silent acceptance returning wrong data
+
+| Tool | bad-input behavior | Test file | Severity |
+|------|-------------------|-----------|---------|
+| `actual_accounts_get_balance` | nil-UUID → returns `{"balance":0}` (wrong account) | `account.js` | Medium |
+| `actual_budgets_setAmount` | nil-UUID categoryId → silently returns `{}` (no-op) | `budget.js` | Medium |
+| `actual_transactions_create` | bad accountId → returns `{"success":true,"id":null}` | `transaction.js` | High |
+| `actual_transactions_get` | bad accountId → returns empty array (no error) | `transaction.js` | Medium |
+| `actual_payee_rules_get` | nil-UUID payeeId → **returns ALL rules** (ignores filter) | `payee.js` | 🔴 High |
+| `actual_schedules_delete` | non-existent UUID → `NOT NULL constraint failed: messages_crdt.row` (not user-friendly) | `schedule.js` | Medium |
+
+### Fix priority order
+
+1. 🔴 **ECONNRESET crashes** — `categories_delete`, `payees_delete` — must be fixed first (server stability)
+2. 🔴 **Data integrity** — `payee_rules_get` returns all rules for any payeeId — filtering bug
+3. 🟠 **Silent wrong result** — `transactions_create` returns `id:null` instead of error
+4. 🟡 **Silent no-op** — `accounts_get_balance`, `budgets_setAmount`, `transactions_get`, `category_groups_delete`, `transactions_delete`, `rules_delete`
+5. 🟢 **Unfriendly message** — `schedules_delete` — error exists but not user-readable
 
 ---
 

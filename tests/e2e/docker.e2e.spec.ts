@@ -6,61 +6,19 @@
  */
 
 import { test, expect } from '@playwright/test';
-
-const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://mcp-server-test:3600';
-const HTTP_PATH = '/http';
-const HEALTH_CHECK_RETRIES = 10;
-const HEALTH_CHECK_DELAY_MS = 2000;
-
-// Helper function to wait for MCP server health with retries
-async function waitForMCPHealth(request: any, url: string, maxRetries = HEALTH_CHECK_RETRIES): Promise<boolean> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const healthRes = await request.get(url);
-      if (healthRes.ok()) {
-        const healthData = await healthRes.json();
-        console.log(`[HEALTH CHECK ${i + 1}/${maxRetries}] Status:`, healthData.status);
-        if (healthData.status === 'ok') {
-          console.log('✅ MCP server is healthy and ready');
-          return true;
-        }
-      }
-    } catch (error) {
-      console.log(`[HEALTH CHECK ${i + 1}/${maxRetries}] Error:`, error instanceof Error ? error.message : String(error));
-    }
-    
-    if (i < maxRetries - 1) {
-      console.log(`⏳ Waiting ${HEALTH_CHECK_DELAY_MS}ms before next health check...`);
-      await new Promise((r) => setTimeout(r, HEALTH_CHECK_DELAY_MS));
-    }
-  }
-  return false;
-}
-
-// Helper function to retry a request with exponential backoff
-async function retryRequest(requestFn: () => Promise<any>, maxRetries = 3, delayMs = 1000): Promise<any> {
-  let lastError;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const result = await requestFn();
-      return result;
-    } catch (error) {
-      lastError = error;
-      console.warn(`Request attempt ${i + 1}/${maxRetries} failed:`, error instanceof Error ? error.message : String(error));
-      if (i < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, delayMs * (i + 1))); // Exponential backoff
-      }
-    }
-  }
-  throw lastError;
-}
+import {
+  waitForMCPHealth,
+  retryRequest,
+  DEFAULT_MCP_SERVER_URL,
+  HTTP_PATH,
+} from '../shared/e2e-helpers.js';
 
 test.describe('Docker E2E - Full Stack Integration', () => {
   let sessionId: string | undefined;
 
   test('should initialize MCP session', async ({ request }) => {
     console.log('🔌 Initializing MCP session...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     
     const initPayload = {
       jsonrpc: '2.0',
@@ -94,13 +52,13 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     console.log('🏥 Checking MCP server health...');
     // Wait for MCP server to be fully healthy (status: 'ok')
     // Note: After initialization, it should transition from 'not-initialized' to 'ok'
-    const isHealthy = await waitForMCPHealth(request, `${MCP_SERVER_URL}/health`);
+    const isHealthy = await waitForMCPHealth(request, `${DEFAULT_MCP_SERVER_URL}/health`);
     if (!isHealthy) {
       throw new Error('MCP server did not become healthy in time. Status may still be "not-initialized".');
     }
     
     // Final health check to verify
-    const healthRes = await request.get(`${MCP_SERVER_URL}/health`);
+    const healthRes = await request.get(`${DEFAULT_MCP_SERVER_URL}/health`);
     expect(healthRes.ok()).toBeTruthy();
     const health = await healthRes.json();
     console.log('✅ MCP Server health:', health);
@@ -114,7 +72,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     }
     
     console.log('📋 Listing available tools...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const listPayload = {
       jsonrpc: '2.0',
       id: 2,
@@ -153,7 +111,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     }
     
     console.log('🔧 Testing actual_server_info tool...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const callPayload = {
       jsonrpc: '2.0',
       id: 3,
@@ -197,7 +155,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     }
     
     console.log('📁 Listing accounts...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const callPayload = {
       jsonrpc: '2.0',
       id: 4,
@@ -239,7 +197,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     }
     
     console.log('➕ Creating test account...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const testAccountName = `E2E-Test-Account-${Date.now()}`;
     
     const callPayload = {
@@ -301,7 +259,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     }
     
     console.log('🔄 Testing session persistence...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     
     // Make multiple calls with the same session - should all work
     for (let i = 0; i < 3; i++) {
@@ -337,7 +295,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
   test('should verify Docker build includes all required files', async ({ request }) => {
     console.log('📦 Verifying Docker build...');
     // This test verifies the Docker image was built correctly
-    const healthRes = await retryRequest(() => request.get(`${MCP_SERVER_URL}/health`));
+    const healthRes = await retryRequest(() => request.get(`${DEFAULT_MCP_SERVER_URL}/health`));
     const health = await healthRes.json();
     
     // Should have connection pool stats (proves actual-adapter.ts is working)
@@ -356,7 +314,7 @@ test.describe('Docker E2E - Error Handling', () => {
   test.beforeAll(async ({ request }) => {
     console.log('🔧 Initializing session for error handling tests...');
     // Initialize session for error tests
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const initPayload = {
       jsonrpc: '2.0',
       id: 1,
@@ -384,7 +342,7 @@ test.describe('Docker E2E - Error Handling', () => {
     }
     
     console.log('⚠️  Testing invalid tool name handling...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const callPayload = {
       jsonrpc: '2.0',
       id: 100,
@@ -419,7 +377,7 @@ test.describe('Docker E2E - Error Handling', () => {
     }
     
     console.log('⚠️  Testing invalid arguments handling...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const callPayload = {
       jsonrpc: '2.0',
       id: 101,

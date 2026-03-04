@@ -16,6 +16,22 @@ export async function rulesTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running RULES TESTS --");
 
+  // Ensure we have a categoryId for rule actions — fetch one from the live server if context is null
+  if (!context.categoryId) {
+    const catData = await callTool("actual_categories_get", {});
+    const raw = catData.result || catData.categories || catData;
+    const flatCats = Array.isArray(raw)
+      ? raw.flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
+      : [];
+    const firstCat = flatCats[0];
+    if (firstCat) {
+      context.categoryId = firstCat.id;
+      console.log(`  ℹ Using existing category for rule actions: "${firstCat.name}" (${firstCat.id})`);
+    } else {
+      console.log("  ⚠ No category available for rule action values — rules test may fail");
+    }
+  }
+
   // List existing rules
   console.log("\nGetting all rules...");
   const rulesData = await callTool("actual_rules_get", {});
@@ -101,5 +117,46 @@ export async function rulesTests(client, context) {
     }
   }
 
-  console.log("  (Rule deletion tested in cleanup phase)");
+  // rules_delete — negative UUID test then real delete(s) + verify
+  // FIXED(BUG-9): actual_rules_delete with nil-UUID now returns { success: false, error } actionable error
+  console.log("\nTesting rules_delete (negative UUID)...");
+  try {
+    const nilResult = await callTool("actual_rules_delete", {
+      id: '00000000-0000-0000-0000-000000000000',
+    });
+    const success = nilResult?.success ?? nilResult?.result?.success;
+    if (success === false || nilResult?.error) {
+      console.log("  ✓ Negative nil-UUID delete: returned error/false correctly");
+    } else {
+      console.log("  ⚠ Negative nil-UUID delete: unexpectedly accepted (result:", JSON.stringify(nilResult).slice(0, 120), ")");
+    }
+  } catch (err) {
+    console.log("  ✓ Negative nil-UUID delete: threw as expected:", err.message?.slice(0, 80));
+  }
+
+  // Helper to list all rule IDs
+  async function allRuleIds() {
+    const rd = await callTool("actual_rules_get", {});
+    const arr = rd.rules || rd.result || rd || [];
+    return Array.isArray(arr) ? arr.map(r => r.id) : [];
+  }
+
+  for (const [label, idKey] of [['ruleId', 'ruleId'], ['ruleWithoutOpId', 'ruleWithoutOpId']]) {
+    const id = context[idKey];
+    if (!id) { console.log(`  ⚠ Skipping delete of ${label} (not in context)`); continue; }
+    console.log(`\nDeleting ${label} (${id})...`);
+    try {
+      await callTool("actual_rules_delete", { id });
+      console.log("✓ Delete call completed");
+      const ids = await allRuleIds();
+      if (ids.includes(id)) {
+        console.log(`  ❌ Verify delete: ${label} still present in rules list`);
+      } else {
+        console.log(`  ✓ Verify delete: ${label} no longer in rules list`);
+        context[idKey] = null;
+      }
+    } catch (err) {
+      console.log(`  ❌ Delete of ${label} threw unexpectedly:`, err.message?.slice(0, 120));
+    }
+  }
 }

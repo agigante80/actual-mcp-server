@@ -1,7 +1,7 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.4.23  
+**Version:** 0.4.24  
 **Last Updated:** 2026-03-03
 
 ---
@@ -317,7 +317,7 @@ actual-mcp-server/
 │   │   ├── streamable-http.js    # Compiled JS companion
 │   │   └── streamable-http.d.ts  # Type definitions
 │   │
-│   ├── tools/                    # MCP tool definitions (51 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (62 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -346,12 +346,20 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (51 tools)
-│   │   └── run-docker-e2e.sh              # Docker test orchestrator
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 62 tools)
+│   │   ├── run-docker-e2e.sh              # Docker test orchestrator
+│   │   └── suites/                        # Domain suite registration functions (one file per domain)
+│   │       ├── shared-context.ts          # SharedState / TestContext types
+│   │       ├── server.ts / accounts.ts / categories.ts / payees.ts
+│   │       ├── transactions.ts / budgets.ts / rules.ts / schedules.ts
+│   │       └── advanced.ts / deletes.ts
 │   ├── unit/                     # Unit tests (offline, stub adapter)
 │   │   ├── transactions_create.test.js
 │   │   ├── generated_tools.smoke.test.js
 │   │   └── schema_validation.test.js
+│   ├── shared/                   # Shared test utilities
+│   │   ├── e2e-helpers.ts        # TS helpers for E2E: waitForMCPHealth, retryRequest, callTool, extractResult
+│   │   └── mcp-protocol.js       # JS mirror of extractResult (used by manual integration suite)
 │   └── manual/                   # Live integration tests (real Actual Budget)
 │
 ├── scripts/                      # Build and utility scripts (see scripts/README.md)
@@ -403,7 +411,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 51 tools with MCP capabilities
+   └─> Registers 62 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance
@@ -451,7 +459,7 @@ npm run dev -- --test-actual-connection
 
 # Test all tool implementations
 npm run dev -- --test-actual-tools
-  └─> Runs smoke tests for all 51 tools
+  └─> Runs smoke tests for all 62 tools
 
 # Test MCP client interaction
 npm run dev -- --http --test-mcp-client
@@ -667,7 +675,7 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 ### Core Dependencies
 
 **Production Runtime:**
-- **@actual-app/api** (^26.3.0): Official Actual Budget API client
+- **@actual-app/api** (^26.2.1): Official Actual Budget API client
   - Purpose: Core integration with Actual Budget server
   - License: MIT
   - Status: ✅ Current, actively maintained

@@ -209,13 +209,17 @@ export async function scheduleTests(client, context) {
     }
   }
 
-  // ── 10. Negative: delete non-existent UUID ────────────────────────────────
+  // ── 10. FIXED(BUG-11): Deleting non-existent schedule UUID now returns actionable error ──────────────────────
   console.log('\nNEGATIVE: Deleting non-existent schedule UUID...');
-  try {
-    await callTool('actual_schedules_delete', { id: NON_EXISTENT_UUID });
-    console.log(`  ⚠ expected an error for non-existent UUID, but call succeeded`);
-  } catch (err) {
-    console.log(`  ✓ correctly rejected non-existent UUID: ${err.message}`);
+  {
+    const nilResult = await callTool('actual_schedules_delete', { id: NON_EXISTENT_UUID });
+    if (nilResult?.success === false && typeof nilResult?.error === 'string' && nilResult.error.includes('not found') && nilResult.error.includes('actual_schedules_get')) {
+      console.log(`  ✓ FIXED(BUG-11): schedules_delete nil-UUID returns actionable error: ${nilResult.error.slice(0, 120)}`);
+    } else if (nilResult?.success === false && typeof nilResult?.error === 'string') {
+      console.log(`  ⚠ Error returned but message not actionable: ${nilResult.error.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ Unexpected response for nil-UUID delete: ${JSON.stringify(nilResult).slice(0, 120)}`);
+    }
   }
 
   console.log('\n  (Schedule cleanup complete — all MCP-Schedule-* entries removed above)');
