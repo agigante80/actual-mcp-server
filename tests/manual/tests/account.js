@@ -68,6 +68,19 @@ export async function accountTests(client, context) {
   if (balanceVal === 0) console.log(`  ✓ Balance: ${balanceVal} (expected 0 for new account)`);
   else console.log(`  ❌ Balance: expected 0 for new account, got ${balanceVal}`);
 
+  // FIXED(BUG-5): accounts_get_balance with non-existent id now returns actionable error
+  console.log("\nNEGATIVE A4: accounts_get_balance with non-existent id...");
+  {
+    const badBalance = await callTool("actual_accounts_get_balance", { id: "00000000-0000-0000-0000-000000000000" });
+    if (typeof badBalance?.error === 'string' && badBalance.error.includes('not found') && badBalance.error.includes('actual_accounts_list')) {
+      console.log(`  ✓ FIXED(BUG-5): accounts_get_balance nil-UUID returns actionable error: ${badBalance.error.slice(0, 120)}`);
+    } else if (typeof badBalance?.error === 'string') {
+      console.log(`  ⚠ A4: error returned but message not actionable: ${badBalance.error.slice(0, 120)}`);
+    } else {
+      console.log(`  ⚠ A4: unexpected response: ${JSON.stringify(badBalance).slice(0, 120)}`);
+    }
+  }
+
   // REGRESSION: multi-field update
   console.log("\nREGRESSION: Updating multiple account fields (name, offbudget)...");
   const updatedName = accountName + "-Updated";
