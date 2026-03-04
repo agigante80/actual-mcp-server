@@ -171,20 +171,24 @@ export async function budgetTests(client, context) {
     else console.log(`  ❌ Verify setAmount: expected 50000, got ${catEntry.budgeted}`);
   }
 
-  // FIXED(BUG-6): budgets_setAmount with non-existent categoryId now returns actionable error
+  // B4: budgets_setAmount with non-existent categoryId — API may reject or throw
+  // Note: Pre-flight category check was removed (caused API session mixing that broke writes)
+  // Now relies on the Actual API to handle invalid category IDs
   console.log("\nNEGATIVE B4: budgets_setAmount with non-existent categoryId...");
   {
-    const badRes = await callTool("actual_budgets_setAmount", {
-      month: currentDate,
-      categoryId: "00000000-0000-0000-0000-000000000000",
-      amount: 99999,
-    });
-    if (typeof badRes?.error === 'string' && badRes.error.includes('not found') && badRes.error.includes('actual_categories_get')) {
-      console.log(`  ✓ FIXED(BUG-6): budgets_setAmount nil-UUID returns actionable error: ${badRes.error.slice(0, 120)}`);
-    } else if (typeof badRes?.error === 'string') {
-      console.log(`  ⚠ B4: error returned but message not actionable: ${badRes.error.slice(0, 120)}`);
-    } else {
-      console.log(`  ⚠ B4: unexpected response: ${JSON.stringify(badRes).slice(0, 120)}`);
+    try {
+      const badRes = await callTool("actual_budgets_setAmount", {
+        month: currentDate,
+        categoryId: "00000000-0000-0000-0000-000000000000",
+        amount: 99999,
+      });
+      if (typeof badRes?.error === 'string') {
+        console.log(`  ✓ B4: error returned for nil-UUID categoryId: ${badRes.error.slice(0, 120)}`);
+      } else {
+        console.log(`  ⚠ B4: unexpected response (API may have accepted nil UUID): ${JSON.stringify(badRes).slice(0, 120)}`);
+      }
+    } catch (e) {
+      console.log(`  ✓ B4: API rejected nil-UUID categoryId (threw): ${String(e).slice(0, 120)}`);
     }
   }
 
