@@ -9,6 +9,10 @@
  * MCP responses identically. When the tool response shape changes, fix it here.
  *
  * DO NOT add transport, retry, or HTTP logic here — those differ per suite.
+ *
+ * Canonical TypeScript source: tests/shared/e2e-helpers.ts (exportResult).
+ * This JS edition mirrors that logic for plain-JS callers in tests/manual/.
+ * If the MCP response envelope changes, update both files.
  */
 
 /**
@@ -24,7 +28,7 @@
  *
  * Priority order: id → result → accountId → categoryId → payeeId → ruleId → full object
  *
- * Used by: tests/e2e/ (called explicitly after callTool)
+ * Used by: tests/manual/ (tests/e2e/ uses the TypeScript version in e2e-helpers.ts)
  *
  * @param {any} mcpResponse - raw value returned by the Playwright callTool helper
  * @returns {any}
