@@ -1,0 +1,160 @@
+name: Auto Release on Dependency Update
+
+# -----------------------------------------------------------------------------
+# TRIGGER: workflow_run (NOT push)
+#
+# Previously this workflow fired on every push to main that touched package.json,
+# which meant it ran BEFORE CI had a chance to validate the dependency update.
+# That caused v0.4.23 to be released even though lint and tests were failing.
+#
+# Now it only fires once the CI/CD Pipeline workflow has COMPLETED SUCCESSFULLY
+# on main. If CI fails the job condition `conclusion == 'success'` stops
+# everything immediately — no version bump, no release, no tag.
+# -----------------------------------------------------------------------------
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-release:
+    name: Auto Version Bump & Release
+    runs-on: ubuntu-latest
+
+    # Guard: skip entirely when the upstream CI/CD pipeline did not succeed.
+    # This is the primary safeguard against releasing broken code.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          # Check out the exact commit that CI validated, not just current HEAD.
+          # This is important if main receives additional commits while CI runs.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if dependency update
+        id: check-update
+        run: |
+          # Only auto-release when this was an @actual-app/api dependency update.
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -q "@actual-app/api"; then
+            echo "is_dependency_update=true" >> $GITHUB_OUTPUT
+            echo "✅ Detected @actual-app/api dependency update — proceeding with release"
+          else
+            echo "is_dependency_update=false" >> $GITHUB_OUTPUT
+            echo "⏭️  Not a dependency update commit, skipping auto-release"
+          fi
+      
+      - name: Setup Node.js
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      
+      - name: Get current version
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        id: current-version
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          echo "version=$CURRENT" >> $GITHUB_OUTPUT
+          echo "Current version: $CURRENT"
+      
+      - name: Bump patch version
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        id: bump
+        run: |
+          npm run version:bump -- patch
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Bumped version to $NEW_VERSION"
+      
+      - name: Get @actual-app/api version
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        id: actual-version
+        run: |
+          ACTUAL_VERSION=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
+          echo "version=$ACTUAL_VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Commit version bump
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add VERSION package.json
+          git commit -m "chore(release): bump version to ${{ steps.bump.outputs.new_version }}"
+          git tag -a "v${{ steps.bump.outputs.new_version }}" -m "Release v${{ steps.bump.outputs.new_version }} - Auto-release for @actual-app/api ${{ steps.actual-version.outputs.version }}"
+          git push origin main
+          git push origin "v${{ steps.bump.outputs.new_version }}"
+          echo "✅ Pushed version bump and tag"
+      
+      - name: Create GitHub Release
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          name: v${{ steps.bump.outputs.new_version }}
+          body: |
+            ## 🤖 Automated Dependency Update Release
+
+            This release was automatically created following a **verified** dependency update.
+            All CI/CD checks (TypeScript compilation, lint, unit tests) passed before this
+            release was created.
+
+            ### Changes
+            - ⬆️ Upgraded `@actual-app/api` to version `${{ steps.actual-version.outputs.version }}`
+            - 🔢 Version bumped from `${{ steps.current-version.outputs.version }}` to `${{ steps.bump.outputs.new_version }}`
+
+            ### What's Updated
+            - Actual Budget API integration updated to latest version
+            - All 62 MCP tools validated with new API version
+            - Docker images rebuilt and published
+
+            ### Testing
+            ✅ All CI/CD checks passed (TypeScript compilation + unit tests)
+            ✅ Lint and tool-coverage checks passed
+            ✅ Auto-release only triggered after successful CI run
+            
+            ---
+            
+            **🚀 Docker Images Published**
+            - `agigante80/actual-mcp-server:${{ steps.bump.outputs.new_version }}`
+            - `agigante80/actual-mcp-server:latest`
+            
+            **📦 npm Package**
+            - [@actual-app/api@${{ steps.actual-version.outputs.version }}](https://www.npmjs.com/package/@actual-app/api/v/${{ steps.actual-version.outputs.version }})
+            
+            ---
+            🤖 Automated release created by dependency update workflow
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Summary
+        if: steps.check-update.outputs.is_dependency_update == 'true'
+        run: |
+          echo "### 🎉 Auto-Release Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ steps.current-version.outputs.version }} → ${{ steps.bump.outputs.new_version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **@actual-app/api:** ${{ steps.actual-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release:** [v${{ steps.bump.outputs.new_version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.bump.outputs.new_version }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Docker images will be built and published by CI/CD pipeline" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary (skipped)
+        if: steps.check-update.outputs.is_dependency_update == 'false'
+        run: |
+          echo "### ⏭️ Auto-Release Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "CI passed, but this commit is not a dependency update — no release created." >> $GITHUB_STEP_SUMMARY
