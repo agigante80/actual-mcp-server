@@ -13,6 +13,7 @@
  */
 
 import fetch from 'node-fetch';
+import { unwrapToolResult } from '../shared/mcp-protocol.js';
 
 /**
  * Create a stateful MCP client.
@@ -156,7 +157,7 @@ export function createClient({ url, rl }) {
       if (textContent) {
         try {
           const parsed = JSON.parse(textContent);
-          return parsed.result !== undefined ? parsed.result : parsed;
+          return unwrapToolResult(parsed);
         } catch {
           return textContent;
         }
