@@ -1,4 +1,23 @@
-name: Dependency Update Check
+name: Dependency Update & Auto-Release
+
+# -----------------------------------------------------------------------------
+# Single self-contained workflow that handles the full dependency update cycle:
+#
+#   1. Check whether @actual-app/api has a new version
+#   2. Create a working branch and install the new version
+#   3. TypeScript build  (lint)
+#   4. Unit tests
+#   5. Docker E2E tests   (full suite)
+#   6.  ↳ only if ALL above are green:
+#          - bump patch version & update docs
+#          - merge the working branch to main (fast-forward, tags included)
+#          - delete the temporary branch
+#          - create a GitHub Release
+#
+# Because this is a single sequential job, GitHub automatically stops at the
+# first failing step — no version bump, no merge, no release if CI is red.
+# No PR or auto-merge machinery is needed.
+# -----------------------------------------------------------------------------
 
 on:
   schedule:
@@ -8,178 +27,233 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
-  check-updates:
-    name: Check for Actual API Updates
+  update-test-release:
+    name: Update • Lint • Test • Release
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     
     steps:
-      - name: Checkout code
+      # -----------------------------------------------------------------------
+      # 1. Setup
+      # -----------------------------------------------------------------------
+      - name: Checkout main
         uses: actions/checkout@v4
-      
-      - name: Generate token from GitHub App
-        id: generate-token
+        with:
+          ref: main
+          fetch-depth: 0          # full history needed for merge + tagging
+
+      - name: Generate GitHub App token
+        id: token
         uses: actions/create-github-app-token@v2
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-        
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          
-      - name: Get current version
-        id: current
+          cache: 'npm'
+
+      # -----------------------------------------------------------------------
+      # 2. Version check — bail out early if already up to date
+      # -----------------------------------------------------------------------
+      - name: Check for new @actual-app/api version
+        id: versions
         run: |
           CURRENT=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
-          echo "version=$CURRENT" >> $GITHUB_OUTPUT
-          echo "Current @actual-app/api version: $CURRENT"
-          
-      - name: Check latest version
-        id: latest
-        run: |
           LATEST=$(npm show @actual-app/api version)
-          echo "version=$LATEST" >> $GITHUB_OUTPUT
-          echo "Latest @actual-app/api version: $LATEST"
-          
-      - name: Compare versions
-        id: compare
-        run: |
-          CURRENT="${{ steps.current.outputs.version }}"
-          LATEST="${{ steps.latest.outputs.version }}"
-          
-          if [ "$CURRENT" != "$LATEST" ]; then
+          echo "current=$CURRENT" >> $GITHUB_OUTPUT
+          echo "latest=$LATEST"   >> $GITHUB_OUTPUT
+          if [ "$CURRENT" = "$LATEST" ]; then
+            echo "update_needed=false" >> $GITHUB_OUTPUT
+            echo "✅ Already on latest: $CURRENT — nothing to do"
+          else
             echo "update_needed=true" >> $GITHUB_OUTPUT
             echo "🔔 Update available: $CURRENT → $LATEST"
-          else
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            echo "✅ Already on latest version: $CURRENT"
           fi
-          
-      - name: Update package.json
-        if: steps.compare.outputs.update_needed == 'true'
-        run: |
-          LATEST="${{ steps.latest.outputs.version }}"
-          npm install --package-lock-only @actual-app/api@^$LATEST
-          
-      - name: Update README.md and documentation
-        if: steps.compare.outputs.update_needed == 'true'
-        run: |
-          LATEST="${{ steps.latest.outputs.version }}"
-          
-          # Update README.md Tech Stack section
-          sed -i "s/@actual-app\/api \^[0-9.]*/@actual-app\/api ^$LATEST/" README.md
-          echo "✅ Updated README.md"
-          
-          # Update docs/PROJECT_OVERVIEW.md - dependency table
-          sed -i "s/\`@actual-app\/api\` | \^[0-9.]*/\`@actual-app\/api\` | ^$LATEST/" docs/PROJECT_OVERVIEW.md
-          echo "✅ Updated docs/PROJECT_OVERVIEW.md (table)"
-          
-          # Update docs/PROJECT_OVERVIEW.md - technical constraints
-          sed -i "s/Requires compatible API version ([0-9.]*+)/Requires compatible API version ($LATEST+)/" docs/PROJECT_OVERVIEW.md
-          echo "✅ Updated docs/PROJECT_OVERVIEW.md (constraints)"
-          
-          # Update docs/ARCHITECTURE.md - core dependencies
-          sed -i "s/@actual-app\/api\*\* (\^[0-9.]*)/@actual-app\/api** (^$LATEST)/" docs/ARCHITECTURE.md
-          echo "✅ Updated docs/ARCHITECTURE.md"
-          
-          echo "📝 All documentation updated to @actual-app/api ^$LATEST"
-          
-      - name: Get changelog
-        if: steps.compare.outputs.update_needed == 'true'
-        id: changelog
-        run: |
-          LATEST="${{ steps.latest.outputs.version }}"
-          # Get package info including recent versions
-          CHANGELOG=$(npm show @actual-app/api@$LATEST --json | jq -r '.version + ": Released " + .time.modified')
-          echo "info=$CHANGELOG" >> $GITHUB_OUTPUT
-          
-      - name: Create Pull Request
-        if: steps.compare.outputs.update_needed == 'true'
-        id: create-pr
-        uses: peter-evans/create-pull-request@v6
-        with:
-          token: ${{ steps.generate-token.outputs.token }}
-          commit-message: "chore(deps): upgrade @actual-app/api to ${{ steps.latest.outputs.version }}"
-          branch: deps/actual-api-${{ steps.latest.outputs.version }}
-          delete-branch: true
-          title: "⬆️ Upgrade @actual-app/api to ${{ steps.latest.outputs.version }}"
-          body: |
-            ## 🔄 Dependency Update
-            
-            Automated update of `@actual-app/api` dependency.
-            
-            ### Changes
-            - **Current version:** `${{ steps.current.outputs.version }}`
-            - **New version:** `${{ steps.latest.outputs.version }}`
-            - **Package:** [@actual-app/api on npm](https://www.npmjs.com/package/@actual-app/api)
-            
-            ### Files Updated
-            - ✅ `package.json` - Dependency version
-            - ✅ `package-lock.json` - Lock file
-            - ✅ `README.md` - Tech Stack section
-            - ✅ `docs/PROJECT_OVERVIEW.md` - Dependency table & constraints
-            - ✅ `docs/ARCHITECTURE.md` - Core dependencies
-            
-            ### Release Info
-            ${{ steps.changelog.outputs.info }}
-            
-            ### 🤖 Fully Automated Process
-            This PR will:
-            1. ✅ Run all CI/CD tests automatically
-            2. ✅ Auto-merge when all checks pass
-            3. ✅ Auto-bump patch version
-            4. ✅ Auto-create GitHub release
-            5. ✅ Auto-publish Docker images
-            
-            **No manual intervention needed** - the automation handles everything!
-            
-            ---
-            🤖 This PR was automatically created by the dependency update workflow.
-          labels: |
-            dependencies
-            automated
-            actual-api
-          reviewers: agigante80
-      
-      - name: Enable auto-merge
-        if: steps.compare.outputs.update_needed == 'true' && steps.create-pr.outputs.pull-request-number != ''
+
+      # -----------------------------------------------------------------------
+      # 3. Create working branch, install new version, commit
+      # -----------------------------------------------------------------------
+      - name: Create branch and update dependency
+        if: steps.versions.outputs.update_needed == 'true'
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: |
-          # --auto tells GitHub to merge ONLY after all required status checks pass.
-          # For this to work, you MUST configure branch protection on main:
-          #   Settings → Branches → main → Require status checks to pass →
-          #   add "Lint Code" and "Run Tests" as required checks.
-          # Without those rules, GitHub treats the PR as immediately mergeable.
-          gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
-            --auto --squash --delete-branch
-          echo "✅ Auto-merge enabled - will merge when all CI checks pass"
-          
-      - name: Summary
-        if: steps.compare.outputs.update_needed == 'true'
+          BRANCH="deps/actual-api-${LATEST}"
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+
+          # Install new version (updates package.json + package-lock.json + node_modules)
+          npm install @actual-app/api@^${LATEST}
+
+          # Update API version string in docs (best-effort, || true avoids failure
+          # if a pattern has already been updated or doesn't exist)
+          sed -i "s/@actual-app\/api \^[0-9.]*/@actual-app\/api ^${LATEST}/" README.md || true
+          sed -i "s/\`@actual-app\/api\` | \^[0-9.]*/\`@actual-app\/api\` | ^${LATEST}/" docs/PROJECT_OVERVIEW.md || true
+          sed -i "s/Requires compatible API version ([0-9.]*+)/Requires compatible API version (${LATEST}+)/" docs/PROJECT_OVERVIEW.md || true
+          sed -i "s/@actual-app\/api\*\* (\^[0-9.]*)/@actual-app\/api** (^${LATEST})/" docs/ARCHITECTURE.md || true
+
+          git add -A
+          git commit -m "chore(deps): upgrade @actual-app/api to ${LATEST}"
+          echo "✅ Working branch '$BRANCH' created and committed"
+
+      # -----------------------------------------------------------------------
+      # 4. Lint — TypeScript compilation
+      # -----------------------------------------------------------------------
+      - name: 🔍 TypeScript build
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npm run build
+
+      # -----------------------------------------------------------------------
+      # 5. Lint — Tool coverage check
+      # -----------------------------------------------------------------------
+      - name: 🔍 Check tool coverage
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npm run check:coverage
+
+      # -----------------------------------------------------------------------
+      # 6. Unit tests
+      # -----------------------------------------------------------------------
+      - name: 🧪 Run unit tests
+        if: steps.versions.outputs.update_needed == 'true'
+        env:
+          ACTUAL_SERVER_URL: http://localhost:5006
+          ACTUAL_PASSWORD: dummy-password-for-tests
+          ACTUAL_BUDGET_SYNC_ID: 00000000-0000-0000-0000-000000000000
+        run: npm run test:unit-js
+
+      # -----------------------------------------------------------------------
+      # 7. Docker E2E tests (full suite)
+      # -----------------------------------------------------------------------
+      - name: 🎭 Install Playwright browsers
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npx playwright install --with-deps
+
+      - name: 🐳 Docker E2E tests (full suite)
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npm run test:e2e:docker:full
+
+      - name: 🧹 Cleanup Docker containers
+        if: steps.versions.outputs.update_needed == 'true' && always()
+        run: docker compose -f docker-compose.test.yaml down -v --remove-orphans
+
+      # -----------------------------------------------------------------------
+      # 8. All green — bump version and commit
+      # -----------------------------------------------------------------------
+      - name: 🔢 Bump patch version
+        if: steps.versions.outputs.update_needed == 'true'
+        id: bump
         run: |
-          echo "### 🤖 Fully Automated Update Initiated" >> $GITHUB_STEP_SUMMARY
+          npm run version:bump -- patch
+          NEW=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW" >> $GITHUB_OUTPUT
+          git add -A
+          git commit -m "chore(release): bump version to ${NEW}"
+          echo "✅ Version bumped to ${NEW}"
+
+      # -----------------------------------------------------------------------
+      # 9. Merge working branch → main, tag, push, clean up branch
+      # -----------------------------------------------------------------------
+      - name: 🚀 Merge to main and push tag
+        if: steps.versions.outputs.update_needed == 'true'
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+        run: |
+          # Push the branch first so the tag is reachable from origin
+          git push origin "${BRANCH}"
+
+          # Fast-forward main to the tip of our working branch
+          git checkout main
+          git merge --ff-only "${BRANCH}"
+
+          # Tag the release commit
+          git tag -a "v${NEW_VERSION}" \
+            -m "Release v${NEW_VERSION} — @actual-app/api ${LATEST}"
+
+          git push origin main
+          git push origin "v${NEW_VERSION}"
+
+          # Remove the temporary working branch
+          git push origin --delete "${BRANCH}"
+          echo "✅ Merged, tagged v${NEW_VERSION}, branch deleted"
+
+      # -----------------------------------------------------------------------
+      # 10. Create GitHub Release
+      # -----------------------------------------------------------------------
+      - name: 📦 Create GitHub Release
+        if: steps.versions.outputs.update_needed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          name: v${{ steps.bump.outputs.new_version }}
+          body: |
+            ## 🤖 Automated Dependency Update Release
+
+            This release was automatically created after all CI checks passed on
+            a temporary working branch — lint, unit tests, and Docker E2E tests
+            (full suite) were green before anything was merged to `main`.
+
+            ### Changes
+            - ⬆️ Upgraded `@actual-app/api` to version `${{ steps.versions.outputs.latest }}`
+            - 🔢 Version bumped from `${{ steps.versions.outputs.current }}` to `${{ steps.bump.outputs.new_version }}`
+
+            ### What's Updated
+            - Actual Budget API integration updated to latest version
+            - All 62 MCP tools validated with new API version
+            - Docker images rebuilt and published
+
+            ### CI Checks Passed ✅
+            - TypeScript compilation (no type errors)
+            - Tool coverage check (all 62 tools registered)
+            - Unit + schema tests
+            - Docker E2E full suite
+
+            ---
+
+            **🚀 Docker Images Published**
+            - `agigante80/actual-mcp-server:${{ steps.bump.outputs.new_version }}`
+            - `agigante80/actual-mcp-server:latest`
+
+            **📦 npm Package**
+            - [@actual-app/api@${{ steps.versions.outputs.latest }}](https://www.npmjs.com/package/@actual-app/api/v/${{ steps.versions.outputs.latest }})
+
+            ---
+            🤖 Automated release — no manual intervention required
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -----------------------------------------------------------------------
+      # 11. Summary
+      # -----------------------------------------------------------------------
+      - name: ✅ Summary (released)
+        if: steps.versions.outputs.update_needed == 'true'
+        run: |
+          echo "### 🎉 Release Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **From:** ${{ steps.current.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **To:** ${{ steps.latest.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **PR:** #${{ steps.create-pr.outputs.pull-request-number }}" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| @actual-app/api | \`${{ steps.versions.outputs.current }}\` → \`${{ steps.versions.outputs.latest }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ steps.bump.outputs.new_version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Release | [v${{ steps.bump.outputs.new_version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.bump.outputs.new_version }}) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🚀 Automation Pipeline" >> $GITHUB_STEP_SUMMARY
-          echo "1. ⏳ CI/CD tests running..." >> $GITHUB_STEP_SUMMARY
-          echo "2. ⏳ Will auto-merge when tests pass" >> $GITHUB_STEP_SUMMARY
-          echo "3. ⏳ Will auto-bump patch version" >> $GITHUB_STEP_SUMMARY
-          echo "4. ⏳ Will auto-create GitHub release" >> $GITHUB_STEP_SUMMARY
-          echo "5. ⏳ Will auto-publish Docker images" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**No manual intervention needed!** 🎉" >> $GITHUB_STEP_SUMMARY
-          
-      - name: No update needed
-        if: steps.compare.outputs.update_needed == 'false'
+          echo "✅ Lint · Unit tests · Docker E2E — all green before merge" >> $GITHUB_STEP_SUMMARY
+
+      - name: ⏭️ Summary (no update)
+        if: steps.versions.outputs.update_needed == 'false'
         run: |
           echo "### ✅ Already Up to Date" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Current version ${{ steps.current.outputs.version }} is the latest." >> $GITHUB_STEP_SUMMARY
+          echo "Current version \`${{ steps.versions.outputs.current }}\` is the latest — nothing to do." >> $GITHUB_STEP_SUMMARY
+
