@@ -2,9 +2,12 @@
  * tests/payee.js
  *
  * PAYEE TESTS — create, update, merge payees; get payee rules.
- * Includes regression test for `category` field on payee update.
+ * Includes full coverage of the category field on payee update:
+ *   - category creates a "set category" rule for the payee
+ *   - setting category twice does NOT create a duplicate rule (update path)
+ *   - setting category to null removes the rule (clear path)
  *
- * Reads from context:  categoryId (optional — used for regression test)
+ * Reads from context:  categoryId (required for category tests)
  * Writes to context:   payeeId, payeeId2 (cleared to null after merge)
  */
 
@@ -52,16 +55,111 @@ export async function payeeTests(client, context) {
     else console.log(`  ❌ Verify payee2 create: expected "MCP-Payee2-${timestamp}", got "${found.name}"`);
   }
 
-  // REGRESSION: set default category on payee
+  // ── Category-via-rules: full lifecycle ─────────────────────────────────
+  // The payees table has no 'category' column. The adapter stores it as a
+  // "payee is X → set category" rule. We test create, no-dup update, and clear.
+
   if (context.categoryId) {
-    console.log("\nREGRESSION: Setting default category on payee...");
+    // ── 1. SET category (create rule path) ────────────────────────────────
+    console.log("\nSetting default category on payee (create rule path)...");
     try {
-      await callTool("actual_payees_update", { id: payeeId, fields: { category: context.categoryId } });
-      console.log("✓ Payee updated with default category");
-      // Verify — payee_rules_get won't show it, but the call succeeding is the assertion
+      await callTool("actual_payees_update", {
+        id: payeeId,
+        fields: { category: context.categoryId },
+      });
+      console.log("✓ actual_payees_update with category succeeded");
+
+      // Verify: payee_rules_get should reveal exactly 1 'set category' rule
+      const rulesAfterSet = await callTool("actual_payee_rules_get", { payeeId });
+      const rulesAfterSetArr = Array.isArray(rulesAfterSet)
+        ? rulesAfterSet
+        : (rulesAfterSet?.rules ?? rulesAfterSet?.result ?? []);
+      const setCatRule = rulesAfterSetArr.find(
+        r => Array.isArray(r.actions) &&
+             r.actions.some(a => a.op === 'set' && a.field === 'category')
+      );
+      if (setCatRule) {
+        const action = setCatRule.actions.find(a => a.op === 'set' && a.field === 'category');
+        if (action.value === context.categoryId) {
+          console.log(`  ✓ Verify create rule: rule created with categoryId=${context.categoryId}`);
+        } else {
+          console.log(`  ❌ Verify create rule: action value=${action.value}, expected ${context.categoryId}`);
+        }
+      } else {
+        console.log(`  ❌ Verify create rule: no 'set category' action found in ${rulesAfterSetArr.length} rule(s)`);
+      }
     } catch (err) {
-      console.log("❌ REGRESSION FAILED: actual_payees_update rejected category field:", err.message);
+      console.log("❌ Set category FAILED:", err.message);
     }
+
+    // ── 2. SET category again (update / no-duplication path) ──────────────
+    console.log("\nSetting same category again (update rule — no duplicate)...");
+    try {
+      await callTool("actual_payees_update", {
+        id: payeeId,
+        fields: { category: context.categoryId },
+      });
+      console.log("✓ Second actual_payees_update with same category succeeded");
+
+      // Verify: still exactly 1 'set category' rule, not 2
+      const rulesAfterUpdate = await callTool("actual_payee_rules_get", { payeeId });
+      const rulesAfterUpdateArr = Array.isArray(rulesAfterUpdate)
+        ? rulesAfterUpdate
+        : (rulesAfterUpdate?.rules ?? rulesAfterUpdate?.result ?? []);
+      const setCatRules = rulesAfterUpdateArr.filter(
+        r => Array.isArray(r.actions) &&
+             r.actions.some(a => a.op === 'set' && a.field === 'category')
+      );
+      if (setCatRules.length === 1) {
+        console.log(`  ✓ No-dup: exactly 1 'set category' rule (no duplicate created)`);
+      } else {
+        console.log(`  ❌ No-dup: expected 1 'set category' rule, got ${setCatRules.length}`);
+      }
+    } catch (err) {
+      console.log("❌ Update (no-dup) category FAILED:", err.message);
+    }
+
+    // ── 3. CLEAR category (delete rule path) ──────────────────────────────
+    console.log("\nClearing default category on payee (delete rule path)...");
+    try {
+      await callTool("actual_payees_update", {
+        id: payeeId,
+        fields: { category: null },
+      });
+      console.log("✓ actual_payees_update with category=null succeeded");
+
+      // Verify: no 'set category' rule remains
+      const rulesAfterClear = await callTool("actual_payee_rules_get", { payeeId });
+      const rulesAfterClearArr = Array.isArray(rulesAfterClear)
+        ? rulesAfterClear
+        : (rulesAfterClear?.rules ?? rulesAfterClear?.result ?? []);
+      const remainingCatRules = rulesAfterClearArr.filter(
+        r => Array.isArray(r.actions) &&
+             r.actions.some(a => a.op === 'set' && a.field === 'category')
+      );
+      if (remainingCatRules.length === 0) {
+        console.log(`  ✓ Clear rule: no 'set category' rule remains after clear`);
+      } else {
+        console.log(`  ❌ Clear rule: expected 0 'set category' rules, got ${remainingCatRules.length}`);
+      }
+    } catch (err) {
+      console.log("❌ Clear category FAILED:", err.message);
+    }
+
+    // ── 4. NEGATIVE: non-existent payee UUID with category ────────────────
+    console.log("\nNegative: category update on non-existent payee UUID...");
+    try {
+      await callTool("actual_payees_update", {
+        id: '00000000-0000-0000-0000-000000000000',
+        fields: { category: context.categoryId },
+      });
+      // Actual may silently succeed (rule created for unknown payee — benign)
+      console.log("  ⚠ Non-existent payee update with category did not throw (Actual allows orphan rules)");
+    } catch (err) {
+      console.log("  ✓ Non-existent payee UUID correctly produced error:", err.message.slice(0, 80));
+    }
+  } else {
+    console.log("\n⚠ Skipping category-via-rules tests: context.categoryId not set (run at extended level)");
   }
 
   // Verify create
@@ -114,8 +212,8 @@ export async function payeeTests(client, context) {
     else console.log(`  ✓ Verify merge: payee2 no longer in list (confirmed deleted by merge)`);
   }
 
-  // Payee rules
-  console.log("\nGetting payee rules...");
+  // Payee rules — after category was set then cleared above, expect 0 rules
+  console.log("\nGetting payee rules (after category cleared — expect 0)...");
   const rules = await callTool("actual_payee_rules_get", { payeeId });
   const rulesArr = Array.isArray(rules) ? rules : (rules?.rules ?? rules?.result ?? null);
   if (!Array.isArray(rulesArr)) console.log("  ❌ Verify payee rules: expected array, got", typeof rulesArr);
