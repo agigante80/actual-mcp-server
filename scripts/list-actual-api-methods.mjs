@@ -1,4 +1,11 @@
-import * as ActualApi from '@actual-app/api';
+// Polyfill navigator for Node.js — required by @actual-app/api v26.3.0+ which
+// uses navigator.platform at module load time inside the browser/Electron bundle.
+if (typeof globalThis.navigator === 'undefined') {
+  globalThis.navigator = { platform: process.platform === 'win32' ? 'Win32' : 'Linux' };
+}
+
+// Use dynamic import so the polyfill above runs first
+const ActualApi = await import('@actual-app/api');
 
 console.log('=== Available Actual API Methods ===\n');
 

@@ -1,3 +1,7 @@
+// Must be the very first import — sets globalThis.navigator before @actual-app/api is evaluated.
+// Required by @actual-app/api v26.3.0+ which uses navigator.platform at module load time.
+import './node-polyfills.js';
+
 import type { components } from '../../generated/actual-client/types.js';
 
 import {
