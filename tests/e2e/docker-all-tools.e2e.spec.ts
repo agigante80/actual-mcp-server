@@ -6,99 +6,14 @@
  */
 
 import { test, expect } from '@playwright/test';
-
-const MCP_SERVER_URL = process.env.MCP_SERVER_URL || 'http://mcp-server-test:3600';
-const HTTP_PATH = '/http';
-const HEALTH_CHECK_RETRIES = 10;
-const HEALTH_CHECK_DELAY_MS = 2000;
-
-// Helper function to wait for MCP server health
-async function waitForMCPHealth(request: any, url: string, maxRetries = HEALTH_CHECK_RETRIES): Promise<boolean> {
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      const healthRes = await request.get(url);
-      if (healthRes.ok()) {
-        const healthData = await healthRes.json();
-        if (healthData.status === 'ok') {
-          return true;
-        }
-      }
-    } catch (error) {
-      // Retry
-    }
-    
-    if (i < maxRetries - 1) {
-      await new Promise((r) => setTimeout(r, HEALTH_CHECK_DELAY_MS));
-    }
-  }
-  return false;
-}
-
-// Helper to retry requests
-async function retryRequest(requestFn: () => Promise<any>, maxRetries = 3, delayMs = 1000): Promise<any> {
-  let lastError;
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await requestFn();
-    } catch (error) {
-      lastError = error;
-      if (i < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, delayMs * (i + 1)));
-      }
-    }
-  }
-  throw lastError;
-}
-
-// Helper to call MCP tool
-async function callTool(request: any, sessionId: string, toolName: string, args: any = {}): Promise<any> {
-  const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
-  const payload = {
-    jsonrpc: '2.0',
-    id: Math.floor(Math.random() * 10000),
-    method: 'tools/call',
-    params: { name: toolName, arguments: args },
-  };
-
-  const res = await retryRequest(() => request.post(rpcUrl, {
-    data: JSON.stringify(payload),
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'mcp-session-id': sessionId,
-    },
-  }));
-
-  expect(res.ok()).toBeTruthy();
-  const json = await res.json();
-  
-  if (json.error) {
-    throw new Error(`Tool ${toolName} failed: ${json.error.message}`);
-  }
-  
-  return json.result;
-}
-
-// Helper to extract result from MCP response.
-// Canonical source is tests/shared/mcp-protocol.js (importable by plain-JS suites).
-// This TS-local copy stays in sync with that file — update both if the MCP envelope changes.
-function extractResult(mcpResponse: any): any {
-  if (mcpResponse?.content?.[0]?.text) {
-    try {
-      const parsed = JSON.parse(mcpResponse.content[0].text);
-      if (parsed.id !== undefined) return parsed.id;
-      if (parsed.result !== undefined) return parsed.result;
-      if (parsed.accountId !== undefined) return parsed.accountId;
-      if (parsed.categoryId !== undefined) return parsed.categoryId;
-      if (parsed.payeeId !== undefined) return parsed.payeeId;
-      if (parsed.ruleId !== undefined) return parsed.ruleId;
-      return parsed;
-    } catch {
-      return mcpResponse.content[0].text;
-    }
-  }
-  return mcpResponse;
-}
+import {
+  waitForMCPHealth,
+  retryRequest,
+  callTool,
+  extractResult,
+  DEFAULT_MCP_SERVER_URL,
+  HTTP_PATH,
+} from '../shared/e2e-helpers.js';
 
 test.describe('Docker E2E - ALL 62 TOOLS', () => {
   let sessionId: string;
@@ -112,13 +27,13 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     transactionId?: string;
     ruleId?: string;
     ruleWithoutOpId?: string;
-    upsertRuleId?: string;
+    rulesUpsertId?: string;
     scheduleOneOffId?: string;
   } = {};
 
   test.beforeAll(async ({ request }) => {
     console.log('🔌 Initializing MCP session...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     
     const initPayload = {
       jsonrpc: '2.0',
@@ -143,7 +58,7 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     expect(sessionId).toBeTruthy();
     
     // Wait for server to be fully ready
-    const isHealthy = await waitForMCPHealth(request, `${MCP_SERVER_URL}/health`);
+    const isHealthy = await waitForMCPHealth(request, `${DEFAULT_MCP_SERVER_URL}/health`);
     expect(isHealthy).toBeTruthy();
     
     console.log('✅ Session initialized and server ready');
@@ -222,7 +137,7 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
 
   test('actual_accounts_create - ERROR: should fail without name', async ({ request }) => {
     console.log('⚠️  Testing actual_accounts_create error handling...');
-    const rpcUrl = `${MCP_SERVER_URL}${HTTP_PATH}`;
+    const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const payload = {
       jsonrpc: '2.0',
       id: 9999,
@@ -1067,7 +982,7 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     const firstData = parseUpsert(first);
     expect(typeof firstData.id).toBe('string');
     expect(firstData.created).toBe(true);
-    testContext.upsertRuleId = firstData.id;
+    testContext.rulesUpsertId = firstData.id;
     console.log(`✅ actual_rules_create_or_update: created=true, id=${firstData.id}`);
 
     // Second call with identical conditions: must update (created=false, same id)
@@ -1342,7 +1257,7 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     const idsToDelete = [
       testContext.ruleWithoutOpId,
       testContext.ruleId,
-      testContext.upsertRuleId,
+      testContext.rulesUpsertId,
     ].filter(Boolean) as string[];
     if (idsToDelete.length === 0) test.skip();
     console.log(`🗑️  Testing actual_rules_delete (${idsToDelete.length} rules)...`);
@@ -1357,7 +1272,7 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     expect(stillThere).toHaveLength(0);
     testContext.ruleWithoutOpId = undefined;
     testContext.ruleId = undefined;
-    testContext.upsertRuleId = undefined;
+    testContext.rulesUpsertId = undefined;
     console.log(`✅ ${idsToDelete.length} rule(s) deleted and confirmed absent from list`);
   });
 
@@ -1456,9 +1371,9 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
         console.log('✅ Rule deleted (fallback)');
       }
 
-      if (testContext.upsertRuleId) {
+      if (testContext.rulesUpsertId) {
         await callTool(request, sessionId, 'actual_rules_delete', {
-          id: testContext.upsertRuleId,
+          id: testContext.rulesUpsertId,
         });
         console.log('✅ Upsert rule deleted (fallback)');
       }

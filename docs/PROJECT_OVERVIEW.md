@@ -40,29 +40,30 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 
 ## ✨ Core Features
 
-### 🛠️ **56 MCP Tools**
+### 🛠️ **62 MCP Tools**
 
 Comprehensive coverage of Actual Budget functionality across 12 categories:
 
 | Category | Tools | Coverage |
 |----------|-------|----------|
 | **Accounts** | 7 | Create, list, update, delete, close, reopen, get balance |
-| **Transactions** | 12 | Create, get, update, delete, import, filter, search (4), summary (2) |
-| **Budgets** | 8 | Get months, set amounts, transfers, carryover, holds |
+| **Transactions** | 13 | Create, get, update, delete, import, filter, search (4), summary (2) |
+| **Budgets** | 11 | Get months, set amounts, transfers, carryover, holds, batch, list, switch |
 | **Categories** | 4 | Create, list, update, delete |
 | **Category Groups** | 4 | Create, list, update, delete |
 | **Payees** | 6 | Create, list, update, delete, merge, get rules |
-| **Rules** | 4 | Create, list, update, delete |
+| **Rules** | 4 | Create, list, update, delete + upsert |
+| **Schedules** | 4 | Create, list, update, delete |
 | **Advanced Query & Sync** | 2 | Custom ActualQL queries, bank synchronization |
 | **Batch Operations** | 1 | Batch budget updates |
-| **Lookup & Server** | 3 | Server info, Actual Budget server version, name→UUID lookup |
+| **Lookup & Server** | 4 | Server info, Actual Budget server version, name→UUID lookup |
 | **Session Management** | 2 | List and close active MCP sessions |
 
-**Total**: 56 tools with 84% coverage of Actual Budget core API
+**Total**: 62 tools with 100% coverage of Actual Budget core API
 
-> ✅ **All 56 tools verified** with LibreChat integration testing  
+> ✅ **All 62 tools verified** with LibreChat and LobeChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
-> 📊 **README enhanced** with comprehensive badges and improved discoverability
+> 📊 **60/62 tools in Docker E2E** (2 excluded: `budgets_list_available`, `budgets_switch` — single-budget CI constraint)
 
 ### 🔄 **Transport Protocol**
 
@@ -225,18 +226,17 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **56 tools implemented** (84% of core API coverage)
-- ✅ **LibreChat verified** - all tools loading and functional
-- ✅ **Docker images published** - Docker Hub and GHCR
-- ✅ **CI/CD pipeline** - automated testing and deployment
-- ✅ **Security hardened** - Bearer auth, HTTPS, non-root container
-- ✅ **Test coverage** - unit tests (56 tools), Playwright E2E, and live integration suite
+- ✅ **62 tools implemented** (100% of core API coverage)
+- ✅ **LibreChat and LobeChat verified** — all tools loading and functional
+- ✅ **Docker images published** — Docker Hub and GHCR
+- ✅ **CI/CD pipeline** — automated testing and deployment
+- ✅ **Security hardened** — Bearer auth, OIDC, HTTPS, non-root container
+- ✅ **Test coverage** — unit tests (62 tools), Docker Playwright E2E (76 tests, all 62 tools), live integration suite (62/62 tools)
 
 ### Future Goals
 
-- 🎯 Implement Schedules tools (4 tools) - target 100% API coverage
-- 🎯 Add more integration tests for complex workflows
-- 🎯 Improve error messages and user guidance
+- 🎯 [Tags CRUD](./feature/TAGS_CRUD.md) — 4 tools for managing transaction tags (blocked on upstream `@actual-app/api` stable release)
+- 🎯 [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md) — actionable errors across all tools
 - 🎯 Performance optimization for large datasets
 - 🎯 Support for additional MCP clients (Claude Desktop, etc.)
 

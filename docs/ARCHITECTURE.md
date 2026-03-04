@@ -346,14 +346,20 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (60/62 tools, 6 delete tests with list-absence assertions)
-│   │   └── run-docker-e2e.sh              # Docker test orchestrator
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 62 tools)
+│   │   ├── run-docker-e2e.sh              # Docker test orchestrator
+│   │   └── suites/                        # Domain suite registration functions (one file per domain)
+│   │       ├── shared-context.ts          # SharedState / TestContext types
+│   │       ├── server.ts / accounts.ts / categories.ts / payees.ts
+│   │       ├── transactions.ts / budgets.ts / rules.ts / schedules.ts
+│   │       └── advanced.ts / deletes.ts
 │   ├── unit/                     # Unit tests (offline, stub adapter)
 │   │   ├── transactions_create.test.js
 │   │   ├── generated_tools.smoke.test.js
 │   │   └── schema_validation.test.js
 │   ├── shared/                   # Shared test utilities
-│   │   └── mcp-protocol.js       # MCP envelope parsing helpers (reused by E2E + integration)
+│   │   ├── e2e-helpers.ts        # TS helpers for E2E: waitForMCPHealth, retryRequest, callTool, extractResult
+│   │   └── mcp-protocol.js       # JS mirror of extractResult (used by manual integration suite)
 │   └── manual/                   # Live integration tests (real Actual Budget)
 │
 ├── scripts/                      # Build and utility scripts (see scripts/README.md)
