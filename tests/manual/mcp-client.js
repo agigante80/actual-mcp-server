@@ -30,7 +30,7 @@ export function createClient({ url, rl }) {
   // Core transport
   // -------------------------------------------------------------------------
 
-  async function callMCP(method, params = {}, _maxRetries = Infinity, _attempt = 0) {
+  async function callMCP(method, params = {}, _maxRetries = Infinity, _attempt = 0, timeoutMs = 90000) {
     const payload = {
       jsonrpc: "2.0",
       id: requestId++,
@@ -47,7 +47,7 @@ export function createClient({ url, rl }) {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s per-call timeout
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs); // per-call timeout (default 90s; pass higher for slow ops like bank sync)
       let response;
       try {
         response = await fetch(url, {
@@ -95,7 +95,7 @@ export function createClient({ url, rl }) {
         console.log("  ⚠ Session expired — re-initializing...");
         sessionId = null;
         await initialize();
-        return callMCP(method, params, _maxRetries, _attempt);
+        return callMCP(method, params, _maxRetries, _attempt, timeoutMs);
       }
       // --- Connection lost: pause then retry with SAME session (TCP dropped, not session expired) ---
       if (
@@ -106,14 +106,14 @@ export function createClient({ url, rl }) {
         if (_attempt >= _maxRetries) throw err;
         console.log("  ⚠ Connection lost — pausing 5s then retrying (session preserved)...");
         await new Promise(r => setTimeout(r, 5000));
-        return callMCP(method, params, _maxRetries, _attempt + 1);
+        return callMCP(method, params, _maxRetries, _attempt + 1, timeoutMs);
       }
       // --- Request timeout: pause then retry with SAME session ---
       if (err.name === 'AbortError' || err.message.includes('aborted') || err.message.includes('timed out')) {
         if (_attempt >= _maxRetries) throw err;
         console.log("  ⚠ Request timed out — pausing 5s then retrying (session preserved)...");
         await new Promise(r => setTimeout(r, 5000));
-        return callMCP(method, params, _maxRetries, _attempt + 1);
+        return callMCP(method, params, _maxRetries, _attempt + 1, timeoutMs);
       }
       throw err;
     }
