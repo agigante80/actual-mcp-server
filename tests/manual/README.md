@@ -30,6 +30,8 @@ tests/manual/
     ├── budget.js              ← budget: list/switch budgets, amounts, carryover, hold, transfer, batch
     ├── rules.js               ← rules: create (with/without op), update
     ├── schedule.js            ← schedules: get, create (one-off + recurring), update, delete, negative UUID test
+    ├── batch_uncategorized_rules_upsert.js
+    │                          ← uncategorized txns · update_batch · rules_create_or_update (idempotency)
     └── advanced.js            ← composite functions: extendedTests, fullTests,
                                   advancedTests (bank sync, raw SQL)
 ```
@@ -44,7 +46,7 @@ tests/manual/
 | `smoke` | No | Sanity + account balances, category/group listing, last 3 transactions |
 | `normal` | Yes | Smoke + full account lifecycle (create → update → close → reopen) |
 | `extended` | Yes | Normal + category groups, categories, payees, transactions |
-| `full` | Yes | Extended + budgets, rules, advanced queries |
+| `full` | Yes | Extended + budgets, rules, schedules, batch/uncategorized txns, advanced queries |
 | `cleanup` | Yes | Standalone: finds and deletes all MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-* / MCP-Rule-* data |
 
 Tests cascade upward — `extended` always includes `normal` which includes `smoke`.
@@ -168,6 +170,9 @@ context shape:
   transactionId    ← written by transaction.js
   ruleId           ← written by rules.js
   ruleWithoutOpId  ← written by rules.js
+  rulesUpsertId    ← written by batch_uncategorized_rules_upsert.js
+  scheduleOneOffId ← written by schedule.js
+  scheduleRecurId  ← written by schedule.js
 ```
 
 Each test module gracefully skips if a required context key is missing, so test
