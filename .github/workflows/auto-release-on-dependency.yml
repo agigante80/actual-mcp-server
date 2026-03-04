@@ -1,12 +1,23 @@
 name: Auto Release on Dependency Update
 
+# -----------------------------------------------------------------------------
+# TRIGGER: workflow_run (NOT push)
+#
+# Previously this workflow fired on every push to main that touched package.json,
+# which meant it ran BEFORE CI had a chance to validate the dependency update.
+# That caused v0.4.23 to be released even though lint and tests were failing.
+#
+# Now it only fires once the CI/CD Pipeline workflow has COMPLETED SUCCESSFULLY
+# on main. If CI fails the job condition `conclusion == 'success'` stops
+# everything immediately — no version bump, no release, no tag.
+# -----------------------------------------------------------------------------
 on:
-  push:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types:
+      - completed
     branches:
       - main
-    paths:
-      - 'package.json'
-      - 'package-lock.json'
 
 permissions:
   contents: write
@@ -16,25 +27,32 @@ jobs:
   auto-release:
     name: Auto Version Bump & Release
     runs-on: ubuntu-latest
-    
+
+    # Guard: skip entirely when the upstream CI/CD pipeline did not succeed.
+    # This is the primary safeguard against releasing broken code.
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Need history to detect changes
+          # Check out the exact commit that CI validated, not just current HEAD.
+          # This is important if main receives additional commits while CI runs.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Check if dependency update
         id: check-update
         run: |
-          # Check if this was an @actual-app/api update
+          # Only auto-release when this was an @actual-app/api dependency update.
           COMMIT_MSG=$(git log -1 --pretty=%B)
           if echo "$COMMIT_MSG" | grep -q "@actual-app/api"; then
             echo "is_dependency_update=true" >> $GITHUB_OUTPUT
-            echo "✅ Detected @actual-app/api dependency update"
+            echo "✅ Detected @actual-app/api dependency update — proceeding with release"
           else
             echo "is_dependency_update=false" >> $GITHUB_OUTPUT
-            echo "⏭️  Not a dependency update, skipping auto-release"
+            echo "⏭️  Not a dependency update commit, skipping auto-release"
           fi
       
       - name: Setup Node.js
@@ -87,21 +105,24 @@ jobs:
           name: v${{ steps.bump.outputs.new_version }}
           body: |
             ## 🤖 Automated Dependency Update Release
-            
-            This release was automatically created following a dependency update.
-            
+
+            This release was automatically created following a **verified** dependency update.
+            All CI/CD checks (TypeScript compilation, lint, unit tests) passed before this
+            release was created.
+
             ### Changes
             - ⬆️ Upgraded `@actual-app/api` to version `${{ steps.actual-version.outputs.version }}`
             - 🔢 Version bumped from `${{ steps.current-version.outputs.version }}` to `${{ steps.bump.outputs.new_version }}`
-            
+
             ### What's Updated
             - Actual Budget API integration updated to latest version
-            - All 51 MCP tools validated with new API version
+            - All 62 MCP tools validated with new API version
             - Docker images rebuilt and published
-            
+
             ### Testing
-            ✅ All CI/CD checks passed before auto-merge
-            ✅ Full E2E test suite (63 tests) validated compatibility
+            ✅ All CI/CD checks passed (TypeScript compilation + unit tests)
+            ✅ Lint and tool-coverage checks passed
+            ✅ Auto-release only triggered after successful CI run
             
             ---
             
@@ -130,3 +151,10 @@ jobs:
           echo "- **Release:** [v${{ steps.bump.outputs.new_version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.bump.outputs.new_version }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Docker images will be built and published by CI/CD pipeline" >> $GITHUB_STEP_SUMMARY
+
+      - name: Summary (skipped)
+        if: steps.check-update.outputs.is_dependency_update == 'false'
+        run: |
+          echo "### ⏭️ Auto-Release Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "CI passed, but this commit is not a dependency update — no release created." >> $GITHUB_STEP_SUMMARY

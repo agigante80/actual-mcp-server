@@ -150,9 +150,14 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
         run: |
+          # --auto tells GitHub to merge ONLY after all required status checks pass.
+          # For this to work, you MUST configure branch protection on main:
+          #   Settings → Branches → main → Require status checks to pass →
+          #   add "Lint Code" and "Run Tests" as required checks.
+          # Without those rules, GitHub treats the PR as immediately mergeable.
           gh pr merge ${{ steps.create-pr.outputs.pull-request-number }} \
             --auto --squash --delete-branch
-          echo "✅ Auto-merge enabled - will merge when CI passes"
+          echo "✅ Auto-merge enabled - will merge when all CI checks pass"
           
       - name: Summary
         if: steps.compare.outputs.update_needed == 'true'
