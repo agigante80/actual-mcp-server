@@ -1075,10 +1075,11 @@ export async function runBankSync(accountId?: string): Promise<void> {
       // Pass { accountId } for a specific account, or {} to sync all linked accounts.
       const args = accountId != null ? { accountId } : {};
 
-      // When a specific account is targeted, verify it has a bank sync source before
-      // calling rawRunBankSync. The SDK silently resolves void for local accounts
-      // (account_sync_source: null), which would otherwise be misreported as success.
+      // Pre-check: verify bank-linked accounts exist before calling rawRunBankSync.
+      // The SDK silently resolves void for local accounts (account_sync_source: null),
+      // which would otherwise be misreported as success and cause an unnecessary 30s wait.
       if (accountId != null) {
+        // Per-account check: verify the specified account is bank-linked.
         const { data: acctRows } = await rawRunQuery(
           (api as any).q('accounts')
             .select(['account_sync_source', 'name'])
@@ -1093,6 +1094,22 @@ export async function runBankSync(accountId?: string): Promise<void> {
           throw new Error(
             `Bank sync failed: Account "${acct.name}" is a local account — not configured for bank sync. ` +
             `To use bank sync, link your account with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ` +
+            `See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`
+          );
+        }
+      } else {
+        // Global check: verify at least one bank-linked account exists across the budget.
+        const { data: allAccounts } = await rawRunQuery(
+          (api as any).q('accounts')
+            .select(['account_sync_source'])
+            .filter({ tombstone: false })
+        ) as { data: Array<{ account_sync_source: string | null }> };
+
+        const linkedCount = allAccounts?.filter(a => a.account_sync_source).length ?? 0;
+        if (linkedCount === 0) {
+          throw new Error(
+            `Bank sync failed: No accounts are configured for bank sync. ` +
+            `To use bank sync, link your account(s) with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ` +
             `See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`
           );
         }

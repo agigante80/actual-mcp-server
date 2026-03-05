@@ -999,15 +999,58 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
   });
 
   // ==================== ADVANCED (2 tools) ====================
-  test('actual_bank_sync - should handle gracefully if unavailable', async ({ request }) => {
-    console.log('🏦 Testing actual_bank_sync...');
+  test('actual_bank_sync - should return actionable error when no accounts are bank-linked', async ({ request }) => {
+    console.log('🏦 Testing actual_bank_sync (global sync)...');
+    let threw = false;
+    let errorMessage = '';
     try {
-      const result = await callTool(request, sessionId, 'actual_bank_sync');
-      const syncStatus = extractResult(result);
-      console.log('✅ Bank sync status retrieved:', syncStatus);
+      await callTool(request, sessionId, 'actual_bank_sync');
     } catch (error: any) {
-      console.log('✅ Bank sync unavailable (expected for local budgets)');
+      threw = true;
+      errorMessage = error?.message || String(error);
     }
+    // CI budget has no bank-linked accounts — must throw immediately with an actionable message.
+    // If a real bank-linked account exists in the budget this test would need updating.
+    expect(threw).toBe(true);
+    const isActionable = /not configured|no accounts|local account|not found/i.test(errorMessage);
+    expect(isActionable).toBe(true);
+    console.log('✅ Global sync correctly rejected (no bank-linked accounts):', errorMessage.slice(0, 100));
+  });
+
+  test('actual_bank_sync - should return actionable error for local account', async ({ request }) => {
+    console.log('🏦 Testing actual_bank_sync with local account...');
+    
+    // Create a temporary local account for this test
+    const tempAccountName = `BankSync-LocalTest-${Date.now()}`;
+    const createResult = await callTool(request, sessionId, 'actual_accounts_create', {
+      name: tempAccountName,
+      balance: 0,
+    });
+    const tempAccountId = extractResult(createResult);
+    
+    let threw = false;
+    let errorMessage = '';
+    try {
+      await callTool(request, sessionId, 'actual_bank_sync', {
+        accountId: tempAccountId,
+      });
+    } catch (error: any) {
+      threw = true;
+      errorMessage = error?.message || String(error);
+    }
+    
+    // Clean up the temp account
+    try {
+      await callTool(request, sessionId, 'actual_accounts_delete', { id: tempAccountId });
+    } catch (cleanupError) {
+      console.log('⚠️  Temp account cleanup failed (non-critical)');
+    }
+    
+    // This account is local (created without bank sync) — must reject immediately.
+    expect(threw).toBe(true);
+    const isLocalAccountError = /local account|not configured/i.test(errorMessage);
+    expect(isLocalAccountError).toBe(true);
+    console.log('✅ Local account correctly rejected:', errorMessage.slice(0, 100));
   });
 
   test('actual_bank_sync - should return actionable error for non-existent accountId', async ({ request }) => {
