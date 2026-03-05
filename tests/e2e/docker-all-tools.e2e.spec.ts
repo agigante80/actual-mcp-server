@@ -1010,6 +1010,25 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
     }
   });
 
+  test('actual_bank_sync - should return actionable error for non-existent accountId', async ({ request }) => {
+    console.log('🏦 Testing actual_bank_sync with non-existent account...');
+    let threw = false;
+    let errorMessage = '';
+    try {
+      await callTool(request, sessionId, 'actual_bank_sync', {
+        accountId: '00000000-0000-0000-0000-000000000000',
+      });
+    } catch (error: any) {
+      threw = true;
+      errorMessage = error?.message || String(error);
+    }
+    expect(threw).toBe(true);
+    // Should mention account not found or not configured — actionable message
+    const isActionable = /not found|not configured|local account/i.test(errorMessage);
+    expect(isActionable).toBe(true);
+    console.log('✅ Non-existent accountId rejected with actionable error:', errorMessage.slice(0, 100));
+  });
+
   test('actual_query_run - should execute SELECT * query', async ({ request }) => {
     console.log('🔍 Testing actual_query_run with SELECT *...');
     const result = await callTool(request, sessionId, 'actual_query_run', {
