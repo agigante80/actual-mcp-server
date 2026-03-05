@@ -13,6 +13,7 @@ console.log('Running generated tools smoke tests');
   // Simple monkeypatch map: for any adapter function we'll return a predictable value
   const stubResponses = {
     getAccounts: [{ id: 'a1', name: 'Cash' }],
+    getAccountsWithBalances: [{ id: 'a1', name: 'Cash', balance_current: 12345 }],
     addTransactions: ['t1'],
     importTransactions: { added: ['t2'], updated: [], errors: [] },
     getTransactions: [{ id: 't1', amount: 100 }],
@@ -202,6 +203,16 @@ console.log('Running generated tools smoke tests');
       if (n === 'accounts_get_balance') {
         // balance is a number on success, null on error (account not found path)
         if (typeof res?.balance !== 'number' && res?.balance !== null) shapeErr(`expected numeric balance or null`);
+      }
+      if (n === 'accounts_list') {
+        // balance_current must be populated for every account — single-session getAccountsWithBalances()
+        if (!Array.isArray(res?.result)) shapeErr(`expected result to be an array`);
+        const unbalanced = res.result.filter(a => typeof a.balance_current !== 'number');
+        if (unbalanced.length > 0) shapeErr(`expected balance_current to be a number for all accounts, but ${unbalanced.length} account(s) had balance_current=${JSON.stringify(unbalanced[0]?.balance_current)}`);
+        // Verify the value matches the getAccountsWithBalances stub — not just the type
+        const STUB_BALANCE = stubResponses.getAccountsWithBalances[0].balance_current; // 12345
+        const wrongValue = res.result.filter(a => a.balance_current !== STUB_BALANCE);
+        if (wrongValue.length > 0) shapeErr(`expected balance_current=${STUB_BALANCE} (from getAccountsWithBalances stub) but got ${wrongValue[0]?.balance_current} for account "${wrongValue[0]?.name}"`);
       }
       if (n === 'server_info') {
         if (!res?.server?.name) shapeErr(`expected server.name`);

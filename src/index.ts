@@ -24,7 +24,8 @@ process.on('unhandledRejection', (reason, promise) => {
     reasonStr.includes('date condition is required') ||
     reasonStr.includes('Cannot create schedules with the same name') ||
     reasonStr.includes('Schedule') && reasonStr.includes('not found') ||
-    reasonStr.includes('is system-managed and not user-editable')
+    reasonStr.includes('is system-managed and not user-editable') ||
+    reasonStr.includes('is not an expense category')
   ) {
     console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
     console.error('⚠️  ' + reasonStr);

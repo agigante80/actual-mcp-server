@@ -522,6 +522,28 @@ export async function getAccountBalance(id: string, cutoff?: string): Promise<nu
     return await withConcurrency(() => retry(() => rawGetAccountBalance(id, cutoff) as Promise<number>, { retries: 2, backoffMs: 200 }));
   });
 }
+
+/**
+ * Fetch all accounts with their current balances in a single API session.
+ * Using a single withActualApi session avoids N separate init/shutdown cycles
+ * that would occur if you called getAccountBalance() once per account.
+ */
+export async function getAccountsWithBalances(): Promise<(components['schemas']['Account'] & { balance_current: number | null })[]> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.accounts.list').catch(() => {});
+    const accounts = await withConcurrency(() => retry(() => rawGetAccounts() as Promise<components['schemas']['Account'][]>, { retries: 2, backoffMs: 200 }));
+    const result: (components['schemas']['Account'] & { balance_current: number | null })[] = [];
+    for (const account of accounts) {
+      try {
+        const balance = await rawGetAccountBalance(account.id as string);
+        result.push({ ...account, balance_current: balance as number });
+      } catch {
+        result.push({ ...account, balance_current: null });
+      }
+    }
+    return result;
+  });
+}
 export async function deleteAccount(id: string): Promise<void> {
   observability.incrementToolCall('actual.accounts.delete').catch(() => {});
   return queueWriteOperation(async () => {
@@ -1140,6 +1162,7 @@ export async function getServerVersion(): Promise<{ version: string } | { error:
 
 export default {
   getAccounts,
+  getAccountsWithBalances,
   addTransactions,
   importTransactions,
   getTransactions,

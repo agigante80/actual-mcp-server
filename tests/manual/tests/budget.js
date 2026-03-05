@@ -16,20 +16,37 @@ export async function budgetTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running BUDGET TESTS --");
 
-  // Ensure we have a categoryId — fetch fallback from live server if context was cleared
+  // Ensure we have an expense categoryId — fetch fallback from live server if context was cleared.
+  // Income categories cannot have budgeted amounts or carryover (Actual rejects them).
+  // If no expense category exists at all, create a disposable one for the budget tests.
+  let budgetOwnedGroupId = null;  // set if we created a group here (cleaned up at end)
+  let budgetOwnedCatId = null;    // set if we created a category here (cleaned up at end)
+
   if (!context.categoryId) {
     const catData = await callTool("actual_categories_get", {});
     const raw = catData.result || catData.categories || catData;
     const flatCats = Array.isArray(raw)
-      ? raw.flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
+      ? raw.filter(g => !g.is_income).flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
       : [];
     const firstCat = flatCats[0];
     if (firstCat) {
       context.categoryId = firstCat.id;
       console.log(`  ℹ Using existing category for budget tests: "${firstCat.name}" (${firstCat.id})`);
     } else {
-      console.log("⚠ No category available - skipping budget tests");
-      return;
+      // No expense category in this budget — create a disposable one so tests can run.
+      console.log("  ℹ No expense category found — creating disposable category group + category for budget tests...");
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BudgetTest-Group-${ts}` });
+      budgetOwnedGroupId = newGroup.id || newGroup.result || newGroup;
+      console.log(`  ✓ Created disposable category group: ${budgetOwnedGroupId}`);
+
+      const newCat = await callTool("actual_categories_create", {
+        name: `MCP-BudgetTest-Cat-${ts}`,
+        group_id: budgetOwnedGroupId,
+      });
+      budgetOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
+      context.categoryId = budgetOwnedCatId;
+      console.log(`  ✓ Created disposable category: ${budgetOwnedCatId}`);
     }
   }
 
@@ -325,6 +342,25 @@ export async function budgetTests(client, context) {
       console.log("✓ Error resilience: invalid-date correctly rejected by schema validation");
     } else {
       console.log("⚠ Batch rejected but with unexpected error:", err.message);
+    }
+  }
+
+  // Clean up any disposable category/group we created at the start of this test.
+  if (budgetOwnedCatId) {
+    try {
+      await callTool("actual_categories_delete", { id: budgetOwnedCatId });
+      console.log(`\n✓ Cleaned up disposable budget-test category (${budgetOwnedCatId})`);
+    } catch (err) {
+      console.log(`\n  ⚠ Could not delete disposable category ${budgetOwnedCatId}: ${err.message}`);
+    }
+    context.categoryId = null;
+  }
+  if (budgetOwnedGroupId) {
+    try {
+      await callTool("actual_category_groups_delete", { id: budgetOwnedGroupId });
+      console.log(`✓ Cleaned up disposable budget-test category group (${budgetOwnedGroupId})`);
+    } catch (err) {
+      console.log(`  ⚠ Could not delete disposable category group ${budgetOwnedGroupId}: ${err.message}`);
     }
   }
 

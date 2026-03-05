@@ -46,6 +46,11 @@ const MCP_URL = process.argv[2] || process.env.MCP_SERVER_URL || "http://localho
 const rawToken = process.argv[3] || process.env.MCP_AUTH_TOKEN || "MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6";
 let level = (process.argv[4] || process.env.MCP_TEST_LEVEL || '').toLowerCase() || null;
 let cleanup = process.argv[5] ? process.argv[5].toLowerCase() : null; // 'yes'|'no'|null
+// Opt-in flags — none enabled by default.
+// Set MCP_TEST_BANK_SYNC=true in the environment to include the bank sync test.
+const testOpts = {
+  bankSync: process.env.MCP_TEST_BANK_SYNC === 'true',
+};
 
 const ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL || "http://localhost:5006";
 
@@ -110,7 +115,7 @@ export async function run() {
       await extendedTests(client, context);
     } else if (level === "full") {
       await extendedTests(client, context);
-      await fullTests(client, context);
+      await fullTests(client, context, testOpts);
     }
     // level === "normal" falls through here with no extra steps
 

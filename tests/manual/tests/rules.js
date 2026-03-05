@@ -16,8 +16,22 @@ export async function rulesTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running RULES TESTS --");
 
-  // Ensure we have a categoryId for rule actions — fetch one from the live server if context is null
+  // Track disposable resources created here so we can clean them up at the end.
+  let rulesOwnedGroupId = null;
+  let rulesOwnedCatId = null;
+
+  // Ensure we have a categoryId for rule actions — fetch one from the live server if context is null.
+  // Budget tests may have left the adapter on a different budget, so explicitly switch back to the
+  // first available (default) budget before trying to fetch categories.
   if (!context.categoryId) {
+    try {
+      const avail = await callTool("actual_budgets_list_available", {});
+      if (Array.isArray(avail?.budgets) && avail.budgets.length > 0) {
+        await callTool("actual_budgets_switch", { budgetName: avail.budgets[0].name });
+        console.log(`  ℹ Reset to first budget "${avail.budgets[0].name}" before fetching categories`);
+      }
+    } catch (_) { /* best-effort — ignore if multi-budget not configured */ }
+
     const catData = await callTool("actual_categories_get", {});
     const raw = catData.result || catData.categories || catData;
     const flatCats = Array.isArray(raw)
@@ -28,7 +42,20 @@ export async function rulesTests(client, context) {
       context.categoryId = firstCat.id;
       console.log(`  ℹ Using existing category for rule actions: "${firstCat.name}" (${firstCat.id})`);
     } else {
-      console.log("  ⚠ No category available for rule action values — rules test may fail");
+      // No category found at all — create a disposable one so the test can run.
+      console.log("  ℹ No category found — creating disposable category group + category for rules tests...");
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const newGroup = await callTool("actual_category_groups_create", { name: `MCP-RulesTest-Group-${ts}` });
+      rulesOwnedGroupId = newGroup.id || newGroup.result || newGroup;
+      console.log(`  ✓ Created disposable category group: ${rulesOwnedGroupId}`);
+
+      const newCat = await callTool("actual_categories_create", {
+        name: `MCP-RulesTest-Cat-${ts}`,
+        group_id: rulesOwnedGroupId,
+      });
+      rulesOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
+      context.categoryId = rulesOwnedCatId;
+      console.log(`  ✓ Created disposable category: ${rulesOwnedCatId}`);
     }
   }
 
@@ -157,6 +184,25 @@ export async function rulesTests(client, context) {
       }
     } catch (err) {
       console.log(`  ❌ Delete of ${label} threw unexpectedly:`, err.message?.slice(0, 120));
+    }
+  }
+
+  // Clean up disposable category/group created at the top of this function (if any).
+  if (rulesOwnedCatId) {
+    try {
+      await callTool("actual_categories_delete", { id: rulesOwnedCatId });
+      context.categoryId = null;
+      console.log("  ✓ Cleaned up disposable rules-test category");
+    } catch (err) {
+      console.log("  ⚠ Could not clean up disposable rules-test category:", err.message);
+    }
+  }
+  if (rulesOwnedGroupId) {
+    try {
+      await callTool("actual_category_groups_delete", { id: rulesOwnedGroupId });
+      console.log("  ✓ Cleaned up disposable rules-test category group");
+    } catch (err) {
+      console.log("  ⚠ Could not clean up disposable rules-test category group:", err.message);
     }
   }
 }
