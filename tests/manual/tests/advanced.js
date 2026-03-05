@@ -260,23 +260,44 @@ export async function advancedTests(client, context, opts = {}) {
   }
 
   // Bank sync — opt-in only (set MCP_TEST_BANK_SYNC=true to enable).
-  // Skipped by default because it takes 30-60 seconds and requires GoCardless/SimpleFIN
-  // credentials configured in the Actual Budget server.
+  // Skipped by default because it takes 30-90 s per account and requires
+  // GoCardless/SimpleFIN credentials configured in the Actual Budget server.
   if (opts.bankSync) {
-    console.log("\nChecking bank sync status...");
+    console.log("\nBank sync — fetching accounts to sync individually...");
+    let accounts = [];
     try {
-      const raw = await client.callMCP("tools/call", {
-        name: "actual_bank_sync",
-        arguments: {},
-      }, 1 /* maxRetries */, 0 /* _attempt */, 60000 /* 60s timeout — bank sync is slow */);
-      // Unwrap MCP envelope
-      const syncText = raw?.content?.[0]?.text;
-      const syncStatus = syncText ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })() : raw;
-      console.log("✓ Bank sync status retrieved:", syncStatus);
+      const acctRaw = await callTool("actual_accounts_list", {});
+      accounts = Array.isArray(acctRaw) ? acctRaw : (acctRaw?.accounts ?? acctRaw?.result ?? []);
     } catch (err) {
-      // Bank sync may fail if accounts are not linked to GoCardless/SimpleFIN,
-      // or if the Actual server does not have bank sync credentials configured.
-      console.log("⚠ Bank sync failed:", err.message);
+      console.log("  ⚠ Could not list accounts for bank sync:", err.message);
+    }
+
+    if (accounts.length === 0) {
+      console.log("  ℹ No accounts found — bank sync skipped");
+    } else {
+      console.log(`  Found ${accounts.length} account(s) — syncing each individually...`);
+      let syncOk = 0, syncFailed = 0;
+      for (const acct of accounts) {
+        const label = `${acct.name} (${acct.id})`;
+        try {
+          const raw = await client.callMCP("tools/call", {
+            name: "actual_bank_sync",
+            arguments: { accountId: acct.id },
+          }, 0 /* maxRetries — never retry bank sync */, 0, 90000 /* 90s per account */);
+          const syncText = raw?.content?.[0]?.text;
+          const syncResult = syncText
+            ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })()
+            : raw;
+          const msg = syncResult?.result ?? JSON.stringify(syncResult).slice(0, 80);
+          console.log(`  ✓ ${label}: ${msg}`);
+          syncOk++;
+        } catch (err) {
+          // Expected for accounts not linked to GoCardless/SimpleFIN
+          console.log(`  ⚠ ${label}: ${err.message}`);
+          syncFailed++;
+        }
+      }
+      console.log(`  Bank sync: ${syncOk} succeeded, ${syncFailed} not configured/failed (out of ${accounts.length})`);
     }
   } else {
     console.log("\n⏭ Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)");
