@@ -8,6 +8,37 @@ Utility and build scripts. All are invoked via `package.json` scripts or from wi
 |---|---|---|
 | `deploy-and-test.sh` | `npm run deploy:full` / `npm run deploy:smoke` | **Periodic maintenance script.** Syncs latest dev code → rebuilds MCP Docker image → pulls latest upstream images (Actual Budget, LibreChat, LobeChat) → independently restarts each service → waits for MCP health → runs the full integration test suite with auto-cleanup. Requires all four services to already be installed and running. See `$DOCKER_DIR/README.md` and sub-folder READMEs for setup instructions. |
 
+### Running deploy-and-test.sh
+
+**Basic usage:**
+```bash
+bash scripts/deploy-and-test.sh          # defaults to 'smoke' level (no writes)
+bash scripts/deploy-and-test.sh full     # full CRUD + advanced tests
+bash scripts/deploy-and-test.sh smoke    # read-only sanity checks
+```
+
+**With bank sync testing enabled:**
+```bash
+# Enable bank sync tests for accounts with GoCardless/SimpleFIN credentials
+MCP_TEST_BANK_SYNC=true bash scripts/deploy-and-test.sh full
+
+# Or export it first
+export MCP_TEST_BANK_SYNC=true
+bash scripts/deploy-and-test.sh full
+```
+
+**What happens when `MCP_TEST_BANK_SYNC=true`:**
+- Negative path tests (non-existent UUID) always run
+- Per-account iteration tests run (30-90s per bank-linked account)
+- Local accounts: validates immediate rejection without provider call
+- Bank-linked accounts: tests actual sync with GoCardless/SimpleFIN
+- Rate limit/auth failures are logged but don't fail the test run
+
+**Default behavior (`MCP_TEST_BANK_SYNC` unset or `false`):**
+- Bank sync tests are skipped with message: `⏭ Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)`
+- Pre-check logic (local account detection, account validation) is still tested via E2E tests
+- See [tests/manual/README.md](../tests/manual/README.md#bank-sync-testing-optional) for more details
+
 ## Tool verification
 
 | Script | npm script | Purpose |
