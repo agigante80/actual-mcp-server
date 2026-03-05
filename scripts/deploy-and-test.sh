@@ -34,8 +34,10 @@
 #     $DOCKER_DIR/lobechatAI/                        ← LobeChat config files
 #
 # Usage:
-#   bash scripts/deploy-and-test.sh [TEST_LEVEL]
+#   bash scripts/deploy-and-test.sh [TEST_LEVEL] [--bank-sync]
 #   TEST_LEVEL: sanity | smoke | normal | extended | full (default: full)
+#   --bank-sync: opt-in flag to include per-account bank sync tests (GoCardless/SimpleFIN)
+#                Skipped by default. Also honoured via MCP_TEST_BANK_SYNC=true env var.
 
 set -euo pipefail
 
@@ -44,7 +46,19 @@ DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
 DEV_DIR="$HOME/dev/actual-mcp-server"
 MCP_SERVER_URL="http://localhost:3601/http"
 MCP_AUTH_TOKEN="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
-TEST_LEVEL="${1:-full}"
+# Parse positional + flag args
+TEST_LEVEL="full"
+BANK_SYNC_FLAG=""   # empty = disabled
+for arg in "$@"; do
+  case "$arg" in
+    --bank-sync) BANK_SYNC_FLAG="true" ;;
+    *)           TEST_LEVEL="$arg"    ;;
+  esac
+done
+# Also honour the environment variable
+if [ "${MCP_TEST_BANK_SYNC:-}" = "true" ]; then
+  BANK_SYNC_FLAG="true"
+fi
 HEALTH_RETRIES=30          # × 3s = 90s max wait
 # Count registered tools directly from source — stays correct automatically
 EXPECTED_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts")
@@ -129,9 +143,15 @@ for i in $(seq 1 "$HEALTH_RETRIES"); do
 done
 
 # ── 7. Run integration tests against bearer instance (port 3601) ───────────
-info "Step 7/7 — Running integration tests against bearer instance port 3601 (level=${TEST_LEVEL}, tools=${EXPECTED_TOOL_COUNT})..."
+BANK_SYNC_LABEL=""
+if [ -n "$BANK_SYNC_FLAG" ]; then
+  BANK_SYNC_LABEL=" + bank-sync"
+fi
+info "Step 7/7 — Running integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
-EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" node "$DEV_DIR/tests/manual/index.js" \
+EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
+  MCP_TEST_BANK_SYNC="${BANK_SYNC_FLAG}" \
+  node "$DEV_DIR/tests/manual/index.js" \
   "$MCP_SERVER_URL" \
   "$MCP_AUTH_TOKEN" \
   "$TEST_LEVEL" \
