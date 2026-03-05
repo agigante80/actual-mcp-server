@@ -16,6 +16,7 @@ process.on('unhandledRejection', (reason, promise) => {
   // returned to the caller; if it somehow escapes as an unhandled rejection
   // we should log but NOT crash the server.
   const reasonStr = String(reason);
+  const reasonObj = reason as any;
   if (
     reasonStr.includes('does not exist in table') ||
     (reasonStr.includes('Field') && reasonStr.includes('does not exist')) ||
@@ -25,7 +26,18 @@ process.on('unhandledRejection', (reason, promise) => {
     reasonStr.includes('Cannot create schedules with the same name') ||
     reasonStr.includes('Schedule') && reasonStr.includes('not found') ||
     reasonStr.includes('is system-managed and not user-editable') ||
-    reasonStr.includes('is not an expense category')
+    reasonStr.includes('is not an expense category') ||
+    // Bank sync errors from GoCardless/SimpleFIN/Nordigen surface as unhandled
+    // rejections from within the @actual-app/api SDK worker. These are non-fatal:
+    // the caller already received a proper error response (or the retry will).
+    reasonObj?.type === 'BankSyncError' ||
+    reasonStr.includes('BankSyncError') ||
+    reasonStr.includes('NORDIGEN_ERROR') ||
+    reasonStr.includes('RATE_LIMIT_EXCEEDED') ||
+    reasonStr.includes('Rate limit exceeded') ||
+    reasonStr.includes('Failed syncing account') ||
+    reasonStr.includes('GoCardless') ||
+    reasonStr.includes('SimpleFIN')
   ) {
     console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
     console.error('⚠️  ' + reasonStr);
@@ -38,6 +50,26 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('uncaughtException', (error) => {
+  const errMsg = String((error as any)?.message || error);
+  const errType = (error as any)?.type;
+  // Bank sync errors from GoCardless/SimpleFIN can surface as uncaughtException
+  // from within the @actual-app/api SDK when the provider API returns an error
+  // asynchronously (e.g. RATE_LIMIT_EXCEEDED from GoCardless/Nordigen).
+  // These are non-fatal — the server should survive and continue serving requests.
+  if (
+    errType === 'BankSyncError' ||
+    errMsg.includes('BankSyncError') ||
+    errMsg.includes('NORDIGEN_ERROR') ||
+    errMsg.includes('RATE_LIMIT_EXCEEDED') ||
+    errMsg.includes('Rate limit exceeded') ||
+    errMsg.includes('Failed syncing account') ||
+    errMsg.includes('GoCardless') ||
+    errMsg.includes('SimpleFIN')
+  ) {
+    console.error('⚠️  [BANK SYNC] Non-fatal bank sync error surfaced as uncaughtException (server continues):');
+    console.error('⚠️  ' + errMsg);
+    return;
+  }
   console.error('Uncaught Exception:', error);
   process.exit(1);
 });

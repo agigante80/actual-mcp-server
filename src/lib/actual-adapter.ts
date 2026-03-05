@@ -1108,6 +1108,30 @@ export async function runBankSync(accountId?: string): Promise<void> {
       );
     }
 
+    // GoCardless / SimpleFIN provider-level errors
+    // BankSyncError objects (from @actual-app/api) may have { type, category, code, message }
+    const bankSyncCategory = (error as any)?.category || '';
+    if (
+      errorMsg.includes('Rate limit exceeded') ||
+      errorMsg.includes('RATE_LIMIT_EXCEEDED') ||
+      bankSyncCategory === 'RATE_LIMIT_EXCEEDED'
+    ) {
+      const reset = (error as any)?.details?.rateLimitHeaders?.http_x_ratelimit_account_success_reset;
+      const retryIn = reset ? ` Retry in ~${Math.ceil(Number(reset) / 60)} minute(s).` : '';
+      throw new Error(
+        `Bank sync failed: GoCardless rate limit exceeded for this account.${retryIn} ` +
+        `(NORDIGEN RATE_LIMIT_EXCEEDED — account success quota exhausted)`
+      );
+    }
+    if (
+      (error as any)?.type === 'BankSyncError' ||
+      errorMsg.includes('BankSyncError') ||
+      errorMsg.includes('NORDIGEN_ERROR') ||
+      errorMsg.includes('Failed syncing account')
+    ) {
+      throw new Error(`Bank sync failed: Provider error — ${errorMsg}`);
+    }
+
     throw new Error(`Bank sync failed: ${errorMsg}`);
   }
 }
