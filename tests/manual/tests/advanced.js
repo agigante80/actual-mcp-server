@@ -260,10 +260,23 @@ export async function advancedTests(client, context, opts = {}) {
   }
 
   // Bank sync — opt-in only (set MCP_TEST_BANK_SYNC=true to enable).
-  // Skipped by default because it takes 30-90 s per account and requires
-  // GoCardless/SimpleFIN credentials configured in the Actual Budget server.
+  // Skipped by default: takes 30-90s per account, requires GoCardless/SimpleFIN.
   if (opts.bankSync) {
-    console.log("\nBank sync — fetching accounts to sync individually...");
+    console.log("\nBank sync — negative-path tests...");
+    try {
+      await client.callMCP("tools/call", {
+        name: "actual_bank_sync",
+        arguments: { accountId: "00000000-0000-0000-0000-000000000000" },
+      }, 0, 0, 10000);
+      console.log("  ❌ non-existent accountId: expected error but got success");
+    } catch (err) {
+      const msg = err.message || String(err);
+      const ok = /not found|not configured|local account/i.test(msg);
+      console.log(ok
+        ? `  ✓ non-existent accountId rejected with actionable error: ${msg.slice(0, 80)}`
+        : `  ⚠ non-existent accountId: error may not be actionable: ${msg.slice(0, 80)}`);
+    }
+
     let accounts = [];
     try {
       const acctRaw = await callTool("actual_accounts_list", {});
@@ -275,7 +288,7 @@ export async function advancedTests(client, context, opts = {}) {
     if (accounts.length === 0) {
       console.log("  ℹ No accounts found — bank sync skipped");
     } else {
-      console.log(`  Found ${accounts.length} account(s) — syncing each individually...`);
+      console.log(`\nBank sync — ${accounts.length} account(s)...`);
       let syncOk = 0, syncFailed = 0;
       for (const acct of accounts) {
         const label = `${acct.name} (${acct.id})`;
@@ -292,16 +305,18 @@ export async function advancedTests(client, context, opts = {}) {
           console.log(`  ✓ ${label}: ${msg}`);
           syncOk++;
         } catch (err) {
-          // Expected for accounts not linked to GoCardless/SimpleFIN
-          console.log(`  ⚠ ${label}: ${err.message}`);
+          const msg = err.message || String(err);
+          if (/local account|not configured/i.test(msg)) {
+            console.log(`  ✓ ${label}: correctly identified as local account`);
+          } else {
+            console.log(`  ⚠ ${label}: ${msg}`);
+          }
           syncFailed++;
         }
       }
       console.log(`  Bank sync: ${syncOk} succeeded, ${syncFailed} not configured/failed (out of ${accounts.length})`);
     }
-  } else {
-    console.log("\n⏭ Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)");
-  }
+  } else { console.log("\n⏭ Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)"); }
 
   // SQL query validation — exercises the query-validator middleware via actual_query_run.
   // Valid queries should succeed; invalid ones should be rejected before execution.
