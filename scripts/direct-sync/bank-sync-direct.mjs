@@ -409,9 +409,17 @@ async function main() {
 
   // ── fetch accounts ────────────────────────────────────────────────────────
   await logger.info('Fetching accounts...');
+  // getAccounts() does NOT expose account_sync_source or account_id (the
+  // GoCardless/SimpleFIN external account reference), so we query the raw
+  // table to get those fields. account_sync_source is null for local accounts.
   let accounts;
   try {
-    accounts = await api.getAccounts();
+    const { data } = await api.runQuery(
+      api.q('accounts')
+        .select(['id', 'name', 'offbudget', 'closed', 'account_sync_source', 'account_id'])
+        .filter({ tombstone: false })
+    );
+    accounts = data;
   } catch (err) {
     await logger.error('getAccounts failed', { error: err.message });
     try { await api.shutdown(); } catch {}
@@ -429,8 +437,9 @@ async function main() {
     const flags = [
       acct.offbudget ? 'off-budget' : 'on-budget',
       acct.closed    ? 'closed'     : 'open',
-    ].join(', ');
-    await logger.info(`  ${i + 1}. ${acct.name}`, { id: acct.id, flags });
+    ];
+    const syncInfo = acct.account_sync_source ? `sync=${acct.account_sync_source}` : 'local (no sync)';
+    await logger.info(`  ${i + 1}. ${acct.name}`, { id: acct.id, flags: flags.join(', '), bankSync: syncInfo });
   }
 
   // ── bank sync ─────────────────────────────────────────────────────────────
@@ -448,6 +457,14 @@ async function main() {
       if (account.closed) {
         await logger.info(`  ↷ Skipping closed account`, { account: account.name });
         results.push({ account: account.name, id: account.id, status: 'skipped_closed', error: null });
+        continue;
+      }
+      // Skip local accounts — account_sync_source is null when there is no
+      // GoCardless / SimpleFIN link. rawRunBankSync() silently resolves void
+      // for these, which would otherwise be misreported as a successful sync.
+      if (!account.account_sync_source) {
+        await logger.info(`  ↷ Local account — no bank sync configured`, { account: account.name });
+        results.push({ account: account.name, id: account.id, status: 'not_configured', error: null });
         continue;
       }
       const r = await syncAccount(api, account, timeoutMs, logger);
