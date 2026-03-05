@@ -1068,22 +1068,48 @@ function parseWhereClause(query: any, whereClause: string): any {
   return query;
 }
 export async function runBankSync(accountId?: string): Promise<void> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.bank.sync').catch(() => {});
-    
-    try {
-      await withConcurrency(() => retry(() => rawRunBankSync(accountId ? { accountId } : undefined) as Promise<void>, { retries: 2, backoffMs: 200 }));
-    } catch (error: any) {
-      const errorMsg = error?.message || String(error);
-      
-      // Provide helpful error message for common cases
-      if (errorMsg.includes('No bank account') || errorMsg.includes('not configured') || errorMsg.includes('not linked') || !errorMsg || errorMsg === '{}') {
-        throw new Error(`Bank sync failed: The ${accountId ? 'specified account is' : 'accounts are'} not configured for bank sync. To use bank sync, you must first link your account(s) with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`);
-      }
-      
-      throw new Error(`Bank sync failed: ${errorMsg}`);
+  try {
+    return await withActualApi(async () => {
+      observability.incrementToolCall('actual.bank.sync').catch(() => {});
+      // Bank sync must NOT be retried — retrying could import duplicate transactions.
+      // Pass { accountId } for a specific account, or {} to sync all linked accounts.
+      const args = accountId != null ? { accountId } : {};
+      await rawRunBankSync(args) as unknown as void;
+    });
+  } catch (error: any) {
+    const errorMsg = error?.message || String(error);
+
+    // Network / connectivity errors (includes "fetch failed" from Node.js native fetch)
+    if (
+      errorMsg.includes('fetch failed') ||
+      errorMsg.includes('network-failure') ||
+      errorMsg.includes('ECONNREFUSED') ||
+      errorMsg.includes('ENOTFOUND') ||
+      errorMsg.includes('Authentication failed')
+    ) {
+      throw new Error(
+        `Bank sync failed: Cannot connect to Actual Budget server. ` +
+        `Check that ACTUAL_SERVER_URL is reachable from the MCP server container. (${errorMsg})`
+      );
     }
-  });
+
+    // Account not configured for bank sync
+    if (
+      errorMsg.includes('No bank account') ||
+      errorMsg.includes('not configured') ||
+      errorMsg.includes('not linked') ||
+      !errorMsg ||
+      errorMsg === '{}'
+    ) {
+      throw new Error(
+        `Bank sync failed: The ${accountId ? 'specified account is' : 'accounts are'} not configured for bank sync. ` +
+        `To use bank sync, you must first link your account(s) with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ` +
+        `See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`
+      );
+    }
+
+    throw new Error(`Bank sync failed: ${errorMsg}`);
+  }
 }
 export async function getBudgets(): Promise<unknown[]> {
   return withActualApi(async () => {
