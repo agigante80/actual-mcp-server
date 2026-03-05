@@ -49,6 +49,17 @@ export const DEFAULT_OPERATION_TIMEOUT_MS = 30000;
 export const SHUTDOWN_GRACE_PERIOD_MS = 5000;
 
 /**
+ * How long (ms) to wait after calling rawRunBankSync for the SDK's background
+ * promise to surface a BankSyncError as an unhandledRejection.
+ *
+ * Bank provider errors (GoCardless RATE_LIMIT_EXCEEDED, auth failures, etc.)
+ * arrive as HTTP responses and are reflected within 1-3 seconds. 10 seconds
+ * gives a comfortable margin while keeping the tool's wall-clock time
+ * acceptable for MCP clients.
+ */
+export const BANK_SYNC_SETTLE_MS = 10_000;
+
+/**
  * How long (ms) to wait for additional queued writes before closing the
  * shared budget session. Increasing this value batches more writes per
  * session at the cost of slightly higher latency.

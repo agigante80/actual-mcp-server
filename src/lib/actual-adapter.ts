@@ -154,7 +154,7 @@ async function shutdownActualApi(): Promise<void> {
   }
 }
 
-import { DEFAULT_CONCURRENCY_LIMIT, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 /**
  * Very small concurrency limiter for adapter calls. This prevents bursts from
@@ -1074,7 +1074,36 @@ export async function runBankSync(accountId?: string): Promise<void> {
       // Bank sync must NOT be retried — retrying could import duplicate transactions.
       // Pass { accountId } for a specific account, or {} to sync all linked accounts.
       const args = accountId != null ? { accountId } : {};
-      await rawRunBankSync(args) as unknown as void;
+
+      // rawRunBankSync returns void immediately; the actual provider call runs on
+      // a background promise inside the SDK and surfaces errors as unhandledRejection.
+      // We install a temporary listener to capture any BankSyncError and re-throw.
+      let capturedRejection: any = null;
+      const rejectionHandler = (reason: any) => {
+        const msg: string = reason?.message || String(reason);
+        if (
+          reason?.type === 'BankSyncError' ||
+          msg.includes('BankSyncError') ||
+          msg.includes('NORDIGEN_ERROR') ||
+          msg.includes('Rate limit exceeded') ||
+          msg.includes('Failed syncing account') ||
+          msg.includes('GoCardless') ||
+          msg.includes('SimpleFIN')
+        ) {
+          capturedRejection = reason;
+        }
+      };
+      process.on('unhandledRejection', rejectionHandler);
+      try {
+        await rawRunBankSync(args) as unknown as void;
+        // Wait for the SDK's background promise to resolve/reject.
+        // Provider errors (rate limits, auth failures) arrive in < 3s in practice;
+        // BANK_SYNC_SETTLE_MS gives a comfortable margin to catch them.
+        await new Promise(resolve => setTimeout(resolve, BANK_SYNC_SETTLE_MS));
+        if (capturedRejection !== null) throw capturedRejection;
+      } finally {
+        process.off('unhandledRejection', rejectionHandler);
+      }
     });
   } catch (error: any) {
     const errorMsg = error?.message || String(error);

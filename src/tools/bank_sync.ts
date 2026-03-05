@@ -10,7 +10,8 @@ type Output = void;
 
 const tool: ToolDefinition = {
   name: 'actual_bank_sync',
-  description: 'Trigger 3rd party bank sync (GoCardless, SimpleFIN) for linked bank accounts. This initiates a sync to pull new transactions from connected banks.',
+  description: 'Trigger 3rd party bank sync (GoCardless, SimpleFIN) for linked bank accounts. Waits up to 10 seconds for the provider to confirm the operation, then returns the result. Provider errors such as rate limits or auth failures are reported if they occur within that window. Successful syncs may take a few additional moments for transactions to appear in Actual Budget.',
+
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
