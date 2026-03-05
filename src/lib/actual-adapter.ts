@@ -1075,6 +1075,29 @@ export async function runBankSync(accountId?: string): Promise<void> {
       // Pass { accountId } for a specific account, or {} to sync all linked accounts.
       const args = accountId != null ? { accountId } : {};
 
+      // When a specific account is targeted, verify it has a bank sync source before
+      // calling rawRunBankSync. The SDK silently resolves void for local accounts
+      // (account_sync_source: null), which would otherwise be misreported as success.
+      if (accountId != null) {
+        const { data: acctRows } = await rawRunQuery(
+          (api as any).q('accounts')
+            .select(['account_sync_source', 'name'])
+            .filter({ id: accountId, tombstone: false })
+        ) as { data: Array<{ account_sync_source: string | null; name: string }> };
+
+        const acct = acctRows?.[0];
+        if (!acct) {
+          throw new Error(`Bank sync failed: Account not found (id: ${accountId})`);
+        }
+        if (!acct.account_sync_source) {
+          throw new Error(
+            `Bank sync failed: Account "${acct.name}" is a local account — not configured for bank sync. ` +
+            `To use bank sync, link your account with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ` +
+            `See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`
+          );
+        }
+      }
+
       // rawRunBankSync returns void immediately; the actual provider call runs on
       // a background promise inside the SDK and surfaces errors as unhandledRejection.
       // We install a temporary listener to capture any BankSyncError and re-throw.
