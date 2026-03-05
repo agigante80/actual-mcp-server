@@ -53,11 +53,11 @@ export const SHUTDOWN_GRACE_PERIOD_MS = 5000;
  * promise to surface a BankSyncError as an unhandledRejection.
  *
  * Bank provider errors (GoCardless RATE_LIMIT_EXCEEDED, auth failures, etc.)
- * arrive as HTTP responses and are reflected within 1-3 seconds. 10 seconds
- * gives a comfortable margin while keeping the tool's wall-clock time
- * acceptable for MCP clients.
+ * arrive as HTTP responses. Fast banks respond within 1-3 seconds; slower
+ * institutions can take considerably longer. 30 seconds gives a comfortable
+ * margin while keeping the tool's wall-clock time acceptable for MCP clients.
  */
-export const BANK_SYNC_SETTLE_MS = 10_000;
+export const BANK_SYNC_SETTLE_MS = 30_000;
 
 /**
  * How long (ms) to wait for additional queued writes before closing the
