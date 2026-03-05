@@ -24,7 +24,12 @@ import { scheduleTests } from './schedule.js';
  * @param {{ callTool: Function }} client
  * @param {object} context
  */
-export async function advancedTests(client, context) {
+/**
+ * @param {{ callTool: Function, callMCP: Function }} client
+ * @param {object} context
+ * @param {{ bankSync?: boolean }} [opts]  - opt-in flags; none enabled by default
+ */
+export async function advancedTests(client, context, opts = {}) {
   const { callTool } = client;
   console.log("\n-- Running ADVANCED TESTS --");
 
@@ -254,23 +259,27 @@ export async function advancedTests(client, context) {
     console.log("  ℹ get_id_by_name [schedules]: could not test — informational:", err.message);
   }
 
-  // Bank sync — uses callMCP directly with a 2-minute timeout and maxRetries=1 because
-  // GoCardless/SimpleFIN sync can take 60+ seconds. A 30s timeout causes spurious socket
-  // hang-ups; 120s gives real syncs time to complete.
-  console.log("\nChecking bank sync status...");
-  try {
-    const raw = await client.callMCP("tools/call", {
-      name: "actual_bank_sync",
-      arguments: {},
-    }, 1 /* maxRetries */, 0 /* _attempt */, 120000 /* 120s timeout — bank sync is slow */);
-    // Unwrap MCP envelope
-    const syncText = raw?.content?.[0]?.text;
-    const syncStatus = syncText ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })() : raw;
-    console.log("✓ Bank sync status retrieved:", syncStatus);
-  } catch (err) {
-    // Bank sync may fail if accounts are not linked to GoCardless/SimpleFIN,
-    // or if the Actual server does not have bank sync credentials configured.
-    console.log("⚠ Bank sync failed:", err.message);
+  // Bank sync — opt-in only (set MCP_TEST_BANK_SYNC=true to enable).
+  // Skipped by default because it takes 30-60 seconds and requires GoCardless/SimpleFIN
+  // credentials configured in the Actual Budget server.
+  if (opts.bankSync) {
+    console.log("\nChecking bank sync status...");
+    try {
+      const raw = await client.callMCP("tools/call", {
+        name: "actual_bank_sync",
+        arguments: {},
+      }, 1 /* maxRetries */, 0 /* _attempt */, 60000 /* 60s timeout — bank sync is slow */);
+      // Unwrap MCP envelope
+      const syncText = raw?.content?.[0]?.text;
+      const syncStatus = syncText ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })() : raw;
+      console.log("✓ Bank sync status retrieved:", syncStatus);
+    } catch (err) {
+      // Bank sync may fail if accounts are not linked to GoCardless/SimpleFIN,
+      // or if the Actual server does not have bank sync credentials configured.
+      console.log("⚠ Bank sync failed:", err.message);
+    }
+  } else {
+    console.log("\n⏭ Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)");
   }
 
   // SQL query validation — exercises the query-validator middleware via actual_query_run.
@@ -337,8 +346,9 @@ export async function extendedTests(client, context) {
  *
  * @param {{ callTool: Function }} client
  * @param {object} context
+ * @param {{ bankSync?: boolean }} [opts]  - opt-in flags; none enabled by default
  */
-export async function fullTests(client, context) {
+export async function fullTests(client, context, opts = {}) {
   console.log("\n========================================");
   console.log("FULL TEST MODE - Budgets, Rules, Advanced");
   console.log("========================================");
@@ -349,5 +359,5 @@ export async function fullTests(client, context) {
   await rulesTests(client, context);
   await batchUncategorizedRulesUpsertTests(client, context);
   await scheduleTests(client, context);
-  await advancedTests(client, context);
+  await advancedTests(client, context, opts);
 }

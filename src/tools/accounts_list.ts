@@ -10,13 +10,14 @@ type Output = unknown; // refine using generated types (paths['/accounts']['get'
 
 const tool: ToolDefinition = {
   name: 'actual_accounts_list',
-  description: "List all accounts in Actual Budget including checking, savings, credit cards, and investment accounts. Returns account ID, name, balance, on-budget/off-budget status, and open/closed state.",
+  description: "List all accounts in Actual Budget including checking, savings, credit cards, and investment accounts. Returns account ID, name, balance (in cents), on-budget/off-budget status, and open/closed state.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    // call adapter.getAccounts with no args
-    const result = await adapter.getAccounts();
+    // Single API session: getAccounts + all balances in one withActualApi cycle.
+    // Calling getAccountBalance() per-account would open N separate sessions and
+    // overwhelm the Actual server with concurrent init/shutdown cycles.
+    const result = await adapter.getAccountsWithBalances();
     return { result };
-
   },
 };
 
