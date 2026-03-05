@@ -28,6 +28,12 @@ Utility and build scripts. All are invoked via `package.json` scripts or from wi
 | `bootstrap-and-init.sh` | `docker-compose.test.yaml` | Waits for the Actual Budget server to be healthy, bootstraps the password via HTTP, then calls `import-test-budget.sh`. |
 | `import-test-budget.sh` | `bootstrap-and-init.sh` | POSTs `test-data/2026-01-08-Test Budget.zip` (or a custom path via `$1`) to the Actual server's import endpoint. |
 
+## Direct Actual Budget connectivity testing
+
+| Script | npm script | Purpose |
+|---|---|---|
+| `direct-sync/bank-sync-direct.mjs` | `npm run direct-sync` | Connect **directly** to Actual Budget (no MCP layer). Lists all accounts then runs bank sync per account. Use `-- --list` to skip sync, `-- --budget <name>` to target a specific budget, `-- --help` for all options. Reads the same `ACTUAL_*` / `BUDGET_n_*` env vars as the server; writes a timestamped JSON log to `logs/direct-sync-*.log`. Useful for diagnosing GoCardless/SimpleFIN issues and validating server connectivity independently of MCP. |
+
 ## Versioning
 
 | Script | npm script | Purpose |
