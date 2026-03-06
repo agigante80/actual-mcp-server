@@ -59,7 +59,7 @@
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/express": "^5.0.3",
-    "@types/node": "^25.3.3",
+    "@types/node": "^25.3.5",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.9.2"
   },
