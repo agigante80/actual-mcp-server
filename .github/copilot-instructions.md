@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **60 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **62 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
 
 **Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
 
-**Current Status**: Production-ready, 60 tools implemented, 84% Actual Budget API coverage
+**Current Status**: Production-ready, 62 tools implemented, 84% Actual Budget API coverage
 
 ## Architecture Essentials
 
@@ -28,7 +28,7 @@ await rawAddTransactions(data);
 
 ### Tool Structure
 
-All 60 tools follow this pattern (`src/tools/*.ts`):
+All 62 tools follow this pattern (`src/tools/*.ts`):
 
 ```typescript
 import { z } from 'zod';
@@ -67,7 +67,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (60 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (62 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── auth/
 │   ├── setup.ts                # createMcpAuth() factory (MCPAuth singleton, AUTH_PROVIDER=oidc)
 │   └── budget-acl.ts           # Per-user budget ACL (email/sub/group principals, AUTH_BUDGET_ACL)
@@ -80,7 +80,7 @@ src/
 │   └── loggerFactory.ts        # Module-scoped loggers (winston)
 ├── server/
 │   └── httpServer.ts           # HTTP transport
-└── tools/                      # 60 tool definitions (see actualToolsManager.ts)
+└── tools/                      # 62 tool definitions (see actualToolsManager.ts)
 ```
 
 ## Development Workflow
@@ -94,11 +94,18 @@ npm run start                   # Production mode (requires build first)
 
 # Testing
 npm run test:adapter            # Adapter smoke tests (concurrency, retry logic)
-npm run test:unit-js            # Unit tests for transactions
+npm run test:unit-js            # All unit tests (4 files)
+node tests/unit/transactions_create.test.js          # Run a single unit test file
+node tests/unit/schema_validation.test.js            # Schema validation tests only
 npm run test:e2e                # Playwright E2E tests (initialize → tools/call → streaming)
+npx playwright test --grep "initialize -> tools/list" # Single E2E test by name
 
 # Tool Management
-npm run verify-tools            # Verify all 60 tools are correctly registered
+npm run verify-tools            # Verify all 62 tools are correctly registered
+npm run check:coverage          # List @actual-app/api methods vs current tool coverage
+
+# Debugging
+npm run test:mcp-client         # Connect as MCP client and exercise tools (requires build)
 
 # Docs & Release
 npm run docs:sync               # Sync **Version:** and **Tool Count:** markers in all docs
@@ -204,8 +211,10 @@ ACTUAL_PASSWORD=your_password
 ACTUAL_BUDGET_SYNC_ID=uuid-from-actual   # Settings → Sync ID
 ACTUAL_BUDGET_PASSWORD=                  # Optional budget encryption password
 MCP_TRANSPORT_MODE=http                  # only http is supported
-MCP_SSE_AUTHORIZATION=Bearer token123    # Optional Bearer token auth
+MCP_SSE_AUTHORIZATION=your_token_here    # Raw token only — NOT "Bearer token123"
 ```
+
+> ⚠️ `MCP_SSE_AUTHORIZATION` must be the **raw token value only**. The server extracts the token from the `Authorization: Bearer <token>` header and compares directly. Setting it to `"Bearer abc123"` will cause all auth checks to fail.
 
 See `src/config.ts` for validation schema.
 
@@ -301,7 +310,7 @@ Located in `src/tests_adapter_runner.ts`:
 # Test Actual connection only
 npm run dev -- --test-actual-connection
 
-# Test all 60 tools
+# Test all 62 tools
 npm run dev -- --test-actual-tools
 ```
 
@@ -313,12 +322,14 @@ npm run dev -- --test-actual-tools
 |-------------|-------------------------------|
 | **New MCP tool** | `README.md` (tool count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list |
 | **New API route/endpoint** | `docs/ARCHITECTURE.md` (endpoints), `docs/PROJECT_OVERVIEW.md` if user-facing |
-| **Environment variable added** | `.env.example` (with comment), `docs/ARCHITECTURE.md` Configuration section |
+| **Environment variable added** | `.env.example` (with comment), `docs/ARCHITECTURE.md` Configuration section, `README.md` env var table |
 | **Test changes** | `docs/TESTING_AND_RELIABILITY.md` (commands/coverage) |
-| **Security/auth changes** | `docs/SECURITY_AND_PRIVACY.md` |
+| **Security/auth changes** | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` (OIDC section) |
 | **New feature** | `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md` (mark completed), `README.md` |
 | **Dependency update** | `docs/PROJECT_OVERVIEW.md` (tech stack) |
-| **Docker changes** | `docs/ARCHITECTURE.md`, `README.md` Docker commands |
+| **Docker changes** | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
+| **AI client setup changes** | `docs/guides/AI_CLIENT_SETUP.md` (LibreChat/LobeChat config, networking, TLS) |
+| **Deployment changes** | `docs/guides/DEPLOYMENT.md` (Docker profiles, Kubernetes, upgrade steps) |
 
 **Version & Tool Count Sync**: `scripts/version-bump.js` auto-updates `**Version:**` and
 `**Tool Count:**` markers across all docs on every `release:*` bump or `docs:sync` run.
@@ -328,6 +339,8 @@ Never manually edit these markers — run `npm run docs:sync` instead.
 - `ARCHITECTURE.md` - Component layers, data flow, transport protocols
 - `PROJECT_OVERVIEW.md` - Features, roadmap, assessment (88/100 score)
 - `NEW_TOOL_CHECKLIST.md` - Step-by-step checklist for adding a new tool (9 steps)
+- `guides/AI_CLIENT_SETUP.md` - LibreChat/LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC/ACL
+- `guides/DEPLOYMENT.md` - Docker, Docker Compose profiles, Kubernetes manifests, upgrade/logs
 
 ## ⚠️ Danger Zones (Never Do These)
 
@@ -343,6 +356,8 @@ Never manually edit these markers — run `npm run docs:sync` instead.
 | Commit without running `npm run build` + `npm run test:unit-js` | May push broken TypeScript |
 | Hardcode secrets or tokens in source files | Security vulnerability |
 | Use `any` type without strong justification | Bypasses TypeScript safety |
+| Set `MCP_SSE_AUTHORIZATION=Bearer token123` | Wrong — set to raw token only; "Bearer " is stripped from header before comparison |
+| Try to enable native HTTPS via `MCP_ENABLE_HTTPS` | These env vars are parsed by `config.ts` but **never consumed** — they are no-ops; use a reverse proxy for TLS |
 
 ## 📄 Documentation Hygiene — Delete, Don't Archive
 
@@ -381,10 +396,11 @@ When working on specific areas, reference these files:
 
 **Adding Tools**: `src/actualToolsManager.ts`, `src/tools/*.ts`, `src/lib/schemas/common.ts`, `docs/NEW_TOOL_CHECKLIST.md`  
 **Transport Issues**: `src/server/httpServer.ts`  
-**OIDC/Auth**: `src/auth/setup.ts`, `src/auth/budget-acl.ts`, `src/config.ts` (AUTH_PROVIDER etc.)  
+**OIDC/Auth**: `src/auth/setup.ts`, `src/auth/budget-acl.ts`, `src/config.ts`, `docs/guides/AI_CLIENT_SETUP.md` (OIDC/ACL section)  
 **API Integration**: `src/lib/actual-adapter.ts` (withActualApi pattern), `src/lib/retry.ts`  
 **Testing**: `tests/e2e/mcp-client.playwright.spec.ts`, `src/tests_adapter_runner.ts`, `tests/manual/` (live integration suite)  
-**Deployment**: `scripts/deploy-and-test.sh`, `docker-compose.yaml`  
+**Deployment**: `scripts/deploy-and-test.sh`, `docker-compose.yaml`, `docs/guides/DEPLOYMENT.md`  
+**AI Client Setup**: `docs/guides/AI_CLIENT_SETUP.md` (LibreChat/LobeChat, Docker networking, TLS proxy)  
 **Configuration**: `src/config.ts`, `.env.example`
 
 ## Common Tasks
@@ -420,6 +436,6 @@ If transactions/budgets don't persist:
 
 ---
 
-**Last Updated**: 2026-03-03  
-**Version:** 0.4.26  
+**Last Updated**: 2026-03-20  
+**Version:** 0.4.27  
 **Tool Count:** 62 (verified LibreChat-compatible)
