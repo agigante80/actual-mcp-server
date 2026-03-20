@@ -19,3 +19,19 @@ certs/
 *.pem
 *.key
 *.crt
+*.p12
+*.pfx
+
+# CI/CD and repo tooling (not needed at build time)
+.github/
+renovate.json
+
+# Compose and test config (not part of the app image)
+docker-compose*.yaml
+playwright.config*.ts
+
+# Docker hub description scripts
+docker/
+
+# Test fixtures
+test-data/

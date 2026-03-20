@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **60 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **62 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
 
 **Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
 
-**Current Status**: Production-ready, 60 tools implemented, 84% Actual Budget API coverage
+**Current Status**: Production-ready, 62 tools implemented, 84% Actual Budget API coverage
 
 ## Architecture Essentials
 
@@ -28,7 +28,7 @@ await rawAddTransactions(data);
 
 ### Tool Structure
 
-All 60 tools follow this pattern (`src/tools/*.ts`):
+All 62 tools follow this pattern (`src/tools/*.ts`):
 
 ```typescript
 import { z } from 'zod';
@@ -67,7 +67,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (60 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (62 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── auth/
 │   ├── setup.ts                # createMcpAuth() factory (MCPAuth singleton, AUTH_PROVIDER=oidc)
 │   └── budget-acl.ts           # Per-user budget ACL (email/sub/group principals, AUTH_BUDGET_ACL)
@@ -80,7 +80,7 @@ src/
 │   └── loggerFactory.ts        # Module-scoped loggers (winston)
 ├── server/
 │   └── httpServer.ts           # HTTP transport
-└── tools/                      # 60 tool definitions (see actualToolsManager.ts)
+└── tools/                      # 62 tool definitions (see actualToolsManager.ts)
 ```
 
 ## Development Workflow
@@ -98,7 +98,7 @@ npm run test:unit-js            # Unit tests for transactions
 npm run test:e2e                # Playwright E2E tests (initialize → tools/call → streaming)
 
 # Tool Management
-npm run verify-tools            # Verify all 60 tools are correctly registered
+npm run verify-tools            # Verify all 62 tools are correctly registered
 
 # Docs & Release
 npm run docs:sync               # Sync **Version:** and **Tool Count:** markers in all docs
@@ -301,7 +301,7 @@ Located in `src/tests_adapter_runner.ts`:
 # Test Actual connection only
 npm run dev -- --test-actual-connection
 
-# Test all 60 tools
+# Test all 62 tools
 npm run dev -- --test-actual-tools
 ```
 
@@ -420,6 +420,6 @@ If transactions/budgets don't persist:
 
 ---
 
-**Last Updated**: 2026-03-03  
+**Last Updated**: 2026-03-20  
 **Version:** 0.4.26  
 **Tool Count:** 62 (verified LibreChat-compatible)
