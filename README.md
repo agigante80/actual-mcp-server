@@ -9,1390 +9,490 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **62 specialized tools** covering 84% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** designed specifically for this MCP server.
+**Talk to your budget. Run it anywhere. Trust it in production.**
 
-> **🧪 Tested with Multiple AI Clients**: This MCP server has been extensively tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools load and function correctly. Other MCP clients should work but have not been tested yet.
+Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant — [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), Claude, and more — directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
+
+```
+┌─────────────┐   MCP/HTTP   ┌──────────────────┐   Actual API   ┌──────────────┐
+│  AI Client  │ ◄──────────► │  Actual MCP      │ ◄───────────► │   Actual     │
+│ (LibreChat, │              │  Server          │               │   Budget     │
+│  LobeChat…) │              │  (62 tools)      │               │   Server     │
+└─────────────┘              └──────────────────┘               └──────────────┘
+```
+
+### Why this project?
+
+Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
+
+- **62 tools — the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
+- **HTTP transport, not stdio.** Runs as a real remote server accessible by any number of clients simultaneously — essential for LibreChat, LobeChat, or any web-based AI assistant.
+- **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
+- **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
+- **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs — no shared tokens required.
+- **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
+
+> **Verified working** with [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-- [Use Cases & Scenarios](#-use-cases--scenarios)
-- [Connection Architecture](#-connection-architecture)
-- [Features](#-features)
-- [Quick Start](#-quick-start)
-- [Available Tools](#-available-tools)
-- [Missing Tools](#-missing-tools-not-yet-implemented)
-- [Installation](#-installation)
-- [AI Client Integration (LibreChat & LobeChat)](#-ai-client-integration-librechat--lobechat)
-- [Usage Examples](#-usage-examples)
-- [Configuration](#-configuration)
-- [Transports & Authentication](#-transports--authentication)
-- [Docker Deployment](#-docker-deployment)
-- [Architecture](#-architecture)
-- [API Coverage](#-api-coverage)
-- [Testing](#-testing)
-- [Contributing](#-contributing)
-- [Documentation](#-documentation)
-- [License](#-license)
+- [Quick Start](#quick-start)
+- [Available Tools](#available-tools)
+- [Configuration](#configuration)
+- [Multi-Budget Switching](#multi-budget-switching)
+- [Transport & Authentication](#transport--authentication)
+- [Testing](#testing)
+- [Documentation](#documentation)
+- [Comparison with Similar Projects](#comparison-with-similar-projects)
+- [Contributing](#contributing)
+- [License](#license)
+- [Disclaimer](#disclaimer)
 
 ---
 
-## 💡 Use Cases & Scenarios
-
-### What Can You Do with This Integration?
-
-**LibreChat ↔ Actual MCP Server ↔ Actual Budget**
-
-This MCP server enables conversational financial management by connecting LibreChat's AI capabilities with your Actual Budget data. Here are real-world scenarios:
-
-#### 🗣️ Natural Language Queries
-
-```
-You: "How much did I spend on groceries last month?"
-AI: [Uses transactions_filter] "You spent $847.23 on groceries in October 2025"
-
-You: "Show me all transactions over $100 this week"
-AI: [Uses transactions_filter] Lists large transactions with dates and payees
-
-You: "What's my checking account balance?"
-AI: [Uses accounts_get_balance] "Your checking account has $3,247.89"
-```
-
-#### 💰 Budget Management
-
-```
-You: "Set my restaurant budget to $300 for this month"
-AI: [Uses budgets_setAmount] "Restaurant budget for November 2025 set to $300"
-
-You: "Transfer $50 from Entertainment to Groceries"
-AI: [Uses budgets_transfer] "Transferred $50 from Entertainment to Groceries"
-
-You: "How much budget do I have left for December?"
-AI: [Uses budgets_getMonth] Shows remaining budget for all categories
-```
-
-#### 📝 Transaction Management
-
-```
-You: "Add a $45.67 transaction at Kroger from my checking account"
-AI: [Uses transactions_create] "Transaction created and categorized as Groceries"
-
-You: "Import my bank CSV file" [with file upload]
-AI: [Uses transactions_import] "Imported 47 transactions, matched 12 duplicates"
-
-You: "Find all Amazon transactions this year"
-AI: [Uses transactions_filter] Lists all Amazon purchases with amounts
-```
-
-#### 🏷️ Organization & Automation
-
-```
-You: "Create a rule to automatically categorize Uber as Transportation"
-AI: [Uses rules_create] "Rule created: Uber → Transportation"
-
-You: "Merge my duplicate Starbucks payees"
-AI: [Uses payees_merge] "Merged 3 Starbucks entries into one"
-
-You: "Create a new category called 'Pet Supplies' under Expenses"
-AI: [Uses categories_create] "Pet Supplies category created"
-```
-
-### 🎯 Perfect For
-
-- **💬 Conversational Finance**: Chat with your budget naturally
-- **📊 Quick Insights**: Get financial answers without opening Actual Budget
-- **🔄 Bulk Operations**: Manage multiple transactions through conversation
-- **🤖 Automation**: Set up rules and recurring patterns via AI
-- **📱 Mobile-Friendly**: Use LibreChat mobile app for on-the-go budget access
-- **♿ Accessibility**: Voice-based financial management for users with disabilities
-
----
-
-## 🔗 Connection Architecture
-
-```
-┌─────────────┐         ┌──────────────────┐         ┌──────────────┐
-│             │  HTTPS  │                  │   API   │              │
-│  LibreChat  │ ◄─────► │  Actual MCP      │ ◄─────► │   Actual     │
-│   (Client)  │  MCP    │     Server       │  calls  │   Budget     │
-│             │Protocol │                  │         │   Server     │
-└─────────────┘         └──────────────────┘         └──────────────┘
-      │                        │                           │
-      │                        │                           │
-   User asks              Translates                  Financial
-  "How much               natural language            operations
-  did I spend?"           to Actual API calls         & data storage
-```
-
-### How It Works
-
-1. **User** chats with **LibreChat** in natural language
-2. **LibreChat** sends MCP tool requests to **Actual MCP Server**
-3. **Actual MCP Server** translates requests to **Actual Budget API** calls
-4. **Actual Budget** executes operations and returns data
-5. **Actual MCP Server** formats response for AI consumption
-6. **LibreChat** presents results in conversational format
-
-### Transport Protocols
-
-- **HTTP/HTTPS**: Production-ready with Bearer token authentication
-
-### 🐳 Docker Networking Best Practices
-
-**For Docker-to-Docker communication (LibreChat, LobeChat, etc.)**, use internal Docker hostnames instead of host IPs:
-
-✅ **RECOMMENDED**: `http://actual-mcp-server-backend:3600/http`  
-❌ **NOT RECOMMENDED**: `http://192.168.x.x:3600/http`
-
-**Why internal hostnames are better:**
-- **Direct communication**: No extra network hops through host bridge
-- **Better security**: No external network exposure required
-- **Built-in DNS**: Automatic hostname resolution within Docker networks
-- **Resilient**: Works even if host IP changes
-- **Performance**: Lower latency for container-to-container communication
-
-**Example configuration for AI clients:**
-```yaml
-# LibreChat librechat.yaml
-mcpServers:
-  actual-mcp:
-    url: "http://actual-mcp-server-backend:3600/http"  # ✅ Use container name
-
-# LobeChat (via UI)
-Server URL: http://actual-mcp-server-backend:3600/http  # ✅ Use container name
-```
-
-Both containers must be on the same Docker network. See [Docker Deployment](#-docker-deployment) section below for network configuration.
-
----
-
-## ✨ Features
-
-### Core Capabilities
-### Core Capabilities
-
-- 🤖 **62 MCP Tools**: Comprehensive financial operations via natural language
--  **Secure**: Bearer token OR OIDC/JWT authentication + HTTPS/TLS encryption
-- 🛡️ **Type-Safe**: Full TypeScript implementation with runtime validation (Zod)
-- 🔁 **Resilient**: Automatic retry logic with exponential backoff
-- 📊 **84% API Coverage**: Supports majority of Actual Budget operations
-- 🚀 **Production-Ready**: Docker support, structured logging, health checks
-- ✅ **LibreChat Verified**: All 62 tools tested and working
-- ⚡ **Exclusive Tools**: 6 ActualQL-powered tools for advanced queries and summaries
-
-### Advanced Features
-
-- **Concurrent Control**: Rate-limited API calls prevent overwhelming Actual Budget
-- **Observability**: Prometheus metrics, structured logging with Winston
-- **Flexible Deployment**: Docker, Kubernetes, bare metal, or Docker Compose
-- **HTTPS Support**: TLS encryption with self-signed or CA-signed certificates
-- **Tested**: Unit tests (62 tools + schema), Playwright E2E, and live integration suite
-
-### Financial Operations
-
-With conversational AI, you can:
-
-- 💰 **Manage Accounts**: Create, update, close accounts; check balances
-- 💳 **Track Transactions**: Add, update, delete transactions; import bank data
-- 📁 **Organize Categories**: Create category groups and categories
-- 👥 **Handle Payees**: Manage payees, merge duplicates
-- 📅 **Budget Planning**: Set budget amounts, enable carryover, track spending
-- 🔧 **Automate Rules**: Create rules for automatic transaction categorization
-- 🔄 **Batch Operations**: Efficiently update multiple budget categories
-
-## 🚀 Quick Start
-
-> 🐳 **Docker Images Available**: 
-> - **Docker Hub**: [`agigante80/actual-mcp-server`](https://hub.docker.com/r/agigante80/actual-mcp-server)
-> - **GitHub Container Registry**: [`ghcr.io/agigante80/actual-mcp-server`](https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server)
+## Quick Start
 
 ### Prerequisites
 
-- **Node.js 20+** or **Docker**
-- **Actual Budget server** (running locally or hosted)
-- Actual Budget credentials (password and sync ID)
+- [Actual Budget](https://actualbudget.org/) server running (local or remote)
+- Your **Budget Sync ID**: Actual → Settings → Show Advanced Settings → Sync ID
+- **Node.js 20+** (npm method) or **Docker**
 
-### Install with npm
-
-```bash
-# Clone the repository
-git clone https://github.com/agigante80/actual-mcp-server.git
-cd actual-mcp-server
-
-# Install dependencies
-npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your Actual Budget credentials
-
-# Build and run
-npm run build
-npm run dev -- --debug
-```
-
-### Run with Docker
-
-**Docker images are published on two registries:**
-
-- **Docker Hub**: [agigante80/actual-mcp-server](https://hub.docker.com/r/agigante80/actual-mcp-server)
-- **GitHub Container Registry**: [ghcr.io/agigante80/actual-mcp-server](https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server)
-
-Available tags:
-- `latest` - Latest stable release from main branch
-- `latest-<sha>` - Specific commit from main (e.g., `latest-abc1234`)
-- `development` - Latest development build
-- `development-<sha>` - Specific development commit
-
-Both registries have identical images. Use Docker Hub for public access, or GHCR for integration with GitHub workflows.
-
-> **Note**: Docker images use HTTP transport mode.
-
-#### Quick Start (HTTP)
+### Option A — Docker (recommended)
 
 ```bash
-# Pull and run from Docker Hub (HTTP is the default)
 docker run -d \
-  --name actual-mcp-server \
+  --name actual-mcp-server-backend \
   -p 3600:3600 \
   -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
-  -v actual-mcp-data:/data \
-  agigante80/actual-mcp-server:latest
-
-# Or from GitHub Container Registry
-docker run -d \
-  --name actual-mcp-server \
-  -p 3600:3600 \
-  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
+  -e MCP_SSE_AUTHORIZATION=your_secret_token \
   -v actual-mcp-data:/data \
   ghcr.io/agigante80/actual-mcp-server:latest
 
-# Check if running
 curl http://localhost:3600/health
 ```
 
-#### With HTTPS (Recommended)
+Also available on Docker Hub: `agigante80/actual-mcp-server:latest`
+
+### Option B — Docker Compose
 
 ```bash
-# Generate self-signed certificate first
-mkdir -p certs
-openssl req -x509 -newkey rsa:4096 -nodes \
-  -keyout certs/key.pem -out certs/cert.pem \
-  -days 365 -subj "/CN=your-server-ip" \
-  -addext "subjectAltName=IP:your-server-ip,DNS:localhost"
-
-# Run with HTTPS enabled
-docker run -d \
-  --name actual-mcp-server \
-  -p 3600:3600 \
-  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
-  -e MCP_ENABLE_HTTPS=true \
-  -e MCP_HTTPS_CERT=/app/certs/cert.pem \
-  -e MCP_HTTPS_KEY=/app/certs/key.pem \
-  -v actual-mcp-data:/data \
-  -v $(pwd)/certs:/app/certs:ro \
-  agigante80/actual-mcp-server:latest
-
-# Verify HTTPS is working
-curl -k https://localhost:3600/health
-```
-
-#### Pull Specific Version
-
-```bash
-# Latest stable from Docker Hub
-docker pull agigante80/actual-mcp-server:latest
-
-# Latest stable from GHCR
-docker pull ghcr.io/agigante80/actual-mcp-server:latest
-
-# Development version
-docker pull agigante80/actual-mcp-server:development
-
-# Specific commit
-docker pull agigante80/actual-mcp-server:latest-abc1234
-```
-
-#### Using docker-compose.yaml (Production profile)
-
-For production deployments, use the `production` profile in the provided `docker-compose.yaml`:
-
-```bash
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your Actual Budget server details
-
-# Start production stack (Nginx proxy + MCP server)
-docker compose --profile production up -d
-
-# View logs
-docker compose --profile production logs -f
-
-# Stop
-docker compose --profile production down
-```
-
-### Run with Docker Compose
-
-```bash
-# Full stack (Actual Budget + MCP Server)
-docker compose --profile fullstack --profile dev up
-
-# Access Actual Budget: http://localhost:5006
-# Access MCP Server: http://localhost:3000
-```
-
-**Next Steps**: Connect your AI assistant (LibreChat, etc.) to `http://localhost:3000`
-
----
-
-## 🛠️ Available Tools
-
-The MCP server exposes **62 tools** organized into 12 categories. All tools follow the naming convention `actual_<category>_<action>`.
-
-> **⚡ Exclusive ActualQL Tools**: This MCP server includes 6 specialized tools powered by ActualQL that are **unique to this implementation** and not available in standard Actual Budget integrations. These tools provide advanced querying, aggregation, and analysis capabilities.
-
-### Accounts (7 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_accounts_list` | List all accounts | - |
-| `actual_accounts_create` | Create new account | `name`, `type`, `offbudget`, `closed` |
-| `actual_accounts_update` | Update account details | `id`, `name?`, `type?`, `offbudget?`, `closed?` |
-| `actual_accounts_delete` | Permanently delete account | `id` |
-| `actual_accounts_close` | Close account (soft delete) | `id` |
-| `actual_accounts_reopen` | Reopen closed account | `id` |
-| `actual_accounts_get_balance` | Get account balance at date | `id`, `cutoff?` |
-
-### Transactions (12 tools)
-
-**Basic Operations (6 tools)**
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_transactions_get` | Get transactions for account | `accountId`, `startDate?`, `endDate?` |
-| `actual_transactions_filter` | Filter transactions with advanced criteria | `accountId?`, `startDate?`, `endDate?`, `minAmount?`, `maxAmount?`, `categoryId?`, `payeeId?`, `notes?`, `cleared?`, `reconciled?` |
-| `actual_transactions_create` | Create new transaction(s) | `accountId`, `date`, `amount`, `payee?`, `category?`, `notes?` |
-| `actual_transactions_import` | Import and reconcile transactions | `accountId`, `transactions[]` |
-| `actual_transactions_update` | Update transaction | `id`, `amount?`, `payee?`, `category?`, `notes?`, `date?` |
-| `actual_transactions_delete` | Delete transaction | `id` |
-
-**⚡ Exclusive ActualQL-Powered Tools (6 tools)** - *Only available in this MCP server*
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_transactions_search_by_month` | Search transactions by month using `$month` transform | `month?` (YYYY-MM, defaults to current), `accountId?`, `categoryName?`, `payeeName?`, `minAmount?`, `maxAmount?` |
-| `actual_transactions_search_by_amount` | Find transactions by amount range | `minAmount?`, `maxAmount?`, `startDate?`, `endDate?`, `accountId?`, `categoryName?`, `limit?` |
-| `actual_transactions_search_by_category` | Search transactions by category name | `categoryName?`, `startDate?`, `endDate?`, `accountId?`, `minAmount?`, `maxAmount?`, `limit?` |
-| `actual_transactions_search_by_payee` | Find transactions by payee/vendor | `payeeName?`, `startDate?`, `endDate?`, `accountId?`, `categoryName?`, `minAmount?`, `maxAmount?`, `limit?` |
-| `actual_transactions_summary_by_category` | Get spending summary grouped by category with aggregation | `startDate?` (defaults to month start), `endDate?` (defaults to today), `accountId?`, `includeIncome?` |
-| `actual_transactions_summary_by_payee` | Analyze top vendors/merchants with totals and counts | `startDate?` (defaults to month start), `endDate?` (defaults to today), `accountId?`, `limit?` |
-
-These exclusive tools use ActualQL's advanced features like `$transform`, `groupBy`, `$sum`, and `$count` for efficient queries and aggregations that go beyond standard API capabilities.
-
-### Categories (4 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_categories_get` | List all categories | - |
-| `actual_categories_create` | Create new category | `name`, `group_id`, `is_income?` |
-| `actual_categories_update` | Update category | `id`, `name?`, `group_id?`, `is_income?` |
-| `actual_categories_delete` | Delete category | `id` |
-
-### Category Groups (4 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_category_groups_get` | List all category groups | - |
-| `actual_category_groups_create` | Create category group | `name`, `is_income?` |
-| `actual_category_groups_update` | Update group | `id`, `name?`, `is_income?` |
-| `actual_category_groups_delete` | Delete group | `id` |
-
-### Payees (6 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_payees_get` | List all payees | - |
-| `actual_payees_create` | Create new payee | `name` |
-| `actual_payees_update` | Update payee | `id`, `name?`, `category?` |
-| `actual_payees_delete` | Delete payee | `id` |
-| `actual_payees_merge` | Merge duplicate payees | `targetId`, `mergeIds[]` |
-| `actual_payee_rules_get` | Get rules for a payee | `payeeId` |
-
-### Budgets (10 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_budgets_list_available` | List all budget files on the server with their sync IDs | - |
-| `actual_budgets_switch` | Switch the active budget for all subsequent operations | `budgetName` (string) |
-| `actual_budgets_get_all` | List all available budget files | - |
-| `actual_budgets_getMonths` | List available budget months | - |
-| `actual_budgets_getMonth` | Get budget for specific month | `month` |
-| `actual_budgets_setAmount` | Set category budget amount | `month`, `categoryId`, `amount` |
-| `actual_budgets_transfer` | Transfer amount between categories | `month`, `fromCategoryId`, `toCategoryId`, `amount` |
-| `actual_budgets_setCarryover` | Enable/disable carryover | `month`, `categoryId`, `flag` |
-| `actual_budgets_holdForNextMonth` | Hold funds for next month | `month`, `amount` |
-| `actual_budgets_resetHold` | Reset hold status | `month` |
-
-### Rules (4 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_rules_get` | List all rules | - |
-| `actual_rules_create` | Create transaction rule | `conditions`, `actions` |
-| `actual_rules_update` | Update rule | `id`, `conditions?`, `actions?` |
-| `actual_rules_delete` | Delete rule | `id` |
-
-### Advanced Query & Sync (2 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_query_run` | Execute custom ActualQL query | `query` |
-| `actual_bank_sync` | Trigger bank sync (GoCardless/SimpleFIN) | `accountId?` |
-
-### Batch Operations (1 tool)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_budget_updates_batch` | Batch multiple budget updates | `updates` (function) |
-
-### Server Information & Lookup (3 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_server_info` | Get MCP server status, version and build info | - |
-| `actual_server_get_version` | Get Actual Budget server version | - |
-| `actual_get_id_by_name` | Resolve entity name → UUID for accounts, categories, payees, or schedules | `type` (`accounts`\|`categories`\|`payees`\|`schedules`), `name` |
-
-### Session Management (2 tools)
-
-| Tool | Description | Parameters |
-|------|-------------|------------|
-| `actual_session_list` | List all active MCP sessions | - |
-| `actual_session_close` | Close a specific MCP session | `sessionId` |
-
-**Total: 62 tools across 12 categories** (including 6 exclusive ActualQL-powered tools)
-
----
-
-## 🚧 Missing Tools (Not Yet Implemented)
-
-The following Actual Budget API features are not yet exposed as MCP tools:
-
-### Schedules (4 API methods available)
-- `getSchedules()` - List all scheduled transactions
-- `createSchedule()` - Create recurring transaction schedules
-- `updateSchedule()` - Modify schedule parameters
-- `deleteSchedule()` - Remove schedules
-
-These methods require access to Actual's internal API and are not directly exported from the standard methods module.
-
-**Note**: Most core financial operations (accounts, transactions, budgets, categories, payees, rules, schedules) are fully implemented. The missing features above represent specialized workflows requiring deeper API integration. Contributions welcome!
-
-## 📦 Installation
-
-### Method 1: npm (Development)
-
-```bash
-# Clone repository
 git clone https://github.com/agigante80/actual-mcp-server.git
 cd actual-mcp-server
+cp .env.example .env        # fill in ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID
 
-# Install dependencies
+docker compose --profile production up -d   # Nginx proxy on :3600
+# or
+docker compose --profile dev up -d          # dev mode with hot-reload
+# or
+docker compose --profile fullstack up -d    # includes Actual Budget server on :5006
+```
+
+### Option C — npm
+
+```bash
+git clone https://github.com/agigante80/actual-mcp-server.git
+cd actual-mcp-server
 npm install
-
-# Configure environment
-cp .env.example .env
-# Edit .env with your credentials
-
-# Build TypeScript
+cp .env.example .env        # fill in required values
 npm run build
-
-# Run server
-npm run dev -- --debug --http
+npm run dev -- --http
 ```
 
-### Method 2: Docker (Recommended for Production)
+Server starts at `http://localhost:3000/http` (dev) or `http://localhost:3600/http` (Docker).
 
-```bash
-# Pull image
-docker pull ghcr.io/agigante80/actual-mcp-server:latest
+### Connect an AI client
 
-# Create secrets directory
-mkdir -p secrets
-echo "your_password" > secrets/actual_password.txt
-chmod 600 secrets/actual_password.txt
-
-# Run container
-docker run -d \
-  --name actual-mcp-server \
-  -p 3000:3000 \
-  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD=your_actual_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -v actual-mcp-data:/data \
-  ghcr.io/agigante80/actual-mcp-server:latest
-```
-
-### Method 3: Docker Compose (Full Stack)
-
-```bash
-# Clone repository
-git clone https://github.com/agigante80/actual-mcp-server.git
-cd actual-mcp-server
-
-# Configure environment
-cp .env.example .env
-# Edit .env
-
-# Start full stack (Actual Budget + MCP Server)
-docker compose --profile fullstack --profile dev up -d
-
-# Or production mode
-mkdir -p secrets
-echo "your_password" > secrets/actual_password.txt
-docker compose --profile production up -d
-```
-
----
-
-## 💬 AI Client Integration (LibreChat & LobeChat)
-
-This MCP server has been tested and verified with both [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools work correctly with both clients.
-
-### Quick Setup (Docker Environment)
-
-**⚠️ Important for Docker Deployments**: Always use **internal Docker hostnames** (not host IPs) for container-to-container communication. This provides better performance, security, and reliability.
-
-✅ **CORRECT**: `http://actual-mcp-server-backend:3600/http`  
-❌ **AVOID**: `http://192.168.x.x:3600/http`
-
-#### 1. Start the MCP Server
-
-```bash
-# Using Docker Compose (recommended)
-docker compose up -d mcp-server
-
-# Or standalone Docker
-docker run -d --name actual-mcp-server-backend \
-  --network your-ai-network \
-  -p 3600:3600 \
-  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
-  -v actual-mcp-data:/data \
-  ghcr.io/agigante80/actual-mcp-server:latest
-```
-
-#### 2a. Configure LibreChat
-
-Edit your `librechat.yaml`:
+Add to your `librechat.yaml` (or LobeChat MCP plugin settings):
 
 ```yaml
-# librechat.yaml
 mcpServers:
   actual-mcp:
     type: "streamable-http"
-    # ✅ Use container name (not IP) if on same Docker network
     url: "http://actual-mcp-server-backend:3600/http"
     headers:
       Authorization: "Bearer YOUR_TOKEN_HERE"
     serverInstructions: true
-    timeout: 600000  # 10 minutes
+    timeout: 600000
 ```
 
-Then restart LibreChat:
-```bash
-docker restart ai-librechat
-```
-
-#### 2b. Configure LobeChat
-
-In LobeChat UI:
-1. Navigate to **Settings** → **Language Model** → **Model Context Protocol**
-2. Click **Add Plugin**
-3. Fill in the configuration:
-   - **Name**: Actual Budget MCP
-   - **Server Type**: HTTP
-   - **Server URL**: `http://actual-mcp-server-backend:3600/http` ✅ (use container name)
-   - **Authorization**: `Bearer YOUR_TOKEN_HERE`
-4. Click **Save**
-
-LobeChat will automatically discover all 62 tools.
-
-### Network Configuration
-
-Both the MCP server and AI client containers must be on the same Docker network:
-
-```yaml
-# docker-compose.yml
-networks:
-  ai-network:
-    driver: bridge
-
-services:
-  librechat:  # or lobe-chat
-    networks:
-      - ai-network
-  
-  actual-mcp-server-backend:
-    networks:
-      - ai-network
-```
-
-Verify connectivity:
-```bash
-# From LibreChat/LobeChat container
-docker exec <ai-container> wget -qO- http://actual-mcp-server-backend:3600/health
-# Should return: {"status":"ok","initialized":true,...}
-```
-
-### HTTPS Setup (Optional - For External Access)
-
-**Note**: HTTPS is **not required** when using internal Docker networking. Use HTTPS only if:
-- Accessing MCP server from outside the Docker network
-- Exposing server to the internet
-- Compliance requirements mandate encryption
-
-For internal Docker-to-Docker communication, HTTP is secure and simpler.
-
-#### Option 1: Docker Internal Network (Recommended - No HTTPS Needed)
-
-If both containers are on the same Docker network, use HTTP securely without TLS overhead:
-
-```yaml
-# docker-compose.yml
-networks:
-  ai-network:
-    driver: bridge
-
-services:
-  librechat:  # or lobe-chat
-    networks:
-      - ai-network
-  
-  actual-mcp-server-backend:
-    networks:
-      - ai-network
-```
-
-Configuration:
-```yaml
-# LibreChat librechat.yaml
-mcpServers:
-  actual-mcp:
-    url: "http://actual-mcp-server-backend:3600/http"  # ✅ No HTTPS needed
-    
-# LobeChat UI
-Server URL: http://actual-mcp-server-backend:3600/http  # ✅ No HTTPS needed
-```
-
-Benefits: No certificate management, simpler configuration, same security (network isolation).
-
-#### Option 2: Self-Signed Certificate (Development/External Access)
-
-For testing HTTPS or external access:
-
-```bash
-# Generate certificate
-mkdir -p certs
-openssl req -x509 -newkey rsa:4096 -nodes \
-  -keyout certs/key.pem -out certs/cert.pem \
-  -days 365 -subj "/CN=your-server-ip" \
-  -addext "subjectAltName=IP:your-server-ip,DNS:localhost"
-
-# Run MCP server with HTTPS
-docker run -d --name actual-mcp-server-backend \
-  -p 3600:3600 \
-  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
-  -e MCP_ENABLE_HTTPS=true \
-  -e MCP_HTTPS_CERT=/app/certs/cert.pem \
-  -e MCP_HTTPS_KEY=/app/certs/key.pem \
-  -v actual-mcp-data:/data \
-  -v $(pwd)/certs:/app/certs:ro \
-  ghcr.io/agigante80/actual-mcp-server:latest
-
-# Trust certificate in LibreChat (Alpine Linux)
-docker cp certs/cert.pem ai-librechat:/tmp/mcp-server.crt
-docker exec -u root ai-librechat sh -c "cat /tmp/mcp-server.crt >> /etc/ssl/certs/ca-certificates.crt"
-docker restart ai-librechat
-```
-
-#### Option 3: CA-Signed Certificate (Production/Internet-Facing)
-
-```bash
-# Using Let's Encrypt (requires domain name)
-sudo certbot certonly --standalone -d your-domain.com
-sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem certs/cert.pem
-sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem certs/key.pem
-sudo chown $USER:$USER certs/*.pem
-```
-
-Update AI client to use domain:
-```yaml
-# LibreChat librechat.yaml
-mcpServers:
-  actual-mcp:
-    url: "https://your-domain.com:3600/http"  # Use domain name
-    
-# LobeChat UI
-Server URL: https://your-domain.com:3600/http
-```
-
-### Verification
-
-Test the connection:
-ACTUAL_PASSWORD=your_password
-ACTUAL_BUDGET_SYNC_ID=your_sync_id
-
-# Security (generate with: openssl rand -hex 32)
-MCP_SSE_AUTHORIZATION=your_bearer_token_here
-
-# Transport mode (Docker only)
-MCP_TRANSPORT_MODE=--http
-
-# HTTPS (optional but recommended)
-MCP_ENABLE_HTTPS=true
-MCP_HTTPS_CERT=/app/certs/cert.pem
-MCP_HTTPS_KEY=/app/certs/key.pem
-
-# Optional
-MCP_BRIDGE_PORT=3600
-MCP_BRIDGE_DATA_DIR=/data
-```
-
-### Verification
-
-Test the connection:
-```bash
-# Health check (adjust URL based on your setup)
-curl http://localhost:3600/health
-# Or with HTTPS
-curl -k https://localhost:3600/health
-
-# Should return: {"status":"ok","initialized":true,...}
-```
-
-In your AI client, you should see:
-- ✅ **62 tools loaded** in the MCP servers list
-- ✅ All tools available with `actual_` prefix
-- ✅ Natural language queries working
+See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full LibreChat, LobeChat, network, and HTTPS/TLS proxy setup.
 
 ---
 
-## 💡 Usage Examples
+## Available Tools
 
-### Example 1: Check Account Balances
+**62 tools** across 12 categories. All tools use the `actual_<category>_<action>` naming convention.
 
-```bash
-# Using curl with HTTP transport
-curl -X POST http://localhost:3000/http \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "tools/call",
-    "params": {
-      "name": "actual_accounts_list",
-      "arguments": {}
-    }
-  }'
-```
+### Accounts (7)
 
-### Example 2: Add Transaction
+| Tool | Description |
+|------|-------------|
+| `actual_accounts_list` | List all accounts |
+| `actual_accounts_create` | Create new account |
+| `actual_accounts_update` | Update account details |
+| `actual_accounts_delete` | Permanently delete account |
+| `actual_accounts_close` | Close account (soft delete) |
+| `actual_accounts_reopen` | Reopen closed account |
+| `actual_accounts_get_balance` | Get account balance at a date |
 
-```bash
-curl -X POST http://localhost:3000/http \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "method": "tools/call",
-    "params": {
-      "name": "actual_transactions_create",
-      "arguments": {
-        "accountId": "your-account-id",
-        "date": "2025-11-09",
-        "amount": -5000,
-        "payee": "Amazon",
-        "notes": "Office supplies"
-      }
-    }
-  }'
-```
+### Transactions (12)
 
-**Note**: Amounts are in cents (integer). $50.00 = `5000`, expenses are negative.
+**Standard (6)**
 
-### Example 3: Set Monthly Budget
+| Tool | Description |
+|------|-------------|
+| `actual_transactions_get` | Get transactions for an account |
+| `actual_transactions_filter` | Filter with advanced criteria |
+| `actual_transactions_create` | Create new transaction(s) |
+| `actual_transactions_import` | Import and reconcile transactions |
+| `actual_transactions_update` | Update a transaction |
+| `actual_transactions_delete` | Delete a transaction |
 
-```bash
-curl -X POST http://localhost:3000/http \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 3,
-    "method": "tools/call",
-    "params": {
-      "name": "actual_budgets_setAmount",
-      "arguments": {
-        "month": "2025-11",
-        "categoryId": "your-category-id",
-        "amount": 50000
-      }
-    }
-  }'
-```
+**Exclusive ActualQL-powered (6)** — unique to this MCP server
 
-### Example 4: Using with AI Clients (LibreChat/LobeChat)
+| Tool | Description |
+|------|-------------|
+| `actual_transactions_search_by_month` | Search by month using `$month` transform |
+| `actual_transactions_search_by_amount` | Find by amount range |
+| `actual_transactions_search_by_category` | Search by category name |
+| `actual_transactions_search_by_payee` | Find by payee/vendor |
+| `actual_transactions_summary_by_category` | Spending summary grouped by category |
+| `actual_transactions_summary_by_payee` | Top vendors with totals and counts |
 
-1. Start the MCP server: `npm run dev -- --http` (or use Docker)
-2. Configure your AI client to connect:
-   - **LibreChat**: Edit `librechat.yaml` with MCP server URL
-   - **LobeChat**: Add plugin via Settings → Model Context Protocol
-3. Ask natural language questions: **"What's my checking account balance?"**
-4. AI client calls appropriate tools (`actual_accounts_list`, `actual_accounts_get_balance`)
-5. You get conversational responses: "Your checking account balance is $1,234.56"
+### Categories (4)
 
-Both LibreChat and LobeChat work identically - all 62 tools are available for conversational financial management.
+`actual_categories_get` · `actual_categories_create` · `actual_categories_update` · `actual_categories_delete`
+
+### Category Groups (4)
+
+`actual_category_groups_get` · `actual_category_groups_create` · `actual_category_groups_update` · `actual_category_groups_delete`
+
+### Payees (6)
+
+`actual_payees_get` · `actual_payees_create` · `actual_payees_update` · `actual_payees_delete` · `actual_payees_merge` · `actual_payee_rules_get`
+
+### Budgets (10)
+
+| Tool | Description |
+|------|-------------|
+| `actual_budgets_list_available` | List all configured budget files |
+| `actual_budgets_switch` | Switch active budget (multi-budget) |
+| `actual_budgets_get_all` | List available budget files |
+| `actual_budgets_getMonths` | List budget months |
+| `actual_budgets_getMonth` | Get budget for a specific month |
+| `actual_budgets_setAmount` | Set category budget amount |
+| `actual_budgets_transfer` | Transfer amount between categories |
+| `actual_budgets_setCarryover` | Enable/disable carryover |
+| `actual_budgets_holdForNextMonth` | Hold funds for next month |
+| `actual_budgets_resetHold` | Reset hold status |
+
+### Rules (4)
+
+`actual_rules_get` · `actual_rules_create` · `actual_rules_update` · `actual_rules_delete`
+
+### Advanced Query & Sync (2)
+
+| Tool | Description |
+|------|-------------|
+| `actual_query_run` | Execute custom ActualQL query |
+| `actual_bank_sync` | Trigger bank sync (GoCardless/SimpleFIN) |
+
+### Batch Operations (1)
+
+`actual_budget_updates_batch` — batch multiple budget updates in one call
+
+### Server Information & Lookup (3)
+
+| Tool | Description |
+|------|-------------|
+| `actual_server_info` | Server status, version, build info |
+| `actual_server_get_version` | Actual Budget server version |
+| `actual_get_id_by_name` | Resolve name → UUID for accounts, categories, payees |
+
+### Session Management (2)
+
+`actual_session_list` · `actual_session_close`
+
+### Not Yet Implemented
+
+- Scheduled/recurring transactions (`getSchedules`, `createSchedule`, `updateSchedule`, `deleteSchedule`)
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
-### Environment Variables
+All configuration is via environment variables. Copy `.env.example` to `.env` to get started.
 
-All configuration is managed via environment variables. See [`.env.example`](.env.example) for a complete reference with detailed descriptions.
-
-#### Complete Environment Variables Reference
+### Complete Environment Variables Reference
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | **Actual Budget Connection** ||||
-| `ACTUAL_SERVER_URL` | `http://localhost:5006` | ✅ Yes | URL of your Actual Budget server |
-| `ACTUAL_PASSWORD` | - | ✅ Yes | Password for Actual Budget server |
-| `ACTUAL_BUDGET_SYNC_ID` | - | ✅ Yes | Budget Sync ID from Actual (Settings → Sync ID) |
-| `ACTUAL_BUDGET_PASSWORD` | - | ❌ No | Optional encryption password for encrypted budgets |
+| `ACTUAL_SERVER_URL` | `http://localhost:5006` | Yes | URL of your Actual Budget server |
+| `ACTUAL_PASSWORD` | — | Yes | Password for Actual Budget server |
+| `ACTUAL_BUDGET_SYNC_ID` | — | Yes | Budget Sync ID from Actual (Settings → Sync ID) |
+| `ACTUAL_BUDGET_PASSWORD` | — | No | Optional encryption password for encrypted budgets |
 | **MCP Server Settings** ||||
-| `MCP_BRIDGE_PORT` | `3000` (dev)<br/>`3600` (Docker) | ❌ No | Port for MCP server to listen on |
-| `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | ❌ No | Host address to bind server to (`0.0.0.0` = all interfaces) |
-| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | ❌ No | Directory to store Actual Budget local data (SQLite) |
-| `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | ❌ No | Public hostname/IP for server (shown in logs) |
-| `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | ❌ No | Public scheme (`http` or `https`) |
-| `MCP_BRIDGE_USE_TLS` | `false` | ❌ No | Legacy TLS flag (use `MCP_ENABLE_HTTPS` instead) |
+| `MCP_BRIDGE_PORT` | `3000` (dev) / `3600` (Docker) | No | Port for MCP server to listen on |
+| `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
+| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite) |
+| `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | No | Public hostname/IP for server (shown in logs) |
+| `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
+| `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
 | **Transport Configuration** ||||
-| `MCP_TRANSPORT_MODE` | `--http` | ❌ No | Transport mode (only `--http` supported) - Docker only |
-| `MCP_HTTP_PATH` | `/http` | ❌ No | HTTP endpoint path |
+| `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode (only `--http` supported) |
+| `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
+| `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
 | **Session Management** ||||
-| `USE_CONNECTION_POOL` | `true` | ❌ No | Enable session-based connection pooling |
-| `MAX_CONCURRENT_SESSIONS` | `15` | ❌ No | Maximum concurrent MCP sessions allowed |
-| `SESSION_IDLE_TIMEOUT_MINUTES` | `5` (pool)<br/>`2` (HTTP) | ❌ No | Minutes before idle session cleanup |
+| `USE_CONNECTION_POOL` | `true` | No | Enable session-based connection pooling |
+| `MAX_CONCURRENT_SESSIONS` | `15` | No | Maximum concurrent MCP sessions allowed |
+| `SESSION_IDLE_TIMEOUT_MINUTES` | `5` (pool) / `2` (HTTP) | No | Minutes before idle session cleanup |
 | **Security & Authentication** ||||
-| `AUTH_PROVIDER` | `none` | ❌ No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
-| `MCP_SSE_AUTHORIZATION` | - | ❌ No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended) |
-| `OIDC_ISSUER` | - | ⚠️ If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
-| `OIDC_RESOURCE` | - | ❌ No | Expected `aud` claim in JWT (your client ID) |
-| `OIDC_SCOPES` | - | ❌ No | Comma-separated required scopes; leave empty for Casdoor |
-| `AUTH_BUDGET_ACL` | - | ❌ No | Per-user budget ACL (see [OIDC Authentication](#oidc-authentication-multi-user)) |
-| `MCP_ENABLE_HTTPS` | `false` | ❌ No | Enable HTTPS/TLS encryption |
-| `MCP_HTTPS_CERT` | - | ⚠️ If HTTPS | Path to TLS certificate file (PEM format) |
-| `MCP_HTTPS_KEY` | - | ⚠️ If HTTPS | Path to TLS private key file (PEM format) |
+| `AUTH_PROVIDER` | `none` | No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
+| `MCP_SSE_AUTHORIZATION` | — | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
+| `OIDC_ISSUER` | — | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
+| `OIDC_RESOURCE` | — | No | Expected `aud` claim in JWT (your client ID) |
+| `OIDC_SCOPES` | — | No | Comma-separated required scopes; leave empty for Casdoor |
+| `AUTH_BUDGET_ACL` | — | No | Per-user budget ACL — see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
+| `MCP_ENABLE_HTTPS` | `false` | No | Parsed but not yet implemented — use a reverse proxy for TLS |
+| `MCP_HTTPS_CERT` | — | No | Parsed but not yet implemented — reserved for future native TLS support |
+| `MCP_HTTPS_KEY` | — | No | Parsed but not yet implemented — reserved for future native TLS support |
 | **Logging Configuration** ||||
-| `MCP_BRIDGE_STORE_LOGS` | `false` | ❌ No | Enable file logging (vs console only) |
-| `MCP_BRIDGE_LOG_DIR` | `./logs` | ❌ No | Directory for log files (if `STORE_LOGS=true`) |
-| `MCP_BRIDGE_LOG_LEVEL` | `debug` | ❌ No | Log level: `error`, `warn`, `info`, `debug` |
+| `MCP_BRIDGE_STORE_LOGS` | `false` | No | Enable file logging (vs console only) |
+| `MCP_BRIDGE_LOG_DIR` | `./logs` | No | Directory for log files (if `STORE_LOGS=true`) |
+| `MCP_BRIDGE_LOG_LEVEL` | `debug` | No | Log level: `error`, `warn`, `info`, `debug` |
 | **Log Rotation** (when `MCP_BRIDGE_STORE_LOGS=true`) ||||
-| `MCP_BRIDGE_MAX_FILES` | `14d` | ❌ No | Keep rotated logs for N days (e.g., `14d`, `30d`) |
-| `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | ❌ No | Rotate when file reaches size (e.g., `20m`, `100m`) |
-| `MCP_BRIDGE_ROTATE_DATEPATTERN` | `YYYY-MM-DD` | ❌ No | Date pattern for rotated log filenames |
+| `MCP_BRIDGE_MAX_FILES` | `14d` | No | Keep rotated logs for N days (e.g., `14d`, `30d`) |
+| `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | No | Rotate when file reaches size (e.g., `20m`, `100m`) |
+| `MCP_BRIDGE_ROTATE_DATEPATTERN` | `YYYY-MM-DD` | No | Date pattern for rotated log filenames |
 | **Development & Debugging** ||||
-| `DEBUG` | `false` | ❌ No | Enable debug mode (verbose logging, sets `--debug` flag) |
-| `LOG_LEVEL` | `info` | ❌ No | Log level override: `error`, `warn`, `info`, `debug` |
-| `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | ❌ No | Enable transport-level debug logging |
+| `DEBUG` | `false` | No | Enable debug mode (verbose logging) |
+| `LOG_LEVEL` | `info` | No | Log level override: `error`, `warn`, `info`, `debug` |
+| `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | No | Enable transport-level debug logging |
 | **Advanced/Internal** ||||
-| `ACTUAL_API_CONCURRENCY` | `5` | ❌ No | Max concurrent Actual API operations |
-| `USE_CONNECTION_POOL` | `true` | ❌ No | Enable session-based connection pooling |
-| `VERSION` | auto-detected | ❌ No | Server version (auto-set by build/Docker) |
-| `TZ` | `UTC` | ❌ No | Timezone for timestamps (e.g., `America/New_York`) |
-
-#### Quick Start Configuration
-
-**Minimum required variables** to get started:
-
-```bash
-# .env file
-ACTUAL_SERVER_URL=http://localhost:5006
-ACTUAL_PASSWORD=your_password
-ACTUAL_BUDGET_SYNC_ID=abc123
-```
-
-**Recommended production configuration:**
-
-```bash
-# Required
-ACTUAL_SERVER_URL=https://actual.yourdomain.com
-ACTUAL_PASSWORD=your_password
-ACTUAL_BUDGET_SYNC_ID=abc123
-
-# Security (generate token: openssl rand -hex 32)
-MCP_SSE_AUTHORIZATION=your_secure_random_token
-
-# HTTPS
-MCP_ENABLE_HTTPS=true
-MCP_HTTPS_CERT=/path/to/cert.pem
-MCP_HTTPS_KEY=/path/to/key.pem
-
-# Logging
-MCP_BRIDGE_STORE_LOGS=true
-MCP_BRIDGE_LOG_LEVEL=info
-
-# Session Management
-MAX_CONCURRENT_SESSIONS=15
-SESSION_IDLE_TIMEOUT_MINUTES=5
-```
-
-**Docker-specific settings:**
-
-Docker images use these defaults (can be overridden):
-- `MCP_BRIDGE_PORT=3600` (instead of 3000)
-- `MCP_TRANSPORT_MODE=--http`
-- `MCP_BRIDGE_DATA_DIR=/data` (recommended for volume mount)
+| `ACTUAL_API_CONCURRENCY` | `5` | No | Max concurrent Actual API operations |
+| `NODE_ENV` | `production` | No | Node environment; `production` hides stack traces in error responses |
+| `VERSION` | auto-detected | No | Server version (auto-set by build/Docker) |
+| `TZ` | `UTC` | No | Timezone for timestamps (e.g., `America/New_York`) |
 
 ---
 
-### 💰 Multi-Budget Switching
+## Multi-Budget Switching
 
-Configure multiple Actual Budget files (on the same server or on different servers) so the AI can switch between them at runtime using `actual_budgets_list_available` and `actual_budgets_switch`.
+Configure multiple Actual Budget files so the AI can switch between them at runtime using `actual_budgets_list_available` and `actual_budgets_switch`.
 
-**How fallback works:** `BUDGET_N_SERVER_URL` and `BUDGET_N_PASSWORD` automatically fall back to `ACTUAL_SERVER_URL` and `ACTUAL_PASSWORD` when omitted — so budgets on the same server need only `NAME` and `SYNC_ID`.
+`BUDGET_N_SERVER_URL` and `BUDGET_N_PASSWORD` fall back to `ACTUAL_SERVER_URL` / `ACTUAL_PASSWORD` when omitted.
 
 | Variable | Required | Fallback |
-|----------|----------|----------|
-| `BUDGET_DEFAULT_NAME` | ❌ No | `"Default"` |
-| `BUDGET_N_NAME` | ✅ Yes (enables group) | — |
-| `BUDGET_N_SYNC_ID` | ✅ Yes | — |
-| `BUDGET_N_SERVER_URL` | ❌ No | `ACTUAL_SERVER_URL` |
-| `BUDGET_N_PASSWORD` | ❌ No | `ACTUAL_PASSWORD` |
-| `BUDGET_N_ENCRYPTION_PASSWORD` | ❌ No | — |
+|----------|----------|---------|
+| `BUDGET_DEFAULT_NAME` | No | `"Default"` |
+| `BUDGET_N_NAME` | Yes (enables group) | — |
+| `BUDGET_N_SYNC_ID` | Yes | — |
+| `BUDGET_N_SERVER_URL` | No | `ACTUAL_SERVER_URL` |
+| `BUDGET_N_PASSWORD` | No | `ACTUAL_PASSWORD` |
+| `BUDGET_N_ENCRYPTION_PASSWORD` | No | — |
 
 ```bash
-# .env — three budget example
-
-# Default budget (always present)
-ACTUAL_SERVER_URL=http://actual-main:5006
+# Default budget
+ACTUAL_SERVER_URL=http://actual:5006
 ACTUAL_PASSWORD=my-password
 ACTUAL_BUDGET_SYNC_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-BUDGET_DEFAULT_NAME=My Main Budget
+BUDGET_DEFAULT_NAME=Personal
 
-# Budget 1 — same server, same password (SERVER_URL + PASSWORD omitted)
-BUDGET_1_NAME=Shared Family Account
+# Budget 1 — same server, same password
+BUDGET_1_NAME=Family
 BUDGET_1_SYNC_ID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 
-# Budget 2 — same server, different password (SERVER_URL omitted)
+# Budget 2 — different server
 BUDGET_2_NAME=Business
-BUDGET_2_PASSWORD=business-password
+BUDGET_2_SERVER_URL=https://actual-office.example.com
+BUDGET_2_PASSWORD=office-password
 BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
-
-# Budget 3 — entirely separate Actual server (all fields provided)
-BUDGET_3_NAME=Remote Office
-BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
-BUDGET_3_PASSWORD=office-password
-BUDGET_3_SYNC_ID=dddddddd-dddd-dddd-dddd-dddddddddddd
 ```
-
-Once configured the AI can ask:
-> *"Switch to the Business budget and show my uncategorized transactions this month."*
-
-and the server will call `actual_budgets_switch` then proceed in the selected budget context for all subsequent operations in that session.
 
 ---
 
-## 🔌 Transport & Authentication
+## Transport & Authentication
 
-The MCP server uses **HTTP transport** with optional Bearer token authentication.
+The server uses **HTTP transport** (`/http` endpoint) with optional Bearer token authentication.
 
-### HTTP Transport
-
-**Best for:** All deployments (only transport supported)
+### Static Bearer token (single-user)
 
 ```bash
-# Start server with HTTP
-npm run dev -- --http
-
-# Or with authentication
-MCP_SSE_AUTHORIZATION=your_token npm run dev -- --http
-```
-
-**LibreChat Configuration:**
-
-```yaml
-# librechat.yaml
-mcpServers:
-  actual-mcp:
-    type: "streamable-http"
-    url: "http://your-server-ip:3600/http"
-    headers:
-      Authorization: "Bearer your_token_here"
-    serverInstructions: true
-```
-
-**Features:**
-- ✅ Full MCP protocol support via `@modelcontextprotocol/sdk`
-- ✅ Bearer token authentication via headers
-- ✅ All 62 tools load successfully in LibreChat
-- ✅ Session management with `MCP-Session-Id` headers
-- ✅ Production-ready and tested
-
-### Authentication Configuration
-
-#### Enable Authentication
-
-Set the `MCP_SSE_AUTHORIZATION` environment variable:
-
-```bash
-# Generate a secure token
+# Generate a token
 openssl rand -hex 32
 
 # Add to .env
-MCP_SSE_AUTHORIZATION=your_generated_token_here
-
-# Restart server
-npm run build
-npm run dev -- --http
+MCP_SSE_AUTHORIZATION=your_token_here
 ```
 
-#### Authentication Behavior
+Clients send: `Authorization: Bearer your_token_here`
 
-When `MCP_SSE_AUTHORIZATION` is set:
-- ✅ Server validates Bearer tokens on all requests
-- ✅ Returns `401 Unauthorized` for missing/invalid tokens
-- ✅ Logs all authentication attempts
-- ✅ Optional - if not set, authentication is disabled
-
-#### Security Best Practices
+### OIDC (multi-user)
 
 ```bash
-# ✅ DO: Use strong random tokens (32+ characters)
-MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32)
-
-# ✅ DO: Use HTTPS in production
-ACTUAL_SERVER_URL=https://actual.yourdomain.com
-
-# ✅ DO: Rotate tokens regularly
-# ✅ DO: Use environment variables, never hardcode
-# ✅ DO: Monitor authentication failures in logs
-
-# ❌ DON'T: Use weak or predictable tokens
-# ❌ DON'T: Commit tokens to version control
-# ❌ DON'T: Share tokens between environments
-```
-
-### OIDC Authentication (Multi-User)
-
-For multi-user deployments with an OIDC provider (Casdoor, Keycloak, Auth0, etc.), set `AUTH_PROVIDER=oidc`.
-The server validates JWTs using JWKS from the issuer and optionally enforces per-user budget ACLs.
-
-```bash
-# .env — OIDC mode
 AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
-OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
-OIDC_SCOPES=                          # leave empty for Casdoor (no 'scope' claim)
-AUTH_BUDGET_ACL=alice@example.com:budget-uuid-1,bob@example.com:budget-uuid-2
+OIDC_RESOURCE=your-client-id    # must match 'aud' JWT claim
+OIDC_SCOPES=                    # leave empty for Casdoor
 ```
 
-**Casdoor compatibility note**: Casdoor auth-code flow JWTs do not include a `scope` claim.
-Set `OIDC_SCOPES=` (empty) to disable scope enforcement. The server logs `Scopes required: (none)`.
-
-**LibreChat with OIDC** — configure the OIDC MCP instance via the LibreChat admin UI (OAuth flow).
-For a static-token fallback instance, add to `librechat.yaml`:
-
-```yaml
-mcpServers:
-  actual-bearer:
-    type: "http"
-    url: "http://your-mcp-server:3600/http"
-    headers:
-      Authorization: "Bearer your_token_here"
-    serverInstructions: false
-```
-
-**`AUTH_BUDGET_ACL` format**: comma-separated `principal:budget-sync-id` pairs.
-Principals can be email addresses, OIDC `sub` values, or `group:groupname`.
-
-```
-AUTH_BUDGET_ACL=alice@example.com:aaa-bbb-ccc,group:admins:ddd-eee-fff
-```
-
-### Testing Results
-
-| Test Case | Result | Tools Loaded |
-|-----------|--------|--------------|
-| HTTP without auth | ✅ Success | 62 tools |
-| HTTP with auth (Bearer) | ✅ Success | 62 tools |
-| HTTP with OIDC (Casdoor v2.13) | ✅ Success | 62 tools |
+See [AI Client Setup — OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format and Casdoor notes.
 
 ---
 
-## 🐳 Docker Deployment
+## Testing
 
-### Docker Hub
+| Command | What It Tests | Requires Live Server |
+|---------|---------------|---------------------|
+| `npm run build` | TypeScript compilation | No |
+| `npm run test:unit-js` | 62-tool smoke, schema validation, auth ACL | No |
+| `npm run test:adapter` | Adapter, retry logic, concurrency | No |
+| `npm run test:e2e` | MCP protocol compliance (Playwright) | No |
+| `npm run test:e2e:docker:full` | Full stack integration | Yes (Docker) |
+| `npm run test:integration` | Live server sanity checks | Yes |
+| `npm run test:integration:full` | Full live integration suite | Yes |
 
-Pull from GitHub Container Registry:
+**Integration test levels** (`tests/manual/`): `sanity` → `smoke` → `normal` → `extended` → `full` → `cleanup`
 
-```bash
-docker pull ghcr.io/agigante80/actual-mcp-server:latest
-```
-
-### Production Deployment
-
-```bash
-# 1. Create secrets
-mkdir -p secrets
-echo "your_password" > secrets/actual_password.txt
-chmod 600 secrets/actual_password.txt
-
-# 2. Create environment file
-cat > .env << EOF
-ACTUAL_SERVER_URL=https://actual.yourdomain.com
-ACTUAL_BUDGET_SYNC_ID=abc123
-MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32)
-EOF
-
-# 3. Run with Docker Compose
-docker compose --profile production up -d
-
-# 4. Check logs
-docker compose logs -f mcp-server-prod
-
-# 5. Verify health
-curl http://localhost:3000/health
-```
-
-### Kubernetes
-
-See [`docs/deployment.md`](docs/deployment.md) for Kubernetes manifests with:
-- Deployments with health checks
-- Services and Ingress
-- Secret management
-- Resource limits
-- Horizontal scaling
+See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md`](tests/e2e/README.md) for details.
 
 ---
 
-## 🏗️ Architecture
+## Documentation
 
-```
-┌──────────────┐         ┌──────────────┐         ┌─────────────┐
-│   LibreChat  │   MCP   │  MCP Server  │   REST  │   Actual    │
-│  (AI Client) │◄────────┤  (62 Tools)  │◄────────┤   Budget    │
-│              │         │  +6 Exclusive│         │             │
-└──────────────┘         └──────────────┘         └─────────────┘
-                                │
-                                ▼
-                         ┌──────────────┐
-                         │   SQLite DB  │
-                         │  (Cached)    │
-                         └──────────────┘
-```
+| Document | Contents |
+|---|---|
+| [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) | LibreChat & LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC |
+| [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) | Docker, Docker Compose profiles, production config, Kubernetes |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component layers, data flow, transport protocols |
+| [docs/SECURITY_AND_PRIVACY.md](docs/SECURITY_AND_PRIVACY.md) | Auth models, threat model, hardening |
+| [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md) | Test strategy, coverage, reliability patterns |
+| [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) | Step-by-step guide for adding a new MCP tool |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, code standards, PR process |
+| [.env.example](.env.example) | Fully annotated environment variable reference |
 
-### Tech Stack
+---
 
-- **Runtime**: Node.js 20 (Alpine Linux in Docker)
-- **Language**: TypeScript 5.9 (ES2020 + ESM modules)
-- **MCP SDK**: @modelcontextprotocol/sdk ^1.25.2
-- **API Client**: @actual-app/api ^26.3.0
-- **Validation**: Zod (runtime type checking + JSON Schema)
+## Comparison with Similar Projects
+
+Several MCP servers exist for personal finance management. Here's how this project compares with the closest alternatives.
+
+> **Snapshot date**: 2026-03-20. Versions and features reflect each project's latest release at that date.
+
+### Feature Comparison
+
+| Feature | **agigante80/actual-mcp-server** | [s-stefanov/actual-mcp](https://github.com/s-stefanov/actual-mcp) | [henfrydls/actual-budget-mcp](https://github.com/henfrydls/actual-budget-mcp) | [WGDevelopment/ynab-mcp-server](https://github.com/WGDevelopment/ynab-mcp-server) |
+|---|---|---|---|---|
+| **Version** | v0.4.26 | v1.11.1 | v0.2.0 | v0.1.0 |
+| **Budget App** | Actual Budget (self-hosted) | Actual Budget (self-hosted) | Actual Budget (self-hosted) | YNAB (cloud, subscription) |
+| **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
+| **Tool Count** | **62** | ~22 | 18 | 9 |
+| **— Setup & Distribution —** |||||
+| **Transport** | HTTP (Streamable HTTP) | STDIO + SSE option | STDIO | STDIO |
+| **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
+| **Published package (npx/pip)** | ❌ Docker / clone only | ✅ `npx actual-mcp` | ✅ `npx actual-budget-mcp` | ✅ `pip install ynab-mcp` |
+| **— Security & Access —** |||||
+| **Authentication** | ✅ Bearer token + OIDC (JWKS) | ⚠️ Optional Bearer token | ❌ None (local only) | ✅ OS keyring / env var |
+| **Read-only mode** | ❌ All tools always available | ✅ Write requires `--enable-write` flag | ❌ | ✅ Most tools are read-only |
+| **Multi-budget switching** | ✅ Runtime switch via tool | ❌ | ❌ | ✅ (YNAB natively multi-budget) |
+| **— Production & Reliability —** |||||
+| **Connection pooling** | ✅ Up to 15 concurrent sessions | ❌ | ❌ | ❌ |
+| **Retry / backoff** | ✅ 3 attempts, exponential backoff | ❌ | ❌ | ❌ |
+| **Automated test suite** | ✅ Unit + E2E + integration | ❌ | ❌ | ❌ |
+| **— Transactions —** |||||
+| **Create / update / delete** | ✅ | ✅ | ✅ | ✅ |
+| **Import & reconcile** | ✅ `actual_transactions_import` | ❌ | ❌ | ❌ |
+| **Scheduled / recurring** | ❌ (planned) | ❌ | ❌ | ❌ |
+| **— Analysis & Reporting —** |||||
+| **ActualQL custom queries** | ✅ 6 exclusive tools + `actual_query_run` | ❌ | ❌ | N/A |
+| **Summary by category / payee** | ✅ | ✅ spending-by-category | ✅ | ❌ |
+| **Spending projections / forecast** | ❌ | ❌ | ✅ end-of-month forecast | ❌ |
+| **Budget vs actual comparison** | ✅ via `actual_budgets_getMonth` | ❌ | ✅ dedicated tool | ✅ month summary |
+| **Bank sync** | ✅ GoCardless / SimpleFIN | ❌ | ✅ | ❌ (YNAB handles sync natively) |
+| **— Budget Management —** |||||
+| **Set / transfer / carryover / hold** | ✅ Full (10 tools) | ❌ | ✅ Partial | ✅ Partial |
+| **Batch budget updates** | ✅ `actual_budget_updates_batch` | ❌ | ❌ | ❌ |
+| **— Accounts, Payees & Rules —** |||||
+| **Account lifecycle (close/reopen)** | ✅ | ❌ | ❌ | N/A |
+| **Payee merging** | ✅ `actual_payees_merge` | ❌ | ❌ | N/A |
+| **Payee rules management** | ✅ Full CRUD | ✅ Full CRUD | ❌ | N/A |
+| **— UX & Usability —** |||||
+| **Natural language date parsing** | ❌ YYYY-MM-DD required | ❌ | ✅ "last month", "yesterday" | ❌ |
+| **Bilingual support** | ❌ | ❌ | ✅ English + Spanish | ❌ |
+| **Auto name → UUID resolution** | ⚠️ Explicit tool (`actual_get_id_by_name`) | ❌ | ✅ Automatic in all tools | ❌ |
+| **AI prompt templates** | ❌ | ✅ financial-insights, budget-review | ❌ | ❌ |
+| **Tested AI clients** | LibreChat, LobeChat | Claude Desktop, Codex | Claude Desktop, Cursor, VS Code | Claude Code |
+| **License** | MIT | MIT | MIT | MIT |
+
+### When to choose which project
+
+- **This project** — best for production deployments, multi-user environments (OIDC), LibreChat/LobeChat, or when you need the broadest tool coverage and Docker-native setup.
+- **s-stefanov/actual-mcp** — the original implementation; good for Claude Desktop with STDIO transport, AI-generated prompt templates, and built-in read-only mode.
+- **henfrydls/actual-budget-mcp** — best for Spanish-speaking users, Cursor/VS Code integration, or when you want natural-language dates, automatic name resolution, and spending forecasts without any server setup.
+- **WGDevelopment/ynab-mcp-server** — only option if you're a YNAB user; privacy-first design with OS keyring token storage and local-LLM focus.
+
+---
+
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and the PR process.
+
+Quick flow:
+1. Fork → `git checkout -b feature/my-feature`
+2. Make changes + add tests
+3. `npm run build && npm run test:unit-js` must pass
+4. Open a Pull Request
+
+---
+
+## Architecture
+
+- **Runtime**: Node.js 22 (Alpine Linux in Docker)
+- **Language**: TypeScript 5.9 (ESM, NodeNext module resolution)
+- **MCP SDK**: `@modelcontextprotocol/sdk` ^1.25.2
+- **Actual API**: `@actual-app/api` ^26.3.0
+- **Validation**: Zod (runtime types + JSON Schema for tool inputs)
 - **Transport**: Express (HTTP)
 - **Logging**: Winston with daily rotation
-- **Testing**: Playwright, unit tests, integration tests
 
-### Key Design Patterns
-
-- **Singleton**: Tool manager, logger, config
-- **Adapter**: Wraps Actual API with retry/concurrency
-- **Strategy**: Multiple transport implementations
-- **Factory**: Dynamic tool loading and registration
-
-See [`docs/architecture.md`](docs/architecture.md) for detailed architecture documentation.
+Every Actual API call goes through the `withActualApi()` wrapper in `src/lib/actual-adapter.ts`, which handles init/shutdown lifecycle, retry (3 attempts, exponential backoff), and concurrency limiting. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full design documentation.
 
 ---
 
-## 📊 API Coverage
+## License
 
-### Coverage by Category
-
-| Category | Coverage | Tools | Status |
-|----------|----------|-------|--------|
-| **Accounts** | 100% | 7/7 | ✅ Complete |
-| **Transactions** | 100% | 12/12 | ✅ Complete + 6 exclusive ActualQL tools |
-| **Categories** | 100% | 4/4 | ✅ Complete |
-| **Category Groups** | 100% | 4/4 | ✅ Complete |
-| **Payees** | 100% | 6/6 | ✅ Complete |
-| **Budgets** | 100% | 10/10 | ✅ Complete (incl. list available + switch) |
-| **Rules** | 100% | 4/4 | ✅ Complete |
-| **Query & Sync** | 100% | 2/2 | ✅ Complete |
-| **Batch** | 100% | 1/1 | ✅ Complete |
-| **Server Info & Lookup** | 100% | 3/3 | ✅ Complete |
-
-**Overall: 84% API Coverage (62 tools covering all major Actual Budget operations)**
-
-**⚡ Exclusive Features**: This MCP server includes 6 ActualQL-powered tools that provide advanced querying and aggregation capabilities not available in other Actual Budget integrations.
-
-### Not Yet Implemented
-
-- ❌ Scheduled transactions (recurring payments)
-- ❌ Budget templates
-- ❌ Transaction notes/attachments
-
-**Note**: The `actual_query_run` tool provides direct ActualQL access for advanced custom queries beyond the 62 pre-built tools.
-- ❌ Custom reports
-
-See [`docs/api-coverage.md`](docs/api-coverage.md) for complete API documentation with examples.
+MIT — see [LICENSE](LICENSE) for details.
 
 ---
 
-## 🧪 Testing
+## Acknowledgments
 
-### Quick Test Commands
-
-```bash
-# Run all tests (adapter + unit + Docker E2E)
-npm run test:all
-
-# Run protocol tests only (fast)
-npm run test:e2e
-
-# Run Docker integration tests (full stack)
-npm run test:e2e:docker
-```
-
-### Test Types
-
-| Command | What It Tests | Speed | Requires Docker |
-|---------|---------------|-------|-----------------|
-| `test:adapter` | Adapter layer, retry logic, concurrency | ⚡ 30s | No |
-| `test:unit-js` | Unit tests (schema, 62-tool smoke, negative-path) | ⚡ 5s | No |
-| `test:e2e` | MCP protocol compliance | ⚡ 10s | No |
-| `test:e2e:docker` | Full stack integration | 🐢 60s | Yes |
-| `test:all` | All of the above | 🐢 90s | Yes |
-
-### Integration Tests (Live Server)
-
-The `tests/manual/` suite connects to a **running MCP server** over HTTP and exercises the full JSON-RPC protocol — no mocking. Six test levels cascade upward:
-
-| Level | Writes? | What runs |
-|-------|---------|----------|
-| `sanity` | No | Protocol checks: tool count, server info, SQL, GraphQL rejection |
-| `smoke` | No | Sanity + account balances, categories, recent transactions |
-| `normal` | Yes | Account lifecycle (create → update → close → reopen) |
-| `extended` | Yes | Normal + category groups, categories, payees, transactions |
-| `full` | Yes | Extended + budgets, rules, batch operations, advanced queries |
-| `cleanup` | Yes | Finds and removes all `MCP-Test-*` / `MCP-Cat-*` / `MCP-Group-*` / `MCP-Payee-*` data |
-
-```bash
-# Via npm scripts
-npm run test:integration              # sanity (default)
-npm run test:integration:full        # full test run
-npm run test:integration:cleanup     # delete all test data
-
-# Direct invocation
-node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
-# Example:
-node tests/manual/index.js http://localhost:3600/http mytoken full yes
-```
-
-See [`tests/manual/README.md`](tests/manual/README.md) for complete documentation.
-
-### Docker E2E Tests
-
-The Docker E2E tests provide comprehensive full-stack validation:
-
-```bash
-# Run Docker-based integration tests
-npm run test:e2e:docker
-
-# Advanced options
-./tests/e2e/run-docker-e2e.sh --no-cleanup   # Leave containers for debugging
-./tests/e2e/run-docker-e2e.sh --verbose      # Show detailed output
-```
-
-**What's tested:**
-- ✅ Docker build correctness
-- ✅ Container networking
-- ✅ Real Actual Budget integration (all 62 tools)
-- ✅ Session management
-- ✅ Production deployment scenario
-
-See [docs/DOCKER_E2E_TESTING.md](docs/DOCKER_E2E_TESTING.md) for complete documentation.
+- **[Actual Budget](https://actualbudget.org/)** — open-source budgeting software
+- **[Model Context Protocol](https://modelcontextprotocol.io/)** — standardised AI-app integration
+- **[LibreChat](https://github.com/danny-avila/LibreChat)** — open-source ChatGPT alternative
+- **[s-stefanov/actual-mcp](https://github.com/s-stefanov/actual-mcp)** — original adapter pattern
 
 ---
 
-## 🤝 Contributing
+## Disclaimer
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for:
+This project started as a **personal learning exercise** to explore the [Model Context Protocol](https://modelcontextprotocol.io/) technology. It is an independent open-source project, not affiliated with, endorsed by, or supported by [Actual Budget](https://actualbudget.org/) or any other organisation.
 
-- Development setup
-- Code standards
-- Testing requirements
-- Pull request process
-- Auto-merge workflow
-
-### Quick Contribution Guide
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/my-feature`
-3. Make changes and add tests
-4. Commit: `git commit -m "feat: add new feature"`
-5. Push: `git push origin feature/my-feature`
-6. Open Pull Request
+The software is provided **as-is**, without warranty of any kind. The author accepts no responsibility for how it is used, for any data loss, financial errors, or other consequences arising from its use. If you connect it to real financial data, you do so entirely at your own risk.
 
 ---
 
-## 📚 Documentation
+## Support
 
-- **[Architecture](docs/architecture.md)**: System design and technical details
-- **[API Coverage](docs/api-coverage.md)**: Complete tool reference with examples
-- **[Deployment](docs/deployment.md)**: Docker, Kubernetes, bare metal guides
-- **[Development](docs/development.md)**: Local development and debugging
-- **[Contributing](CONTRIBUTING.md)**: Contribution guidelines and workflow
+- **[GitHub Issues](https://github.com/agigante80/actual-mcp-server/issues)** — bug reports and feature requests
+- **[GitHub Discussions](https://github.com/agigante80/actual-mcp-server/discussions)** — questions and ideas
 
 ---
 
-## 📜 License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🙏 Acknowledgments
-
-- **[Actual Budget](https://actualbudget.org/)**: Open-source budgeting software
-- **[Model Context Protocol](https://modelcontextprotocol.io/)**: Standardized AI-app integration
-- **[LibreChat](https://github.com/danny-avila/LibreChat)**: Open-source ChatGPT alternative
-- **Community contributors**: Thank you for your support!
-
----
-
-## 📞 Support & Community
-
-- **GitHub Issues**: [Report bugs or request features](https://github.com/agigante80/actual-mcp-server/issues)
-- **GitHub Discussions**: [Ask questions and share ideas](https://github.com/agigante80/actual-mcp-server/discussions)
-- **Documentation**: [Comprehensive guides in /docs](docs/)
-
----
-
-**Made with ❤️ by the Actual MCP Server community**
+**Version:** 0.4.27 | **Tool Count:** 62 (verified LibreChat-compatible)
