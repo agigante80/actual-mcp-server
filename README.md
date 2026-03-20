@@ -9,9 +9,9 @@
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
-A production-ready **Model Context Protocol (MCP)** server that bridges AI assistants with [Actual Budget](https://actualbudget.org/), enabling natural language financial management through **62 specialized tools** covering 84% of the Actual Budget API, including **6 exclusive ActualQL-powered tools** unique to this implementation.
+**Talk to your budget. Run it anywhere. Trust it in production.**
 
-> **Tested with**: [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home) — all 62 tools verified working. Any MCP-compatible client should work.
+Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant — [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), Claude, and more — directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
 
 ```
 ┌─────────────┐   MCP/HTTP   ┌──────────────────┐   Actual API   ┌──────────────┐
@@ -20,6 +20,19 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 │  LobeChat…) │              │  (62 tools)      │               │   Server     │
 └─────────────┘              └──────────────────┘               └──────────────┘
 ```
+
+### Why this project?
+
+Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
+
+- **62 tools — the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
+- **HTTP transport, not stdio.** Runs as a real remote server accessible by any number of clients simultaneously — essential for LibreChat, LobeChat, or any web-based AI assistant.
+- **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
+- **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
+- **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs — no shared tokens required.
+- **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
+
+> **Verified working** with [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -35,6 +48,7 @@ A production-ready **Model Context Protocol (MCP)** server that bridges AI assis
 - [Comparison with Similar Projects](#comparison-with-similar-projects)
 - [Contributing](#contributing)
 - [License](#license)
+- [Disclaimer](#disclaimer)
 
 ---
 
@@ -463,6 +477,14 @@ MIT — see [LICENSE](LICENSE) for details.
 - **[Model Context Protocol](https://modelcontextprotocol.io/)** — standardised AI-app integration
 - **[LibreChat](https://github.com/danny-avila/LibreChat)** — open-source ChatGPT alternative
 - **[s-stefanov/actual-mcp](https://github.com/s-stefanov/actual-mcp)** — original adapter pattern
+
+---
+
+## Disclaimer
+
+This project started as a **personal learning exercise** to explore the [Model Context Protocol](https://modelcontextprotocol.io/) technology. It is an independent open-source project, not affiliated with, endorsed by, or supported by [Actual Budget](https://actualbudget.org/) or any other organisation.
+
+The software is provided **as-is**, without warranty of any kind. The author accepts no responsibility for how it is used, for any data loss, financial errors, or other consequences arising from its use. If you connect it to real financial data, you do so entirely at your own risk.
 
 ---
 
