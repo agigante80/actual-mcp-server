@@ -368,6 +368,7 @@ See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md
 
 | Document | Contents |
 |---|---|
+| [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) | **Start here** — step-by-step guide to connecting Claude Desktop to Actual Budget |
 | [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) | LibreChat & LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC |
 | [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) | Docker, Docker Compose profiles, production config, Kubernetes |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component layers, data flow, transport protocols |
