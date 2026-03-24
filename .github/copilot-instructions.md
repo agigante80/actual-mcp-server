@@ -357,7 +357,6 @@ Never manually edit these markers — run `npm run docs:sync` instead.
 | Hardcode secrets or tokens in source files | Security vulnerability |
 | Use `any` type without strong justification | Bypasses TypeScript safety |
 | Set `MCP_SSE_AUTHORIZATION=Bearer token123` | Wrong — set to raw token only; "Bearer " is stripped from header before comparison |
-| Try to enable native HTTPS via `MCP_ENABLE_HTTPS` | These env vars are parsed by `config.ts` but **never consumed** — they are no-ops; use a reverse proxy for TLS |
 
 ## 📄 Documentation Hygiene — Delete, Don't Archive
 

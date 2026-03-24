@@ -260,13 +260,30 @@ export {};
     const schemeOverride = process.env.MCP_BRIDGE_PUBLIC_SCHEME;
     let scheme = schemeOverride;
     if (!scheme) {
-      scheme = process.env.MCP_BRIDGE_USE_TLS === 'true' ? 'https' : 'http';
+      scheme = (process.env.MCP_BRIDGE_USE_TLS === 'true' || process.env.MCP_ENABLE_HTTPS === 'true') ? 'https' : 'http';
     }
 
     // choose advertised path based on transport type
     const advertisedPath = process.env.MCP_BRIDGE_HTTP_PATH || HTTP_PATH;
 
     const advertisedUrl = `${scheme}://${advertisedHost}:${PORT}${advertisedPath}`;
+
+    // Fail fast if native TLS is enabled but cert/key paths are missing or unreadable
+    if (process.env.MCP_ENABLE_HTTPS === 'true') {
+      const certPath = process.env.MCP_HTTPS_CERT;
+      const keyPath = process.env.MCP_HTTPS_KEY;
+      if (!certPath || !keyPath) {
+        logger.error('MCP_ENABLE_HTTPS=true requires both MCP_HTTPS_CERT and MCP_HTTPS_KEY to be set');
+        process.exit(1);
+      }
+      const { existsSync } = await import('node:fs');
+      for (const [label, p] of [['MCP_HTTPS_CERT', certPath], ['MCP_HTTPS_KEY', keyPath]] as const) {
+        if (!existsSync(p)) {
+          logger.error(`${label} path not found: ${p}`);
+          process.exit(1);
+        }
+      }
+    }
 
     // If requested, run the MCP client-side tests now that all variables are ready
     if (useTestMcpClient) {
