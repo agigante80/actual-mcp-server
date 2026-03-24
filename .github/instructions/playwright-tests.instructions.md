@@ -14,8 +14,8 @@ Key rules:
 - **Never hardcode** server URLs or credentials — always use `process.env.MCP_SERVER_URL`
 - `EXPECTED_TOOL_COUNT` must be updated to the current total whenever a tool is added or removed
 - **File-size target: ≤ 500 lines per spec file.** Files over 700 lines must be split by domain
-- **Do not duplicate helpers** — once `docs/feature/E2E_TEST_REFACTOR.md` ships, import from
-  `tests/shared/e2e-helpers.ts` instead of defining helpers locally in spec files
+- **Do not duplicate helpers** — import shared utilities from `tests/shared/e2e-helpers.ts`
+  (and `tests/shared/mcp-protocol.js` for JS callers) instead of defining helpers locally in spec files
 - These are **API-only** tests (HTTP JSON-RPC). Do not use `page.*` or any browser APIs
 - Do NOT add `baseURL` interaction patterns — specs call `MCP_SERVER_URL` directly
 - Retry logic (`retries: 2`) is configured in `playwright.config.ts` / `playwright.config.docker.ts` — don't add manual retry loops

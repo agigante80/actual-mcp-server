@@ -259,9 +259,9 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `OIDC_RESOURCE` | — | No | Expected `aud` claim in JWT (your client ID) |
 | `OIDC_SCOPES` | — | No | Comma-separated required scopes; leave empty for Casdoor |
 | `AUTH_BUDGET_ACL` | — | No | Per-user budget ACL — see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
-| `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS — see [docs/feature/NATIVE_TLS.md](docs/feature/NATIVE_TLS.md) *(planned)* |
-| `MCP_HTTPS_CERT` | — | No | Path to PEM certificate file — see [docs/feature/NATIVE_TLS.md](docs/feature/NATIVE_TLS.md) *(planned)* |
-| `MCP_HTTPS_KEY` | — | No | Path to PEM private key file — see [docs/feature/NATIVE_TLS.md](docs/feature/NATIVE_TLS.md) *(planned)* |
+| `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS. Requires `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` |
+| `MCP_HTTPS_CERT` | — | No | Path to PEM certificate file (required when `MCP_ENABLE_HTTPS=true`) |
+| `MCP_HTTPS_KEY` | — | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
 | **Logging Configuration** ||||
 | `MCP_BRIDGE_STORE_LOGS` | `false` | No | Enable file logging (vs console only) |
 | `MCP_BRIDGE_LOG_DIR` | `./logs` | No | Directory for log files (if `STORE_LOGS=true`) |
