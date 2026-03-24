@@ -121,6 +121,30 @@ If you see that, the server is up and ready. 🎉
 
 > **Troubleshooting**: If the health check fails, check the container logs with `docker logs actual-mcp` to see what went wrong.
 
+### Verify your token with a full MCP handshake
+
+The health endpoint doesn't check auth. Use this single command to confirm your secret token is correct **and** the MCP protocol is working end-to-end:
+
+```bash
+curl -s -X POST http://localhost:3600/http \
+  -H "Authorization: Bearer your_secret_token" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli-test","version":"1.0"}}}' \
+  | python3 -m json.tool
+```
+
+Replace `your_secret_token` with the token you set in `MCP_SSE_AUTHORIZATION`.
+
+**✅ Success** — you'll see a JSON response containing `"protocolVersion"` and a `"serverInfo"` block with the server name and version.
+
+**❌ Wrong token** — you'll get:
+```json
+{"error": "Unauthorized"}
+```
+
+**❌ Server not running** — you'll get `curl: (7) Failed to connect`.
+
 ---
 
 ## Step 4 — Configure Claude Desktop
@@ -191,6 +215,14 @@ After saving the file, **fully quit and reopen Claude Desktop** — changes to t
 
 > **On Mac**: Right-click the Claude icon in the Dock and choose **Quit**, then reopen it from Applications.  
 > **On Windows**: Right-click the Claude icon in the system tray and choose **Exit**, then reopen it.
+
+### ⚠️ Claude Desktop may require HTTPS
+
+Some versions of Claude Desktop enforce that the MCP server URL starts with `https://`. If you see an error like **"URL must start with 'https'"**, you have two options:
+
+**Option A — Reverse proxy (works today):** Run nginx or Caddy in front of the MCP server to terminate TLS, then use `https://` in the config URL. See [AI Client Setup — HTTPS/TLS](AI_CLIENT_SETUP.md#https--tls-setup) for examples.
+
+**Option B — Native TLS (planned):** Native `https://` support via `MCP_ENABLE_HTTPS=true` + `MCP_HTTPS_CERT` + `MCP_HTTPS_KEY` is planned. See [docs/feature/NATIVE_TLS.md](../../docs/feature/NATIVE_TLS.md) for the full spec including a `mkcert` workflow for locally-trusted certificates.
 
 ---
 
