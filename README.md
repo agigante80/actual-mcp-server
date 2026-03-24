@@ -11,14 +11,16 @@
 
 **Talk to your budget. Run it anywhere. Trust it in production.**
 
-Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant — [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), Claude, and more — directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
+Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant — [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), [Claude Desktop](https://claude.ai/download), and more — directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
 
 ```
 ┌─────────────┐   MCP/HTTP   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  AI Client  │ ◄──────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │ (LibreChat, │              │  Server          │               │   Budget     │
-│  LobeChat…) │              │  (62 tools)      │               │   Server     │
-└─────────────┘              └──────────────────┘               └──────────────┘
+│  LobeChat,  │              │  (62 tools)      │               │   Server     │
+│  Claude     │              └──────────────────┘               └──────────────┘
+│  Desktop…)  │
+└─────────────┘
 ```
 
 ### Why this project?
@@ -32,7 +34,7 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs — no shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/) and [LobeChat](https://lobehub.com/home). All 62 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 62 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -107,7 +109,7 @@ Server starts at `http://localhost:3000/http` (dev) or `http://localhost:3600/ht
 
 ### Connect an AI client
 
-Add to your `librechat.yaml` (or LobeChat MCP plugin settings):
+**LibreChat / LobeChat** — add to `librechat.yaml` (or LobeChat MCP plugin settings):
 
 ```yaml
 mcpServers:
@@ -121,6 +123,27 @@ mcpServers:
 ```
 
 See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full LibreChat, LobeChat, network, and HTTPS/TLS proxy setup.
+
+**Claude Desktop** — add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:3600/http",
+        "--header",
+        "Authorization: Bearer YOUR_TOKEN_HERE"
+      ]
+    }
+  }
+}
+```
+
+See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for HTTPS setup, Linux/NVM fixes, and troubleshooting.
 
 ---
 
