@@ -144,7 +144,7 @@ HTTPS is **not required** for internal Docker-to-Docker communication. Use it on
 - You are exposing the server to the internet
 - Compliance requirements mandate encryption
 
-> **Note:** Native TLS is not yet implemented in the MCP server. Terminate TLS at a reverse proxy and set `MCP_BRIDGE_USE_TLS=true` so the server advertises `https://` in its URL.
+> **Note:** Native TLS is supported — set `MCP_ENABLE_HTTPS=true`, `MCP_HTTPS_CERT`, and `MCP_HTTPS_KEY`. For multi-domain or certificate rotation use cases a reverse proxy is still preferred; set `MCP_BRIDGE_USE_TLS=true` so the server advertises the correct `https://` URL when TLS is terminated upstream.
 
 ### Option A: Docker Internal Network (Recommended — No HTTPS Needed)
 
