@@ -18,6 +18,8 @@ import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { createMcpAuth } from '../auth/setup.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
+import * as https from 'node:https';
+import * as fs from 'node:fs';
 
 // AsyncLocalStorage for request context (sessionId accessible to tools)
 export const requestContext = new AsyncLocalStorage<{ sessionId?: string }>();
@@ -37,6 +39,7 @@ export async function startHttpServer(
 ) {
   const app = express();
   app.use(express.json());
+  const scheme = config.MCP_ENABLE_HTTPS ? 'https' : 'http';
 
   // --- OIDC / mcp-auth (CF-5) ---
   // When AUTH_PROVIDER=oidc, validate JWTs and enforce budget ACL.
@@ -522,7 +525,7 @@ export async function startHttpServer(
         serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
         capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: toolsList.reduce((a: Record<string, object>, n: string) => ({ ...a, [n]: {} }), {}) },
         tools: toolsList,
-        advertisedUrl: advertisedUrl || `http://${serverIp}:${port}${httpPath}`,
+        advertisedUrl: advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`,
       },
     });
   });
@@ -536,7 +539,7 @@ export async function startHttpServer(
         serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
         capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: toolsList.reduce((a: Record<string, object>, n: string) => ({ ...a, [n]: {} }), {}) },
         tools: toolsList,
-        advertisedUrl: advertisedUrl || `http://${serverIp}:${port}${httpPath}`,
+        advertisedUrl: advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`,
       },
     });
   });
@@ -563,11 +566,15 @@ export async function startHttpServer(
     res.send(txt);
   });
 
-  const listener = app.listen(port, () => {
-    const advertised = advertisedUrl || `http://${serverIp}:${port}${httpPath}`;
+  const tlsOptions = config.MCP_ENABLE_HTTPS
+    ? { cert: fs.readFileSync(config.MCP_HTTPS_CERT!), key: fs.readFileSync(config.MCP_HTTPS_KEY!) }
+    : undefined;
+
+  const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, () => {
+    const advertised = advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`;
     console.info(`MCP Streamable HTTP Server listening on ${port}`);
     console.info(`📨 MCP endpoint: ${advertised}`);
-    console.info(`❤️ Health check: http://localhost:${port}/health`);
+    console.info(`❤️ Health check: ${scheme}://localhost:${port}/health`);
     if (config.AUTH_PROVIDER === 'oidc') {
       logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required — issuer: ${config.OIDC_ISSUER})`);
     } else if (config.MCP_SSE_AUTHORIZATION) {
