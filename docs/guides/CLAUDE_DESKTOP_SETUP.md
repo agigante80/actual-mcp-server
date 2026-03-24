@@ -151,6 +151,14 @@ Replace `your_secret_token` with the token you set in `MCP_SSE_AUTHORIZATION`.
 
 Claude Desktop reads its MCP server configuration from a JSON file on your computer. You need to add the Actual MCP Server to that file.
 
+### ⚠️ Close Claude Desktop before editing the config
+
+Config changes are only loaded at startup — editing while Claude Desktop is open has no effect.
+
+- **Linux**: `pkill -9 -f "claude-desktop"`
+- **macOS**: Right-click Claude in the Dock → **Quit**
+- **Windows**: Right-click Claude in the system tray → **Exit**
+
 ### Find your config file
 
 | Operating System | Config file location |
@@ -165,34 +173,93 @@ Claude Desktop reads its MCP server configuration from a JSON file on your compu
 
 Open the file in any text editor (Notepad on Windows, TextEdit on Mac, etc.).
 
+#### Option A — HTTPS with native TLS (recommended)
+
+This works even when Claude Desktop enforces `https://` URLs. It requires the server to be running with `MCP_ENABLE_HTTPS=true` (see [native TLS setup](#️-claude-desktop-may-require-https)).
+
 If the file is **empty or new**, replace its entire contents with:
 
 ```json
 {
   "mcpServers": {
     "actual-budget": {
-      "type": "http",
-      "url": "http://localhost:3600/http",
-      "headers": {
-        "Authorization": "Bearer your_secret_token"
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://localhost:3601/http",
+        "--header",
+        "Authorization: Bearer your_secret_token"
+      ],
+      "env": {
+        "NODE_EXTRA_CA_CERTS": "/path/to/your/cert.pem"
       }
     }
   }
 }
 ```
 
-If the file **already has content**, add the `"actual-budget"` block inside the existing `"mcpServers"` section. For example:
+If the file **already has content**, add the `"actual-budget"` block inside the existing `"mcpServers"` section.
+
+**Replace `your_secret_token`** with the token you generated in Step 2.
+**Replace `/path/to/your/cert.pem`** with the absolute path to the server's TLS certificate PEM file.
+
+> **Linux with NVM?** Claude Desktop does not load NVM or `.bashrc`, so both `npx` and `node` resolve to the system version. If your system Node is older than v20, `mcp-remote` will crash silently with `ReferenceError: File is not defined`. You must use the absolute NVM path for `command` **and** set `PATH` explicitly in `env`:
+>
+> ```json
+> {
+>   "mcpServers": {
+>     "actual-budget": {
+>       "command": "/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/npx",
+>       "args": [
+>         "-y",
+>         "mcp-remote",
+>         "https://localhost:3601/http",
+>         "--header",
+>         "Authorization: Bearer your_secret_token"
+>       ],
+>       "env": {
+>         "NODE_EXTRA_CA_CERTS": "/path/to/your/cert.pem",
+>         "PATH": "/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+>       }
+>     }
+>   }
+> }
+> ```
+>
+> Replace `YOUR_USER` and `vX.Y.Z` with your username and NVM node version (`ls ~/.nvm/versions/node/`).
+>
+> The `PATH` entry is required even with an absolute `command` path: `mcp-remote`'s shebang (`#!/usr/bin/env node`) looks up `node` via PATH at runtime. Without this, `env node` still finds the system v18 binary.
+
+**What each field does:**
+
+| Field | What it means |
+|-------|--------------|
+| `"actual-budget"` | A label for this connection (you can rename it) |
+| `"command": "npx"` | Run via Node.js package runner (no global install needed) |
+| `"mcp-remote"` | Bridges Claude Desktop's stdio transport to the HTTPS MCP server |
+| `https://localhost:3601/http` | Native TLS endpoint (port 3601 by default when `MCP_ENABLE_HTTPS=true`) |
+| `"Authorization: Bearer ..."` | Your secret token |
+| `NODE_EXTRA_CA_CERTS` | Tells `mcp-remote` (Node.js) to trust your self-signed cert — **no system trust store changes needed** |
+
+> **Why `mcp-remote`?** Claude Desktop only supports stdio-based MCP servers. `mcp-remote` is a lightweight bridge that proxies traffic to the HTTP/HTTPS server. It is downloaded automatically by `npx` on first use.
+
+#### Option B — Plain HTTP (simpler, no TLS required)
+
+Use this if your server is HTTP-only and your version of Claude Desktop accepts `http://` URLs:
 
 ```json
 {
   "mcpServers": {
-    "some-other-server": { ... },
     "actual-budget": {
-      "type": "http",
-      "url": "http://localhost:3600/http",
-      "headers": {
-        "Authorization": "Bearer your_secret_token"
-      }
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:3600/http",
+        "--header",
+        "Authorization: Bearer your_secret_token"
+      ]
     }
   }
 }
@@ -200,29 +267,31 @@ If the file **already has content**, add the `"actual-budget"` block inside the 
 
 **Replace `your_secret_token`** with the token you generated in Step 2.
 
-**What each field does:**
-
-| Field | What it means |
-|-------|--------------|
-| `"actual-budget"` | A label for this connection (you can rename it) |
-| `"type": "http"` | Use the HTTP protocol to talk to the server |
-| `"url"` | The address of the MCP server on your computer |
-| `"Authorization"` | Your secret token, prefixed with `Bearer ` |
-
 ### Restart Claude Desktop
 
 After saving the file, **fully quit and reopen Claude Desktop** — changes to the config only take effect on restart.
 
-> **On Mac**: Right-click the Claude icon in the Dock and choose **Quit**, then reopen it from Applications.  
+> **On Linux**: `pkill -9 -f "claude-desktop"`, then reopen from your application launcher.
+> **On Mac**: Right-click the Claude icon in the Dock and choose **Quit**, then reopen it from Applications.
 > **On Windows**: Right-click the Claude icon in the system tray and choose **Exit**, then reopen it.
 
 ### ⚠️ Claude Desktop may require HTTPS
 
-Some versions of Claude Desktop enforce that the MCP server URL starts with `https://`. If you see an error like **"URL must start with 'https'"**, you have two options:
+Some versions of Claude Desktop enforce that the MCP server URL starts with `https://`. If you see an error like **"URL must start with 'https'"**, use Option A above (HTTPS with native TLS).
 
-**Option A — Reverse proxy (works today):** Run nginx or Caddy in front of the MCP server to terminate TLS, then use `https://` in the config URL. See [AI Client Setup — HTTPS/TLS](AI_CLIENT_SETUP.md#https--tls-setup) for examples.
+**To enable native TLS on the server**, set these environment variables when starting the MCP server:
 
-**Option B — Native TLS (planned):** Native `https://` support via `MCP_ENABLE_HTTPS=true` + `MCP_HTTPS_CERT` + `MCP_HTTPS_KEY` is planned. See [docs/feature/NATIVE_TLS.md](../../docs/feature/NATIVE_TLS.md) for the full spec including a `mkcert` workflow for locally-trusted certificates.
+```bash
+MCP_ENABLE_HTTPS=true
+MCP_HTTPS_CERT=/path/to/cert.pem
+MCP_HTTPS_KEY=/path/to/key.pem
+```
+
+The server will then listen on port `3601` (HTTPS) in addition to port `3000` (HTTP).
+
+**Self-signed cert?** You do **not** need to modify the system trust store. Instead, set `NODE_EXTRA_CA_CERTS` in the `env` block of the mcpServers entry (as shown in Option A above) to the path of your PEM cert file. This tells `mcp-remote` (a Node.js process) to trust that certificate without affecting any other software on your system.
+
+Alternatively, a **reverse proxy** (nginx or Caddy) can terminate TLS in front of an HTTP server — see [AI Client Setup — HTTPS/TLS](AI_CLIENT_SETUP.md#https--tls-setup) for examples.
 
 ---
 
@@ -310,10 +379,25 @@ docker logs actual-mcp --tail 50
 
 ## Troubleshooting
 
+### "Server disconnected" error
+
+Check the MCP log first — it shows the exact failure:
+
+```bash
+tail -30 ~/.config/Claude/logs/mcp-server-actual-budget.log
+```
+
+| What you see in the log | Cause | Fix |
+|---|---|---|
+| `ReferenceError: File is not defined` + `Node.js v18.x` | Node version too old — `mcp-remote` requires v20+ | Use absolute NVM path for `command` and set `PATH` in `env` (see Linux/NVM note in Step 4) |
+| `SSL certificate problem` or `unable to verify` | Wrong or missing cert path in `NODE_EXTRA_CA_CERTS` | Verify the path: `ls -la /path/to/your/cert.pem` |
+| `ECONNREFUSED` | MCP server container not running | `docker ps \| grep actual-mcp` — start it if missing |
+
 ### "I don't see any tools in Claude"
 - Make sure Claude Desktop was **fully restarted** after editing the config file
 - Double-check the JSON in the config file — a missing comma or bracket will break it
 - Try a [JSON validator](https://jsonlint.com/) if you're unsure the file is valid
+- Check the MCP log for error details: `tail -20 ~/.config/Claude/logs/mcp-server-actual-budget.log`
 
 ### "Connection refused" or health check fails
 - Make sure the Docker container is running: `docker ps | grep actual-mcp`
