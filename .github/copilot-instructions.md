@@ -436,5 +436,5 @@ If transactions/budgets don't persist:
 ---
 
 **Last Updated**: 2026-03-20  
-**Version:** 0.4.30  
+**Version:** 0.4.31  
 **Tool Count:** 62 (verified LibreChat-compatible)

@@ -68,14 +68,41 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 docker run -d \
   --name actual-mcp-server-backend \
   -p 3600:3600 \
-  -e ACTUAL_SERVER_URL=http://your-actual-server:5006 \
+  # Use the same URL you type in your browser to open Actual Budget:
+  #   http://localhost:5006          — if Actual Budget runs on the same machine
+  #   http://192.168.1.50:5006       — if it runs on another machine on your network
+  #   https://actual.yourdomain.com  — if you use a domain name
+  #   http://actual:5006             — if both containers share a Docker network (use container name)
+  -e ACTUAL_SERVER_URL=http://localhost:5006 \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
   -e MCP_SSE_AUTHORIZATION=your_secret_token \
-  -v actual-mcp-data:/data \
+  -v actual-mcp-data:/data \        # required — see note below
+  -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
+```
 
+> **Why the `/data` volume is required:** Actual Budget does not expose a REST API. The official `@actual-app/api` library (used internally by this server) works by downloading a local copy of your budget data, running all queries on that local copy, then syncing changes back. The `/data` volume gives the container a persistent, writable place to store that local copy. Without it the container has nowhere to write and will fail on startup. See the [Actual API docs](https://actualbudget.org/docs/api/) for details.
+>
+> **actual-mcp does not need to run on the same machine as Actual Budget.** You can have Actual Budget on one server and actual-mcp on another - as long as `ACTUAL_SERVER_URL` points to your Actual Budget instance, everything works.
+
+**Verify it's running:**
+
+```bash
+# Quick health check
 curl http://localhost:3600/health
+# Expected: {"status":"ok","transport":"http","version":"..."}
+
+# Full MCP handshake (also verifies your token)
+curl -s -X POST http://localhost:3600/http \
+  -H "Authorization: Bearer your_secret_token" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli-test","version":"1.0"}}}' \
+  | python3 -m json.tool
+# Success: JSON response with "protocolVersion" and "serverInfo"
+# Wrong token: {"error": "Unauthorized"}
+# Server not running: curl: (7) Failed to connect
 ```
 
 Also available on Docker Hub: `agigante80/actual-mcp-server:latest`
@@ -256,14 +283,14 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | **Actual Budget Connection** ||||
-| `ACTUAL_SERVER_URL` | `http://localhost:5006` | Yes | URL of your Actual Budget server |
+| `ACTUAL_SERVER_URL` | `http://localhost:5006` | Yes | URL of your Actual Budget server. Use the same URL you type in your browser: `http://localhost:5006` (local), `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), or `http://actual:5006` (container name if on the same Docker network) |
 | `ACTUAL_PASSWORD` | — | Yes | Password for Actual Budget server |
 | `ACTUAL_BUDGET_SYNC_ID` | — | Yes | Budget Sync ID from Actual (Settings → Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | — | No | Optional encryption password for encrypted budgets |
 | **MCP Server Settings** ||||
 | `MCP_BRIDGE_PORT` | `3000` (dev) / `3600` (Docker) | No | Port for MCP server to listen on |
 | `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
-| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite) |
+| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite). **Required to be a persistent path.** The `@actual-app/api` library downloads a local copy of your budget here to run queries — use a volume mount in Docker to persist it across restarts |
 | `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | No | Public hostname/IP for server (shown in logs) |
 | `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
 | `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
@@ -519,4 +546,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.4.30 | **Tool Count:** 62 (verified LibreChat-compatible)
+**Version:** 0.4.31 | **Tool Count:** 62 (verified LibreChat-compatible)
