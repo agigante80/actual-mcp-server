@@ -32,12 +32,20 @@ services:
       # Mount source code for development
       - ./src:/app/src:ro
       - ./dist:/app/dist
-      # Persist Actual data locally
+      # Required: local cache for the @actual-app/api library.
+      # The API downloads your budget data locally to run queries — this MUST be a persistent path.
       - ./actual-data:/data
       # Persist logs
       - ./logs:/app/logs
     environment:
       # Actual Finance connection
+      # Use the same URL you type in your browser to open Actual Budget.
+      # Examples:
+      #   http://localhost:5006          - Actual Budget on the same machine (not in Docker)
+      #   http://192.168.1.50:5006       - Actual Budget on another machine on your network
+      #   https://actual.yourdomain.com  - Actual Budget with a domain name
+      #   http://actual-main:5006        - Actual Budget in the same Docker network (service name)
+      # Note: actual-mcp does NOT need to run on the same machine as Actual Budget.
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-main:5006}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
@@ -112,12 +120,16 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # Persist Actual data
+      # Required: local cache for the @actual-app/api library.
+      # The API downloads your budget data locally to run queries — this MUST be a persistent path.
       - mcp-data:/data
       # Persist logs
       - mcp-logs:/app/logs
     environment:
-      # Actual Finance connection
+      # Actual Finance connection.
+      # Use the same URL you type in your browser to open Actual Budget.
+      # Examples: http://localhost:5006, http://192.168.1.50:5006, https://actual.yourdomain.com
+      # If on the same Docker network, use the container service name: http://actual:5006
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
