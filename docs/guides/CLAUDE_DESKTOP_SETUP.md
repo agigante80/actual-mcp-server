@@ -22,6 +22,7 @@ You type a message like *"How much did I spend on groceries last month?"* — Cl
 - ✅ **Actual Budget** running (local or self-hosted) — [setup guide](https://actualbudget.org/docs/install/)
 - ✅ **Claude Desktop** installed — [download here](https://claude.ai/download) (free plan works)
 - ✅ **Docker** installed — [get Docker](https://docs.docker.com/get-docker/) (used to run the MCP server)
+- ✅ **Node.js v20+** installed — [download here](https://nodejs.org/) — required for `npx` (used to run `mcp-remote`, the bridge between Claude Desktop and the MCP server). Check your version with `node --version`. If you use NVM, see the Linux/NVM note in Step 4.
 - ✅ A few minutes and a terminal (the command-line app on your computer)
 
 > **Terminal on Mac**: Press `Cmd + Space`, type `Terminal`, press Enter.  
@@ -246,7 +247,7 @@ If the file **already has content**, add the `"actual-budget"` block inside the 
 
 #### Option B — Plain HTTP (simpler, no TLS required)
 
-Use this if your server is HTTP-only and your version of Claude Desktop accepts `http://` URLs:
+Use this if your server is HTTP-only. The `--allow-http` flag is required — `mcp-remote` enforces HTTPS by default and will refuse HTTP connections without it:
 
 ```json
 {
@@ -258,7 +259,8 @@ Use this if your server is HTTP-only and your version of Claude Desktop accepts 
         "mcp-remote",
         "http://localhost:3600/http",
         "--header",
-        "Authorization: Bearer your_secret_token"
+        "Authorization: Bearer your_secret_token",
+        "--allow-http"
       ]
     }
   }
@@ -266,6 +268,10 @@ Use this if your server is HTTP-only and your version of Claude Desktop accepts 
 ```
 
 **Replace `your_secret_token`** with the token you generated in Step 2.
+
+> **`--allow-http` is required for HTTP connections.** Without it, `mcp-remote` will refuse to connect to `http://` URLs and you'll see an error like `URL must use HTTPS`. If you see `URL must start with 'https'` in Claude Desktop itself, that means your version of Claude Desktop also enforces HTTPS — switch to Option A.
+
+> **Linux with NVM?** Claude Desktop does not load NVM or `.bashrc`, so `npx` resolves to the system version. If your system Node is older than v20, `mcp-remote` will crash silently. Use the absolute NVM path (see the note in Option A above).
 
 ### Restart Claude Desktop
 
@@ -275,9 +281,13 @@ After saving the file, **fully quit and reopen Claude Desktop** — changes to t
 > **On Mac**: Right-click the Claude icon in the Dock and choose **Quit**, then reopen it from Applications.
 > **On Windows**: Right-click the Claude icon in the system tray and choose **Exit**, then reopen it.
 
-### ⚠️ Claude Desktop may require HTTPS
+### ⚠️ Claude Desktop and `mcp-remote` both enforce HTTPS by default
 
-Some versions of Claude Desktop enforce that the MCP server URL starts with `https://`. If you see an error like **"URL must start with 'https'"**, use Option A above (HTTPS with native TLS).
+There are two separate HTTPS requirements to be aware of:
+
+1. **`mcp-remote` requires HTTPS by default** — even if Claude Desktop accepts `http://` URLs, `mcp-remote` itself will refuse to connect to `http://` endpoints unless you pass `--allow-http` in the args (see Option B above).
+
+2. **Some versions of Claude Desktop also enforce HTTPS** — if you see an error like **"URL must start with 'https'"** in Claude Desktop, use Option A (HTTPS with native TLS) instead.
 
 **To enable native TLS on the server**, set these environment variables when starting the MCP server:
 
@@ -390,6 +400,7 @@ tail -30 ~/.config/Claude/logs/mcp-server-actual-budget.log
 | What you see in the log | Cause | Fix |
 |---|---|---|
 | `ReferenceError: File is not defined` + `Node.js v18.x` | Node version too old — `mcp-remote` requires v20+ | Use absolute NVM path for `command` and set `PATH` in `env` (see Linux/NVM note in Step 4) |
+| `URL must use HTTPS` or connection refused with no log entry | `--allow-http` missing from args | Add `"--allow-http"` to the `args` array in your config (Option B) |
 | `SSL certificate problem` or `unable to verify` | Wrong or missing cert path in `NODE_EXTRA_CA_CERTS` | Verify the path: `ls -la /path/to/your/cert.pem` |
 | `ECONNREFUSED` | MCP server container not running | `docker ps \| grep actual-mcp` — start it if missing |
 
