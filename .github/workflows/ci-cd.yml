@@ -343,7 +343,7 @@ jobs:
           echo "📦 Docker tags: ${TAGS}"
 
       - name: 🏗️ Build and push Docker images
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ env.DOCKER_PLATFORMS }}
@@ -397,7 +397,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: 🏗️ Build image for scanning
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
