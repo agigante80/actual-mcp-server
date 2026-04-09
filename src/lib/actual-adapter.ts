@@ -1017,16 +1017,18 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
   }
 }
 
-// Helper function to parse WHERE clause conditions
-function parseWhereClause(query: any, whereClause: string): any {
+// Helper function to parse WHERE clause conditions.
+// Exported so it can be unit-tested directly.
+export function parseWhereClause(query: any, whereClause: string): any {
   // Split by AND (simple parser - doesn't handle OR or nested conditions)
   const conditions = whereClause.split(/\s+AND\s+/i);
-  
+
   for (const condition of conditions) {
     const trimmedCondition = condition.trim();
-    
+
     // Handle IN clause: field IN (value1, value2, ...)
-    const inMatch = trimmedCondition.match(/^(\w+)\s+IN\s+\((.+)\)$/i);
+    // [\w.]+ matches both simple fields (amount) and joined fields (category.name)
+    const inMatch = trimmedCondition.match(/^([\w.]+)\s+IN\s+\((.+)\)$/i);
     if (inMatch) {
       const [, field, valuesStr] = inMatch;
       const values = valuesStr.split(',').map(v => {
@@ -1040,7 +1042,8 @@ function parseWhereClause(query: any, whereClause: string): any {
     }
     
     // Handle comparison operators: field >= value, field <= value, field = value, etc.
-    const compMatch = trimmedCondition.match(/^(\w+)\s*(>=|<=|>|<|=|!=)\s*(.+)$/);
+    // [\w.]+ matches both simple fields (amount) and joined fields (category.name, payee.name)
+    const compMatch = trimmedCondition.match(/^([\w.]+)\s*(>=|<=|>|<|=|!=)\s*(.+)$/);
     if (compMatch) {
       const [, field, operator, valueStr] = compMatch;
       const value = valueStr.trim().replace(/^['"]|['"]$/g, '');

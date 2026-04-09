@@ -79,12 +79,26 @@ const tool: ToolDefinition = {
     }
     
     // Step 2: Get base transactions (filtered by account and date range if provided)
-    const allTransactions = await adapter.getTransactions(
-      input.accountId,
-      input.startDate,
-      input.endDate
-    );
-    
+    // getTransactions() requires an accountId — when none is provided, fetch from all accounts
+    let allTransactions: any[];
+    if (input.accountId) {
+      allTransactions = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
+    } else {
+      const allAccounts = await adapter.getAccounts();
+      const perAccount = await Promise.all(
+        allAccounts.map((acc: any) =>
+          adapter.getTransactions(acc.id, input.startDate, input.endDate).catch(() => [])
+        )
+      );
+      // Deduplicate by id (split transactions appear in both parent and child accounts)
+      const seen = new Set<string>();
+      allTransactions = perAccount.flat().filter((t: any) => {
+        if (!t.id || seen.has(t.id)) return false;
+        seen.add(t.id);
+        return true;
+      });
+    }
+
     if (!Array.isArray(allTransactions)) {
       return {
         transactions: [],

@@ -69,8 +69,10 @@ const tool: ToolDefinition = {
       ])
       .orderBy(['category.group.sort_order', 'category.sort_order']);
     
-    const result = await adapter.runQuery(query);
-    
+    const rawResult = await adapter.runQuery(query);
+    // @actual-app/api runQuery returns { data: [...] } — unwrap if needed
+    const result = Array.isArray(rawResult) ? rawResult : (rawResult as any)?.data;
+
     // Ensure result is an array
     if (!result || !Array.isArray(result)) {
       return {
