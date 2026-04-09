@@ -1,10 +1,9 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { 
-  setBudgetAmount as rawSetBudgetAmount, 
-  setBudgetCarryover as rawSetBudgetCarryover 
-} from '@actual-app/api/dist/methods.js';
+import api from '@actual-app/api';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { setBudgetAmount: rawSetBudgetAmount, setBudgetCarryover: rawSetBudgetCarryover } = api as any;
 
 const BudgetOperationSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format (e.g. 2025-01)').describe('Budget month in YYYY-MM format'),

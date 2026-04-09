@@ -34,6 +34,10 @@ npm run verify-tools            # Verify tool count + registration
 npm run check:coverage          # List @actual-app/api methods vs tool coverage
 npm run test:mcp-client         # Connect as MCP client and exercise tools
 
+# Manual connection tests (requires .env)
+npm run dev -- --test-actual-connection  # Test Actual Budget connection only
+npm run dev -- --test-actual-tools       # Exercise all 62 tools against live server
+
 # Docker
 docker compose --profile dev up         # Hot-reload dev
 docker compose --profile production up  # Nginx proxy on :3600
@@ -76,31 +80,32 @@ await rawAddTransactions(data);
 
 ### Tool Structure Pattern
 
-All tools in `src/tools/*.ts` follow this structure:
+New tools should use `createTool()` from `src/lib/toolFactory.ts` — it wires up error handling, logging, and observability automatically:
 
 ```typescript
 import { z } from 'zod';
-import type { ToolDefinition } from '../../types/tool.d.js';
-import adapter from '../lib/actual-adapter.js';
+import { createTool } from '../lib/toolFactory.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({
-  account: CommonSchemas.accountId,
-  amount: CommonSchemas.amountCents, // always in cents, integer
-  date: CommonSchemas.date,          // YYYY-MM-DD
-});
-
-const tool: ToolDefinition = {
+export default createTool({
   name: 'actual_domain_action',      // naming: actual_{domain}_{action}
   description: '...',
-  inputSchema: InputSchema,
-  call: async (args: unknown) => {
-    const input = InputSchema.parse(args);
+  schema: z.object({
+    account: CommonSchemas.accountId,
+    amount: CommonSchemas.amountCents, // always in cents, integer
+    date: CommonSchemas.date,          // YYYY-MM-DD
+  }),
+  handler: async (input) => {
     return await adapter.someMethod(input);
   },
-};
-export default tool;
+  examples: [                          // optional but recommended
+    { description: 'Example use case', input: { account: 'uuid', amount: 5000, date: '2024-01-15' } },
+  ],
+});
 ```
+
+Many existing tools still use the older pattern (manual `ToolDefinition` export with `call:` and `inputSchema:`). Both work, but `createTool()` is preferred for new tools.
 
 ### Adding a New Tool
 
@@ -125,6 +130,12 @@ export default tool;
 | `src/lib/schemas/common.ts` | Shared Zod schemas (`CommonSchemas`) |
 | `src/lib/constants.ts` | `UUID_PATTERN`, timeouts, limits |
 | `src/lib/retry.ts` | Exponential backoff (3 attempts, 200ms base) |
+| `src/lib/toolFactory.ts` | `createTool()` — preferred factory for new tools |
+| `src/lib/errors.ts` | `notFoundMsg()`, `constraintErrorMsg()` helpers |
+| `src/observability.ts` | Per-tool call counters (incremented by `createTool`) |
+| `src/lib/budget-registry.ts` | Parses `BUDGET_N_*` env vars into budget config list |
+| `src/prompts/` | MCP prompt definitions (e.g. `showLargeTransactions`) |
+| `src/resources/` | MCP resource definitions (e.g. `accountsSummary`) |
 
 ## Key Conventions & Gotchas
 
@@ -136,7 +147,9 @@ export default tool;
 
 **Date fields require `YYYY-MM-DD` strings** — never use `Date.now()` (produces a number).
 
-**Multi-budget mode**: `BUDGET_N_NAME`, `BUDGET_N_SYNC_ID`, `BUDGET_N_SERVER_URL`, `BUDGET_N_PASSWORD` (N = 1, 2, 3…).
+**Multi-budget mode**: `BUDGET_N_NAME`, `BUDGET_N_SYNC_ID`, `BUDGET_N_SERVER_URL`, `BUDGET_N_PASSWORD`, `BUDGET_N_ENCRYPTION_PASSWORD` (N = 1, 2, 3…). Server URL and password fall back to the default `ACTUAL_*` vars if omitted.
+
+**`mcp-remote` requires `--allow-http`** for HTTP connections — it enforces HTTPS by default. Without the flag, clients see `URL must use HTTPS`. Some versions of Claude Desktop also enforce HTTPS at the app level; in that case, switch to native TLS (`MCP_ENABLE_HTTPS=true`).
 
 **Documentation hygiene**: Prefer deletion over archiving. When a feature ships, delete its `docs/feature/*.md` spec and remove its row from `docs/ROADMAP.md`. Never move to `archive/` folders — git history is the archive.
 
@@ -149,6 +162,18 @@ export default tool;
 **Modify with caution** (test thoroughly): `src/lib/actual-adapter.ts` (affects all tools), `src/actualToolsManager.ts` (run `verify-tools` after), `src/server/*.ts` (verify with MCP client), `src/index.ts`, `src/actualConnection.ts`
 
 **Do not modify without explicit permission**: `types/*.d.ts`, `generated/**/*` (auto-generated), `scripts/version-bump.js`, `VERSION`
+
+## Documentation Sync
+
+When changing code, update these docs:
+
+| Change | Required updates |
+|--------|-----------------|
+| New tool | `README.md` (count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list |
+| New env var | `.env.example`, `docs/ARCHITECTURE.md` config section, `README.md` env table |
+| Auth/security change | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` |
+| Docker change | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
+| New feature shipped | `docs/PROJECT_OVERVIEW.md`, delete its `docs/feature/*.md` spec, remove from `docs/ROADMAP.md` |
 
 ## Documentation Map
 
