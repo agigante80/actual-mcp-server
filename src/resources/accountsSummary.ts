@@ -1,5 +1,7 @@
 // Example resource: summary of all accounts
-import { getAccounts } from '@actual-app/api/dist/methods.js';
+import api from '@actual-app/api';
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { getAccounts } = api as any;
 import type { components } from '../../generated/actual-client/types.js';
 
 export async function accountsSummary(): Promise<Array<{ id?: string; name?: string; balance?: number }>> {

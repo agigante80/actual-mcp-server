@@ -12,7 +12,18 @@
     "typeRoots": [
       "./types",
       "./node_modules/@types"
-    ] // Include custom and npm types
+    ], // Include custom and npm types
+    "paths": {
+      // @actual-app/core ships TypeScript source files (not compiled .d.ts).
+      // From @actual-app/api v26.4.0 it is imported directly, causing tsc to
+      // compile those source files with our strict settings — and they require
+      // typescript-strict-plugin to pass, which tsc doesn't support.
+      // This stub redirects all @actual-app/core/* imports to a no-op declaration
+      // so TypeScript never follows into its source. All type information we
+      // actually use flows through @actual-app/api's own compiled declarations.
+      "@actual-app/core": ["./types/actual-core-stub.d.ts"],
+      "@actual-app/core/*": ["./types/actual-core-stub.d.ts"]
+    }
   },
   "include": [
     "src/**/*",
