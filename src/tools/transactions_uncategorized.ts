@@ -38,8 +38,23 @@ const tool: ToolDefinition = {
     const transactions = await adapter.getTransactions(accountId, startDate, endDate);
     const txns = Array.isArray(transactions) ? transactions : [];
 
+    // Exclude off-budget accounts (issue #80) — their transactions can never have
+    // categories set; any update is silently discarded by Actual Budget.
+    // Follows the same pattern as transactions_search_by_payee.ts.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const uncategorized = txns.filter((txn: any) => txn?.category == null);
+    const accounts = await adapter.getAccounts();
+    const offBudgetIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Array.isArray(accounts) ? accounts : [])
+        .filter((acc: any) => acc?.offbudget === true)
+        .map((acc: any) => acc.id as string)
+    );
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const uncategorized = txns.filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (txn: any) => txn?.category == null && !offBudgetIds.has(txn?.account)
+    );
     const limited = uncategorized.slice(0, input.limit ?? 500);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
