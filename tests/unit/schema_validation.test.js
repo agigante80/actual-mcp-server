@@ -442,6 +442,35 @@ async function expectCallError(tool, input, label) {
     { account: VALID_ACCT_ID, date: '2026-01-01', amount: 5000 },
     'valid income transaction accepted')) fail();
 
+  // ── actual_transactions_uncategorized (cases 7–9) ────────────────────────
+  console.log('\n[actual_transactions_uncategorized — schema validation]');
+  const uncategorized_tool = await import('../../dist/src/tools/transactions_uncategorized.js').then(m => m.default);
+
+  // Case 7: invalid startDate format
+  if (!expectParseError(uncategorized_tool,
+    { startDate: '2024/01/01' },
+    'invalid startDate format (slash-separated) rejected')) fail();
+
+  // Case 8: invalid accountId format (non-UUID)
+  if (!expectParseError(uncategorized_tool,
+    { accountId: 'not-a-uuid' },
+    'non-UUID accountId rejected')) fail();
+
+  // Case 9: invalid limit type (string instead of number)
+  if (!expectParseError(uncategorized_tool,
+    { limit: 'ten' },
+    'string limit rejected (must be number)')) fail();
+
+  // Valid: all fields omitted (uses defaults)
+  if (!expectParseOk(uncategorized_tool,
+    {},
+    'empty input accepted (all fields optional)')) fail();
+
+  // Valid: with a proper UUID accountId
+  if (!expectParseOk(uncategorized_tool,
+    { accountId: '00000000-0000-0000-0000-000000000001' },
+    'valid UUID accountId accepted')) fail();
+
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');
   if (failures > 0) {
