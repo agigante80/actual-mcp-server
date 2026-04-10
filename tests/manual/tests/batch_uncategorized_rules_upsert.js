@@ -143,6 +143,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   // Account is closed (not deleted) at the end so history is preserved.
   console.log("\nOFF-BUDGET REGRESSION (issue #80): uncategorized must exclude off-budget txns...");
   let offBudgetAccountId = null;
+  let offBudgetTxnId = null;
   const offBudgetAccountName = `MCP-OffBudget-${timestamp}`;
   try {
     // 1. Create a named off-budget account
@@ -180,7 +181,6 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     // Locate the transaction ID via actual_transactions_get (which, unlike transactions_filter,
     // does not exclude off-budget accounts). We need it for teardown: closing an account with a
     // non-zero balance requires deleting the transaction first so the balance reaches zero.
-    let offBudgetTxnId = null;
     try {
       const offTxns = await callTool("actual_transactions_get", { accountId: offBudgetAccountId });
       const offTxnsArr = Array.isArray(offTxns) ? offTxns : (offTxns?.result ?? []);
