@@ -57,6 +57,8 @@ docker compose --profile fullstack up   # Includes Actual Budget server on :5006
 
 **Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker).
 
+**Integration test modules** (`tests/manual/tests/`): `sanity` (read-only protocol), `smoke` (balances/categories), `account`, `category-group`, `category`, `payee`, `transaction`, `budget`, `rules`, `schedule`, `batch_uncategorized_rules_upsert`, `advanced` (bank sync, raw SQL).
+
 ## Project-Local Agents & Commands
 
 Four specialized subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
@@ -130,7 +132,23 @@ export default createTool({
 });
 ```
 
-Many existing tools still use the older pattern (manual `ToolDefinition` export with `call:` and `inputSchema:`). Both work, but `createTool()` is preferred for new tools.
+Many existing tools still use the older pattern — both work, but `createTool()` is preferred for new tools:
+
+```typescript
+// Legacy pattern (most existing tools)
+import type { ToolDefinition } from '../../types/tool.d.js';
+const InputSchema = z.object({ ... });
+const tool: ToolDefinition = {
+  name: 'actual_domain_action',
+  description: '...',
+  inputSchema: InputSchema,
+  call: async (args: unknown) => {
+    const input = InputSchema.parse(args);
+    return await adapter.someMethod(input);
+  },
+};
+export default tool;
+```
 
 ### Adding a New Tool
 
@@ -182,6 +200,8 @@ Many existing tools still use the older pattern (manual `ToolDefinition` export 
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
 
 **Never use `overrides` (npm) or `pnpm.overrides` to force-update a transitive dependency.** If a transitive dependency has a vulnerability, upgrade the direct dependency that pulls it in instead.
+
+**If transactions/budgets don't persist**: verify `withActualApi` wraps the call (grep for `rawAdd*` / `rawUpdate*` called without it), confirm `api.shutdown()` runs after the operation, and check logs for "tombstone" errors. The `getConcurrencyState()` export from `actual-adapter.ts` shows `{ active, queued, limit }` for diagnosing concurrency back-pressure.
 
 ## File Safety Tiers
 
