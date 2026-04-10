@@ -494,14 +494,22 @@ export async function getTransactions(accountId: string | undefined, startDate?:
 export async function getAllTransactions(accounts: { id: string }[], startDate: string, endDate: string): Promise<components['schemas']['Transaction'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.transactions.getAll').catch(() => {});
-    const perAccount = await Promise.all(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (Array.isArray(accounts) ? accounts : []).map((acc: { id: string }) =>
-        withConcurrency(() => retry(() => rawGetTransactions(acc.id, startDate, endDate) as Promise<any[]>, { retries: 2, backoffMs: 200 })).catch(() => [] as any[])
-      )
-    );
+    // Sequential per-account fetches — @actual-app/api uses a single SQLite
+    // connection; concurrent calls via Promise.all within one session can
+    // silently return empty. A simple for-loop is safe and correct.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return (perAccount as any[][]).flat() as components['schemas']['Transaction'][];
+    const results: any[] = [];
+    for (const acc of (Array.isArray(accounts) ? accounts : [])) {
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const txns = await rawGetTransactions(acc.id, startDate, endDate) as any[];
+        if (Array.isArray(txns)) results.push(...txns);
+      } catch {
+        // per-account failure swallowed — other accounts still returned
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return results as components['schemas']['Transaction'][];
   });
 }
 export async function getCategories(): Promise<components['schemas']['Category'][]> {
