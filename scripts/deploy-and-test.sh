@@ -44,7 +44,7 @@ set -euo pipefail
 # ── Config ─────────────────────────────────────────────────────────────────
 DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
 DEV_DIR="$HOME/dev-github-personal/actual-mcp-server"
-MCP_SERVER_URL="http://localhost:3601/http"
+MCP_SERVER_URL="https://localhost:3601/http"
 MCP_AUTH_TOKEN="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
 # Parse positional + flag args
 TEST_LEVEL="full"
@@ -151,6 +151,7 @@ info "Step 7/7 — Running integration tests against bearer instance port 3601 (
 echo ""
 EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
   MCP_TEST_BANK_SYNC="${BANK_SYNC_FLAG}" \
+  NODE_TLS_REJECT_UNAUTHORIZED=0 \
   node "$DEV_DIR/tests/manual/index.js" \
   "$MCP_SERVER_URL" \
   "$MCP_AUTH_TOKEN" \
