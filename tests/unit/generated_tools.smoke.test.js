@@ -17,6 +17,7 @@ console.log('Running generated tools smoke tests');
     addTransactions: ['t1'],
     importTransactions: { added: ['t2'], updated: [], errors: [] },
     getTransactions: [{ id: 't1', amount: 100 }],
+    getAllTransactions: [],
     getCategories: [{ id: 'c1', name: 'Food' }],
     getCategoryGroups: [{ id: 'grp_1', name: 'Expenses' }],
     createCategory: 'c-new',
@@ -298,13 +299,18 @@ console.log('Running generated tools smoke tests');
   {
     console.log('\n[regression #80] transactions_uncategorized: off-budget filtering');
 
-    // Patch getAccounts + getTransactions: one on-budget account, one off-budget.
-    // The fix resolves offbudget status via the account UUID on each transaction.
+    // Patch getAccounts + getTransactions + getAllTransactions: one on-budget account,
+    // one off-budget. The fix resolves offbudget status via the account UUID on each
+    // transaction. getAllTransactions is the new no-accountId code path for #97.
     adapterMod.default.getAccounts = async () => [
       { id: 'acct-on',  name: 'Checking',   offbudget: false },
       { id: 'acct-off', name: 'Investment', offbudget: true  },
     ];
     adapterMod.default.getTransactions = async () => [
+      { id: 'on1',  amount: -500,  category: null, account: 'acct-on'  },
+      { id: 'off1', amount: -1500, category: null, account: 'acct-off' },
+    ];
+    adapterMod.default.getAllTransactions = async () => [
       { id: 'on1',  amount: -500,  category: null, account: 'acct-on'  },
       { id: 'off1', amount: -1500, category: null, account: 'acct-off' },
     ];
@@ -334,9 +340,10 @@ console.log('Running generated tools smoke tests');
       console.error('[regression #80] unexpected error:', e && e.message);
       failures++;
     } finally {
-      // Restore stubs for both patched methods
+      // Restore stubs for all patched methods
       adapterMod.default.getAccounts = async (..._args) => stubResponses.getAccounts;
       adapterMod.default.getTransactions = async (..._args) => stubResponses.getTransactions;
+      adapterMod.default.getAllTransactions = async (..._args) => stubResponses.getAllTransactions;
     }
   }
   // ── End regression #80 ────────────────────────────────────────────────────

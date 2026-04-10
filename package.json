@@ -12,7 +12,7 @@
     "verify-tools": "npm run build && node scripts/verify-tools.js",
     "check:coverage": "node scripts/list-actual-api-methods.mjs",
     "direct-sync": "node scripts/direct-sync/bank-sync-direct.mjs",
-    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js && node tests/unit/auth-acl.test.js && node tests/unit/bug76.test.js && node tests/unit/budgets_setAmount.test.js",
+    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js && node tests/unit/auth-acl.test.js && node tests/unit/bug76.test.js && node tests/unit/budgets_setAmount.test.js && node tests/unit/transactions_uncategorized.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
     "test:e2e:docker": "./tests/e2e/run-docker-e2e.sh",

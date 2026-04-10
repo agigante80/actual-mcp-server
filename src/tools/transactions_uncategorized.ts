@@ -14,11 +14,12 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format (default: first day of current month)'),
-  endDate: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
-  accountId: z.string().optional().describe('Filter by specific account ID (optional)'),
+  startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format (default: first day of current month)'),
+  endDate: CommonSchemas.date.optional().describe('End date in YYYY-MM-DD format (default: today)'),
+  accountId: CommonSchemas.accountId.optional().describe('Filter by specific account ID (optional)'),
   limit: z.number().optional().default(500).describe('Maximum number of transactions to return (default: 500)'),
 });
 
@@ -35,12 +36,8 @@ const tool: ToolDefinition = {
     const endDate = input.endDate || today.toISOString().split('T')[0];
     const accountId = input.accountId ?? undefined;
 
-    const transactions = await adapter.getTransactions(accountId, startDate, endDate);
-    const txns = Array.isArray(transactions) ? transactions : [];
-
-    // Exclude off-budget accounts (issue #80) — their transactions can never have
-    // categories set; any update is silently discarded by Actual Budget.
-    // Follows the same pattern as transactions_search_by_payee.ts.
+    // Fetch accounts first — needed for both off-budget filtering and the
+    // no-accountId path (rawGetTransactions requires a valid UUID; undefined → []).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const accounts = await adapter.getAccounts();
     const offBudgetIds = new Set(
@@ -49,6 +46,13 @@ const tool: ToolDefinition = {
         .filter((acc: any) => acc?.offbudget === true)
         .map((acc: any) => acc.id as string)
     );
+
+    // When no accountId is given, use getAllTransactions which opens a single
+    // withActualApi session and queries every account internally.
+    const txnRaw = accountId
+      ? await adapter.getTransactions(accountId, startDate, endDate)
+      : await adapter.getAllTransactions(startDate, endDate);
+    const txns = Array.isArray(txnRaw) ? txnRaw : [];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uncategorized = txns.filter(
