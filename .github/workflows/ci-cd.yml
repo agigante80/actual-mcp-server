@@ -218,11 +218,36 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      - name: 🎭 Install Playwright
-        run: npx playwright install --with-deps
+      # Playwright browsers are NOT installed on the host — tests run inside the
+      # mcr.microsoft.com/playwright:v1.57.0-jammy Docker container (e2e-test-runner
+      # service in docker-compose.test.yaml) which already has Playwright pre-installed.
+
+      - name: 🗄️ Restore Docker image cache
+        id: docker-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/docker-image-cache
+          key: docker-e2e-images-${{ runner.os }}-${{ hashFiles('docker-compose.test.yaml') }}
+          restore-keys: docker-e2e-images-${{ runner.os }}-
+
+      - name: 🐳 Load cached Docker images
+        if: steps.docker-cache.outputs.cache-hit == 'true'
+        run: |
+          for f in /tmp/docker-image-cache/*.tar; do
+            [ -f "$f" ] && docker load -i "$f" && echo "Loaded $f" || true
+          done
 
       - name: 🧪 Run Docker E2E tests (FULL - 63 tests)
         run: npm run test:e2e:docker:full
+
+      - name: 🐳 Save Docker images to cache
+        if: always()
+        run: |
+          mkdir -p /tmp/docker-image-cache
+          docker save actualbudget/actual-server:latest \
+            -o /tmp/docker-image-cache/actual-server.tar 2>/dev/null || true
+          docker save "mcr.microsoft.com/playwright:v1.57.0-jammy" \
+            -o /tmp/docker-image-cache/playwright-jammy.tar 2>/dev/null || true
 
       - name: 🧹 Cleanup Docker containers
         if: always()
@@ -233,7 +258,7 @@ jobs:
         run: |
           echo "### 🐳 Docker E2E Test Results (Full Suite)" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tests**: 63 (all 51 tools + error scenarios)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests**: 63 (all 62 tools + error scenarios)" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
