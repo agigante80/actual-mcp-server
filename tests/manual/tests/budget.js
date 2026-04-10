@@ -23,19 +23,26 @@ export async function budgetTests(client, context) {
   // Ensure we have an expense categoryId — fetch fallback from live server if context was cleared.
   // Income categories cannot have budgeted amounts or carryover (Actual rejects them).
   // If no expense category exists at all, create a disposable one for the budget tests.
+  // Also resolve xferGroupId here so we can create a second category for the transfer test
+  // without a second round-trip that might miss freshly created categories.
   let budgetOwnedGroupId = null;  // set if we created a group here (cleaned up at end)
   let budgetOwnedCatId = null;    // set if we created a category here (cleaned up at end)
   let budgetXferCatId = null;     // second disposable category for transfer test (cleaned up at end)
+  let xferGroupId = null;         // group_id for context.categoryId — used to create budgetXferCatId
 
-  if (!context.categoryId) {
-    const catData = await callTool("actual_categories_get", {});
-    const raw = catData.result || catData.categories || catData;
-    const flatCats = Array.isArray(raw)
-      ? raw.filter(g => !g.is_income).flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
-      : [];
+  // Always fetch categories to resolve group membership, even when context.categoryId is
+  // already set (the previous category test may have deleted its category, leaving a stale ID).
+  const catData = await callTool("actual_categories_get", {});
+  const raw = catData.result || catData.categories || catData;
+  const allGroups = Array.isArray(raw) ? raw.filter(g => !g.is_income) : [];
+  const flatCats = allGroups.flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden);
+
+  if (!context.categoryId || !flatCats.some(c => c.id === context.categoryId)) {
+    // context.categoryId is absent or stale — resolve from live data
     const firstCat = flatCats[0];
     if (firstCat) {
       context.categoryId = firstCat.id;
+      xferGroupId = firstCat.group_id ?? allGroups.find(g => (g.categories || []).some(c => c.id === firstCat.id))?.id ?? null;
       console.log(`  ℹ Using existing category for budget tests: "${firstCat.name}" (${firstCat.id})`);
     } else {
       // No expense category in this budget — create a disposable one so tests can run.
@@ -50,31 +57,25 @@ export async function budgetTests(client, context) {
       });
       budgetOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
       context.categoryId = budgetOwnedCatId;
+      xferGroupId = budgetOwnedGroupId;  // already known — no second lookup needed
       console.log(`  ✓ Created disposable category: ${budgetOwnedCatId}`);
     }
+  } else {
+    // context.categoryId is valid — find its group from the live data
+    xferGroupId = allGroups.find(g => (g.categories || []).some(c => c.id === context.categoryId))?.id ?? null;
   }
 
   // Create a second disposable category for the transfer test.
-  // Must use a fresh actual_categories_get call — monthBudget (fetched later) may not yet
-  // contain the disposable category just created above and would give stale group data.
-  {
-    const catData2 = await callTool("actual_categories_get", {});
-    const raw2 = catData2.result || catData2.categories || catData2;
-    const allGroups2 = Array.isArray(raw2) ? raw2.filter(g => !g.is_income) : [];
-    const owningGroup = allGroups2.find(g =>
-      (g.categories || []).some(c => c.id === context.categoryId)
-    );
-    const xferGroupId = owningGroup?.id ?? null;
-    if (xferGroupId) {
-      const xferRes = await callTool("actual_categories_create", {
-        name: `MCP-BudgetXfer-${ts}`,
-        group_id: xferGroupId,
-      });
-      budgetXferCatId = xferRes.categoryId || xferRes.id || xferRes.result || xferRes;
-      console.log(`  ✓ Created second disposable category for transfer test: ${budgetXferCatId}`);
-    } else {
-      console.log("  ⚠ Could not resolve owning group for context.categoryId — transfer test will be skipped");
-    }
+  // xferGroupId was resolved above without an extra round-trip.
+  if (xferGroupId) {
+    const xferRes = await callTool("actual_categories_create", {
+      name: `MCP-BudgetXfer-${ts}`,
+      group_id: xferGroupId,
+    });
+    budgetXferCatId = xferRes.categoryId || xferRes.id || xferRes.result || xferRes;
+    console.log(`  ✓ Created second disposable category for transfer test: ${budgetXferCatId}`);
+  } else {
+    console.log("  ⚠ Could not resolve owning group for context.categoryId — transfer test will be skipped");
   }
 
   const currentDate = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
