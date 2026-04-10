@@ -1,0 +1,118 @@
+name: Feature Request
+description: Propose a new feature or enhancement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        <!-- template-version: 1 -->
+        ## Feature Request
+        Please fill in all required fields. Clear acceptance criteria and test plans help implementation go smoothly.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What does this feature do and why is it needed?
+      placeholder: "One paragraph describing the feature and its value."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Affected area(s)
+      description: Which parts of the codebase will this touch? If 3+, consider splitting into sub-issues.
+      multiple: true
+      options:
+        - New MCP tool
+        - Existing tool enhancement
+        - HTTP server / transport
+        - Auth / OIDC / ACL
+        - Connection pool / performance
+        - Docker / Deployment
+        - Configuration / env vars
+        - Documentation only
+        - Tests / CI
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 — Critical (blocks users or breaks existing tools)
+        - P1 — High (important for current release)
+        - P2 — Medium (should do, not blocking)
+        - P3 — Low (nice to have)
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to create / modify
+      description: List specific files that will be created or changed. Helps scope the work.
+      placeholder: |
+        - **Create** `src/tools/domain_action.ts` — tool definition
+        - **Edit** `src/tools/index.ts` — add export
+        - **Edit** `src/actualToolsManager.ts` — add to IMPLEMENTED_TOOLS
+        - **Edit** `src/lib/actual-adapter.ts` — add adapter method if needed
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation details
+      description: How should this be implemented? Include code snippets if helpful.
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for this feature to be considered complete?
+      placeholder: |
+        - [ ] Tool `actual_domain_action` exists and passes `npm run verify-tools`
+        - [ ] Unit smoke test added to `tests/unit/generated_tools.smoke.test.js`
+        - [ ] `npm run build && npm run test:unit-js` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security considerations
+      description: Auth, input validation, data exposure.
+      value: |
+        - **Authentication:** behind Bearer/OIDC? / public (justify if public)
+        - **Input validation:** Zod schema defined in `src/lib/schemas/common.ts`?
+        - **Data exposure:** any sensitive budget data in response?
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other issues that must be completed before this one.
+      placeholder: "Depends on: #54, #55"
+    validations:
+      required: false
+
+  - type: textarea
+    id: qa
+    attributes:
+      label: QA & testing
+      description: What tests are required for this feature?
+      value: |
+        - [ ] Unit smoke test: tool dispatches correctly with stub adapter
+        - [ ] Schema validation test: negative-path Zod assertions
+        - [ ] Manual integration test added to `tests/manual/tests/<module>.js` (positive + negative)
+        - [ ] `npm run build && npm run test:unit-js` passes
+        - [ ] E2E test added if this affects server startup, transport, or auth
+    validations:
+      required: true

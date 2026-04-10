@@ -1,0 +1,154 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        <!-- template-version: 1 -->
+        ## Bug Report
+        Please fill in all required fields so we can reproduce and assess the issue quickly.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug description
+      description: What is happening? What did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps to trigger the bug.
+      placeholder: |
+        1. Configure environment with ...
+        2. Call tool `actual_transactions_get` with ...
+        3. Observe error ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual behavior
+      description: What should happen vs what actually happens.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Affected area(s)
+      description: Which part of the codebase does this bug affect?
+      multiple: true
+      options:
+        - MCP tools (src/tools/)
+        - Actual Budget API / adapter (src/lib/actual-adapter.ts)
+        - HTTP server / transport (src/server/)
+        - Auth / OIDC / ACL (src/auth/)
+        - Connection pool (src/lib/ActualConnectionPool.ts)
+        - Configuration (src/config.ts)
+        - Docker / Deployment
+        - Tests
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical (data loss, auth bypass, server crash)
+        - high (feature broken, no workaround)
+        - medium (feature degraded, workaround exists)
+        - low (cosmetic, minor inconvenience)
+    validations:
+      required: true
+
+  - type: input
+    id: mcp_version
+    attributes:
+      label: MCP Server Version
+      description: Run `cat VERSION` or check the release tag.
+      placeholder: "e.g. 0.4.35"
+    validations:
+      required: true
+
+  - type: input
+    id: actual_version
+    attributes:
+      label: Actual Budget Version
+      description: Found in the Actual Budget UI under Settings → About.
+      placeholder: "e.g. v25.9.0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node.js version, Docker version, MCP client, transport, installation method.
+      value: |
+        - **OS:**
+        - **Node.js:**
+        - **Docker:**
+        - **MCP client:** LibreChat / LobeChat / Claude Desktop / Other
+        - **Transport:** HTTP
+        - **Installation:** npm / Docker / Docker Compose
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste server logs (remove sensitive data). Enable debug logs with `--debug`.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security impact
+      description: Does this bug create a vulnerability or expose budget data?
+      value: |
+        - **Does this bug expose budget data or create a vulnerability?** yes / no
+        - **Details:**
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true for this bug to be considered fixed?
+      placeholder: |
+        - [ ] Bug no longer reproducible with steps above
+        - [ ] Regression test added
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other issues that must be resolved before or are blocked by this fix.
+      placeholder: "Blocked by: #54 | Blocks: #55"
+    validations:
+      required: false
+
+  - type: textarea
+    id: qa
+    attributes:
+      label: QA & Regression tests
+      description: What tests should be added to prevent this bug from recurring?
+      value: |
+        - [ ] Regression test added in `tests/unit/`
+        - [ ] If tool-related: smoke test updated in `tests/unit/generated_tools.smoke.test.js`
+        - [ ] E2E test added if this is a server-level or transport-level bug
+        - [ ] `npm run build && npm run test:unit-js` passes
+    validations:
+      required: true
