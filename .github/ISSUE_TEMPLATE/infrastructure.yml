@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        <!-- template-version: 1 -->
+        **Template version:** 2
         ## Infrastructure Task
         For dependency audits, CI/CD, Docker, deployment, and configuration work.
         Issues created by the `/dep-auditor` command use this template automatically.
@@ -112,3 +112,19 @@ body:
         - [ ] `npm audit --audit-level=moderate` passes
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Agent Review Scores
+
+        > Run `/review-ticket <issue-number>` after filing to trigger the readiness gate.
+        > All 4 agents must score **10/10** before implementation begins.
+
+        | Agent | Score | Status | Notes |
+        |---|---|---|---|
+        | tool-author | — | — | |
+        | qa | — | — | |
+        | release-manager | — | — | |
+        | actual-api | — | — | |
