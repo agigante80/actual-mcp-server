@@ -601,7 +601,9 @@ test.describe('Docker E2E - ALL 62 TOOLS', () => {
       // deliberately no category
     });
 
-    const result = await callTool(request, sessionId, 'actual_transactions_uncategorized', {});
+    const result = await callTool(request, sessionId, 'actual_transactions_uncategorized', {
+      accountId: testContext.accountId,
+    });
     const data = extractResult(result);
     const txns: any[] = data?.transactions ?? data?.result?.transactions ?? (Array.isArray(data) ? data : []);
     expect(Array.isArray(txns)).toBeTruthy();
