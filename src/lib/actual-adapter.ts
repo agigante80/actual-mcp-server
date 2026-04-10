@@ -484,19 +484,20 @@ export async function getTransactions(accountId: string | undefined, startDate?:
 }
 
 /**
- * Fetch transactions across ALL accounts for the given date range in a single
- * withActualApi session. Used when no accountId is provided — rawGetTransactions
- * requires a valid accountId and returns [] for undefined.
+ * Fetch transactions for all given accounts in a single withActualApi session.
+ * Callers must pass ALL accounts (on-budget AND off-budget) — off-budget
+ * filtering is the caller's responsibility and happens post-fetch.
+ *
+ * Do NOT call rawGetAccounts() inside this method — withApiLock is a chained
+ * Promise mutex, and a nested withActualApi call would deadlock.
  */
-export async function getAllTransactions(startDate: string, endDate: string): Promise<components['schemas']['Transaction'][]> {
+export async function getAllTransactions(accounts: { id: string }[], startDate: string, endDate: string): Promise<components['schemas']['Transaction'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.transactions.getAll').catch(() => {});
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const accounts = await withConcurrency(() => retry(() => rawGetAccounts() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
     const perAccount = await Promise.all(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (Array.isArray(accounts) ? accounts : []).map((acc: any) =>
-        withConcurrency(() => retry(() => rawGetTransactions(acc.id as string, startDate, endDate) as Promise<any[]>, { retries: 2, backoffMs: 200 })).catch(() => [] as any[])
+      (Array.isArray(accounts) ? accounts : []).map((acc: { id: string }) =>
+        withConcurrency(() => retry(() => rawGetTransactions(acc.id, startDate, endDate) as Promise<any[]>, { retries: 2, backoffMs: 200 })).catch(() => [] as any[])
       )
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
