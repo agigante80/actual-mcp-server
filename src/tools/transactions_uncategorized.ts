@@ -51,7 +51,8 @@ const tool: ToolDefinition = {
     // withActualApi session and queries every account internally.
     const txnRaw = accountId
       ? await adapter.getTransactions(accountId, startDate, endDate)
-      : await adapter.getAllTransactions(startDate, endDate);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : await adapter.getAllTransactions((Array.isArray(accounts) ? accounts : []).filter((a: any) => typeof a?.id === 'string') as { id: string }[], startDate, endDate);
     const txns = Array.isArray(txnRaw) ? txnRaw : [];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -141,16 +141,13 @@ console.log('Running transactions_uncategorized unit tests');
   // ── Case 6: getAllTransactions adapter method — flat union of two accounts ───
   console.log('\n[Case 6] getAllTransactions adapter — flat union of two accounts');
   {
-    // Temporarily stub the raw functions the adapter uses internally
-    // We test at the tool level because the adapter uses rawGetAccounts/rawGetTransactions
-    // which are private; use two accounts in getAccounts + getAllTransactions that returns
-    // the union to verify the adapter method contract.
     adapterMod.default.getAccounts = async () => [
       { id: 'acc1', name: 'Checking', offbudget: false },
       { id: 'acc2', name: 'Savings',  offbudget: false },
     ];
-    adapterMod.default.getAllTransactions = async (startDate, endDate) => {
-      // Verify the method receives dates
+    // New 3-param signature: (accounts, startDate, endDate)
+    adapterMod.default.getAllTransactions = async (accounts, startDate, endDate) => {
+      if (!Array.isArray(accounts)) throw new Error('accounts must be array');
       if (!startDate || !endDate) throw new Error('dates missing');
       return [
         { id: 'acc1-txn', amount: -100, category: null, account: 'acc1', date: '2026-04-01' },
@@ -167,6 +164,59 @@ console.log('Running transactions_uncategorized unit tests');
       else ok('acc2 transaction present in union');
       if (txns.length !== 2) fail(`expected 2 transactions, got ${txns.length}`);
       else ok('flat union contains exactly 2 transactions');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 7: getAllTransactions with empty accounts returns [] ────────────────
+  console.log('\n[Case 7] getAllTransactions — empty accounts list returns empty result');
+  {
+    adapterMod.default.getAccounts = async () => [];
+    adapterMod.default.getAllTransactions = async (accounts, startDate, endDate) => {
+      if (!Array.isArray(accounts)) throw new Error('accounts must be array');
+      if (!startDate || !endDate) throw new Error('dates missing');
+      return [];
+    };
+
+    try {
+      const res = await tool.call({ startDate: '2026-04-01', endDate: '2026-04-30' });
+      const txns = res?.transactions ?? [];
+      if (txns.length !== 0) fail(`expected 0 transactions, got ${txns.length}`);
+      else ok('empty accounts list returns empty result without crashing');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 8: getAllTransactions never calls rawGetAccounts ────────────────────
+  console.log('\n[Case 8] getAllTransactions — accounts passed in; rawGetAccounts never called');
+  {
+    let getAllTransactionsCalled = false;
+    let receivedAccounts = null;
+    adapterMod.default.getAccounts = async () => [
+      { id: '00000000-0000-0000-0000-000000000099', name: 'Checking', offbudget: false },
+    ];
+    adapterMod.default.getAllTransactions = async (accounts, startDate, endDate) => {
+      getAllTransactionsCalled = true;
+      receivedAccounts = accounts;
+      if (!Array.isArray(accounts)) throw new Error('accounts must be array');
+      if (!startDate || !endDate) throw new Error('dates missing');
+      return [
+        { id: 'txn-spy', amount: -100, category: null, account: accounts[0]?.id, date: '2026-04-01' },
+      ];
+    };
+
+    try {
+      const res = await tool.call({ startDate: '2026-04-01', endDate: '2026-04-30' });
+      if (!getAllTransactionsCalled) fail('getAllTransactions was not called');
+      else ok('getAllTransactions was called');
+      if (!Array.isArray(receivedAccounts) || receivedAccounts.length !== 1) {
+        fail(`expected 1 account passed in, got ${JSON.stringify(receivedAccounts)}`);
+      } else ok('pre-fetched accounts array passed to getAllTransactions (not fetched internally)');
+      const txns = res?.transactions ?? [];
+      if (!txns.some(t => t.id === 'txn-spy')) fail('expected transaction missing');
+      else ok('transaction from passed-in account is present in result');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
