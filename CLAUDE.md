@@ -8,6 +8,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
+## Git Workflow
+
+**Always work on `develop`, never push directly to `main`.**
+
+- All changes go to the `develop` branch
+- Push to `origin/develop` after every commit
+- `main` is only updated with explicit user permission (e.g. "push to main" or "release")
+- When the user says "push to github" without specifying a branch → push to `develop`
+
 ## Commands
 
 ```bash
