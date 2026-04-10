@@ -216,9 +216,8 @@ export async function budgetTests(client, context) {
     else console.log(`  ❌ Verify setAmount: expected 50000, got ${catEntry.budgeted}`);
   }
 
-  // B4: budgets_setAmount with non-existent categoryId — API may reject or throw
-  // Note: Pre-flight category check was removed (caused API session mixing that broke writes)
-  // Now relies on the Actual API to handle invalid category IDs
+  // B4: budgets_setAmount with non-existent categoryId — pre-flight rejects nil/unknown UUIDs
+  // Pre-flight validation is inside adapter.setBudgetAmount() — nil and unknown UUIDs both rejected.
   console.log("\nNEGATIVE B4: budgets_setAmount with non-existent categoryId...");
   {
     try {
