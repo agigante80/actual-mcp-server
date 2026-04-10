@@ -160,7 +160,7 @@ Skip creation if a matching open issue already exists (same package name in titl
 For each new ticket, use the template below. This mirrors the `.github/ISSUE_TEMPLATE/infrastructure.yml` form so programmatically-created tickets look identical to manually-filed ones.
 
 ```
-<!-- dep-auditor: template-version 2 -->
+<!-- dep-auditor: template-version 3 -->
 
 ## Summary
 
@@ -191,7 +191,7 @@ P2 — Medium (dependency health, address within 2 sprints) — default unless s
 
 ## Rollback plan
 
-Revert to previous package version: `npm install <pkg>@<previous-version>`
+Revert to previous package version: \`npm install <pkg>@<previous-version>\`
 No data migration needed.
 
 ## Acceptance Criteria
@@ -199,7 +199,20 @@ No data migration needed.
 - [ ] Issue investigated; decision made (fix / replace / accept risk)
 - [ ] If fixing: PR merged and passing CI
 - [ ] If accepting risk: decision documented in a comment on this issue
-- [ ] `npm audit --audit-level=moderate` passes
+- [ ] \`npm audit --audit-level=moderate\` passes
+
+---
+## Agent Review Scores
+
+> Run \`/review-ticket <issue-number>\` after filing to trigger the readiness gate.
+> All 4 agents must score **10/10** before implementation begins.
+
+| Agent | Score | Status | Notes |
+|---|---|---|---|
+| tool-author | — | — | |
+| qa | — | — | |
+| release-manager | — | — | |
+| actual-api | — | — | |
 ```
 
 Assign to the current milestone if one is active:

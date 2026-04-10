@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        <!-- template-version: 1 -->
+        **Template version:** 2
         ## Feature Request
         Please fill in all required fields. Clear acceptance criteria and test plans help implementation go smoothly.
 
@@ -116,3 +116,19 @@ body:
         - [ ] E2E test added if this affects server startup, transport, or auth
     validations:
       required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## Agent Review Scores
+
+        > Run `/review-ticket <issue-number>` after filing to trigger the readiness gate.
+        > All 4 agents must score **10/10** before implementation begins.
+
+        | Agent | Score | Status | Notes |
+        |---|---|---|---|
+        | tool-author | — | — | |
+        | qa | — | — | |
+        | release-manager | — | — | |
+        | actual-api | — | — | |
