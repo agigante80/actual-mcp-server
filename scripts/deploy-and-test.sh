@@ -43,7 +43,7 @@ set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────────
 DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
-DEV_DIR="$HOME/dev/actual-mcp-server"
+DEV_DIR="$HOME/dev-github-personal/actual-mcp-server"
 MCP_SERVER_URL="http://localhost:3601/http"
 MCP_AUTH_TOKEN="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
 # Parse positional + flag args
