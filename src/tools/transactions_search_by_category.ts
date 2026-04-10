@@ -26,14 +26,17 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // Fetch accounts once — used for validation, off-budget filtering (issue #81), and enrichment
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allAccounts = await adapter.getAccounts();
+
     // Step 0: Validate accountId exists if provided
     if (input.accountId) {
-      const accounts = await adapter.getAccounts();
-      const accountExists = accounts.some((acc: any) => acc.id === input.accountId);
+      const accountExists = allAccounts.some((acc: any) => acc.id === input.accountId);
       
       if (!accountExists) {
         // Check if user provided account name instead of UUID
-        const accountByName = accounts.find((acc: any) => 
+        const accountByName = allAccounts.find((acc: any) =>
           acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
         );
         
@@ -78,14 +81,28 @@ const tool: ToolDefinition = {
     }
     
     // Step 2: Get base transactions (filtered by account and date range if provided)
-    // getTransactions() requires an accountId — when none is provided, fetch from all accounts
+    // getTransactions() requires an accountId — when none is provided, fetch from all accounts.
+    // Exclude off-budget accounts (issue #81) — their transactions cannot have categories set;
+    // any update is silently discarded by Actual Budget.
+    const offBudgetIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Array.isArray(allAccounts) ? allAccounts : [])
+        .filter((acc: any) => acc?.offbudget === true)
+        .map((acc: any) => acc.id as string)
+    );
+
     let allTransactions: any[];
     if (input.accountId) {
-      allTransactions = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
+      const raw = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      allTransactions = (Array.isArray(raw) ? raw : []).filter((t: any) => !offBudgetIds.has(t?.account));
     } else {
-      const allAccounts = await adapter.getAccounts();
+      // Only fetch from on-budget accounts — skip off-budget entirely (more efficient)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const budgetAccounts = allAccounts.filter((acc: any) => !acc?.offbudget);
       const perAccount = await Promise.all(
-        allAccounts.map((acc: any) =>
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        budgetAccounts.map((acc: any) =>
           adapter.getTransactions(acc.id, input.startDate, input.endDate).catch(() => [])
         )
       );
@@ -132,9 +149,8 @@ const tool: ToolDefinition = {
     
     const limited = filtered.slice(0, input.limit || 100);
     
-    // Enrich transactions with account names
-    const accounts = await adapter.getAccounts();
-    const accountMap = new Map(accounts.map((acc: any) => [acc.id, acc.name]));
+    // Enrich transactions with account names (reuse already-fetched allAccounts)
+    const accountMap = new Map(allAccounts.map((acc: any) => [acc.id, acc.name]));
     
     const enrichedTransactions = limited.map((t: any) => ({
       ...t,

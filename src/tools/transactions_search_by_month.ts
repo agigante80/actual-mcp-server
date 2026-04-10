@@ -86,9 +86,23 @@ const tool: ToolDefinition = {
         month,
       };
     }
-    
+
+    // Fetch accounts once — used for off-budget filtering (issue #81) and enrichment
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const accounts = await adapter.getAccounts();
+
+    // Exclude off-budget accounts (issue #81) — their transactions cannot have
+    // categories set; any update is silently discarded by Actual Budget.
+    const offBudgetIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Array.isArray(accounts) ? accounts : [])
+        .filter((acc: any) => acc?.offbudget === true)
+        .map((acc: any) => acc.id as string)
+    );
+
     // Apply JavaScript filters
-    let filtered = allTransactions;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let filtered = allTransactions.filter((t: any) => !offBudgetIds.has(t?.account));
     
     // Filter by category name (need to lookup category ID)
     if (input.categoryName) {
@@ -147,8 +161,7 @@ const tool: ToolDefinition = {
     
     const limited = filtered.slice(0, input.limit || 100);
     
-    // Enrich transactions with account names
-    const accounts = await adapter.getAccounts();
+    // Enrich transactions with account names (reuse already-fetched accounts)
     const accountMap = new Map(accounts.map((acc: any) => [acc.id, acc.name]));
     
     const enrichedTransactions = limited.map((t: any) => ({
