@@ -47,8 +47,9 @@ const tool: ToolDefinition = {
       return { success: true as const, id: maybeId };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.toLowerCase().includes('account') || msg.toLowerCase().includes('not found')) {
-        throw new Error(`Failed to create transaction: ${msg}. Use actual_accounts_list to verify the account ID.`);
+      if (msg.toLowerCase().includes('not found') && msg.toLowerCase().includes('account')) {
+        // Return structured error (not throw) so callers receive { success: false, error }
+        return { success: false as const, error: msg, id: null };
       }
       throw new Error(`Failed to create transaction: ${msg}`);
     }
