@@ -36,9 +36,15 @@ const tool: ToolDefinition = {
     const endDate = input.endDate || today.toISOString().split('T')[0];
     const accountId = input.accountId ?? undefined;
 
-    // Fetch accounts first — needed for both off-budget filtering and the
-    // no-accountId path (rawGetTransactions requires a valid UUID; undefined → []).
+    // Fetch transactions first. When accountId is undefined, rawGetTransactions does
+    // a full table scan (no account filter) — this reliably returns newly written
+    // transactions even across separate WAL sessions in CI Docker. Filtering by
+    // accountId uses a SQLite index that can lag across sessions.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const txnRaw = await adapter.getTransactions(accountId as any, startDate, endDate);
+    const txns = Array.isArray(txnRaw) ? txnRaw : [];
+
+    // Fetch accounts to build off-budget exclusion set.
     const accounts = await adapter.getAccounts();
     const offBudgetIds = new Set(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,14 +52,6 @@ const tool: ToolDefinition = {
         .filter((acc: any) => acc?.offbudget === true)
         .map((acc: any) => acc.id as string)
     );
-
-    // When no accountId is given, use getAllTransactions which opens a single
-    // withActualApi session and queries every account internally.
-    const txnRaw = accountId
-      ? await adapter.getTransactions(accountId, startDate, endDate)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      : await adapter.getAllTransactions((Array.isArray(accounts) ? accounts : []).filter((a: any) => typeof a?.id === 'string') as { id: string }[], startDate, endDate);
-    const txns = Array.isArray(txnRaw) ? txnRaw : [];
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uncategorized = txns.filter(
