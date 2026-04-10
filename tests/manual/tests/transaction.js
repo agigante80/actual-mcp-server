@@ -3,7 +3,7 @@
  *
  * TRANSACTION TESTS — create, get, update, filter, import.
  *
- * Reads from context:  accountId (required), payeeId (optional), categoryId (optional)
+ * Reads from context:  accountId (logged for reference only — not used for API calls; txAccountId is created locally), payeeId (optional), categoryId (optional)
  * Writes to context:   transactionId
  */
 
@@ -22,9 +22,17 @@ export async function transactionTests(client, context) {
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 
+  // Create a dedicated on-budget account for transaction tests so they are not affected
+  // by the offbudget=true flag set in the account regression test (account.js).
+  // Do NOT write txAccountId to context — it is local to this test block.
+  const txAcctName = `MCP-Tx-${timestamp}`;
+  const txAcctResult = await callTool("actual_accounts_create", { name: txAcctName, balance: 0 });
+  const txAccountId = txAcctResult.id || txAcctResult.result || txAcctResult;
+  console.log(`\n  ✓ Created dedicated transaction test account: ${txAcctName} (${txAccountId})`);
+
   // Build create params, attaching optional payee / category from context
   const txnParams = {
-    account: context.accountId,
+    account: txAccountId,
     date: new Date().toISOString().split('T')[0],
     amount: -5000,
     notes: `MCP-Transaction-${timestamp}`,
@@ -45,7 +53,7 @@ export async function transactionTests(client, context) {
   // actual_transactions_create does not return an ID — locate it by notes filter
   console.log("\nVerifying create: searching by notes...");
   const noteFilter = await callTool("actual_transactions_filter", {
-    accountId: context.accountId,
+    accountId: txAccountId,
     notes: `MCP-Transaction-${timestamp}`,
   });
   const noteResults = Array.isArray(noteFilter) ? noteFilter : (noteFilter.result || []);
@@ -94,7 +102,7 @@ export async function transactionTests(client, context) {
 
     // Verify update — re-filter by notes since there's no get-by-id tool
     const updateFilter = await callTool("actual_transactions_filter", {
-      accountId: context.accountId,
+      accountId: txAccountId,
       notes: `MCP-Transaction-${timestamp}`,
     });
     const updateResults = Array.isArray(updateFilter) ? updateFilter : (updateFilter.result || []);
@@ -116,7 +124,7 @@ export async function transactionTests(client, context) {
     const today = new Date().toISOString().split('T')[0];
     const yearStart = `${new Date().getFullYear()}-01-01`;
     const getTxnsResult = await callTool("actual_transactions_get", {
-      accountId: context.accountId,
+      accountId: txAccountId,
       startDate: yearStart,
       endDate: today,
     });
@@ -152,7 +160,7 @@ export async function transactionTests(client, context) {
 
   // Filter (with correct param name and count assertion)
   console.log("\nFiltering transactions for account...");
-  const filteredTxns = await callTool("actual_transactions_filter", { accountId: context.accountId });
+  const filteredTxns = await callTool("actual_transactions_filter", { accountId: txAccountId });
   const filteredArr = Array.isArray(filteredTxns) ? filteredTxns : (filteredTxns.result || []);
   if (filteredArr.length >= 1) console.log(`  ✓ Found ${filteredArr.length} transaction(s) for account`);
   else console.log("  ❌ Filter returned 0 transactions (expected at least 1 after create)");
@@ -163,7 +171,7 @@ export async function transactionTests(client, context) {
   const importAmount = -3300; // -$33.00, distinctive value
   const importNotes = `MCP-Import-${timestamp}`;
   const importResult = await callTool("actual_transactions_import", {
-    accountId: context.accountId,
+    accountId: txAccountId,
     txs: [
       {
         date: importDate,
@@ -184,7 +192,7 @@ export async function transactionTests(client, context) {
   // T6: read-back — confirm imported transaction is present
   {
     const afterImport = await callTool("actual_transactions_filter", {
-      accountId: context.accountId,
+      accountId: txAccountId,
       notes: importNotes,
     });
     const afterArr = Array.isArray(afterImport) ? afterImport : (afterImport.result || []);
@@ -227,7 +235,7 @@ export async function transactionTests(client, context) {
 
       // Verify deletion
       const afterDelete = await callTool("actual_transactions_filter", {
-        accountId: context.accountId,
+        accountId: txAccountId,
         notes: `MCP-Transaction-${timestamp}`,
       });
       const afterArr = Array.isArray(afterDelete) ? afterDelete : (afterDelete.result || []);
@@ -243,5 +251,17 @@ export async function transactionTests(client, context) {
     }
   } else {
     console.log("  ⚠ Skipping delete (no transactionId in context)");
+  }
+
+  // Teardown: close then delete the dedicated transaction test account.
+  // close() must come first — Actual tombstones (hard-deletes) accounts with zero
+  // transactions on close(), making them unrecoverable. We need close() to set
+  // closed=1 before delete() removes the record cleanly.
+  try {
+    await callTool("actual_accounts_close", { id: txAccountId });
+    await callTool("actual_accounts_delete", { id: txAccountId });
+    console.log(`\n  ✓ Cleaned up transaction test account (${txAccountId})`);
+  } catch (err) {
+    console.log(`\n  ⚠ Teardown: could not clean up transaction test account (${txAccountId}): ${err.message?.slice(0, 120)}`);
   }
 }
