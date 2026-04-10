@@ -16,11 +16,16 @@ export async function budgetTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running BUDGET TESTS --");
 
+  // Hoist timestamp to function scope — used by both the disposable category block and
+  // the transfer test category created below.
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+
   // Ensure we have an expense categoryId — fetch fallback from live server if context was cleared.
   // Income categories cannot have budgeted amounts or carryover (Actual rejects them).
   // If no expense category exists at all, create a disposable one for the budget tests.
   let budgetOwnedGroupId = null;  // set if we created a group here (cleaned up at end)
   let budgetOwnedCatId = null;    // set if we created a category here (cleaned up at end)
+  let budgetXferCatId = null;     // second disposable category for transfer test (cleaned up at end)
 
   if (!context.categoryId) {
     const catData = await callTool("actual_categories_get", {});
@@ -35,7 +40,6 @@ export async function budgetTests(client, context) {
     } else {
       // No expense category in this budget — create a disposable one so tests can run.
       console.log("  ℹ No expense category found — creating disposable category group + category for budget tests...");
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
       const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BudgetTest-Group-${ts}` });
       budgetOwnedGroupId = newGroup.id || newGroup.result || newGroup;
       console.log(`  ✓ Created disposable category group: ${budgetOwnedGroupId}`);
@@ -47,6 +51,29 @@ export async function budgetTests(client, context) {
       budgetOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
       context.categoryId = budgetOwnedCatId;
       console.log(`  ✓ Created disposable category: ${budgetOwnedCatId}`);
+    }
+  }
+
+  // Create a second disposable category for the transfer test.
+  // Must use a fresh actual_categories_get call — monthBudget (fetched later) may not yet
+  // contain the disposable category just created above and would give stale group data.
+  {
+    const catData2 = await callTool("actual_categories_get", {});
+    const raw2 = catData2.result || catData2.categories || catData2;
+    const allGroups2 = Array.isArray(raw2) ? raw2.filter(g => !g.is_income) : [];
+    const owningGroup = allGroups2.find(g =>
+      (g.categories || []).some(c => c.id === context.categoryId)
+    );
+    const xferGroupId = owningGroup?.id ?? null;
+    if (xferGroupId) {
+      const xferRes = await callTool("actual_categories_create", {
+        name: `MCP-BudgetXfer-${ts}`,
+        group_id: xferGroupId,
+      });
+      budgetXferCatId = xferRes.categoryId || xferRes.id || xferRes.result || xferRes;
+      console.log(`  ✓ Created second disposable category for transfer test: ${budgetXferCatId}`);
+    } else {
+      console.log("  ⚠ Could not resolve owning group for context.categoryId — transfer test will be skipped");
     }
   }
 
@@ -267,10 +294,9 @@ export async function budgetTests(client, context) {
 
   // Transfer between categories
   console.log("\nTesting budget transfer...");
-  const targetCategory = monthBudget.categoryGroups?.[0]?.categories?.[0];
-  const targetCategoryId = targetCategory ? targetCategory.id : context.categoryId;
-  if (targetCategoryId === context.categoryId) {
-    console.log("⚠ Skipping transfer test (need two different categories)");
+  const targetCategoryId = budgetXferCatId;
+  if (!targetCategoryId || targetCategoryId === context.categoryId) {
+    console.log("⚠ Skipping transfer test (could not create second category)");
   } else {
     const preTransfer = await callTool("actual_budgets_getMonth", { month: currentDate });
     const preData = preTransfer.result || preTransfer;
@@ -342,6 +368,16 @@ export async function budgetTests(client, context) {
       console.log("✓ Error resilience: invalid-date correctly rejected by schema validation");
     } else {
       console.log("⚠ Batch rejected but with unexpected error:", err.message);
+    }
+  }
+
+  // Clean up the second disposable category created for the transfer test.
+  if (budgetXferCatId) {
+    try {
+      await callTool("actual_categories_delete", { id: budgetXferCatId });
+      console.log(`\n✓ Cleaned up budget transfer test category (${budgetXferCatId})`);
+    } catch (err) {
+      console.log(`\n  ⚠ Could not delete budget transfer category ${budgetXferCatId}: ${err.message}`);
     }
   }
 
