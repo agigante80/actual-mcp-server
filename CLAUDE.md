@@ -57,6 +57,22 @@ docker compose --profile fullstack up   # Includes Actual Budget server on :5006
 
 **Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker).
 
+## Project-Local Agents & Commands
+
+Four specialized subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
+
+| Agent | When to use |
+|-------|-------------|
+| `tool-author` | Adding a new MCP tool end-to-end (file, registration, adapter, tests, docs) |
+| `qa` | Writing, reviewing, or debugging tests at any layer (unit, integration, E2E, manual) |
+| `release-manager` | Version bumps, docs sync, GitHub issue triage, closing fixed tickets |
+| `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
+
+Project-local slash commands in `.claude/commands/`:
+
+- `/dep-auditor [--full]` — dependency health audit: runs Knip, npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything)
+- `/local-env` — full local deployment pipeline for the dev environment
+
 ## Architecture
 
 ### Layered Design

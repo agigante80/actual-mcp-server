@@ -1,0 +1,114 @@
+name: Security Issue
+description: Report a security vulnerability or propose a security hardening
+labels: ["security"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        <!-- template-version: 1 -->
+        ## Security Issue
+        For active vulnerabilities, consider reporting privately first via the Security Advisories link below
+        rather than creating a public issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Vulnerability description
+      description: What is the vulnerability or security gap?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: owasp
+    attributes:
+      label: OWASP category
+      description: Which OWASP Top 10 category applies (if any)?
+      options:
+        - A01 Broken Access Control
+        - A02 Cryptographic Failures
+        - A03 Injection
+        - A04 Insecure Design
+        - A05 Security Misconfiguration
+        - A06 Vulnerable Components
+        - A07 Authentication Failures
+        - A08 Data Integrity Failures
+        - A09 Logging / Monitoring Failures
+        - A10 SSRF
+        - Other / N/A
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - critical (actively exploitable, data loss, auth bypass)
+        - high (exploitable with effort, budget data at risk)
+        - medium (requires specific conditions)
+        - low (theoretical, defense-in-depth hardening)
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected
+    attributes:
+      label: Affected endpoints / files
+      description: Which routes, tools, or files are vulnerable?
+      placeholder: |
+        - `src/server/httpServer.ts` — Bearer token comparison
+        - `src/tools/transactions_create.ts`
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact
+      description: What can an attacker do if this is exploited? Does it expose budget data?
+      value: |
+        - **Budget data exposed?** yes / no
+        - **Auth bypass possible?** yes / no
+        - **Details:**
+    validations:
+      required: true
+
+  - type: textarea
+    id: remediation
+    attributes:
+      label: Remediation approach
+      description: How should this be fixed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Vulnerability no longer exploitable
+        - [ ] Regression / security test added
+        - [ ] `npm audit --audit-level=moderate` passes (if dependency-related)
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: Other issues blocked by or related to this security fix.
+      placeholder: "Blocks: #55"
+    validations:
+      required: false
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Test plan for the fix
+      description: How do we verify the fix works and does not regress?
+      placeholder: |
+        - [ ] Unit test: ...
+        - [ ] Integration test: ...
+        - [ ] Manual verification: ...
+    validations:
+      required: true

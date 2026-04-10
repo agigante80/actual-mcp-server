@@ -1,0 +1,114 @@
+name: Infrastructure Task
+description: Dependency health, CI/CD, Docker, deployment, configuration
+labels: ["infrastructure"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        <!-- template-version: 1 -->
+        ## Infrastructure Task
+        For dependency audits, CI/CD, Docker, deployment, and configuration work.
+        Issues created by the `/dep-auditor` command use this template automatically.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What infrastructure work is needed and why?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: finding_type
+    attributes:
+      label: Finding type
+      options:
+        - Dependency vulnerability (CVE)
+        - Outdated dependency (major version drift)
+        - Unmaintained / deprecated package
+        - Unused dependency (Knip)
+        - CI/CD issue
+        - Docker / deployment issue
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: areas
+    attributes:
+      label: Area(s) affected
+      multiple: true
+      options:
+        - npm dependencies (outdated / vulnerable / unused)
+        - CI/CD (GitHub Actions)
+        - Docker / containers
+        - Configuration / env vars
+        - Security audit
+        - Documentation
+        - Release / versioning
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - P0 — Critical (active exploit, server won't start)
+        - P1 — High (security risk, blocking CI)
+        - P2 — Medium (dependency health, address within 2 sprints)
+        - P3 — Low (minor drift, nice to fix)
+    validations:
+      required: true
+
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Full findings — CVE ID, versions, dependency path, alternatives considered, effort estimate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: files
+    attributes:
+      label: Files to create / modify
+      placeholder: |
+        - `package.json` — upgrade `express` to v5.x
+        - `.github/workflows/ci-cd.yml`
+    validations:
+      required: false
+
+  - type: textarea
+    id: security
+    attributes:
+      label: Security considerations
+      value: |
+        - **Credentials:** are secrets stored securely (env vars, GitHub Secrets)?
+        - **Access control:** who can access the changed infrastructure?
+        - **Network exposure:** any new ports or endpoints exposed?
+    validations:
+      required: true
+
+  - type: textarea
+    id: rollback
+    attributes:
+      label: Rollback plan
+      description: How to revert if this change causes problems.
+      placeholder: |
+        - Revert to previous package version: `npm install <pkg>@<previous>`
+        - No data migration needed
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      placeholder: |
+        - [ ] Issue investigated; decision made (fix / replace / accept risk)
+        - [ ] If fixing: PR merged and passing CI
+        - [ ] If accepting risk: decision documented in a comment on this issue
+        - [ ] `npm audit --audit-level=moderate` passes
+    validations:
+      required: true
