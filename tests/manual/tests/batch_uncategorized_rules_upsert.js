@@ -167,7 +167,6 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     }
 
     // 2. Create a transaction in the off-budget account (no category)
-    // This transaction also prevents Actual from tombstoning the account on close.
     const offBudgetNotes = `MCP-OffBudget-Txn-${timestamp}`;
     await callTool("actual_transactions_create", {
       account: offBudgetAccountId,
@@ -177,6 +176,17 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       // deliberately no category
     });
     console.log(`  ✓ Off-budget transaction created (notes="${offBudgetNotes}")`);
+
+    // Locate the transaction ID via actual_transactions_get (which, unlike transactions_filter,
+    // does not exclude off-budget accounts). We need it for teardown: closing an account with a
+    // non-zero balance requires deleting the transaction first so the balance reaches zero.
+    let offBudgetTxnId = null;
+    try {
+      const offTxns = await callTool("actual_transactions_get", { accountId: offBudgetAccountId });
+      const offTxnsArr = Array.isArray(offTxns) ? offTxns : (offTxns?.result ?? []);
+      const offTxn = offTxnsArr.find(t => t?.notes === offBudgetNotes);
+      offBudgetTxnId = offTxn?.id ?? null;
+    } catch (_) { /* best effort */ }
 
     // 3. List uncategorized — off-budget transaction must NOT appear
     const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {});
@@ -215,8 +225,16 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   } catch (err) {
     console.log(`  ❌ OFF-BUDGET REGRESSION: error during test: ${err.message}`);
   } finally {
-    // 5. Close the off-budget account (preserves history; account is identifiable by name)
+    // 5. Clean up the off-budget account.
+    // actual_accounts_close requires zero balance — delete the transaction first so the
+    // balance reaches zero, then close() tombstones the account cleanly (zero-transaction
+    // accounts are hard-deleted on close, which is fine for test cleanup).
     if (offBudgetAccountId) {
+      if (offBudgetTxnId) {
+        try {
+          await callTool("actual_transactions_delete", { id: offBudgetTxnId });
+        } catch (_) { /* best effort */ }
+      }
       try {
         await callTool("actual_accounts_close", { id: offBudgetAccountId });
         console.log(`  ✓ Off-budget test account closed: "${offBudgetAccountName}" (${offBudgetAccountId})`);
