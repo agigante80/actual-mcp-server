@@ -427,19 +427,6 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
       throw new Error('Transaction must include account or accountId');
     }
 
-    // Pre-flight: verify account exists — nil/unknown UUIDs silently no-op in Actual Budget
-    // (API returns "ok" even when accountId is invalid). Closed accounts are intentionally
-    // allowed; rawGetAccounts includes them. Only tombstoned (hard-deleted) accounts are excluded.
-    const accounts = await withConcurrency(() =>
-      retry(() => rawGetAccounts() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
-    );
-    const accountExists = (accounts as any[]).some((a: any) => a.id === accountId);
-    if (!accountExists) {
-      throw new Error(
-        `Account "${accountId}" not found. Use actual_accounts_list to list available accounts.`
-      );
-    }
-
     // Remove account/accountId from transaction objects as they're passed separately
     const cleanedTxs = txArray.map(tx => {
       const { account, accountId: _, ...rest } = tx as any;
