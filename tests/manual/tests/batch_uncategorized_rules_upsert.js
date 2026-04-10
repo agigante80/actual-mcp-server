@@ -146,16 +146,20 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   let offBudgetTxnId = null;
   const offBudgetAccountName = `MCP-OffBudget-${timestamp}`;
   try {
-    // 1. Create a named off-budget account
+    // 1. Create a named account, then update to set offbudget=true
+    // (actual_accounts_create does not accept offbudget at creation time)
     const createAcctResult = await callTool("actual_accounts_create", {
       name: offBudgetAccountName,
-      type: "investment",
-      offbudget: true,
     });
     offBudgetAccountId = createAcctResult?.id ?? createAcctResult?.result ?? createAcctResult;
     if (!offBudgetAccountId || typeof offBudgetAccountId !== 'string') {
       throw new Error(`Failed to create off-budget account — got: ${JSON.stringify(createAcctResult)}`);
     }
+    // Set offbudget=true via update (API does not support it at creation time)
+    await callTool("actual_accounts_update", {
+      id: offBudgetAccountId,
+      fields: { offbudget: true },
+    });
     console.log(`  ✓ Off-budget account created: "${offBudgetAccountName}" (${offBudgetAccountId})`);
 
     // Verify it is marked off-budget
