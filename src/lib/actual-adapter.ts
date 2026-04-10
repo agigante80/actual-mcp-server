@@ -492,25 +492,23 @@ export async function getTransactions(accountId: string | undefined, startDate?:
  * Promise mutex, and a nested withActualApi call would deadlock.
  */
 export async function getAllTransactions(accounts: { id: string }[], startDate: string, endDate: string): Promise<components['schemas']['Transaction'][]> {
-  return withActualApi(async () => {
-    observability.incrementToolCall('actual.transactions.getAll').catch(() => {});
-    // Sequential per-account fetches — @actual-app/api uses a single SQLite
-    // connection; concurrent calls via Promise.all within one session can
-    // silently return empty. A simple for-loop is safe and correct.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const results: any[] = [];
-    for (const acc of (Array.isArray(accounts) ? accounts : [])) {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const txns = await rawGetTransactions(acc.id, startDate, endDate) as any[];
-        if (Array.isArray(txns)) results.push(...txns);
-      } catch {
-        // per-account failure swallowed — other accounts still returned
-      }
+  observability.incrementToolCall('actual.transactions.getAll').catch(() => {});
+  // Each account uses its own withActualApi session — the same pattern used by
+  // getTransactions(), which is proven reliable in CI Docker. A single shared
+  // session has failed to return newly-written transactions across three fix
+  // attempts (d40c397, cc27161, 576190f), likely because api.downloadBudget()
+  // does not re-fetch from the server within an already-open session.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results: any[] = [];
+  for (const acc of (Array.isArray(accounts) ? accounts : [])) {
+    try {
+      const txns = await getTransactions(acc.id, startDate, endDate);
+      if (Array.isArray(txns)) results.push(...txns);
+    } catch {
+      // per-account failure swallowed — other accounts still returned
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    return results as components['schemas']['Transaction'][];
-  });
+  }
+  return results as components['schemas']['Transaction'][];
 }
 export async function getCategories(): Promise<components['schemas']['Category'][]> {
   return withActualApi(async () => {
