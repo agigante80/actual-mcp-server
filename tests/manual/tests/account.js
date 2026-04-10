@@ -136,6 +136,13 @@ export async function accountTests(client, context) {
   await listAndVerify("After reopen", accountId, true,
     a => (a.closed === false) || `expected closed=false, got closed=${a.closed}`);
 
+  // Reset offbudget to false — the update test set it to true, but downstream tests
+  // (e.g. batch/uncategorized) create transactions in context.accountId and expect it
+  // to be on-budget so those transactions appear in the uncategorized list.
+  await callTool("actual_accounts_update", { id: accountId, fields: { offbudget: false } });
+  await listAndVerify("After offbudget reset", accountId, true,
+    a => (a.offbudget === false) || `expected offbudget=false, got offbudget=${a.offbudget}`);
+
   // actual_accounts_delete — uses a separate disposable account (no transactions)
   // so Actual hard-deletes it cleanly without tombstoning.
   console.log("\nTesting actual_accounts_delete...");
