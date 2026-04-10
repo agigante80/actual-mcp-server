@@ -6,7 +6,7 @@
  *   2. actual_transactions_update_batch   — update multiple transactions in one call
  *   3. actual_rules_create_or_update      — idempotent rule upsert
  *
- * Reads from context:  accountId (required), categoryId (required)
+ * Reads from context:  accountId (required), categoryId (optional — creates disposable if absent)
  * Writes to context:   rulesUpsertId  (cleaned up by runner.js cleanup phase)
  */
 
@@ -22,13 +22,40 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     console.log("⚠ No account ID in context — skipping batch/uncategorized/upsert tests");
     return;
   }
-  if (!context.categoryId) {
-    console.log("⚠ No category ID in context — skipping batch/uncategorized/upsert tests");
-    return;
-  }
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const today = new Date().toISOString().split('T')[0];
+
+  // Ensure we have an expense categoryId — budget.js (which runs before this) may have
+  // nulled context.categoryId in its teardown. Apply the same self-contained fallback pattern.
+  let buruOwnedGroupId = null;  // set if we created a group here (cleaned up at end)
+  let buruOwnedCatId = null;    // set if we created a category here (cleaned up at end)
+
+  if (!context.categoryId) {
+    const catData = await callTool("actual_categories_get", {});
+    const raw = catData.result || catData.categories || catData;
+    const flatCats = Array.isArray(raw)
+      ? raw.filter(g => !g.is_income).flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
+      : [];
+    const firstCat = flatCats[0];
+    if (firstCat) {
+      context.categoryId = firstCat.id;
+      console.log(`  ℹ Using existing category for batch/upsert tests: "${firstCat.name}" (${firstCat.id})`);
+    } else {
+      console.log("  ℹ No expense category found — creating disposable category group + category for batch/upsert tests...");
+      const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BuRU-Group-${timestamp}` });
+      buruOwnedGroupId = newGroup.id || newGroup.result || newGroup;
+      console.log(`  ✓ Created disposable category group: ${buruOwnedGroupId}`);
+
+      const newCat = await callTool("actual_categories_create", {
+        name: `MCP-BuRU-Cat-${timestamp}`,
+        group_id: buruOwnedGroupId,
+      });
+      buruOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
+      context.categoryId = buruOwnedCatId;
+      console.log(`  ✓ Created disposable category: ${buruOwnedCatId}`);
+    }
+  }
 
   // ──────────────────────────────────────────────────────────────────────────
   // 1. actual_transactions_uncategorized
@@ -377,6 +404,25 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       console.log(`  ✓ NEGATIVE: correctly rejected invalid condition: ${err.message.slice(0, 80)}`);
     } else {
       console.log(`  ⚠ NEGATIVE: threw but unexpected message: ${err.message.slice(0, 120)}`);
+    }
+  }
+
+  // Clean up any disposable category/group we created at the start of this test.
+  if (buruOwnedCatId) {
+    try {
+      await callTool("actual_categories_delete", { id: buruOwnedCatId });
+      console.log(`\n✓ Cleaned up disposable batch/upsert test category (${buruOwnedCatId})`);
+    } catch (err) {
+      console.log(`\n  ⚠ Could not delete disposable category ${buruOwnedCatId}: ${err.message}`);
+    }
+    context.categoryId = null;
+  }
+  if (buruOwnedGroupId) {
+    try {
+      await callTool("actual_category_groups_delete", { id: buruOwnedGroupId });
+      console.log(`✓ Cleaned up disposable batch/upsert test category group (${buruOwnedGroupId})`);
+    } catch (err) {
+      console.log(`  ⚠ Could not delete disposable category group ${buruOwnedGroupId}: ${err.message}`);
     }
   }
 
