@@ -134,6 +134,66 @@ export function registerTransactionTests(state: SharedState): void {
     console.log('✅ actual_transactions_uncategorized: future date range returns empty list');
   });
 
+  test('actual_transactions_uncategorized - should exclude off-budget transactions (regression #80)', async ({ request }) => {
+    // Create a temporary off-budget account
+    const offBudgetTimestamp = Date.now();
+    const offBudgetAccountName = `E2E-OffBudget-${offBudgetTimestamp}`;
+    const createAcctResult = await callTool(request, state.sessionId, 'actual_accounts_create', {
+      name: offBudgetAccountName,
+      type: 'investment',
+      offbudget: true,
+      balance: 0,
+    });
+    const offBudgetAccountId = extractResult(createAcctResult);
+    expect(offBudgetAccountId).toBeTruthy();
+    console.log(`✅ Off-budget account created: ${offBudgetAccountId}`);
+
+    const today = new Date().toISOString().split('T')[0];
+    const offBudgetNote = `E2E-OffBudget-Txn-${offBudgetTimestamp}`;
+
+    try {
+      // Create a transaction in the off-budget account (no category)
+      await callTool(request, state.sessionId, 'actual_transactions_create', {
+        account: offBudgetAccountId,
+        date: today,
+        amount: -9999,
+        notes: offBudgetNote,
+      });
+
+      const result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+      const data = extractResult(result);
+      const txns: any[] = data?.transactions ?? data?.result?.transactions ?? (Array.isArray(data) ? data : []);
+      expect(Array.isArray(txns)).toBeTruthy();
+
+      // Off-budget transaction must NOT appear
+      const offBudgetFound = txns.find((t: any) => t?.notes === offBudgetNote);
+      expect(offBudgetFound).toBeFalsy();
+      console.log('✅ actual_transactions_uncategorized [#80]: off-budget transaction correctly excluded');
+
+      // On-budget transaction (created by the earlier test) must still appear
+      if (state.ctx.accountId) {
+        const onBudgetNote = `E2E-Uncat-${offBudgetTimestamp}`;
+        // Create a fresh on-budget uncategorized transaction to assert inclusion
+        await callTool(request, state.sessionId, 'actual_transactions_create', {
+          account: state.ctx.accountId,
+          date: today,
+          amount: -777,
+          notes: onBudgetNote,
+        });
+        const result2 = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+        const data2 = extractResult(result2);
+        const txns2: any[] = data2?.transactions ?? data2?.result?.transactions ?? (Array.isArray(data2) ? data2 : []);
+        const onBudgetFound = txns2.find((t: any) => t?.notes === onBudgetNote);
+        expect(onBudgetFound).toBeTruthy();
+        console.log('✅ actual_transactions_uncategorized [#80]: on-budget transaction correctly included');
+      }
+    } finally {
+      // Close (not delete) the off-budget account to preserve history
+      await callTool(request, state.sessionId, 'actual_accounts_close', { id: offBudgetAccountId });
+      console.log(`✅ Off-budget test account closed: ${offBudgetAccountId}`);
+    }
+  });
+
   test('actual_transactions_update_batch - should batch update transactions', async ({ request }) => {
     if (!state.ctx.accountId || !state.ctx.transactionId) test.skip();
 

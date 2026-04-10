@@ -156,6 +156,14 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     const offBudgetUncatTxns = offBudgetUncatResult?.transactions ?? [];
     const offBudgetTxnFound = offBudgetUncatTxns.find(t => t?.notes === offBudgetNotes);
 
+    // Also verify the on-budget transaction is still present (a too-broad filter would exclude everything)
+    const onBudgetStillPresent = offBudgetUncatTxns.find(t => t?.notes === uncatNotes);
+    if (onBudgetStillPresent) {
+      console.log("  ✓ ON-BUDGET VERIFY [#80]: on-budget transaction still appears in uncategorized list");
+    } else {
+      console.log("  ❌ ON-BUDGET VERIFY [#80]: on-budget transaction missing — filter may be too broad");
+    }
+
     if (!offBudgetTxnFound) {
       console.log("  ✓ OFF-BUDGET REGRESSION [#80]: off-budget transaction correctly excluded from uncategorized list");
     } else {

@@ -314,12 +314,20 @@ console.log('Running generated tools smoke tests');
       const res = await uncatTool.call({});
       const txns = res?.transactions ?? [];
       const offBudgetIncluded = txns.some(t => t?.id === 'off1');
+      const onBudgetIncluded = txns.some(t => t?.id === 'on1');
 
       if (offBudgetIncluded) {
         console.error('[known-bug #80] off-budget transaction still included in uncategorized results — fix pending');
         failures++;
       } else {
         console.log('OK [regression #80] off-budget transaction correctly excluded');
+      }
+
+      if (!onBudgetIncluded) {
+        console.error('[regression #80] on-budget transaction incorrectly excluded — filter is too broad');
+        failures++;
+      } else {
+        console.log('OK [regression #80] on-budget transaction correctly included');
       }
     } catch (e) {
       console.error('[regression #80] unexpected error:', e && e.message);
