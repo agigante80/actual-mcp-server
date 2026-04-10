@@ -97,22 +97,34 @@ function getActiveBudgetConfig(): BudgetConfig {
 }
 
 /**
+ * Global API session mutex.
+ * @actual-app/api is a singleton with a single SQLite connection — concurrent
+ * init/shutdown pairs corrupt the session.  All callers (reads via withActualApi,
+ * writes via processWriteQueue) must acquire this lock before touching the API.
+ */
+let _apiSessionLock: Promise<void> = Promise.resolve();
+
+function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
+  let release!: () => void;
+  const prevLock = _apiSessionLock;
+  _apiSessionLock = new Promise<void>(resolve => { release = resolve; });
+  return prevLock.then(() => fn()).finally(() => release());
+}
+
+/**
  * Helper to init and shutdown Actual API around each operation
  * This is CRITICAL for data persistence - shutdown() must be called after every operation
  * Based on the pattern from https://github.com/s-stefanov/actual-mcp
  */
 async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
-  try {
-    // Initialize API for this operation
-    await initActualApiForOperation();
-    
-    // Execute the operation
-    return await operation();
-  } finally {
-    // CRITICAL: Always call shutdown after operation
-    // This ensures data is properly committed and tombstone=0
-    await shutdownActualApi();
-  }
+  return withApiLock(async () => {
+    try {
+      await initActualApiForOperation();
+      return await operation();
+    } finally {
+      await shutdownActualApi();
+    }
+  });
 }
 
 /**
@@ -198,48 +210,53 @@ async function processWriteQueue() {
   
   const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
   logger.debug(`[WRITE QUEUE] Processing batch of ${batch.length} operations`);
-  
+
   try {
-    // Initialize API once for all queued writes
-    await initActualApiForOperation();
-    
-    // Process all queued writes in the same session
-    // Each operation handles its own success/failure
-    await Promise.allSettled(
-      batch.map(async ({ operation, resolve, reject }) => {
-        try {
-          const result = await operation();
-          resolve(result);
-        } catch (error) {
-          logger.error('[WRITE QUEUE] Operation failed:', error);
-          reject(error);
-        }
-      })
-    );
-    
-    // Explicitly sync changes to server before shutdown
-    // This ensures all write operations are persisted
-    logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
-    try {
-      await (api as any).sync();
-      logger.debug(`[WRITE QUEUE] Sync completed`);
-    } catch (syncError) {
-      logger.error('[WRITE QUEUE] Sync failed:', syncError);
-      // Don't throw - we still want to shutdown cleanly
-      // Individual operation errors were already reported to callers
-    }
-    
-    // Shutdown after all writes complete and sync
-    await shutdownActualApi();
-    logger.debug(`[WRITE QUEUE] Batch completed successfully`);
-  } catch (error) {
-    logger.error('[WRITE QUEUE] Fatal error in write queue:', error);
-    // Reject any operations that weren't processed
-    batch.forEach(({ reject }) => {
+    await withApiLock(async () => {
       try {
-        reject(error);
-      } catch (e) {
-        logger.error('[WRITE QUEUE] Error rejecting operation:', e);
+        // Initialize API once for all queued writes
+        await initActualApiForOperation();
+
+        // Process all queued writes in the same session
+        // Each operation handles its own success/failure
+        await Promise.allSettled(
+          batch.map(async ({ operation, resolve, reject }) => {
+            try {
+              const result = await operation();
+              resolve(result);
+            } catch (error) {
+              logger.error('[WRITE QUEUE] Operation failed:', error);
+              reject(error);
+            }
+          })
+        );
+
+        // Explicitly sync changes to server before shutdown
+        // This ensures all write operations are persisted
+        logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
+        try {
+          await (api as any).sync();
+          logger.debug(`[WRITE QUEUE] Sync completed`);
+        } catch (syncError) {
+          logger.error('[WRITE QUEUE] Sync failed:', syncError);
+          // Don't throw - we still want to shutdown cleanly
+          // Individual operation errors were already reported to callers
+        }
+
+        // Shutdown after all writes complete and sync
+        await shutdownActualApi();
+        logger.debug(`[WRITE QUEUE] Batch completed successfully`);
+      } catch (error) {
+        logger.error('[WRITE QUEUE] Fatal error in write queue:', error);
+        // Reject any operations that weren't processed
+        batch.forEach(({ reject }) => {
+          try {
+            reject(error);
+          } catch (e) {
+            logger.error('[WRITE QUEUE] Error rejecting operation:', e);
+          }
+        });
+        await shutdownActualApi();
       }
     });
   } finally {
@@ -470,7 +487,9 @@ export async function createCategory(category: components['schemas']['Category']
       if (error instanceof Error) {
         throw error;
       }
-      throw new Error(String(error));
+      // Handle Actual APIError plain objects: { type: "APIError", message: "..." }
+      const msg = (error as any)?.message ? String((error as any).message) : JSON.stringify(error);
+      throw new Error(msg);
     }
   });
 }
