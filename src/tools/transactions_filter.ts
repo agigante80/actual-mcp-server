@@ -36,8 +36,20 @@ const tool: ToolDefinition = {
       return { result: [] };
     }
     
+    // Exclude off-budget accounts (issue #81) — their transactions cannot have
+    // categories set; any update is silently discarded by Actual Budget.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const accounts = await adapter.getAccounts();
+    const offBudgetIds = new Set(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (Array.isArray(accounts) ? accounts : [])
+        .filter((acc: any) => acc?.offbudget === true)
+        .map((acc: any) => acc.id as string)
+    );
+
     // Apply filters
-    let filtered = transactions;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let filtered = transactions.filter((t: any) => !offBudgetIds.has(t?.account));
     
     // Filter by amount range
     if (input.minAmount !== undefined) {

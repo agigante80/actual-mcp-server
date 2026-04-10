@@ -340,6 +340,62 @@ console.log('Running generated tools smoke tests');
   }
   // ── End regression #80 ────────────────────────────────────────────────────
 
+  // ── Off-budget filtering regression test (issue #81) ─────────────────────
+  // transactions_filter, transactions_search_by_category, and
+  // transactions_search_by_month must NOT include off-budget account transactions.
+  {
+    console.log('\n[regression #81] off-budget filtering for filter/search_by_category/search_by_month');
+
+    const onBudgetAcct  = { id: 'acct-on',  name: 'Checking',   offbudget: false };
+    const offBudgetAcct = { id: 'acct-off', name: 'Investment', offbudget: true  };
+    const onTxn  = { id: 'on1',  amount: -500,  category: 'cat-1', account: 'acct-on',  date: '2025-01-15' };
+    const offTxn = { id: 'off1', amount: -1500, category: null,    account: 'acct-off', date: '2025-01-15' };
+
+    adapterMod.default.getAccounts     = async () => [onBudgetAcct, offBudgetAcct];
+    adapterMod.default.getTransactions = async () => [onTxn, offTxn];
+    adapterMod.default.getCategories   = async () => [{ id: 'cat-1', name: 'Food' }];
+    adapterMod.default.getPayees       = async () => [];
+
+    const toolsToCheck = [
+      { name: 'transactions_filter',             args: {},                        extract: r => r?.result ?? r?.transactions ?? [] },
+      { name: 'transactions_search_by_category', args: { categoryName: 'Food' }, extract: r => r?.transactions ?? [] },
+      { name: 'transactions_search_by_month',    args: { month: '2025-01' },     extract: r => r?.transactions ?? [] },
+    ];
+
+    for (const { name, args, extract } of toolsToCheck) {
+      try {
+        const mod  = toolsIndex[name];
+        const tool = mod?.default ?? mod;
+        const res  = await tool.call(args);
+        const txns = extract(res);
+
+        if (txns.some(t => t?.id === 'off1')) {
+          console.error(`[regression #81] ${name}: off-budget transaction still included`);
+          failures++;
+        } else {
+          console.log(`OK [regression #81] ${name}: off-budget transaction correctly excluded`);
+        }
+
+        if (!txns.some(t => t?.id === 'on1')) {
+          console.error(`[regression #81] ${name}: on-budget transaction incorrectly excluded`);
+          failures++;
+        } else {
+          console.log(`OK [regression #81] ${name}: on-budget transaction correctly included`);
+        }
+      } catch (e) {
+        console.error(`[regression #81] ${name} unexpected error:`, e && e.message);
+        failures++;
+      }
+    }
+
+    // Restore stubs
+    adapterMod.default.getAccounts     = async (..._args) => stubResponses.getAccounts;
+    adapterMod.default.getTransactions = async (..._args) => stubResponses.getTransactions;
+    adapterMod.default.getCategories   = async (..._args) => stubResponses.getCategories;
+    adapterMod.default.getPayees       = async (..._args) => stubResponses.getPayees;
+  }
+  // ── End regression #81 ────────────────────────────────────────────────────
+
   // restore adapter
   Object.assign(adapterMod.default, originalAdapter);
 
