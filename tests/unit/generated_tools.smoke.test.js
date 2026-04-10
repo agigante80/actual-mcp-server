@@ -63,6 +63,7 @@ console.log('Running generated tools smoke tests');
     getAccountBalance: 12345,
     deleteTransaction: null,
     updateTransaction: null,
+    updateTransactionBatch: { succeeded: [{ id: '00000000-0000-0000-0000-000000000001' }], failed: [] },
     runQuery: [{ id: 'result1', value: 100 }],
     runBankSync: null,
     getBudgets: [{ name: 'My Budget', cloudFileId: '00000000-0000-0000-0000-000000000001', hasKey: false, state: 'remote' }],
@@ -395,6 +396,66 @@ console.log('Running generated tools smoke tests');
     adapterMod.default.getPayees       = async (..._args) => stubResponses.getPayees;
   }
   // ── End regression #81 ────────────────────────────────────────────────────
+
+  // ── Batching regression test (issue #79) ─────────────────────────────────
+  // actual_transactions_update_batch must dispatch a SINGLE adapter call for N
+  // updates — not N separate calls. N separate calls each trigger a full
+  // init/downloadBudget/sync/shutdown cycle, causing compounding timeouts.
+  {
+    console.log('\n[regression #79] transactions_update_batch: single adapter call for N updates');
+
+    let batchCalls = 0;
+    let singleCalls = 0;
+
+    adapterMod.default.updateTransactionBatch = async (updates) => {
+      batchCalls++;
+      return { succeeded: updates.map(u => ({ id: u.id })), failed: [] };
+    };
+    adapterMod.default.updateTransaction = async () => {
+      singleCalls++;
+      return null;
+    };
+
+    try {
+      const mod  = toolsIndex['transactions_update_batch'];
+      const tool = mod?.default ?? mod;
+      const res  = await tool.call({
+        updates: [
+          { id: 'txn-1', fields: { notes: 'a' } },
+          { id: 'txn-2', fields: { notes: 'b' } },
+          { id: 'txn-3', fields: { notes: 'c' } },
+        ],
+      });
+
+      if (batchCalls !== 1) {
+        console.error(`[regression #79] adapter.updateTransactionBatch called ${batchCalls}x — expected exactly 1`);
+        failures++;
+      } else {
+        console.log('OK [regression #79] adapter.updateTransactionBatch called exactly once for 3 updates');
+      }
+
+      if (singleCalls !== 0) {
+        console.error(`[regression #79] adapter.updateTransaction called ${singleCalls}x — batch tool must not use the single-update path`);
+        failures++;
+      } else {
+        console.log('OK [regression #79] adapter.updateTransaction not invoked (batch path used correctly)');
+      }
+
+      if (res?.successCount !== 3) {
+        console.error(`[regression #79] expected successCount=3, got ${res?.successCount}`);
+        failures++;
+      } else {
+        console.log('OK [regression #79] successCount=3 correct for 3-item batch');
+      }
+    } catch (e) {
+      console.error('[regression #79] unexpected error:', e && e.message);
+      failures++;
+    } finally {
+      adapterMod.default.updateTransactionBatch = async (..._args) => stubResponses.updateTransactionBatch;
+      adapterMod.default.updateTransaction      = async (..._args) => stubResponses.updateTransaction;
+    }
+  }
+  // ── End regression #79 ───────────────────────────────────────────────────
 
   // restore adapter
   Object.assign(adapterMod.default, originalAdapter);

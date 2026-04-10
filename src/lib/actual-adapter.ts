@@ -582,6 +582,30 @@ export async function updateTransaction(id: string, fields: Partial<components['
     await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
+export async function updateTransactionBatch(
+  updates: Array<{ id: string; fields: Partial<components['schemas']['Transaction']> | unknown }>
+): Promise<{ succeeded: { id: string }[]; failed: { id: string; error: string }[] }> {
+  observability.incrementToolCall('actual.transactions.updateBatch').catch(() => {});
+  // All updates share one queueWriteOperation → one init/sync/shutdown cycle (issue #79).
+  // Sequential loop (not Promise.all) is intentional: concurrent rawUpdateTransaction calls
+  // within one session can interleave withMutation CRDT messages unpredictably.
+  return queueWriteOperation(async () => {
+    const succeeded: { id: string }[] = [];
+    const failed: { id: string; error: string }[] = [];
+    for (const { id, fields } of updates) {
+      try {
+        await withConcurrency(() =>
+          retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200 })
+        );
+        succeeded.push({ id });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        failed.push({ id, error: message });
+      }
+    }
+    return { succeeded, failed };
+  });
+}
 export async function deleteTransaction(id: string): Promise<void> {
   observability.incrementToolCall('actual.transactions.delete').catch(() => {});
   return queueWriteOperation(async () => {
@@ -1357,5 +1381,6 @@ export default {
   createSchedule,
   updateSchedule,
   deleteSchedule,
+  updateTransactionBatch,
   notifications,
 };

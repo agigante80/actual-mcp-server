@@ -58,19 +58,9 @@ Example: { updates: [{ id: "txn-uuid-1", fields: { category: "cat-uuid" } }, { i
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
 
-    const succeeded: { id: string }[] = [];
-    const failed: { id: string; error: string }[] = [];
-
-    // Process updates sequentially for clean per-item error isolation
-    for (const item of input.updates) {
-      try {
-        await adapter.updateTransaction(item.id, item.fields);
-        succeeded.push({ id: item.id });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        failed.push({ id: item.id, error: message });
-      }
-    }
+    // Single adapter call — all updates share one init/sync/shutdown cycle (fixes issue #79).
+    // Calling adapter.updateTransaction() in a loop would trigger N separate budget sessions.
+    const { succeeded, failed } = await adapter.updateTransactionBatch(input.updates);
 
     const result: BatchResult = {
       succeeded,
