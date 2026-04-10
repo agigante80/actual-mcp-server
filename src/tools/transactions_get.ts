@@ -16,10 +16,7 @@ const tool: ToolDefinition = {
       const accounts = await adapter.getAccounts();
       const accountExists = (accounts as any[]).some((a: any) => a.id === input.accountId);
       if (!accountExists) {
-        return {
-          error: notFoundMsg('Account', input.accountId, 'actual_accounts_list'),
-          result: [],
-        };
+        return { error: notFoundMsg('Account', input.accountId, 'actual_accounts_list') };
       }
     }
     const result = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);

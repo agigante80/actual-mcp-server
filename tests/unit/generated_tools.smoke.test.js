@@ -97,7 +97,7 @@ console.log('Running generated tools smoke tests');
       // Provide minimal examples for known tools (use UUIDs where schemas require them)
   if (name.includes('transactions_create')) inputExample.account = '00000000-0000-0000-0000-000000000001', inputExample.date = '2025-11-24', inputExample.amount = -1234;
   if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.transactions = [{ amount: 100 }];
-  if (name.includes('transactions_get')) inputExample.accountId = '00000000-0000-0000-0000-000000000001';
+  if (name.includes('transactions_get')) inputExample.accountId = 'a1'; // matches getAccounts stub { id: 'a1' } — nil-UUID would hit not-found path and return { error } without result
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
   if (name.includes('transactions_update_batch')) inputExample.updates = [{ id: '00000000-0000-0000-0000-000000000001', fields: { notes: 'batch-test' } }];
