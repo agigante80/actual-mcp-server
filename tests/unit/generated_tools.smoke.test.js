@@ -292,6 +292,46 @@ console.log('Running generated tools smoke tests');
     }
   }
 
+  // ── Off-budget filtering regression test (issue #80) ─────────────────────
+  // transactions_uncategorized must NOT include transactions from off-budget accounts.
+  {
+    console.log('\n[regression #80] transactions_uncategorized: off-budget filtering');
+
+    // Patch getAccounts + getTransactions: one on-budget account, one off-budget.
+    // The fix resolves offbudget status via the account UUID on each transaction.
+    adapterMod.default.getAccounts = async () => [
+      { id: 'acct-on',  name: 'Checking',   offbudget: false },
+      { id: 'acct-off', name: 'Investment', offbudget: true  },
+    ];
+    adapterMod.default.getTransactions = async () => [
+      { id: 'on1',  amount: -500,  category: null, account: 'acct-on'  },
+      { id: 'off1', amount: -1500, category: null, account: 'acct-off' },
+    ];
+
+    try {
+      const uncatMod = toolsIndex['transactions_uncategorized'];
+      const uncatTool = uncatMod?.default ?? uncatMod;
+      const res = await uncatTool.call({});
+      const txns = res?.transactions ?? [];
+      const offBudgetIncluded = txns.some(t => t?.id === 'off1');
+
+      if (offBudgetIncluded) {
+        console.error('[known-bug #80] off-budget transaction still included in uncategorized results — fix pending');
+        failures++;
+      } else {
+        console.log('OK [regression #80] off-budget transaction correctly excluded');
+      }
+    } catch (e) {
+      console.error('[regression #80] unexpected error:', e && e.message);
+      failures++;
+    } finally {
+      // Restore stubs for both patched methods
+      adapterMod.default.getAccounts = async (..._args) => stubResponses.getAccounts;
+      adapterMod.default.getTransactions = async (..._args) => stubResponses.getTransactions;
+    }
+  }
+  // ── End regression #80 ────────────────────────────────────────────────────
+
   // restore adapter
   Object.assign(adapterMod.default, originalAdapter);
 

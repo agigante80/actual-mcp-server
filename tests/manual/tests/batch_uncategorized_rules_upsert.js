@@ -106,6 +106,92 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     console.log(`  ✓ EDGE CASE: summary.totalAmount=0`);
   }
 
+  // ── Off-budget filtering regression (issue #80) ───────────────────────────
+  // actual_transactions_uncategorized must NOT include transactions from
+  // off-budget accounts (investment, HSA, etc.) because those transactions
+  // can never have categories assigned — any update is silently discarded.
+  //
+  // Account is named MCP-OffBudget-{timestamp} so cleanup can identify it.
+  // The off-budget transaction protects against tombstoning on close.
+  // Account is closed (not deleted) at the end so history is preserved.
+  console.log("\nOFF-BUDGET REGRESSION (issue #80): uncategorized must exclude off-budget txns...");
+  let offBudgetAccountId = null;
+  const offBudgetAccountName = `MCP-OffBudget-${timestamp}`;
+  try {
+    // 1. Create a named off-budget account
+    const createAcctResult = await callTool("actual_accounts_create", {
+      name: offBudgetAccountName,
+      type: "investment",
+      offbudget: true,
+    });
+    offBudgetAccountId = createAcctResult?.id ?? createAcctResult?.result ?? createAcctResult;
+    if (!offBudgetAccountId || typeof offBudgetAccountId !== 'string') {
+      throw new Error(`Failed to create off-budget account — got: ${JSON.stringify(createAcctResult)}`);
+    }
+    console.log(`  ✓ Off-budget account created: "${offBudgetAccountName}" (${offBudgetAccountId})`);
+
+    // Verify it is marked off-budget
+    const allAccounts = await callTool("actual_accounts_list", {});
+    const createdAcct = Array.isArray(allAccounts) ? allAccounts.find(a => a.id === offBudgetAccountId) : null;
+    if (createdAcct?.offbudget === true) {
+      console.log(`  ✓ Verified account.offbudget=true`);
+    } else {
+      console.log(`  ⚠ account.offbudget not true — got: ${JSON.stringify(createdAcct?.offbudget)}`);
+    }
+
+    // 2. Create a transaction in the off-budget account (no category)
+    // This transaction also prevents Actual from tombstoning the account on close.
+    const offBudgetNotes = `MCP-OffBudget-Txn-${timestamp}`;
+    await callTool("actual_transactions_create", {
+      account: offBudgetAccountId,
+      date: today,
+      amount: -9999,
+      notes: offBudgetNotes,
+      // deliberately no category
+    });
+    console.log(`  ✓ Off-budget transaction created (notes="${offBudgetNotes}")`);
+
+    // 3. List uncategorized — off-budget transaction must NOT appear
+    const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {});
+    const offBudgetUncatTxns = offBudgetUncatResult?.transactions ?? [];
+    const offBudgetTxnFound = offBudgetUncatTxns.find(t => t?.notes === offBudgetNotes);
+
+    if (!offBudgetTxnFound) {
+      console.log("  ✓ OFF-BUDGET REGRESSION [#80]: off-budget transaction correctly excluded from uncategorized list");
+    } else {
+      console.log("  ❌ OFF-BUDGET REGRESSION [#80]: off-budget transaction appeared in uncategorized list (bug confirmed)");
+      console.log(`     id=${offBudgetTxnFound.id}, notes=${offBudgetTxnFound.notes}`);
+
+      // 4. Also document the silent write discard if the bug is present and we have a category
+      if (context.categoryId) {
+        await callTool("actual_transactions_update", {
+          id: offBudgetTxnFound.id,
+          fields: { category: context.categoryId },
+        });
+        const readBack = await callTool("actual_transactions_uncategorized", {});
+        const stillPresent = (readBack?.transactions ?? []).find(t => t?.id === offBudgetTxnFound.id);
+        if (stillPresent) {
+          console.log("  ✓ SILENT-WRITE CONFIRMED [#80]: update returned success but category still null (off-budget write is a no-op)");
+        } else {
+          console.log("  ⚠ SILENT-WRITE CHECK: transaction left uncategorized list after update (unexpected)");
+        }
+      }
+    }
+  } catch (err) {
+    console.log(`  ❌ OFF-BUDGET REGRESSION: error during test: ${err.message}`);
+  } finally {
+    // 5. Close the off-budget account (preserves history; account is identifiable by name)
+    if (offBudgetAccountId) {
+      try {
+        await callTool("actual_accounts_close", { id: offBudgetAccountId });
+        console.log(`  ✓ Off-budget test account closed: "${offBudgetAccountName}" (${offBudgetAccountId})`);
+      } catch (closeErr) {
+        console.log(`  ⚠ Could not close off-budget test account (${offBudgetAccountId}): ${closeErr.message}`);
+      }
+    }
+  }
+  // ── End off-budget regression ──────────────────────────────────────────────
+
   // ──────────────────────────────────────────────────────────────────────────
   // 2. actual_transactions_update_batch
   // ──────────────────────────────────────────────────────────────────────────

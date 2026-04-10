@@ -36,7 +36,7 @@ npm run test:adapter            # Adapter: retry, concurrency, init/shutdown
 node tests/unit/transactions_create.test.js   # Single unit test file
 npx playwright test --grep "initialize -> tools/list"  # Single E2E test
 npm run test:e2e                # Full Playwright E2E (requires no live server)
-npm run test:integration:smoke  # Live server integration (smoke level)
+npm run test:integration:smoke  # Live server integration (levels: sanity < smoke < normal < extended < full)
 
 # Tools
 npm run verify-tools            # Verify tool count + registration
@@ -119,10 +119,11 @@ Many existing tools still use the older pattern (manual `ToolDefinition` export 
 ### Adding a New Tool
 
 1. Create `src/tools/new_tool.ts` using the pattern above
-2. Add tool name to `IMPLEMENTED_TOOLS` array in `src/actualToolsManager.ts`
-3. Add unit tests in `tests/unit/` (positive + negative cases)
-4. Run `npm run verify-tools` to confirm registration
-5. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry)
+2. Export it from `src/tools/index.ts` (e.g. `export { default as new_tool } from './new_tool.js';`)
+3. Add tool name to `IMPLEMENTED_TOOLS` array in `src/actualToolsManager.ts`
+4. Add unit tests in `tests/unit/` (positive + negative cases)
+5. Run `npm run verify-tools` to confirm registration
+6. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry)
 
 ### Key Source Files
 
@@ -163,6 +164,8 @@ Many existing tools still use the older pattern (manual `ToolDefinition` export 
 **Documentation hygiene**: Prefer deletion over archiving. When a feature ships, delete its `docs/feature/*.md` spec and remove its row from `docs/ROADMAP.md`. Never move to `archive/` folders — git history is the archive.
 
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
+
+**Never use `overrides` (npm) or `pnpm.overrides` to force-update a transitive dependency.** If a transitive dependency has a vulnerability, upgrade the direct dependency that pulls it in instead.
 
 ## File Safety Tiers
 
