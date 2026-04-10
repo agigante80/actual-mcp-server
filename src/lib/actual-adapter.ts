@@ -534,6 +534,16 @@ export async function getBudgetMonth(month: string | undefined): Promise<compone
 export async function setBudgetAmount(month: string | undefined, categoryId: string | undefined, amount: number | undefined): Promise<components['schemas']['BudgetSetRequest'] | null | void> {
   observability.incrementToolCall('actual.budgets.setAmount').catch(() => {});
   return queueWriteOperation(async () => {
+    // Pre-flight: verify category exists — nil/unknown UUIDs silently no-op in Actual Budget
+    const categories = await withConcurrency(() =>
+      retry(() => rawGetCategories() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    const exists = (categories as any[]).some((c: any) => c.id === categoryId);
+    if (!exists) {
+      throw new Error(
+        `Category "${categoryId}" not found. Use actual_categories_get to list available categories.`
+      );
+    }
     const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200 }));
     return result;
   });

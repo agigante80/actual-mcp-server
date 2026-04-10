@@ -10,16 +10,16 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    // Note: category existence is validated by the Actual API.
-    // Avoid mixing withActualApi (read) before queueWriteOperation (write) as
-    // it can disrupt the write queue's sync session.
     try {
       const result = await adapter.setBudgetAmount(input.month, input.categoryId, input.amount);
       return { result };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.toLowerCase().includes('category') || msg.toLowerCase().includes('not found')) {
-        throw new Error(`Failed to set budget amount: ${msg}. Use actual_categories_get to verify the category ID.`);
+      // The pre-flight in adapter.setBudgetAmount throws:
+      //   Category "${categoryId}" not found. Use actual_categories_get to list available categories.
+      // That string always contains BOTH "not found" AND "category", so && is the correct operator.
+      if (msg.toLowerCase().includes('not found') && msg.toLowerCase().includes('category')) {
+        return { success: false as const, error: msg };
       }
       throw new Error(`Failed to set budget amount: ${msg}`);
     }
