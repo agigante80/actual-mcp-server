@@ -1,0 +1,98 @@
+{
+  "lastFullAudit": "2026-04-10T00:00:00.000Z",
+  "libraries": {
+    "@actual-app/api": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2025-12-01",
+      "weeklyDownloads": 1200
+    },
+    "@modelcontextprotocol/sdk": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-03-01",
+      "weeklyDownloads": 95000,
+      "notes": "1.27.1 current → 1.29.0 latest. Transitively pulls in vulnerable hono, @hono/node-server, express-rate-limit. Issue #83 filed."
+    },
+    "dotenv": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-03-01",
+      "weeklyDownloads": 45000000,
+      "notes": "17.3.1 → 17.4.1 (minor drift, no ticket needed)"
+    },
+    "express": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2025-10-01",
+      "weeklyDownloads": 35000000,
+      "notes": "5.2.1 pulls in router@2.2.0 → path-to-regexp 8.x (high ReDoS). Issue #84 filed."
+    },
+    "mcp-auth": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-01-21",
+      "weeklyDownloads": 22530
+    },
+    "mitt": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2023-08-06",
+      "weeklyDownloads": 4800000,
+      "notes": "Unused — flagged by Knip. Issue #82 filed."
+    },
+    "winston": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2025-06-01",
+      "weeklyDownloads": 12000000
+    },
+    "winston-daily-rotate-file": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2024-02-09",
+      "weeklyDownloads": 1239927,
+      "notes": "Last publish Feb 2024 (>14 months). Downloads healthy. Monitor for continued maintenance."
+    },
+    "zod": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-02-01",
+      "weeklyDownloads": 25000000
+    },
+    "@playwright/test": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-03-01",
+      "weeklyDownloads": 8000000,
+      "notes": "1.58.2 → 1.59.1 (minor drift, no ticket needed)"
+    },
+    "@types/express": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2025-12-01",
+      "weeklyDownloads": 47550525
+    },
+    "@types/node": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-03-01",
+      "weeklyDownloads": 70000000,
+      "notes": "25.3.3 → 25.6.0 (minor drift, no ticket needed)"
+    },
+    "tsconfig-paths": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2023-12-14",
+      "weeklyDownloads": 66070579,
+      "notes": "Last publish Dec 2023 (>28 months). Extremely high downloads; stable utility with no active development needed. Known false positive in Knip — used by scripts/register-tsconfig-paths.js."
+    },
+    "typescript": {
+      "lastChecked": "2026-04-10",
+      "status": "maintained",
+      "lastPublish": "2026-03-01",
+      "weeklyDownloads": 50000000,
+      "notes": "5.9.3 current → 6.0.2 latest (MAJOR drift). Issue #85 filed."
+    }
+  }
+}
