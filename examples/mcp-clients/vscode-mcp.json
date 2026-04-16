@@ -1,0 +1,14 @@
+{
+  "servers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+      }
+    }
+  }
+}
