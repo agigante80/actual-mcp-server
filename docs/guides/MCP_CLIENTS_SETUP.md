@@ -36,6 +36,11 @@ This is in contrast to the **HTTP transport** (`--http`), where the server runs 
 For stdio options (Sections 1–4 below):
 - ✅ **Node.js 20+** — [download](https://nodejs.org/). Check with `node --version`
 - ✅ The server available via `npx` (no install needed) — or cloned and built from source for development
+- ✅ **Data directory created** — pick an absolute path and create it before starting:
+  ```bash
+  mkdir -p /absolute/path/to/data-dir
+  ```
+  This is where the server stores a local SQLite copy of your budget. The server will create it automatically if missing, but doing it explicitly avoids permission issues on first run.
 
 For HTTP options (Docker-based):
 - ✅ **Docker** — [get Docker](https://docs.docker.com/get-docker/)
@@ -120,7 +125,7 @@ Run `pwd` in the repo directory to find the absolute path.
 
 > **Linux with NVM?** Use the absolute NVM path for `command`: `/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/node`
 
-> **Why `MCP_BRIDGE_DATA_DIR` must be absolute**: The server downloads a local copy of your budget data here. Without an absolute path it resolves relative to Claude Desktop's working directory (usually `$HOME`), which is unpredictable. The directory is created automatically on first run.
+> **Why `MCP_BRIDGE_DATA_DIR` must be absolute**: The server downloads a local copy of your budget data here. Without an absolute path it resolves relative to Claude Desktop's working directory (usually `$HOME`), which is unpredictable. Create the directory before first run: `mkdir -p /absolute/path/to/data-dir`
 
 **No auth token needed.** Only Claude Desktop (the spawning process) can communicate with the server via its stdin/stdout.
 
@@ -404,6 +409,7 @@ If you set `MCP_BRIDGE_DATA_DIR` to a path outside the repo, nothing else change
 | Server starts but no tools appear | Config file not reloaded | Fully restart the AI client after editing config |
 | `ACTUAL_PASSWORD` not picked up | Relative env var path | Check variable expansion syntax for your client |
 | Data appears to reset between sessions | `MCP_BRIDGE_DATA_DIR` is relative | Set it to an absolute path in the `env` block |
+| `ENOENT` or permission error on startup | Data directory doesn't exist | `mkdir -p /your/data-dir` then restart the client |
 
 ### JSON config validation
 
