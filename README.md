@@ -14,13 +14,17 @@
 Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant — [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), [Claude Desktop](https://claude.ai/download), and more — directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
 
 ```
-┌─────────────┐   MCP/HTTP   ┌──────────────────┐   Actual API   ┌──────────────┐
-│  AI Client  │ ◄──────────► │  Actual MCP      │ ◄───────────► │   Actual     │
-│ (LibreChat, │              │  Server          │               │   Budget     │
-│  LobeChat,  │              │  (62 tools)      │               │   Server     │
-│  Claude     │              └──────────────────┘               └──────────────┘
-│  Desktop…)  │
-└─────────────┘
+┌─────────────┐   MCP/HTTP    ┌──────────────────┐   Actual API   ┌──────────────┐
+│  LibreChat  │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
+│  LobeChat   │               │  Server          │               │   Budget     │
+│  (remote)   │               │  (62 tools)      │               │   Server     │
+└─────────────┘               └──────────────────┘               └──────────────┘
+
+┌─────────────┐   MCP/stdio   ┌──────────────────┐   Actual API   ┌──────────────┐
+│  Claude     │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
+│  Desktop    │               │  Server          │               │   Budget     │
+│  (local)    │               │  (62 tools)      │               │   Server     │
+└─────────────┘               └──────────────────┘               └──────────────┘
 ```
 
 ### Why this project?
@@ -121,7 +125,7 @@ docker compose --profile dev up -d          # dev mode with hot-reload
 docker compose --profile fullstack up -d    # includes Actual Budget server on :5006
 ```
 
-### Option C — npm
+### Option C — npm (HTTP server)
 
 ```bash
 git clone https://github.com/agigante80/actual-mcp-server.git
@@ -133,6 +137,41 @@ npm run dev -- --http
 ```
 
 Server starts at `http://localhost:3000/http` (dev) or `http://localhost:3600/http` (Docker).
+
+### Option D — stdio (Claude Desktop native, no Docker or HTTP server needed)
+
+The stdio transport runs the MCP server as a child process — Claude Desktop spawns it directly and communicates over stdin/stdout. No network port, no auth token, no Docker required.
+
+```bash
+# 1. Clone and build once
+git clone https://github.com/agigante80/actual-mcp-server.git
+cd actual-mcp-server
+npm install
+npm run build
+
+# 2. Add to Claude Desktop config (see below)
+# 3. Done — Claude Desktop starts the server automatically
+```
+
+Add to `claude_desktop_config.json` (see [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for config file location):
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here"
+      }
+    }
+  }
+}
+```
+
+> **No token needed.** stdio runs as a local process owned by your user — the transport itself is the security boundary. All 62 tools are available.
 
 ### Connect an AI client
 
@@ -151,7 +190,7 @@ mcpServers:
 
 See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full LibreChat, LobeChat, network, and HTTPS/TLS proxy setup.
 
-**Claude Desktop** — add to `claude_desktop_config.json`:
+**Claude Desktop via HTTP** (when the server is already running as a Docker container):
 
 ```json
 {
@@ -170,7 +209,25 @@ See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full Li
 }
 ```
 
-See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for HTTPS setup, Linux/NVM fixes, and troubleshooting.
+**Claude Desktop via stdio** (native, no HTTP server needed — see Option D above):
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id"
+      }
+    }
+  }
+}
+```
+
+See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for all options, Linux/NVM path fixes, and troubleshooting.
 
 ---
 
@@ -371,14 +428,70 @@ BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
 
 The server supports two transport modes:
 
-| Mode | Flag | Use case |
-|------|------|----------|
-| HTTP | `--http` | LibreChat, LobeChat, Docker, multi-user deployments |
-| stdio | `--stdio` | Claude Desktop, Cursor, local single-user use |
+| Mode | Flag | Use case | Auth |
+|------|------|----------|------|
+| HTTP | `--http` | LibreChat, LobeChat, Docker, multi-user deployments | Bearer token or OIDC |
+| stdio | `--stdio` | Claude Desktop, Cursor, local single-user use | None (OS process isolation) |
 
-**HTTP transport** uses the `/http` endpoint with optional Bearer token authentication.
+The two modes are mutually exclusive — pass exactly one flag when starting the server.
 
-### Static Bearer token (single-user)
+### stdio transport
+
+stdio is the simplest way to connect Claude Desktop directly to Actual Budget. The MCP server runs as a child process; Claude Desktop spawns it, communicates over stdin/stdout using NDJSON (the MCP wire format), and the process exits cleanly when Claude Desktop closes.
+
+**Key properties of stdio mode:**
+
+- No network port — the transport is a pipe, not a socket
+- No auth token — process ownership is the security boundary
+- All logs go to stderr so they never corrupt the JSON-RPC framing on stdout
+- The process exits when stdin closes (Claude Desktop shutting down)
+- All 62 tools are available, identical to HTTP mode
+
+**Start manually to verify:**
+
+```bash
+cd /path/to/actual-mcp-server
+ACTUAL_SERVER_URL=http://localhost:5006 \
+ACTUAL_PASSWORD=your_password \
+ACTUAL_BUDGET_SYNC_ID=your-sync-id \
+node dist/src/index.js --stdio
+```
+
+Send a test request (keep stdin open with `sleep`):
+
+```bash
+{ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'; sleep 5; } \
+| ACTUAL_SERVER_URL=http://localhost:5006 ACTUAL_PASSWORD=your_password ACTUAL_BUDGET_SYNC_ID=your-sync-id \
+  node dist/src/index.js --stdio 2>/dev/null
+```
+
+**Claude Desktop config** (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here"
+      }
+    }
+  }
+}
+```
+
+> **Path must be absolute.** Claude Desktop does not inherit shell `PATH`, so `node` must also be absolute if you use NVM or a non-standard install: `/home/youruser/.nvm/versions/node/v22.x.x/bin/node`.
+
+See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for all three connection options (stdio native, mcp-remote via HTTP, mcp-remote via HTTPS), Linux path fixes, and troubleshooting.
+
+### HTTP transport
+
+**HTTP transport** uses the `/http` endpoint (StreamableHTTP) with optional Bearer token or OIDC authentication.
+
+#### Static Bearer token (single-user)
 
 ```bash
 # Generate a token
@@ -390,7 +503,7 @@ MCP_SSE_AUTHORIZATION=your_token_here
 
 Clients send: `Authorization: Bearer your_token_here`
 
-### OIDC (multi-user)
+#### OIDC (multi-user)
 
 ```bash
 AUTH_PROVIDER=oidc
@@ -490,7 +603,7 @@ Several MCP servers exist for personal finance management. Here's how this proje
 
 ### When to choose which project
 
-- **This project** — best for production deployments, multi-user environments (OIDC), LibreChat/LobeChat, or when you need the broadest tool coverage and Docker-native setup.
+- **This project** — best for production deployments, multi-user environments (OIDC), LibreChat/LobeChat, Docker-native setup, or for Claude Desktop users who want a native stdio connection without any HTTP server overhead.
 - **s-stefanov/actual-mcp** — the original implementation; good for Claude Desktop with STDIO transport, AI-generated prompt templates, and built-in read-only mode.
 - **henfrydls/actual-budget-mcp** — best for Spanish-speaking users, Cursor/VS Code integration, or when you want natural-language dates, automatic name resolution, and spending forecasts without any server setup.
 - **WGDevelopment/ynab-mcp-server** — only option if you're a YNAB user; privacy-first design with OS keyring token storage and local-LLM focus.
@@ -516,8 +629,8 @@ Quick flow:
 - **MCP SDK**: `@modelcontextprotocol/sdk` ^1.25.2
 - **Actual API**: `@actual-app/api` ^26.3.0
 - **Validation**: Zod (runtime types + JSON Schema for tool inputs)
-- **Transport**: Express (HTTP)
-- **Logging**: Winston with daily rotation
+- **Transports**: Express + StreamableHTTP (`--http`) · `StdioServerTransport` (`--stdio`)
+- **Logging**: Winston with daily rotation (all output routed to stderr in stdio mode)
 
 Every Actual API call goes through the `withActualApi()` wrapper in `src/lib/actual-adapter.ts`, which handles init/shutdown lifecycle, retry (3 attempts, exponential backoff), and concurrency limiting. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full design documentation.
 
