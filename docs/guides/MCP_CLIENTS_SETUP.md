@@ -260,12 +260,13 @@ Cursor starts the MCP server when a project with this config is opened and stops
 
 ## VS Code — GitHub Copilot
 
-VS Code reads MCP configuration from `.vscode/mcp.json`. Note: VS Code uses `"servers"` as the root key (not `"mcpServers"` — this is VS Code-specific).
+GitHub Copilot in VS Code reads MCP configuration from **`.copilot/mcp-config.json`** in your project root (or the equivalent user-level location). It uses `mcpServers` as the root key and requires `"type": "stdio"` on each entry.
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "actual-budget": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
@@ -279,9 +280,14 @@ VS Code reads MCP configuration from `.vscode/mcp.json`. Note: VS Code uses `"se
 }
 ```
 
-Commit `.vscode/mcp.json` to your repo to share the configuration with your team. Each team member provides their own credentials via environment variables or edits the file locally (add it to `.gitignore` if it contains secrets).
+> **NVM users**: VS Code / Copilot may not load your shell profile, so `npx` might resolve to a system binary older than v20. Use the absolute path to your nvm binary instead:
+> ```json
+> "command": "/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/actual-mcp-server",
+> "args": ["--stdio"]
+> ```
+> Run `which actual-mcp-server` (after `npm install -g actual-mcp-server`) or `which npx` in your shell to find the correct path.
 
-> VS Code also supports a user-level config via **MCP: Open User Configuration** from the command palette.
+Commit `.copilot/mcp-config.json` to share the configuration with your team. If the file contains secrets, add it to `.gitignore` and have each team member fill in their own credentials.
 
 To see server logs: **Output panel → MCP: actual-budget**.
 

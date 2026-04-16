@@ -1,6 +1,7 @@
 {
-  "servers": {
+  "mcpServers": {
     "actual-budget": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
