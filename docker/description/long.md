@@ -1,26 +1,26 @@
 # Actual MCP Server
 
-A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budget APIs as conversational AI tools for LibreChat and other MCP-compatible clients.
+A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budget APIs as conversational AI tools for LibreChat, LobeChat, Claude Desktop, and any MCP-compatible client.
 
-> **✅ LibreChat Verified**: All 62 tools tested and working with LibreChat over HTTPS with Bearer token and OIDC authentication.
+> **✅ Verified**: All 62 tools tested and working with LibreChat (HTTP/HTTPS + OIDC) and Claude Desktop (stdio native + mcp-remote).
 
 ## 🚀 Features
 
-- **62 Implemented Tools** - Comprehensive coverage of core Actual Budget API
+- **62 Implemented Tools** - Comprehensive coverage of the Actual Budget API (84% of methods)
 - **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
-- **Advanced Features** - Custom ActualQL queries, bank sync, multi-budget switching
-- **HTTPS Support** - Secure connections with self-signed or CA certificates
+- **HTTP + stdio Transports** - Run as a remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`) — no Docker or HTTP server needed for local use
+- **Claude Desktop Native** - Connect without mcp-remote: spawn the server directly over stdin/stdout, zero config overhead
+- **HTTPS Support** - Secure connections with native TLS or reverse-proxy termination
 - **OIDC / JWT Auth** - Multi-user OIDC authentication with per-user budget ACL (Casdoor, Keycloak, etc.)
-- **LibreChat Ready** - Tested and verified with all 62 tools loading successfully
-- **Multiple Transports** - HTTP transport with authentication
-- **Production-Grade** - Retry logic, concurrency control, observability
-- **Type-Safe** - Full TypeScript implementation with generated types
-- **Secure** - Non-root container, secrets management, rate limiting
+- **Multi-Budget Switching** - Configure multiple budgets and switch at runtime via `actual_budgets_switch`
+- **Production-Grade** - Connection pooling (15 concurrent sessions), retry with exponential backoff, full test suite
+- **Type-Safe** - Full TypeScript with Zod runtime validation
+- **Secure** - Non-root container, secrets management, concurrency control
 - **Dual Registry** - Available on Docker Hub and GitHub Container Registry (GHCR)
 
 ## 📦 Quick Start
 
-### Basic HTTP Setup
+### HTTP — Docker (for LibreChat / LobeChat)
 
 ```bash
 docker run -d \
@@ -32,22 +32,48 @@ docker run -d \
   -e MCP_SSE_AUTHORIZATION="$(openssl rand -hex 32)" \
   -v actual-mcp-data:/data \
   agigante80/actual-mcp-server:latest
-  
-# Or use GitHub Container Registry
-docker run -d ... ghcr.io/agigante80/actual-mcp-server:latest
+
+# Also available on GHCR:
+# ghcr.io/agigante80/actual-mcp-server:latest
 ```
+
+### stdio — Claude Desktop native (no Docker, no HTTP server, no token)
+
+```bash
+# 1. Clone and build once
+git clone https://github.com/agigante80/actual-mcp-server.git
+cd actual-mcp-server && npm install && npm run build
+
+# 2. Add to claude_desktop_config.json:
+```
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here"
+      }
+    }
+  }
+}
+```
+
+> No auth token needed. All 62 tools available. Claude Desktop spawns the process and owns its lifecycle.
 
 ### HTTPS Setup (Recommended for LibreChat)
 
 ```bash
-# Generate self-signed certificate
 mkdir -p certs
 openssl req -x509 -newkey rsa:4096 -nodes \
   -keyout certs/key.pem -out certs/cert.pem \
   -days 365 -subj "/CN=YOUR_SERVER_IP" \
   -addext "subjectAltName=IP:YOUR_SERVER_IP"
 
-# Run with HTTPS
 docker run -d \
   --name actual-mcp-server \
   -p 3600:3600 \
@@ -68,48 +94,39 @@ docker run -d \
 ### Required Environment Variables
 - `ACTUAL_SERVER_URL` - Your Actual Budget server URL
 - `ACTUAL_PASSWORD` - Actual Budget password
-- `ACTUAL_BUDGET_SYNC_ID` - Budget sync ID
+- `ACTUAL_BUDGET_SYNC_ID` - Budget sync ID (Settings → Show Advanced Settings → Sync ID)
 
 ### Server Configuration
 - `MCP_BRIDGE_PORT` - Server port (default: 3600)
-- `MCP_TRANSPORT_MODE` - Transport protocol: --http (only supported mode)
-- `MCP_SSE_AUTHORIZATION` - Bearer token for authentication (generate with `openssl rand -hex 32`)
+- `MCP_TRANSPORT_MODE` - Transport: `--http` or `--stdio`
+- `MCP_SSE_AUTHORIZATION` - Bearer token for HTTP auth (generate with `openssl rand -hex 32`)
+
+### HTTPS Configuration (Optional)
+- `MCP_ENABLE_HTTPS` - Enable native TLS (true/false)
+- `MCP_HTTPS_CERT` - Path to PEM certificate
+- `MCP_HTTPS_KEY` - Path to PEM private key
 
 ### Multi-Budget Switching (Optional)
 
-Configure multiple Actual Budget files — on the **same or different servers** — so the AI can switch between them at runtime.
-
-`BUDGET_N_SERVER_URL` and `BUDGET_N_PASSWORD` fall back to the default `ACTUAL_*` values when omitted, so budgets on the same server need only `NAME` and `SYNC_ID`.
+Configure multiple Actual Budget files so the AI can switch between them at runtime.
 
 ```bash
 # Default budget
-ACTUAL_SERVER_URL=http://actual-main:5006
+ACTUAL_SERVER_URL=http://actual:5006
 ACTUAL_PASSWORD=my-password
 ACTUAL_BUDGET_SYNC_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-BUDGET_DEFAULT_NAME=My Main Budget
+BUDGET_DEFAULT_NAME=Personal
 
-# Budget 1 — same server, same password (SERVER_URL + PASSWORD omitted)
-BUDGET_1_NAME=Shared Family Account
+# Budget 1 — same server
+BUDGET_1_NAME=Family
 BUDGET_1_SYNC_ID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 
-# Budget 2 — same server, different password (SERVER_URL omitted)
+# Budget 2 — separate server
 BUDGET_2_NAME=Business
-BUDGET_2_PASSWORD=business-password
+BUDGET_2_SERVER_URL=https://actual-office.example.com
+BUDGET_2_PASSWORD=office-password
 BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
-
-# Budget 3 — entirely separate Actual server (all fields required)
-BUDGET_3_NAME=Remote Office
-BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
-BUDGET_3_PASSWORD=office-password
-BUDGET_3_SYNC_ID=dddddddd-dddd-dddd-dddd-dddddddddddd
 ```
-
-Use `actual_budgets_list_available` to see all configured budgets and `actual_budgets_switch` to change the active one.
-
-### HTTPS Configuration (Optional but Recommended)
-- `MCP_ENABLE_HTTPS` - Enable HTTPS (true/false, default: false)
-- `MCP_HTTPS_CERT` - Path to SSL certificate (default: /app/certs/cert.pem)
-- `MCP_HTTPS_KEY` - Path to SSL private key (default: /app/certs/key.pem)
 
 ## 📚 Available Tools (62 Total)
 
@@ -137,82 +154,108 @@ create, list, update, delete
 - **Bank sync** - Trigger GoCardless/SimpleFIN synchronization
 
 ### Batch Operations (1 tool)
-Batch multiple budget updates in a single transaction
+Batch multiple budget updates in a single call
 
-### Server Information (1 tool)
-Get Actual Budget server version and build information
+### Server Information (3 tools)
+Server status + transport info, Actual Budget server version, name-to-UUID resolver
 
 ### Session Management (2 tools)
-List all active MCP sessions, close specific sessions by ID
+List active MCP sessions, close sessions by ID
 
 ## ⚡ Exclusive ActualQL Features
 
-This MCP server includes **6 specialized tools** that are **unique to this implementation** and not available in standard Actual Budget integrations:
+6 tools unique to this implementation using ActualQL's `$transform`, `groupBy`, `$sum`, and `$count`:
 
-1. **Monthly Transaction Search** - Uses `$month` transform for efficient monthly queries
-2. **Amount Range Search** - Find transactions by amount with flexible filters
+1. **Monthly Transaction Search** - Efficient monthly queries with `$month` transform
+2. **Amount Range Search** - Find by amount with flexible filters
 3. **Category Search** - Search by category name with date ranges
-4. **Payee Search** - Find transactions by vendor/merchant
-5. **Category Spending Summary** - Aggregated totals with `groupBy` and `$sum`
-6. **Top Vendors Analysis** - Identify highest spending merchants with counts
+4. **Payee Search** - Find by vendor/merchant
+5. **Category Spending Summary** - Aggregated totals grouped by category
+6. **Top Vendors Analysis** - Highest-spending merchants with counts
 
-These tools leverage ActualQL's advanced features (`$transform`, `groupBy`, `$sum`, `$count`) for powerful financial analysis beyond standard API capabilities.
+## 🔗 AI Client Setup
 
-## 🔗 Container Registries
+### LibreChat / LobeChat (HTTP)
 
-- **Docker Hub**: https://hub.docker.com/r/agigante80/actual-mcp-server
-- **GitHub Container Registry**: https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server
+```yaml
+mcpServers:
+  actual-mcp:
+    type: "streamable-http"
+    url: "https://YOUR_SERVER_IP:3600/http"
+    headers:
+      Authorization: "Bearer YOUR_TOKEN"
+    serverInstructions: true
+```
 
-## 📖 Documentation & Links
+### Claude Desktop (stdio — native, recommended for local use)
 
-- **GitHub Repository**: https://github.com/agigante80/actual-mcp-server
-- **Full Documentation**: https://github.com/agigante80/actual-mcp-server/blob/main/README.md
-- **LibreChat Integration Guide**: See README for detailed HTTPS setup instructions
-- **Actual Budget**: https://actualbudget.org
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id"
+      }
+    }
+  }
+}
+```
+
+### Claude Desktop (mcp-remote via HTTP, when server already running)
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:3600/http", "--header", "Authorization: Bearer YOUR_TOKEN"]
+    }
+  }
+}
+```
 
 ## 🛠️ Health & Status Checks
 
 ```bash
-# HTTP
+# HTTP health check
 curl http://localhost:3600/health
+# Expected: {"status":"ok","transport":"http","version":"..."}
 
-# HTTPS (with self-signed cert)
-curl -k https://localhost:3600/health
+# MCP handshake (verifies token)
+curl -s -X POST http://localhost:3600/http \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -H "Accept: application/json, text/event-stream" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'
 
-# Check logs
+# Logs
 docker logs actual-mcp-server
-# Should show startup message with current version
 ```
 
-## 🤖 LibreChat Integration
+## 🔗 Container Registries
 
-1. Generate HTTPS certificates (self-signed or CA-signed)
-2. Run container with HTTPS enabled
-3. Configure LibreChat (`librechat.yaml`) with:
-   ```yaml
-   mcpServers:
-     actual-mcp:
-       type: "streamable-http"
-       url: "https://YOUR_SERVER_IP:3600/http"
-       headers:
-         Authorization: "Bearer YOUR_TOKEN"
-       serverInstructions: true
-   ```
-4. All 62 tools will load automatically (including 6 exclusive ActualQL tools)
+- **Docker Hub**: https://hub.docker.com/r/agigante80/actual-mcp-server
+- **GHCR**: https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server
 
-**Verified**: HTTP transport with Bearer token authentication works perfectly with LibreChat.
+## 📖 Documentation
 
-## 📊 Monitoring
-
-Prometheus metrics available at `/metrics` endpoint for observability and performance tracking.
+- **GitHub Repository**: https://github.com/agigante80/actual-mcp-server
+- **Full README + Setup Guides**: https://github.com/agigante80/actual-mcp-server/blob/main/README.md
+- **Claude Desktop Setup**: https://github.com/agigante80/actual-mcp-server/blob/main/docs/guides/CLAUDE_DESKTOP_SETUP.md
+- **Actual Budget**: https://actualbudget.org
 
 ## 🔒 Security
 
-- Runs as non-root user
+- Runs as non-root user inside the container
 - Multi-stage Docker build for minimal attack surface
 - Secrets via environment variables or Docker secrets
 - Rate limiting and concurrency control built-in
+- OIDC/JWKS support for enterprise multi-user deployments
 
 ## 📝 License
 
-MIT License - see GitHub repository for details
+MIT License — see GitHub repository for details
