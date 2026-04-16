@@ -9,7 +9,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // Read version from environment variable (set during Docker build) or package.json
-let packageInfo: { version: string; name: string; description: string };
+let packageInfo: { version: string; name: string; description: string; dependencies?: Record<string, string> };
 try {
   const packagePath = join(__dirname, '../../../package.json');
   const packageJson = readFileSync(packagePath, 'utf-8');
@@ -62,6 +62,7 @@ Use this to check server status, verify version compatibility, or debug issues.`
         name: packageInfo.name,
         version: packageInfo.version,
         description: packageInfo.description,
+        transport: process.env.MCP_STDIO_MODE === 'true' ? 'stdio' : 'http',
       },
       runtime: {
         node: process.version,
@@ -69,8 +70,8 @@ Use this to check server status, verify version compatibility, or debug issues.`
         arch: process.arch,
       },
       dependencies: {
-        mcpSdk: '^1.18.2',
-        actualApi: '^25.11.0',
+        mcpSdk: packageInfo.dependencies?.['@modelcontextprotocol/sdk'] ?? 'unknown',
+        actualApi: packageInfo.dependencies?.['@actual-app/api'] ?? 'unknown',
       },
       status: {
         uptime: uptimeFormatted,
