@@ -140,18 +140,7 @@ Server starts at `http://localhost:3000/http` (dev) or `http://localhost:3600/ht
 
 ### Option D — stdio (Claude Desktop native, no Docker or HTTP server needed)
 
-The stdio transport runs the MCP server as a child process — Claude Desktop spawns it directly and communicates over stdin/stdout. No network port, no auth token, no Docker required.
-
-```bash
-# 1. Clone and build once
-git clone https://github.com/agigante80/actual-mcp-server.git
-cd actual-mcp-server
-npm install
-npm run build
-
-# 2. Add to Claude Desktop config (see below)
-# 3. Done — Claude Desktop starts the server automatically
-```
+The stdio transport runs the MCP server as a child process — Claude Desktop spawns it directly and communicates over stdin/stdout. No network port, no auth token, no Docker required. No cloning needed — `npx` downloads and caches the package automatically.
 
 Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for config file location and all client options):
 
@@ -159,13 +148,13 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 {
   "mcpServers": {
     "actual-budget": {
-      "command": "node",
-      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
         "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
-        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       }
     }
   }
@@ -174,7 +163,7 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 
 > **No token needed.** stdio runs as a local process owned by your user — the transport itself is the security boundary. All 62 tools are available.
 >
-> **`MCP_BRIDGE_DATA_DIR` should be an absolute path** — without it, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable.
+> **`MCP_BRIDGE_DATA_DIR` should be an absolute path** — without it, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
 
 ### Connect an AI client
 
@@ -572,7 +561,7 @@ Several MCP servers exist for personal finance management. Here's how this proje
 | **— Setup & Distribution —** |||||
 | **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
 | **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
-| **Published package (npx/pip)** | ❌ Docker / clone only | ✅ `npx actual-mcp` | ✅ `npx actual-budget-mcp` | ✅ `pip install ynab-mcp` |
+| **Published package (npx/pip)** | ✅ `npx actual-mcp-server` | ✅ `npx actual-mcp` | ✅ `npx actual-budget-mcp` | ✅ `pip install ynab-mcp` |
 | **— Security & Access —** |||||
 | **Authentication** | ✅ Bearer token + OIDC (JWKS) | ⚠️ Optional Bearer token | ❌ None (local only) | ✅ OS keyring / env var |
 | **Read-only mode** | ❌ All tools always available | ✅ Write requires `--enable-write` flag | ❌ | ✅ Most tools are read-only |

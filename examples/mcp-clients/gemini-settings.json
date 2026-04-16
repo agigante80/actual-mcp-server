@@ -1,13 +1,13 @@
 {
   "mcpServers": {
     "actual-budget": {
-      "command": "node",
-      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "$ACTUAL_SERVER_URL",
         "ACTUAL_PASSWORD": "$ACTUAL_PASSWORD",
         "ACTUAL_BUDGET_SYNC_ID": "$ACTUAL_BUDGET_SYNC_ID",
-        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       },
       "trust": false,
       "timeout": 30000

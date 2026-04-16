@@ -35,7 +35,7 @@ This is in contrast to the **HTTP transport** (`--http`), where the server runs 
 
 For stdio options (Sections 1–4 below):
 - ✅ **Node.js 20+** — [download](https://nodejs.org/). Check with `node --version`
-- ✅ The server built from source: `git clone https://github.com/agigante80/actual-mcp-server && cd actual-mcp-server && npm install && npm run build`
+- ✅ The server available via `npx` (no install needed) — or cloned and built from source for development
 
 For HTTP options (Docker-based):
 - ✅ **Docker** — [get Docker](https://docs.docker.com/get-docker/)
@@ -72,7 +72,32 @@ Claude Desktop spawns the server as a child process. No Docker, no HTTP server, 
 
 > **Close Claude Desktop before editing** — config changes only take effect on restart.
 
-Add to your config file:
+#### Via npx (no clone or build required)
+
+The simplest option — `npx` downloads and caches the package automatically on first use:
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
+      }
+    }
+  }
+}
+```
+
+> **Linux with NVM?** Claude Desktop does not load NVM or `.bashrc`, so `npx` resolves to the system binary. If your system Node is older than v20, use the absolute NVM path: `/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/npx`
+
+#### Via local clone (for development or pinned version)
+
+Clone and build first: `git clone https://github.com/agigante80/actual-mcp-server && cd actual-mcp-server && npm install && npm run build`
 
 ```json
 {
@@ -93,15 +118,9 @@ Add to your config file:
 
 Run `pwd` in the repo directory to find the absolute path.
 
-> **Why `MCP_BRIDGE_DATA_DIR` must be absolute**: The server downloads a local copy of your budget data into this directory. Without an absolute path it resolves relative to Claude Desktop's working directory (usually `$HOME`), which is unpredictable. An absolute path keeps the data next to the server code.
+> **Linux with NVM?** Use the absolute NVM path for `command`: `/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/node`
 
-> **Linux with NVM?** Claude Desktop does not load NVM or `.bashrc`, so `node` resolves to the system binary. If your system Node is older than v20, the server will fail silently. Use the absolute NVM path for `command`:
->
-> ```json
-> "command": "/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/node"
-> ```
->
-> Find your NVM node version with `ls ~/.nvm/versions/node/`.
+> **Why `MCP_BRIDGE_DATA_DIR` must be absolute**: The server downloads a local copy of your budget data here. Without an absolute path it resolves relative to Claude Desktop's working directory (usually `$HOME`), which is unpredictable. The directory is created automatically on first run.
 
 **No auth token needed.** Only Claude Desktop (the spawning process) can communicate with the server via its stdin/stdout.
 
@@ -220,13 +239,13 @@ Cursor reads MCP configuration from `.cursor/mcp.json` in your project root or `
 {
   "mcpServers": {
     "actual-budget": {
-      "command": "node",
-      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
         "ACTUAL_BUDGET_SYNC_ID": "your-sync-id",
-        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       }
     }
   }
@@ -235,7 +254,7 @@ Cursor reads MCP configuration from `.cursor/mcp.json` in your project root or `
 
 Cursor starts the MCP server when a project with this config is opened and stops it on close. To see server logs: **View → Output → MCP: actual-budget**.
 
-> **NVM note**: Cursor may not load your shell profile. If `node` resolves to a system binary older than v20, use the absolute NVM path for `command`: `/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/node`.
+> **NVM note**: Cursor may not load your shell profile. If `npx` resolves to a system binary older than v20, use the absolute NVM path: `/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/npx`.
 
 ---
 
@@ -247,13 +266,13 @@ VS Code reads MCP configuration from `.vscode/mcp.json`. Note: VS Code uses `"se
 {
   "servers": {
     "actual-budget": {
-      "command": "node",
-      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
         "ACTUAL_BUDGET_SYNC_ID": "your-sync-id",
-        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       }
     }
   }
@@ -278,13 +297,13 @@ Gemini CLI supports environment variable expansion — use `$VAR_NAME` to refere
 {
   "mcpServers": {
     "actual-budget": {
-      "command": "node",
-      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "$ACTUAL_SERVER_URL",
         "ACTUAL_PASSWORD": "$ACTUAL_PASSWORD",
         "ACTUAL_BUDGET_SYNC_ID": "$ACTUAL_BUDGET_SYNC_ID",
-        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       },
       "trust": false,
       "timeout": 30000
@@ -316,8 +335,8 @@ claude mcp add actual-budget \
   --env ACTUAL_SERVER_URL=http://localhost:5006 \
   --env ACTUAL_PASSWORD=your_actual_password \
   --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
-  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/actual-mcp-server/actual-data \
-  -- node /absolute/path/to/actual-mcp-server/dist/src/index.js --stdio
+  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+  -- npx -y actual-mcp-server --stdio
 ```
 
 **Or add to `.claude/mcp.json`** in your project root for team-wide config:
@@ -326,13 +345,13 @@ claude mcp add actual-budget \
 {
   "mcpServers": {
     "actual-budget": {
-      "command": "node",
-      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
         "ACTUAL_BUDGET_SYNC_ID": "your-sync-id",
-        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       }
     }
   }
