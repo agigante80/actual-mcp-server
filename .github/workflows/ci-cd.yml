@@ -399,7 +399,7 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 6: Publish to npm
+  # Job 6: Publish to npm (via Trusted Publishers — no NPM_TOKEN needed)
   # --------------------------------------------------------------------------
   npm-publish:
     name: Publish to npm
@@ -409,6 +409,8 @@ jobs:
     if: |
       needs.version.outputs.is_release == 'true' &&
       needs.docker-publish.result == 'success'
+    permissions:
+      id-token: write  # required for npm Trusted Publishers (OIDC)
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
@@ -426,10 +428,8 @@ jobs:
       - name: 🏗️ Build project
         run: npm run build
 
-      - name: 🚀 Publish to npm
-        run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: 🚀 Publish to npm (Trusted Publishers / OIDC)
+        run: npm publish --provenance --access public
 
       - name: 📋 npm publish summary
         run: |
@@ -437,6 +437,7 @@ jobs:
           echo "- **Package**: \`actual-mcp-server\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: https://www.npmjs.com/package/actual-mcp-server" >> $GITHUB_STEP_SUMMARY
+          echo "- **Provenance**: attached (OIDC, no long-lived token)" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
   # Job 8: Security Scanning
@@ -702,7 +703,7 @@ jobs:
 # Required Secrets:
 # - DOCKERHUB_USER: Docker Hub username
 # - DOCKERHUB_TOKEN: Docker Hub access token
-# - NPM_TOKEN: npm Automation token (npmjs.com → Account → Access Tokens → Automation)
+# - NPM_TOKEN: NOT needed — npm publishing uses Trusted Publishers (OIDC, id-token: write)
 # - GITHUB_TOKEN: Automatically provided by GitHub Actions
 # ============================================================================
 
