@@ -332,27 +332,17 @@ export ACTUAL_BUDGET_SYNC_ID="your-sync-id"
 
 ## Claude Code
 
-Claude Code (this CLI) supports MCP servers via `claude mcp add` or a `.claude/mcp.json` file in the project root.
+Claude Code supports MCP servers via `.mcp.json` in your project root (project-scoped) or via `claude mcp add` (user-scoped). The config uses `mcpServers` as the root key and requires `"type": "stdio"`.
 
-**Add via CLI** (recommended for quick setup):
-
-```bash
-claude mcp add actual-budget \
-  --env ACTUAL_SERVER_URL=http://localhost:5006 \
-  --env ACTUAL_PASSWORD=your_actual_password \
-  --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
-  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
-  -- npx -y actual-mcp-server --stdio
-```
-
-**Or add to `.claude/mcp.json`** in your project root for team-wide config:
+**`.mcp.json`** in your project root (recommended — version-controlled, shared with teammates):
 
 ```json
 {
   "mcpServers": {
     "actual-budget": {
+      "type": "stdio",
       "command": "npx",
-      "args": ["-y", "actual-mcp-server", "--stdio"],
+      "args": ["actual-mcp-server@latest", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
@@ -362,6 +352,19 @@ claude mcp add actual-budget \
     }
   }
 }
+```
+
+> **`actual-mcp-server@latest`** — using `@latest` ensures npx always runs the latest published version. Drop `@latest` to use whatever version npx has cached locally.
+
+**Or add via CLI** (user-scoped, not project-specific):
+
+```bash
+claude mcp add actual-budget \
+  --env ACTUAL_SERVER_URL=http://localhost:5006 \
+  --env ACTUAL_PASSWORD=your_actual_password \
+  --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
+  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+  -- npx actual-mcp-server@latest --stdio
 ```
 
 Verify with `claude mcp list` to confirm the server is registered.
