@@ -28,7 +28,7 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
 - **62 tools — the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
-- **HTTP transport, not stdio.** Runs as a real remote server accessible by any number of clients simultaneously — essential for LibreChat, LobeChat, or any web-based AI assistant.
+- **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`) — no Docker or HTTP server needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs — no shared tokens required.
@@ -295,7 +295,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
 | `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
 | **Transport Configuration** ||||
-| `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode (only `--http` supported) |
+| `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode: `--http` or `--stdio` |
 | `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
 | `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
 | **Session Management** ||||
@@ -369,7 +369,14 @@ BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
 
 ## Transport & Authentication
 
-The server uses **HTTP transport** (`/http` endpoint) with optional Bearer token authentication.
+The server supports two transport modes:
+
+| Mode | Flag | Use case |
+|------|------|----------|
+| HTTP | `--http` | LibreChat, LobeChat, Docker, multi-user deployments |
+| stdio | `--stdio` | Claude Desktop, Cursor, local single-user use |
+
+**HTTP transport** uses the `/http` endpoint with optional Bearer token authentication.
 
 ### Static Bearer token (single-user)
 
@@ -445,7 +452,7 @@ Several MCP servers exist for personal finance management. Here's how this proje
 | **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
 | **Tool Count** | **62** | ~22 | 18 | 9 |
 | **— Setup & Distribution —** |||||
-| **Transport** | HTTP (Streamable HTTP) | STDIO + SSE option | STDIO | STDIO |
+| **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
 | **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
 | **Published package (npx/pip)** | ❌ Docker / clone only | ✅ `npx actual-mcp` | ✅ `npx actual-budget-mcp` | ✅ `pip install ynab-mcp` |
 | **— Security & Access —** |||||

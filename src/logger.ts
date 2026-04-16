@@ -70,9 +70,14 @@ if (STORE_LOGS) {
 }
 
 // single console transport for terminal output (use same level)
+// In stdio mode all output must go to stderr — writing to stdout corrupts JSON-RPC framing.
+// MCP_STDIO_MODE is set by src/index.ts before this module is first imported.
 transports.push(
   new winston.transports.Console({
     level: DEFAULT_LEVEL,
+    ...(process.env.MCP_STDIO_MODE === 'true'
+      ? { stderrLevels: ['error', 'warn', 'info', 'verbose', 'debug', 'silly', 'http'] }
+      : {}),
     format: winston.format.combine(
       winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
       winston.format.colorize(),
