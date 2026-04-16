@@ -153,7 +153,7 @@ npm run build
 # 3. Done — Claude Desktop starts the server automatically
 ```
 
-Add to `claude_desktop_config.json` (see [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for config file location):
+Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for config file location and all client options):
 
 ```json
 {
@@ -164,7 +164,8 @@ Add to `claude_desktop_config.json` (see [docs/guides/CLAUDE_DESKTOP_SETUP.md](d
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
-        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here"
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
       }
     }
   }
@@ -172,6 +173,8 @@ Add to `claude_desktop_config.json` (see [docs/guides/CLAUDE_DESKTOP_SETUP.md](d
 ```
 
 > **No token needed.** stdio runs as a local process owned by your user — the transport itself is the security boundary. All 62 tools are available.
+>
+> **`MCP_BRIDGE_DATA_DIR` should be an absolute path** — without it, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable.
 
 ### Connect an AI client
 
@@ -220,14 +223,15 @@ See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full Li
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_password",
-        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id"
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id",
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
       }
     }
   }
 }
 ```
 
-See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for all options, Linux/NVM path fixes, and troubleshooting.
+See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all options (including Cursor, VS Code, Gemini CLI), Linux/NVM path fixes, and troubleshooting.
 
 ---
 
@@ -476,7 +480,8 @@ Send a test request (keep stdin open with `sleep`):
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "your_actual_password",
-        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here"
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/actual-mcp-server/actual-data"
       }
     }
   }
@@ -485,7 +490,7 @@ Send a test request (keep stdin open with `sleep`):
 
 > **Path must be absolute.** Claude Desktop does not inherit shell `PATH`, so `node` must also be absolute if you use NVM or a non-standard install: `/home/youruser/.nvm/versions/node/v22.x.x/bin/node`.
 
-See [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) for all three connection options (stdio native, mcp-remote via HTTP, mcp-remote via HTTPS), Linux path fixes, and troubleshooting.
+See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all connection options (stdio native, mcp-remote via HTTP/HTTPS), other clients (Cursor, VS Code, Gemini CLI, Claude Code), Linux path fixes, and troubleshooting.
 
 ### HTTP transport
 
@@ -538,7 +543,7 @@ See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md
 
 | Document | Contents |
 |---|---|
-| [docs/guides/CLAUDE_DESKTOP_SETUP.md](docs/guides/CLAUDE_DESKTOP_SETUP.md) | **Start here** — step-by-step guide to connecting Claude Desktop to Actual Budget |
+| [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) | **Start here** — connect Claude Desktop, Cursor, VS Code (Copilot), Gemini CLI, or Claude Code |
 | [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) | LibreChat & LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC |
 | [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) | Docker, Docker Compose profiles, production config, Kubernetes |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component layers, data flow, transport protocols |

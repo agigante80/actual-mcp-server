@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **62 tools** for conversational financial management. Built for LibreChat/LobeChat but compatible with any MCP client via HTTP transport.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **62 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use — pass `--stdio` flag).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
@@ -23,7 +23,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build & Run
 npm run build                   # TypeScript compilation (required before running)
 npm run dev -- --http --debug   # Dev mode with HTTP transport + debug logs
-npm run start                   # Production (requires build first)
+npm run dev -- --stdio --debug  # Dev mode with stdio transport (for Claude Desktop/Code)
+npm run start                   # Production HTTP (requires build first)
+node dist/src/index.js --stdio  # Production stdio
 
 # Testing (validation sequence — run in this order)
 npm run build                   # Step 1: must compile cleanly
@@ -82,10 +84,11 @@ Project-local slash commands in `.claude/commands/`:
 ### Layered Design
 
 ```
-AI Client (LibreChat/LobeChat)
-    ↓ HTTP/MCP JSON-RPC
-Express + StreamableHTTP (src/server/httpServer.ts)
-    ↓
+AI Client (LibreChat/LobeChat)       Claude Desktop / Claude Code
+    ↓ HTTP/MCP JSON-RPC                   ↓ stdin/stdout JSON-RPC
+Express + StreamableHTTP             StdioServerTransport
+(src/server/httpServer.ts)           (src/server/stdioServer.ts)
+    ↓                                     ↓
 ActualMCPConnection (src/lib/ActualMCPConnection.ts)
     ↓
 ActualToolsManager — 62 tools, Zod validation, dispatch (src/actualToolsManager.ts)
@@ -94,6 +97,8 @@ actual-adapter.ts — withActualApi wrapper, retry (3x), concurrency limit (5)
     ↓
 @actual-app/api v26 → Actual Budget Server
 ```
+
+**Transport is selected via CLI flag** (`--http` or `--stdio`); they are mutually exclusive. The `--stdio` flag sets `MCP_STDIO_MODE=true` **before** importing the logger so that all log output is routed to stderr (stdout is reserved for JSON-RPC framing).
 
 ### Critical Pattern: `withActualApi` Wrapper
 
@@ -170,6 +175,7 @@ export default tool;
 | `src/lib/actual-adapter.ts` | **CRITICAL**: `withActualApi`, retry, concurrency |
 | `src/lib/ActualConnectionPool.ts` | Up to 15 concurrent sessions, idle timeouts |
 | `src/server/httpServer.ts` | Express HTTP, StreamableHTTP, Bearer/OIDC auth |
+| `src/server/stdioServer.ts` | stdio transport — logs to stderr, stdout for JSON-RPC |
 | `src/auth/setup.ts` | OIDC/JWKS factory (`AUTH_PROVIDER=oidc`) |
 | `src/auth/budget-acl.ts` | Per-user budget ACL (email/sub/group principals) |
 | `src/config.ts` | Zod environment validation — all config lives here |
