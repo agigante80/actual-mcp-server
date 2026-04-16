@@ -302,7 +302,27 @@ To see server logs: **Output panel → MCP: actual-budget**.
 
 Gemini CLI reads MCP configuration from `~/.gemini/settings.json` (user-level) or `.gemini/settings.json` (project-level).
 
-Gemini CLI supports environment variable expansion — use `$VAR_NAME` to reference shell variables instead of hardcoding secrets.
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "npx",
+      "args": ["-y", "actual-mcp-server", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id",
+        "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
+      },
+      "trust": true
+    }
+  }
+}
+```
+
+> **`"trust"`** controls whether Gemini CLI prompts before running each tool. `true` = run automatically; `false` = ask each time. Set based on your comfort level.
+
+Gemini CLI also supports environment variable expansion — useful to avoid hardcoding secrets in the file:
 
 ```json
 {
@@ -316,22 +336,19 @@ Gemini CLI supports environment variable expansion — use `$VAR_NAME` to refere
         "ACTUAL_BUDGET_SYNC_ID": "$ACTUAL_BUDGET_SYNC_ID",
         "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       },
-      "trust": false,
-      "timeout": 30000
+      "trust": true
     }
   }
 }
 ```
 
-Set the variables in your shell profile (`.bashrc`, `.zshrc`):
+Set the variables in your shell profile (`.bashrc`, `.zshrc`) then `source` it before starting Gemini CLI:
 
 ```bash
 export ACTUAL_SERVER_URL="http://localhost:5006"
 export ACTUAL_PASSWORD="your_actual_password"
 export ACTUAL_BUDGET_SYNC_ID="your-sync-id"
 ```
-
-> **`"trust": false`** is the secure default — Gemini CLI will ask before running tools that read/write data. Set to `true` to allow automatic tool execution without prompting.
 
 ---
 
