@@ -2,8 +2,17 @@
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
   "version": "0.5.0",
-  "description": "MCP server providing 60 tools for AI-driven financial management with Actual Budget - session management, query, bank sync, and multi-budget support",
+  "description": "MCP server with 62 tools for AI-driven financial management with Actual Budget — HTTP and stdio transports, LibreChat, Claude Desktop, Cursor, VS Code, Gemini CLI",
   "main": "dist/src/index.js",
+  "bin": {
+    "actual-mcp-server": "./bin/actual-mcp-server.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -64,10 +73,16 @@
   },
   "license": "MIT",
   "keywords": [
-    "librechat",
+    "mcp",
+    "model-context-protocol",
+    "actual-budget",
     "actual-finance",
-    "bridge",
-    "chatbot"
+    "librechat",
+    "claude-desktop",
+    "cursor",
+    "budget",
+    "finance",
+    "ai"
   ],
-  "author": ""
+  "author": "agigante80"
 }

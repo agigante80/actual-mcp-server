@@ -399,6 +399,46 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
+  # Job 6: Publish to npm
+  # --------------------------------------------------------------------------
+  npm-publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [version, docker-publish]
+    if: |
+      needs.version.outputs.is_release == 'true' &&
+      needs.docker-publish.result == 'success'
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build project
+        run: npm run build
+
+      - name: 🚀 Publish to npm
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: 📋 npm publish summary
+        run: |
+          echo "### 📦 npm Package Published" >> $GITHUB_STEP_SUMMARY
+          echo "- **Package**: \`actual-mcp-server\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Registry**: https://www.npmjs.com/package/actual-mcp-server" >> $GITHUB_STEP_SUMMARY
+
+  # --------------------------------------------------------------------------
   # Job 8: Security Scanning
   # --------------------------------------------------------------------------
   security-scan:
@@ -552,11 +592,12 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, docker-publish, security-scan, docker-hub-description, deployment-test]
+    needs: [version, docker-publish, npm-publish, security-scan, docker-hub-description, deployment-test]
     if: |
       always() &&
       needs.version.outputs.is_release == 'true' &&
       needs.docker-publish.result == 'success' &&
+      (needs.npm-publish.result == 'success' || needs.npm-publish.result == 'skipped') &&
       (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped') &&
       (needs.docker-hub-description.result == 'success' || needs.docker-hub-description.result == 'skipped') &&
       (needs.deployment-test.result == 'success' || needs.deployment-test.result == 'skipped')
@@ -635,7 +676,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, lint, test, docker-e2e, validate-short-description,
-            docker-publish, security-scan, deployment-test, release]
+            docker-publish, npm-publish, security-scan, deployment-test, release]
     if: always()
     steps:
       - name: 📊 Generate pipeline summary
@@ -650,6 +691,7 @@ jobs:
           echo "| Docker E2E | ${{ needs.docker-e2e.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate Description | ${{ needs.validate-short-description.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker Publish | ${{ needs.docker-publish.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| npm Publish | ${{ needs.npm-publish.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Deployment Test | ${{ needs.deployment-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Release | ${{ needs.release.result }} |" >> $GITHUB_STEP_SUMMARY
@@ -660,6 +702,7 @@ jobs:
 # Required Secrets:
 # - DOCKERHUB_USER: Docker Hub username
 # - DOCKERHUB_TOKEN: Docker Hub access token
+# - NPM_TOKEN: npm Automation token (npmjs.com → Account → Access Tokens → Automation)
 # - GITHUB_TOKEN: Automatically provided by GitHub Actions
 # ============================================================================
 
