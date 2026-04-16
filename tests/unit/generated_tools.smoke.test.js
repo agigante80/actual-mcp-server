@@ -217,6 +217,9 @@ console.log('Running generated tools smoke tests');
       }
       if (n === 'server_info') {
         if (!res?.server?.name) shapeErr(`expected server.name`);
+        if (typeof res?.server?.transport !== 'string') shapeErr(`expected server.transport to be a string`);
+        if (res?.dependencies?.mcpSdk === '^1.18.2') shapeErr(`dependencies.mcpSdk is still the stale hardcoded value`);
+        if (res?.dependencies?.actualApi === '^25.11.0') shapeErr(`dependencies.actualApi is still the stale hardcoded value`);
       }
       if (n === 'get_id_by_name') {
         if (typeof res?.id !== 'string') shapeErr(`expected id string`);
