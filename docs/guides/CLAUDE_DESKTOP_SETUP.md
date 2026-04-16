@@ -245,6 +245,40 @@ If the file **already has content**, add the `"actual-budget"` block inside the 
 
 > **Why `mcp-remote`?** Claude Desktop only supports stdio-based MCP servers. `mcp-remote` is a lightweight bridge that proxies traffic to the HTTP/HTTPS server. It is downloaded automatically by `npx` on first use.
 
+#### Option C — stdio (direct, no Docker or HTTP server required)
+
+This is the simplest option if you run the server locally from source. Claude Desktop spawns the Node.js process directly and communicates over stdin/stdout — no HTTP server, no token, no port to open.
+
+**Prerequisites**: Node.js 20+ and the built server (`npm run build` in the repo directory).
+
+```json
+{
+  "mcpServers": {
+    "actual-budget": {
+      "command": "node",
+      "args": ["/absolute/path/to/actual-mcp-server/dist/src/index.js", "--stdio"],
+      "env": {
+        "ACTUAL_SERVER_URL": "http://localhost:5006",
+        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here"
+      }
+    }
+  }
+}
+```
+
+**Replace the path** with the absolute path to your local clone of the repo (use `pwd` in the repo directory to find it).
+
+> **Linux with NVM?** Claude Desktop does not load NVM or `.bashrc`, so `node` resolves to the system version. If your system Node is older than v20, the server will fail. Use the absolute NVM path for `command`:
+>
+> ```json
+> "command": "/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/node"
+> ```
+
+**No authentication needed** — stdio is trust-bounded by the OS. Only Claude Desktop (the process that spawned the server) can communicate with it.
+
+**Security note**: do not expose `ACTUAL_PASSWORD` or `ACTUAL_BUDGET_SYNC_ID` beyond the config file, which is stored at `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) and readable only by your user account.
+
 #### Option B — Plain HTTP (simpler, no TLS required)
 
 Use this if your server is HTTP-only. The `--allow-http` flag is required — `mcp-remote` enforces HTTPS by default and will refuse HTTP connections without it:

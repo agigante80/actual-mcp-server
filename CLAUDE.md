@@ -61,7 +61,7 @@ docker compose --profile fullstack up   # Includes Actual Budget server on :5006
 
 ## Project-Local Agents & Commands
 
-Four specialized subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
+Five specialized subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
 
 | Agent | When to use |
 |-------|-------------|
@@ -69,11 +69,13 @@ Four specialized subagents live in `.claude/agents/` — delegate to them via th
 | `qa` | Writing, reviewing, or debugging tests at any layer (unit, integration, E2E, manual) |
 | `release-manager` | Version bumps, docs sync, GitHub issue triage, closing fixed tickets |
 | `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
+| `ticket-gate` | Readiness gate for GitHub issues — runs 4 specialist agents to score a ticket before implementation (all must score 10/10) |
 
 Project-local slash commands in `.claude/commands/`:
 
 - `/dep-auditor [--full]` — dependency health audit: runs Knip, npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything)
 - `/local-env` — full local deployment pipeline for the dev environment
+- `/review-ticket <issue-number>` — runs the ticket readiness gate on a GitHub issue number
 
 ## Architecture
 

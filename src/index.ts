@@ -77,15 +77,23 @@ process.on('uncaughtException', (error) => {
 // Minimal early help handling before any side-effectful modules (prevents dotenv from running on --help)
 const argsEarly = process.argv.slice(2);
 
+// Set MCP_STDIO_MODE before the async IIFE so it is in place when src/logger.ts is first
+// imported. The Winston Console transport reads this env var at construction time to decide
+// whether to route all output to stderr (required in stdio mode — stdout writes corrupt JSON-RPC).
+if (argsEarly.includes('--stdio')) {
+  process.env.MCP_STDIO_MODE = 'true';
+}
+
 // Only load dotenv if we're not just showing help
 // dotenv will be loaded inside the async IIFE below via dynamic import
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const usageEarly = `
-Usage: npm run dev -- [--http | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: npm run dev -- [--http | --stdio | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
   --http                   Start HTTP MCP server
+  --stdio                  Start stdio MCP server (for Claude Desktop / local clients)
   --test-actual-connection Test connecting to Actual and exit
   --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
@@ -126,12 +134,14 @@ export {};
 
   const [
     { startHttpServer },
+    { startStdioServer },
     loggerModule,
     osModule,
     utilsModule,
     actualToolsManagerModule,
   ] = await Promise.all([
     import('./server/httpServer.js'),
+    import('./server/stdioServer.js'),
     import('./logger.js'),
     import('os'),
     import('./utils.js'),
@@ -171,6 +181,7 @@ export {};
 
   const args = process.argv.slice(2);
   const useHttp = args.includes('--http');
+  const useStdio = args.includes('--stdio');
 
   const useTestActualConnection = args.includes('--test-actual-connection');
   const useTestActualTools = args.includes('--test-actual-tools');
@@ -184,8 +195,14 @@ export {};
   const usage = usageEarly;
 
   async function main() {
+    // Mutual exclusion — stdio and http are incompatible transports
+    if (useHttp && useStdio) {
+      logger.error('❌ --http and --stdio are mutually exclusive. Pick one.');
+      process.exit(1);
+    }
+
     logger.info(`🚀 Starting Actual MCP Server v${VERSION}`);
-    
+
     // NOTE: Persistent connection disabled - using init/shutdown per operation pattern
     // This ensures tombstone=0 for all created entities (they appear in UI)
     // await connectToActual();
@@ -321,15 +338,18 @@ export {};
       }
     }
 
-    logger.info('---------');
-    logger.info('🟡 MCP SERVER INFO');
-    logger.info(`• Server Description:   ${SERVER_DESCRIPTION}`);
-    logger.info(`• OAuth Required:       false`);
-    logger.info(`• Capabilities:         ${Object.keys(capabilities).join(', ')}`);
-    logger.info(`• Tools:                ${implementedTools.join(', ') || 'none'}`);
-    logger.info(`• Server Instructions:  ${SERVER_INSTRUCTIONS}`);
-    logger.info(`• MCP endpoint (advertised): ${advertisedUrl}`);
-    logger.info('---------');
+    // Startup banner — skip in stdio mode (stdout writes corrupt JSON-RPC framing)
+    if (!useStdio) {
+      logger.info('---------');
+      logger.info('🟡 MCP SERVER INFO');
+      logger.info(`• Server Description:   ${SERVER_DESCRIPTION}`);
+      logger.info(`• OAuth Required:       false`);
+      logger.info(`• Capabilities:         ${Object.keys(capabilities).join(', ')}`);
+      logger.info(`• Tools:                ${implementedTools.join(', ') || 'none'}`);
+      logger.info(`• Server Instructions:  ${SERVER_INSTRUCTIONS}`);
+      logger.info(`• MCP endpoint (advertised): ${advertisedUrl}`);
+      logger.info('---------');
+    }
 
     if (useHttp) {
       logger.info('Mode: HTTP');
@@ -342,18 +362,25 @@ export {};
         SERVER_DESCRIPTION,
         SERVER_INSTRUCTIONS,
         toolSchemas,
+        version,
         // bind host (ensure server accepts connections on that interface)
         process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
         // advertised URL shown to clients
         advertisedUrl
       );
-    }
-
-    logger.info('---------');
-    logger.info('Starting MCP bridge server...');
-
-    if (!useHttp) {
-      logger.error('❌ Please specify a transport mode: --http');
+    } else if (useStdio) {
+      logger.debug('Mode: stdio');
+      await startStdioServer(
+        mcp,
+        capabilities,
+        implementedTools,
+        SERVER_DESCRIPTION,
+        SERVER_INSTRUCTIONS,
+        toolSchemas,
+        version,
+      );
+    } else {
+      logger.error('❌ Please specify a transport mode: --http or --stdio');
       process.exit(1);
     }
   }
