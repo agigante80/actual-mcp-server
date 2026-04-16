@@ -128,6 +128,14 @@ docker compose --profile fullstack up -d    # includes Actual Budget server on :
 ### Option C — npm (HTTP server)
 
 ```bash
+# Quick start via npx (no clone needed):
+ACTUAL_SERVER_URL=http://localhost:5006 \
+ACTUAL_PASSWORD=your_password \
+ACTUAL_BUDGET_SYNC_ID=your-sync-id \
+MCP_SSE_AUTHORIZATION=your_token \
+npx actual-mcp-server --http
+
+# Or clone for development / custom config:
 git clone https://github.com/agigante80/actual-mcp-server.git
 cd actual-mcp-server
 npm install
