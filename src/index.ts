@@ -77,15 +77,16 @@ process.on('uncaughtException', (error) => {
 // Minimal early help handling before any side-effectful modules (prevents dotenv from running on --help)
 const argsEarly = process.argv.slice(2);
 
+// dotenv v17 outputs diagnostic text to stdout by default (console.log).
+// Suppress it unconditionally — in stdio mode stdout is the JSON-RPC channel
+// (non-JSON corrupts the framing), and in other modes the diagnostic is noise.
+process.env.DOTENV_CONFIG_QUIET = 'true';
+
 // Set MCP_STDIO_MODE before the async IIFE so it is in place when src/logger.ts is first
 // imported. The Winston Console transport reads this env var at construction time to decide
 // whether to route all output to stderr (required in stdio mode — stdout writes corrupt JSON-RPC).
 if (argsEarly.includes('--stdio')) {
   process.env.MCP_STDIO_MODE = 'true';
-  // dotenv v17 outputs diagnostic text to stdout by default (console.log).
-  // In stdio mode stdout is the JSON-RPC channel — any non-JSON output corrupts
-  // the framing and causes MCP clients to close the connection immediately.
-  process.env.DOTENV_CONFIG_QUIET = 'true';
 }
 
 // Only load dotenv if we're not just showing help
@@ -93,7 +94,7 @@ if (argsEarly.includes('--stdio')) {
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const usageEarly = `
-Usage: npm run dev -- [--http | --stdio | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: actual-mcp-server [--http | --stdio | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
   --http                   Start HTTP MCP server
