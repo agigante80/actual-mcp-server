@@ -77,35 +77,43 @@ process.on('uncaughtException', (error) => {
 // Minimal early help handling before any side-effectful modules (prevents dotenv from running on --help)
 const argsEarly = process.argv.slice(2);
 
+// dotenv v17 outputs diagnostic text to stdout by default (console.log).
+// Suppress it unconditionally — in stdio mode stdout is the JSON-RPC channel
+// (non-JSON corrupts the framing), and in other modes the diagnostic is noise.
+process.env.DOTENV_CONFIG_QUIET = 'true';
+
 // Set MCP_STDIO_MODE before the async IIFE so it is in place when src/logger.ts is first
 // imported. The Winston Console transport reads this env var at construction time to decide
 // whether to route all output to stderr (required in stdio mode — stdout writes corrupt JSON-RPC).
 if (argsEarly.includes('--stdio')) {
   process.env.MCP_STDIO_MODE = 'true';
-  // dotenv v17 outputs diagnostic text to stdout by default (console.log).
-  // In stdio mode stdout is the JSON-RPC channel — any non-JSON output corrupts
-  // the framing and causes MCP clients to close the connection immediately.
-  process.env.DOTENV_CONFIG_QUIET = 'true';
 }
 
 // Only load dotenv if we're not just showing help
 // dotenv will be loaded inside the async IIFE below via dynamic import
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
-const usageEarly = `
-Usage: npm run dev -- [--http | --stdio | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
+    argsEarly.includes('--version') || argsEarly.includes('-v')) {
+  const pkg = await import('../package.json', { with: { type: 'json' } });
+  const version = pkg.default.version;
+  if (argsEarly.includes('--version') || argsEarly.includes('-v')) {
+    console.log(version);
+  } else {
+    console.log(`actual-mcp-server v${version}
+
+Usage: actual-mcp-server [--http | --stdio | --test-actual-connection] [--debug] [--help]
 
 Options:
   --http                   Start HTTP MCP server
   --stdio                  Start stdio MCP server (for Claude Desktop / local clients)
   --test-actual-connection Test connecting to Actual and exit
-  --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
-  --help                   Show this help message
-`;
+  --version, -v            Print version and exit
+  --help, -h               Show this help message
 
-if (argsEarly.includes('--help')) {
-  console.log(usageEarly);
+Docs & source: https://github.com/agigante80/actual-mcp-server`);
+  }
   process.exit(0);
 }
 
@@ -130,10 +138,9 @@ export {};
   }
 
   // dynamic imports to avoid running side effects on module import
-  const [{ connectToActual }, { testAllTools }, { ActualMCPConnection }] = await Promise.all([
+  const [{ connectToActual }, { ActualMCPConnection }] = await Promise.all([
     import('./actualConnection.js'),
-    import('./tests/actualToolsTests.js'),
-  import('./lib/ActualMCPConnection.js'),
+    import('./lib/ActualMCPConnection.js'),
   ]);
 
   const [
@@ -188,15 +195,12 @@ export {};
   const useStdio = args.includes('--stdio');
 
   const useTestActualConnection = args.includes('--test-actual-connection');
-  const useTestActualTools = args.includes('--test-actual-tools');
   const useTestMcpClient = args.includes('--test-mcp-client');
 
   const SERVER_DESCRIPTION = 'Bridge MCP server exposing Actual finance API to LibreChat.';
   const SERVER_INSTRUCTIONS =
     'Welcome to the Actual MCP server. The tools listed here are only the ones currently confirmed and tested, ' +
     'but the server can proxy any API call supported by Actual. As we expand coverage, more tools will be officially exposed.';
-
-  const usage = usageEarly;
 
   async function main() {
     // Mutual exclusion — stdio and http are incompatible transports
@@ -218,21 +222,6 @@ export {};
       process.exit(0);
     }
 
-    if (useTestActualTools) {
-      logger.info('⚙️  --test-actual-tools specified, connecting and testing all tools...');
-      try {
-        await testAllTools();
-        logger.info('✅ All tool tests completed.');
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          logger.error('❌ Tool tests failed: %s', err.message);
-        } else {
-          logger.error('❌ Tool tests failed: %o', err);
-        }
-        process.exit(1);
-      }
-      process.exit(0);
-    }
 
     // Initialize tools before usage
     await actualToolsManager.initialize();
