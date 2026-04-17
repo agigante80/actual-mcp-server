@@ -41,7 +41,7 @@ function getConfig(): Config {
     console.error(
       `\n❌ Missing or invalid environment variables:\n${missing}\n\n` +
       `Set them in a .env file in the current directory, or export them before running.\n` +
-      `Required: ACTUAL_SERVER_URL, ACTUAL_BUDGET_SYNC_ID\n` +
+      `Required: ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID\n` +
       `See: https://github.com/agigante80/actual-mcp-server\n`
     );
     process.exit(1);
