@@ -94,7 +94,7 @@ if (argsEarly.includes('--stdio')) {
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
 const KNOWN_FLAGS = new Set([
-  '--http', '--stdio', '--test-actual-connection', '--test-mcp-client',
+  '--http', '--stdio', '--test-actual-connection',
   '--debug', '--help', '-h', '--version', '-v',
 ]);
 const unknownFlags = argsEarly.filter(a => a.startsWith('-') && !KNOWN_FLAGS.has(a));
