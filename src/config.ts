@@ -37,7 +37,13 @@ export type Config = z.infer<typeof configSchema>;
 function getConfig(): Config {
   const result = configSchema.safeParse(process.env);
   if (!result.success) {
-    console.error('Invalid or missing environment variables:', result.error.issues);
+    const missing = result.error.issues.map(i => `  • ${i.path.join('.')}`).join('\n');
+    console.error(
+      `\n❌ Missing or invalid environment variables:\n${missing}\n\n` +
+      `Set them in a .env file in the current directory, or export them before running.\n` +
+      `Required: ACTUAL_SERVER_URL, ACTUAL_BUDGET_SYNC_ID\n` +
+      `See: https://github.com/agigante80/actual-mcp-server\n`
+    );
     process.exit(1);
   }
   return result.data;
