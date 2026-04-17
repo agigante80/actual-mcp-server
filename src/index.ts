@@ -110,6 +110,12 @@ if (argsEarly.includes('--help')) {
   process.exit(0);
 }
 
+if (argsEarly.includes('--version') || argsEarly.includes('-v')) {
+  const pkg = await import('../package.json', { with: { type: 'json' } });
+  console.log(pkg.default.version);
+  process.exit(0);
+}
+
 // Defer remaining imports until after help check to avoid starting servers on import
 export {};
 (async () => {
