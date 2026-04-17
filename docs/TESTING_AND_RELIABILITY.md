@@ -1,7 +1,7 @@
 # Testing & Reliability
 
 **Project:** Actual MCP Server  
-**Version:** 0.5.4  
+**Version:** 0.5.5  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
 **Last Updated:** 2026-03-02
 
@@ -162,9 +162,6 @@ npm run test:e2e:docker
 # Test Actual connection
 npm run dev -- --test-actual-connection
 
-# Test all tools
-npm run dev -- --test-actual-tools
-
 # Test MCP client interaction
 npm run test:mcp-client
 ```
@@ -284,7 +281,7 @@ npm run dev -- --test-actual-connection
 
 **Command**:
 ```bash
-npm run dev -- --test-actual-tools
+npm run test:unit-js
 ```
 
 **What it tests**:
@@ -615,7 +612,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 **Test Files:**
 - `src/tests_adapter_runner.ts` - Main adapter test runner
-- `src/tests/actualToolsTests.ts` - Individual tool smoke tests
+- `tests/unit/generated_tools.smoke.test.js` - All 62 tools smoke validation
 
 **Success Criteria:**
 - All tools found in registry

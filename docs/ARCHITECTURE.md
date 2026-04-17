@@ -1,7 +1,7 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.5.4  
+**Version:** 0.5.5  
 **Last Updated:** 2026-03-03
 
 ---
@@ -456,10 +456,6 @@ The server supports special test modes:
 # Test Actual Budget connection only
 npm run dev -- --test-actual-connection
   └─> Connects, downloads budget, disconnects, exits
-
-# Test all tool implementations
-npm run dev -- --test-actual-tools
-  └─> Runs smoke tests for all 62 tools
 
 # Test MCP client interaction
 npm run dev -- --http --test-mcp-client

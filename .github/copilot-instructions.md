@@ -309,9 +309,6 @@ Located in `src/tests_adapter_runner.ts`:
 ```bash
 # Test Actual connection only
 npm run dev -- --test-actual-connection
-
-# Test all 62 tools
-npm run dev -- --test-actual-tools
 ```
 
 ## Documentation Standards
@@ -436,5 +433,5 @@ If transactions/budgets don't persist:
 ---
 
 **Last Updated**: 2026-03-20  
-**Version:** 0.5.4  
+**Version:** 0.5.5  
 **Tool Count:** 62 (verified LibreChat-compatible)
