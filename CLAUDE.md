@@ -47,7 +47,6 @@ npm run test:mcp-client         # Connect as MCP client and exercise tools
 
 # Manual connection tests (requires .env)
 npm run dev -- --test-actual-connection  # Test Actual Budget connection only
-npm run dev -- --test-actual-tools       # Exercise all 62 tools against live server
 
 # Docker
 docker compose --profile dev up         # Hot-reload dev

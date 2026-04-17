@@ -457,10 +457,6 @@ The server supports special test modes:
 npm run dev -- --test-actual-connection
   └─> Connects, downloads budget, disconnects, exits
 
-# Test all tool implementations
-npm run dev -- --test-actual-tools
-  └─> Runs smoke tests for all 62 tools
-
 # Test MCP client interaction
 npm run dev -- --http --test-mcp-client
   └─> Starts server, sends test requests, verifies responses

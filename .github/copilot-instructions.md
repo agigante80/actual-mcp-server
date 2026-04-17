@@ -309,9 +309,6 @@ Located in `src/tests_adapter_runner.ts`:
 ```bash
 # Test Actual connection only
 npm run dev -- --test-actual-connection
-
-# Test all 62 tools
-npm run dev -- --test-actual-tools
 ```
 
 ## Documentation Standards
