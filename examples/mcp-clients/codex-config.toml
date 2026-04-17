@@ -1,17 +1,23 @@
 # OpenAI Codex MCP configuration
 # Place at: ~/.codex/config.toml (global) or .codex/config.toml (project-scoped)
 #
-# Alternatively, run:
+# IMPORTANT — NVM users: Codex is Python-based and does NOT load your shell profile.
+# Bare `npx` will fail because it resolves to the system Node (which may be < v20).
+# Use the absolute path to your NVM binary instead:
+#   which actual-mcp-server   (after: npm install -g actual-mcp-server)
+#
+# Alternatively, run codex mcp add:
 #   codex mcp add actual-budget \
 #     --env ACTUAL_SERVER_URL=http://localhost:5006 \
 #     --env ACTUAL_PASSWORD=your_actual_password \
 #     --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
 #     --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
-#     -- npx -y actual-mcp-server --stdio
+#     -- /home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server --stdio
 
 [mcp_servers.actual-budget]
-command = "npx"
-args = ["-y", "actual-mcp-server", "--stdio"]
+command = "/home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server"
+args = ["--stdio"]
+startup_timeout_sec = 30
 
 [mcp_servers.actual-budget.env]
 ACTUAL_SERVER_URL = "http://localhost:5006"
