@@ -93,7 +93,15 @@ if (argsEarly.includes('--stdio')) {
 // dotenv will be loaded inside the async IIFE below via dynamic import
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
-const usageEarly = `
+if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
+    argsEarly.includes('--version') || argsEarly.includes('-v')) {
+  const pkg = await import('../package.json', { with: { type: 'json' } });
+  const version = pkg.default.version;
+  if (argsEarly.includes('--version') || argsEarly.includes('-v')) {
+    console.log(version);
+  } else {
+    console.log(`actual-mcp-server v${version}
+
 Usage: actual-mcp-server [--http | --stdio | --test-actual-connection | --test-actual-tools] [--debug] [--help]
 
 Options:
@@ -102,17 +110,11 @@ Options:
   --test-actual-connection Test connecting to Actual and exit
   --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
-  --help                   Show this help message
-`;
+  --version, -v            Print version and exit
+  --help, -h               Show this help message
 
-if (argsEarly.includes('--help')) {
-  console.log(usageEarly);
-  process.exit(0);
-}
-
-if (argsEarly.includes('--version') || argsEarly.includes('-v')) {
-  const pkg = await import('../package.json', { with: { type: 'json' } });
-  console.log(pkg.default.version);
+Docs & source: https://github.com/agigante80/actual-mcp-server`);
+  }
   process.exit(0);
 }
 
@@ -202,8 +204,6 @@ export {};
   const SERVER_INSTRUCTIONS =
     'Welcome to the Actual MCP server. The tools listed here are only the ones currently confirmed and tested, ' +
     'but the server can proxy any API call supported by Actual. As we expand coverage, more tools will be officially exposed.';
-
-  const usage = usageEarly;
 
   async function main() {
     // Mutual exclusion — stdio and http are incompatible transports
