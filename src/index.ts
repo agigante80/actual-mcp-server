@@ -93,6 +93,16 @@ if (argsEarly.includes('--stdio')) {
 // dotenv will be loaded inside the async IIFE below via dynamic import
 // to avoid using require() in ESM and to keep the early --help fast exit.
 
+const KNOWN_FLAGS = new Set([
+  '--http', '--stdio', '--test-actual-connection', '--test-mcp-client',
+  '--debug', '--help', '-h', '--version', '-v',
+]);
+const unknownFlags = argsEarly.filter(a => a.startsWith('-') && !KNOWN_FLAGS.has(a));
+if (unknownFlags.length > 0) {
+  console.error(`Unknown option: ${unknownFlags.join(', ')}\nRun \`actual-mcp-server --help\` for usage.`);
+  process.exit(1);
+}
+
 if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
     argsEarly.includes('--version') || argsEarly.includes('-v')) {
   const pkg = await import('../package.json', { with: { type: 'json' } });

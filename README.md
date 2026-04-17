@@ -1,5 +1,7 @@
 # Actual MCP Server
 
+[![npm version](https://img.shields.io/npm/v/actual-mcp-server)](https://www.npmjs.com/package/actual-mcp-server)
+[![npm downloads](https://img.shields.io/npm/dm/actual-mcp-server)](https://www.npmjs.com/package/actual-mcp-server)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue)](https://www.typescriptlang.org/)
@@ -668,4 +670,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.5.4 | **Tool Count:** 62 (verified LibreChat-compatible)
+**Version:** 0.5.5 | **Tool Count:** 62 (verified LibreChat-compatible)
