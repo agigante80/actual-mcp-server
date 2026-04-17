@@ -393,6 +393,46 @@ Verify with `claude mcp list` to confirm the server is registered.
 
 ---
 
+## OpenAI Codex
+
+Codex supports MCP servers via `codex mcp add` (recommended) or by editing `~/.codex/config.toml` directly. Unlike all other clients, Codex uses **TOML** (not JSON) for manual config.
+
+First, create the data directory:
+```bash
+mkdir -p /absolute/path/to/data-dir
+```
+
+**Add via CLI** (recommended — writes TOML automatically):
+
+```bash
+codex mcp add actual-budget \
+  --env ACTUAL_SERVER_URL=http://localhost:5006 \
+  --env ACTUAL_PASSWORD=your_actual_password \
+  --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
+  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+  -- npx -y actual-mcp-server --stdio
+```
+
+**Or edit `~/.codex/config.toml` directly** (global) or `.codex/config.toml` (project-scoped, trusted projects only):
+
+```toml
+[mcp_servers.actual-budget]
+command = "npx"
+args = ["-y", "actual-mcp-server", "--stdio"]
+
+[mcp_servers.actual-budget.env]
+ACTUAL_SERVER_URL = "http://localhost:5006"
+ACTUAL_PASSWORD = "your_actual_password"
+ACTUAL_BUDGET_SYNC_ID = "your-sync-id"
+MCP_BRIDGE_DATA_DIR = "/absolute/path/to/data-dir"
+```
+
+> No `type` field is needed — Codex infers stdio from the presence of `command`.
+
+> **NVM users**: if `npx` resolves to a system binary older than v20, use the absolute path: `/home/YOUR_USER/.nvm/versions/node/vX.Y.Z/bin/npx`
+
+---
+
 ## No special ignore file needed
 
 There is no `.mcpignore`, `.cursorignore`, or similar file in the MCP ecosystem. The only file you need to watch for is the **data directory** (`actual-data/` or whatever you set `MCP_BRIDGE_DATA_DIR` to). This directory is already in `.gitignore` — it contains a local SQLite copy of your budget data downloaded by the `@actual-app/api` library, and should never be committed to version control.
@@ -413,6 +453,7 @@ If you set `MCP_BRIDGE_DATA_DIR` to a path outside the repo, nothing else change
 | VS Code | Output panel → MCP: actual-budget |
 | Gemini CLI | stderr output in terminal |
 | Claude Code | `claude mcp logs actual-budget` |
+| OpenAI Codex | stderr output in terminal |
 
 ### Common issues
 
