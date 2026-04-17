@@ -88,9 +88,6 @@ npm run dev -- --debug
 
 # Test connection only
 npm run dev -- --test-actual-connection
-
-# Test all tools
-npm run dev -- --test-actual-tools
 ```
 
 ## 📁 Project Structure
