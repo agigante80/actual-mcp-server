@@ -397,25 +397,28 @@ Verify with `claude mcp list` to confirm the server is registered.
 
 Codex supports MCP servers via `codex mcp add` (CLI) or by editing `~/.codex/config.toml` directly. Unlike all other clients, Codex uses **TOML** (not JSON).
 
-> **Important — NVM users**: Codex is Python-based and does **not** load your shell profile or NVM. Using bare `npx` will likely fail with a silent startup error because `npx` resolves to the system binary with an older Node.js version. **Use the absolute path to your NVM binary instead.**
-
 First, create the data directory:
 ```bash
 mkdir -p /absolute/path/to/data-dir
 ```
 
-Find your NVM binary path:
+**Option A — via CLI (simplest):**
+
 ```bash
-which actual-mcp-server   # after: npm install -g actual-mcp-server
-# example output: /home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server
+codex mcp add actual-budget \
+  --env ACTUAL_SERVER_URL=http://localhost:5006 \
+  --env ACTUAL_PASSWORD=your_actual_password \
+  --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
+  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+  -- npx -y actual-mcp-server --stdio
 ```
 
-**Edit `~/.codex/config.toml`** (global) or `.codex/config.toml` (project-scoped, trusted projects only):
+**Option B — edit `~/.codex/config.toml`** (global) or `.codex/config.toml` (project-scoped, trusted projects only):
 
 ```toml
 [mcp_servers.actual-budget]
-command = "/home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server"
-args = ["--stdio"]
+command = "npx"
+args = ["-y", "actual-mcp-server", "--stdio"]
 startup_timeout_sec = 30
 
 [mcp_servers.actual-budget.env]
@@ -429,18 +432,14 @@ MCP_BRIDGE_DATA_DIR = "/absolute/path/to/data-dir"
 
 > `startup_timeout_sec = 30` gives the server enough time to initialise on first run.
 
-**Alternative via CLI** (also needs the absolute path for the same reason):
-
-```bash
-codex mcp add actual-budget \
-  --env ACTUAL_SERVER_URL=http://localhost:5006 \
-  --env ACTUAL_PASSWORD=your_actual_password \
-  --env ACTUAL_BUDGET_SYNC_ID=your-sync-id \
-  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
-  -- /home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server --stdio
-```
-
-**If you don't use NVM** (system Node ≥ 20): bare `npx -y actual-mcp-server --stdio` will work fine as the command.
+> **NVM users — system Node < 18**: Codex is Python-based and does not load your shell profile. If your system `node` (outside NVM) is older than v18 or missing, `npx` will fail. Use the absolute NVM path instead:
+> ```bash
+> # Find your path:
+> which actual-mcp-server   # after: npm install -g actual-mcp-server
+> # Then replace npx … with:
+> #   command = "/home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server"
+> #   args = ["--stdio"]
+> ```
 
 ---
 
@@ -479,7 +478,7 @@ If you set `MCP_BRIDGE_DATA_DIR` to a path outside the repo, nothing else change
 | `ACTUAL_PASSWORD` not picked up | Relative env var path | Check variable expansion syntax for your client |
 | Data appears to reset between sessions | `MCP_BRIDGE_DATA_DIR` is relative | Set it to an absolute path in the `env` block |
 | `ENOENT` or permission error on startup | Data directory doesn't exist | `mkdir -p /your/data-dir` then restart the client |
-| Codex: `connection closed: initialize response` | Codex doesn't load NVM — bare `npx` uses system Node < 20 | Use absolute NVM path: `/home/USER/.nvm/versions/node/vX.Y.Z/bin/actual-mcp-server` |
+| Codex: `connection closed: initialize response` | Server version < 0.5.2 — dotenv wrote to stdout, corrupting JSON-RPC | Upgrade: `npx -y actual-mcp-server@latest --stdio` or use absolute NVM path if system Node < 18 |
 
 ### JSON config validation
 
