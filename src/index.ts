@@ -102,13 +102,12 @@ if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
   } else {
     console.log(`actual-mcp-server v${version}
 
-Usage: actual-mcp-server [--http | --stdio | --test-actual-connection | --test-actual-tools] [--debug] [--help]
+Usage: actual-mcp-server [--http | --stdio | --test-actual-connection] [--debug] [--help]
 
 Options:
   --http                   Start HTTP MCP server
   --stdio                  Start stdio MCP server (for Claude Desktop / local clients)
   --test-actual-connection Test connecting to Actual and exit
-  --test-actual-tools      Test connecting and run all tools, then exit
   --debug                  Enable debug logging
   --version, -v            Print version and exit
   --help, -h               Show this help message
@@ -139,10 +138,9 @@ export {};
   }
 
   // dynamic imports to avoid running side effects on module import
-  const [{ connectToActual }, { testAllTools }, { ActualMCPConnection }] = await Promise.all([
+  const [{ connectToActual }, { ActualMCPConnection }] = await Promise.all([
     import('./actualConnection.js'),
-    import('./tests/actualToolsTests.js'),
-  import('./lib/ActualMCPConnection.js'),
+    import('./lib/ActualMCPConnection.js'),
   ]);
 
   const [
@@ -197,7 +195,6 @@ export {};
   const useStdio = args.includes('--stdio');
 
   const useTestActualConnection = args.includes('--test-actual-connection');
-  const useTestActualTools = args.includes('--test-actual-tools');
   const useTestMcpClient = args.includes('--test-mcp-client');
 
   const SERVER_DESCRIPTION = 'Bridge MCP server exposing Actual finance API to LibreChat.';
@@ -225,21 +222,6 @@ export {};
       process.exit(0);
     }
 
-    if (useTestActualTools) {
-      logger.info('⚙️  --test-actual-tools specified, connecting and testing all tools...');
-      try {
-        await testAllTools();
-        logger.info('✅ All tool tests completed.');
-      } catch (err: unknown) {
-        if (err instanceof Error) {
-          logger.error('❌ Tool tests failed: %s', err.message);
-        } else {
-          logger.error('❌ Tool tests failed: %o', err);
-        }
-        process.exit(1);
-      }
-      process.exit(0);
-    }
 
     // Initialize tools before usage
     await actualToolsManager.initialize();
