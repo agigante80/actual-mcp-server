@@ -5,7 +5,7 @@
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-03  
 **Assessment Score:** 88/100 (EXCELLENT)  
-**Tool Count:** 62 MCP tools (verified LibreChat and LobeChat compatible)  
+**Tool Count:** 63 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---
@@ -40,14 +40,15 @@ The **Actual MCP Server** is a production-ready bridge service that exposes [Act
 
 ## ✨ Core Features
 
-### 🛠️ **62 MCP Tools**
+### 🛠️ **63 MCP Tools**
 
-Comprehensive coverage of Actual Budget functionality across 12 categories:
+Comprehensive coverage of Actual Budget functionality across 13 categories:
 
 | Category | Tools | Coverage |
 |----------|-------|----------|
 | **Accounts** | 7 | Create, list, update, delete, close, reopen, get balance |
 | **Transactions** | 13 | Create, get, update, delete, import, filter, search (4), summary (2) |
+| **Transfers** | 1 | Create paired account transfers (equivalent to UI "Make Transfer") |
 | **Budgets** | 11 | Get months, set amounts, transfers, carryover, holds, batch, list, switch |
 | **Categories** | 4 | Create, list, update, delete |
 | **Category Groups** | 4 | Create, list, update, delete |
@@ -59,11 +60,11 @@ Comprehensive coverage of Actual Budget functionality across 12 categories:
 | **Lookup & Server** | 4 | Server info, Actual Budget server version, name→UUID lookup |
 | **Session Management** | 2 | List and close active MCP sessions |
 
-**Total**: 62 tools with 100% coverage of Actual Budget core API
+**Total**: 63 tools with 100% coverage of Actual Budget core API
 
-> ✅ **All 62 tools verified** with LibreChat and LobeChat integration testing  
+> ✅ **All 63 tools verified** with LibreChat and LobeChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
-> 📊 **60/62 tools in Docker E2E** (2 excluded: `budgets_list_available`, `budgets_switch` — single-budget CI constraint)
+> 📊 **60/63 tools in Docker E2E** (2 excluded: `budgets_list_available`, `budgets_switch` — single-budget CI constraint)
 
 ### 🔄 **Transport Protocol**
 
@@ -226,12 +227,12 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **62 tools implemented** (100% of core API coverage)
+- ✅ **63 tools implemented** (100% of core API coverage)
 - ✅ **LibreChat and LobeChat verified** — all tools loading and functional
 - ✅ **Docker images published** — Docker Hub and GHCR
 - ✅ **CI/CD pipeline** — automated testing and deployment
 - ✅ **Security hardened** — Bearer auth, OIDC, HTTPS, non-root container
-- ✅ **Test coverage** — unit tests (62 tools), Docker Playwright E2E (76 tests, all 62 tools), live integration suite (62/62 tools)
+- ✅ **Test coverage** — unit tests (63 tools), Docker Playwright E2E (76 tests, all 63 tools), live integration suite (63/63 tools)
 
 ### Future Goals
 

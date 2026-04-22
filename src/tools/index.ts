@@ -59,5 +59,6 @@ export { default as transactions_summary_by_payee } from './transactions_summary
 export { default as transactions_uncategorized } from './transactions_uncategorized.js';
 export { default as transactions_update } from './transactions_update.js';
 export { default as transactions_update_batch } from './transactions_update_batch.js';
+export { default as transfers_create } from './transfers_create.js';
 export { default as session_close } from './session_close.js';
 export { default as session_list } from './session_list.js';
