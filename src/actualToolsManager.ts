@@ -66,6 +66,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_transactions_uncategorized',
   'actual_transactions_update',
   'actual_transactions_update_batch',
+  'actual_transfers_create',
   'actual_server_info',
   'actual_session_close',
   'actual_session_list',

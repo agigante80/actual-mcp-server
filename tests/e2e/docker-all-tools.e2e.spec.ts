@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 62 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 63 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests
@@ -15,7 +15,7 @@ import {
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 62 TOOLS', () => {
+test.describe('Docker E2E - ALL 63 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
