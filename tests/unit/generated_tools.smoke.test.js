@@ -75,6 +75,7 @@ console.log('Running generated tools smoke tests');
     createSchedule: '00000000-0000-0000-0000-000000000099',
     updateSchedule: null,
     deleteSchedule: null,
+    createTransfer: { success: true, from_id: '00000000-0000-0000-0000-000000000003', to_id: null },
   };
 
   // Patch adapter default export functions
@@ -136,6 +137,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('schedules_create')) inputExample.date = '2026-06-01';
   if (name.includes('schedules_update')) inputExample.id = '00000000-0000-0000-0000-000000000099';
   if (name.includes('schedules_delete')) inputExample.id = '00000000-0000-0000-0000-000000000099';
+  if (name.includes('transfers_create')) inputExample.from_account = '11111111-1111-1111-1111-111111111111', inputExample.to_account = '22222222-2222-2222-2222-222222222222', inputExample.amount = 5000, inputExample.date = '2025-01-15';
   // server_get_version takes no parameters
 
       // Validate input parsing — only silently skip when no example was provided (tool may have required fields);

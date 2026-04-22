@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **62 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use — pass `--stdio` flag).
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **63 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use — pass `--stdio` flag).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
@@ -29,7 +29,7 @@ node dist/src/index.js --stdio  # Production stdio
 
 # Testing (validation sequence — run in this order)
 npm run build                   # Step 1: must compile cleanly
-npm run verify-tools            # Step 2: all 62 tools registered (reads dist/)
+npm run verify-tools            # Step 2: all 63 tools registered (reads dist/)
 npm run test:unit-js            # Step 3: unit + schema tests
 npm audit --audit-level=moderate # Step 4: no new vulnerabilities
 
@@ -90,7 +90,7 @@ Express + StreamableHTTP             StdioServerTransport
     ↓                                     ↓
 ActualMCPConnection (src/lib/ActualMCPConnection.ts)
     ↓
-ActualToolsManager — 62 tools, Zod validation, dispatch (src/actualToolsManager.ts)
+ActualToolsManager — 63 tools, Zod validation, dispatch (src/actualToolsManager.ts)
     ↓
 actual-adapter.ts — withActualApi wrapper, retry (3x), concurrency limit (5)
     ↓
@@ -187,6 +187,8 @@ export default tool;
 | `src/lib/budget-registry.ts` | Parses `BUDGET_N_*` env vars into budget config list |
 | `src/prompts/` | MCP prompt definitions (e.g. `showLargeTransactions`) |
 | `src/resources/` | MCP resource definitions (e.g. `accountsSummary`) |
+| `src/lib/actual-schema.ts` | Actual Budget DB schema (tables/fields/join paths) — source of truth for SQL validation |
+| `src/lib/query-validator.ts` | Pre-validates SQL queries against `actual-schema` before execution to prevent server crashes |
 
 ## Key Conventions & Gotchas
 
@@ -207,6 +209,8 @@ export default tool;
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
 
 **Never use `overrides` (npm) or `pnpm.overrides` to force-update a transitive dependency.** If a transitive dependency has a vulnerability, upgrade the direct dependency that pulls it in instead.
+
+**Session tools are the only exception to `withActualApi`**: `actual_session_list` and `actual_session_close` call `connectionPool` directly — they manage the pool itself, not budget data, so they skip the wrapper intentionally.
 
 **If transactions/budgets don't persist**: verify `withActualApi` wraps the call (grep for `rawAdd*` / `rawUpdate*` called without it), confirm `api.shutdown()` runs after the operation, and check logs for "tombstone" errors. The `getConcurrencyState()` export from `actual-adapter.ts` shows `{ active, queued, limit }` for diagnosing concurrency back-pressure.
 

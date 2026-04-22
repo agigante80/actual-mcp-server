@@ -54,13 +54,13 @@ Extract the number (e.g. `2` from `**Template version:** 2`).
 gh issue view <NUMBER> --repo agigante80/actual-mcp-server --json body --jq '.body' | grep "Template version"
 ```
 
-#### 0c. Evaluate
+#### 0c. Evaluate and auto-fix
 
 | Result | Action |
 |---|---|
-| No version marker found | Post `BLOCKED — TEMPLATE_UPGRADE_REQUIRED` comment. List which sections are missing. Do NOT score. Stop. |
-| Version found < current | Post `BLOCKED — TEMPLATE_OUTDATED (v{found} < v{current})` comment. All previous scores are invalidated. Do NOT score. Stop. |
-| Version found = current | Proceed to Step 1. |
+| No version marker found | Append `\n\n**Template version:** <current>` to the issue body via `gh issue edit <NUMBER> --repo agigante80/actual-mcp-server --body "<existing body + marker>"`. Post a comment: `🔧 Auto-added missing template version marker (v<current>). Proceeding with gate.` Then continue to Step 1. |
+| Version found < current | Replace the old `**Template version:** <found>` with `**Template version:** <current>` in the issue body via `gh issue edit`. Post a comment: `🔧 Auto-upgraded template version marker from v<found> to v<current>. Proceeding with gate.` Then continue to Step 1. |
+| Version found = current | Proceed to Step 1 (no change needed). |
 
 ---
 

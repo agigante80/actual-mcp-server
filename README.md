@@ -19,13 +19,13 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 ┌─────────────┐   MCP/HTTP    ┌──────────────────┐   Actual API   ┌──────────────┐
 │  LibreChat  │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  LobeChat   │               │  Server          │               │   Budget     │
-│  (remote)   │               │  (62 tools)      │               │   Server     │
+│  (remote)   │               │  (63 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 
 ┌─────────────┐   MCP/stdio   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  Claude     │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  Desktop    │               │  Server          │               │   Budget     │
-│  (local)    │               │  (62 tools)      │               │   Server     │
+│  (local)    │               │  (63 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 ```
 
@@ -40,7 +40,7 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs — no shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 62 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 63 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -171,7 +171,7 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 }
 ```
 
-> **No token needed.** stdio runs as a local process owned by your user — the transport itself is the security boundary. All 62 tools are available.
+> **No token needed.** stdio runs as a local process owned by your user — the transport itself is the security boundary. All 63 tools are available.
 >
 > **`MCP_BRIDGE_DATA_DIR` should be an absolute path** — without it, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
 
@@ -236,7 +236,7 @@ See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all
 
 ## Available Tools
 
-**62 tools** across 12 categories. All tools use the `actual_<category>_<action>` naming convention.
+**63 tools** across 12 categories. All tools use the `actual_<category>_<action>` naming convention.
 
 ### Accounts (7)
 
@@ -273,6 +273,12 @@ See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all
 | `actual_transactions_search_by_payee` | Find by payee/vendor |
 | `actual_transactions_summary_by_category` | Spending summary grouped by category |
 | `actual_transactions_summary_by_payee` | Top vendors with totals and counts |
+
+### Transfers (1)
+
+| Tool | Description |
+|------|-------------|
+| `actual_transfers_create` | Create a paired transfer between two accounts (debit + credit linked by `transfer_id`, identical to UI "Make Transfer") |
 
 ### Categories (4)
 
@@ -448,7 +454,7 @@ stdio is the simplest way to connect Claude Desktop directly to Actual Budget. T
 - No auth token — process ownership is the security boundary
 - All logs go to stderr so they never corrupt the JSON-RPC framing on stdout
 - The process exits when stdin closes (Claude Desktop shutting down)
-- All 62 tools are available, identical to HTTP mode
+- All 63 tools are available, identical to HTTP mode
 
 **Start manually to verify:**
 
@@ -525,7 +531,7 @@ See [AI Client Setup — OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authenticatio
 | Command | What It Tests | Requires Live Server |
 |---------|---------------|---------------------|
 | `npm run build` | TypeScript compilation | No |
-| `npm run test:unit-js` | 62-tool smoke, schema validation, auth ACL | No |
+| `npm run test:unit-js` | 63-tool smoke, schema validation, auth ACL | No |
 | `npm run test:adapter` | Adapter, retry logic, concurrency | No |
 | `npm run test:e2e` | MCP protocol compliance (Playwright) | No |
 | `npm run test:e2e:docker:full` | Full stack integration | Yes (Docker) |
@@ -567,7 +573,7 @@ Several MCP servers exist for personal finance management. Here's how this proje
 | **Version** | v0.4.26 | v1.11.1 | v0.2.0 | v0.1.0 |
 | **Budget App** | Actual Budget (self-hosted) | Actual Budget (self-hosted) | Actual Budget (self-hosted) | YNAB (cloud, subscription) |
 | **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
-| **Tool Count** | **62** | ~22 | 18 | 9 |
+| **Tool Count** | **63** | ~22 | 18 | 9 |
 | **— Setup & Distribution —** |||||
 | **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
 | **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
@@ -670,4 +676,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.5.5 | **Tool Count:** 62 (verified LibreChat-compatible)
+**Version:** 0.5.5 | **Tool Count:** 63 (verified LibreChat-compatible)

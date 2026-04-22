@@ -412,7 +412,7 @@ export async function getAccounts(): Promise<components['schemas']['Account'][]>
   });
 }
 // addTransactions returns various formats: "ok", array of IDs, or Transaction objects
-export async function addTransactions(txs: components['schemas']['TransactionInput'][] | components['schemas']['TransactionInput']) : Promise<string[]> {
+export async function addTransactions(txs: components['schemas']['TransactionInput'][] | components['schemas']['TransactionInput'], options: { runTransfers?: boolean } = {}) : Promise<string[]> {
   observability.incrementToolCall('actual.transactions.create').catch(() => {});
   return queueWriteOperation(async () => {
     // The Actual API expects addTransactions(accountId, transactions, options)
@@ -421,7 +421,7 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     if (txArray.length === 0) {
       throw new Error('No transactions provided');
     }
-    
+
     const accountId = (txArray[0] as any).account || (txArray[0] as any).accountId;
     if (!accountId) {
       throw new Error('Transaction must include account or accountId');
@@ -432,9 +432,9 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
       const { account, accountId: _, ...rest } = tx as any;
       return rest;
     });
-    
+
     // API docs say it returns id[], but reality is it can return "ok", array of IDs, or Transaction objects
-    const result = await withConcurrency(() => retry(() => rawAddTransactions(accountId, cleanedTxs, {}) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+    const result = await withConcurrency(() => retry(() => rawAddTransactions(accountId, cleanedTxs, options) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
     
     // Handle various return formats
     if (result === 'ok') {
@@ -463,6 +463,60 @@ export async function importTransactions(accountId: string | undefined, txs: com
     return raw || { added: [], updated: [], errors: [] };
   });
 }
+
+export async function createTransfer(params: {
+  from_account: string;
+  to_account: string;
+  amount: number;
+  date: string;
+  notes?: string;
+}): Promise<{ success: true; from_id: string | null; to_id: null } | { success: false; error: string }> {
+  observability.incrementToolCall('actual.transfers.create').catch(() => {});
+  return queueWriteOperation(async () => {
+    if (params.from_account === params.to_account) {
+      return { success: false as const, error: 'from_account and to_account must be different accounts.' };
+    }
+
+    const accounts = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<components['schemas']['Account'][]>, { retries: 2, backoffMs: 200 })
+    );
+    const fromAcc = accounts.find((a: any) => a.id === params.from_account);
+    const toAcc   = accounts.find((a: any) => a.id === params.to_account);
+
+    if (!fromAcc) return { success: false as const, error: `Account '${params.from_account}' not found. Use actual_accounts_list to find valid accounts.` };
+    if ((fromAcc as any).closed) return { success: false as const, error: `Source account '${(fromAcc as any).name}' is closed.` };
+    if (!toAcc)   return { success: false as const, error: `Account '${params.to_account}' not found. Use actual_accounts_list to find valid accounts.` };
+    if ((toAcc as any).closed)   return { success: false as const, error: `Destination account '${(toAcc as any).name}' is closed.` };
+
+    const payees = await withConcurrency(() =>
+      retry(() => rawGetPayees() as Promise<Array<{ id: string; transfer_acct?: string; tombstone?: boolean }>>, { retries: 2, backoffMs: 200 })
+    );
+    const transferPayee = payees.find((p: any) => p.transfer_acct === params.to_account && !p.tombstone);
+    if (!transferPayee) {
+      return { success: false as const, error: `No transfer payee found for destination account '${(toAcc as any).name}'. The account may not support transfers.` };
+    }
+
+    const sourceTx: Record<string, unknown> = {
+      date: params.date,
+      amount: -Math.abs(params.amount),
+      payee: transferPayee.id,
+      ...(params.notes !== undefined && { notes: params.notes }),
+    };
+
+    const result = await withConcurrency(() =>
+      retry(() => rawAddTransactions(params.from_account, [sourceTx], { runTransfers: true }) as Promise<unknown>, { retries: 2, backoffMs: 200 })
+    );
+
+    let from_id: string | null = null;
+    if (Array.isArray(result) && result.length > 0 && typeof result[0] === 'string' && result[0] !== 'ok') {
+      from_id = result[0];
+    } else if (result && typeof result === 'object' && 'id' in (result as any)) {
+      from_id = (result as any).id;
+    }
+    return { success: true as const, from_id, to_id: null };
+  });
+}
+
 export async function getTransactions(accountId: string | undefined, startDate?: string, endDate?: string): Promise<components['schemas']['Transaction'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.transactions.get').catch(() => {});
@@ -1347,6 +1401,7 @@ export default {
   getAccountsWithBalances,
   addTransactions,
   importTransactions,
+  createTransfer,
   getTransactions,
   getCategories,
   createCategory,

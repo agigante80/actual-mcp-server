@@ -72,7 +72,7 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_SERVER_URL` | `http://mcp-server-test:3600` | MCP server URL |
-| `EXPECTED_TOOL_COUNT` | `62` | Expected tool count (must match `actualToolsManager.ts`) |
+| `EXPECTED_TOOL_COUNT` | `63` | Expected tool count (must match `actualToolsManager.ts`) |
 | `USE_DOCKER_MCP_SERVER` | `true` | Set to `false` to spawn a local server (mcp-client spec only) |
 
 ---
