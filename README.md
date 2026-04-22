@@ -280,6 +280,8 @@ See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all
 |------|-------------|
 | `actual_transfers_create` | Create a paired transfer between two accounts (debit + credit linked by `transfer_id`, identical to UI "Make Transfer") |
 
+> **How transfers work under the hood** — Actual Budget requires the `runTransfers: true` option when adding transactions so that both sides (the debit on the source account and the credit on the destination account) are created and linked via a shared `transfer_id`. Prior to v0.5.6, the adapter forwarded a hardcoded empty options object `{}` to `rawAddTransactions`, silently dropping any options including this flag. This meant that calling `actual_transfers_create` would appear to succeed but only one side of the transfer would be recorded. The fix ensures options are forwarded correctly; use `actual_transfers_create` (not `actual_transactions_create`) for all account-to-account moves.
+
 ### Categories (4)
 
 `actual_categories_get` · `actual_categories_create` · `actual_categories_update` · `actual_categories_delete`
