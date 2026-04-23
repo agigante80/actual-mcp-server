@@ -25,7 +25,7 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_uncategorized',
-  description: 'List uncategorized transactions (category is null/unset). Useful for cleanup workflows and rule-suggestion prompts. Defaults to the current month unless a date range is provided. Returns { transactions, count, summary: { totalAmount }, dateRange }.',
+  description: 'List uncategorized transactions (category is null/unset). Excludes transfers, split-transaction parents, opening balance entries, off-budget accounts, and closed accounts — matching Actual Budget\'s own Uncategorized view. Defaults to the current month unless a date range is provided. Returns { transactions, count, summary: { totalAmount }, dateRange }.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
@@ -44,19 +44,24 @@ const tool: ToolDefinition = {
     const txnRaw = await adapter.getTransactions(accountId as any, startDate, endDate);
     const txns = Array.isArray(txnRaw) ? txnRaw : [];
 
-    // Fetch accounts to build off-budget exclusion set.
+    // Fetch accounts to build exclusion set: off-budget + closed accounts.
     const accounts = await adapter.getAccounts();
-    const offBudgetIds = new Set(
+    const excludedAccountIds = new Set(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (Array.isArray(accounts) ? accounts : [])
-        .filter((acc: any) => acc?.offbudget === true)
+        .filter((acc: any) => acc?.offbudget === true || acc?.closed === true)
         .map((acc: any) => acc.id as string)
     );
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const uncategorized = txns.filter(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (txn: any) => txn?.category == null && !offBudgetIds.has(txn?.account)
+      (txn: any) =>
+        txn?.category == null &&
+        txn?.transfer_id == null &&
+        txn?.is_parent !== true &&
+        txn?.starting_balance_flag !== true &&
+        !excludedAccountIds.has(txn?.account)
     );
     const limited = uncategorized.slice(0, input.limit ?? 500);
 

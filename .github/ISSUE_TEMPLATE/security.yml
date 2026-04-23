@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Template version:** 2
+        **Template version:** 3
         ## Security Issue
         For active vulnerabilities, consider reporting privately first via the Security Advisories link below
         rather than creating a public issue.
@@ -102,14 +102,47 @@ body:
       required: false
 
   - type: textarea
-    id: tests
+    id: scenarios
     attributes:
-      label: Test plan for the fix
-      description: How do we verify the fix works and does not regress?
+      label: Test scenarios (Given / When / Then)
+      description: |
+        One positive ✅ (fix works) and one negative ❌ (attack/misuse is blocked) scenario
+        per vulnerability being addressed.
       placeholder: |
-        - [ ] Unit test: ...
-        - [ ] Integration test: ...
-        - [ ] Manual verification: ...
+        **Condition: [vulnerability name]**
+
+        ✅ Positive (legitimate use works)
+        - Given: [valid, authorised request]
+        - When: [action is performed]
+        - Then: [expected correct result, no data leak]
+
+        ❌ Negative (attack is blocked)
+        - Given: [malicious or unauthorised input]
+        - When: [action is performed]
+        - Then: [request rejected / error returned / no sensitive data exposed]
+    validations:
+      required: true
+
+  - type: textarea
+    id: unit_tests
+    attributes:
+      label: Unit tests
+      description: Specific unit test cases with inputs and expected outputs.
+      placeholder: |
+        - [ ] Positive: [test file] — authorised call with [input] → [expected safe result]
+        - [ ] Negative: [test file] — unauthorised/malicious [input] → error / rejection
+        - [ ] `npm run build && npm run test:unit-js` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: e2e_tests
+    attributes:
+      label: E2E tests
+      description: End-to-end verification that the fix holds against a running server.
+      placeholder: |
+        - [ ] Positive: [suite file] — legitimate request succeeds
+        - [ ] Negative: [suite file] — attack vector rejected with correct error
     validations:
       required: true
 
