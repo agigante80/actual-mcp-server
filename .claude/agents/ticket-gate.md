@@ -54,13 +54,97 @@ Extract the number (e.g. `2` from `**Template version:** 2`).
 gh issue view <NUMBER> --repo agigante80/actual-mcp-server --json body --jq '.body' | grep "Template version"
 ```
 
-#### 0c. Evaluate and auto-fix
+#### 0c. Evaluate and act
 
-| Result | Action |
-|---|---|
-| No version marker found | Append `\n\n**Template version:** <current>` to the issue body via `gh issue edit <NUMBER> --repo agigante80/actual-mcp-server --body "<existing body + marker>"`. Post a comment: `🔧 Auto-added missing template version marker (v<current>). Proceeding with gate.` Then continue to Step 1. |
-| Version found < current | Replace the old `**Template version:** <found>` with `**Template version:** <current>` in the issue body via `gh issue edit`. Post a comment: `🔧 Auto-upgraded template version marker from v<found> to v<current>. Proceeding with gate.` Then continue to Step 1. |
-| Version found = current | Proceed to Step 1 (no change needed). |
+**Version matches current → proceed to Step 1. No changes needed.**
+
+**Version missing or outdated → run the full upgrade pipeline below before Step 1.**
+
+##### 0c-i. Parse the current template structure
+
+Read the YAML template identified in 0a. Extract every section's `label` and `description`
+(and `placeholder`/`value` where present):
+
+```bash
+grep -E "label:|description:|placeholder:|value:" .github/ISSUE_TEMPLATE/<type>.yml
+```
+
+##### 0c-ii. Identify gaps in the issue body
+
+For each section label found in the template, check whether a corresponding heading exists
+in the issue body. Classify each section as:
+- **Present and sufficient** — heading exists, content is substantive
+- **Present but needs enrichment** — heading exists but content is thin relative to what the
+  new template now requires (e.g., acceptance criteria exist but lack the unit-test file
+  references now required by v3)
+- **Missing** — no heading found in the body at all
+
+##### 0c-iii. Synthesise real content for every gap
+
+Spawn a **general-purpose** sub-agent with the following brief and permissions:
+
+> You are enriching a GitHub issue body to conform to the current issue template (v<current>).
+>
+> **Existing issue body:** <full body>
+>
+> **Sections to synthesise or enrich:** <list with template description for each>
+>
+> **Permissions:**
+> - Fetch any external URLs referenced in the issue body (GitHub PRs, docs, community links)
+>   to gather additional context
+> - Proactively search for or fetch additional information (WebFetch / WebSearch) if you
+>   judge the existing content insufficient to produce high-quality section content
+>
+> **Output requirements — produce real, specific content for each gap:**
+>
+> | Section | Derived from |
+> |---|---|
+> | `scenarios` (Given/When/Then) | Problem description + root cause + each condition → one ✅ positive and one ❌ negative GWT scenario per condition |
+> | `unit_tests` | Acceptance criteria + any test files/cases mentioned in the body → specific file name, inputs, and expected outputs |
+> | `e2e_tests` | Acceptance criteria + any test suite references → specific suite file, setup steps, and assertions; positive + negative per condition |
+> | Any existing section needing enrichment | Existing content + new template description → enhanced version preserving all prior text |
+>
+> Do NOT use placeholder text. Every section must contain real, actionable content.
+> Return the synthesised sections as a structured document (one heading per section).
+
+##### 0c-iv. Produce the full updated body
+
+Merge the synthesised content into the existing issue body:
+- Preserve all existing text verbatim
+- Insert or append synthesised/enriched sections in the order they appear in the template
+- Replace `**Template version:** <old>` with `**Template version:** <current>` (or append
+  if the marker was missing)
+
+Apply via:
+```bash
+gh issue edit <NUMBER> --repo agigante80/actual-mcp-server --body "<full updated body>"
+```
+
+##### 0c-v. Post a void + synthesis comment
+
+```
+🔄 **Template auto-upgraded to v<current> — content synthesised**
+
+Ticket was filed against an older template (v<old> / no marker found).
+The following sections have been synthesised from the existing issue content
+(and any external sources consulted) and added to the issue body:
+
+- **Test scenarios (Given / When / Then):** <N> conditions, <N×2> scenarios
+- **Unit tests:** <N> specific cases with file / input / expected output
+- **E2E tests:** <N> specific cases with suite file / setup / assertion
+
+The following existing sections were enriched to meet v<current> requirements:
+- <list, or "none">
+
+⚠️ All previous gate scores are **void**. Proceeding to re-score all 4 agents
+against the enriched body now. Review the synthesised content and re-run
+`/review-ticket <N>` if you make any corrections.
+```
+
+##### 0c-vi. Continue to Step 1
+
+All 4 agents score against the enriched issue body. If any synthesised section is
+incomplete, the relevant agent will report it specifically in `required_changes`.
 
 ---
 
@@ -293,6 +377,10 @@ If re-running after fixes, **only re-score agents that were <10**. Keep passing 
 the previous run — read the existing scorecard comment to get prior passing scores.
 State clearly which agents are being re-scored and which are carried forward.
 
+**Exception — template upgrade:** if the current run triggered a template upgrade in Step 0c,
+ALL 4 agents must score regardless of any prior passing scores. The upgrade voids every
+previous result — no scores are carried forward from a pre-upgrade gate run.
+
 ---
 
 ## Rules
@@ -303,3 +391,10 @@ State clearly which agents are being re-scored and which are carried forward.
 - **Sequential execution.** Each agent sees all prior scores. This prevents duplicate feedback.
 - **Scorecard is permanent.** Posted as a GitHub comment for the audit trail.
 - **actual-api auto-10** when the ticket has no @actual-app/api interaction.
+- **Template upgrade = full synthesis + void + immediate re-score.** When Step 0c detects a
+  version mismatch, the gate synthesises real content for all missing/thin sections (fetching
+  external sources as needed), voids all prior scores, and re-runs all 4 agents against the
+  enriched body. No human action is required for the upgrade itself.
+- **QA agent must check ticket body content, not codebase state.** Finding that tests exist
+  in the codebase is NOT sufficient — scenarios, unit tests, and E2E tests must be documented
+  in the ticket body itself with specific inputs, outputs, and file references.
