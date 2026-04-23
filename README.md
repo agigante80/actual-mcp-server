@@ -296,7 +296,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_accounts_reopen` | Reopen closed account |
 | `actual_accounts_get_balance` | Get account balance at a date |
 
-### Transactions (12)
+### Transactions (13)
 
 **Standard (6)**
 
@@ -308,6 +308,12 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_transactions_import` | Import and reconcile transactions |
 | `actual_transactions_update` | Update a transaction |
 | `actual_transactions_delete` | Delete a transaction |
+
+**Utility (1)**
+
+| Tool | Description |
+|------|-------------|
+| `actual_transactions_uncategorized` | Summary of uncategorized transactions (totalCount, totalAmount, per-account breakdown); pass `includeTransactions:true` for paginated rows |
 
 **Exclusive ActualQL-powered (6)** — unique to this MCP server
 
@@ -724,4 +730,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.5.8 | **Tool Count:** 63 (verified LibreChat-compatible)
+**Version:** 0.6.0 | **Tool Count:** 63 (verified LibreChat-compatible)

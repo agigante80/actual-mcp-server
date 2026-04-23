@@ -253,6 +253,55 @@ export async function transactionTests(client, context) {
     console.log("  ⚠ Skipping delete (no transactionId in context)");
   }
 
+  // ── actual_transactions_uncategorized tests ───────────────────────────────
+  console.log("\n--- actual_transactions_uncategorized ---");
+
+  // Positive — summary only (default mode)
+  {
+    const summary = await callTool("actual_transactions_uncategorized", {});
+    if (typeof summary?.totalCount !== 'number') {
+      console.log("  ❌ summary: totalCount not a number");
+    } else if (typeof summary?.totalAmount !== 'number') {
+      console.log("  ❌ summary: totalAmount not a number");
+    } else if (!Array.isArray(summary?.byAccount)) {
+      console.log("  ❌ summary: byAccount not an array");
+    } else if ('transactions' in summary) {
+      console.log("  ❌ summary: transactions key must be absent by default");
+    } else {
+      console.log(`  ✓ summary: totalCount=${summary.totalCount}, byAccount entries=${summary.byAccount.length}, transactions absent`);
+    }
+  }
+
+  // Positive — with transactions (includeTransactions:true)
+  {
+    const listResult = await callTool("actual_transactions_uncategorized", {
+      includeTransactions: true,
+      limit: 5,
+    });
+    if (!Array.isArray(listResult?.transactions)) {
+      console.log("  ❌ list: transactions not an array");
+    } else if (typeof listResult?.hasMore !== 'boolean') {
+      console.log("  ❌ list: hasMore not a boolean");
+    } else if ((listResult?.transactions ?? []).length > 5) {
+      console.log("  ❌ list: returned more than limit:5 transactions");
+    } else {
+      console.log(`  ✓ list: ${listResult.transactions.length} transactions returned, hasMore=${listResult.hasMore}`);
+    }
+  }
+
+  // Negative — non-existent accountId → totalCount:0, byAccount:[]
+  {
+    const nilId = '00000000-0000-0000-0000-000000000000';
+    const nilResult = await callTool("actual_transactions_uncategorized", { accountId: nilId });
+    if (nilResult?.totalCount !== 0) {
+      console.log(`  ❌ negative accountId: expected totalCount:0, got ${nilResult?.totalCount}`);
+    } else if (!Array.isArray(nilResult?.byAccount) || nilResult.byAccount.length !== 0) {
+      console.log("  ❌ negative accountId: expected byAccount:[]");
+    } else {
+      console.log("  ✓ negative accountId: totalCount:0 and byAccount:[] as expected");
+    }
+  }
+
   // Teardown: close then delete the dedicated transaction test account.
   // close() must come first — Actual tombstones (hard-deletes) accounts with zero
   // transactions on close(), making them unrecoverable. We need close() to set

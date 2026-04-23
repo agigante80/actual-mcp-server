@@ -168,10 +168,16 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 **Phase 5b — Batch, Uncategorized & Rules-Upsert (3 tools):**
 
-- actual_transactions_uncategorized
+- actual_transactions_uncategorized (summary mode — default)
   Input: no parameters (defaults to current month)
-  Expect: { transactions: [...], count: N, summary: { totalAmount: N }, dateRange: {...} }
-  Report count as ✓ informational
+  Expect: { totalCount: N, totalAmount: N, byAccount: [...], dateRange: {...} }
+  Verify: totalCount is a number ≥ 0, byAccount is an array, transactions key is absent
+  Report totalCount as ✓ informational
+
+- actual_transactions_uncategorized (list mode)
+  Input: { includeTransactions: true, limit: 5 }
+  Expect: { totalCount, totalAmount, byAccount, transactions: [...], count, hasMore, offset, limit }
+  Verify: transactions is an array, hasMore is a boolean, count ≤ 5
 
 - actual_transactions_update_batch
   Use first existing transaction ID from actual_accounts_list result (or any visible from earlier calls):

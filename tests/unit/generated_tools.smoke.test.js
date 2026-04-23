@@ -264,9 +264,10 @@ console.log('Running generated tools smoke tests');
         if (typeof res?.failureCount !== 'number') shapeErr(`expected failureCount number`);
       }
       if (n === 'transactions_uncategorized') {
-        if (!Array.isArray(res?.transactions)) shapeErr(`expected transactions array`);
-        if (typeof res?.count !== 'number') shapeErr(`expected count number`);
-        if (typeof res?.summary?.totalAmount !== 'number') shapeErr(`expected summary.totalAmount number`);
+        if (typeof res?.totalCount !== 'number') shapeErr(`expected totalCount number`);
+        if (typeof res?.totalAmount !== 'number') shapeErr(`expected totalAmount number`);
+        if (!Array.isArray(res?.byAccount)) shapeErr(`expected byAccount array`);
+        if (res?.transactions !== undefined) shapeErr(`expected no transactions by default (summary-only mode)`);
       }
       // categories_create: old ToolDefinition pattern, returns { success, categoryId, message }
       if (n === 'categories_create') {
@@ -319,22 +320,22 @@ console.log('Running generated tools smoke tests');
       const uncatMod = toolsIndex['transactions_uncategorized'];
       const uncatTool = uncatMod?.default ?? uncatMod;
       const res = await uncatTool.call({});
-      const txns = res?.transactions ?? [];
-      const offBudgetIncluded = txns.some(t => t?.id === 'off1');
-      const onBudgetIncluded = txns.some(t => t?.id === 'on1');
+      // New API: check via totalCount and byAccount (transactions absent by default)
+      const offBudgetInByAccount = (res?.byAccount ?? []).some(a => a?.accountId === 'acct-off');
+      const onBudgetInByAccount  = (res?.byAccount ?? []).some(a => a?.accountId === 'acct-on');
 
-      if (offBudgetIncluded) {
-        console.error('[known-bug #80] off-budget transaction still included in uncategorized results — fix pending');
+      if (offBudgetInByAccount) {
+        console.error('[regression #80] off-budget account appears in byAccount — exclusion broken');
         failures++;
       } else {
-        console.log('OK [regression #80] off-budget transaction correctly excluded');
+        console.log('OK [regression #80] off-budget account correctly excluded from byAccount');
       }
 
-      if (!onBudgetIncluded) {
-        console.error('[regression #80] on-budget transaction incorrectly excluded — filter is too broad');
+      if (!onBudgetInByAccount) {
+        console.error('[regression #80] on-budget account missing from byAccount — filter is too broad');
         failures++;
       } else {
-        console.log('OK [regression #80] on-budget transaction correctly included');
+        console.log('OK [regression #80] on-budget account correctly present in byAccount');
       }
     } catch (e) {
       console.error('[regression #80] unexpected error:', e && e.message);
