@@ -44,7 +44,25 @@ if (!syncOnly) {
   const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
   packageJson.version = targetVersion;
   fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');
-} else {
+}
+
+// ── Sync tool count in package.json description ────────────────────────────
+// Done outside the !syncOnly block so `docs:sync` also keeps it up to date.
+{
+  const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+  const managerSrcEarly = fs.readFileSync(path.join('src', 'actualToolsManager.ts'), 'utf8');
+  const earlyToolCount = (managerSrcEarly.match(/^\s*'actual_/gm) || []).length;
+  if (packageJson.description) {
+    const updated = packageJson.description.replace(/\d+ tools/, `${earlyToolCount} tools`);
+    if (updated !== packageJson.description) {
+      packageJson.description = updated;
+      fs.writeFileSync('package.json', JSON.stringify(packageJson, null, 2) + '\n');
+      console.log(`📝 Updated tool count in package.json description → ${earlyToolCount} tools`);
+    }
+  }
+}
+
+if (syncOnly) {
   console.log(`Syncing **Version:** markers to current version: ${currentVersion}`);
 }
 
