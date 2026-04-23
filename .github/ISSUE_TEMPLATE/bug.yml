@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Template version:** 2
+        **Template version:** 3
         ## Bug Report
         Please fill in all required fields so we can reproduce and assess the issue quickly.
 
@@ -141,15 +141,61 @@ body:
       required: false
 
   - type: textarea
-    id: qa
+    id: scenarios
     attributes:
-      label: QA & Regression tests
-      description: What tests should be added to prevent this bug from recurring?
-      value: |
-        - [ ] Regression test added in `tests/unit/`
-        - [ ] If tool-related: smoke test updated in `tests/unit/generated_tools.smoke.test.js`
-        - [ ] E2E test added if this is a server-level or transport-level bug
+      label: Test scenarios (Given / When / Then)
+      description: |
+        One positive ✅ and one negative ❌ scenario per condition being fixed or reviewed.
+        For bugs fixing multiple conditions: repeat the block for each condition.
+        For revisiting existing code: scenarios must cover the *current correct* behaviour —
+        do NOT write scenarios for the new fix code itself.
+      placeholder: |
+        **Condition: [name of the condition]**
+
+        ✅ Positive
+        - Given: [valid starting state]
+        - When: [action is performed]
+        - Then: [expected correct result]
+
+        ❌ Negative
+        - Given: [invalid or edge-case state]
+        - When: [action is performed]
+        - Then: [expected rejection / error message]
+    validations:
+      required: true
+
+  - type: textarea
+    id: unit_tests
+    attributes:
+      label: Unit tests
+      description: |
+        Specific cases for `tests/unit/`. State file, input, and expected output for each.
+        For revisiting existing code: confirm which existing unit tests cover the correct
+        behaviour and identify any gaps to fill.
+      placeholder: |
+        - [ ] Positive: `[test file]` — call with [valid input] → [expected output / field value]
+        - [ ] Negative: `[test file]` — call with [bad input] → ZodError / error message contains "[text]"
+        - [ ] Existing coverage check: `[test file]` cases [N–M] already cover [behaviour] ✅
+        - [ ] Gap found: case for [behaviour] missing — add to `[test file]`
         - [ ] `npm run build && npm run test:unit-js` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: e2e_tests
+    attributes:
+      label: E2E tests
+      description: |
+        Specific cases for `tests/e2e/suites/`. State the suite file, setup, action, and
+        assertion for each. Include both a positive (happy-path) and a negative (error/rejection)
+        case per condition.
+        For revisiting existing code: confirm existing E2E tests cover the correct behaviour
+        and add any missing coverage.
+      placeholder: |
+        - [ ] Positive: `[suite file]` — create [entity] with valid input → appears in [list call]
+        - [ ] Negative: `[suite file]` — call with [bad ID / missing field] → response contains error
+        - [ ] Existing coverage check: `[suite file]` test "[name]" covers [behaviour] ✅
+        - [ ] Gap found: E2E for [behaviour] missing — add to `[suite file]`
     validations:
       required: true
 
