@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Template version:** 2
+        **Template version:** 3
         ## Feature Request
         Please fill in all required fields. Clear acceptance criteria and test plans help implementation go smoothly.
 
@@ -104,16 +104,51 @@ body:
       required: false
 
   - type: textarea
-    id: qa
+    id: scenarios
     attributes:
-      label: QA & testing
-      description: What tests are required for this feature?
-      value: |
-        - [ ] Unit smoke test: tool dispatches correctly with stub adapter
-        - [ ] Schema validation test: negative-path Zod assertions
-        - [ ] Manual integration test added to `tests/manual/tests/<module>.js` (positive + negative)
+      label: Test scenarios (Given / When / Then)
+      description: |
+        One positive ✅ and one negative ❌ scenario per condition or acceptance criterion.
+        When a feature covers multiple independent conditions, repeat the block for each.
+      placeholder: |
+        **Condition: [name of the condition or feature aspect]**
+
+        ✅ Positive
+        - Given: [valid starting state]
+        - When: [action is performed]
+        - Then: [expected correct result]
+
+        ❌ Negative
+        - Given: [invalid or edge-case state]
+        - When: [action is performed]
+        - Then: [expected rejection / error message]
+    validations:
+      required: true
+
+  - type: textarea
+    id: unit_tests
+    attributes:
+      label: Unit tests
+      description: Specific cases for `tests/unit/`. State file, input, and expected output.
+      placeholder: |
+        - [ ] Positive: `[test file]` — call with [valid input] → [expected output / field]
+        - [ ] Negative: `[test file]` — call with [bad input] → ZodError / error contains "[text]"
+        - [ ] Smoke entry added to `tests/unit/generated_tools.smoke.test.js` (new tools only)
         - [ ] `npm run build && npm run test:unit-js` passes
-        - [ ] E2E test added if this affects server startup, transport, or auth
+    validations:
+      required: true
+
+  - type: textarea
+    id: e2e_tests
+    attributes:
+      label: E2E tests
+      description: |
+        Specific cases for `tests/e2e/suites/`. One positive and one negative per condition.
+        Also note if an integration test in `tests/manual/tests/` is needed.
+      placeholder: |
+        - [ ] Positive: `[suite file]` — [setup] → call tool → assert [field] equals [value]
+        - [ ] Negative: `[suite file]` — [bad state] → call tool → response contains error
+        - [ ] Manual integration test added to `tests/manual/tests/<module>.js` if live-server behaviour must be verified
     validations:
       required: true
 
