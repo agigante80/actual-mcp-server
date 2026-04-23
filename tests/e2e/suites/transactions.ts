@@ -282,6 +282,65 @@ export function registerTransactionTests(state: SharedState): void {
     console.log('✅ actual_transactions_uncategorized [#119]: closed account correctly excluded from byAccount');
   });
 
+  test('actual_transactions_uncategorized - should paginate correctly and match summary totals', async ({ request }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const ts = Date.now();
+
+    // Create a fresh isolated account so totalCount is exactly 2
+    const acctResult = await callTool(request, state.sessionId, 'actual_accounts_create', {
+      name: `E2E-Uncat-Pagination-${ts}`,
+      balance: 0,
+    });
+    const acctData = extractResult(acctResult);
+    const acctId: string = acctData?.id ?? acctData?.result?.id;
+    expect(acctId).toBeTruthy();
+
+    const amt1 = -1500;
+    const amt2 = -2500;
+    await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: acctId, date: today, amount: amt1, notes: `E2E-Pag-A-${ts}`,
+    });
+    await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: acctId, date: today, amount: amt2, notes: `E2E-Pag-B-${ts}`,
+    });
+
+    // Summary call — no includeTransactions
+    const summaryResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', { accountId: acctId });
+    const summaryData = extractResult(summaryResult);
+    const acctEntry = (summaryData?.byAccount ?? []).find((a: any) => a?.accountId === acctId);
+    expect(acctEntry).toBeTruthy();
+    expect(acctEntry?.count).toBe(2);
+    expect(acctEntry?.totalAmount).toBe(amt1 + amt2);
+    expect(summaryData?.totalCount).toBe(2);
+    expect('transactions' in summaryData).toBe(false);
+    console.log(`✅ actual_transactions_uncategorized pagination: summary totalCount=2, totalAmount=${amt1 + amt2}`);
+
+    // Page 1: limit:1 → 1 result, hasMore:true
+    const page1Result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
+      accountId: acctId, includeTransactions: true, limit: 1, offset: 0,
+    });
+    const page1 = extractResult(page1Result);
+    expect(page1?.transactions?.length).toBe(1);
+    expect(page1?.count).toBe(1);
+    expect(page1?.hasMore).toBe(true);
+    expect(page1?.totalCount).toBe(2);
+    console.log('✅ actual_transactions_uncategorized pagination: page 1 — 1 txn, hasMore:true');
+
+    // Page 2: offset:1 → 1 result, hasMore:false
+    const page2Result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
+      accountId: acctId, includeTransactions: true, limit: 1, offset: 1,
+    });
+    const page2 = extractResult(page2Result);
+    expect(page2?.transactions?.length).toBe(1);
+    expect(page2?.hasMore).toBe(false);
+    console.log('✅ actual_transactions_uncategorized pagination: page 2 — 1 txn, hasMore:false');
+
+    // Teardown
+    await callTool(request, state.sessionId, 'actual_accounts_close', { id: acctId });
+    await callTool(request, state.sessionId, 'actual_accounts_delete', { id: acctId });
+    console.log('✅ actual_transactions_uncategorized pagination: teardown complete');
+  });
+
   test('actual_transactions_update_batch - should batch update transactions', async ({ request }) => {
     if (!state.ctx.accountId || !state.ctx.transactionId) test.skip();
 
