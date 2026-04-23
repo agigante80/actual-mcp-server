@@ -47,6 +47,7 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 ## Table of Contents
 
 - [Quick Start](#quick-start)
+- [Upgrading](#upgrading)
 - [Available Tools](#available-tools)
 - [Configuration](#configuration)
 - [Multi-Budget Switching](#multi-budget-switching)
@@ -231,6 +232,51 @@ See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full Li
 ```
 
 See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all options (including Cursor, VS Code, Gemini CLI), Linux/NVM path fixes, and troubleshooting.
+
+---
+
+## Upgrading
+
+### Docker (Option A)
+
+```bash
+docker pull ghcr.io/agigante80/actual-mcp-server:latest
+docker stop actual-mcp-server-backend
+docker rm actual-mcp-server-backend
+# Re-run the original docker run command with the same flags and volumes
+```
+
+Also available on Docker Hub: `docker pull agigante80/actual-mcp-server:latest`
+
+### Docker Compose (Option B)
+
+```bash
+docker compose pull
+docker compose --profile production up -d
+```
+
+### npm / cloned repo (Option C)
+
+```bash
+git pull
+npm install
+npm run build
+# Then restart the server
+```
+
+### npx / stdio (Options C & D)
+
+If you run `npx actual-mcp-server` without a globally installed version, npx fetches the latest from the registry automatically. But if you previously installed it globally (`npm install -g actual-mcp-server`), the global install takes precedence — you must upgrade it explicitly:
+
+```bash
+# Upgrade the global install
+npm install -g actual-mcp-server
+
+# Or force the registry version without touching your global install
+npx actual-mcp-server@latest --http
+```
+
+For Claude Desktop (stdio), restart Claude after upgrading.
 
 ---
 
@@ -678,4 +724,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.5.7 | **Tool Count:** 63 (verified LibreChat-compatible)
+**Version:** 0.5.8 | **Tool Count:** 63 (verified LibreChat-compatible)
