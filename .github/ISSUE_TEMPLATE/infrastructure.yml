@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        **Template version:** 2
+        **Template version:** 3
         ## Infrastructure Task
         For dependency audits, CI/CD, Docker, deployment, and configuration work.
         Issues created by the `/dep-auditor` command use this template automatically.
@@ -110,6 +110,27 @@ body:
         - [ ] If fixing: PR merged and passing CI
         - [ ] If accepting risk: decision documented in a comment on this issue
         - [ ] `npm audit --audit-level=moderate` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: scenarios
+    attributes:
+      label: Test scenarios (Given / When / Then)
+      description: |
+        Required when the change can be verified programmatically (e.g. a dependency
+        version change, a CI step, a config value). One positive and one negative per
+        condition. For pure documentation-only changes, write "N/A — docs only".
+      placeholder: |
+        ✅ Positive
+        - Given: server starts with updated dependency
+        - When: `npm run build && npm audit --audit-level=moderate` run
+        - Then: zero vulnerabilities reported, build succeeds
+
+        ❌ Negative
+        - Given: old vulnerable version is pinned
+        - When: `npm audit --audit-level=moderate` run
+        - Then: audit reports the CVE
     validations:
       required: true
 

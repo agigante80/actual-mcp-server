@@ -164,13 +164,24 @@ Use `subagent_type: qa`.
 > Context files: CLAUDE.md
 >
 > Score criteria:
-> - Are specific test cases listed with inputs and expected outputs (not vague "add tests")?
-> - Are negative paths tested (invalid UUID, Zod validation failure, missing required fields)?
-> - Are regression tests scoped to a specific file (unit, smoke test in `generated_tools.smoke.test.js`, integration, E2E)?
-> - Could this change break existing tools? Is that addressed?
+> **Scenarios (Given / When / Then)**
+> - Is there at least one positive ✅ and one negative ❌ Given/When/Then scenario?
+> - When the ticket covers multiple conditions: does each condition have its own positive AND negative scenario?
+> - For revisiting existing code: do scenarios cover the *current correct* behaviour (not the new fix code itself)? Scenarios for the fix are NOT required — only scenarios verifying the existing correct behaviour that should be preserved.
+>
+> **Unit tests**
+> - Are specific unit test cases listed with file name, input, and expected output (not vague "add unit tests")?
+> - Is at least one positive case (valid input → expected output) specified?
+> - Is at least one negative case (invalid input → error / ZodError) specified?
 > - For new tools: is the smoke test entry in `tests/unit/generated_tools.smoke.test.js` specified?
-> - For server-level changes: is an E2E test specified?
+> - For revisiting existing code: are existing unit test gaps identified and addressed (not just new coverage)?
 > - Is `npm run build && npm run test:unit-js` explicitly in the acceptance criteria?
+>
+> **E2E tests**
+> - Is at least one positive E2E case (happy-path) specified with suite file, setup, and assertion?
+> - Is at least one negative E2E case (error/rejection) specified?
+> - For revisiting existing code: are existing E2E test gaps identified?
+> - Could this change break existing tools? Is regression risk addressed?
 >
 > Return ONLY valid JSON in the format: { "agent": "qa", "score": N, "status": "PASS"|"FAIL", "notes": "...", "required_changes": [...] }
 

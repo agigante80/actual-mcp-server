@@ -6,6 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
+        **Template version:** 3
         Use this template for tasks you intend to assign to Copilot coding agent.
         A good Copilot task is **specific, bounded, and testable**.
         See [best practices](https://docs.github.com/en/copilot/tutorials/coding-agent/get-the-best-results#making-sure-your-issues-are-well-scoped).
@@ -58,6 +59,51 @@ body:
       placeholder: |
         - Do not update README.md or doc files (handled separately)
         - Do not change other existing tools
+
+  - type: textarea
+    id: scenarios
+    attributes:
+      label: Test scenarios (Given / When / Then)
+      description: |
+        One positive ✅ and one negative ❌ scenario per acceptance criterion.
+        Copilot uses these to write and verify tests.
+      placeholder: |
+        **Condition: [criterion name]**
+
+        ✅ Positive
+        - Given: [valid state]
+        - When: [tool is called with valid input]
+        - Then: [expected correct output]
+
+        ❌ Negative
+        - Given: [invalid or missing input]
+        - When: [tool is called]
+        - Then: [ZodError / error message containing "..."]
+    validations:
+      required: true
+
+  - type: textarea
+    id: unit_tests
+    attributes:
+      label: Unit tests
+      description: Specific cases Copilot must implement in `tests/unit/`.
+      placeholder: |
+        - [ ] Positive: `[test file]` — [valid input] → [expected output]
+        - [ ] Negative: `[test file]` — [bad input] → error contains "[text]"
+        - [ ] `npm run test:unit-js` passes
+    validations:
+      required: true
+
+  - type: textarea
+    id: e2e_tests
+    attributes:
+      label: E2E tests
+      description: Specific cases Copilot must implement in `tests/e2e/suites/`.
+      placeholder: |
+        - [ ] Positive: `[suite file]` — [setup + valid call] → [assertion]
+        - [ ] Negative: `[suite file]` — [bad state + call] → error response
+    validations:
+      required: false
 
   - type: dropdown
     id: complexity
