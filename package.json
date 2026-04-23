@@ -1,12 +1,13 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.5.7",
+  "version": "0.5.8",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
-  "description": "MCP server with 62 tools for AI-driven financial management with Actual Budget — HTTP and stdio transports, LibreChat, Claude Desktop, Cursor, VS Code, Gemini CLI",
+  "description": "MCP server with 63 tools for AI-driven financial management with Actual Budget — HTTP and stdio transports, LibreChat, Claude Desktop, Cursor, VS Code, Gemini CLI",
+  "homepage": "https://github.com/agigante80/actual-mcp-server#readme",
   "repository": {
     "type": "git",
     "url": "https://github.com/agigante80/actual-mcp-server"

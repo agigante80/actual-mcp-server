@@ -163,7 +163,8 @@ export default tool;
 3. Add tool name to `IMPLEMENTED_TOOLS` array in `src/actualToolsManager.ts`
 4. Add unit tests in `tests/unit/` (positive + negative cases)
 5. Run `npm run verify-tools` to confirm registration
-6. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry)
+6. Update `tests/e2e/docker-all-tools.e2e.spec.ts` describe block name ("ALL N TOOLS") to reflect the new count
+7. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry)
 
 ### Key Source Files
 
@@ -228,7 +229,7 @@ When changing code, update these docs:
 
 | Change | Required updates |
 |--------|-----------------|
-| New tool | `README.md` (count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list |
+| New tool | `README.md` (count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list, `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block name) |
 | New env var | `.env.example`, `docs/ARCHITECTURE.md` config section, `README.md` env table |
 | Auth/security change | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` |
 | Docker change | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
