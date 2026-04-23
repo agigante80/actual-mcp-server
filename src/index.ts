@@ -103,6 +103,27 @@ if (unknownFlags.length > 0) {
   process.exit(1);
 }
 
+// Early transport mode check — before dotenv and dynamic imports.
+// Without this, the config validation error fires first and confuses users who
+// simply forgot to pass --http or --stdio.
+if (
+  !argsEarly.includes('--http') &&
+  !argsEarly.includes('--stdio') &&
+  !argsEarly.includes('--test-actual-connection') &&
+  !argsEarly.includes('--test-mcp-client') &&
+  !argsEarly.includes('--help') && !argsEarly.includes('-h') &&
+  !argsEarly.includes('--version') && !argsEarly.includes('-v')
+) {
+  console.error(
+    'No transport mode specified.\n\n' +
+    'Usage:\n' +
+    '  actual-mcp-server --http        # HTTP server (LibreChat / LobeChat / multi-user)\n' +
+    '  actual-mcp-server --stdio       # stdio transport (Claude Desktop / Claude Code)\n\n' +
+    'Run actual-mcp-server --help for all options.\n'
+  );
+  process.exit(1);
+}
+
 if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
     argsEarly.includes('--version') || argsEarly.includes('-v')) {
   const pkg = await import('../package.json', { with: { type: 'json' } });
