@@ -74,8 +74,8 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   });
   console.log("✓ Uncategorized transaction created");
 
-  // List uncategorized for current month
-  console.log("\nListing uncategorized transactions (default: current month)...");
+  // List uncategorized transactions (default: all-time)
+  console.log("\nListing uncategorized transactions (default: all-time)...");
   const uncatResult = await callTool("actual_transactions_uncategorized", {});
   const uncatTxns = uncatResult?.transactions ?? [];
   const uncatCount = uncatResult?.count ?? uncatTxns.length;
