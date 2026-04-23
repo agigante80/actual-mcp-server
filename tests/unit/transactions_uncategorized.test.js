@@ -10,6 +10,10 @@
  *  6. getTransactions returns flat list including multiple account txns
  *  7. Empty transaction list returns empty result
  *  8. Invalid accountId (non-UUID) — Zod validation error thrown
+ *  9. Transfer exclusion — txn with transfer_id set excluded (issue #119)
+ * 10. Split parent exclusion — txn with is_parent:true excluded (issue #119)
+ * 11. Opening balance exclusion — txn with starting_balance_flag:true excluded (issue #119)
+ * 12. Closed account exclusion — txn on closed account excluded (issue #119)
  *
  * Run via: npm run test:unit-js
  */
@@ -215,6 +219,103 @@ console.log('Running transactions_uncategorized unit tests');
       } else {
         fail(`expected ZodError, got: ${e && e.constructor && e.constructor.name}: ${e && e.message}`);
       }
+    }
+  }
+
+  // ── Case 9: Transfer exclusion — txn with transfer_id set excluded ─────────
+  // Issue #119: transfers have category:null by design and must be excluded
+  console.log('\n[Case 9] Transfer exclusion — txn with transfer_id set excluded (issue #119)');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-transfer', amount: -5000, category: null, account: 'acct-on', date: '2026-04-01', transfer_id: 'paired-txn-id' },
+      { id: 'txn-normal',   amount:  -100, category: null, account: 'acct-on', date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: 'acct-on', name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      const txns = res?.transactions ?? [];
+      if (txns.some(t => t.id === 'txn-transfer')) fail('transfer transaction (transfer_id set) incorrectly included');
+      else ok('transfer transaction correctly excluded');
+      if (!txns.some(t => t.id === 'txn-normal')) fail('normal uncategorized transaction missing');
+      else ok('normal uncategorized transaction present');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 10: Split parent exclusion — txn with is_parent:true excluded ────
+  // Issue #119: split parents have no category; children carry it. Parent must be excluded.
+  console.log('\n[Case 10] Split parent exclusion — txn with is_parent:true excluded (issue #119)');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-parent', amount: -300, category: null, account: 'acct-on', date: '2026-04-01', is_parent: true },
+      { id: 'txn-normal', amount: -100, category: null, account: 'acct-on', date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: 'acct-on', name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      const txns = res?.transactions ?? [];
+      if (txns.some(t => t.id === 'txn-parent')) fail('split parent transaction (is_parent:true) incorrectly included');
+      else ok('split parent transaction correctly excluded');
+      if (!txns.some(t => t.id === 'txn-normal')) fail('normal uncategorized transaction missing');
+      else ok('normal uncategorized transaction present');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 11: Opening balance exclusion — starting_balance_flag:true excluded
+  // Issue #119: opening balance entries are system-generated and never categorised
+  console.log('\n[Case 11] Opening balance exclusion — starting_balance_flag:true excluded (issue #119)');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-openbal', amount: 100000, category: null, account: 'acct-on', date: '2026-04-01', starting_balance_flag: true },
+      { id: 'txn-normal',  amount:   -100, category: null, account: 'acct-on', date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: 'acct-on', name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      const txns = res?.transactions ?? [];
+      if (txns.some(t => t.id === 'txn-openbal')) fail('opening balance transaction (starting_balance_flag:true) incorrectly included');
+      else ok('opening balance transaction correctly excluded');
+      if (!txns.some(t => t.id === 'txn-normal')) fail('normal uncategorized transaction missing');
+      else ok('normal uncategorized transaction present');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 12: Closed account exclusion — account.closed:true excluded ───────
+  // Issue #119: transactions on closed accounts are historical artefacts
+  console.log('\n[Case 12] Closed account exclusion — account.closed:true excluded (issue #119)');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-closed', amount: -200, category: null, account: 'acct-closed', date: '2026-04-01' },
+      { id: 'txn-open',   amount: -100, category: null, account: 'acct-open',   date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: 'acct-closed', name: 'OldCard',  offbudget: false, closed: true  },
+      { id: 'acct-open',   name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      const txns = res?.transactions ?? [];
+      if (txns.some(t => t.id === 'txn-closed')) fail('closed account transaction incorrectly included');
+      else ok('closed account transaction correctly excluded');
+      if (!txns.some(t => t.id === 'txn-open')) fail('open account transaction missing');
+      else ok('open account transaction present');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
     }
   }
 
