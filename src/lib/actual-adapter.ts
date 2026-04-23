@@ -60,6 +60,7 @@ const {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
+import { randomUUID } from 'node:crypto';
 import observability from '../observability.js';
 import retry from './retry.js';
 import logger from '../logger.js';
@@ -472,7 +473,15 @@ export async function createTransfer(params: {
   notes?: string;
 }): Promise<{ success: true; from_id: string | null; to_id: string | null } | { success: false; error: string }> {
   observability.incrementToolCall('actual.transfers.create').catch(() => {});
-  return queueWriteOperation(async () => {
+
+  // Tag with a unique imported_id so we can locate the transaction in a fresh
+  // read session after the write session has synced to the server.
+  // Reading within the same write session is unreliable: batchMessages may not
+  // have flushed the transfer_id update to SQLite before the AQL query runs.
+  const importedId = randomUUID();
+
+  // ── Phase 1: validate + write ─────────────────────────────────────────────
+  const writeResult = await queueWriteOperation(async (): Promise<{ success: true } | { success: false; error: string }> => {
     if (params.from_account === params.to_account) {
       return { success: false as const, error: 'from_account and to_account must be different accounts.' };
     }
@@ -500,6 +509,7 @@ export async function createTransfer(params: {
       date: params.date,
       amount: -Math.abs(params.amount),
       payee: transferPayee.id,
+      imported_id: importedId,
       ...(params.notes !== undefined && { notes: params.notes }),
     };
 
@@ -507,18 +517,25 @@ export async function createTransfer(params: {
       retry(() => rawAddTransactions(params.from_account, [sourceTx], { runTransfers: true }) as Promise<unknown>, { retries: 2, backoffMs: 200 })
     );
 
-    // Read back within the same session to retrieve both transaction IDs.
-    // The transfer_id field on the source transaction is the mirror's ID.
-    const txnsAfter = await withConcurrency(() =>
-      retry(() => rawGetTransactions(params.from_account, params.date, params.date) as Promise<any[]>, { retries: 2, backoffMs: 200 })
-    );
-    const sourceTxRecord = (txnsAfter ?? []).find(
-      (t: any) => t.amount === -Math.abs(params.amount) && t.payee === transferPayee.id && t.transfer_id != null
-    );
-    const from_id: string | null = sourceTxRecord?.id ?? null;
-    const to_id:   string | null = sourceTxRecord?.transfer_id ?? null;
-    return { success: true as const, from_id, to_id };
+    return { success: true as const };
   });
+
+  if (!writeResult.success) return writeResult;
+
+  // ── Phase 2: read-back in a fresh session (after write has synced) ────────
+  // A new withActualApi session downloads the budget from the server, which
+  // reflects the synced write, guaranteeing transfer_id is fully committed.
+  try {
+    return await withActualApi(async () => {
+      const txns = await withConcurrency(() =>
+        retry(() => rawGetTransactions(params.from_account, params.date, params.date) as Promise<any[]>, { retries: 2, backoffMs: 200 })
+      );
+      const tx = (txns ?? []).find((t: any) => t.imported_id === importedId);
+      return { success: true as const, from_id: tx?.id ?? null, to_id: tx?.transfer_id ?? null };
+    });
+  } catch {
+    return { success: true as const, from_id: null, to_id: null };
+  }
 }
 
 export async function getTransactions(accountId: string | undefined, startDate?: string, endDate?: string): Promise<components['schemas']['Transaction'][]> {
