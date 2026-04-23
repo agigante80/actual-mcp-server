@@ -601,7 +601,10 @@ test.describe('Docker E2E - ALL 63 TOOLS', () => {
       // deliberately no category
     });
 
-    const result = await callTool(request, sessionId, 'actual_transactions_uncategorized', {});
+    const result = await callTool(request, sessionId, 'actual_transactions_uncategorized', {
+      includeTransactions: true,
+      limit: 1000,
+    });
     const data = extractResult(result);
     const txns: any[] = data?.transactions ?? data?.result?.transactions ?? (Array.isArray(data) ? data : []);
     expect(Array.isArray(txns)).toBeTruthy();
@@ -609,16 +612,15 @@ test.describe('Docker E2E - ALL 63 TOOLS', () => {
     expect(found).toBeTruthy();
     console.log(`✅ actual_transactions_uncategorized: found ${txns.length} uncategorized, including our test transaction`);
 
-    // Edge: far-future date range must return empty list
+    // Edge: far-future date range must return empty summary
     const emptyResult = await callTool(request, sessionId, 'actual_transactions_uncategorized', {
       startDate: '2099-01-01',
       endDate: '2099-01-31',
     });
     const emptyData = extractResult(emptyResult);
-    const emptyTxns: any[] = emptyData?.transactions ?? emptyData?.result?.transactions ?? (Array.isArray(emptyData) ? emptyData : []);
-    expect(Array.isArray(emptyTxns)).toBeTruthy();
-    expect(emptyTxns.length).toBe(0);
-    console.log('✅ actual_transactions_uncategorized: future date range returns empty list');
+    expect(typeof emptyData?.totalCount).toBe('number');
+    expect(emptyData?.totalCount).toBe(0);
+    console.log('✅ actual_transactions_uncategorized: future date range returns totalCount:0');
   });
 
   test('actual_transactions_update_batch - should batch update transactions', async ({ request }) => {
