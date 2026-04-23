@@ -266,7 +266,17 @@ npm run build
 
 ### npx / stdio (Options C & D)
 
-`npx actual-mcp-server` always fetches the latest published release — no manual upgrade step needed. For Claude Desktop, restart Claude after the new version is pulled.
+If you run `npx actual-mcp-server` without a globally installed version, npx fetches the latest from the registry automatically. But if you previously installed it globally (`npm install -g actual-mcp-server`), the global install takes precedence — you must upgrade it explicitly:
+
+```bash
+# Upgrade the global install
+npm install -g actual-mcp-server
+
+# Or force the registry version without touching your global install
+npx actual-mcp-server@latest --http
+```
+
+For Claude Desktop (stdio), restart Claude after upgrading.
 
 ---
 
