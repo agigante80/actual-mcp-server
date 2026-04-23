@@ -14,9 +14,10 @@ const pass = (label) => console.log(`  ✓ ${label}`);
 const fail = (label, d = '') => { console.error(`  ✗ FAIL: ${label}${d ? ' — ' + d : ''}`); failures++; };
 const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
-const UUID_A = '11111111-1111-1111-1111-111111111111';
-const UUID_B = '22222222-2222-2222-2222-222222222222';
+const UUID_A  = '11111111-1111-1111-1111-111111111111';
+const UUID_B  = '22222222-2222-2222-2222-222222222222';
 const UUID_TX = '33333333-3333-3333-3333-333333333333';
+const UUID_TO = '44444444-4444-4444-4444-444444444444';
 
 (async () => {
   const [toolMod, adapterMod] = await Promise.all([
@@ -99,7 +100,7 @@ const UUID_TX = '33333333-3333-3333-3333-333333333333';
       if (params.from_account === params.to_account) {
         return { success: false, error: 'from_account and to_account must be different accounts.' };
       }
-      return { success: true, from_id: UUID_TX, to_id: null };
+      return { success: true, from_id: UUID_TX, to_id: UUID_TO };
     };
 
     const res = await tool.call({ from_account: UUID_A, to_account: UUID_A, amount: 5000, date: '2024-01-15' });
@@ -108,24 +109,24 @@ const UUID_TX = '33333333-3333-3333-3333-333333333333';
     check(res?.result?.error?.toLowerCase().includes('different'), 'error mentions "different"', res?.result?.error);
   }
 
-  // ── Happy path ───────────────────────────────────────────────────────────────
-  console.log('\n[#118] Happy path — two accounts, transfer payee found');
+  // ── Happy path — both IDs returned (fix for #123) ───────────────────────────
+  console.log('\n[#123] Happy path — both from_id and to_id populated');
   {
-    adapter.createTransfer = async () => ({ success: true, from_id: UUID_TX, to_id: null });
+    adapter.createTransfer = async () => ({ success: true, from_id: UUID_TX, to_id: UUID_TO });
     const res = await tool.call({ from_account: UUID_A, to_account: UUID_B, amount: 5000, date: '2024-01-15' });
-    check(res?.result?.success === true,   'result.success is true');
-    check(res?.result?.from_id === UUID_TX, 'result.from_id matches expected UUID');
-    check(res?.result?.to_id === null,      'result.to_id is null (mirror ID not returned by API)');
+    check(res?.result?.success === true,    'result.success is true');
+    check(res?.result?.from_id === UUID_TX, 'result.from_id is the source transaction UUID');
+    check(res?.result?.to_id === UUID_TO,   'result.to_id is the mirror transaction UUID');
   }
 
-  // ── Happy path: API returns "ok" (from_id null) ──────────────────────────────
-  console.log('\n[#118] Happy path — API returns "ok" (from_id null)');
+  // ── IDs not found in read-back (graceful null fallback) ──────────────────────
+  console.log('\n[#123] IDs not found in read-back — graceful null fallback');
   {
     adapter.createTransfer = async () => ({ success: true, from_id: null, to_id: null });
     const res = await tool.call({ from_account: UUID_A, to_account: UUID_B, amount: 5000, date: '2024-01-15' });
-    check(res?.result?.success === true,  'result.success is true even when from_id is null');
-    check(res?.result?.from_id === null,  'result.from_id is null when API returned "ok"');
-    check(res?.result?.to_id === null,    'result.to_id is null');
+    check(res?.result?.success === true, 'result.success is true even when IDs are null');
+    check(res?.result?.from_id === null, 'result.from_id is null when read-back finds no match');
+    check(res?.result?.to_id === null,   'result.to_id is null when read-back finds no match');
   }
 
   // ── to_account not found ─────────────────────────────────────────────────────

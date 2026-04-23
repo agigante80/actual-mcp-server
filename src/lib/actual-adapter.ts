@@ -470,7 +470,7 @@ export async function createTransfer(params: {
   amount: number;
   date: string;
   notes?: string;
-}): Promise<{ success: true; from_id: string | null; to_id: null } | { success: false; error: string }> {
+}): Promise<{ success: true; from_id: string | null; to_id: string | null } | { success: false; error: string }> {
   observability.incrementToolCall('actual.transfers.create').catch(() => {});
   return queueWriteOperation(async () => {
     if (params.from_account === params.to_account) {
@@ -503,17 +503,21 @@ export async function createTransfer(params: {
       ...(params.notes !== undefined && { notes: params.notes }),
     };
 
-    const result = await withConcurrency(() =>
+    await withConcurrency(() =>
       retry(() => rawAddTransactions(params.from_account, [sourceTx], { runTransfers: true }) as Promise<unknown>, { retries: 2, backoffMs: 200 })
     );
 
-    let from_id: string | null = null;
-    if (Array.isArray(result) && result.length > 0 && typeof result[0] === 'string' && result[0] !== 'ok') {
-      from_id = result[0];
-    } else if (result && typeof result === 'object' && 'id' in (result as any)) {
-      from_id = (result as any).id;
-    }
-    return { success: true as const, from_id, to_id: null };
+    // Read back within the same session to retrieve both transaction IDs.
+    // The transfer_id field on the source transaction is the mirror's ID.
+    const txnsAfter = await withConcurrency(() =>
+      retry(() => rawGetTransactions(params.from_account, params.date, params.date) as Promise<any[]>, { retries: 2, backoffMs: 200 })
+    );
+    const sourceTxRecord = (txnsAfter ?? []).find(
+      (t: any) => t.amount === -Math.abs(params.amount) && t.payee === transferPayee.id && t.transfer_id != null
+    );
+    const from_id: string | null = sourceTxRecord?.id ?? null;
+    const to_id:   string | null = sourceTxRecord?.transfer_id ?? null;
+    return { success: true as const, from_id, to_id };
   });
 }
 
