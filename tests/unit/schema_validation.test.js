@@ -442,7 +442,7 @@ async function expectCallError(tool, input, label) {
     { account: VALID_ACCT_ID, date: '2026-01-01', amount: 5000 },
     'valid income transaction accepted')) fail();
 
-  // ── actual_transactions_uncategorized (cases 7–9) ────────────────────────
+  // ── actual_transactions_uncategorized (cases 7–16) ───────────────────────
   console.log('\n[actual_transactions_uncategorized — schema validation]');
   const uncategorized_tool = await import('../../dist/src/tools/transactions_uncategorized.js').then(m => m.default);
 
@@ -461,6 +461,41 @@ async function expectCallError(tool, input, label) {
     { limit: 'ten' },
     'string limit rejected (must be number)')) fail();
 
+  // Case 10: limit below min (0)
+  if (!expectParseError(uncategorized_tool,
+    { limit: 0 },
+    'limit:0 rejected (min is 1)')) fail();
+
+  // Case 11: limit above max (1001)
+  if (!expectParseError(uncategorized_tool,
+    { limit: 1001 },
+    'limit:1001 rejected (max is 1000)')) fail();
+
+  // Case 12: limit non-integer (float)
+  if (!expectParseError(uncategorized_tool,
+    { limit: 1.5 },
+    'limit:1.5 rejected (must be integer)')) fail();
+
+  // Case 13: offset negative
+  if (!expectParseError(uncategorized_tool,
+    { offset: -1 },
+    'offset:-1 rejected (min is 0)')) fail();
+
+  // Case 14: includeTransactions wrong type
+  if (!expectParseError(uncategorized_tool,
+    { includeTransactions: 'yes' },
+    'includeTransactions:"yes" rejected (must be boolean)')) fail();
+
+  // Case 15: startDate invalid format (MM/DD/YYYY)
+  if (!expectParseError(uncategorized_tool,
+    { startDate: '01/31/2024' },
+    'startDate in MM/DD/YYYY format rejected')) fail();
+
+  // Case 16: accountId non-UUID string (different shape)
+  if (!expectParseError(uncategorized_tool,
+    { accountId: 'my-account-name' },
+    'non-UUID accountId string rejected')) fail();
+
   // Valid: all fields omitted (uses defaults)
   if (!expectParseOk(uncategorized_tool,
     {},
@@ -470,6 +505,11 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(uncategorized_tool,
     { accountId: '00000000-0000-0000-0000-000000000001' },
     'valid UUID accountId accepted')) fail();
+
+  // Valid: includeTransactions with limit and offset
+  if (!expectParseOk(uncategorized_tool,
+    { includeTransactions: true, limit: 50, offset: 100 },
+    'includeTransactions:true with valid limit/offset accepted')) fail();
 
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');
