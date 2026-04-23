@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **62 tools** for conversational financial management. Built for LibreChat but MCP-compatible with any client.
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **63 tools** for conversational financial management. Supports two transports: **HTTP** (LibreChat/LobeChat/multi-user) and **stdio** (Claude Desktop/Claude Code).
 
-**Tech Stack**: TypeScript (NodeNext), Node.js 20+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express, Zod schemas, Playwright tests
+**Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
-**Current Status**: Production-ready, 62 tools implemented, 84% Actual Budget API coverage
+**Current Status**: Production-ready, 63 tools implemented
 
 ## Architecture Essentials
 
@@ -28,29 +28,42 @@ await rawAddTransactions(data);
 
 ### Tool Structure
 
-All 62 tools follow this pattern (`src/tools/*.ts`):
+New tools should use `createTool()` from `src/lib/toolFactory.ts` — it wires up error handling, logging, and observability automatically:
 
 ```typescript
 import { z } from 'zod';
-import type { ToolDefinition } from '../../types/tool.d.js';
-import adapter from '../lib/actual-adapter.js';
+import { createTool } from '../lib/toolFactory.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({
-  account: CommonSchemas.accountId,
-  amount: CommonSchemas.amountCents, // always in cents
+export default createTool({
+  name: 'actual_domain_action',      // naming: actual_{domain}_{action}
+  description: '...',
+  schema: z.object({
+    account: CommonSchemas.accountId,
+    amount: CommonSchemas.amountCents, // always in cents, integer
+    date: CommonSchemas.date,          // YYYY-MM-DD
+  }),
+  handler: async (input) => {
+    return await adapter.someMethod(input);
+  },
 });
+```
 
+Many existing tools use the legacy pattern (both work, but `createTool()` is preferred for new tools):
+
+```typescript
+import type { ToolDefinition } from '../../types/tool.d.js';
+const InputSchema = z.object({ ... });
 const tool: ToolDefinition = {
   name: 'actual_transactions_create',
-  description: 'Create transaction. Amount in cents (negative=expense, positive=income).',
+  description: '...',
   inputSchema: InputSchema,
   call: async (args: unknown) => {
     const input = InputSchema.parse(args);
     return await adapter.addTransactions(input);
   },
 };
-
 export default tool;
 ```
 
@@ -67,7 +80,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (62 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (63 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── auth/
 │   ├── setup.ts                # createMcpAuth() factory (MCPAuth singleton, AUTH_PROVIDER=oidc)
 │   └── budget-acl.ts           # Per-user budget ACL (email/sub/group principals, AUTH_BUDGET_ACL)
@@ -80,7 +93,7 @@ src/
 │   └── loggerFactory.ts        # Module-scoped loggers (winston)
 ├── server/
 │   └── httpServer.ts           # HTTP transport
-└── tools/                      # 62 tool definitions (see actualToolsManager.ts)
+└── tools/                      # 63 tool definitions (see actualToolsManager.ts)
 ```
 
 ## Development Workflow
@@ -101,7 +114,7 @@ npm run test:e2e                # Playwright E2E tests (initialize → tools/cal
 npx playwright test --grep "initialize -> tools/list" # Single E2E test by name
 
 # Tool Management
-npm run verify-tools            # Verify all 62 tools are correctly registered
+npm run verify-tools            # Verify all 63 tools are correctly registered
 npm run check:coverage          # List @actual-app/api methods vs current tool coverage
 
 # Debugging
@@ -210,9 +223,10 @@ ACTUAL_SERVER_URL=http://localhost:5006  # Actual Budget server
 ACTUAL_PASSWORD=your_password
 ACTUAL_BUDGET_SYNC_ID=uuid-from-actual   # Settings → Sync ID
 ACTUAL_BUDGET_PASSWORD=                  # Optional budget encryption password
-MCP_TRANSPORT_MODE=http                  # only http is supported
 MCP_SSE_AUTHORIZATION=your_token_here    # Raw token only — NOT "Bearer token123"
 ```
+
+Transport is selected via **CLI flag** (`--http` or `--stdio`), not an env var.
 
 > ⚠️ `MCP_SSE_AUTHORIZATION` must be the **raw token value only**. The server extracts the token from the `Authorization: Bearer <token>` header and compares directly. Setting it to `"Bearer abc123"` will cause all auth checks to fail.
 
@@ -275,7 +289,7 @@ npm run test:e2e  # Spawns server, tests full MCP flow
 - Use `actual_server_info` tool to verify connection before complex operations
 
 **Common LibreChat Issues**:
-1. **Tools don't load**: Check `MCP_TRANSPORT_MODE=http` in server env
+1. **Tools don't load**: Ensure server started with `--http` flag
 2. **Auth failures**: Verify `MCP_SSE_AUTHORIZATION` token is correct
 3. **Timeout errors**: Increase `DEFAULT_OPERATION_TIMEOUT_MS` in `src/lib/constants.ts`
 4. **Silent failures**: Tool succeeded but no UI feedback - check LibreChat logs
@@ -398,6 +412,24 @@ When working on specific areas, reference these files:
 **Deployment**: `scripts/deploy-and-test.sh`, `docker-compose.yaml`, `docs/guides/DEPLOYMENT.md`  
 **AI Client Setup**: `docs/guides/AI_CLIENT_SETUP.md` (LibreChat/LobeChat, Docker networking, TLS proxy)  
 **Configuration**: `src/config.ts`, `.env.example`
+
+## Claude Code Agents & Commands
+
+Five specialized subagents live in `.claude/agents/` — delegate via the Agent tool:
+
+| Agent | When to use |
+|-------|-------------|
+| `tool-author` | Adding a new MCP tool end-to-end (file, registration, adapter, tests, docs) |
+| `qa` | Writing, reviewing, or debugging tests at any layer |
+| `release-manager` | Version bumps, docs sync, GitHub issue triage, closing fixed tickets |
+| `actual-api` | Questions about `@actual-app/api` behaviour, field names, `withActualApi` lifecycle |
+| `ticket-gate` | Readiness gate for GitHub issues — all 4 agents must score 10/10 before implementation |
+
+Project-local slash commands:
+
+- `/dep-auditor [--full]` — dependency health audit (Knip, npm audit, version drift)
+- `/local-env` — full local deployment pipeline for the dev environment
+- `/review-ticket <issue-number>` — runs the ticket readiness gate on a GitHub issue
 
 ## Common Tasks
 
