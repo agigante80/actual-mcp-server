@@ -1,19 +1,24 @@
 /**
- * Unit tests for actual_transactions_uncategorized tool (issue #104).
+ * Unit tests for actual_transactions_uncategorized tool (issue #121 upgrade).
  *
  * Cases:
- *  1. No accountId — getTransactions(undefined, ...) full scan, off-budget excluded
- *  2. With accountId — getTransactions(accountId, ...) scoped result
- *  3. Silent off-budget exclusion — on-budget returned, off-budget filtered
- *  4. Fatal account-list failure — getAccounts error propagated
- *  5. limit truncation — stub 10 txns, call with limit:3, assert 3 returned
- *  6. getTransactions returns flat list including multiple account txns
- *  7. Empty transaction list returns empty result
- *  8. Invalid accountId (non-UUID) — Zod validation error thrown
- *  9. Transfer exclusion — txn with transfer_id set excluded (issue #119)
- * 10. Split parent exclusion — txn with is_parent:true excluded (issue #119)
- * 11. Opening balance exclusion — txn with starting_balance_flag:true excluded (issue #119)
- * 12. Closed account exclusion — txn on closed account excluded (issue #119)
+ *  1.  Default call — summary only; totalCount, totalAmount, byAccount present; no transactions key
+ *  2.  includeTransactions:true — all summary fields + transactions, count, hasMore, offset, limit
+ *  3.  accountId filter — byAccount scoped to one account, totalCount reflects that account only
+ *  4.  Pagination — hasMore:true (limit:2, offset:0, 5 txns)
+ *  5.  Pagination — hasMore:false (limit:2, offset:4, 5 txns)
+ *  6.  Transfer exclusion — txn with transfer_id not counted (issue #119)
+ *  7.  Closed account exclusion — txn on closed account not in totalCount or byAccount (issue #119)
+ *  8.  summary.totalAmount removed — result.summary is undefined
+ *  9.  No accountId — full scan, off-budget excluded from totalCount and byAccount
+ * 10.  With accountId — getTransactions called with the specific accountId
+ * 11.  getAccounts failure — error propagated
+ * 12.  Limit truncation with includeTransactions — limit:3 returns 3 of 10 txns
+ * 13.  Multiple accounts in byAccount breakdown
+ * 14.  Empty transaction list — totalCount:0, byAccount:[]
+ * 15.  Invalid accountId (non-UUID) — Zod validation error thrown
+ * 16.  Split parent exclusion — is_parent:true not in totalCount (issue #119)
+ * 17.  Opening balance exclusion — starting_balance_flag:true not in totalCount (issue #119)
  *
  * Run via: npm run test:unit-js
  */
@@ -33,100 +38,273 @@ console.log('Running transactions_uncategorized unit tests');
   const fail = (msg) => { console.error('  FAIL:', msg); failures++; };
   const ok = (msg) => console.log('  ✓', msg);
 
-  // ── Case 1: No accountId — getTransactions(undefined) full scan, off-budget excluded ───
-  console.log('\n[Case 1] No accountId — getTransactions(undefined) full scan, off-budget excluded');
+  const ACCT_A = 'aaaaaaaa-0000-0000-0000-000000000001';
+  const ACCT_B = 'bbbbbbbb-0000-0000-0000-000000000002';
+
+  // ── Case 1: Default call — summary only, no transactions key ───────────────
+  console.log('\n[Case 1] Default call — summary only; no transactions key');
   {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-1', amount: -500,  category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: 'txn-2', amount: -1000, category: null, account: ACCT_B, date: '2026-04-01' },
+      { id: 'txn-3', amount: -200,  category: 'cat-1', account: ACCT_A, date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+      { id: ACCT_B, name: 'Savings',  offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      if (res?.totalCount !== 2) fail(`expected totalCount:2, got ${res?.totalCount}`);
+      else ok('totalCount is 2');
+      if (typeof res?.totalAmount !== 'number') fail('totalAmount not a number');
+      else ok('totalAmount is a number');
+      if (!Array.isArray(res?.byAccount)) fail('byAccount not an array');
+      else ok('byAccount is an array');
+      if (res?.byAccount?.length !== 2) fail(`expected 2 byAccount entries, got ${res?.byAccount?.length}`);
+      else ok('byAccount has 2 entries');
+      if ('transactions' in (res ?? {})) fail('transactions key must be absent by default');
+      else ok('transactions key absent (summary-only mode)');
+      if (res?.dateRange?.startDate === undefined) fail('dateRange.startDate missing');
+      else ok('dateRange present');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 2: includeTransactions:true — all fields present ─────────────────
+  console.log('\n[Case 2] includeTransactions:true — all summary + list fields present');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-1', amount: -500, category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: 'txn-2', amount: -300, category: null, account: ACCT_B, date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+      { id: ACCT_B, name: 'Savings',  offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({ includeTransactions: true });
+      if (typeof res?.totalCount !== 'number') fail('totalCount not a number');
+      else ok('totalCount present');
+      if (typeof res?.totalAmount !== 'number') fail('totalAmount not a number');
+      else ok('totalAmount present');
+      if (!Array.isArray(res?.byAccount)) fail('byAccount not an array');
+      else ok('byAccount present');
+      if (!Array.isArray(res?.transactions)) fail('transactions not an array');
+      else ok('transactions present');
+      if (typeof res?.count !== 'number') fail('count not a number');
+      else ok('count present');
+      if (typeof res?.hasMore !== 'boolean') fail('hasMore not a boolean');
+      else ok('hasMore present');
+      if (typeof res?.offset !== 'number') fail('offset not a number');
+      else ok('offset present');
+      if (typeof res?.limit !== 'number') fail('limit not a number');
+      else ok('limit present');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 3: accountId filter — byAccount scoped to one account ────────────
+  console.log('\n[Case 3] accountId filter — byAccount has exactly 1 entry, totalCount scoped');
+  {
+    adapterMod.default.getTransactions = async (accountId) => {
+      if (accountId === ACCT_A) {
+        return [{ id: 'txn-a1', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' }];
+      }
+      return [];
+    };
+    adapterMod.default.getAccounts = async () => [
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+      { id: ACCT_B, name: 'Savings',  offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({ accountId: ACCT_A });
+      if (res?.totalCount !== 1) fail(`expected totalCount:1, got ${res?.totalCount}`);
+      else ok('totalCount:1 for filtered account');
+      if (res?.byAccount?.length !== 1) fail(`expected 1 byAccount entry, got ${res?.byAccount?.length}`);
+      else ok('byAccount has exactly 1 entry');
+      if (res?.byAccount?.[0]?.accountId !== ACCT_A) fail('byAccount entry is not the requested account');
+      else ok('byAccount entry matches requested accountId');
+      if (res?.byAccount?.[0]?.accountName !== 'Checking') fail('byAccount entry has wrong name');
+      else ok('byAccount entry has correct accountName');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 4: Pagination — hasMore:true ─────────────────────────────────────
+  console.log('\n[Case 4] Pagination — hasMore:true (limit:2, offset:0, 5 txns)');
+  {
+    const fiveTxns = Array.from({ length: 5 }, (_, i) => ({
+      id: `txn-${i}`, amount: -100, category: null, account: ACCT_A, date: '2026-04-01',
+    }));
+    adapterMod.default.getTransactions = async () => fiveTxns;
+    adapterMod.default.getAccounts = async () => [{ id: ACCT_A, name: 'Checking', offbudget: false, closed: false }];
+
+    try {
+      const res = await tool.call({ includeTransactions: true, limit: 2, offset: 0 });
+      if (res?.count !== 2) fail(`expected count:2, got ${res?.count}`);
+      else ok('count:2 for limit:2');
+      if (res?.hasMore !== true) fail(`expected hasMore:true, got ${res?.hasMore}`);
+      else ok('hasMore:true');
+      if (res?.totalCount !== 5) fail(`expected totalCount:5, got ${res?.totalCount}`);
+      else ok('totalCount:5 (full count before limit)');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 5: Pagination — hasMore:false ────────────────────────────────────
+  console.log('\n[Case 5] Pagination — hasMore:false (limit:2, offset:4, 5 txns)');
+  {
+    const fiveTxns = Array.from({ length: 5 }, (_, i) => ({
+      id: `txn-${i}`, amount: -100, category: null, account: ACCT_A, date: '2026-04-01',
+    }));
+    adapterMod.default.getTransactions = async () => fiveTxns;
+    adapterMod.default.getAccounts = async () => [{ id: ACCT_A, name: 'Checking', offbudget: false, closed: false }];
+
+    try {
+      const res = await tool.call({ includeTransactions: true, limit: 2, offset: 4 });
+      if (res?.count !== 1) fail(`expected count:1, got ${res?.count}`);
+      else ok('count:1 (only 1 txn at offset:4)');
+      if (res?.hasMore !== false) fail(`expected hasMore:false, got ${res?.hasMore}`);
+      else ok('hasMore:false (last page)');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 6: Transfer exclusion — transfer_id set → not counted ────────────
+  console.log('\n[Case 6] Transfer exclusion — txn with transfer_id not in totalCount (issue #119)');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-transfer', amount: -5000, category: null, account: ACCT_A, date: '2026-04-01', transfer_id: 'paired-id' },
+      { id: 'txn-normal',   amount: -100,  category: null, account: ACCT_A, date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      if (res?.totalCount !== 1) fail(`expected totalCount:1 (transfer excluded), got ${res?.totalCount}`);
+      else ok('transfer excluded from totalCount');
+      if (res?.byAccount?.[0]?.count !== 1) fail('transfer incorrectly counted in byAccount');
+      else ok('transfer excluded from byAccount count');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 7: Closed account exclusion ─────────────────────────────────────
+  console.log('\n[Case 7] Closed account exclusion — txn on closed account not in totalCount (issue #119)');
+  {
+    const CLOSED = 'cccccccc-0000-0000-0000-000000000003';
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-closed', amount: -200, category: null, account: CLOSED, date: '2026-04-01' },
+      { id: 'txn-open',   amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: CLOSED, name: 'OldCard',  offbudget: false, closed: true  },
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      if (res?.totalCount !== 1) fail(`expected totalCount:1, got ${res?.totalCount}`);
+      else ok('closed account transaction excluded from totalCount');
+      const closedEntry = (res?.byAccount ?? []).find(a => a.accountId === CLOSED);
+      if (closedEntry) fail('closed account appears in byAccount');
+      else ok('closed account absent from byAccount');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 8: summary.totalAmount removed — result.summary is undefined ─────
+  console.log('\n[Case 8] summary.totalAmount removed — result.summary is undefined');
+  {
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-1', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
+    ];
+    adapterMod.default.getAccounts = async () => [
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+    ];
+
+    try {
+      const res = await tool.call({});
+      if (res?.summary !== undefined) fail('legacy summary key should not exist');
+      else ok('result.summary is absent (breaking change expected)');
+      if (typeof res?.totalAmount !== 'number') fail('totalAmount not at top level');
+      else ok('totalAmount is at top level');
+    } catch (e) {
+      fail(`unexpected error: ${e && e.message}`);
+    }
+  }
+
+  // ── Case 9: No accountId — off-budget excluded from totalCount and byAccount
+  console.log('\n[Case 9] No accountId — off-budget excluded from totalCount and byAccount');
+  {
+    const OFFBUDGET = 'dddddddd-0000-0000-0000-000000000004';
     let capturedAccountId = 'NOT_SET';
-    adapterMod.default.getTransactions = async (accountId, startDate, endDate) => {
+    adapterMod.default.getTransactions = async (accountId) => {
       capturedAccountId = accountId;
       return [
-        { id: 'txn-on1', amount: -500,  category: null,    account: 'acct-on',  date: '2026-04-01', notes: 'grocery' },
-        { id: 'txn-off', amount: -1500, category: null,    account: 'acct-off', date: '2026-04-01', notes: 'invest'  },
-        { id: 'txn-cat', amount: -200,  category: 'cat-1', account: 'acct-on',  date: '2026-04-01', notes: 'already categorized' },
+        { id: 'txn-on',  amount: -500,  category: null, account: ACCT_A,    date: '2026-04-01' },
+        { id: 'txn-off', amount: -1500, category: null, account: OFFBUDGET,  date: '2026-04-01' },
+        { id: 'txn-cat', amount: -200,  category: 'cat-1', account: ACCT_A,  date: '2026-04-01' },
       ];
     };
     adapterMod.default.getAccounts = async () => [
-      { id: 'acct-on',  name: 'Checking',   offbudget: false },
-      { id: 'acct-off', name: 'Investment', offbudget: true  },
+      { id: ACCT_A,    name: 'Checking',   offbudget: false },
+      { id: OFFBUDGET, name: 'Investment', offbudget: true  },
     ];
 
     try {
       const res = await tool.call({});
       if (capturedAccountId !== undefined) fail(`expected getTransactions called with undefined, got ${JSON.stringify(capturedAccountId)}`);
       else ok('getTransactions called with undefined (full table scan)');
-      const txns = res?.transactions ?? [];
-      if (txns.some(t => t.id === 'txn-off')) fail('off-budget transaction included');
-      else ok('off-budget transaction excluded');
-      if (!txns.some(t => t.id === 'txn-on1')) fail('on-budget uncategorized transaction missing');
-      else ok('on-budget uncategorized transaction included');
-      if (txns.some(t => t.id === 'txn-cat')) fail('categorized transaction included');
-      else ok('categorized transaction correctly excluded');
-      if (typeof res?.count !== 'number') fail('count not a number');
-      else ok('count is a number');
-      if (typeof res?.summary?.totalAmount !== 'number') fail('summary.totalAmount not a number');
-      else ok('summary.totalAmount is a number');
+      if (res?.totalCount !== 1) fail(`expected totalCount:1, got ${res?.totalCount}`);
+      else ok('totalCount:1 (off-budget + categorized excluded)');
+      const offEntry = (res?.byAccount ?? []).find(a => a.accountId === OFFBUDGET);
+      if (offEntry) fail('off-budget account appears in byAccount');
+      else ok('off-budget account absent from byAccount');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
   }
 
-  // ── Case 2: With accountId — delegates to getTransactions(accountId, ...) ──
-  console.log('\n[Case 2] With accountId — delegates to getTransactions(accountId, ...)');
+  // ── Case 10: With accountId — getTransactions scoped ─────────────────────
+  console.log('\n[Case 10] With accountId — getTransactions called with the specific accountId');
   {
-    const ACCT_UUID = '00000000-0000-0000-0000-000000000001';
-    let capturedAccountId = 'NOT_SET';
+    let capturedId = 'NOT_SET';
     adapterMod.default.getTransactions = async (accountId) => {
-      capturedAccountId = accountId;
-      if (accountId === ACCT_UUID) {
-        return [{ id: 'txn-a1', amount: -100, category: null, account: ACCT_UUID, date: '2026-04-01' }];
-      }
-      return [];
+      capturedId = accountId;
+      return [{ id: 'txn-a1', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' }];
     };
     adapterMod.default.getAccounts = async () => [
-      { id: ACCT_UUID, name: 'Checking', offbudget: false },
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
     ];
 
     try {
-      const res = await tool.call({ accountId: ACCT_UUID });
-      if (capturedAccountId !== ACCT_UUID) fail(`expected getTransactions called with ${ACCT_UUID}, got ${capturedAccountId}`);
-      else ok('getTransactions called with the specified accountId');
-      const txns = res?.transactions ?? [];
-      if (txns.length !== 1 || txns[0].id !== 'txn-a1') fail(`expected 1 txn for acct, got ${txns.length}`);
-      else ok('only the specified account\'s transactions returned');
+      await tool.call({ accountId: ACCT_A });
+      if (capturedId !== ACCT_A) fail(`expected getTransactions called with ${ACCT_A}, got ${capturedId}`);
+      else ok('getTransactions called with specified accountId');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
   }
 
-  // ── Case 3: Off-budget exclusion with on-budget and off-budget txns ─────────
-  console.log('\n[Case 3] Off-budget exclusion — on-budget returned, off-budget filtered');
+  // ── Case 11: getAccounts failure — error propagated ───────────────────────
+  console.log('\n[Case 11] getAccounts failure — error propagated');
   {
     adapterMod.default.getTransactions = async () => [
-      { id: 'txn-ok',  amount: -100, category: null, account: 'acct-ok',  date: '2026-04-01' },
-      { id: 'txn-bad', amount: -200, category: null, account: 'acct-bad', date: '2026-04-01' },
-    ];
-    adapterMod.default.getAccounts = async () => [
-      { id: 'acct-ok',  name: 'Checking', offbudget: false },
-      { id: 'acct-bad', name: 'Invest',   offbudget: true  },
-    ];
-
-    try {
-      const res = await tool.call({});
-      const txns = res?.transactions ?? [];
-      if (!txns.some(t => t.id === 'txn-ok')) fail('on-budget transaction missing');
-      else ok('on-budget transaction present');
-      if (txns.some(t => t.id === 'txn-bad')) fail('off-budget transaction incorrectly included');
-      else ok('off-budget transaction correctly excluded');
-    } catch (e) {
-      fail(`unexpected error: ${e && e.message}`);
-    }
-  }
-
-  // ── Case 4: Fatal account-list failure — error propagated ──────────────────
-  console.log('\n[Case 4] getAccounts failure — error propagated');
-  {
-    adapterMod.default.getTransactions = async () => [
-      { id: 'txn-x', amount: -100, category: null, account: 'acct-x', date: '2026-04-01' },
+      { id: 'txn-x', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
     ];
     adapterMod.default.getAccounts = async () => { throw new Error('network error'); };
 
@@ -138,74 +316,81 @@ console.log('Running transactions_uncategorized unit tests');
     }
   }
 
-  // ── Case 5: limit truncation ────────────────────────────────────────────────
-  console.log('\n[Case 5] limit truncation — stub 10 txns, call with limit:3');
+  // ── Case 12: Limit truncation with includeTransactions ────────────────────
+  console.log('\n[Case 12] Limit truncation with includeTransactions — limit:3 of 10 txns');
   {
     const tenTxns = Array.from({ length: 10 }, (_, i) => ({
-      id: `txn-${i}`, amount: -100, category: null, account: 'acct-on', date: '2026-04-01',
+      id: `txn-${i}`, amount: -100, category: null, account: ACCT_A, date: '2026-04-01',
     }));
     adapterMod.default.getTransactions = async () => tenTxns;
-    adapterMod.default.getAccounts = async () => [{ id: 'acct-on', name: 'Checking', offbudget: false }];
+    adapterMod.default.getAccounts = async () => [{ id: ACCT_A, name: 'Checking', offbudget: false, closed: false }];
 
     try {
-      const res = await tool.call({ limit: 3 });
-      const txns = res?.transactions ?? [];
-      if (txns.length !== 3) fail(`expected 3 transactions, got ${txns.length}`);
-      else ok('limit:3 correctly truncates 10 stub transactions to 3');
-      if (res?.count !== 3) fail(`expected count=3, got ${res?.count}`);
-      else ok('count reflects truncated length');
+      const res = await tool.call({ includeTransactions: true, limit: 3 });
+      if ((res?.transactions ?? []).length !== 3) fail(`expected 3 transactions, got ${(res?.transactions ?? []).length}`);
+      else ok('limit:3 correctly truncates 10 transactions to 3');
+      if (res?.count !== 3) fail(`expected count:3, got ${res?.count}`);
+      else ok('count reflects page length');
+      if (res?.totalCount !== 10) fail(`expected totalCount:10, got ${res?.totalCount}`);
+      else ok('totalCount:10 (full set before paging)');
+      if (res?.hasMore !== true) fail('hasMore should be true');
+      else ok('hasMore:true');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
   }
 
-  // ── Case 6: getTransactions returns flat list including multiple accounts ───
-  console.log('\n[Case 6] getTransactions returns flat union of transactions from multiple accounts');
+  // ── Case 13: Multiple accounts in byAccount breakdown ─────────────────────
+  console.log('\n[Case 13] Multiple accounts in byAccount breakdown');
   {
-    adapterMod.default.getTransactions = async (accountId, startDate, endDate) => {
-      if (!startDate || !endDate) throw new Error('dates missing');
-      return [
-        { id: 'acc1-txn', amount: -100, category: null, account: 'acc1', date: '2026-04-01' },
-        { id: 'acc2-txn', amount: -200, category: null, account: 'acc2', date: '2026-04-01' },
-      ];
-    };
+    adapterMod.default.getTransactions = async () => [
+      { id: 'txn-a1', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: 'txn-a2', amount: -200, category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: 'txn-b1', amount: -500, category: null, account: ACCT_B, date: '2026-04-01' },
+    ];
     adapterMod.default.getAccounts = async () => [
-      { id: 'acc1', name: 'Checking', offbudget: false },
-      { id: 'acc2', name: 'Savings',  offbudget: false },
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
+      { id: ACCT_B, name: 'Savings',  offbudget: false, closed: false },
     ];
 
     try {
-      const res = await tool.call({ startDate: '2026-04-01', endDate: '2026-04-30' });
-      const txns = res?.transactions ?? [];
-      if (!txns.some(t => t.id === 'acc1-txn')) fail('acc1 transaction missing');
-      else ok('acc1 transaction present');
-      if (!txns.some(t => t.id === 'acc2-txn')) fail('acc2 transaction missing');
-      else ok('acc2 transaction present');
-      if (txns.length !== 2) fail(`expected 2 transactions, got ${txns.length}`);
-      else ok('flat list contains exactly 2 transactions');
+      const res = await tool.call({});
+      if (res?.byAccount?.length !== 2) fail(`expected 2 byAccount entries, got ${res?.byAccount?.length}`);
+      else ok('byAccount has 2 entries');
+      const entryA = (res?.byAccount ?? []).find(a => a.accountId === ACCT_A);
+      const entryB = (res?.byAccount ?? []).find(a => a.accountId === ACCT_B);
+      if (!entryA || entryA.count !== 2 || entryA.totalAmount !== -300) fail(`ACCT_A entry wrong: ${JSON.stringify(entryA)}`);
+      else ok('ACCT_A: count:2, totalAmount:-300');
+      if (!entryB || entryB.count !== 1 || entryB.totalAmount !== -500) fail(`ACCT_B entry wrong: ${JSON.stringify(entryB)}`);
+      else ok('ACCT_B: count:1, totalAmount:-500');
+      if (entryA?.accountName !== 'Checking') fail('ACCT_A accountName wrong');
+      else ok('accountName resolved correctly from accounts list');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
   }
 
-  // ── Case 7: Empty transaction list returns empty result ─────────────────────
-  console.log('\n[Case 7] Empty transaction list returns empty result without crashing');
+  // ── Case 14: Empty transaction list ───────────────────────────────────────
+  console.log('\n[Case 14] Empty transaction list — totalCount:0, byAccount:[]');
   {
     adapterMod.default.getTransactions = async () => [];
     adapterMod.default.getAccounts = async () => [];
 
     try {
-      const res = await tool.call({ startDate: '2026-04-01', endDate: '2026-04-30' });
-      const txns = res?.transactions ?? [];
-      if (txns.length !== 0) fail(`expected 0 transactions, got ${txns.length}`);
-      else ok('empty transaction list returns empty result without crashing');
+      const res = await tool.call({});
+      if (res?.totalCount !== 0) fail(`expected totalCount:0, got ${res?.totalCount}`);
+      else ok('totalCount:0');
+      if (res?.totalAmount !== 0) fail(`expected totalAmount:0, got ${res?.totalAmount}`);
+      else ok('totalAmount:0');
+      if (!Array.isArray(res?.byAccount) || res?.byAccount?.length !== 0) fail('byAccount should be empty array');
+      else ok('byAccount:[]');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
   }
 
-  // ── Case 8: Invalid accountId (non-UUID) — Zod validation error ─────────────
-  console.log('\n[Case 8] Invalid accountId (non-UUID string) — Zod validation error thrown');
+  // ── Case 15: Invalid accountId (non-UUID) — Zod validation error ──────────
+  console.log('\n[Case 15] Invalid accountId (non-UUID string) — Zod validation error thrown');
   {
     adapterMod.default.getTransactions = async () => [];
     adapterMod.default.getAccounts = async () => [];
@@ -222,98 +407,41 @@ console.log('Running transactions_uncategorized unit tests');
     }
   }
 
-  // ── Case 9: Transfer exclusion — txn with transfer_id set excluded ─────────
-  // Issue #119: transfers have category:null by design and must be excluded
-  console.log('\n[Case 9] Transfer exclusion — txn with transfer_id set excluded (issue #119)');
+  // ── Case 16: Split parent exclusion ──────────────────────────────────────
+  console.log('\n[Case 16] Split parent exclusion — is_parent:true not in totalCount (issue #119)');
   {
     adapterMod.default.getTransactions = async () => [
-      { id: 'txn-transfer', amount: -5000, category: null, account: 'acct-on', date: '2026-04-01', transfer_id: 'paired-txn-id' },
-      { id: 'txn-normal',   amount:  -100, category: null, account: 'acct-on', date: '2026-04-01' },
+      { id: 'txn-parent', amount: -300, category: null, account: ACCT_A, date: '2026-04-01', is_parent: true },
+      { id: 'txn-normal', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
     ];
     adapterMod.default.getAccounts = async () => [
-      { id: 'acct-on', name: 'Checking', offbudget: false, closed: false },
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
     ];
 
     try {
       const res = await tool.call({});
-      const txns = res?.transactions ?? [];
-      if (txns.some(t => t.id === 'txn-transfer')) fail('transfer transaction (transfer_id set) incorrectly included');
-      else ok('transfer transaction correctly excluded');
-      if (!txns.some(t => t.id === 'txn-normal')) fail('normal uncategorized transaction missing');
-      else ok('normal uncategorized transaction present');
+      if (res?.totalCount !== 1) fail(`expected totalCount:1 (parent excluded), got ${res?.totalCount}`);
+      else ok('split parent excluded from totalCount');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }
   }
 
-  // ── Case 10: Split parent exclusion — txn with is_parent:true excluded ────
-  // Issue #119: split parents have no category; children carry it. Parent must be excluded.
-  console.log('\n[Case 10] Split parent exclusion — txn with is_parent:true excluded (issue #119)');
+  // ── Case 17: Opening balance exclusion ────────────────────────────────────
+  console.log('\n[Case 17] Opening balance exclusion — starting_balance_flag:true not in totalCount (issue #119)');
   {
     adapterMod.default.getTransactions = async () => [
-      { id: 'txn-parent', amount: -300, category: null, account: 'acct-on', date: '2026-04-01', is_parent: true },
-      { id: 'txn-normal', amount: -100, category: null, account: 'acct-on', date: '2026-04-01' },
+      { id: 'txn-openbal', amount: 100000, category: null, account: ACCT_A, date: '2026-04-01', starting_balance_flag: true },
+      { id: 'txn-normal',  amount:   -100, category: null, account: ACCT_A, date: '2026-04-01' },
     ];
     adapterMod.default.getAccounts = async () => [
-      { id: 'acct-on', name: 'Checking', offbudget: false, closed: false },
+      { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
     ];
 
     try {
       const res = await tool.call({});
-      const txns = res?.transactions ?? [];
-      if (txns.some(t => t.id === 'txn-parent')) fail('split parent transaction (is_parent:true) incorrectly included');
-      else ok('split parent transaction correctly excluded');
-      if (!txns.some(t => t.id === 'txn-normal')) fail('normal uncategorized transaction missing');
-      else ok('normal uncategorized transaction present');
-    } catch (e) {
-      fail(`unexpected error: ${e && e.message}`);
-    }
-  }
-
-  // ── Case 11: Opening balance exclusion — starting_balance_flag:true excluded
-  // Issue #119: opening balance entries are system-generated and never categorised
-  console.log('\n[Case 11] Opening balance exclusion — starting_balance_flag:true excluded (issue #119)');
-  {
-    adapterMod.default.getTransactions = async () => [
-      { id: 'txn-openbal', amount: 100000, category: null, account: 'acct-on', date: '2026-04-01', starting_balance_flag: true },
-      { id: 'txn-normal',  amount:   -100, category: null, account: 'acct-on', date: '2026-04-01' },
-    ];
-    adapterMod.default.getAccounts = async () => [
-      { id: 'acct-on', name: 'Checking', offbudget: false, closed: false },
-    ];
-
-    try {
-      const res = await tool.call({});
-      const txns = res?.transactions ?? [];
-      if (txns.some(t => t.id === 'txn-openbal')) fail('opening balance transaction (starting_balance_flag:true) incorrectly included');
-      else ok('opening balance transaction correctly excluded');
-      if (!txns.some(t => t.id === 'txn-normal')) fail('normal uncategorized transaction missing');
-      else ok('normal uncategorized transaction present');
-    } catch (e) {
-      fail(`unexpected error: ${e && e.message}`);
-    }
-  }
-
-  // ── Case 12: Closed account exclusion — account.closed:true excluded ───────
-  // Issue #119: transactions on closed accounts are historical artefacts
-  console.log('\n[Case 12] Closed account exclusion — account.closed:true excluded (issue #119)');
-  {
-    adapterMod.default.getTransactions = async () => [
-      { id: 'txn-closed', amount: -200, category: null, account: 'acct-closed', date: '2026-04-01' },
-      { id: 'txn-open',   amount: -100, category: null, account: 'acct-open',   date: '2026-04-01' },
-    ];
-    adapterMod.default.getAccounts = async () => [
-      { id: 'acct-closed', name: 'OldCard',  offbudget: false, closed: true  },
-      { id: 'acct-open',   name: 'Checking', offbudget: false, closed: false },
-    ];
-
-    try {
-      const res = await tool.call({});
-      const txns = res?.transactions ?? [];
-      if (txns.some(t => t.id === 'txn-closed')) fail('closed account transaction incorrectly included');
-      else ok('closed account transaction correctly excluded');
-      if (!txns.some(t => t.id === 'txn-open')) fail('open account transaction missing');
-      else ok('open account transaction present');
+      if (res?.totalCount !== 1) fail(`expected totalCount:1 (opening balance excluded), got ${res?.totalCount}`);
+      else ok('opening balance excluded from totalCount');
     } catch (e) {
       fail(`unexpected error: ${e && e.message}`);
     }

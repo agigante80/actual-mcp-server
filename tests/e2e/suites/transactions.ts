@@ -100,6 +100,17 @@ export function registerTransactionTests(state: SharedState): void {
     console.log('✅ Transaction import tested');
   });
 
+  test('actual_transactions_uncategorized - default summary mode', async ({ request }) => {
+    // Default call must return summary fields with no transactions array
+    const result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+    const data = extractResult(result);
+    expect(typeof data?.totalCount).toBe('number');
+    expect(typeof data?.totalAmount).toBe('number');
+    expect(Array.isArray(data?.byAccount)).toBeTruthy();
+    expect(data?.transactions).toBeUndefined();
+    console.log(`✅ actual_transactions_uncategorized summary: totalCount=${data?.totalCount}, byAccount entries=${data?.byAccount?.length}`);
+  });
+
   test('actual_transactions_uncategorized - should list uncategorized transactions', async ({ request }) => {
     if (!state.ctx.accountId) test.skip();
 
@@ -114,24 +125,27 @@ export function registerTransactionTests(state: SharedState): void {
       // deliberately no category
     });
 
-    const result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+    // Use includeTransactions:true to get transaction rows
+    const result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
+      includeTransactions: true,
+    });
     const data = extractResult(result);
-    const txns: any[] = data?.transactions ?? data?.result?.transactions ?? (Array.isArray(data) ? data : []);
+    const txns: any[] = data?.transactions ?? [];
     expect(Array.isArray(txns)).toBeTruthy();
     const found = txns.find((t: any) => t?.notes === uncatNote);
     expect(found).toBeTruthy();
-    console.log(`✅ actual_transactions_uncategorized: found ${txns.length} uncategorized, including our test transaction`);
+    expect(typeof data?.totalCount).toBe('number');
+    expect(typeof data?.hasMore).toBe('boolean');
+    console.log(`✅ actual_transactions_uncategorized: found ${txns.length} uncategorized (totalCount=${data?.totalCount}), including our test transaction`);
 
-    // Edge: far-future date range must return empty list
+    // Edge: far-future date range must return empty summary
     const emptyResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
       startDate: '2099-01-01',
       endDate: '2099-01-31',
     });
     const emptyData = extractResult(emptyResult);
-    const emptyTxns: any[] = emptyData?.transactions ?? emptyData?.result?.transactions ?? (Array.isArray(emptyData) ? emptyData : []);
-    expect(Array.isArray(emptyTxns)).toBeTruthy();
-    expect(emptyTxns.length).toBe(0);
-    console.log('✅ actual_transactions_uncategorized: future date range returns empty list');
+    expect(emptyData?.totalCount).toBe(0);
+    console.log('✅ actual_transactions_uncategorized: future date range returns totalCount:0');
   });
 
   test('actual_transactions_uncategorized - should exclude off-budget transactions (regression #80)', async ({ request }) => {
@@ -160,29 +174,30 @@ export function registerTransactionTests(state: SharedState): void {
         notes: offBudgetNote,
       });
 
-      const result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
-      const data = extractResult(result);
-      const txns: any[] = data?.transactions ?? data?.result?.transactions ?? (Array.isArray(data) ? data : []);
-      expect(Array.isArray(txns)).toBeTruthy();
+      // Use byAccount to verify off-budget account is excluded
+      const summaryResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+      const summaryData = extractResult(summaryResult);
+      const byAccount: any[] = summaryData?.byAccount ?? [];
 
-      // Off-budget transaction must NOT appear
-      const offBudgetFound = txns.find((t: any) => t?.notes === offBudgetNote);
-      expect(offBudgetFound).toBeFalsy();
-      console.log('✅ actual_transactions_uncategorized [#80]: off-budget transaction correctly excluded');
+      // Off-budget account must NOT appear in byAccount
+      const offBudgetInSummary = byAccount.find((a: any) => a?.accountId === offBudgetAccountId);
+      expect(offBudgetInSummary).toBeFalsy();
+      console.log('✅ actual_transactions_uncategorized [#80]: off-budget account correctly excluded from byAccount');
 
-      // On-budget transaction (created by the earlier test) must still appear
+      // On-budget transaction must appear; verify via includeTransactions
       if (state.ctx.accountId) {
         const onBudgetNote = `E2E-Uncat-${offBudgetTimestamp}`;
-        // Create a fresh on-budget uncategorized transaction to assert inclusion
         await callTool(request, state.sessionId, 'actual_transactions_create', {
           account: state.ctx.accountId,
           date: today,
           amount: -777,
           notes: onBudgetNote,
         });
-        const result2 = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+        const result2 = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
+          includeTransactions: true,
+        });
         const data2 = extractResult(result2);
-        const txns2: any[] = data2?.transactions ?? data2?.result?.transactions ?? (Array.isArray(data2) ? data2 : []);
+        const txns2: any[] = data2?.transactions ?? [];
         const onBudgetFound = txns2.find((t: any) => t?.notes === onBudgetNote);
         expect(onBudgetFound).toBeTruthy();
         console.log('✅ actual_transactions_uncategorized [#80]: on-budget transaction correctly included');
@@ -199,7 +214,7 @@ export function registerTransactionTests(state: SharedState): void {
 
     const before = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
     const beforeData = extractResult(before);
-    const countBefore: number = beforeData?.count ?? (beforeData?.transactions ?? []).length;
+    const countBefore: number = beforeData?.totalCount ?? 0;
 
     const today = new Date().toISOString().split('T')[0];
     const destAcctResult = await callTool(request, state.sessionId, 'actual_accounts_create', {
@@ -221,7 +236,7 @@ export function registerTransactionTests(state: SharedState): void {
 
       const after = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
       const afterData = extractResult(after);
-      const countAfter: number = afterData?.count ?? (afterData?.transactions ?? []).length;
+      const countAfter: number = afterData?.totalCount ?? 0;
 
       expect(countAfter).toBe(countBefore);
       console.log(`✅ actual_transactions_uncategorized [#119]: transfer did not inflate uncategorized count (before=${countBefore}, after=${countAfter})`);
@@ -250,19 +265,80 @@ export function registerTransactionTests(state: SharedState): void {
       notes: closedNote,
     });
 
-    // Before close: transaction must appear
+    // Before close: account must appear in byAccount
     const openResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
-    const openTxns: any[] = extractResult(openResult)?.transactions ?? [];
-    expect(openTxns.find((t: any) => t?.notes === closedNote)).toBeTruthy();
-    console.log('✅ actual_transactions_uncategorized [#119]: open account transaction visible before close');
+    const openData = extractResult(openResult);
+    const openAccountEntry = (openData?.byAccount ?? []).find((a: any) => a?.accountId === acctId);
+    expect(openAccountEntry).toBeTruthy();
+    console.log('✅ actual_transactions_uncategorized [#119]: open account visible in byAccount before close');
 
     await callTool(request, state.sessionId, 'actual_accounts_close', { id: acctId });
 
-    // After close: transaction must NOT appear
+    // After close: account must NOT appear in byAccount (closed accounts excluded)
     const closedResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
-    const closedTxns: any[] = extractResult(closedResult)?.transactions ?? [];
-    expect(closedTxns.find((t: any) => t?.notes === closedNote)).toBeFalsy();
-    console.log('✅ actual_transactions_uncategorized [#119]: closed account transaction correctly excluded');
+    const closedData = extractResult(closedResult);
+    const closedAccountEntry = (closedData?.byAccount ?? []).find((a: any) => a?.accountId === acctId);
+    expect(closedAccountEntry).toBeFalsy();
+    console.log('✅ actual_transactions_uncategorized [#119]: closed account correctly excluded from byAccount');
+  });
+
+  test('actual_transactions_uncategorized - should paginate correctly and match summary totals', async ({ request }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const ts = Date.now();
+
+    // Create a fresh isolated account so totalCount is exactly 2
+    const acctResult = await callTool(request, state.sessionId, 'actual_accounts_create', {
+      name: `E2E-Uncat-Pagination-${ts}`,
+      balance: 0,
+    });
+    const acctData = extractResult(acctResult);
+    const acctId: string = acctData?.id ?? acctData?.result?.id;
+    expect(acctId).toBeTruthy();
+
+    const amt1 = -1500;
+    const amt2 = -2500;
+    await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: acctId, date: today, amount: amt1, notes: `E2E-Pag-A-${ts}`,
+    });
+    await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: acctId, date: today, amount: amt2, notes: `E2E-Pag-B-${ts}`,
+    });
+
+    // Summary call — no includeTransactions
+    const summaryResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', { accountId: acctId });
+    const summaryData = extractResult(summaryResult);
+    const acctEntry = (summaryData?.byAccount ?? []).find((a: any) => a?.accountId === acctId);
+    expect(acctEntry).toBeTruthy();
+    expect(acctEntry?.count).toBe(2);
+    expect(acctEntry?.totalAmount).toBe(amt1 + amt2);
+    expect(summaryData?.totalCount).toBe(2);
+    expect('transactions' in summaryData).toBe(false);
+    console.log(`✅ actual_transactions_uncategorized pagination: summary totalCount=2, totalAmount=${amt1 + amt2}`);
+
+    // Page 1: limit:1 → 1 result, hasMore:true
+    const page1Result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
+      accountId: acctId, includeTransactions: true, limit: 1, offset: 0,
+    });
+    const page1 = extractResult(page1Result);
+    expect(page1?.transactions?.length).toBe(1);
+    expect(page1?.count).toBe(1);
+    expect(page1?.hasMore).toBe(true);
+    expect(page1?.totalCount).toBe(2);
+    console.log('✅ actual_transactions_uncategorized pagination: page 1 — 1 txn, hasMore:true');
+
+    // Page 2: offset:1 → 1 result, hasMore:false
+    const page2Result = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {
+      accountId: acctId, includeTransactions: true, limit: 1, offset: 1,
+    });
+    const page2 = extractResult(page2Result);
+    expect(page2?.transactions?.length).toBe(1);
+    expect(page2?.hasMore).toBe(false);
+    console.log('✅ actual_transactions_uncategorized pagination: page 2 — 1 txn, hasMore:false');
+
+    // Teardown
+    await callTool(request, state.sessionId, 'actual_accounts_close', { id: acctId });
+    await callTool(request, state.sessionId, 'actual_accounts_delete', { id: acctId });
+    console.log('✅ actual_transactions_uncategorized pagination: teardown complete');
   });
 
   test('actual_transactions_update_batch - should batch update transactions', async ({ request }) => {
