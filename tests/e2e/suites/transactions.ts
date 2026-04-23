@@ -194,6 +194,77 @@ export function registerTransactionTests(state: SharedState): void {
     }
   });
 
+  test('actual_transactions_uncategorized - should exclude transfers (issue #119)', async ({ request }) => {
+    if (!state.ctx.accountId) test.skip();
+
+    const before = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+    const beforeData = extractResult(before);
+    const countBefore: number = beforeData?.count ?? (beforeData?.transactions ?? []).length;
+
+    const today = new Date().toISOString().split('T')[0];
+    const destAcctResult = await callTool(request, state.sessionId, 'actual_accounts_create', {
+      name: `E2E-Transfer-Dest-${Date.now()}`,
+      type: 'checking',
+      offbudget: false,
+      balance: 0,
+    });
+    const destAcctId = extractResult(destAcctResult);
+    expect(destAcctId).toBeTruthy();
+
+    try {
+      await callTool(request, state.sessionId, 'actual_transfers_create', {
+        fromAccount: state.ctx.accountId,
+        toAccount: destAcctId,
+        amount: 1234,
+        date: today,
+      });
+
+      const after = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+      const afterData = extractResult(after);
+      const countAfter: number = afterData?.count ?? (afterData?.transactions ?? []).length;
+
+      expect(countAfter).toBe(countBefore);
+      console.log(`✅ actual_transactions_uncategorized [#119]: transfer did not inflate uncategorized count (before=${countBefore}, after=${countAfter})`);
+    } finally {
+      await callTool(request, state.sessionId, 'actual_accounts_close', { id: destAcctId });
+    }
+  });
+
+  test('actual_transactions_uncategorized - should exclude closed account transactions (issue #119)', async ({ request }) => {
+    const today = new Date().toISOString().split('T')[0];
+    const closedNote = `E2E-Closed-${Date.now()}`;
+
+    const acctResult = await callTool(request, state.sessionId, 'actual_accounts_create', {
+      name: `E2E-ClosedAcct-${Date.now()}`,
+      type: 'checking',
+      offbudget: false,
+      balance: 0,
+    });
+    const acctId = extractResult(acctResult);
+    expect(acctId).toBeTruthy();
+
+    await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: acctId,
+      date: today,
+      amount: -4321,
+      notes: closedNote,
+    });
+
+    // Before close: transaction must appear
+    const openResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+    const openTxns: any[] = extractResult(openResult)?.transactions ?? [];
+    expect(openTxns.find((t: any) => t?.notes === closedNote)).toBeTruthy();
+    console.log('✅ actual_transactions_uncategorized [#119]: open account transaction visible before close');
+
+    await callTool(request, state.sessionId, 'actual_accounts_close', { id: acctId });
+
+    // After close: transaction must NOT appear
+    const closedResult = await callTool(request, state.sessionId, 'actual_transactions_uncategorized', {});
+    const closedTxns: any[] = extractResult(closedResult)?.transactions ?? [];
+    expect(closedTxns.find((t: any) => t?.notes === closedNote)).toBeFalsy();
+    console.log('✅ actual_transactions_uncategorized [#119]: closed account transaction correctly excluded');
+  });
+
   test('actual_transactions_update_batch - should batch update transactions', async ({ request }) => {
     if (!state.ctx.accountId || !state.ctx.transactionId) test.skip();
 
