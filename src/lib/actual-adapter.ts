@@ -60,7 +60,6 @@ const {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
-import { randomUUID } from 'node:crypto';
 import observability from '../observability.js';
 import retry from './retry.js';
 import logger from '../logger.js';
@@ -474,12 +473,6 @@ export async function createTransfer(params: {
 }): Promise<{ success: true; from_id: string | null; to_id: string | null } | { success: false; error: string }> {
   observability.incrementToolCall('actual.transfers.create').catch(() => {});
 
-  // Tag with a unique imported_id so we can locate the transaction in a fresh
-  // read session after the write session has synced to the server.
-  // Reading within the same write session is unreliable: batchMessages may not
-  // have flushed the transfer_id update to SQLite before the AQL query runs.
-  const importedId = randomUUID();
-
   // ── Phase 1: validate + write ─────────────────────────────────────────────
   const writeResult = await queueWriteOperation(async (): Promise<{ success: true } | { success: false; error: string }> => {
     if (params.from_account === params.to_account) {
@@ -509,7 +502,6 @@ export async function createTransfer(params: {
       date: params.date,
       amount: -Math.abs(params.amount),
       payee: transferPayee.id,
-      imported_id: importedId,
       ...(params.notes !== undefined && { notes: params.notes }),
     };
 
@@ -530,10 +522,16 @@ export async function createTransfer(params: {
       const txns = await withConcurrency(() =>
         retry(() => rawGetTransactions(params.from_account, params.date, params.date) as Promise<any[]>, { retries: 2, backoffMs: 200 })
       );
-      const tx = (txns ?? []).find((t: any) => t.imported_id === importedId);
+      // Find the most recently created transfer matching our amount.
+      // imported_id is not synced via Actual Budget CRDT, so we sort by
+      // sort_order descending and take the newest matching transfer instead.
+      const tx = (txns ?? [])
+        .filter((t: any) => t.amount === -Math.abs(params.amount) && t.transfer_id != null)
+        .sort((a: any, b: any) => (b.sort_order ?? 0) - (a.sort_order ?? 0))[0];
       return { success: true as const, from_id: tx?.id ?? null, to_id: tx?.transfer_id ?? null };
     });
   } catch {
+    // Transfer was created; IDs just can't be retrieved right now.
     return { success: true as const, from_id: null, to_id: null };
   }
 }
