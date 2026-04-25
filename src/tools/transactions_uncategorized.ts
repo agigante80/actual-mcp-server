@@ -15,7 +15,7 @@ import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format (default: first day of current month)'),
+  startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format (default: all-time)'),
   endDate: CommonSchemas.date.optional().describe('End date in YYYY-MM-DD format (default: today)'),
   accountId: CommonSchemas.accountId.optional().describe('Filter to a specific account ID (optional)'),
   includeTransactions: z.boolean().optional().default(false).describe('When true, include paginated transaction rows in the response (default: false)'),
@@ -43,6 +43,7 @@ const tool: ToolDefinition = {
     'Use limit (default 50, max 1000) and offset for pagination.',
     'Excludes: transfers, split-transaction parents, opening balance entries, off-budget accounts, and closed accounts.',
     'When accountId is provided, all fields are scoped to that account.',
+    'Default date range is all-time (2000-01-01 to today); pass startDate/endDate to narrow.',
     'Note: the legacy summary.totalAmount field has been removed — totalAmount is now at the top level.',
   ].join(' '),
   inputSchema: InputSchema,
@@ -50,8 +51,7 @@ const tool: ToolDefinition = {
     const input = InputSchema.parse(args || {});
 
     const today = new Date();
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const startDate = input.startDate || firstDayOfMonth.toISOString().split('T')[0];
+    const startDate = input.startDate || '2000-01-01';
     const endDate = input.endDate || today.toISOString().split('T')[0];
     const accountId = input.accountId ?? undefined;
 
