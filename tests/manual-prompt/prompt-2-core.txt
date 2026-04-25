@@ -169,7 +169,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 **Phase 5b — Batch, Uncategorized & Rules-Upsert (3 tools):**
 
 - actual_transactions_uncategorized (summary mode — default)
-  Input: no parameters (defaults to current month)
+  Input: no parameters (defaults to all-time)
   Expect: { totalCount: N, totalAmount: N, byAccount: [...], dateRange: {...} }
   Verify: totalCount is a number ≥ 0, byAccount is an array, transactions key is absent
   Report totalCount as ✓ informational

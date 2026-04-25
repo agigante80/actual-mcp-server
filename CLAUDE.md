@@ -38,7 +38,8 @@ npm run test:adapter            # Adapter: retry, concurrency, init/shutdown
 node tests/unit/transactions_create.test.js   # Single unit test file
 npx playwright test --grep "initialize -> tools/list"  # Single E2E test
 npm run test:e2e                # Full Playwright E2E (requires no live server)
-npm run test:integration:smoke  # Live server integration (levels: sanity < smoke < normal < extended < full)
+npm run test:integration:smoke  # Live server integration (levels: sanity < smoke < normal < extended < full < cleanup)
+npm run test:all                # Convenience: adapter + unit + docker:smoke (no live server needed)
 
 # Tools
 npm run verify-tools            # Verify tool count + registration
@@ -52,11 +53,12 @@ npm run dev -- --test-actual-connection  # Test Actual Budget connection only
 docker compose --profile dev up         # Hot-reload dev
 docker compose --profile production up  # Nginx proxy on :3600
 docker compose --profile fullstack up   # Includes Actual Budget server on :5006
+# docker-compose.test.yaml + playwright.config.docker.ts are used by test:e2e:docker* scripts
 ```
 
 **Pre-commit mandatory**: `npm run build && npm run test:adapter && npm run test:unit-js && npm audit --audit-level=moderate`
 
-**Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker).
+**Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker). `test:integration:cleanup` deletes test data created by `full` — only run after `full` against a test budget.
 
 **Integration test modules** (`tests/manual/tests/`): `sanity` (read-only protocol), `smoke` (balances/categories), `account`, `category-group`, `category`, `payee`, `transaction`, `budget`, `rules`, `schedule`, `batch_uncategorized_rules_upsert`, `advanced` (bank sync, raw SQL).
 
@@ -163,8 +165,8 @@ export default tool;
 3. Add tool name to `IMPLEMENTED_TOOLS` array in `src/actualToolsManager.ts`
 4. Add unit tests in `tests/unit/` (positive + negative cases)
 5. Run `npm run verify-tools` to confirm registration
-6. Update `tests/e2e/docker-all-tools.e2e.spec.ts` describe block name ("ALL N TOOLS") to reflect the new count
-7. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry)
+6. Update `EXPECTED_TOOL_COUNT` in both `tests/e2e/mcp-client.playwright.spec.ts` and `tests/e2e/docker-all-tools.e2e.spec.ts`; add a happy-path call to `tests/e2e/suites/<domain>.ts`
+7. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry, manual-prompt update)
 
 ### Key Source Files
 
@@ -209,7 +211,7 @@ export default tool;
 
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
 
-**Never use `overrides` (npm) or `pnpm.overrides` to force-update a transitive dependency.** If a transitive dependency has a vulnerability, upgrade the direct dependency that pulls it in instead.
+**`npm overrides` are a last resort for security CVEs only.** Prefer upgrading the direct dependency that pulls in the vulnerable transitive. If an override is unavoidable (no direct-dep upgrade available), add it with an explanation in `package.json`'s `"comments"."security-overrides"` field (see existing `ajv`/`qs` entries as the pattern). Never use overrides to resolve non-security version drift.
 
 **Session tools are the only exception to `withActualApi`**: `actual_session_list` and `actual_session_close` call `connectionPool` directly — they manage the pool itself, not budget data, so they skip the wrapper intentionally.
 
@@ -217,7 +219,7 @@ export default tool;
 
 ## File Safety Tiers
 
-**Safe to modify**: `src/tools/*.ts`, `tests/**`, `docs/**/*.md`, `README.md`, `.env.example`, `docker-compose.yaml`
+**Safe to modify**: `src/tools/*.ts`, `tests/**`, `docs/**/*.md`, `README.md`, `.env.example`, `docker-compose.yaml`, `examples/mcp-clients/**` (6 client config examples — update when transport/auth changes)
 
 **Modify with caution** (test thoroughly): `src/lib/actual-adapter.ts` (affects all tools), `src/actualToolsManager.ts` (run `verify-tools` after), `src/server/*.ts` (verify with MCP client), `src/index.ts`, `src/actualConnection.ts`
 
@@ -234,12 +236,17 @@ When changing code, update these docs:
 | Auth/security change | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` |
 | Docker change | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
 | New feature shipped | `docs/PROJECT_OVERVIEW.md`, delete its `docs/feature/*.md` spec, remove from `docs/ROADMAP.md` |
+| New tool added | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` (add positive + negative scenario, update phase count); `tests/manual-prompt/README.md` Phase Overview total; run `npm run docs:sync` (updates `docker/description/long.md`, `docker/description/short.md`, and all `**Tool Count:**` markers) |
+| Test module added | `docs/TESTING_AND_RELIABILITY.md` (test-file table) |
 
 ## Documentation Map
 
 - `docs/ARCHITECTURE.md` — component layers, data flow, transport protocols
 - `docs/NEW_TOOL_CHECKLIST.md` — canonical 9-step guide for adding tools
+- `docs/TESTING_AND_RELIABILITY.md` — test-file inventory, integration test module table
 - `docs/guides/AI_CLIENT_SETUP.md` — LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL
 - `docs/guides/DEPLOYMENT.md` — Docker Compose profiles, Kubernetes, upgrade steps
 - `docs/SECURITY_AND_PRIVACY.md` — auth models, threat model
+- `tests/manual-prompt/` — three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools
+- `docker/description/long.md`, `docker/description/short.md` — Docker Hub descriptions; managed by `npm run docs:sync`
 - `.env.example` — all environment variables with inline documentation

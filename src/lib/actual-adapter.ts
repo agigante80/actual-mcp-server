@@ -470,9 +470,11 @@ export async function createTransfer(params: {
   amount: number;
   date: string;
   notes?: string;
-}): Promise<{ success: true; from_id: string | null; to_id: null } | { success: false; error: string }> {
+}): Promise<{ success: true; from_id: string | null; to_id: string | null } | { success: false; error: string }> {
   observability.incrementToolCall('actual.transfers.create').catch(() => {});
-  return queueWriteOperation(async () => {
+
+  // ── Phase 1: validate + write ─────────────────────────────────────────────
+  const writeResult = await queueWriteOperation(async (): Promise<{ success: true } | { success: false; error: string }> => {
     if (params.from_account === params.to_account) {
       return { success: false as const, error: 'from_account and to_account must be different accounts.' };
     }
@@ -503,18 +505,35 @@ export async function createTransfer(params: {
       ...(params.notes !== undefined && { notes: params.notes }),
     };
 
-    const result = await withConcurrency(() =>
+    await withConcurrency(() =>
       retry(() => rawAddTransactions(params.from_account, [sourceTx], { runTransfers: true }) as Promise<unknown>, { retries: 2, backoffMs: 200 })
     );
 
-    let from_id: string | null = null;
-    if (Array.isArray(result) && result.length > 0 && typeof result[0] === 'string' && result[0] !== 'ok') {
-      from_id = result[0];
-    } else if (result && typeof result === 'object' && 'id' in (result as any)) {
-      from_id = (result as any).id;
-    }
-    return { success: true as const, from_id, to_id: null };
+    return { success: true as const };
   });
+
+  if (!writeResult.success) return writeResult;
+
+  // ── Phase 2: read-back in a fresh session (after write has synced) ────────
+  // A new withActualApi session downloads the budget from the server, which
+  // reflects the synced write, guaranteeing transfer_id is fully committed.
+  try {
+    return await withActualApi(async () => {
+      const txns = await withConcurrency(() =>
+        retry(() => rawGetTransactions(params.from_account, params.date, params.date) as Promise<any[]>, { retries: 2, backoffMs: 200 })
+      );
+      // Find the most recently created transfer matching our amount.
+      // imported_id is not synced via Actual Budget CRDT, so we sort by
+      // sort_order descending and take the newest matching transfer instead.
+      const tx = (txns ?? [])
+        .filter((t: any) => t.amount === -Math.abs(params.amount) && t.transfer_id != null)
+        .sort((a: any, b: any) => (b.sort_order ?? 0) - (a.sort_order ?? 0))[0];
+      return { success: true as const, from_id: tx?.id ?? null, to_id: tx?.transfer_id ?? null };
+    });
+  } catch {
+    // Transfer was created; IDs just can't be retrieved right now.
+    return { success: true as const, from_id: null, to_id: null };
+  }
 }
 
 export async function getTransactions(accountId: string | undefined, startDate?: string, endDate?: string): Promise<components['schemas']['Transaction'][]> {
