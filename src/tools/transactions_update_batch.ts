@@ -33,10 +33,10 @@ const UpdateItemSchema = z.object({
 });
 
 const InputSchema = z.object({
-  updates: z.array(UpdateItemSchema)
+  updates:  z.array(UpdateItemSchema)
     .min(1)
-    .max(100)
-    .describe('Array of {id, fields} objects. Maximum 100 per batch.'),
+    .max(50)
+    .describe('Array of {id, fields} objects. Maximum 50 per batch (higher values risk timeout).'),
 });
 
 type BatchResult = {
@@ -56,21 +56,32 @@ Returns: { succeeded: [{id}], failed: [{id, error}], total, successCount, failur
 Example: { updates: [{ id: "txn-uuid-1", fields: { category: "cat-uuid" } }, { id: "txn-uuid-2", fields: { notes: "Reimbursement" } }] }`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    const input = InputSchema.parse(args || {});
+    try {
+      const input = InputSchema.parse(args || {});
 
-    // Single adapter call — all updates share one init/sync/shutdown cycle (fixes issue #79).
-    // Calling adapter.updateTransaction() in a loop would trigger N separate budget sessions.
-    const { succeeded, failed } = await adapter.updateTransactionBatch(input.updates);
+      // Single adapter call — all updates share one init/sync/shutdown cycle (fixes issue #79).
+      // Calling adapter.updateTransaction() in a loop would trigger N separate budget sessions.
+      const { succeeded, failed } = await adapter.updateTransactionBatch(input.updates);
 
-    const result: BatchResult = {
-      succeeded,
-      failed,
-      total: input.updates.length,
-      successCount: succeeded.length,
-      failureCount: failed.length,
-    };
+      const result: BatchResult = {
+        succeeded,
+        failed,
+        total: input.updates.length,
+        successCount: succeeded.length,
+        failureCount: failed.length,
+      };
 
-    return result;
+      return result;
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      return {
+        succeeded: [],
+        failed: [{ id: 'batch', error: `update_batch failed: ${message}` }],
+        total: 0,
+        successCount: 0,
+        failureCount: 1,
+      };
+    }
   },
 };
 
