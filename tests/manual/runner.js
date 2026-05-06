@@ -54,8 +54,45 @@ const testOpts = {
 
 const ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL || "http://localhost:5006";
 
+// ---------------------------------------------------------------------------
+// Wall-clock guard — see issue #133.
+// Per-level defaults match the documented "expected runtime" in tests/manual/README.md.
+// MCP_TEST_MAX_RUNTIME_MS overrides for any single run (e.g. CI bisects).
+// Exit code 2 (distinct from exit code 1 used for assertion failures) so
+// schedulers can distinguish "tests failed" from "harness gave up — server bad".
+// ---------------------------------------------------------------------------
+const RUNTIME_BUDGETS_MS = {
+  sanity: 60_000,
+  smoke: 120_000,
+  normal: 300_000,
+  extended: 600_000,
+  full: 900_000,
+  cleanup: 120_000,
+};
+
+function startWallClockGuard(levelName) {
+  const override = process.env.MCP_TEST_MAX_RUNTIME_MS;
+  const budgetMs = override ? parseInt(override, 10) : (RUNTIME_BUDGETS_MS[levelName] || 600_000);
+  let lastCompleted = '<startup>';
+  const setLastCompleted = (label) => { lastCompleted = label; };
+  const handle = setTimeout(() => {
+    const minutes = Math.round(budgetMs / 60000);
+    console.error(`\n❌ Aborted after ${minutes} min — server appears unhealthy. Last completed test: ${lastCompleted}`);
+    process.exit(2);
+  }, budgetMs);
+  // Don't keep the event loop alive solely for the timer — `node` should exit
+  // promptly on success even if some other handle is still cleaning up.
+  if (typeof handle.unref === 'function') handle.unref();
+  return {
+    setLastCompleted,
+    clear: () => clearTimeout(handle),
+    budgetMs,
+  };
+}
+
 export async function run() {
   const rl = readline.createInterface({ input, output });
+  let guard = null;
 
   try {
     const client = createClient({ url: MCP_URL, rl });
@@ -83,26 +120,35 @@ export async function run() {
     console.log(`Target: ${MCP_URL}`);
     console.log(`Test level: ${level.toUpperCase()}\n`);
 
+    // Start the wall-clock guard now that we know the level. The guard fires
+    // process.exit(2) if the suite is still running after the per-level budget.
+    guard = startWallClockGuard(level);
+    console.log(`Wall-clock guard armed: ${Math.round(guard.budgetMs / 1000)}s budget for level=${level} (override via MCP_TEST_MAX_RUNTIME_MS)\n`);
+
     // Initialize MCP session
     await client.initialize();
+    guard.setLastCompleted('initialize');
 
     const context = {};
 
     // --- CLEANUP (standalone) ---
     if (level === "cleanup") {
       await cleanupMcpTestAccounts(client);
+      guard.setLastCompleted('cleanup');
       return;
     }
 
     // --- SANITY ---
     if (level === "sanity") {
       await sanityTests(client);
+      guard.setLastCompleted('sanityTests');
       console.log("\n✓ Sanity checks completed successfully!");
       return;
     }
 
     // --- SMOKE ---
     await smokeTests(client);
+    guard.setLastCompleted('smokeTests');
     if (level === "smoke") {
       console.log("\n✓ Smoke test completed successfully!");
       return;
@@ -110,12 +156,16 @@ export async function run() {
 
     // --- NORMAL / EXTENDED / FULL ---
     await accountTests(client, context);
+    guard.setLastCompleted('accountTests');
 
     if (level === "extended") {
       await extendedTests(client, context);
+      guard.setLastCompleted('extendedTests');
     } else if (level === "full") {
       await extendedTests(client, context);
+      guard.setLastCompleted('extendedTests');
       await fullTests(client, context, testOpts);
+      guard.setLastCompleted('fullTests');
     }
     // level === "normal" falls through here with no extra steps
 
@@ -219,6 +269,7 @@ export async function run() {
     }
     process.exit(1);
   } finally {
+    if (guard) guard.clear();
     rl.close();
   }
 }
