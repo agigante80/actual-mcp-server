@@ -67,6 +67,7 @@ import config from '../config.js';
 import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
+import { isApiInitialized, setApiInitialized } from './apiState.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -133,12 +134,11 @@ function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
 // falls back to the legacy init+shutdown path so non-MCP callers keep working.
 let connectionReuseCount = 0;
 
-// Tracks the *actual* live state of the @actual-app/api singleton. The pool's
-// hasConnection() is an optimistic hint at the session level — it can become
-// stale when other code paths (notably processWriteQueue) call api.shutdown()
-// for cleanup. The pool branch in withActualApi must check BOTH that the pool
-// claims a connection AND that the singleton is actually initialised.
-let _apiInitialized = false;
+// The "is the @actual-app/api singleton currently live?" flag lives in
+// src/lib/apiState.ts so both this module and ActualConnectionPool can
+// update it without a circular import. The pool's hasConnection() returns
+// true based on its own per-session record; this flag is the second guard
+// — the singleton's actual state. Both must agree before reuse is safe.
 
 function _resolveSessionId(): string | undefined {
   return requestContext.getStore()?.sessionId;
@@ -146,7 +146,7 @@ function _resolveSessionId(): string | undefined {
 
 function _hasPooledConnection(sessionId: string | undefined): sessionId is string {
   if (!sessionId) return false;
-  if (!_apiInitialized) return false; // singleton was shut down by some other path
+  if (!isApiInitialized()) return false; // singleton was shut down by some other path
   return connectionPool.hasConnection(sessionId);
 }
 
@@ -275,7 +275,7 @@ export function _resetConnectionReuseCounterForTests(): void {
  * upstream. NOT exported via the package public surface.
  */
 export function _setApiInitializedForTests(value: boolean): void {
-  _apiInitialized = value;
+  setApiInitialized(value);
 }
 
 /**
@@ -401,7 +401,7 @@ export function _resetAuthRetryCountersForTests(): void {
  */
 async function initActualApiForOperation(): Promise<void> {
   if (_skipApiInitForTests) {
-    _apiInitialized = true;
+    setApiInitialized(true);
     return;
   }
   try {
@@ -427,7 +427,7 @@ async function initActualApiForOperation(): Promise<void> {
       await api.downloadBudget(budget.syncId);
     }
 
-    _apiInitialized = true;
+    setApiInitialized(true);
     logger.debug('[ADAPTER] Actual API initialized for operation');
   } catch (err) {
     logger.error('[ADAPTER] Error initializing Actual API:', err);
@@ -437,7 +437,7 @@ async function initActualApiForOperation(): Promise<void> {
 
 async function shutdownActualApi(): Promise<void> {
   if (_skipApiInitForTests) {
-    _apiInitialized = false;
+    setApiInitialized(false);
     return;
   }
   try {
@@ -452,7 +452,7 @@ async function shutdownActualApi(): Promise<void> {
     // Always reset the flag — even if shutdown threw, the api singleton is
     // no longer in a known-good state, so pool reuse must NOT be attempted
     // until something explicitly re-inits.
-    _apiInitialized = false;
+    setApiInitialized(false);
   }
 }
 
