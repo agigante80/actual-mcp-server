@@ -65,6 +65,8 @@ import retry from './retry.js';
 import logger from '../logger.js';
 import config from '../config.js';
 import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
+import { requestContext } from './requestContext.js';
+import { connectionPool } from './ActualConnectionPool.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -111,12 +113,86 @@ function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
   return prevLock.then(() => fn()).finally(() => release());
 }
 
+// ----------------------------------------------------------------------------
+// Per-session pool cooperation — issue #134
+// ----------------------------------------------------------------------------
+// Pre-#134, every adapter call did api.init() + op + api.shutdown(). With many
+// tool calls in quick succession this produced a burst of upstream logins and
+// tripped Actual's auth rate-limiter (#127's root cause).
+//
+// Post-#134, when an MCP session has already initialised a per-session
+// connection via ActualConnectionPool (httpServer.ts wires this on session
+// open), withActualApi reuses that connection: no init, no shutdown. Writes
+// commit via api.sync() (the same pattern processWriteQueue already uses).
+// The pool tears down once at session close.
+//
+// Fallback: when there is no sessionId in AsyncLocalStorage (e.g. startup
+// health checks, internal calls outside any MCP session, stdio transport
+// callers that don't run inside requestContext.run), or when there is a
+// sessionId but the pool has no initialised connection for it, withActualApi
+// falls back to the legacy init+shutdown path so non-MCP callers keep working.
+let connectionReuseCount = 0;
+
+// Tracks the *actual* live state of the @actual-app/api singleton. The pool's
+// hasConnection() is an optimistic hint at the session level — it can become
+// stale when other code paths (notably processWriteQueue) call api.shutdown()
+// for cleanup. The pool branch in withActualApi must check BOTH that the pool
+// claims a connection AND that the singleton is actually initialised.
+let _apiInitialized = false;
+
+function _resolveSessionId(): string | undefined {
+  return requestContext.getStore()?.sessionId;
+}
+
+function _hasPooledConnection(sessionId: string | undefined): sessionId is string {
+  if (!sessionId) return false;
+  if (!_apiInitialized) return false; // singleton was shut down by some other path
+  return connectionPool.hasConnection(sessionId);
+}
+
 /**
- * Helper to init and shutdown Actual API around each operation
- * This is CRITICAL for data persistence - shutdown() must be called after every operation
- * Based on the pattern from https://github.com/s-stefanov/actual-mcp
+ * Helper to run an operation with the Actual API ready, deciding the lifecycle
+ * mode automatically:
+ *
+ *   - **Pooled mode** (preferred): when an MCP session is in the AsyncLocalStorage
+ *     context AND the connection pool has an initialised connection for it.
+ *     The operation runs against the existing connection. No init, no shutdown.
+ *     If the operation throws, the pool's connection for that session is
+ *     released so the next call gets a fresh init.
+ *
+ *   - **Legacy mode** (fallback): the original per-op init → op → shutdown
+ *     cycle. Used when there is no sessionId in context, or the pool has no
+ *     connection for the sessionId. Preserves the original tombstone /
+ *     persistence semantics for non-MCP callers.
+ *
+ * In either mode `withApiLock` serialises against concurrent callers because
+ * `@actual-app/api` is a process-wide singleton.
  */
-async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
+export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
+  const sessionId = _resolveSessionId();
+
+  if (_hasPooledConnection(sessionId)) {
+    // Pooled mode: skip init+shutdown.
+    return withApiLock(async () => {
+      try {
+        connectionReuseCount++;
+        logger.debug(`[ADAPTER] Reusing pool connection for session ${sessionId} (reuses=${connectionReuseCount})`);
+        return await operation();
+      } catch (err) {
+        // Drop the (possibly corrupt) pool connection so the next call in the
+        // same session re-inits cleanly. Original error still propagates.
+        logger.warn(`[ADAPTER] Releasing pool connection for session ${sessionId} after operation error`);
+        try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+        throw err;
+      }
+    });
+  }
+
+  if (sessionId) {
+    logger.warn(`[ADAPTER] Pool miss for session ${sessionId}; falling back to per-op init`);
+  }
+
+  // Legacy mode: init+shutdown around every operation.
   return withApiLock(async () => {
     try {
       await initActualApiForOperation();
@@ -125,6 +201,95 @@ async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
       await shutdownActualApi();
     }
   });
+}
+
+/**
+ * Variant of `withActualApi` for write operations. Identical to `withActualApi`
+ * except that, in pooled mode, it explicitly calls `api.sync()` after the
+ * operation succeeds so writes propagate to the upstream Actual server (and so
+ * tombstones for deletes propagate). In legacy mode the existing
+ * `shutdownActualApi()` already handles the persistence flush — no extra sync
+ * call needed there.
+ *
+ * Pattern source: `processWriteQueue` already uses `api.sync()` between writes
+ * within a batch (without shutdown), so this is the same proven approach
+ * generalised to single-write call sites.
+ */
+export async function withActualApiWrite<T>(operation: () => Promise<T>): Promise<T> {
+  const sessionId = _resolveSessionId();
+
+  if (_hasPooledConnection(sessionId)) {
+    return withApiLock(async () => {
+      try {
+        connectionReuseCount++;
+        logger.debug(`[ADAPTER] Reusing pool connection for write session ${sessionId} (reuses=${connectionReuseCount})`);
+        const result = await operation();
+        // Propagate the write to the server so other clients (and our next
+        // read) see it. Pre-#134 this happened implicitly via api.shutdown().
+        try {
+          const apiAny = api as unknown as { sync?: () => Promise<unknown> };
+          if (typeof apiAny.sync === 'function') {
+            await apiAny.sync();
+          }
+        } catch (syncErr) {
+          // Sync failure on a write is not silent: drop the pool connection
+          // so the next call re-inits, then surface the error.
+          logger.error(`[ADAPTER] api.sync() failed after write in session ${sessionId}; releasing pool connection`);
+          try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+          throw syncErr;
+        }
+        return result;
+      } catch (err) {
+        logger.warn(`[ADAPTER] Releasing pool connection for write session ${sessionId} after operation error`);
+        try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+        throw err;
+      }
+    });
+  }
+
+  if (sessionId) {
+    logger.warn(`[ADAPTER] Pool miss for session ${sessionId}; falling back to per-op init (write)`);
+  }
+
+  return withApiLock(async () => {
+    try {
+      await initActualApiForOperation();
+      return await operation();
+    } finally {
+      await shutdownActualApi();
+    }
+  });
+}
+
+/**
+ * Test-only: reset the connection-reuse counter. NOT exported via the package
+ * public surface — only used by unit tests.
+ */
+export function _resetConnectionReuseCounterForTests(): void {
+  connectionReuseCount = 0;
+}
+
+/**
+ * Test-only: directly set the api-initialised flag. Lets unit tests exercise
+ * the pool-cooperation branch without driving a real api.init() against the
+ * upstream. NOT exported via the package public surface.
+ */
+export function _setApiInitializedForTests(value: boolean): void {
+  _apiInitialized = value;
+}
+
+/**
+ * Test-only: short-circuit `initActualApiForOperation` and `shutdownActualApi`
+ * so the legacy fallback path can run without making network calls against a
+ * real upstream Actual server. Used by unit tests that want to verify the
+ * branch decision in `withActualApi` (pool vs legacy) without hanging on the
+ * real api.init network handshake.
+ *
+ * NOT exported via the package public surface.
+ */
+let _skipApiInitForTests = false;
+export function _setSkipApiInitForTests(value: boolean): void {
+  _skipApiInitForTests = value;
 }
 
 // ----------------------------------------------------------------------------
@@ -235,6 +400,10 @@ export function _resetAuthRetryCountersForTests(): void {
  * This calls api.init() and api.downloadBudget() for each operation
  */
 async function initActualApiForOperation(): Promise<void> {
+  if (_skipApiInitForTests) {
+    _apiInitialized = true;
+    return;
+  }
   try {
     const budget = getActiveBudgetConfig();
     const DATA_DIR = config.MCP_BRIDGE_DATA_DIR;
@@ -258,6 +427,7 @@ async function initActualApiForOperation(): Promise<void> {
       await api.downloadBudget(budget.syncId);
     }
 
+    _apiInitialized = true;
     logger.debug('[ADAPTER] Actual API initialized for operation');
   } catch (err) {
     logger.error('[ADAPTER] Error initializing Actual API:', err);
@@ -266,6 +436,10 @@ async function initActualApiForOperation(): Promise<void> {
 }
 
 async function shutdownActualApi(): Promise<void> {
+  if (_skipApiInitForTests) {
+    _apiInitialized = false;
+    return;
+  }
   try {
     const maybeApi = api as unknown as { shutdown?: () => Promise<void> };
     if (typeof maybeApi.shutdown === 'function') {
@@ -274,6 +448,11 @@ async function shutdownActualApi(): Promise<void> {
     }
   } catch (err) {
     logger.error('[ADAPTER] Error during Actual API shutdown:', err);
+  } finally {
+    // Always reset the flag — even if shutdown threw, the api singleton is
+    // no longer in a known-good state, so pool reuse must NOT be attempted
+    // until something explicitly re-inits.
+    _apiInitialized = false;
   }
 }
 
@@ -441,6 +620,12 @@ export function getConcurrencyState() {
     // pressure (healthy). Both jumping = upstream genuinely overloaded.
     authRetries: authRetryCount,
     authRetryFailures: authRetryFailureCount,
+    // Pool-cooperation observability — issue #134. connectionReuses increments
+    // every time withActualApi reused an existing per-session pool connection
+    // instead of running its own init+shutdown cycle. Pre-#134 this was
+    // structurally always 0; post-#134 it should grow at least linearly with
+    // tool-call volume on healthy MCP sessions.
+    connectionReuses: connectionReuseCount,
   };
 }
 

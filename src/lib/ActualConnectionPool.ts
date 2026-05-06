@@ -322,12 +322,21 @@ class ActualConnectionPool {
   }
 
   /**
-   * Start periodic cleanup of idle connections
+   * Start periodic cleanup of idle connections.
+   *
+   * The interval is `unref()`d so it does not keep the Node event loop alive
+   * on its own. Without this, importing the pool from a one-shot script
+   * (e.g. unit test, `--test-actual-connection`) would prevent natural
+   * process exit. The interval still fires while the server runs because
+   * other handles (HTTP listener, stdio transport, etc.) keep the loop alive.
    */
   private startCleanupTimer(): void {
     this.cleanupInterval = setInterval(() => {
       this.cleanupIdleConnections();
     }, this.CLEANUP_INTERVAL);
+    if (typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
   }
 
   /**
