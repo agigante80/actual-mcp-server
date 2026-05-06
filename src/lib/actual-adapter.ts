@@ -147,6 +147,15 @@ async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
 let authRetryCount = 0;          // monotonic, observability
 let authRetryFailureCount = 0;   // increments only when retry budget exhausted
 
+// The auth-rate-limit path uses a deliberately LARGER backoff than the generic
+// retry helper because Actual Budget's auth rate-limiter operates on a multi-
+// second window, not a per-request burst. The generic 200ms base would
+// exhaust within 1.4s — well inside the upstream's window. 2000ms base gives
+// 2s + 4s + 8s = 14s total, capped per-step by MAX_RETRY_DELAY_MS (10s), which
+// reliably clears the common rate-limit windows we've observed in CI and
+// /local-env reproductions on 2026-05-06 (#127).
+const AUTH_RETRY_BASE_BACKOFF_MS = 2000;
+
 export function isRetryableAuthError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   return (
@@ -173,7 +182,7 @@ export async function withAuthRetry<T>(
   opts?: { maxRetries?: number; baseBackoffMs?: number },
 ): Promise<T> {
   const maxRetries = opts?.maxRetries ?? DEFAULT_RETRY_ATTEMPTS;
-  const baseBackoffMs = opts?.baseBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
+  const baseBackoffMs = opts?.baseBackoffMs ?? AUTH_RETRY_BASE_BACKOFF_MS;
   let attempt = 0;
 
   while (true) {
@@ -257,7 +266,7 @@ async function shutdownActualApi(): Promise<void> {
   }
 }
 
-import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_BACKOFF_MS, MAX_RETRY_DELAY_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, DEFAULT_RETRY_ATTEMPTS, MAX_RETRY_DELAY_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 /**
  * Very small concurrency limiter for adapter calls. This prevents bursts from
