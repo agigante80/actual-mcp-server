@@ -370,6 +370,13 @@ export async function startHttpServer(
           resolveInit = resolve;
           rejectInit = reject;
         });
+        // Always-on safety net: if no concurrent code path is awaiting initPromise
+        // when rejectInit fires (e.g. session init fails before any tools/call
+        // arrives), the rejection would otherwise hit process.on('unhandledRejection')
+        // and exit the server. The original error is already logged inside the
+        // onsessioninitialized catch block below — we deliberately do NOT re-log here
+        // to avoid duplicate noise and any risk of leaking credentials.
+        initPromise.catch(() => {});
 
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
