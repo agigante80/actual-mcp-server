@@ -127,6 +127,89 @@ async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
   });
 }
 
+// ----------------------------------------------------------------------------
+// Auth-rate-limit retry — issue #127
+// ----------------------------------------------------------------------------
+// The Actual Budget server returns "Authentication failed: too-many-requests"
+// when many MCP sessions log in in quick succession (e.g. a burst of E2E
+// tests). Without a retry-with-backoff at the adapter layer, the very first
+// burst spike fails through to the test runner and cascades into the bearer
+// MCP container's session-init crash (see #132).
+//
+// We retry only on errors known to be transient at the auth layer
+// (too-many-requests, network-failure). invalid-password and other terminal
+// errors propagate immediately so callers see the real cause.
+//
+// The retry budget is bounded so a rate-limited init cannot indefinitely
+// hold the API mutex (withApiLock) and starve other operations.
+// ----------------------------------------------------------------------------
+
+let authRetryCount = 0;          // monotonic, observability
+let authRetryFailureCount = 0;   // increments only when retry budget exhausted
+
+export function isRetryableAuthError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.message.includes('Authentication failed: too-many-requests') ||
+    err.message.includes('Authentication failed: network-failure')
+  );
+}
+
+/**
+ * Wrap an operation with retry-on-rate-limit. Used to wrap api.init() so
+ * transient too-many-requests errors are absorbed transparently. The retry
+ * budget is capped at DEFAULT_RETRY_ATTEMPTS (3) attempts and total wallclock
+ * is bounded by MAX_RETRY_DELAY_MS via exponential backoff.
+ *
+ * Test-friendly: opts.maxRetries / opts.baseBackoffMs override the defaults
+ * so unit tests can run fast.
+ *
+ * Log hygiene: this function never logs the upstream URL, password, or any
+ * config-derived value — only the error class and the Actual error code
+ * (extracted from the message) plus the attempt counter.
+ */
+export async function withAuthRetry<T>(
+  operation: () => Promise<T>,
+  opts?: { maxRetries?: number; baseBackoffMs?: number },
+): Promise<T> {
+  const maxRetries = opts?.maxRetries ?? DEFAULT_RETRY_ATTEMPTS;
+  const baseBackoffMs = opts?.baseBackoffMs ?? DEFAULT_RETRY_BACKOFF_MS;
+  let attempt = 0;
+
+  while (true) {
+    try {
+      return await operation();
+    } catch (err) {
+      if (!isRetryableAuthError(err)) throw err;
+      attempt++;
+      if (attempt > maxRetries) {
+        // Budget exhausted: log + bump failure counter, but do NOT bump
+        // authRetryCount — that counter measures successful retry-and-sleep
+        // cycles, not failed final attempts.
+        authRetryFailureCount++;
+        const code = (err instanceof Error ? err.message.match(/Authentication failed: (\S+)/)?.[1] : null) || 'unknown';
+        logger.error(`[ADAPTER] Auth retry exhausted after ${maxRetries} retries (last code: ${code})`);
+        throw err;
+      }
+      // We're going to retry — count it and sleep with exponential backoff.
+      authRetryCount++;
+      const delay = Math.min(baseBackoffMs * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS);
+      const code = (err instanceof Error ? err.message.match(/Authentication failed: (\S+)/)?.[1] : null) || 'unknown';
+      logger.debug(`[ADAPTER] Auth retry ${attempt}/${maxRetries} (code: ${code}) after ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+}
+
+/**
+ * Test-only: reset the auth retry observability counters. NOT exported via
+ * the package public surface — only used by unit tests.
+ */
+export function _resetAuthRetryCountersForTests(): void {
+  authRetryCount = 0;
+  authRetryFailureCount = 0;
+}
+
 /**
  * Initialize Actual API - based on s-stefanov/actual-mcp pattern
  * This calls api.init() and api.downloadBudget() for each operation
@@ -138,11 +221,13 @@ async function initActualApiForOperation(): Promise<void> {
 
     logger.debug(`[ADAPTER] Initializing Actual API for operation (budget: "${budget.name}", server: ${budget.serverUrl})`);
 
-    await api.init({
+    // Wrap api.init in auth-rate-limit retry so a transient too-many-requests
+    // doesn't surface to the caller (and doesn't trigger #132's crash path).
+    await withAuthRetry(() => api.init({
       dataDir: DATA_DIR,
       serverURL: budget.serverUrl,
       password: budget.password || '',
-    });
+    }));
 
     logger.debug('[ADAPTER] Downloading budget');
 
@@ -172,7 +257,7 @@ async function shutdownActualApi(): Promise<void> {
   }
 }
 
-import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, DEFAULT_RETRY_ATTEMPTS, DEFAULT_RETRY_BACKOFF_MS, MAX_RETRY_DELAY_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 /**
  * Very small concurrency limiter for adapter calls. This prevents bursts from
@@ -325,7 +410,18 @@ function withConcurrency<T>(fn: () => Promise<T>): Promise<T> {
 
 // Expose some helpers for testing concurrency
 export function getConcurrencyState() {
-  return { running, queueLength: queue.length, maxConcurrency: MAX_CONCURRENCY };
+  return {
+    running,
+    queueLength: queue.length,
+    maxConcurrency: MAX_CONCURRENCY,
+    // Auth-retry observability — issue #127. authRetries is monotonic over the
+    // process lifetime; authRetryFailures only increments when retry budget
+    // exhausted. A jump in authRetries without a matching jump in
+    // authRetryFailures means the retry-with-backoff is absorbing rate-limit
+    // pressure (healthy). Both jumping = upstream genuinely overloaded.
+    authRetries: authRetryCount,
+    authRetryFailures: authRetryFailureCount,
+  };
 }
 
 /**
