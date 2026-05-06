@@ -445,6 +445,15 @@ async function initActualApiForOperation(): Promise<void> {
     setApiInitialized(true);
     return;
   }
+  // If the api singleton is already live (e.g. the connection pool initialised
+  // it at MCP session open), don't redundantly call api.init() again — that
+  // would trigger an extra upstream login and reintroduce the auth-burst
+  // pattern #134 is fixing. The pool keeps the singleton alive across writes;
+  // we just join in.
+  if (isApiInitialized()) {
+    logger.debug('[ADAPTER] api already initialised; skipping redundant init');
+    return;
+  }
   try {
     const budget = getActiveBudgetConfig();
     const DATA_DIR = config.MCP_BRIDGE_DATA_DIR;
@@ -481,6 +490,33 @@ async function shutdownActualApi(): Promise<void> {
     setApiInitialized(false);
     return;
   }
+  // If the connection pool currently has any active per-session connections,
+  // those sessions own the api singleton's lifecycle — tearing it down here
+  // would invalidate every active session's pool entry and force the next
+  // tool call back through legacy init+shutdown (the very pattern #134 is
+  // eliminating). Instead, just sync (the persistence guarantee that
+  // shutdown was previously providing implicitly) and leave the singleton
+  // alive for the pool to manage.
+  try {
+    const stats = connectionPool.getStats();
+    if (stats.activeSessions > 0) {
+      try {
+        const apiAny = api as unknown as { sync?: () => Promise<unknown> };
+        if (typeof apiAny.sync === 'function') {
+          await apiAny.sync();
+          logger.debug('[ADAPTER] api.sync() instead of shutdown (pool has active sessions)');
+        }
+      } catch (syncErr) {
+        logger.error('[ADAPTER] sync-without-shutdown failed:', syncErr);
+        // Don't propagate — shutdown was best-effort anyway.
+      }
+      return;
+    }
+  } catch (statsErr) {
+    // Pool not available (e.g. early startup) — fall through to legacy shutdown.
+    logger.debug('[ADAPTER] could not read pool stats; defaulting to full shutdown:', statsErr);
+  }
+
   try {
     const maybeApi = api as unknown as { shutdown?: () => Promise<void> };
     if (typeof maybeApi.shutdown === 'function') {
