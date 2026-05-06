@@ -122,13 +122,13 @@ test.describe('Docker E2E - ALL 63 TOOLS', () => {
     console.log('➕ Testing actual_accounts_create...');
     const timestamp = Date.now();
     testContext.accountName = `E2E-Test-${timestamp}`;
-    
+
     const result = await callTool(request, sessionId, 'actual_accounts_create', {
       name: testContext.accountName,
       balance: 0,
     });
     const accountId = extractResult(result);
-    
+
     expect(accountId).toBeTruthy();
     expect(typeof accountId).toBe('string');
     testContext.accountId = accountId;

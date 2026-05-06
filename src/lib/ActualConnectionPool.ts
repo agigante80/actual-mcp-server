@@ -17,6 +17,7 @@ import config from '../config.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
+import { setApiInitialized } from './apiState.js';
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
 
@@ -148,9 +149,12 @@ class ActualConnectionPool {
         serverURL: SERVER_URL,
         password: PASSWORD,
       });
+      // Mark the singleton as live so the adapter's pool-cooperation branch
+      // (withActualApi in actual-adapter.ts) can safely skip its per-op init.
+      setApiInitialized(true);
 
       logger.info(`[ConnectionPool] Downloading budget for session: ${sessionId}`);
-      
+
       if (BUDGET_PASSWORD) {
         const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
         await apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
@@ -167,10 +171,10 @@ class ActualConnectionPool {
 
       this.connections.set(sessionId, conn);
       logger.info(`[ConnectionPool] Connection ready for session: ${sessionId}`);
-      
+
     } catch (err) {
       logger.error(`[ConnectionPool] Failed to initialize connection for session ${sessionId}:`, err);
-      
+
       // Clean up the failed connection attempt
       // Try to shutdown the API to leave it in a clean state for the next attempt
       try {
@@ -182,10 +186,12 @@ class ActualConnectionPool {
       } catch (cleanupErr) {
         logger.debug(`[ConnectionPool] Error during cleanup (ignoring): ${cleanupErr}`);
       }
-      
+      // Singleton is back to torn-down state regardless of cleanup outcome.
+      setApiInitialized(false);
+
       // Ensure this session is not in the connections map
       this.connections.delete(sessionId);
-      
+
       throw err;
     }
   }
@@ -217,6 +223,7 @@ class ActualConnectionPool {
         serverURL: SERVER_URL,
         password: PASSWORD,
       });
+      setApiInitialized(true);
 
       if (BUDGET_PASSWORD) {
         const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
@@ -233,9 +240,10 @@ class ActualConnectionPool {
       };
 
       logger.info('[ConnectionPool] Shared connection ready');
-      
+
     } catch (err) {
       logger.error('[ConnectionPool] Failed to initialize shared connection:', err);
+      setApiInitialized(false);
       throw err;
     }
   }
@@ -257,17 +265,20 @@ class ActualConnectionPool {
       if (typeof maybeApi.shutdown === 'function') {
         await (maybeApi.shutdown as () => Promise<unknown>)();
       }
-      
+
       conn.initialized = false;
       this.connections.delete(sessionId);
-      
+      setApiInitialized(false);
+
       // NOTE: We do NOT delete the data directory because it's shared across all sessions
       // Deleting it would cause data loss for other active sessions
-      
+
       logger.info(`[ConnectionPool] Connection shutdown complete for session: ${sessionId}`);
-      
+
     } catch (err) {
       logger.error(`[ConnectionPool] Error shutting down connection for session ${sessionId}:`, err);
+      // Even on error, the singleton is in an unknown state — don't reuse.
+      setApiInitialized(false);
     }
   }
 
@@ -280,20 +291,22 @@ class ActualConnectionPool {
     }
 
     logger.info('[ConnectionPool] Shutting down shared connection');
-    
+
     try {
       const maybeApi = api as unknown as { shutdown?: Function };
       if (typeof maybeApi.shutdown === 'function') {
         await (maybeApi.shutdown as () => Promise<unknown>)();
       }
-      
+
       this.sharedConnection.initialized = false;
       this.sharedConnection = null;
-      
+      setApiInitialized(false);
+
       logger.info('[ConnectionPool] Shared connection shutdown complete');
-      
+
     } catch (err) {
       logger.error('[ConnectionPool] Error shutting down shared connection:', err);
+      setApiInitialized(false);
     }
   }
 
@@ -322,12 +335,21 @@ class ActualConnectionPool {
   }
 
   /**
-   * Start periodic cleanup of idle connections
+   * Start periodic cleanup of idle connections.
+   *
+   * The interval is `unref()`d so it does not keep the Node event loop alive
+   * on its own. Without this, importing the pool from a one-shot script
+   * (e.g. unit test, `--test-actual-connection`) would prevent natural
+   * process exit. The interval still fires while the server runs because
+   * other handles (HTTP listener, stdio transport, etc.) keep the loop alive.
    */
   private startCleanupTimer(): void {
     this.cleanupInterval = setInterval(() => {
       this.cleanupIdleConnections();
     }, this.CLEANUP_INTERVAL);
+    if (typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
   }
 
   /**
