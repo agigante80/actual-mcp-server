@@ -37,7 +37,14 @@ process.on('unhandledRejection', (reason, promise) => {
     reasonStr.includes('Rate limit exceeded') ||
     reasonStr.includes('Failed syncing account') ||
     reasonStr.includes('GoCardless') ||
-    reasonStr.includes('SimpleFIN')
+    reasonStr.includes('SimpleFIN') ||
+    // Actual API auth failures (network-failure, too-many-requests, invalid-password,
+    // etc.) can escape as unhandled rejections from session-init code paths that
+    // create a deferred Promise but only conditionally await it (see #132). The
+    // primary fix lives in httpServer.ts (.catch on initPromise); this allow-list
+    // entry is defence-in-depth so any future deferred-promise leak in the same
+    // family also fails non-fatally.
+    reasonStr.includes('Authentication failed:')
   ) {
     console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
     console.error('⚠️  ' + reasonStr);

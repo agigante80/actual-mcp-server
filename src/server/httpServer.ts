@@ -1,5 +1,4 @@
 // src/server/httpServer.ts
-import { AsyncLocalStorage } from 'async_hooks';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import express, { Request, Response } from 'express';
 import { randomUUID } from 'crypto';
@@ -21,8 +20,12 @@ import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 
-// AsyncLocalStorage for request context (sessionId accessible to tools)
-export const requestContext = new AsyncLocalStorage<{ sessionId?: string }>();
+// AsyncLocalStorage for request context — moved to src/lib/requestContext.ts
+// so adapter code can import it without a circular dependency on httpServer.
+// Re-exported here for backward compatibility with any callers that imported
+// `requestContext` from this module.
+import { requestContext } from '../lib/requestContext.js';
+export { requestContext };
 
 export async function startHttpServer(
   mcp: ActualMCPConnection,
@@ -370,6 +373,13 @@ export async function startHttpServer(
           resolveInit = resolve;
           rejectInit = reject;
         });
+        // Always-on safety net: if no concurrent code path is awaiting initPromise
+        // when rejectInit fires (e.g. session init fails before any tools/call
+        // arrives), the rejection would otherwise hit process.on('unhandledRejection')
+        // and exit the server. The original error is already logged inside the
+        // onsessioninitialized catch block below — we deliberately do NOT re-log here
+        // to avoid duplicate noise and any risk of leaking credentials.
+        initPromise.catch(() => {});
 
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
