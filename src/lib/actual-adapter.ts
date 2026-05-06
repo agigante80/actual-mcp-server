@@ -149,12 +149,23 @@ let authRetryFailureCount = 0;   // increments only when retry budget exhausted
 
 // The auth-rate-limit path uses a deliberately LARGER backoff than the generic
 // retry helper because Actual Budget's auth rate-limiter operates on a multi-
-// second window, not a per-request burst. The generic 200ms base would
-// exhaust within 1.4s — well inside the upstream's window. 2000ms base gives
-// 2s + 4s + 8s = 14s total, capped per-step by MAX_RETRY_DELAY_MS (10s), which
-// reliably clears the common rate-limit windows we've observed in CI and
-// /local-env reproductions on 2026-05-06 (#127).
-const AUTH_RETRY_BASE_BACKOFF_MS = 2000;
+// second sliding window, not a per-request burst. The generic 200ms base
+// would exhaust within 1.4s — well inside the upstream's window.
+//
+// Empirically (2026-05-06, #127):
+//   - 200ms base = 1.4s total: too short, every retry hits the throttle.
+//   - 2000ms base = 14s total: insufficient under heavy auth pressure
+//     (e.g. 10 rapid logins before a tool call still throttle 14s+).
+//   - 5000ms base = 5s + 10s + 10s = 25s total (each step capped by
+//     MAX_RETRY_DELAY_MS): clears the rate-limit window in light-pressure
+//     scenarios (3 rapid logins) without holding the API mutex unreasonably
+//     long.
+//
+// Beyond 25s, blocking the API mutex starts to harm tail latency for
+// unrelated tool calls. The proper long-term fix for sustained-pressure
+// scenarios is session reuse (avoid init+shutdown per op) — out of scope for
+// this ticket; tracked as a follow-up.
+const AUTH_RETRY_BASE_BACKOFF_MS = 5000;
 
 export function isRetryableAuthError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;

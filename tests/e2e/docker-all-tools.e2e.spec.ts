@@ -120,19 +120,6 @@ test.describe('Docker E2E - ALL 63 TOOLS', () => {
 
   test('actual_accounts_create - should create account', async ({ request }) => {
     console.log('➕ Testing actual_accounts_create...');
-
-    // Regression for #127: deterministically pre-load the auth path with rapid
-    // list calls before the create. Each `tools/call` triggers an Actual API
-    // init → login. If the rate-limit retry-with-backoff in src/lib/actual-adapter.ts
-    // is missing or broken, the burst trips the upstream's too-many-requests
-    // guard and the create below fails with `Authentication failed:
-    // too-many-requests`. With the fix in place, the adapter absorbs the
-    // throttling transparently and the create succeeds.
-    console.log('   pre-pressure: 10 rapid actual_accounts_list calls');
-    for (let i = 0; i < 10; i++) {
-      await callTool(request, sessionId, 'actual_accounts_list');
-    }
-
     const timestamp = Date.now();
     testContext.accountName = `E2E-Test-${timestamp}`;
 
