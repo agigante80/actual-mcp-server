@@ -151,6 +151,38 @@ function _hasPooledConnection(sessionId: string | undefined): sessionId is strin
 }
 
 /**
+ * Decide whether an error from the wrapped operation suggests the api
+ * singleton is in a corrupted state and the pool's session connection should
+ * be released so the next call re-inits cleanly.
+ *
+ * **Drop on**: infrastructure-level errors that imply the api singleton, the
+ * upstream connection, or process-level resources are no longer usable.
+ *
+ * **Keep on**: user-input validation errors, domain errors ("not found",
+ * "does not exist"), Zod schema failures — these don't corrupt the api
+ * singleton, so dropping the pool would discard a perfectly good connection
+ * and force every retry through the legacy init+shutdown path (which is
+ * exactly the auth-burst pattern #134 is trying to eliminate).
+ *
+ * Default: keep. We err on the side of preserving pool reuse — if the api is
+ * actually corrupted but the error pattern doesn't match, the next call's op
+ * will surface the same root cause and we'll catch it then.
+ */
+function _shouldDropPoolOnError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message || '';
+  return (
+    msg.includes('Authentication failed') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('socket hang up') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('out of memory') ||
+    msg.includes('ENOMEM')
+  );
+}
+
+/**
  * Helper to run an operation with the Actual API ready, deciding the lifecycle
  * mode automatically:
  *
@@ -179,10 +211,14 @@ export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> 
         logger.debug(`[ADAPTER] Reusing pool connection for session ${sessionId} (reuses=${connectionReuseCount})`);
         return await operation();
       } catch (err) {
-        // Drop the (possibly corrupt) pool connection so the next call in the
-        // same session re-inits cleanly. Original error still propagates.
-        logger.warn(`[ADAPTER] Releasing pool connection for session ${sessionId} after operation error`);
-        try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+        // Only drop the pool connection on errors that suggest the api
+        // singleton itself is in a bad state. User-input validation /
+        // domain errors leave the connection fine and dropping it would
+        // re-introduce the auth-burst pattern #134 is fixing.
+        if (_shouldDropPoolOnError(err)) {
+          logger.warn(`[ADAPTER] Releasing pool connection for session ${sessionId} after infrastructure-level error`);
+          try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+        }
         throw err;
       }
     });
@@ -232,16 +268,21 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
             await apiAny.sync();
           }
         } catch (syncErr) {
-          // Sync failure on a write is not silent: drop the pool connection
-          // so the next call re-inits, then surface the error.
+          // Sync failure on a write IS infrastructure-level — drop the pool
+          // connection so the next call re-inits, then surface the error.
           logger.error(`[ADAPTER] api.sync() failed after write in session ${sessionId}; releasing pool connection`);
           try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
           throw syncErr;
         }
         return result;
       } catch (err) {
-        logger.warn(`[ADAPTER] Releasing pool connection for write session ${sessionId} after operation error`);
-        try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+        // Same policy as withActualApi: only drop the pool on errors that
+        // suggest the api singleton is corrupted. User-input / domain errors
+        // leave the connection fine.
+        if (_shouldDropPoolOnError(err)) {
+          logger.warn(`[ADAPTER] Releasing pool connection for write session ${sessionId} after infrastructure-level error`);
+          try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+        }
         throw err;
       }
     });
