@@ -119,35 +119,71 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
   }
 
   // -------------------------------------------------------------------------
-  // Case 4 — error in pooled-mode op releases the pool's session
+  // Case 4a — INFRASTRUCTURE error in pooled-mode op releases the pool conn
   // -------------------------------------------------------------------------
-  describe('Case 4 — error in pooled mode releases the pool connection');
+  describe('Case 4a — infrastructure error in pooled mode releases the pool connection');
   {
     _resetConnectionReuseCounterForTests();
     _setApiInitializedForTests(true);
-    primePoolSession('sess-err');
+    primePoolSession('sess-err-infra');
     let observedShutdown = false;
     const originalShutdown = connectionPool.shutdownConnection.bind(connectionPool);
     connectionPool.shutdownConnection = async (sid) => {
-      if (sid === 'sess-err') observedShutdown = true;
+      if (sid === 'sess-err-infra') observedShutdown = true;
       connectionPool.connections.delete(sid);
     };
 
     let thrown = null;
     try {
-      await requestContext.run({ sessionId: 'sess-err' }, async () => {
-        await withActualApi(async () => { throw new Error('boom'); });
+      await requestContext.run({ sessionId: 'sess-err-infra' }, async () => {
+        // Simulates a real upstream failure — auth lost mid-call.
+        await withActualApi(async () => { throw new Error('Authentication failed: too-many-requests'); });
       });
     } catch (err) { thrown = err; }
 
     connectionPool.shutdownConnection = originalShutdown;
 
-    assert(thrown !== null && thrown.message === 'boom',
-      'original error propagated to caller');
+    assert(thrown !== null && /too-many-requests/.test(thrown.message),
+      'original infrastructure error propagated to caller');
     assert(observedShutdown === true,
       'connectionPool.shutdownConnection was called for the failing session');
-    assert(connectionPool.hasConnection('sess-err') === false,
+    assert(connectionPool.hasConnection('sess-err-infra') === false,
       'pool no longer reports the session as connected');
+  }
+
+  // -------------------------------------------------------------------------
+  // Case 4b — USER-INPUT/domain error does NOT release the pool connection
+  // -------------------------------------------------------------------------
+  describe('Case 4b — user-input/domain error keeps the pool connection alive');
+  {
+    _resetConnectionReuseCounterForTests();
+    _setApiInitializedForTests(true);
+    primePoolSession('sess-err-domain');
+    let observedShutdown = false;
+    const originalShutdown = connectionPool.shutdownConnection.bind(connectionPool);
+    connectionPool.shutdownConnection = async (sid) => {
+      if (sid === 'sess-err-domain') observedShutdown = true;
+      connectionPool.connections.delete(sid);
+    };
+
+    let thrown = null;
+    try {
+      await requestContext.run({ sessionId: 'sess-err-domain' }, async () => {
+        // Simulates a Zod validation failure / domain rejection — api state is fine.
+        await withActualApi(async () => { throw new Error('Field "payee_name" does not exist in table "transactions"'); });
+      });
+    } catch (err) { thrown = err; }
+
+    connectionPool.shutdownConnection = originalShutdown;
+
+    assert(thrown !== null && /payee_name/.test(thrown.message),
+      'original domain error propagated to caller');
+    assert(observedShutdown === false,
+      'connectionPool.shutdownConnection was NOT called (pool entry preserved)');
+    assert(connectionPool.hasConnection('sess-err-domain') === true,
+      'pool still reports the session as connected (next call can reuse)');
+
+    clearPoolSession('sess-err-domain');
   }
 
   // -------------------------------------------------------------------------
