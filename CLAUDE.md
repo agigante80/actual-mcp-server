@@ -50,8 +50,8 @@ npm run test:mcp-client         # Connect as MCP client and exercise tools
 npm run dev -- --test-actual-connection  # Test Actual Budget connection only
 
 # Docker
-docker compose --profile dev up         # Hot-reload dev
-docker compose --profile production up  # Nginx proxy on :3600
+docker compose --profile dev up         # Hot-reload dev (HTTP :3000)
+docker compose --profile production up  # Nginx proxy on :3600 → app :3000
 docker compose --profile fullstack up   # Includes Actual Budget server on :5006
 # docker-compose.test.yaml + playwright.config.docker.ts are used by test:e2e:docker* scripts
 ```
@@ -64,7 +64,7 @@ docker compose --profile fullstack up   # Includes Actual Budget server on :5006
 
 ## Project-Local Agents & Commands
 
-Five specialized subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
+Five **project-specific** subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
 
 | Agent | When to use |
 |-------|-------------|
@@ -74,11 +74,16 @@ Five specialized subagents live in `.claude/agents/` — delegate to them via th
 | `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
 | `ticket-gate` | Readiness gate for GitHub issues — runs 4 specialist agents to score a ticket before implementation (all must score 10/10) |
 
+Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `health-check`) — use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain.
+
 Project-local slash commands in `.claude/commands/`:
 
 - `/dep-auditor [--full]` — dependency health audit: runs Knip, npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything)
 - `/local-env` — full local deployment pipeline for the dev environment
-- `/review-ticket <issue-number>` — runs the ticket readiness gate on a GitHub issue number
+- `/gate-ticket <issue-number>` — runs the ticket readiness gate on a GitHub issue (all 4 specialist agents must score 10/10 before implementation)
+- `/ci-health` — checks all GitHub Actions workflows for failures, opens P0 tickets, and auto-fixes safe failures
+- `/full-review [target]` — orchestrates a multi-dimensional code review (architecture, security, performance, testing, best practices)
+- `/pr-enhance [PR# or description]` — enhances an existing pull request (description, labels, follow-ups)
 
 ## Architecture
 
@@ -184,7 +189,9 @@ export default tool;
 | `src/lib/schemas/common.ts` | Shared Zod schemas (`CommonSchemas`) |
 | `src/lib/constants.ts` | `UUID_PATTERN`, timeouts, limits |
 | `src/lib/retry.ts` | Exponential backoff (3 attempts, 200ms base) |
+| `src/lib/loggerFactory.ts` | Module-scoped winston loggers |
 | `src/lib/toolFactory.ts` | `createTool()` — preferred factory for new tools |
+| `src/actualConnection.ts` | Actual Budget connection lifecycle |
 | `src/lib/errors.ts` | `notFoundMsg()`, `constraintErrorMsg()` helpers |
 | `src/observability.ts` | Per-tool call counters (incremented by `createTool`) |
 | `src/lib/budget-registry.ts` | Parses `BUDGET_N_*` env vars into budget config list |
