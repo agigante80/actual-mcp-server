@@ -26,9 +26,10 @@ npm run release:major   # 0.4.35 → 1.0.0   (breaking changes)
 ```
 
 These run `scripts/version-bump.js` which:
-1. Bumps `VERSION` file and `package.json`
-2. Updates all `**Version:**` and `**Tool Count:**` markers across docs automatically
-3. Files updated: `README.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md`, `docs/SECURITY_AND_PRIVACY.md`, `docs/TESTING_AND_RELIABILITY.md`, `.github/copilot-instructions.md`
+1. **Production-tag freshness check (added 2026-05-07).** Before bumping, the script queries `git ls-remote --tags origin` and aborts with a clear remediation message if the local `VERSION` is BEHIND the latest published `vX.Y.Z` tag. This guards against the failure mode where the scheduled `Dependency Update & Auto-Release` workflow has already shipped a release while a local branch was unsynced — bumping in that state would reuse a version number that's already on production. If you see the abort, run `git fetch origin && git merge origin/main` (or `--ff-only` if your branch is an ancestor) before retrying. Override only with `--force` when production is genuinely wrong.
+2. Bumps `VERSION` file and `package.json`
+3. Updates all `**Version:**` and `**Tool Count:**` markers across docs automatically
+4. Files updated: `README.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md`, `docs/SECURITY_AND_PRIVACY.md`, `docs/TESTING_AND_RELIABILITY.md`, `.github/copilot-instructions.md`
 
 **Never edit version markers manually** — always use the script.
 
@@ -36,6 +37,58 @@ To sync markers without bumping the version:
 ```bash
 npm run docs:sync
 ```
+
+### MANDATORY pre-bump algorithm (the agent MUST execute this before invoking any `release:*` command)
+
+**Why this is mandatory:** the script `scripts/version-bump.js` already runs the same check internally and will abort if it fires. This algorithm is a second line of defence so the agent doesn't even reach the script when production has moved ahead — saves a wasted invocation, gives a clearer summary up front, and stays correct even if a future refactor accidentally weakens the script's guard.
+
+Run **all four steps every time** before running any `release:*` script. Do not skip steps even if "you just ran them" — production tags can change between conversations.
+
+**Step 1 — refresh production tags:**
+
+```bash
+git fetch origin --tags --prune
+```
+
+If this errors (offline, auth issue, etc.), stop and tell the user. Do NOT bump from a stale view of production.
+
+**Step 2 — compute the comparison:**
+
+```bash
+LOCAL=$(cat VERSION)
+PROD=$(git ls-remote --tags origin "refs/tags/v*.*.*" \
+  | awk '{print $2}' | sed -E 's|refs/tags/v||; s|\^\{\}||' \
+  | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+echo "local=$LOCAL  prod=v$PROD"
+```
+
+`PROD` is the highest semver tag actually published on origin (not local-only tags from a failed push).
+
+**Step 3 — apply the decision matrix exactly:**
+
+| Comparison | Action |
+|---|---|
+| `LOCAL == PROD` | ✅ **Proceed** to step 4. Tell the user "local matches production — safe to bump." |
+| `LOCAL < PROD` | ❌ **STOP.** Production has moved on. Tell the user the local/prod gap, then merge `origin/main` first: `git fetch origin && git merge --ff-only origin/main` (or a 3-way merge if the branch has its own commits). Re-run from step 1. Do NOT bump in this state. Do NOT silently use `--force`. |
+| `LOCAL > PROD` | ⚠️ **Pause and tell the user.** This means a previous bump was committed but never released. Confirm with them before proceeding — sometimes this is fine (mid-release), sometimes it's evidence of a half-broken pipeline. |
+
+**Step 4 — confirm the working tree is clean:**
+
+```bash
+git status -sb
+```
+
+If there are uncommitted changes, decide whether they should be part of the bump commit (then add them deliberately) or whether they're unrelated work that should be stashed/committed separately first. The release commit must contain only `VERSION`, `package.json`, and the doc-marker updates.
+
+**Step 5 — invoke the script:**
+
+```bash
+npm run release:patch    # or :minor / :major as appropriate
+```
+
+If the script's own freshness check fires here despite step 3 passing, **trust the script** — origin may have advanced between steps 1 and 5. Re-run the algorithm from step 1.
+
+**`--force` policy:** never use `--force` autonomously. The flag exists for the rare case where a corrupt or malicious tag exists on origin and you've explicitly verified the local state is the correct one. Always require an explicit user confirmation message ("yes, force the bump because <reason>") before invoking `--force`.
 
 ## Pre-commit mandatory sequence
 
