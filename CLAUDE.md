@@ -108,15 +108,20 @@ actual-adapter.ts — withActualApi wrapper, retry (3x), concurrency limit (5)
 
 ### Critical Pattern: `withActualApi` Wrapper
 
-**Every Actual API operation MUST use `withActualApi()`** from `src/lib/actual-adapter.ts`. Actual Budget requires `api.shutdown()` after every operation to commit data — the wrapper handles the full init → operation → shutdown lifecycle.
+**Every Actual API operation MUST use `withActualApi()`** from `src/lib/actual-adapter.ts`. Two execution modes since #134 (v0.6.4):
+
+- **Pooled mode (preferred — fires automatically when an MCP session is active):** if `requestContext` carries a `sessionId` AND `connectionPool.hasConnection(sessionId)` is true AND `apiState.isApiInitialized()` is true, the wrapper skips `api.init()` / `api.shutdown()` entirely and runs the operation against the existing per-session connection. This eliminates the per-op upstream-login burst that was the root cause of #127. Writes still call `api.sync()` afterward to commit.
+- **Legacy mode (fallback):** when there's no sessionId in context, no pool entry, or the api singleton was torn down by another path, the wrapper falls back to the original `init` → `op` → `shutdown` cycle so non-MCP callers (CLI scripts, startup health checks, stdio without `requestContext.run`) keep working.
 
 ```typescript
 // ✅ CORRECT
 await withActualApi(async () => { return await rawAddTransactions(data); });
 
-// ❌ WRONG — data won't persist (tombstone issue)
+// ❌ WRONG — data won't persist (tombstone issue) and bypasses pool cooperation
 await rawAddTransactions(data);
 ```
+
+The pool branch only releases its session connection on **infrastructure-level errors** (`Authentication failed`, `ECONNRESET`, `ECONNREFUSED`, `socket hang up`, `ETIMEDOUT`, `ENOMEM`). User-input / domain errors (Zod failures, "field does not exist", "not found") leave the pool entry intact so the next call can reuse it. See `_shouldDropPoolOnError` in `actual-adapter.ts`.
 
 ### Tool Structure Pattern
 
@@ -179,8 +184,10 @@ export default tool;
 |------|------|
 | `src/index.ts` | Entry point, CLI flags, server startup |
 | `src/actualToolsManager.ts` | `IMPLEMENTED_TOOLS` registry, Zod dispatch |
-| `src/lib/actual-adapter.ts` | **CRITICAL**: `withActualApi`, retry, concurrency |
-| `src/lib/ActualConnectionPool.ts` | Up to 15 concurrent sessions, idle timeouts |
+| `src/lib/actual-adapter.ts` | **CRITICAL**: `withActualApi` (pool-cooperation since #134), `withActualApiWrite`, retry, concurrency, auth-rate-limit retry |
+| `src/lib/ActualConnectionPool.ts` | Up to 15 concurrent sessions, idle timeouts; updates the singleton-state flag in `apiState.ts` |
+| `src/lib/apiState.ts` | Shared module-level flag for `@actual-app/api`'s singleton "live" state. Updated by every `init`/`shutdown` path so the adapter can probe whether the pool branch is safe |
+| `src/lib/requestContext.ts` | `AsyncLocalStorage<{ sessionId? }>` carrying the active MCP session across async boundaries. Producer: `httpServer.ts`. Consumer: `actual-adapter.ts` (decides pool reuse) |
 | `src/server/httpServer.ts` | Express HTTP, StreamableHTTP, Bearer/OIDC auth |
 | `src/server/stdioServer.ts` | stdio transport — logs to stderr, stdout for JSON-RPC |
 | `src/auth/setup.ts` | OIDC/JWKS factory (`AUTH_PROVIDER=oidc`) |
@@ -218,11 +225,22 @@ export default tool;
 
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
 
+**Production-tag freshness check (added in v0.6.5):** before any bump, `scripts/version-bump.js` queries `git ls-remote --tags origin` and aborts if the local `VERSION` is BEHIND the latest published `vX.Y.Z` tag. This guards against the parallel-bump pattern that occurred when the scheduled `Dependency Update & Auto-Release` workflow shipped a release while a local branch was unsynced. If you see the abort message, run `git fetch origin && git merge origin/main` before retrying. Override only with `--force` (and only when production is genuinely wrong — the `release-manager` agent requires explicit user confirmation before invoking that flag).
+
 **`npm overrides` are a last resort for security CVEs only.** Prefer upgrading the direct dependency that pulls in the vulnerable transitive. If an override is unavoidable (no direct-dep upgrade available), add it with an explanation in `package.json`'s `"comments"."security-overrides"` field (see existing `ajv`/`qs` entries as the pattern). Never use overrides to resolve non-security version drift.
 
 **Session tools are the only exception to `withActualApi`**: `actual_session_list` and `actual_session_close` call `connectionPool` directly — they manage the pool itself, not budget data, so they skip the wrapper intentionally.
 
-**If transactions/budgets don't persist**: verify `withActualApi` wraps the call (grep for `rawAdd*` / `rawUpdate*` called without it), confirm `api.shutdown()` runs after the operation, and check logs for "tombstone" errors. The `getConcurrencyState()` export from `actual-adapter.ts` shows `{ active, queued, limit }` for diagnosing concurrency back-pressure.
+**If transactions/budgets don't persist**: verify `withActualApi` wraps the call (grep for `rawAdd*` / `rawUpdate*` called without it), confirm `api.shutdown()` runs after the operation (or that `api.sync()` ran in pool mode), and check logs for "tombstone" errors. The `getConcurrencyState()` export from `actual-adapter.ts` shows `{ running, queueLength, maxConcurrency, authRetries, authRetryFailures, connectionReuses }` for diagnosing concurrency back-pressure and pool-reuse health. A growing `connectionReuses` counter without growing `authRetries` is the healthy signal that #134's cooperation is working.
+
+**Integration test runner kill-switches (added in v0.6.4 via #133):** `tests/manual/index.js` (used by `/local-env` and `npm run test:integration:*`) now caps every retry path so a crash-looping MCP server can't livelock the runner. Defaults can be overridden via env vars when you need to relax them in a slow environment or tighten them in CI:
+
+| Env var | Default | What it caps |
+|---------|---------|--------------|
+| `MCP_TEST_MAX_RETRIES` | 5 | Connection-lost / timeout retries per `callMCP` invocation |
+| `MCP_TEST_MAX_SESSION_RETRIES` | 3 | Session-expired re-initialisations per logical chain (closure-state, survives recursion) |
+| `MCP_TEST_CIRCUIT_THRESHOLD` | 10 | Consecutive failed `callMCP` invocations before the circuit breaker opens |
+| `MCP_TEST_MAX_RUNTIME_MS` | per-level (sanity 60s, smoke 120s, normal 300s, extended 600s, full 900s) | Wall-clock budget in `runner.js`; exceeding it exits **code 2** (distinct from code 1 used for assertion failures) with `Aborted after N min — server appears unhealthy` |
 
 ## File Safety Tiers
 
