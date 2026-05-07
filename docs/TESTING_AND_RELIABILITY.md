@@ -1,7 +1,7 @@
 # Testing & Reliability
 
 **Project:** Actual MCP Server  
-**Version:** 0.6.5  
+**Version:** 0.6.6  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
 **Last Updated:** 2026-03-02
 
