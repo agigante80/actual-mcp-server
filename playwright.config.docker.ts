@@ -7,7 +7,7 @@ import { defineConfig } from '@playwright/test';
  * Tests run inside a container against the full Actual Budget + MCP server stack.
  *
  * Note: Both docker spec files read process.env.MCP_SERVER_URL directly for the
- * MCP server URL — they are API-only tests (no browser) so browser-oriented
+ * MCP server URL. They are API-only tests (no browser), so browser-oriented
  * settings (baseURL, screenshot, video, navigationTimeout, actionTimeout) are
  * intentionally absent here.
  */
@@ -17,7 +17,7 @@ export default defineConfig({
   // Longer timeout for Docker-based tests (service startup, network latency)
   timeout: 120000,
 
-  // No retries — catch real failures, don't mask flakiness in CI
+  // No retries: catch real failures, don't mask flakiness in CI
   retries: 0,
 
   // Single worker for deterministic test execution
