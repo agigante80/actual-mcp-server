@@ -1,33 +1,34 @@
 {
   "lastFullAudit": "2026-04-17T00:00:00.000Z",
+  "lastIncrementalAudit": "2026-05-07T00:00:00.000Z",
   "libraries": {
     "@actual-app/api": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2026-04-17",
       "weeklyDownloads": 11219,
-      "notes": "Active nightly builds (26.5.0-nightly.*). Weekly downloads 11,219. Current pinned: 26.4.0."
+      "notes": "Active nightly builds. Bumped 26.4.0 → 26.5.0 by auto-release pipeline (2026-05-07). package.json now ^26.5.0; lock pins 26.5.0."
     },
     "@modelcontextprotocol/sdk": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2026-03-30",
       "weeklyDownloads": 32648132,
-      "notes": "1.29.0 installed and latest. Issues #83 (hono/express-rate-limit vulns) now closed."
+      "notes": "1.29.0 installed and latest. Pulls in vulnerable hono@4.12.14 (range ^4.11.4 — fix via npm update hono → 4.12.18, tracked by #138)."
     },
     "dotenv": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2026-03-01",
       "weeklyDownloads": 45000000,
-      "notes": "17.4.1 installed → 17.4.2 latest (minor patch drift, no ticket needed)."
+      "notes": "17.4.1 installed → 17.4.2 latest (patch drift, covered by Dependabot PR #126 / closed-issue #128)."
     },
     "express": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2025-12-01",
       "weeklyDownloads": 92829141,
-      "notes": "5.2.1 installed and latest. Issue #84 (path-to-regexp ReDoS) now closed."
+      "notes": "5.2.1 installed and latest. Issue #84 (path-to-regexp ReDoS) closed."
     },
     "mcp-auth": {
       "lastChecked": "2026-04-17",
@@ -39,28 +40,28 @@
     "mitt": {
       "lastChecked": "2026-04-17",
       "status": "removed",
-      "notes": "Issue #82 (unused dependency — mitt) now closed. Removed from package.json."
+      "notes": "Issue #82 closed. Removed from package.json."
     },
     "winston": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2025-12-07",
       "weeklyDownloads": 21969367,
-      "notes": "3.18.3 installed. Latest is 3.19.0 (minor drift, no ticket needed)."
+      "notes": "3.18.3 installed. Latest 3.19.0 (minor drift, no ticket needed)."
     },
     "winston-daily-rotate-file": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2024-02-09",
       "weeklyDownloads": 1358924,
-      "notes": "Last publish Feb 2024 (>26 months). Downloads healthy at 1.36M/week. No deprecation warning. Monitor — stable utility."
+      "notes": "Last publish Feb 2024 (>27 months). Downloads healthy at 1.36M/week. No deprecation warning. Monitor — stable utility."
     },
     "zod": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2026-01-25",
       "weeklyDownloads": 158071285,
-      "notes": "4.0.0 installed, latest 4.3.6 (minor drift, no ticket needed)."
+      "notes": "4.3.6 installed → 4.4.3 latest (minor drift, covered by Dependabot PR #126 / closed-issue #128)."
     },
     "@playwright/test": {
       "lastChecked": "2026-04-17",
@@ -88,42 +89,56 @@
       "status": "maintained",
       "lastPublish": "2023-12-14",
       "weeklyDownloads": 66070579,
-      "notes": "Last publish Dec 2023 (>28 months). Extremely high downloads; stable utility. Known false positive in Knip — used by scripts/register-tsconfig-paths.js."
+      "notes": "Last publish Dec 2023 (>29 months). Extremely high downloads; stable utility. Known false positive in Knip — used by scripts/register-tsconfig-paths.js."
     },
     "typescript": {
       "lastChecked": "2026-04-17",
       "status": "maintained",
       "lastPublish": "2026-03-01",
       "weeklyDownloads": 50000000,
-      "notes": "6.0.2 installed, latest 6.0.3 (patch drift, no ticket needed). Issue #85 (major 5→6 upgrade) now closed."
+      "notes": "6.0.2 installed → 6.0.3 latest (patch drift, covered by Dependabot PR #126 / closed-issue #128)."
     },
     "debug": {
       "lastChecked": "2026-04-17",
-      "status": "unlisted",
+      "status": "maintained",
       "lastPublish": "2024-12-01",
       "weeklyDownloads": 554339343,
-      "notes": "Used in src/logger.ts but not declared in package.json. Issue #115 filed."
+      "notes": "Now declared as direct dependency (^4.4.3). Issue #115 closed."
     },
     "prom-client": {
       "lastChecked": "2026-04-17",
-      "status": "unlisted",
+      "status": "maintained",
       "lastPublish": "2025-06-01",
       "weeklyDownloads": 6153835,
-      "notes": "Used in src/observability.ts but not declared in package.json. Issue #115 filed."
+      "notes": "Now declared as optionalDependency (*). Issue #115 closed."
     },
     "jose": {
       "lastChecked": "2026-04-17",
-      "status": "unlisted",
+      "status": "maintained",
       "lastPublish": "2025-12-01",
       "weeklyDownloads": 64471098,
-      "notes": "Used in src/server/httpServer.ts but not declared in package.json. Issue #115 filed."
+      "notes": "Now declared as direct dependency (^6.1.3). 6.1.3 installed → 6.2.3 latest (minor drift, covered by Dependabot PR #126 / closed-issue #128). Issue #115 closed."
     },
     "node-fetch": {
       "lastChecked": "2026-04-17",
-      "status": "unlisted",
+      "status": "maintained",
       "lastPublish": "2023-12-01",
       "weeklyDownloads": 130463545,
-      "notes": "Used in src/tests/testMcpClient.ts and tests/manual/mcp-client.js (test-only) but not declared in package.json. Issue #115 filed."
+      "notes": "Now declared as devDependency (^3.3.2). Issue #115 closed."
+    }
+  },
+  "auditHistory": {
+    "2026-05-07": {
+      "type": "incremental (cache-first, 30-day window)",
+      "registryQueriesSkipped": 18,
+      "knipUnusedDeps": 0,
+      "vulnerabilities": {
+        "ip-address": "tracked by #137 / PR #136",
+        "express-rate-limit": "fixed transitively when ip-address bumps (#137)",
+        "hono": "filed #138 — npm update hono → 4.12.18"
+      },
+      "versionDrift": "All <1 major behind (info-only). dotenv/jose/zod/typescript drifts covered by closed-issue #128 / open PR #126.",
+      "ticketsCreated": ["#138"]
     }
   }
 }
