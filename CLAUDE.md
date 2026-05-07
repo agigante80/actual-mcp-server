@@ -8,6 +8,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
+## Output Convention: never use em or en dashes
+
+**Hard project rule. Applies to ALL output: chat, commits, GitHub comments and PR/issue bodies, file content, code comments, release notes.** Never write the unicode em dash character (U+2014) or en dash character (U+2013).
+
+When you would have written one, restructure the sentence so no dash is needed at all. Do NOT substitute with a regular ASCII hyphen (the hyphen is reserved for genuine compound words like `post-merge`, `cherry-pick`, `off-budget`).
+
+Replacement patterns:
+- Introducing an explanation or list: use a colon. "Result: it shipped."
+- Parenthetical aside: use commas or parentheses. "The fix, cherry-picked, landed cleanly." Or "The fix (cherry-picked) landed cleanly."
+- Range: use the word "to" or "through". "v0.6.4 to v0.6.6", "Monday through Friday".
+- Strong pause or contrast: split into two sentences.
+
+Mechanical enforcement: a PreToolUse hook at `.claude/hooks/no_dashes_hook.py` (registered in `.claude/settings.local.json`) blocks any `Edit`, `MultiEdit`, `Write`, or `Bash` tool call whose payload contains an em or en dash, and tells the model how to restructure. The hook script's output is shown back to the model verbatim. Self-check before submitting tool calls regardless of whether the hook is currently armed.
+
+Common slip patterns to watch for (described abstractly to avoid the literal characters):
+- Tables that use a wide horizontal-bar punctuation as a separator inside cells (replace with a colon, or restructure into a sub-table).
+- A definitional pause like `X PAUSE Y` where PAUSE is a wide horizontal bar (use `X: Y` instead).
+- Range expressions like `X PAUSE Y` where PAUSE is a wide horizontal bar (use `X to Y`).
+- Bulleted lists in the form `- item PAUSE description` where PAUSE is a wide horizontal bar (use `- item: description`).
+
 ## Git Workflow
 
 **Always work on `develop`, never push directly to `main`.**
