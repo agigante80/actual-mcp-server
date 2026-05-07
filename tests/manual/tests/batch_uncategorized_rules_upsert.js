@@ -74,12 +74,20 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   });
   console.log("✓ Uncategorized transaction created");
 
-  // List uncategorized transactions (default: all-time)
+  // List uncategorized transactions (default: all-time).
+  // NOTE: Since #121, actual_transactions_uncategorized returns only a summary
+  // by default (totalCount, totalAmount, byAccount, dateRange). Pass
+  // includeTransactions:true to also receive the paginated transactions[] we
+  // need for the find-by-notes assertions below.
   console.log("\nListing uncategorized transactions (default: all-time)...");
-  const uncatResult = await callTool("actual_transactions_uncategorized", {});
+  const uncatResult = await callTool("actual_transactions_uncategorized", {
+    includeTransactions: true,
+    limit: 1000,
+  });
   const uncatTxns = uncatResult?.transactions ?? [];
-  const uncatCount = uncatResult?.count ?? uncatTxns.length;
-  const uncatTotalAmount = uncatResult?.summary?.totalAmount;
+  // totalCount lives at the top level (post-#121); summary.totalAmount no longer exists.
+  const uncatCount = uncatResult?.totalCount ?? uncatTxns.length;
+  const uncatTotalAmount = uncatResult?.totalAmount;
   if (Array.isArray(uncatTxns)) {
     console.log(`  ✓ actual_transactions_uncategorized: count=${uncatCount}, totalAmount=${uncatTotalAmount}`);
   } else {
@@ -129,8 +137,8 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   if (emptyRangeResult?.count === 0) {
     console.log(`  ✓ EDGE CASE: count=0`);
   }
-  if (emptyRangeResult?.summary?.totalAmount === 0) {
-    console.log(`  ✓ EDGE CASE: summary.totalAmount=0`);
+  if (emptyRangeResult?.totalAmount === 0) {
+    console.log(`  ✓ EDGE CASE: totalAmount=0`);
   }
 
   // ── Off-budget filtering regression (issue #80) ───────────────────────────
@@ -192,8 +200,12 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       offBudgetTxnId = offTxn?.id ?? null;
     } catch (_) { /* best effort */ }
 
-    // 3. List uncategorized — off-budget transaction must NOT appear
-    const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {});
+    // 3. List uncategorized — off-budget transaction must NOT appear.
+    // Same #121 shape note: includeTransactions:true is required to get the array.
+    const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {
+      includeTransactions: true,
+      limit: 1000,
+    });
     const offBudgetUncatTxns = offBudgetUncatResult?.transactions ?? [];
     const offBudgetTxnFound = offBudgetUncatTxns.find(t => t?.notes === offBudgetNotes);
 
@@ -217,7 +229,10 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
           id: offBudgetTxnFound.id,
           fields: { category: context.categoryId },
         });
-        const readBack = await callTool("actual_transactions_uncategorized", {});
+        const readBack = await callTool("actual_transactions_uncategorized", {
+          includeTransactions: true,
+          limit: 1000,
+        });
         const stillPresent = (readBack?.transactions ?? []).find(t => t?.id === offBudgetTxnFound.id);
         if (stillPresent) {
           console.log("  ✓ SILENT-WRITE CONFIRMED [#80]: update returned success but category still null (off-budget write is a no-op)");
