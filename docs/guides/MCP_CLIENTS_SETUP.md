@@ -1,6 +1,6 @@
 # Connect Any AI Client to Your Budget
 
-This guide walks you through connecting **Claude Desktop, Cursor, VS Code (GitHub Copilot), Gemini CLI, and Claude Code** to your **Actual Budget** instance using the Actual MCP Server. Once set up, you can manage your budget conversationally — ask questions, log expenses, analyse spending — all in plain English.
+This guide walks you through connecting **Claude Desktop, Cursor, VS Code (GitHub Copilot), Gemini CLI, and Claude Code** to your **Actual Budget** instance using the Actual MCP Server. Once set up, you can manage your budget conversationally: ask questions, log expenses, analyse spending, all in plain English.
 
 > **New to Actual Budget?** Set it up first at [actualbudget.org](https://actualbudget.org/) before continuing.
 
@@ -16,7 +16,7 @@ AI Client  ──stdin──►  actual-mcp-server  ──►  Actual Budget
            ◄──stderr──  (logs only, not shown to user)
 ```
 
-The client **spawns actual-mcp-server as a child process**. Requests travel over **stdin**, responses come back over **stdout**, and all server logs go to **stderr** (visible in each client's debug panel). There is no network port, no auth token — the OS process boundary is the security model. The client starts the server on launch and kills it on exit.
+The client **spawns actual-mcp-server as a child process**. Requests travel over **stdin**, responses come back over **stdout**, and all server logs go to **stderr** (visible in each client's debug panel). There is no network port and no auth token; the OS process boundary is the security model. The client starts the server on launch and kills it on exit.
 
 This is in contrast to the **HTTP transport** (`--http`), where the server runs persistently and clients connect over a network port with a Bearer token.
 
@@ -29,21 +29,21 @@ This is in contrast to the **HTTP transport** (`--http`), where the server runs 
 
 ## Prerequisites (all options)
 
-- ✅ **Actual Budget** running (local or self-hosted) — [setup guide](https://actualbudget.org/docs/install/)
+- ✅ **Actual Budget** running (local or self-hosted): [setup guide](https://actualbudget.org/docs/install/)
 - ✅ Your **Budget Sync ID**: Actual → Settings → Show Advanced Settings → Sync ID
 - ✅ Your **server URL** and **password** for Actual Budget
 
-For stdio options (Sections 1–4 below):
-- ✅ **Node.js 20+** — [download](https://nodejs.org/). Check with `node --version`
-- ✅ The server available via `npx` (no install needed) — or cloned and built from source for development
-- ✅ **Data directory created** — pick an absolute path and create it before starting:
+For stdio options (Sections 1 to 4 below):
+- ✅ **Node.js 20+**: [download](https://nodejs.org/). Check with `node --version`
+- ✅ The server available via `npx` (no install needed), or cloned and built from source for development
+- ✅ **Data directory created**: pick an absolute path and create it before starting:
   ```bash
   mkdir -p /absolute/path/to/data-dir
   ```
   This is where the server stores a local SQLite copy of your budget. The server will create it automatically if missing, but doing it explicitly avoids permission issues on first run.
 
 For HTTP options (Docker-based):
-- ✅ **Docker** — [get Docker](https://docs.docker.com/get-docker/)
+- ✅ **Docker**: [get Docker](https://docs.docker.com/get-docker/)
 
 ---
 
@@ -51,19 +51,19 @@ For HTTP options (Docker-based):
 
 You'll need three pieces of information regardless of which client you use:
 
-1. **Server URL** — where Actual Budget is running
+1. **Server URL**: where Actual Budget is running
    - Same computer: `http://localhost:5006`
    - Another machine on your network: `http://192.168.1.x:5006`
 
-2. **Server password** — the password you use to log in to Actual Budget
+2. **Server password**: the password you use to log in to Actual Budget
 
-3. **Budget Sync ID** — open Actual Budget → Settings → Show Advanced Settings → copy the Sync ID (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
+3. **Budget Sync ID**: open Actual Budget then Settings then Show Advanced Settings, then copy the Sync ID (`xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
 
 ---
 
 ## Claude Desktop
 
-### Option A — stdio (native, recommended for local use)
+### Option A: stdio (native, recommended for local use)
 
 Claude Desktop spawns the server as a child process. No Docker, no HTTP server, no token required.
 
@@ -75,11 +75,11 @@ Claude Desktop spawns the server as a child process. No Docker, no HTTP server, 
 | Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
 | Linux | `~/.config/Claude/claude_desktop_config.json` |
 
-> **Close Claude Desktop before editing** — config changes only take effect on restart.
+> **Close Claude Desktop before editing.** Config changes only take effect on restart.
 
 #### Via npx (no clone or build required)
 
-The simplest option — `npx` downloads and caches the package automatically on first use:
+The simplest option. `npx` downloads and caches the package automatically on first use:
 
 ```json
 {
@@ -135,7 +135,7 @@ Run `pwd` in the repo directory to find the absolute path.
 
 ---
 
-### Option B — HTTPS via mcp-remote (when server is running in Docker)
+### Option B: HTTPS via mcp-remote (when server is running in Docker)
 
 Use this when the MCP server is already running as a Docker container with `MCP_ENABLE_HTTPS=true`.
 
@@ -161,13 +161,13 @@ First, [start the Docker container](#starting-the-docker-container) below.
 }
 ```
 
-> **Linux with NVM?** Use the absolute NVM path for `command` and set `PATH` explicitly in `env` (see Linux NVM note in Option A above — same issue applies to `npx`). The `PATH` is also required because `mcp-remote`'s shebang resolves `node` via PATH at runtime.
+> **Linux with NVM?** Use the absolute NVM path for `command` and set `PATH` explicitly in `env` (see Linux NVM note in Option A above; same issue applies to `npx`). The `PATH` is also required because `mcp-remote`'s shebang resolves `node` via PATH at runtime.
 
 ---
 
-### Option C — Plain HTTP via mcp-remote
+### Option C: Plain HTTP via mcp-remote
 
-Use this for HTTP-only Docker deployments. The `--allow-http` flag is required — `mcp-remote` enforces HTTPS by default.
+Use this for HTTP-only Docker deployments. The `--allow-http` flag is required because `mcp-remote` enforces HTTPS by default.
 
 ```json
 {
@@ -263,7 +263,7 @@ Cursor starts the MCP server when a project with this config is opened and stops
 
 ---
 
-## VS Code — GitHub Copilot
+## VS Code (GitHub Copilot)
 
 GitHub Copilot in VS Code reads MCP configuration from **`.copilot/mcp-config.json`** in your project root (or the equivalent user-level location). It uses `mcpServers` as the root key and requires `"type": "stdio"` on each entry.
 
@@ -322,7 +322,7 @@ Gemini CLI reads MCP configuration from `~/.gemini/settings.json` (user-level) o
 
 > **`"trust"`** controls whether Gemini CLI prompts before running each tool. `true` = run automatically; `false` = ask each time. Set based on your comfort level.
 
-Gemini CLI also supports environment variable expansion — useful to avoid hardcoding secrets in the file:
+Gemini CLI also supports environment variable expansion. This is useful to avoid hardcoding secrets in the file:
 
 ```json
 {
@@ -356,7 +356,7 @@ export ACTUAL_BUDGET_SYNC_ID="your-sync-id"
 
 Claude Code supports MCP servers via `.mcp.json` in your project root (project-scoped) or via `claude mcp add` (user-scoped). The config uses `mcpServers` as the root key and requires `"type": "stdio"`.
 
-**`.mcp.json`** in your project root (recommended — version-controlled, shared with teammates):
+**`.mcp.json`** in your project root (recommended; version-controlled, shared with teammates):
 
 ```json
 {
@@ -376,7 +376,7 @@ Claude Code supports MCP servers via `.mcp.json` in your project root (project-s
 }
 ```
 
-> **`actual-mcp-server@latest`** — using `@latest` ensures npx always runs the latest published version. Drop `@latest` to use whatever version npx has cached locally.
+> **`actual-mcp-server@latest`**: using `@latest` ensures npx always runs the latest published version. Drop `@latest` to use whatever version npx has cached locally.
 
 **Or add via CLI** (user-scoped, not project-specific):
 
@@ -402,7 +402,7 @@ First, create the data directory:
 mkdir -p /absolute/path/to/data-dir
 ```
 
-**Option A — via CLI (simplest):**
+**Option A: via CLI (simplest):**
 
 ```bash
 codex mcp add actual-budget \
@@ -413,7 +413,7 @@ codex mcp add actual-budget \
   -- npx -y actual-mcp-server --stdio
 ```
 
-**Option B — edit `~/.codex/config.toml`** (global) or `.codex/config.toml` (project-scoped, trusted projects only):
+**Option B: edit `~/.codex/config.toml`** (global) or `.codex/config.toml` (project-scoped, trusted projects only):
 
 ```toml
 [mcp_servers.actual-budget]
@@ -428,11 +428,11 @@ ACTUAL_BUDGET_SYNC_ID = "your-sync-id"
 MCP_BRIDGE_DATA_DIR = "/absolute/path/to/data-dir"
 ```
 
-> No `type` field is needed — Codex infers stdio from the presence of `command`.
+> No `type` field is needed; Codex infers stdio from the presence of `command`.
 
 > `startup_timeout_sec = 30` gives the server enough time to initialise on first run.
 
-> **NVM users — system Node < 18**: Codex is Python-based and does not load your shell profile. If your system `node` (outside NVM) is older than v18 or missing, `npx` will fail. Use the absolute NVM path instead:
+> **NVM users with system Node < 18**: Codex is Python-based and does not load your shell profile. If your system `node` (outside NVM) is older than v18 or missing, `npx` will fail. Use the absolute NVM path instead:
 > ```bash
 > # Find your path:
 > which actual-mcp-server   # after: npm install -g actual-mcp-server
@@ -445,9 +445,9 @@ MCP_BRIDGE_DATA_DIR = "/absolute/path/to/data-dir"
 
 ## No special ignore file needed
 
-There is no `.mcpignore`, `.cursorignore`, or similar file in the MCP ecosystem. The only file you need to watch for is the **data directory** (`actual-data/` or whatever you set `MCP_BRIDGE_DATA_DIR` to). This directory is already in `.gitignore` — it contains a local SQLite copy of your budget data downloaded by the `@actual-app/api` library, and should never be committed to version control.
+There is no `.mcpignore`, `.cursorignore`, or similar file in the MCP ecosystem. The only file you need to watch for is the **data directory** (`actual-data/` or whatever you set `MCP_BRIDGE_DATA_DIR` to). This directory is already in `.gitignore`; it contains a local SQLite copy of your budget data downloaded by the `@actual-app/api` library, and should never be committed to version control.
 
-If you set `MCP_BRIDGE_DATA_DIR` to a path outside the repo, nothing else changes — it simply won't be gitignored automatically, so ensure that path is not tracked elsewhere.
+If you set `MCP_BRIDGE_DATA_DIR` to a path outside the repo, nothing else changes; it simply won't be gitignored automatically, so ensure that path is not tracked elsewhere.
 
 ---
 
@@ -469,20 +469,20 @@ If you set `MCP_BRIDGE_DATA_DIR` to a path outside the repo, nothing else change
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| `ReferenceError: File is not defined` + `Node.js v18.x` | Node version too old — requires v20+ | Use absolute NVM path for `command` |
+| `ReferenceError: File is not defined` + `Node.js v18.x` | Node version too old (requires v20+) | Use absolute NVM path for `command` |
 | `URL must use HTTPS` (mcp-remote) | `--allow-http` missing | Add `"--allow-http"` to args (HTTP option) |
 | `URL must start with 'https'` (Claude Desktop) | Claude Desktop enforces HTTPS | Switch to HTTPS option or use stdio (Option A) |
 | `SSL certificate problem` | Wrong cert path in `NODE_EXTRA_CA_CERTS` | Verify: `ls -la /path/to/cert.pem` |
-| `ECONNREFUSED` | Docker container not running | `docker ps \| grep actual-mcp` — start if missing |
+| `ECONNREFUSED` | Docker container not running | `docker ps \| grep actual-mcp` and start if missing |
 | Server starts but no tools appear | Config file not reloaded | Fully restart the AI client after editing config |
 | `ACTUAL_PASSWORD` not picked up | Relative env var path | Check variable expansion syntax for your client |
 | Data appears to reset between sessions | `MCP_BRIDGE_DATA_DIR` is relative | Set it to an absolute path in the `env` block |
 | `ENOENT` or permission error on startup | Data directory doesn't exist | `mkdir -p /your/data-dir` then restart the client |
-| Codex: `connection closed: initialize response` | Server version < 0.5.2 — dotenv wrote to stdout, corrupting JSON-RPC | Upgrade: `npx -y actual-mcp-server@latest --stdio` or use absolute NVM path if system Node < 18 |
+| Codex: `connection closed: initialize response` | Server version < 0.5.2: dotenv wrote to stdout, corrupting JSON-RPC | Upgrade: `npx -y actual-mcp-server@latest --stdio` or use absolute NVM path if system Node < 18 |
 
 ### JSON config validation
 
-All config files are JSON — a missing comma or bracket silently prevents the server from loading. Validate with:
+All config files are JSON. A missing comma or bracket silently prevents the server from loading. Validate with:
 
 ```bash
 python3 -m json.tool /path/to/your/config.json
@@ -500,9 +500,9 @@ Or use [jsonlint.com](https://jsonlint.com/) in a browser.
 
 ## Next steps
 
-- **[62 available tools](../../README.md#available-tools)** — complete list of what your AI can do with your budget
-- **[AI Client Setup Guide](AI_CLIENT_SETUP.md)** — LibreChat, LobeChat, Docker networking, HTTPS/TLS proxy, OIDC multi-user
-- **[Deployment Guide](DEPLOYMENT.md)** — Docker Compose profiles, production config
+- **[62 available tools](../../README.md#available-tools)**: complete list of what your AI can do with your budget
+- **[AI Client Setup Guide](AI_CLIENT_SETUP.md)**: LibreChat, LobeChat, Docker networking, HTTPS/TLS proxy, OIDC multi-user
+- **[Deployment Guide](DEPLOYMENT.md)**: Docker Compose profiles, production config
 
 ---
 
