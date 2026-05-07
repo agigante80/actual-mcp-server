@@ -64,7 +64,7 @@ Comprehensive coverage of Actual Budget functionality across 13 categories:
 
 > ✅ **All 63 tools verified** with LibreChat and LobeChat integration testing  
 > 🐳 **Docker images published** on Docker Hub and GitHub Container Registry  
-> 📊 **60/63 tools in Docker E2E** (2 excluded: `budgets_list_available`, `budgets_switch` — single-budget CI constraint)
+> 📊 **60/63 tools in Docker E2E** (2 excluded: `budgets_list_available`, `budgets_switch`, due to single-budget CI constraint)
 
 ### 🔄 **Transport Protocol**
 
@@ -228,16 +228,16 @@ mcpServers:
 ### Current Achievements
 
 - ✅ **63 tools implemented** (100% of core API coverage)
-- ✅ **LibreChat and LobeChat verified** — all tools loading and functional
-- ✅ **Docker images published** — Docker Hub and GHCR
-- ✅ **CI/CD pipeline** — automated testing and deployment
-- ✅ **Security hardened** — Bearer auth, OIDC, HTTPS, non-root container
-- ✅ **Test coverage** — unit tests (63 tools), Docker Playwright E2E (76 tests, all 63 tools), live integration suite (63/63 tools)
+- ✅ **LibreChat and LobeChat verified**: all tools loading and functional
+- ✅ **Docker images published** to Docker Hub and GHCR
+- ✅ **CI/CD pipeline**: automated testing and deployment
+- ✅ **Security hardened**: Bearer auth, OIDC, HTTPS, non-root container
+- ✅ **Test coverage**: unit tests (63 tools), Docker Playwright E2E (76 tests, all 63 tools), live integration suite (63/63 tools)
 
 ### Future Goals
 
-- 🎯 [Tags CRUD](./feature/TAGS_CRUD.md) — 4 tools for managing transaction tags (blocked on upstream `@actual-app/api` stable release)
-- 🎯 [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md) — actionable errors across all tools
+- 🎯 [Tags CRUD](./feature/TAGS_CRUD.md): 4 tools for managing transaction tags (blocked on upstream `@actual-app/api` stable release)
+- 🎯 [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md): actionable errors across all tools
 - 🎯 Performance optimization for large datasets
 - 🎯 Support for additional MCP clients (Claude Desktop, etc.)
 
