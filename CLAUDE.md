@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **63 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use — pass `--stdio` flag).
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **63 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
@@ -47,7 +47,7 @@ npm run dev -- --stdio --debug  # Dev mode with stdio transport (for Claude Desk
 npm run start                   # Production HTTP (requires build first)
 node dist/src/index.js --stdio  # Production stdio
 
-# Testing (validation sequence — run in this order)
+# Testing (validation sequence, run in this order)
 npm run build                   # Step 1: must compile cleanly
 npm run verify-tools            # Step 2: all 63 tools registered (reads dist/)
 npm run test:unit-js            # Step 3: unit + schema tests
@@ -78,13 +78,13 @@ docker compose --profile fullstack up   # Includes Actual Budget server on :5006
 
 **Pre-commit mandatory**: `npm run build && npm run test:adapter && npm run test:unit-js && npm audit --audit-level=moderate`
 
-**Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker). `test:integration:cleanup` deletes test data created by `full` — only run after `full` against a test budget.
+**Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker). `test:integration:cleanup` deletes test data created by `full`. Only run it after `full` against a test budget.
 
 **Integration test modules** (`tests/manual/tests/`): `sanity` (read-only protocol), `smoke` (balances/categories), `account`, `category-group`, `category`, `payee`, `transaction`, `budget`, `rules`, `schedule`, `batch_uncategorized_rules_upsert`, `advanced` (bank sync, raw SQL).
 
 ## Project-Local Agents & Commands
 
-Five **project-specific** subagents live in `.claude/agents/` — delegate to them via the Agent tool for complex tasks in their domain:
+Five **project-specific** subagents live in `.claude/agents/`. Delegate to them via the Agent tool for complex tasks in their domain:
 
 | Agent | When to use |
 |-------|-------------|
@@ -92,18 +92,18 @@ Five **project-specific** subagents live in `.claude/agents/` — delegate to th
 | `qa` | Writing, reviewing, or debugging tests at any layer (unit, integration, E2E, manual) |
 | `release-manager` | Version bumps, docs sync, GitHub issue triage, closing fixed tickets |
 | `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
-| `ticket-gate` | Readiness gate for GitHub issues — runs 4 specialist agents to score a ticket before implementation (all must score 10/10) |
+| `ticket-gate` | Readiness gate for GitHub issues. Runs 4 specialist agents to score a ticket before implementation (all must score 10/10) |
 
-Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `health-check`) — use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain.
+Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `health-check`). Use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain.
 
 Project-local slash commands in `.claude/commands/`:
 
-- `/dep-auditor [--full]` — dependency health audit: runs Knip, npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything)
-- `/local-env` — full local deployment pipeline for the dev environment
-- `/gate-ticket <issue-number>` — runs the ticket readiness gate on a GitHub issue (all 4 specialist agents must score 10/10 before implementation)
-- `/ci-health` — checks all GitHub Actions workflows for failures, opens P0 tickets, and auto-fixes safe failures
-- `/full-review [target]` — orchestrates a multi-dimensional code review (architecture, security, performance, testing, best practices)
-- `/pr-enhance [PR# or description]` — enhances an existing pull request (description, labels, follow-ups)
+- `/dep-auditor [--full]`: dependency health audit. Runs Knip, npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything).
+- `/local-env`: full local deployment pipeline for the dev environment.
+- `/gate-ticket <issue-number>`: runs the ticket readiness gate on a GitHub issue (all 4 specialist agents must score 10/10 before implementation).
+- `/ci-health`: checks all GitHub Actions workflows for failures, opens P0 tickets, and auto-fixes safe failures.
+- `/full-review [target]`: orchestrates a multi-dimensional code review (architecture, security, performance, testing, best practices).
+- `/pr-enhance [PR# or description]`: enhances an existing pull request (description, labels, follow-ups).
 
 ## Architecture
 
@@ -117,9 +117,9 @@ Express + StreamableHTTP             StdioServerTransport
     ↓                                     ↓
 ActualMCPConnection (src/lib/ActualMCPConnection.ts)
     ↓
-ActualToolsManager — 63 tools, Zod validation, dispatch (src/actualToolsManager.ts)
+ActualToolsManager (63 tools, Zod validation, dispatch) at src/actualToolsManager.ts
     ↓
-actual-adapter.ts — withActualApi wrapper, retry (3x), concurrency limit (5)
+actual-adapter.ts (withActualApi wrapper, retry 3x, concurrency limit 5)
     ↓
 @actual-app/api v26 → Actual Budget Server
 ```
@@ -130,14 +130,14 @@ actual-adapter.ts — withActualApi wrapper, retry (3x), concurrency limit (5)
 
 **Every Actual API operation MUST use `withActualApi()`** from `src/lib/actual-adapter.ts`. Two execution modes since #134 (v0.6.4):
 
-- **Pooled mode (preferred — fires automatically when an MCP session is active):** if `requestContext` carries a `sessionId` AND `connectionPool.hasConnection(sessionId)` is true AND `apiState.isApiInitialized()` is true, the wrapper skips `api.init()` / `api.shutdown()` entirely and runs the operation against the existing per-session connection. This eliminates the per-op upstream-login burst that was the root cause of #127. Writes still call `api.sync()` afterward to commit.
+- **Pooled mode (preferred, fires automatically when an MCP session is active):** if `requestContext` carries a `sessionId` AND `connectionPool.hasConnection(sessionId)` is true AND `apiState.isApiInitialized()` is true, the wrapper skips `api.init()` / `api.shutdown()` entirely and runs the operation against the existing per-session connection. This eliminates the per-op upstream-login burst that was the root cause of #127. Writes still call `api.sync()` afterward to commit.
 - **Legacy mode (fallback):** when there's no sessionId in context, no pool entry, or the api singleton was torn down by another path, the wrapper falls back to the original `init` → `op` → `shutdown` cycle so non-MCP callers (CLI scripts, startup health checks, stdio without `requestContext.run`) keep working.
 
 ```typescript
 // ✅ CORRECT
 await withActualApi(async () => { return await rawAddTransactions(data); });
 
-// ❌ WRONG — data won't persist (tombstone issue) and bypasses pool cooperation
+// ❌ WRONG: data won't persist (tombstone issue) and bypasses pool cooperation
 await rawAddTransactions(data);
 ```
 
@@ -145,7 +145,7 @@ The pool branch only releases its session connection on **infrastructure-level e
 
 ### Tool Structure Pattern
 
-New tools should use `createTool()` from `src/lib/toolFactory.ts` — it wires up error handling, logging, and observability automatically:
+New tools should use `createTool()` from `src/lib/toolFactory.ts`. It wires up error handling, logging, and observability automatically:
 
 ```typescript
 import { z } from 'zod';
@@ -170,7 +170,7 @@ export default createTool({
 });
 ```
 
-Many existing tools still use the older pattern — both work, but `createTool()` is preferred for new tools:
+Many existing tools still use the older pattern. Both work, but `createTool()` is preferred for new tools:
 
 ```typescript
 // Legacy pattern (most existing tools)
@@ -209,47 +209,47 @@ export default tool;
 | `src/lib/apiState.ts` | Shared module-level flag for `@actual-app/api`'s singleton "live" state. Updated by every `init`/`shutdown` path so the adapter can probe whether the pool branch is safe |
 | `src/lib/requestContext.ts` | `AsyncLocalStorage<{ sessionId? }>` carrying the active MCP session across async boundaries. Producer: `httpServer.ts`. Consumer: `actual-adapter.ts` (decides pool reuse) |
 | `src/server/httpServer.ts` | Express HTTP, StreamableHTTP, Bearer/OIDC auth |
-| `src/server/stdioServer.ts` | stdio transport — logs to stderr, stdout for JSON-RPC |
+| `src/server/stdioServer.ts` | stdio transport. Logs to stderr, stdout reserved for JSON-RPC |
 | `src/auth/setup.ts` | OIDC/JWKS factory (`AUTH_PROVIDER=oidc`) |
 | `src/auth/budget-acl.ts` | Per-user budget ACL (email/sub/group principals) |
-| `src/config.ts` | Zod environment validation — all config lives here |
+| `src/config.ts` | Zod environment validation. All config lives here |
 | `src/lib/schemas/common.ts` | Shared Zod schemas (`CommonSchemas`) |
 | `src/lib/constants.ts` | `UUID_PATTERN`, timeouts, limits |
 | `src/lib/retry.ts` | Exponential backoff (3 attempts, 200ms base) |
 | `src/lib/loggerFactory.ts` | Module-scoped winston loggers |
-| `src/lib/toolFactory.ts` | `createTool()` — preferred factory for new tools |
+| `src/lib/toolFactory.ts` | `createTool()`, the preferred factory for new tools |
 | `src/actualConnection.ts` | Actual Budget connection lifecycle |
 | `src/lib/errors.ts` | `notFoundMsg()`, `constraintErrorMsg()` helpers |
 | `src/observability.ts` | Per-tool call counters (incremented by `createTool`) |
 | `src/lib/budget-registry.ts` | Parses `BUDGET_N_*` env vars into budget config list |
 | `src/prompts/` | MCP prompt definitions (e.g. `showLargeTransactions`) |
 | `src/resources/` | MCP resource definitions (e.g. `accountsSummary`) |
-| `src/lib/actual-schema.ts` | Actual Budget DB schema (tables/fields/join paths) — source of truth for SQL validation |
+| `src/lib/actual-schema.ts` | Actual Budget DB schema (tables/fields/join paths); source of truth for SQL validation |
 | `src/lib/query-validator.ts` | Pre-validates SQL queries against `actual-schema` before execution to prevent server crashes |
 
 ## Key Conventions & Gotchas
 
 **Amounts are always in integer cents**: `5000 = $50.00`, `-5000 = -$50.00`. Never use decimal dollars.
 
-**`MCP_SSE_AUTHORIZATION` must be the raw token only** — not `"Bearer token123"`. The server extracts the token from the `Authorization: Bearer <token>` header and compares directly.
+**`MCP_SSE_AUTHORIZATION` must be the raw token only**, not `"Bearer token123"`. The server extracts the token from the `Authorization: Bearer <token>` header and compares directly.
 
-**`MCP_ENABLE_HTTPS=true`** enables native TLS — set `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` to PEM file paths. A reverse proxy is still preferred for production (certificate rotation, SNI), but native TLS works for simple single-host deployments.
+**`MCP_ENABLE_HTTPS=true`** enables native TLS. Set `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` to PEM file paths. A reverse proxy is still preferred for production (certificate rotation, SNI), but native TLS works for simple single-host deployments.
 
-**Date fields require `YYYY-MM-DD` strings** — never use `Date.now()` (produces a number).
+**Date fields require `YYYY-MM-DD` strings**. Never use `Date.now()` (it produces a number).
 
 **Multi-budget mode**: `BUDGET_N_NAME`, `BUDGET_N_SYNC_ID`, `BUDGET_N_SERVER_URL`, `BUDGET_N_PASSWORD`, `BUDGET_N_ENCRYPTION_PASSWORD` (N = 1, 2, 3…). Server URL and password fall back to the default `ACTUAL_*` vars if omitted.
 
-**`mcp-remote` requires `--allow-http`** for HTTP connections — it enforces HTTPS by default. Without the flag, clients see `URL must use HTTPS`. Some versions of Claude Desktop also enforce HTTPS at the app level; in that case, switch to native TLS (`MCP_ENABLE_HTTPS=true`).
+**`mcp-remote` requires `--allow-http`** for HTTP connections, because it enforces HTTPS by default. Without the flag, clients see `URL must use HTTPS`. Some versions of Claude Desktop also enforce HTTPS at the app level; in that case, switch to native TLS (`MCP_ENABLE_HTTPS=true`).
 
-**Documentation hygiene**: Prefer deletion over archiving. When a feature ships, delete its `docs/feature/*.md` spec and remove its row from `docs/ROADMAP.md`. Never move to `archive/` folders — git history is the archive.
+**Documentation hygiene**: Prefer deletion over archiving. When a feature ships, delete its `docs/feature/*.md` spec and remove its row from `docs/ROADMAP.md`. Never move to `archive/` folders; git history is the archive.
 
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
 
-**Production-tag freshness check (added in v0.6.5):** before any bump, `scripts/version-bump.js` queries `git ls-remote --tags origin` and aborts if the local `VERSION` is BEHIND the latest published `vX.Y.Z` tag. This guards against the parallel-bump pattern that occurred when the scheduled `Dependency Update & Auto-Release` workflow shipped a release while a local branch was unsynced. If you see the abort message, run `git fetch origin && git merge origin/main` before retrying. Override only with `--force` (and only when production is genuinely wrong — the `release-manager` agent requires explicit user confirmation before invoking that flag).
+**Production-tag freshness check (added in v0.6.5):** before any bump, `scripts/version-bump.js` queries `git ls-remote --tags origin` and aborts if the local `VERSION` is BEHIND the latest published `vX.Y.Z` tag. This guards against the parallel-bump pattern that occurred when the scheduled `Dependency Update & Auto-Release` workflow shipped a release while a local branch was unsynced. If you see the abort message, run `git fetch origin && git merge origin/main` before retrying. Override only with `--force`, and only when production is genuinely wrong; the `release-manager` agent requires explicit user confirmation before invoking that flag.
 
 **`npm overrides` are a last resort for security CVEs only.** Prefer upgrading the direct dependency that pulls in the vulnerable transitive. If an override is unavoidable (no direct-dep upgrade available), add it with an explanation in `package.json`'s `"comments"."security-overrides"` field (see existing `ajv`/`qs` entries as the pattern). Never use overrides to resolve non-security version drift.
 
-**Session tools are the only exception to `withActualApi`**: `actual_session_list` and `actual_session_close` call `connectionPool` directly — they manage the pool itself, not budget data, so they skip the wrapper intentionally.
+**Session tools are the only exception to `withActualApi`**: `actual_session_list` and `actual_session_close` call `connectionPool` directly. They manage the pool itself, not budget data, so they skip the wrapper intentionally.
 
 **If transactions/budgets don't persist**: verify `withActualApi` wraps the call (grep for `rawAdd*` / `rawUpdate*` called without it), confirm `api.shutdown()` runs after the operation (or that `api.sync()` ran in pool mode), and check logs for "tombstone" errors. The `getConcurrencyState()` export from `actual-adapter.ts` shows `{ running, queueLength, maxConcurrency, authRetries, authRetryFailures, connectionReuses }` for diagnosing concurrency back-pressure and pool-reuse health. A growing `connectionReuses` counter without growing `authRetries` is the healthy signal that #134's cooperation is working.
 
@@ -260,11 +260,11 @@ export default tool;
 | `MCP_TEST_MAX_RETRIES` | 5 | Connection-lost / timeout retries per `callMCP` invocation |
 | `MCP_TEST_MAX_SESSION_RETRIES` | 3 | Session-expired re-initialisations per logical chain (closure-state, survives recursion) |
 | `MCP_TEST_CIRCUIT_THRESHOLD` | 10 | Consecutive failed `callMCP` invocations before the circuit breaker opens |
-| `MCP_TEST_MAX_RUNTIME_MS` | per-level (sanity 60s, smoke 120s, normal 300s, extended 600s, full 900s) | Wall-clock budget in `runner.js`; exceeding it exits **code 2** (distinct from code 1 used for assertion failures) with `Aborted after N min — server appears unhealthy` |
+| `MCP_TEST_MAX_RUNTIME_MS` | per-level (sanity 60s, smoke 120s, normal 300s, extended 600s, full 900s) | Wall-clock budget in `runner.js`; exceeding it exits **code 2** (distinct from code 1 used for assertion failures) with `Aborted after N min, server appears unhealthy` |
 
 ## File Safety Tiers
 
-**Safe to modify**: `src/tools/*.ts`, `tests/**`, `docs/**/*.md`, `README.md`, `.env.example`, `docker-compose.yaml`, `examples/mcp-clients/**` (6 client config examples — update when transport/auth changes)
+**Safe to modify**: `src/tools/*.ts`, `tests/**`, `docs/**/*.md`, `README.md`, `.env.example`, `docker-compose.yaml`, `examples/mcp-clients/**` (6 client config examples; update when transport/auth changes)
 
 **Modify with caution** (test thoroughly): `src/lib/actual-adapter.ts` (affects all tools), `src/actualToolsManager.ts` (run `verify-tools` after), `src/server/*.ts` (verify with MCP client), `src/index.ts`, `src/actualConnection.ts`
 
@@ -286,12 +286,12 @@ When changing code, update these docs:
 
 ## Documentation Map
 
-- `docs/ARCHITECTURE.md` — component layers, data flow, transport protocols
-- `docs/NEW_TOOL_CHECKLIST.md` — canonical 9-step guide for adding tools
-- `docs/TESTING_AND_RELIABILITY.md` — test-file inventory, integration test module table
-- `docs/guides/AI_CLIENT_SETUP.md` — LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL
-- `docs/guides/DEPLOYMENT.md` — Docker Compose profiles, Kubernetes, upgrade steps
-- `docs/SECURITY_AND_PRIVACY.md` — auth models, threat model
-- `tests/manual-prompt/` — three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools
-- `docker/description/long.md`, `docker/description/short.md` — Docker Hub descriptions; managed by `npm run docs:sync`
-- `.env.example` — all environment variables with inline documentation
+- `docs/ARCHITECTURE.md`: component layers, data flow, transport protocols
+- `docs/NEW_TOOL_CHECKLIST.md`: canonical 9-step guide for adding tools
+- `docs/TESTING_AND_RELIABILITY.md`: test-file inventory, integration test module table
+- `docs/guides/AI_CLIENT_SETUP.md`: LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL
+- `docs/guides/DEPLOYMENT.md`: Docker Compose profiles, Kubernetes, upgrade steps
+- `docs/SECURITY_AND_PRIVACY.md`: auth models, threat model
+- `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools
+- `docker/description/long.md`, `docker/description/short.md`: Docker Hub descriptions; managed by `npm run docs:sync`
+- `.env.example`: all environment variables with inline documentation

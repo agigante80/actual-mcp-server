@@ -13,7 +13,7 @@
 
 **Talk to your budget. Run it anywhere. Trust it in production.**
 
-Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant — [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), [Claude Desktop](https://claude.ai/download), and more — directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
+Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/) server that connects any MCP-compatible AI assistant (such as [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), [Claude Desktop](https://claude.ai/download), and more) directly to your self-hosted [Actual Budget](https://actualbudget.org/) instance. Ask natural language questions, create transactions, analyse spending, and manage your entire budget without ever opening the Actual Budget UI.
 
 ```
 ┌─────────────┐   MCP/HTTP    ┌──────────────────┐   Actual API   ┌──────────────┐
@@ -33,11 +33,11 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **62 tools — the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
-- **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`) — no Docker or HTTP server needed for local use.
+- **62 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
+- **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
-- **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs — no shared tokens required.
+- **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
 > **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 63 tools tested end-to-end. Any MCP-compatible client should work.
@@ -69,22 +69,22 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 - Your **Budget Sync ID**: Actual → Settings → Show Advanced Settings → Sync ID
 - **Node.js 20+** (npm method) or **Docker**
 
-### Option A — Docker (recommended)
+### Option A: Docker (recommended)
 
 ```bash
 docker run -d \
   --name actual-mcp-server-backend \
   -p 3600:3600 \
   # Use the same URL you type in your browser to open Actual Budget:
-  #   http://localhost:5006          — if Actual Budget runs on the same machine
-  #   http://192.168.1.50:5006       — if it runs on another machine on your network
-  #   https://actual.yourdomain.com  — if you use a domain name
-  #   http://actual:5006             — if both containers share a Docker network (use container name)
+  #   http://localhost:5006          (if Actual Budget runs on the same machine)
+  #   http://192.168.1.50:5006       (if it runs on another machine on your network)
+  #   https://actual.yourdomain.com  (if you use a domain name)
+  #   http://actual:5006             (if both containers share a Docker network; use container name)
   -e ACTUAL_SERVER_URL=http://localhost:5006 \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
   -e MCP_SSE_AUTHORIZATION=your_secret_token \
-  -v actual-mcp-data:/data \        # required — see note below
+  -v actual-mcp-data:/data \        # required, see note below
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
 ```
@@ -114,7 +114,7 @@ curl -s -X POST http://localhost:3600/http \
 
 Also available on Docker Hub: `agigante80/actual-mcp-server:latest`
 
-### Option B — Docker Compose
+### Option B: Docker Compose
 
 ```bash
 git clone https://github.com/agigante80/actual-mcp-server.git
@@ -128,7 +128,7 @@ docker compose --profile dev up -d          # dev mode with hot-reload
 docker compose --profile fullstack up -d    # includes Actual Budget server on :5006
 ```
 
-### Option C — npm (HTTP server)
+### Option C: npm (HTTP server)
 
 ```bash
 # Quick start via npx (no clone needed):
@@ -149,9 +149,9 @@ npm run dev -- --http
 
 Server starts at `http://localhost:3000/http` (dev) or `http://localhost:3600/http` (Docker).
 
-### Option D — stdio (Claude Desktop native, no Docker or HTTP server needed)
+### Option D: stdio (Claude Desktop native, no Docker or HTTP server needed)
 
-The stdio transport runs the MCP server as a child process — Claude Desktop spawns it directly and communicates over stdin/stdout. No network port, no auth token, no Docker required. No cloning needed — `npx` downloads and caches the package automatically.
+The stdio transport runs the MCP server as a child process. Claude Desktop spawns it directly and communicates over stdin/stdout. No network port, no auth token, no Docker required. No cloning needed: `npx` downloads and caches the package automatically.
 
 Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for config file location and all client options):
 
@@ -172,13 +172,13 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 }
 ```
 
-> **No token needed.** stdio runs as a local process owned by your user — the transport itself is the security boundary. All 63 tools are available.
+> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 63 tools are available.
 >
-> **`MCP_BRIDGE_DATA_DIR` should be an absolute path** — without it, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
+> **`MCP_BRIDGE_DATA_DIR` should be an absolute path.** Without one, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
 
 ### Connect an AI client
 
-**LibreChat / LobeChat** — add to `librechat.yaml` (or LobeChat MCP plugin settings):
+**LibreChat / LobeChat**: add to `librechat.yaml` (or LobeChat MCP plugin settings):
 
 ```yaml
 mcpServers:
@@ -212,7 +212,7 @@ See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full Li
 }
 ```
 
-**Claude Desktop via stdio** (native, no HTTP server needed — see Option D above):
+**Claude Desktop via stdio** (native, no HTTP server needed; see Option D above):
 
 ```json
 {
@@ -266,7 +266,7 @@ npm run build
 
 ### npx / stdio (Options C & D)
 
-If you run `npx actual-mcp-server` without a globally installed version, npx fetches the latest from the registry automatically. But if you previously installed it globally (`npm install -g actual-mcp-server`), the global install takes precedence — you must upgrade it explicitly:
+If you run `npx actual-mcp-server` without a globally installed version, npx fetches the latest from the registry automatically. But if you previously installed it globally (`npm install -g actual-mcp-server`), the global install takes precedence, so you must upgrade it explicitly:
 
 ```bash
 # Upgrade the global install
@@ -315,7 +315,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 |------|-------------|
 | `actual_transactions_uncategorized` | Summary of uncategorized transactions (totalCount, totalAmount, per-account breakdown); pass `includeTransactions:true` for paginated rows |
 
-**Exclusive ActualQL-powered (6)** — unique to this MCP server
+**Exclusive ActualQL-powered (6)**, unique to this MCP server
 
 | Tool | Description |
 |------|-------------|
@@ -332,7 +332,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 |------|-------------|
 | `actual_transfers_create` | Create a paired transfer between two accounts (debit + credit linked by `transfer_id`, identical to UI "Make Transfer") |
 
-> **How transfers work under the hood** — Actual Budget requires the `runTransfers: true` option when adding transactions so that both sides (the debit on the source account and the credit on the destination account) are created and linked via a shared `transfer_id`. Prior to v0.5.6, the adapter forwarded a hardcoded empty options object `{}` to `rawAddTransactions`, silently dropping any options including this flag. This meant that calling `actual_transfers_create` would appear to succeed but only one side of the transfer would be recorded. The fix ensures options are forwarded correctly; use `actual_transfers_create` (not `actual_transactions_create`) for all account-to-account moves.
+> **How transfers work under the hood:** Actual Budget requires the `runTransfers: true` option when adding transactions so that both sides (the debit on the source account and the credit on the destination account) are created and linked via a shared `transfer_id`. Prior to v0.5.6, the adapter forwarded a hardcoded empty options object `{}` to `rawAddTransactions`, silently dropping any options including this flag. This meant that calling `actual_transfers_create` would appear to succeed but only one side of the transfer would be recorded. The fix ensures options are forwarded correctly; use `actual_transfers_create` (not `actual_transactions_create`) for all account-to-account moves.
 
 ### Categories (4)
 
@@ -374,7 +374,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 ### Batch Operations (1)
 
-`actual_budget_updates_batch` — batch multiple budget updates in one call
+`actual_budget_updates_batch`: batch multiple budget updates in one call
 
 ### Server Information & Lookup (3)
 
@@ -404,13 +404,13 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 |----------|---------|----------|-------------|
 | **Actual Budget Connection** ||||
 | `ACTUAL_SERVER_URL` | `http://localhost:5006` | Yes | URL of your Actual Budget server. Use the same URL you type in your browser: `http://localhost:5006` (local), `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), or `http://actual:5006` (container name if on the same Docker network) |
-| `ACTUAL_PASSWORD` | — | Yes | Password for Actual Budget server |
-| `ACTUAL_BUDGET_SYNC_ID` | — | Yes | Budget Sync ID from Actual (Settings → Sync ID) |
-| `ACTUAL_BUDGET_PASSWORD` | — | No | Optional encryption password for encrypted budgets |
+| `ACTUAL_PASSWORD` | _(none)_ | Yes | Password for Actual Budget server |
+| `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
+| `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
 | **MCP Server Settings** ||||
 | `MCP_BRIDGE_PORT` | `3000` (dev) / `3600` (Docker) | No | Port for MCP server to listen on |
 | `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
-| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite). **Required to be a persistent path.** The `@actual-app/api` library downloads a local copy of your budget here to run queries — use a volume mount in Docker to persist it across restarts |
+| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite). **Required to be a persistent path.** The `@actual-app/api` library downloads a local copy of your budget here to run queries; use a volume mount in Docker to persist it across restarts |
 | `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | No | Public hostname/IP for server (shown in logs) |
 | `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
 | `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
@@ -424,14 +424,14 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `SESSION_IDLE_TIMEOUT_MINUTES` | `5` (pool) / `2` (HTTP) | No | Minutes before idle session cleanup |
 | **Security & Authentication** ||||
 | `AUTH_PROVIDER` | `none` | No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
-| `MCP_SSE_AUTHORIZATION` | — | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
-| `OIDC_ISSUER` | — | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
-| `OIDC_RESOURCE` | — | No | Expected `aud` claim in JWT (your client ID) |
-| `OIDC_SCOPES` | — | No | Comma-separated required scopes; leave empty for Casdoor |
-| `AUTH_BUDGET_ACL` | — | No | Per-user budget ACL — see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
+| `MCP_SSE_AUTHORIZATION` | _(none)_ | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
+| `OIDC_ISSUER` | _(none)_ | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
+| `OIDC_RESOURCE` | _(none)_ | No | Expected `aud` claim in JWT (your client ID) |
+| `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |
+| `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
 | `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS. Requires `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` |
-| `MCP_HTTPS_CERT` | — | No | Path to PEM certificate file (required when `MCP_ENABLE_HTTPS=true`) |
-| `MCP_HTTPS_KEY` | — | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
+| `MCP_HTTPS_CERT` | _(none)_ | No | Path to PEM certificate file (required when `MCP_ENABLE_HTTPS=true`) |
+| `MCP_HTTPS_KEY` | _(none)_ | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
 | **Logging Configuration** ||||
 | `MCP_BRIDGE_STORE_LOGS` | `false` | No | Enable file logging (vs console only) |
 | `MCP_BRIDGE_LOG_DIR` | `./logs` | No | Directory for log files (if `STORE_LOGS=true`) |
@@ -461,11 +461,11 @@ Configure multiple Actual Budget files so the AI can switch between them at runt
 | Variable | Required | Fallback |
 |----------|----------|---------|
 | `BUDGET_DEFAULT_NAME` | No | `"Default"` |
-| `BUDGET_N_NAME` | Yes (enables group) | — |
-| `BUDGET_N_SYNC_ID` | Yes | — |
+| `BUDGET_N_NAME` | Yes (enables group) | _(none)_ |
+| `BUDGET_N_SYNC_ID` | Yes | _(none)_ |
 | `BUDGET_N_SERVER_URL` | No | `ACTUAL_SERVER_URL` |
 | `BUDGET_N_PASSWORD` | No | `ACTUAL_PASSWORD` |
-| `BUDGET_N_ENCRYPTION_PASSWORD` | No | — |
+| `BUDGET_N_ENCRYPTION_PASSWORD` | No | _(none)_ |
 
 ```bash
 # Default budget
@@ -474,11 +474,11 @@ ACTUAL_PASSWORD=my-password
 ACTUAL_BUDGET_SYNC_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 BUDGET_DEFAULT_NAME=Personal
 
-# Budget 1 — same server, same password
+# Budget 1 (same server, same password)
 BUDGET_1_NAME=Family
 BUDGET_1_SYNC_ID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 
-# Budget 2 — different server
+# Budget 2 (different server)
 BUDGET_2_NAME=Business
 BUDGET_2_SERVER_URL=https://actual-office.example.com
 BUDGET_2_PASSWORD=office-password
@@ -496,7 +496,7 @@ The server supports two transport modes:
 | HTTP | `--http` | LibreChat, LobeChat, Docker, multi-user deployments | Bearer token or OIDC |
 | stdio | `--stdio` | Claude Desktop, Cursor, local single-user use | None (OS process isolation) |
 
-The two modes are mutually exclusive — pass exactly one flag when starting the server.
+The two modes are mutually exclusive. Pass exactly one flag when starting the server.
 
 ### stdio transport
 
@@ -504,8 +504,8 @@ stdio is the simplest way to connect Claude Desktop directly to Actual Budget. T
 
 **Key properties of stdio mode:**
 
-- No network port — the transport is a pipe, not a socket
-- No auth token — process ownership is the security boundary
+- No network port. The transport is a pipe, not a socket.
+- No auth token. Process ownership is the security boundary.
 - All logs go to stderr so they never corrupt the JSON-RPC framing on stdout
 - The process exits when stdin closes (Claude Desktop shutting down)
 - All 63 tools are available, identical to HTTP mode
@@ -576,7 +576,7 @@ OIDC_RESOURCE=your-client-id    # must match 'aud' JWT claim
 OIDC_SCOPES=                    # leave empty for Casdoor
 ```
 
-See [AI Client Setup — OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format and Casdoor notes.
+See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format and Casdoor notes.
 
 ---
 
@@ -602,7 +602,7 @@ See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md
 
 | Document | Contents |
 |---|---|
-| [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) | **Start here** — connect Claude Desktop, Cursor, VS Code (Copilot), Gemini CLI, or Claude Code |
+| [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) | **Start here** to connect Claude Desktop, Cursor, VS Code (Copilot), Gemini CLI, or Claude Code |
 | [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) | LibreChat & LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC |
 | [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) | Docker, Docker Compose profiles, production config, Kubernetes |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component layers, data flow, transport protocols |
@@ -628,36 +628,36 @@ Several MCP servers exist for personal finance management. Here's how this proje
 | **Budget App** | Actual Budget (self-hosted) | Actual Budget (self-hosted) | Actual Budget (self-hosted) | YNAB (cloud, subscription) |
 | **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
 | **Tool Count** | **63** | ~22 | 18 | 9 |
-| **— Setup & Distribution —** |||||
+| **Setup & Distribution** |||||
 | **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
 | **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
 | **Published package (npx/pip)** | ✅ `npx actual-mcp-server` | ✅ `npx actual-mcp` | ✅ `npx actual-budget-mcp` | ✅ `pip install ynab-mcp` |
-| **— Security & Access —** |||||
+| **Security & Access** |||||
 | **Authentication** | ✅ Bearer token + OIDC (JWKS) | ⚠️ Optional Bearer token | ❌ None (local only) | ✅ OS keyring / env var |
 | **Read-only mode** | ❌ All tools always available | ✅ Write requires `--enable-write` flag | ❌ | ✅ Most tools are read-only |
 | **Multi-budget switching** | ✅ Runtime switch via tool | ❌ | ❌ | ✅ (YNAB natively multi-budget) |
-| **— Production & Reliability —** |||||
+| **Production & Reliability** |||||
 | **Connection pooling** | ✅ Up to 15 concurrent sessions | ❌ | ❌ | ❌ |
 | **Retry / backoff** | ✅ 3 attempts, exponential backoff | ❌ | ❌ | ❌ |
 | **Automated test suite** | ✅ Unit + E2E + integration | ❌ | ❌ | ❌ |
-| **— Transactions —** |||||
+| **Transactions** |||||
 | **Create / update / delete** | ✅ | ✅ | ✅ | ✅ |
 | **Import & reconcile** | ✅ `actual_transactions_import` | ❌ | ❌ | ❌ |
 | **Scheduled / recurring** | ❌ (planned) | ❌ | ❌ | ❌ |
-| **— Analysis & Reporting —** |||||
+| **Analysis & Reporting** |||||
 | **ActualQL custom queries** | ✅ 6 exclusive tools + `actual_query_run` | ❌ | ❌ | N/A |
 | **Summary by category / payee** | ✅ | ✅ spending-by-category | ✅ | ❌ |
 | **Spending projections / forecast** | ❌ | ❌ | ✅ end-of-month forecast | ❌ |
 | **Budget vs actual comparison** | ✅ via `actual_budgets_getMonth` | ❌ | ✅ dedicated tool | ✅ month summary |
 | **Bank sync** | ✅ GoCardless / SimpleFIN | ❌ | ✅ | ❌ (YNAB handles sync natively) |
-| **— Budget Management —** |||||
+| **Budget Management** |||||
 | **Set / transfer / carryover / hold** | ✅ Full (10 tools) | ❌ | ✅ Partial | ✅ Partial |
 | **Batch budget updates** | ✅ `actual_budget_updates_batch` | ❌ | ❌ | ❌ |
-| **— Accounts, Payees & Rules —** |||||
+| **Accounts, Payees & Rules** |||||
 | **Account lifecycle (close/reopen)** | ✅ | ❌ | ❌ | N/A |
 | **Payee merging** | ✅ `actual_payees_merge` | ❌ | ❌ | N/A |
 | **Payee rules management** | ✅ Full CRUD | ✅ Full CRUD | ❌ | N/A |
-| **— UX & Usability —** |||||
+| **UX & Usability** |||||
 | **Natural language date parsing** | ❌ YYYY-MM-DD required | ❌ | ✅ "last month", "yesterday" | ❌ |
 | **Bilingual support** | ❌ | ❌ | ✅ English + Spanish | ❌ |
 | **Auto name → UUID resolution** | ⚠️ Explicit tool (`actual_get_id_by_name`) | ❌ | ✅ Automatic in all tools | ❌ |
@@ -667,10 +667,10 @@ Several MCP servers exist for personal finance management. Here's how this proje
 
 ### When to choose which project
 
-- **This project** — best for production deployments, multi-user environments (OIDC), LibreChat/LobeChat, Docker-native setup, or for Claude Desktop users who want a native stdio connection without any HTTP server overhead.
-- **s-stefanov/actual-mcp** — the original implementation; good for Claude Desktop with STDIO transport, AI-generated prompt templates, and built-in read-only mode.
-- **henfrydls/actual-budget-mcp** — best for Spanish-speaking users, Cursor/VS Code integration, or when you want natural-language dates, automatic name resolution, and spending forecasts without any server setup.
-- **WGDevelopment/ynab-mcp-server** — only option if you're a YNAB user; privacy-first design with OS keyring token storage and local-LLM focus.
+- **This project**: best for production deployments, multi-user environments (OIDC), LibreChat/LobeChat, Docker-native setup, or for Claude Desktop users who want a native stdio connection without any HTTP server overhead.
+- **s-stefanov/actual-mcp**: the original implementation; good for Claude Desktop with STDIO transport, AI-generated prompt templates, and built-in read-only mode.
+- **henfrydls/actual-budget-mcp**: best for Spanish-speaking users, Cursor/VS Code integration, or when you want natural-language dates, automatic name resolution, and spending forecasts without any server setup.
+- **WGDevelopment/ynab-mcp-server**: only option if you're a YNAB user; privacy-first design with OS keyring token storage and local-LLM focus.
 
 ---
 
@@ -702,16 +702,16 @@ Every Actual API call goes through the `withActualApi()` wrapper in `src/lib/act
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+MIT. See [LICENSE](LICENSE) for details.
 
 ---
 
 ## Acknowledgments
 
-- **[Actual Budget](https://actualbudget.org/)** — open-source budgeting software
-- **[Model Context Protocol](https://modelcontextprotocol.io/)** — standardised AI-app integration
-- **[LibreChat](https://github.com/danny-avila/LibreChat)** — open-source ChatGPT alternative
-- **[s-stefanov/actual-mcp](https://github.com/s-stefanov/actual-mcp)** — original adapter pattern
+- **[Actual Budget](https://actualbudget.org/)**: open-source budgeting software
+- **[Model Context Protocol](https://modelcontextprotocol.io/)**: standardised AI-app integration
+- **[LibreChat](https://github.com/danny-avila/LibreChat)**: open-source ChatGPT alternative
+- **[s-stefanov/actual-mcp](https://github.com/s-stefanov/actual-mcp)**: original adapter pattern
 
 ---
 
@@ -725,8 +725,8 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ## Support
 
-- **[GitHub Issues](https://github.com/agigante80/actual-mcp-server/issues)** — bug reports and feature requests
-- **[GitHub Discussions](https://github.com/agigante80/actual-mcp-server/discussions)** — questions and ideas
+- **[GitHub Issues](https://github.com/agigante80/actual-mcp-server/issues)**: bug reports and feature requests
+- **[GitHub Discussions](https://github.com/agigante80/actual-mcp-server/discussions)**: questions and ideas
 
 ---
 
