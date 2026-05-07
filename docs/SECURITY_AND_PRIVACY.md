@@ -54,7 +54,7 @@ MCP_SSE_AUTHORIZATION=your_generated_token
 **Status**: ✅ Implemented (`AUTH_PROVIDER=oidc`)
 
 **How it works**: The server validates JWTs using JWKS from the OIDC issuer.
-No PKCE flow runs on the server — the MCP client (e.g., LibreChat) handles the OAuth code exchange.
+No PKCE flow runs on the server. The MCP client (e.g., LibreChat) handles the OAuth code exchange.
 
 **Configuration**:
 ```bash
@@ -77,7 +77,7 @@ Principals are matched against JWT claims `email`, `sub`, and `groups`.
 If `AUTH_BUDGET_ACL` is not set, all authenticated users access the single configured budget.
 
 **Security Properties**:
-- ✅ JWKS-validated JWT — cryptographically verified
+- ✅ JWKS-validated JWT (cryptographically verified)
 - ✅ Per-user budget isolation via `AUTH_BUDGET_ACL`
 - ✅ Compatible with Casdoor v2.13, Keycloak, Auth0
 - ✅ Group-based access control
