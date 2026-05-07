@@ -332,7 +332,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 |------|-------------|
 | `actual_transfers_create` | Create a paired transfer between two accounts (debit + credit linked by `transfer_id`, identical to UI "Make Transfer") |
 
-> **How transfers work under the hood:** Actual Budget requires the `runTransfers: true` option when adding transactions so that both sides (the debit on the source account and the credit on the destination account) are created and linked via a shared `transfer_id`. Prior to v0.5.6, the adapter forwarded a hardcoded empty options object `{}` to `rawAddTransactions`, silently dropping any options including this flag. This meant that calling `actual_transfers_create` would appear to succeed but only one side of the transfer would be recorded. The fix ensures options are forwarded correctly; use `actual_transfers_create` (not `actual_transactions_create`) for all account-to-account moves.
+> **Note:** Use `actual_transfers_create` for any account-to-account movement, not `actual_transactions_create`. The dedicated tool creates both sides (debit and credit) atomically so the books stay balanced. Limitations: both accounts must exist and be open, and `from_account` must differ from `to_account`.
 
 ### Categories (4)
 
