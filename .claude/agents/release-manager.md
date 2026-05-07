@@ -26,9 +26,10 @@ npm run release:major   # 0.4.35 → 1.0.0   (breaking changes)
 ```
 
 These run `scripts/version-bump.js` which:
-1. Bumps `VERSION` file and `package.json`
-2. Updates all `**Version:**` and `**Tool Count:**` markers across docs automatically
-3. Files updated: `README.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md`, `docs/SECURITY_AND_PRIVACY.md`, `docs/TESTING_AND_RELIABILITY.md`, `.github/copilot-instructions.md`
+1. **Production-tag freshness check (added 2026-05-07).** Before bumping, the script queries `git ls-remote --tags origin` and aborts with a clear remediation message if the local `VERSION` is BEHIND the latest published `vX.Y.Z` tag. This guards against the failure mode where the scheduled `Dependency Update & Auto-Release` workflow has already shipped a release while a local branch was unsynced — bumping in that state would reuse a version number that's already on production. If you see the abort, run `git fetch origin && git merge origin/main` (or `--ff-only` if your branch is an ancestor) before retrying. Override only with `--force` when production is genuinely wrong.
+2. Bumps `VERSION` file and `package.json`
+3. Updates all `**Version:**` and `**Tool Count:**` markers across docs automatically
+4. Files updated: `README.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md`, `docs/SECURITY_AND_PRIVACY.md`, `docs/TESTING_AND_RELIABILITY.md`, `.github/copilot-instructions.md`
 
 **Never edit version markers manually** — always use the script.
 
@@ -36,6 +37,13 @@ To sync markers without bumping the version:
 ```bash
 npm run docs:sync
 ```
+
+### Pre-bump checklist (the agent should walk through this before invoking the script)
+
+1. `git fetch origin --tags` — make sure you have the latest production tags locally.
+2. Compare `cat VERSION` with `git tag -l 'v*' | sort -V | tail -1`. If local is behind, you'd hit the script's abort anyway — merge first.
+3. Confirm the working tree is clean (`git status -sb`) so the bump commit is isolated.
+4. Run the appropriate `npm run release:*`. If the script aborts with the freshness-check message, follow its remediation (merge `origin/main`, then retry) — do NOT use `--force` unless you've explicitly verified production is wrong.
 
 ## Pre-commit mandatory sequence
 
