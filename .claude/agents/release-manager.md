@@ -38,12 +38,57 @@ To sync markers without bumping the version:
 npm run docs:sync
 ```
 
-### Pre-bump checklist (the agent should walk through this before invoking the script)
+### MANDATORY pre-bump algorithm (the agent MUST execute this before invoking any `release:*` command)
 
-1. `git fetch origin --tags` — make sure you have the latest production tags locally.
-2. Compare `cat VERSION` with `git tag -l 'v*' | sort -V | tail -1`. If local is behind, you'd hit the script's abort anyway — merge first.
-3. Confirm the working tree is clean (`git status -sb`) so the bump commit is isolated.
-4. Run the appropriate `npm run release:*`. If the script aborts with the freshness-check message, follow its remediation (merge `origin/main`, then retry) — do NOT use `--force` unless you've explicitly verified production is wrong.
+**Why this is mandatory:** the script `scripts/version-bump.js` already runs the same check internally and will abort if it fires. This algorithm is a second line of defence so the agent doesn't even reach the script when production has moved ahead — saves a wasted invocation, gives a clearer summary up front, and stays correct even if a future refactor accidentally weakens the script's guard.
+
+Run **all four steps every time** before running any `release:*` script. Do not skip steps even if "you just ran them" — production tags can change between conversations.
+
+**Step 1 — refresh production tags:**
+
+```bash
+git fetch origin --tags --prune
+```
+
+If this errors (offline, auth issue, etc.), stop and tell the user. Do NOT bump from a stale view of production.
+
+**Step 2 — compute the comparison:**
+
+```bash
+LOCAL=$(cat VERSION)
+PROD=$(git ls-remote --tags origin "refs/tags/v*.*.*" \
+  | awk '{print $2}' | sed -E 's|refs/tags/v||; s|\^\{\}||' \
+  | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+echo "local=$LOCAL  prod=v$PROD"
+```
+
+`PROD` is the highest semver tag actually published on origin (not local-only tags from a failed push).
+
+**Step 3 — apply the decision matrix exactly:**
+
+| Comparison | Action |
+|---|---|
+| `LOCAL == PROD` | ✅ **Proceed** to step 4. Tell the user "local matches production — safe to bump." |
+| `LOCAL < PROD` | ❌ **STOP.** Production has moved on. Tell the user the local/prod gap, then merge `origin/main` first: `git fetch origin && git merge --ff-only origin/main` (or a 3-way merge if the branch has its own commits). Re-run from step 1. Do NOT bump in this state. Do NOT silently use `--force`. |
+| `LOCAL > PROD` | ⚠️ **Pause and tell the user.** This means a previous bump was committed but never released. Confirm with them before proceeding — sometimes this is fine (mid-release), sometimes it's evidence of a half-broken pipeline. |
+
+**Step 4 — confirm the working tree is clean:**
+
+```bash
+git status -sb
+```
+
+If there are uncommitted changes, decide whether they should be part of the bump commit (then add them deliberately) or whether they're unrelated work that should be stashed/committed separately first. The release commit must contain only `VERSION`, `package.json`, and the doc-marker updates.
+
+**Step 5 — invoke the script:**
+
+```bash
+npm run release:patch    # or :minor / :major as appropriate
+```
+
+If the script's own freshness check fires here despite step 3 passing, **trust the script** — origin may have advanced between steps 1 and 5. Re-run the algorithm from step 1.
+
+**`--force` policy:** never use `--force` autonomously. The flag exists for the rare case where a corrupt or malicious tag exists on origin and you've explicitly verified the local state is the correct one. Always require an explicit user confirmation message ("yes, force the bump because <reason>") before invoking `--force`.
 
 ## Pre-commit mandatory sequence
 
