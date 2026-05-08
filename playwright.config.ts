@@ -4,7 +4,7 @@ import { defineConfig } from '@playwright/test';
  * Playwright configuration for local E2E tests.
  *
  * Requires a running MCP server before executing:
- *   - docker tests use MCP_SERVER_URL (default: http://localhost:3601 — bearer instance)
+ *   - docker tests use MCP_SERVER_URL (default: http://localhost:3601, the bearer instance)
  *   - mcp-client tests use the Docker stack on localhost:3602 by default,
  *     or spawn a local server when USE_DOCKER_MCP_SERVER=false
  *
@@ -12,7 +12,7 @@ import { defineConfig } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 120000,  // 2 minutes — covers server startup + comprehensive tool tests
+  timeout: 120000,  // 2 minutes; covers server startup + comprehensive tool tests
   retries: 2,
   workers: 1,
   reporter: [

@@ -1,12 +1,12 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "engines": {
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
-  "description": "MCP server with 63 tools for AI-driven financial management with Actual Budget — HTTP and stdio transports, LibreChat, Claude Desktop, Cursor, VS Code, Gemini CLI",
+  "description": "MCP server with 63 tools for AI-driven financial management with Actual Budget. HTTP and stdio transports for LibreChat, Claude Desktop, Cursor, VS Code, Gemini CLI",
   "homepage": "https://github.com/agigante80/actual-mcp-server#readme",
   "repository": {
     "type": "git",
@@ -30,7 +30,7 @@
     "verify-tools": "npm run build && node scripts/verify-tools.js",
     "check:coverage": "node scripts/list-actual-api-methods.mjs",
     "direct-sync": "node scripts/direct-sync/bank-sync-direct.mjs",
-    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js && node tests/unit/auth-acl.test.js && node tests/unit/bug76.test.js && node tests/unit/budgets_setAmount.test.js && node tests/unit/transactions_uncategorized.test.js && node tests/unit/httpServer_session_init.test.js && node tests/unit/manual_mcp_client_retry.test.js && node tests/unit/manual_mcp_client_session.test.js && node tests/unit/manual_mcp_client_circuit.test.js && node tests/unit/manual_runner_killswitch.test.js && node tests/unit/adapter_auth_rate_limit.test.js && node tests/unit/adapter_session_reuse.test.js",
+    "test:unit-js": "node tests/unit/transactions_create.test.js && node tests/unit/generated_tools.smoke.test.js && node tests/unit/schema_validation.test.js && node tests/unit/auth-acl.test.js && node tests/unit/bug76.test.js && node tests/unit/budgets_setAmount.test.js && node tests/unit/budgets_transfer.test.js && node tests/unit/transactions_uncategorized.test.js && node tests/unit/httpServer_session_init.test.js && node tests/unit/manual_mcp_client_retry.test.js && node tests/unit/manual_mcp_client_session.test.js && node tests/unit/manual_mcp_client_circuit.test.js && node tests/unit/manual_runner_killswitch.test.js && node tests/unit/adapter_auth_rate_limit.test.js && node tests/unit/adapter_session_reuse.test.js && node tests/unit/adapter_with_write_session.test.js && node tests/unit/category_groups_delete.test.js && node tests/unit/rules_delete.test.js && node tests/unit/schedules_delete.test.js && node tests/unit/payees_delete.test.js && node tests/unit/rules_create_or_update.test.js",
     "test:adapter": "npm run build && node dist/src/tests_adapter_runner.js",
     "test:e2e": "npx playwright test",
     "test:e2e:docker": "./tests/e2e/run-docker-e2e.sh",

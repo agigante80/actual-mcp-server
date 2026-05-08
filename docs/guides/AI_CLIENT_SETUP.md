@@ -26,7 +26,7 @@ The AI client communicates with the MCP server over **HTTP** using the JSON-RPC 
 
 ## Docker Networking: Internal Hostnames
 
-**When both the AI client and MCP server run in Docker**, always use **internal container hostnames** — not host IP addresses.
+**When both the AI client and MCP server run in Docker**, always use **internal container hostnames**, not host IP addresses.
 
 | | URL |
 |---|---|
@@ -65,7 +65,7 @@ Then restart LibreChat:
 docker restart ai-librechat
 ```
 
-Verify tools loaded — in the LibreChat UI you should see **62 tools** listed under the MCP server entry.
+Verify tools loaded. In the LibreChat UI you should see **62 tools** listed under the MCP server entry.
 
 ### LibreChat with OIDC
 
@@ -144,9 +144,9 @@ HTTPS is **not required** for internal Docker-to-Docker communication. Use it on
 - You are exposing the server to the internet
 - Compliance requirements mandate encryption
 
-> **Note:** Native TLS is supported — set `MCP_ENABLE_HTTPS=true`, `MCP_HTTPS_CERT`, and `MCP_HTTPS_KEY`. For multi-domain or certificate rotation use cases a reverse proxy is still preferred; set `MCP_BRIDGE_USE_TLS=true` so the server advertises the correct `https://` URL when TLS is terminated upstream.
+> **Note:** Native TLS is supported. Set `MCP_ENABLE_HTTPS=true`, `MCP_HTTPS_CERT`, and `MCP_HTTPS_KEY`. For multi-domain or certificate rotation use cases a reverse proxy is still preferred; set `MCP_BRIDGE_USE_TLS=true` so the server advertises the correct `https://` URL when TLS is terminated upstream.
 
-### Option A: Docker Internal Network (Recommended — No HTTPS Needed)
+### Option A: Docker Internal Network (Recommended; No HTTPS Needed)
 
 If both containers share a Docker network, HTTP is sufficient. Internal Docker traffic does not leave the host machine.
 
@@ -215,9 +215,9 @@ AUTH_BUDGET_ACL={"alice@example.com":["budget-uuid-1"],"group:admins":["*"]}
 ```
 
 Principal key formats:
-- `"alice@example.com"` — matches the `email` claim
-- `"some-sub-uuid"` — matches the `sub` claim
-- `"group:admin"` — matches an element in `groups` or `roles` array
+- `"alice@example.com"`: matches the `email` claim
+- `"some-sub-uuid"`: matches the `sub` claim
+- `"group:admin"`: matches an element in `groups` or `roles` array
 
 **Casdoor note**: Casdoor JWTs do not include a `scope` claim. Set `OIDC_SCOPES=` (empty string) to disable scope enforcement.
 
