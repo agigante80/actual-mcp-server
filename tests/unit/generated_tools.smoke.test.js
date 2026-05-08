@@ -7,6 +7,23 @@ process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-
 console.log('Running generated tools smoke tests');
 
 (async () => {
+  // Tools that bypass the adapter facade (#142 migrations and #141's
+  // budgets_transfer pattern) destructure raw `@actual-app/api` functions at
+  // module init. Stub the api singleton BEFORE importing tools so those
+  // captured references resolve to predictable values.
+  const apiMod = await import('@actual-app/api');
+  const apiDefault = (apiMod.default || apiMod);
+  apiDefault.sync = async () => {};
+  apiDefault.getRules = async () => [{ id: 'rule1', conditions: [] }];
+  apiDefault.createRule = async () => 'rule-new';
+  apiDefault.updateRule = async () => {};
+  apiDefault.deleteRule = async () => {};
+  apiDefault.getCategoryGroups = async () => [{ id: 'grp_1', name: 'Expenses' }];
+  apiDefault.deleteCategoryGroup = async () => {};
+  apiDefault.getSchedules = async () => [{ id: '00000000-0000-0000-0000-000000000099' }];
+  apiDefault.deleteSchedule = async () => {};
+  apiDefault.deletePayee = async () => {};
+
   const toolsIndex = await import('../../dist/src/tools/index.js');
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
 
@@ -76,6 +93,12 @@ console.log('Running generated tools smoke tests');
     updateSchedule: null,
     deleteSchedule: null,
     createTransfer: { success: true, from_id: '00000000-0000-0000-0000-000000000003', to_id: null },
+    // #141: transferBudgetAmount is the new atomic adapter method.
+    transferBudgetAmount: {
+      transferred: 5000,
+      fromCategory: { id: 'cat_1', previousAmount: 10000, newAmount: 5000 },
+      toCategory: { id: 'cat_2', previousAmount: 0, newAmount: 5000 },
+    },
   };
 
   // Patch adapter default export functions
@@ -85,6 +108,10 @@ console.log('Running generated tools smoke tests');
       adapterMod.default[k] = async (..._args) => v;
     }
   }
+  // #142: withWriteSession is a generic helper; it must run its callback so that
+  // the migrated tools' read-then-write logic actually executes (against the api
+  // stubs we set up before the tools imported).
+  adapterMod.default.withWriteSession = async (fn) => fn();
 
   const toolNames = Object.keys(toolsIndex).filter(n => n !== 'default');
   let failures = 0;

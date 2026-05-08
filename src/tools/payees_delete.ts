@@ -1,12 +1,14 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import api from '@actual-app/api';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { deletePayee: rawDeletePayee } = api as any;
 
 const InputSchema = z.object({
   id: z.string().describe('Payee ID to delete'),
 });
-
-type Output = { success: boolean };
 
 const tool: ToolDefinition = {
   name: 'actual_payees_delete',
@@ -14,8 +16,12 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    await adapter.deletePayee(input.id);
-    return { success: true };
+    // Single-write tool, but uses withWriteSession for consistency with the other
+    // delete tools and to share the same lock-cycle invariant (#142).
+    return await adapter.withWriteSession(async () => {
+      await rawDeletePayee(input.id);
+      return { success: true };
+    });
   },
 };
 
