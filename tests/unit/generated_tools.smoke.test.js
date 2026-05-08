@@ -11,6 +11,13 @@ console.log('Running generated tools smoke tests');
   // budgets_transfer pattern) destructure raw `@actual-app/api` functions at
   // module init. Stub the api singleton BEFORE importing tools so those
   // captured references resolve to predictable values.
+  //
+  // Load the node-polyfills first: @actual-app/api v26 reads navigator.platform
+  // at module evaluation time and crashes with "navigator is not defined" on
+  // bare Node 20. The adapter imports this polyfill itself, but here we touch
+  // the api module directly before the adapter, so we must set the polyfill up
+  // ourselves.
+  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};
