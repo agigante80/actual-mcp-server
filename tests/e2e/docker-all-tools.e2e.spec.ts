@@ -886,6 +886,41 @@ test.describe('Docker E2E - ALL 63 TOOLS', () => {
     console.log('✅ Budget transferred');
   });
 
+  test('actual_budgets_transfer - should reject insufficient funds', async ({ request }) => {
+    if (!testContext.categoryId || !testContext.categoryGroupId) test.skip();
+
+    console.log('🚫 Testing actual_budgets_transfer insufficient-funds rejection...');
+    const currentMonth = new Date().toISOString().substring(0, 7);
+    const groupId = typeof testContext.categoryGroupId === 'string'
+      ? testContext.categoryGroupId
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      : (testContext.categoryGroupId as any).id || String(testContext.categoryGroupId);
+
+    // Create a sink category with zero budget. Insufficient funds is the rejection
+    // we want, regardless of the source's current value.
+    const sinkRes = await callTool(request, sessionId, 'actual_categories_create', {
+      name: `E2E-Transfer-Reject-${Date.now()}`,
+      group_id: groupId,
+    });
+    const sinkData = extractResult(sinkRes);
+    const sinkId = typeof sinkData === 'string' ? sinkData : sinkData?.categoryId;
+
+    // Attempt to drain an obscene amount from sink (which has 0 budgeted).
+    const result = await callTool(request, sessionId, 'actual_budgets_transfer', {
+      month: currentMonth,
+      amount: 99_999_999,
+      fromCategoryId: sinkId,
+      toCategoryId: testContext.categoryId,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }).catch((err: Error) => ({ __error: err.message } as any));
+
+    // The MCP error surfaces in either the JSON-RPC error envelope or as a thrown error.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const errMsg = (result as any)?.__error ?? (result as any)?.error?.message ?? '';
+    expect(errMsg).toContain('Insufficient budget');
+    console.log('✅ Insufficient-funds correctly rejected');
+  });
+
   // ==================== RULES (4 tools) ====================
   test('actual_rules_get - should list rules', async ({ request }) => {
     console.log('📋 Testing actual_rules_get...');

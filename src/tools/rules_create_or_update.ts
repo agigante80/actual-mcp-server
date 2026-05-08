@@ -19,7 +19,11 @@
  */
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
-import adapter from '../lib/actual-adapter.js';
+import adapter, { normalizeToId } from '../lib/actual-adapter.js';
+import api from '@actual-app/api';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const { getRules: rawGetRules, createRule: rawCreateRule, updateRule: rawUpdateRule } = api as any;
 
 // Mirrors the same schemas used in rules_create.ts
 const ConditionSchema = z.object({
@@ -169,39 +173,48 @@ Returns: { id, created: boolean } — created=true if new rule was created, fals
         }
       }
 
-      // ── Fetch existing rules and look for a match ──
-      const existingRules = await adapter.getRules();
-      let matchedRule: (Record<string, unknown> & { id: string }) | null = null;
+      // Fetch existing rules and either update (matched) or create (no match) inside
+      // ONE withWriteSession cycle so the read and the write share a single lock
+      // acquisition (#142).
+      return await adapter.withWriteSession(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const existingRules: any[] = await rawGetRules();
+        let matchedRule: (Record<string, unknown> & { id: string }) | null = null;
 
-      for (const rule of existingRules) {
-        const r = rule as Record<string, unknown>;
-        if (!r.id || typeof r.id !== 'string') continue;
+        for (const rule of existingRules) {
+          const r = rule as Record<string, unknown>;
+          if (!r.id || typeof r.id !== 'string') continue;
 
-        const existingConditions = Array.isArray(r.conditions) ? r.conditions : [];
-        const existingConditionsOp = (r.conditionsOp as string) || 'and';
+          const existingConditions = Array.isArray(r.conditions) ? r.conditions : [];
+          const existingConditionsOp = (r.conditionsOp as string) || 'and';
 
-        if (conditionsMatch(existingConditions, existingConditionsOp, input.conditions, input.conditionsOp)) {
-          matchedRule = r as Record<string, unknown> & { id: string };
-          break;
+          if (conditionsMatch(existingConditions, existingConditionsOp, input.conditions, input.conditionsOp)) {
+            matchedRule = r as Record<string, unknown> & { id: string };
+            break;
+          }
         }
-      }
 
-      const ruleData = JSON.parse(JSON.stringify(input)); // deep clone for API call
+        const ruleData = JSON.parse(JSON.stringify(input)); // deep clone for API call
 
-      if (matchedRule) {
-        // ── UPDATE existing rule ──
-        await adapter.updateRule(matchedRule.id, {
-          stage: ruleData.stage,
-          conditionsOp: ruleData.conditionsOp,
-          conditions: ruleData.conditions,
-          actions: ruleData.actions,
-        });
-        return { id: matchedRule.id, created: false };
-      } else {
-        // ── CREATE new rule ──
-        const ruleId = await adapter.createRule(ruleData);
-        return { id: ruleId, created: true };
-      }
+        if (matchedRule) {
+          // UPDATE existing rule. The Actual Budget API expects the FULL merged rule
+          // object passed as a single argument (matches adapter.updateRule's behaviour).
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const merged: any = {
+            id: matchedRule.id,
+            stage: ruleData.stage ?? (matchedRule as Record<string, unknown>).stage,
+            conditionsOp: ruleData.conditionsOp ?? (matchedRule as Record<string, unknown>).conditionsOp,
+            conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
+            actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
+          };
+          await rawUpdateRule(merged);
+          return { id: matchedRule.id, created: false };
+        } else {
+          // CREATE new rule
+          const rawId = await rawCreateRule(ruleData);
+          return { id: normalizeToId(rawId), created: true };
+        }
+      });
     } catch (error) {
       if (error instanceof z.ZodError) {
         const fieldErrors = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
