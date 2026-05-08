@@ -71,7 +71,7 @@ services:
       - MCP_BRIDGE_LOG_LEVEL=info
       - MAX_CONCURRENT_SESSIONS=15
       - NODE_ENV=test
-      # No auth for testing — MCP_SSE_AUTHORIZATION left empty intentionally
+      # No auth for testing; MCP_SSE_AUTHORIZATION left empty intentionally
       - MCP_SSE_AUTHORIZATION=
     volumes:
       - mcp-test-data:/app/data

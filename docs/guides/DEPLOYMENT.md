@@ -24,7 +24,7 @@ npm install
 
 # Configure environment
 cp .env.example .env
-# Edit .env — set ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID at minimum
+# Edit .env to set ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID at minimum
 
 # Build TypeScript
 npm run build
@@ -185,7 +185,7 @@ curl http://localhost:3600/health
 | `ACTUAL_PASSWORD` | Actual Budget server password |
 | `ACTUAL_BUDGET_SYNC_ID` | Budget Sync ID (Settings → Sync ID in Actual) |
 
-All other variables are optional — see [Configuration Reference](../../README.md#complete-environment-variables-reference) in the README for the full table.
+All other variables are optional. See [Configuration Reference](../../README.md#complete-environment-variables-reference) in the README for the full table.
 
 ---
 

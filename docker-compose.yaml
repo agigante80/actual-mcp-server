@@ -33,7 +33,7 @@ services:
       - ./src:/app/src:ro
       - ./dist:/app/dist
       # Required: local cache for the @actual-app/api library.
-      # The API downloads your budget data locally to run queries — this MUST be a persistent path.
+      # The API downloads your budget data locally to run queries; this MUST be a persistent path.
       - ./actual-data:/data
       # Persist logs
       - ./logs:/app/logs
@@ -59,16 +59,16 @@ services:
       # BUDGET_N_SERVER_URL and BUDGET_N_PASSWORD fall back to ACTUAL_* if omitted,
       # so budgets on the same server need only NAME and SYNC_ID.
       #
-      # Budget 1 — same server, same password → SERVER_URL and PASSWORD omitted
+      # Budget 1 (same server, same password): SERVER_URL and PASSWORD omitted
       # - BUDGET_1_NAME=Shared Family Account
       # - BUDGET_1_SYNC_ID=${BUDGET_1_SYNC_ID}
       #
-      # Budget 2 — same server, different password → only PASSWORD overridden
+      # Budget 2 (same server, different password): only PASSWORD overridden
       # - BUDGET_2_NAME=Business
       # - BUDGET_2_PASSWORD=${BUDGET_2_PASSWORD}
       # - BUDGET_2_SYNC_ID=${BUDGET_2_SYNC_ID}
       #
-      # Budget 3 — entirely separate Actual server → full override
+      # Budget 3 (entirely separate Actual server): full override
       # - BUDGET_3_NAME=Remote Office
       # - BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
       # - BUDGET_3_PASSWORD=${BUDGET_3_PASSWORD}
@@ -90,7 +90,7 @@ services:
       # - SESSION_IDLE_TIMEOUT_MINUTES=5
       # - ACTUAL_API_CONCURRENCY=5
 
-      # Authentication — static Bearer token or OIDC (see README)
+      # Authentication: static Bearer token or OIDC (see README)
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
       # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
       # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
@@ -121,7 +121,7 @@ services:
       - "3000:3000"
     volumes:
       # Required: local cache for the @actual-app/api library.
-      # The API downloads your budget data locally to run queries — this MUST be a persistent path.
+      # The API downloads your budget data locally to run queries; this MUST be a persistent path.
       - mcp-data:/data
       # Persist logs
       - mcp-logs:/app/logs
@@ -143,16 +143,16 @@ services:
       # BUDGET_N_SERVER_URL and BUDGET_N_PASSWORD fall back to ACTUAL_* if omitted,
       # so budgets on the same server need only NAME and SYNC_ID.
       #
-      # Budget 1 — same server, same password → SERVER_URL and PASSWORD omitted
+      # Budget 1 (same server, same password): SERVER_URL and PASSWORD omitted
       # - BUDGET_1_NAME=Shared Family Account
       # - BUDGET_1_SYNC_ID=${BUDGET_1_SYNC_ID}
       #
-      # Budget 2 — same server, different password → only PASSWORD overridden
+      # Budget 2 (same server, different password): only PASSWORD overridden
       # - BUDGET_2_NAME=Business
       # - BUDGET_2_PASSWORD=${BUDGET_2_PASSWORD}
       # - BUDGET_2_SYNC_ID=${BUDGET_2_SYNC_ID}
       #
-      # Budget 3 — entirely separate Actual server → full override
+      # Budget 3 (entirely separate Actual server): full override
       # - BUDGET_3_NAME=Remote Office
       # - BUDGET_3_SERVER_URL=https://actual-office.example.com:5006
       # - BUDGET_3_PASSWORD=${BUDGET_3_PASSWORD}
@@ -174,7 +174,7 @@ services:
       # - SESSION_IDLE_TIMEOUT_MINUTES=5
       # - ACTUAL_API_CONCURRENCY=5
 
-      # Authentication — static Bearer token or OIDC (see README)
+      # Authentication: static Bearer token or OIDC (see README)
       # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
       # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
       # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc

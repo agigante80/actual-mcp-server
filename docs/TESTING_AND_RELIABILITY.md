@@ -1,7 +1,7 @@
 # Testing & Reliability
 
 **Project:** Actual MCP Server  
-**Version:** 0.6.6  
+**Version:** 0.6.7  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
 **Last Updated:** 2026-03-02
 
@@ -131,7 +131,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 **What Docker E2E tests verify:**
 - ✅ Docker build works correctly
 - ✅ Container networking (MCP ↔ Actual Budget)
-- ✅ Real tool execution (**all 63 tools — 100% coverage**)
+- ✅ Real tool execution (**all 63 tools at 100% coverage**)
 - ✅ Session management and persistence
 - ✅ Production-like deployment
 - ✅ Error handling and validation (15+ error scenarios)
@@ -178,10 +178,10 @@ npm run test:mcp-client
 
 Before running `git commit`:
 
-- [ ] `npm run build` — ✅ No TypeScript errors
-- [ ] `npm run test:adapter` — ✅ All adapter tests pass
-- [ ] `npm run test:unit-js` — ✅ All unit + schema tests pass (3 files, ~25 assertions)
-- [ ] `npm audit --audit-level=moderate` — ✅ No moderate/high/critical vulnerabilities
+- [ ] `npm run build`: ✅ No TypeScript errors
+- [ ] `npm run test:adapter`: ✅ All adapter tests pass
+- [ ] `npm run test:unit-js`: ✅ All unit + schema tests pass (3 files, ~25 assertions)
+- [ ] `npm audit --audit-level=moderate`: ✅ No moderate/high/critical vulnerabilities
 
 ### CI/CD Enforcement
 
@@ -210,7 +210,7 @@ GitHub Actions automatically runs:
 **Files**:
 | File | What it tests |
 |---|---|
-| `transactions_create.test.js` | Zod schema — valid input accepted, empty input rejected |
+| `transactions_create.test.js` | Zod schema: valid input accepted, empty input rejected |
 | `generated_tools.smoke.test.js` | All 63 tools: stub adapter, call succeeds, response shape correct |
 | `schema_validation.test.js` | Negative-path schemas: `rules_create`, `budget_updates_batch`, `budgets_transfer`, `budgets_setAmount` |
 
@@ -275,7 +275,7 @@ npm run dev -- --test-actual-connection
 
 **Use case**: Quickly verify environment configuration
 
-### 5. Tool Tests (deprecated path — use unit tests instead)
+### 5. Tool Tests (deprecated path; use unit tests instead)
 
 **Purpose**: Smoke test all 63 tools
 
@@ -341,8 +341,8 @@ Planned integrations:
 ### Current Coverage
 
 - **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 63 tools
-- **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle) — not per-tool
-- **Docker E2E**: 60/63 tools with named tests (real Actual Budget server); 2 tools excluded — `budgets_list_available` and `budgets_switch` require ≥2 budgets (CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
+- **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle), not per-tool
+- **Docker E2E**: 60/63 tools with named tests (real Actual Budget server); 2 tools excluded (`budgets_list_available` and `budgets_switch` require ≥2 budgets, and the CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
 - **Live Integration**: 63/63 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
 
 ### Coverage Goals
@@ -587,7 +587,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
         /       (mcp-client.playwright.spec)  \
       /                                          \
     /      Level 3: Live Integration Tests        \  ← Real Actual Budget
-  /          (tests/manual/ — npm run test:integration:*)  \
+  /          (tests/manual/, npm run test:integration:*)  \
 /                                                      \
 /              Level 2: Unit Tests                      \  ← Offline, stub adapter
 \        (3 files: smoke, schema, negative-path)        /
@@ -628,7 +628,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 ### Level 2: Unit Tests ⚡ (Fast: ~3s)
 
-**Purpose:** Test individual components in isolation — fully offline, no Actual Budget server needed  
+**Purpose:** Test individual components in isolation, fully offline, no Actual Budget server needed  
 **Location:** `tests/unit/`  
 **Command:** `npm run test:unit-js`
 
@@ -644,7 +644,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ✅ All 63 tools: stub invocation + response-shape assertion
 - ✅ Schema parse rejection for empty/invalid inputs (11+ tools, 60+ cases)
 - ✅ Runtime guard rejection: `amount ≤ 0`, `fromId === toId` in `budgets_transfer`
-- ✅ Schema correctness — parse errors with provided examples surface as test failures
+- ✅ Schema correctness: parse errors with provided examples surface as test failures
 
 **Error Scenarios Tested:**
 - ❌ Missing required fields (`conditions`, `operations`, `amount`, `month`, `categoryId`)
@@ -719,7 +719,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | 5 | List accounts | ✅ Account array returned | ❌ Database error |
 | 6 | Create test account | ✅ Account ID returned | ❌ Duplicate name, validation error |
 | 7 | Verify session persistence | ✅ 3 consecutive calls work | ❌ Session timeout |
-| 8 | *(removed — SSE transport removed)* | N/A | N/A |
+| 8 | *(removed: SSE transport removed)* | N/A | N/A |
 | 9 | Docker build verification | ✅ All files present | ❌ Missing dependencies |
 | 10 | Handle invalid tool name | ✅ Error: Tool not found | ❌ Unexpected behavior |
 | 11 | Handle invalid arguments | ✅ Validation error returned | ❌ Server crash |
@@ -966,7 +966,7 @@ npm run test:integration:cleanup
 | **Level 2:** Unit Tests | 63/63 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
 | **Level 3:** Live Integration | 63/63 tools called | 63/63 | ✅ Maintain |
 | **Level 4:** Protocol E2E | 100% (MCP compliance) | 100% | ✅ Maintain |
-| **Level 5:** Docker E2E | **60/63 tools** (100% named; 2 excluded — single-budget CI) | 100% | ✅ Maintain |
+| **Level 5:** Docker E2E | **60/63 tools** (100% named; 2 excluded for single-budget CI) | 100% | ✅ Maintain |
 | **Level 6:** Manual Full | 100% (63/63 tools) | 100% | ✅ Maintain |
 | **Error Scenarios** | ~70% | 90% | 🟡 Medium |
 
@@ -975,8 +975,8 @@ npm run test:integration:cleanup
 ### Next Testing Improvements
 
 **High Priority:**
-1. ✅ **Completed:** Docker E2E tests — 60/63 tools named (2 excluded: `budgets_list_available`, `budgets_switch` — single-budget CI constraint)
-2. ✅ **Completed:** Unit test suite — 3 files, 63-tool smoke, 23 negative-path assertions
+1. ✅ **Completed:** Docker E2E tests with 60/63 tools named (2 excluded: `budgets_list_available`, `budgets_switch` due to single-budget CI constraint)
+2. ✅ **Completed:** Unit test suite with 3 files, 63-tool smoke, 23 negative-path assertions
 3. ✅ **Completed:** All 6 delete tools promoted to named E2E tests with list-absence assertions; `afterAll` is now fallback-only
 4. ✅ **Completed:** Shared `tests/shared/mcp-protocol.js` utility (MCP envelope parsing, reused across E2E and integration tests)
 5. ⏳ **TODO:** Add business logic error tests (duplicate accounts, insufficient funds)

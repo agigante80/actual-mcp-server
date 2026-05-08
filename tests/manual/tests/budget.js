@@ -317,6 +317,56 @@ export async function budgetTests(client, context) {
     else if (srcBefore !== null) console.log(`  ❌ Verify transfer: source expected ${srcBefore - 5000}, got ${srcAfter}`);
     if (dstBefore !== null && dstAfter !== null && dstAfter === dstBefore + 5000) console.log(`  ✓ Verify transfer: destination budgeted ${dstBefore} → ${dstAfter} (+50.00)`);
     else if (dstBefore !== null) console.log(`  ❌ Verify transfer: destination expected ${dstBefore + 5000}, got ${dstAfter}`);
+
+    // #141 negative: insufficient funds. State must be unchanged after rejection.
+    console.log("\nTesting budget transfer (negative): insufficient funds rejected atomically");
+    const obscene = Math.max((srcAfter ?? 0) * 100, 100_000_000);
+    let insufficientErr = null;
+    try {
+      await callTool("actual_budgets_transfer", {
+        month: currentDate,
+        amount: obscene,
+        fromCategoryId: context.categoryId,
+        toCategoryId: targetCategoryId,
+      });
+      console.log(`  ❌ Insufficient-funds transfer accepted (expected rejection)`);
+    } catch (err) {
+      insufficientErr = err.message || String(err);
+      if (insufficientErr.includes("Insufficient budget")) {
+        console.log(`  ✓ Insufficient-funds transfer correctly rejected`);
+      } else {
+        console.log(`  ❌ Wrong error for insufficient funds: ${insufficientErr}`);
+      }
+    }
+    // Verify state unchanged (atomic rejection, no partial write).
+    const postReject = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const postRejectData = postReject.result || postReject;
+    const srcAfterReject = (postRejectData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === context.categoryId)?.budgeted ?? null;
+    const dstAfterReject = (postRejectData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
+    if (srcAfterReject === srcAfter && dstAfterReject === dstAfter) {
+      console.log(`  ✓ State unchanged after rejection (source=${srcAfterReject}, target=${dstAfterReject})`);
+    } else {
+      console.log(`  ❌ State changed after rejection (source ${srcAfter} → ${srcAfterReject}, target ${dstAfter} → ${dstAfterReject})`);
+    }
+
+    // #141 negative: same source and target rejected at the tool layer.
+    console.log("\nTesting budget transfer (negative): same source and target rejected");
+    try {
+      await callTool("actual_budgets_transfer", {
+        month: currentDate,
+        amount: 100,
+        fromCategoryId: context.categoryId,
+        toCategoryId: context.categoryId,
+      });
+      console.log(`  ❌ Same source and target accepted (expected rejection)`);
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes("Source and target categories must be different")) {
+        console.log(`  ✓ Same source and target correctly rejected`);
+      } else {
+        console.log(`  ⚠ Same source and target rejected with unexpected message: ${msg}`);
+      }
+    }
   }
 
   // Batch updates

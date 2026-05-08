@@ -634,17 +634,39 @@ async function processWriteQueue() {
 function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     writeQueue.push({ operation, resolve, reject });
-    
+
     // Clear existing timeout
     if (writeSessionTimeout) {
       clearTimeout(writeSessionTimeout);
     }
-    
+
     // Set new timeout to process queue
     writeSessionTimeout = setTimeout(() => {
       processWriteQueue();
     }, WRITE_SESSION_DELAY_MS);
   });
+}
+
+/**
+ * Run a read+write atomic sequence inside a SINGLE write-queue session.
+ *
+ * Use this when a tool needs to read state, decide what to write based on
+ * that state, and write all within one lock acquisition. Compare with the
+ * default pattern of one `withActualApi` (read) followed by one
+ * `queueWriteOperation` (write), which holds the api lock TWICE.
+ *
+ * Inside the callback, use the raw `@actual-app/api` functions imported at
+ * the top of `actual-adapter.ts` (e.g. `rawGetRules`, `rawDeleteRule`). Do
+ * NOT call public adapter methods (e.g. `adapter.getRules`) inside the
+ * callback, since each public adapter method opens its own lock cycle and
+ * defeats the purpose of this helper.
+ *
+ * Inherits the correctness guarantees of `queueWriteOperation`: serialised
+ * via `withApiLock`, single `api.sync()` after the callback resolves,
+ * pool-aware shutdown semantics. Issue #142.
+ */
+export async function withWriteSession<T>(fn: () => Promise<T>): Promise<T> {
+  return queueWriteOperation(fn);
 }
 
 function processQueue() {
@@ -987,6 +1009,70 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
     return result;
   });
 }
+
+/**
+ * Atomic budget transfer between two categories within a single month.
+ *
+ * Reads the current budget amounts, validates source-side sufficient funds,
+ * and writes both adjustments inside ONE `queueWriteOperation` cycle. This
+ * is the structural fix for issue #141: the previous tool body did three
+ * separate lock cycles (read + write + write) which could hang for the
+ * full Playwright timeout when the upstream server's mutator queue stalled
+ * between cycles.
+ *
+ * Both writes run inside `rawBatchBudgetUpdates` so the upstream Actual
+ * Budget server treats them as one transaction, guaranteeing no partial
+ * transfer is observable from the server's perspective.
+ */
+export interface TransferBudgetResult {
+  transferred: number;
+  fromCategory: { id: string; previousAmount: number; newAmount: number };
+  toCategory: { id: string; previousAmount: number; newAmount: number };
+}
+
+export async function transferBudgetAmount(
+  month: string,
+  fromCategoryId: string,
+  toCategoryId: string,
+  amount: number,
+): Promise<TransferBudgetResult> {
+  observability.incrementToolCall('actual.budgets.transfer').catch(() => {});
+  return queueWriteOperation(async () => {
+    // Inside processWriteQueue we already hold _apiSessionLock and the api is
+    // initialised. Call raw functions only: adapter wrappers would re-enter
+    // queueWriteOperation / withActualApi and defeat the single-cycle goal.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const budgetMonth: any = await rawGetBudgetMonth(month);
+    if (!budgetMonth?.categoryGroups) {
+      throw new Error(`Budget not found for month ${month}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const cats = budgetMonth.categoryGroups.flatMap((g: any) => g.categories || []);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const from = cats.find((c: any) => c.id === fromCategoryId);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const to = cats.find((c: any) => c.id === toCategoryId);
+    if (!from) throw new Error(`Source category ${fromCategoryId} not found in budget`);
+    if (!to) throw new Error(`Target category ${toCategoryId} not found in budget`);
+    const prevFrom = from.budgeted || 0;
+    const prevTo = to.budgeted || 0;
+    if (prevFrom < amount) {
+      throw new Error(`Insufficient budget in source category. Available: ${prevFrom}, Requested: ${amount}`);
+    }
+
+    await rawBatchBudgetUpdates(async () => {
+      await rawSetBudgetAmount(month, fromCategoryId, prevFrom - amount);
+      await rawSetBudgetAmount(month, toCategoryId, prevTo + amount);
+    });
+
+    return {
+      transferred: amount,
+      fromCategory: { id: fromCategoryId, previousAmount: prevFrom, newAmount: prevFrom - amount },
+      toCategory: { id: toCategoryId, previousAmount: prevTo, newAmount: prevTo + amount },
+    };
+  });
+}
+
 export async function createAccount(account: components['schemas']['Account'] | unknown, initialBalance?: number): Promise<string> {
   observability.incrementToolCall('actual.accounts.create').catch(() => {});
   return queueWriteOperation(async () => {
@@ -1831,6 +1917,7 @@ export default {
   mergePayees,
   getPayeeRules,
   batchBudgetUpdates,
+  transferBudgetAmount,
   holdBudgetForNextMonth,
   resetBudgetHold,
   runQuery,
@@ -1845,5 +1932,6 @@ export default {
   updateSchedule,
   deleteSchedule,
   updateTransactionBatch,
+  withWriteSession,
   notifications,
 };

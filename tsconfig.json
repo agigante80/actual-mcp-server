@@ -16,7 +16,7 @@
     "paths": {
       // @actual-app/core ships TypeScript source files (not compiled .d.ts).
       // From @actual-app/api v26.4.0 it is imported directly, causing tsc to
-      // compile those source files with our strict settings — and they require
+      // compile those source files with our strict settings, and they require
       // typescript-strict-plugin to pass, which tsc doesn't support.
       // This stub redirects all @actual-app/core/* imports to a no-op declaration
       // so TypeScript never follows into its source. All type information we

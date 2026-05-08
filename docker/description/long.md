@@ -8,7 +8,7 @@ A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budge
 
 - **62 Implemented Tools** - Comprehensive coverage of the Actual Budget API (84% of methods)
 - **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
-- **HTTP + stdio Transports** - Run as a remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`) — no Docker or HTTP server needed for local use
+- **HTTP + stdio Transports** - Run as a remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **Claude Desktop Native** - Connect without mcp-remote: spawn the server directly over stdin/stdout, zero config overhead
 - **HTTPS Support** - Secure connections with native TLS or reverse-proxy termination
 - **OIDC / JWT Auth** - Multi-user OIDC authentication with per-user budget ACL (Casdoor, Keycloak, etc.)
@@ -20,7 +20,7 @@ A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budge
 
 ## 📦 Quick Start
 
-### HTTP — Docker (for LibreChat / LobeChat)
+### HTTP via Docker (for LibreChat / LobeChat)
 
 ```bash
 docker run -d \
@@ -37,7 +37,7 @@ docker run -d \
 # ghcr.io/agigante80/actual-mcp-server:latest
 ```
 
-### stdio — Claude Desktop native (no Docker, no HTTP server, no token)
+### stdio for Claude Desktop native (no Docker, no HTTP server, no token)
 
 ```bash
 # 1. Clone and build once
@@ -117,11 +117,11 @@ ACTUAL_PASSWORD=my-password
 ACTUAL_BUDGET_SYNC_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
 BUDGET_DEFAULT_NAME=Personal
 
-# Budget 1 — same server
+# Budget 1 (same server)
 BUDGET_1_NAME=Family
 BUDGET_1_SYNC_ID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
 
-# Budget 2 — separate server
+# Budget 2 (separate server)
 BUDGET_2_NAME=Business
 BUDGET_2_SERVER_URL=https://actual-office.example.com
 BUDGET_2_PASSWORD=office-password
@@ -187,7 +187,7 @@ mcpServers:
     serverInstructions: true
 ```
 
-### Claude Desktop (stdio — native, recommended for local use)
+### Claude Desktop (stdio native, recommended for local use)
 
 ```json
 {
@@ -258,4 +258,4 @@ docker logs actual-mcp-server
 
 ## 📝 License
 
-MIT License — see GitHub repository for details
+MIT License. See GitHub repository for details.
