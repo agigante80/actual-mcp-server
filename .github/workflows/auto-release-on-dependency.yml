@@ -9,7 +9,7 @@ name: Auto Release on Dependency Update
 #
 # Now it only fires once the CI/CD Pipeline workflow has COMPLETED SUCCESSFULLY
 # on main. If CI fails the job condition `conclusion == 'success'` stops
-# everything immediately — no version bump, no release, no tag.
+# everything immediately. There is no version bump, no release, no tag.
 # -----------------------------------------------------------------------------
 on:
   workflow_run:
@@ -45,22 +45,25 @@ jobs:
       - name: Check if dependency update
         id: check-update
         run: |
-          # Only auto-release when this was an @actual-app/api dependency update.
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -q "@actual-app/api"; then
+          # Auto-release only when @actual-app/api's version line actually
+          # changed in this commit's package.json. The previous check grep'd
+          # the commit message for the package name, which false-positived on
+          # any merge commit that mentioned the package in its body. Issue #148.
+          if git show --name-only HEAD | grep -q '^package.json$' \
+             && git show HEAD -- package.json | grep -E '^\+.*"@actual-app/api"' >/dev/null; then
             echo "is_dependency_update=true" >> $GITHUB_OUTPUT
-            echo "✅ Detected @actual-app/api dependency update — proceeding with release"
+            echo "Detected @actual-app/api version change in package.json; proceeding with release"
           else
             echo "is_dependency_update=false" >> $GITHUB_OUTPUT
-            echo "⏭️  Not a dependency update commit, skipping auto-release"
+            echo "Not a dependency update commit, skipping auto-release"
           fi
-      
+
       - name: Setup Node.js
         if: steps.check-update.outputs.is_dependency_update == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      
+
       - name: Get current version
         if: steps.check-update.outputs.is_dependency_update == 'true'
         id: current-version
@@ -68,7 +71,7 @@ jobs:
           CURRENT=$(node -p "require('./package.json').version")
           echo "version=$CURRENT" >> $GITHUB_OUTPUT
           echo "Current version: $CURRENT"
-      
+
       - name: Bump patch version
         if: steps.check-update.outputs.is_dependency_update == 'true'
         id: bump
@@ -77,14 +80,14 @@ jobs:
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "✅ Bumped version to $NEW_VERSION"
-      
+
       - name: Get @actual-app/api version
         if: steps.check-update.outputs.is_dependency_update == 'true'
         id: actual-version
         run: |
           ACTUAL_VERSION=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
           echo "version=$ACTUAL_VERSION" >> $GITHUB_OUTPUT
-      
+
       - name: Commit version bump
         if: steps.check-update.outputs.is_dependency_update == 'true'
         run: |
@@ -93,10 +96,13 @@ jobs:
           git add VERSION package.json
           git commit -m "chore(release): bump version to ${{ steps.bump.outputs.new_version }}"
           git tag -a "v${{ steps.bump.outputs.new_version }}" -m "Release v${{ steps.bump.outputs.new_version }} - Auto-release for @actual-app/api ${{ steps.actual-version.outputs.version }}"
-          git push origin main
+          # workflow_run-triggered runs are on a detached HEAD, so the local
+          # `main` branch ref does not exist. Push the current commit to the
+          # remote main ref via HEAD:main syntax. Issue #148.
+          git push origin HEAD:main
           git push origin "v${{ steps.bump.outputs.new_version }}"
           echo "✅ Pushed version bump and tag"
-      
+
       - name: Create GitHub Release
         if: steps.check-update.outputs.is_dependency_update == 'true'
         uses: softprops/action-gh-release@v3
@@ -123,16 +129,16 @@ jobs:
             ✅ All CI/CD checks passed (TypeScript compilation + unit tests)
             ✅ Lint and tool-coverage checks passed
             ✅ Auto-release only triggered after successful CI run
-            
+
             ---
-            
+
             **🚀 Docker Images Published**
             - `agigante80/actual-mcp-server:${{ steps.bump.outputs.new_version }}`
             - `agigante80/actual-mcp-server:latest`
-            
+
             **📦 npm Package**
             - [@actual-app/api@${{ steps.actual-version.outputs.version }}](https://www.npmjs.com/package/@actual-app/api/v/${{ steps.actual-version.outputs.version }})
-            
+
             ---
             🤖 Automated release created by dependency update workflow
           draft: false
@@ -140,7 +146,7 @@ jobs:
           generate_release_notes: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Summary
         if: steps.check-update.outputs.is_dependency_update == 'true'
         run: |
@@ -157,4 +163,4 @@ jobs:
         run: |
           echo "### ⏭️ Auto-Release Skipped" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "CI passed, but this commit is not a dependency update — no release created." >> $GITHUB_STEP_SUMMARY
+          echo "CI passed, but this commit is not a dependency update; no release created." >> $GITHUB_STEP_SUMMARY
