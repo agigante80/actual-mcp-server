@@ -672,7 +672,7 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 ### Core Dependencies
 
 **Production Runtime:**
-- **@actual-app/api** (^26.5.0): Official Actual Budget API client
+- **@actual-app/api** (^26.5.2): Official Actual Budget API client
   - Purpose: Core integration with Actual Budget server
   - License: MIT
   - Status: ✅ Current, actively maintained

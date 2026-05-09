@@ -57,7 +57,7 @@
     "release:patch": "npm run version:bump -- patch"
   },
   "dependencies": {
-    "@actual-app/api": "^26.5.0",
+    "@actual-app/api": "^26.5.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "debug": "^4.4.3",
     "dotenv": "^17.4.2",
