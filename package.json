@@ -73,10 +73,11 @@
   },
   "overrides": {
     "ajv": "8.18.0",
-    "qs": "6.14.2"
+    "qs": "6.14.2",
+    "fast-uri": "^3.1.2"
   },
   "comments": {
-    "security-overrides": "ajv>=8.18.0 (CVE alert #21), qs>=6.14.2 (alert #17)"
+    "security-overrides": "ajv>=8.18.0 (CVE alert #21), qs>=6.14.2 (alert #17), fast-uri>=3.1.2 (GHSA-q3j6-qgpj-74h6 + GHSA-v39h-62p7-jpjc)"
   },
   "devDependencies": {
     "@playwright/test": "^1.59.1",
