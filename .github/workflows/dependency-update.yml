@@ -27,6 +27,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   update-test-release:
@@ -168,6 +169,13 @@ jobs:
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
           LATEST: ${{ steps.versions.outputs.latest }}
         run: |
+          # Route subsequent pushes through the App token (#145). Pushes by
+          # GITHUB_TOKEN (the credential helper actions/checkout configured)
+          # do not trigger workflow runs on the same repo, so ci-cd.yml
+          # never fires on the auto-bumped commit. Switching the remote URL
+          # to use the App token makes downstream workflows trigger normally.
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+
           # Push the branch first so the tag is reachable from origin
           git push origin "${BRANCH}"
 
@@ -185,6 +193,23 @@ jobs:
           # Remove the temporary working branch
           git push origin --delete "${BRANCH}"
           echo "✅ Merged, tagged v${NEW_VERSION}, branch deleted"
+
+          # Keep develop in sync with the auto-released main (#145). If develop
+          # has divergent commits the fast-forward aborts; in that case open a
+          # sync PR rather than failing the run or letting the branches drift.
+          {
+            git fetch origin develop:develop
+            git checkout develop
+            git merge --ff-only main
+            git push origin develop
+            echo "✅ Develop fast-forwarded to v${NEW_VERSION}"
+          } || {
+            echo "⚠ Develop has diverged or sync failed; opening sync PR"
+            gh pr create --base develop --head main \
+              --title "chore: sync develop with auto-release main (v${NEW_VERSION})" \
+              --body "Automated PR from dependency-update.yml. Develop has diverged from main; merge could not be fast-forward. Resolve any conflicts and merge to keep develop in sync." \
+              || echo "⚠ Sync PR creation failed; manual merge from main to develop required"
+          }
 
       # -----------------------------------------------------------------------
       # 10. Create GitHub Release
