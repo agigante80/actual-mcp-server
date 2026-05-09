@@ -44,7 +44,17 @@ process.on('unhandledRejection', (reason, promise) => {
     // primary fix lives in httpServer.ts (.catch on initPromise); this allow-list
     // entry is defence-in-depth so any future deferred-promise leak in the same
     // family also fails non-fatally.
-    reasonStr.includes('Authentication failed:')
+    reasonStr.includes('Authentication failed:') ||
+    // EACCES/EPERM from @actual-app/api's internal worker during budget download
+    // (e.g. when MCP_BRIDGE_DATA_DIR is not writable). The primary error is already
+    // caught and logged by connectToActualForSession; a secondary rejection escapes
+    // from the api worker's cleanup code with a non-enumerable error object, making
+    // reasonStr resolve to '[object Object]' rather than containing the code string.
+    // Check raw properties on the reason object as a fallback.
+    (reason as Record<string, unknown>)?.code === 'EACCES' ||
+    (reason as Record<string, unknown>)?.code === 'EPERM' ||
+    (typeof (reason as Record<string, unknown>)?.stack === 'string' &&
+      ((reason as Record<string, unknown>).stack as string).includes('download-budget'))
   ) {
     console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
     console.error('⚠️  ' + reasonStr);
