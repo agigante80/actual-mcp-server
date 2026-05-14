@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
 // Add global error handlers
 let isHandlingQueryError = false;
 
@@ -10,49 +11,14 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Stack:', reason.stack);
   }
   console.error('===========================');
-  
-  // Check if this is a known domain-level error from @actual-app/api
-  // These indicate invalid user input, not server bugs — the error is properly
-  // returned to the caller; if it somehow escapes as an unhandled rejection
-  // we should log but NOT crash the server.
-  const reasonStr = String(reason);
-  const reasonObj = reason as any;
-  if (
-    reasonStr.includes('does not exist in table') ||
-    (reasonStr.includes('Field') && reasonStr.includes('does not exist')) ||
-    reasonStr.includes('Expression stack') ||
-    reasonStr.includes('Date is required') ||
-    reasonStr.includes('date condition is required') ||
-    reasonStr.includes('Cannot create schedules with the same name') ||
-    reasonStr.includes('Schedule') && reasonStr.includes('not found') ||
-    reasonStr.includes('is system-managed and not user-editable') ||
-    reasonStr.includes('is not an expense category') ||
-    // Bank sync errors from GoCardless/SimpleFIN/Nordigen surface as unhandled
-    // rejections from within the @actual-app/api SDK worker. These are non-fatal:
-    // the caller already received a proper error response (or the retry will).
-    reasonObj?.type === 'BankSyncError' ||
-    reasonStr.includes('BankSyncError') ||
-    reasonStr.includes('NORDIGEN_ERROR') ||
-    reasonStr.includes('RATE_LIMIT_EXCEEDED') ||
-    reasonStr.includes('Rate limit exceeded') ||
-    reasonStr.includes('Failed syncing account') ||
-    reasonStr.includes('GoCardless') ||
-    reasonStr.includes('SimpleFIN') ||
-    // Actual API auth failures (network-failure, too-many-requests, invalid-password,
-    // etc.) can escape as unhandled rejections from session-init code paths that
-    // create a deferred Promise but only conditionally await it (see #132). The
-    // primary fix lives in httpServer.ts (.catch on initPromise); this allow-list
-    // entry is defence-in-depth so any future deferred-promise leak in the same
-    // family also fails non-fatally.
-    reasonStr.includes('Authentication failed:')
-  ) {
+
+  if (isKnownBenignRejection(reason)) {
     console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
-    console.error('⚠️  ' + reasonStr);
+    console.error('⚠️  ' + String(reason));
     console.error('⚠️  Server will continue running. The caller received an error response.');
     return;
   }
-  
-  // For all other unhandled rejections, exit
+
   process.exit(1);
 });
 
