@@ -33,7 +33,7 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **62 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
+- **63 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, rules, budgets, batch operations, bank sync, and more. Covers 84% of the Actual Budget API.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
@@ -730,4 +730,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.6.10 | **Tool Count:** 63 (verified LibreChat-compatible)
+**Version:** 0.6.11 | **Tool Count:** 63 (verified LibreChat-compatible)

@@ -191,7 +191,7 @@ export default tool;
 ### Adding a New Tool
 
 1. Create `src/tools/new_tool.ts` using the pattern above
-2. Export it from `src/tools/index.ts` (e.g. `export { default as new_tool } from './new_tool.js';`)
+2. Export it from `src/tools/index.ts` (e.g. `export { default as new_tool } from './new_tool.js';`). Despite the "Auto-generated index" header on that file, exports are added manually; no script regenerates it.
 3. Add tool name to `IMPLEMENTED_TOOLS` array in `src/actualToolsManager.ts`
 4. Add unit tests in `tests/unit/` (positive + negative cases)
 5. Run `npm run verify-tools` to confirm registration
@@ -290,6 +290,8 @@ When changing code, update these docs:
 - `docs/NEW_TOOL_CHECKLIST.md`: canonical 9-step guide for adding tools
 - `docs/TESTING_AND_RELIABILITY.md`: test-file inventory, integration test module table
 - `docs/guides/AI_CLIENT_SETUP.md`: LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL
+- `docs/guides/MCP_CLIENTS_SETUP.md`: per-client setup recipes (Claude Desktop, Cursor, etc.); complements AI_CLIENT_SETUP.md
+- `docs/audit/dep-audit-cache.json`: cache used by `/dep-auditor` to skip recently-checked libraries; do not edit manually
 - `docs/guides/DEPLOYMENT.md`: Docker Compose profiles, Kubernetes, upgrade steps
 - `docs/SECURITY_AND_PRIVACY.md`: auth models, threat model
 - `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools
