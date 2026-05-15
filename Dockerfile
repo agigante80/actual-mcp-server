@@ -1,4 +1,4 @@
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN apk add --no-cache python3 make g++
@@ -6,7 +6,7 @@ RUN npm ci --production=false
 COPY . ./
 RUN npm run build
 
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 # Accept VERSION as build argument and set as environment variable
