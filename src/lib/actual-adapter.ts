@@ -2065,16 +2065,40 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   }
 
   // Release the existing pool entry (bound to the previous syncId) BEFORE
-  // mutating the session map. The next withActualApi call materialises a
-  // fresh entry against the new budget. Swallow shutdown errors: a stale or
-  // missing pool entry is benign at this point.
+  // mutating the session map. Swallow shutdown errors: a stale or missing
+  // pool entry is benign at this point.
   try {
     await connectionPool.shutdownConnection(sessionId);
   } catch (e) {
     logger.debug(`[ADAPTER] switchBudget: shutdownConnection raised (likely no prior entry): ${e}`);
   }
 
+  // Update the per-session active-budget slot. Subsequent getActiveBudgetConfig
+  // calls for this session now return the new budget.
   sessionBudgetState.set(sessionId, key);
+
+  // Materialise a fresh pool entry for the new budget. Without this, the
+  // next withActualApi call would find no pool entry, fall back to the
+  // legacy init+shutdown path, and every subsequent call would do the
+  // same, producing exactly the upstream-auth-burst pattern that #134
+  // eliminated. Failure here is logged but not fatal: the legacy fallback
+  // will still work, just less efficiently.
+  if (_skipApiInitForTests) {
+    // Tests prime the pool directly via connectionPool.connections.set();
+    // calling getConnection here would try to api.init() against the real
+    // upstream. Mark the singleton live and let the test prime the entry.
+    setApiInitialized(true);
+  } else {
+    try {
+      await connectionPool.getConnection(sessionId);
+    } catch (poolErr) {
+      logger.warn(
+        `[ADAPTER] switchBudget: failed to materialise new pool entry for session ${sessionId}: ${poolErr}. ` +
+          'Subsequent calls will use the legacy init+shutdown fallback.',
+      );
+    }
+  }
+
   logger.info(
     `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
   );
