@@ -552,11 +552,19 @@ interface WriteOperation<T> {
   operation: () => Promise<T>;
   resolve: (value: T) => void;
   reject: (error: any) => void;
+  // sessionId captured at enqueue time so the pool-vs-legacy branch in
+  // processWriteQueue has the right context, even though setTimeout strips
+  // AsyncLocalStorage. See #158.
+  sessionId?: string;
 }
 
 let writeQueue: WriteOperation<any>[] = [];
 let isProcessingWrites = false;
 let writeSessionTimeout: NodeJS.Timeout | null = null;
+
+// Counter for diagnostic: writes that reused an existing pool connection
+// (skipped the per-op init). Surfaces in getConcurrencyState(). See #158.
+let writeConnectionReuseCount = 0;
 
 async function processWriteQueue() {
   // Atomically check and set processing flag to prevent race conditions
@@ -570,13 +578,38 @@ async function processWriteQueue() {
   }
   
   const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
-  logger.debug(`[WRITE QUEUE] Processing batch of ${batch.length} operations`);
+  // Pool-cooperation decision (#158): use the first queued op's captured
+  // sessionId as the batch's sessionId. In practice all ops batched together
+  // came from the same setTimeout window and same request, so they share
+  // a session. The heuristic is safe: a stale sessionId just means we take
+  // the legacy branch, never that we attribute one session's writes to
+  // another's pool entry.
+  const batchSessionId = batch[0]?.sessionId;
+  const usePoolBranch = !!batchSessionId && _hasPooledConnection(batchSessionId);
+  logger.debug(
+    `[WRITE QUEUE] Processing batch of ${batch.length} operations ` +
+      `(sessionId=${batchSessionId ?? 'none'}, poolBranch=${usePoolBranch})`,
+  );
 
   try {
     await withApiLock(async () => {
       try {
-        // Initialize API once for all queued writes
-        await initActualApiForOperation();
+        if (usePoolBranch) {
+          // Pool branch: api singleton already live for this session, no need
+          // to init or shutdown around the batch. Sync at the end to commit
+          // writes upstream. On infrastructure-level errors, release the pool
+          // entry so the next call materialises a fresh connection.
+          writeConnectionReuseCount++;
+          logger.debug(
+            `[WRITE QUEUE] Reusing pool connection for session ${batchSessionId} ` +
+              `(writeReuses=${writeConnectionReuseCount})`,
+          );
+        } else {
+          // Legacy branch: no pool entry, init+shutdown around the batch as
+          // before. initActualApiForOperation() still short-circuits if the
+          // api is somehow already live (e.g. another path init'd it).
+          await initActualApiForOperation();
+        }
 
         // Process all queued writes in the same session
         // Each operation handles its own success/failure
@@ -592,20 +625,37 @@ async function processWriteQueue() {
           })
         );
 
-        // Explicitly sync changes to server before shutdown
-        // This ensures all write operations are persisted
+        // Explicitly sync changes to server before shutdown (legacy) or just
+        // before returning (pool). Persistence guarantee in both branches.
         logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
         try {
           await (api as any).sync();
           logger.debug(`[WRITE QUEUE] Sync completed`);
         } catch (syncError) {
           logger.error('[WRITE QUEUE] Sync failed:', syncError);
+          // Pool branch: drop the connection on infrastructure-level sync
+          // failure so the next write re-initialises cleanly. Mirrors
+          // withActualApiWrite's policy.
+          if (usePoolBranch && _shouldDropPoolOnError(syncError)) {
+            logger.warn(
+              `[WRITE QUEUE] Releasing pool connection for session ${batchSessionId} after sync failure`,
+            );
+            try {
+              await connectionPool.shutdownConnection(batchSessionId!);
+            } catch (_e) {
+              /* swallow */
+            }
+          }
           // Don't throw - we still want to shutdown cleanly
           // Individual operation errors were already reported to callers
         }
 
-        // Shutdown after all writes complete and sync
-        await shutdownActualApi();
+        if (!usePoolBranch) {
+          // Legacy branch only: actually shut the singleton down.
+          // shutdownActualApi() itself short-circuits to sync-only if another
+          // path has active pool sessions, so this is safe under contention.
+          await shutdownActualApi();
+        }
         logger.debug(`[WRITE QUEUE] Batch completed successfully`);
       } catch (error) {
         logger.error('[WRITE QUEUE] Fatal error in write queue:', error);
@@ -617,7 +667,19 @@ async function processWriteQueue() {
             logger.error('[WRITE QUEUE] Error rejecting operation:', e);
           }
         });
-        await shutdownActualApi();
+        // Pool branch: drop the pool entry if the error suggests infrastructure
+        // corruption. Legacy branch: full shutdown.
+        if (usePoolBranch) {
+          if (_shouldDropPoolOnError(error)) {
+            try {
+              await connectionPool.shutdownConnection(batchSessionId!);
+            } catch (_e) {
+              /* swallow */
+            }
+          }
+        } else {
+          await shutdownActualApi();
+        }
       }
     });
   } finally {
@@ -632,8 +694,12 @@ async function processWriteQueue() {
 }
 
 function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
+  // Capture sessionId from AsyncLocalStorage at enqueue time. The setTimeout
+  // below strips the ALS frame, so without capturing here the pool-branch
+  // decision in processWriteQueue would always miss. See #158.
+  const sessionId = _resolveSessionId();
   return new Promise((resolve, reject) => {
-    writeQueue.push({ operation, resolve, reject });
+    writeQueue.push({ operation, resolve, reject, sessionId });
 
     // Clear existing timeout
     if (writeSessionTimeout) {
@@ -725,6 +791,11 @@ export function getConcurrencyState() {
     // structurally always 0; post-#134 it should grow at least linearly with
     // tool-call volume on healthy MCP sessions.
     connectionReuses: connectionReuseCount,
+    // Pool-cooperation observability for WRITES (issue #158). Before #158 the
+    // write path (processWriteQueue) never used the pool branch explicitly,
+    // so this counter stayed at 0 even when reads were reusing the pool.
+    // Post-#158 it grows with write volume on pooled sessions.
+    writeConnectionReuses: writeConnectionReuseCount,
   };
 }
 
