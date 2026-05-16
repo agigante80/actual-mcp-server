@@ -414,7 +414,9 @@ export async function startHttpServer(
         await server.connect(transport);
         try {
           // Run in AsyncLocalStorage context so tools can access sessionId
-          await requestContext.run({ sessionId: undefined }, async () => {
+          // and the adapter can enforce per-request budget ACL (#156).
+          const allowedBudgetsInit = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
+          await requestContext.run({ sessionId: undefined, allowedBudgets: allowedBudgetsInit }, async () => {
             await transport.handleRequest(req, res, req.body);
           });
         } catch (err: unknown) {
@@ -496,8 +498,10 @@ export async function startHttpServer(
       // Update activity timestamp for valid session
       sessionLastActivity.set(sessionId, Date.now());
 
-      // Run in AsyncLocalStorage context so tools can access sessionId
-      await requestContext.run({ sessionId }, async () => {
+      // Run in AsyncLocalStorage context so tools and the adapter can access
+      // sessionId (pool branch, #134) and allowedBudgets (ACL enforcement, #156).
+      const allowedBudgets = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
+      await requestContext.run({ sessionId, allowedBudgets }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     } catch (err: unknown) {
