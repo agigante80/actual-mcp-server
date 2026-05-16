@@ -641,6 +641,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
 | `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
 | `rejection-allowlist-purity.test.js` | Static analysis of `src/lib/rejection-allowlist.ts`: sentinel marker present; no static, dynamic, or CommonJS imports of non-node modules; no top-level side-effecting statements (#159) | 5 categories |
+| `httpServer_bearer_auth.test.js` | Hardened bearer auth path: `timingSafeEqual` comparison with length-equality short-circuit; forbids re-introduction of token-content debug log lines (#157) | 12 |
 
 **Coverage:**
 - ✅ All 63 tools: stub invocation + response-shape assertion
