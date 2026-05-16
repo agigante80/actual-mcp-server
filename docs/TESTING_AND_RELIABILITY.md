@@ -643,6 +643,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `rejection-allowlist-purity.test.js` | Static analysis of `src/lib/rejection-allowlist.ts`: sentinel marker present; no static, dynamic, or CommonJS imports of non-node modules; no top-level side-effecting statements (#159) | 5 categories |
 | `httpServer_bearer_auth.test.js` | Hardened bearer auth path: `timingSafeEqual` comparison with length-equality short-circuit; forbids re-introduction of token-content debug log lines (#157) | 12 |
 | `adapter_write_pool_cooperation.test.js` | Write path uses the pool branch when a pooled session is in context: `writeConnectionReuses` increments; legacy branch otherwise; `api.sync()` runs in both branches (#158) | 7 |
+| `budget_acl_enforcement.test.js` | Per-session active budget + ACL: stdio short-circuit; OIDC defence-in-depth refusal on missing allowedBudgets; allow on ACL match; warn-level structured denial log; `switchBudget` requires session, exact match only, releases pool entry before mutating session map (#156) | 15 |
 
 **Coverage:**
 - ✅ All 63 tools: stub invocation + response-shape assertion

@@ -86,15 +86,37 @@ logger.info(
 );
 
 /**
- * Key (lowercased budget name) of the currently active budget.
- * Null = use the first entry in the registry (the default budget).
+ * Per-session active budget. Map from sessionId to lowercased budget key
+ * (matches the keys in budgetRegistry).
+ *
+ * Issue #156: previously a single module-level `activeBudgetKey` was shared
+ * across all sessions. In multi-user OIDC mode that meant one user's
+ * actual_budgets_switch silently flipped the active budget for every other
+ * concurrent session, leaking financial data across tenants. The per-session
+ * map closes that hole: each MCP sessionId has its own slot.
+ *
+ * Sessions without an entry (or callers outside any requestContext.run scope:
+ * stdio mode, startup health checks) fall back to the env-default budget
+ * (first entry in budgetRegistry).
+ *
+ * Lifecycle: entries are removed on session close via session_close.ts and
+ * implicitly when connectionPool.shutdownConnection runs (switchBudget calls
+ * it to drop the stale pool entry bound to the previous syncId).
  */
-let activeBudgetKey: string | null = null;
+const sessionBudgetState = new Map<string, string>();
 
 function getActiveBudgetConfig(): BudgetConfig {
-  if (activeBudgetKey) {
-    const found = budgetRegistry.get(activeBudgetKey);
-    if (found) return found;
+  // _resolveSessionId is declared below; function declarations hoist so this
+  // call works at runtime. If we're not in any requestContext.run scope (stdio,
+  // startup health checks), sessionId is undefined and we fall back to the
+  // env-default budget (first registry entry).
+  const sessionId = requestContext.getStore()?.sessionId;
+  if (sessionId) {
+    const key = sessionBudgetState.get(sessionId);
+    if (key) {
+      const found = budgetRegistry.get(key);
+      if (found) return found;
+    }
   }
   return [...budgetRegistry.values()][0];
 }
@@ -183,6 +205,77 @@ function _shouldDropPoolOnError(err: unknown): boolean {
 }
 
 /**
+ * Enforce per-request budget ACL before any pool branching or lock acquisition.
+ *
+ * Issue #156: the documented isolation model (CF-5 OIDC + AUTH_BUDGET_ACL)
+ * was never wired through to tool dispatch. canAccessBudget() in
+ * src/auth/budget-acl.ts had zero call sites; budgetAclMiddleware only
+ * attached req.allowedBudgets and trusted callers to honour it.
+ *
+ * This function is the single enforcement choke point: every withActualApi /
+ * withActualApiWrite call passes through it. If the resolved active budget's
+ * syncId is not in the request's allowedBudgets list, we throw with a clear
+ * message and log at warn level with structured fields.
+ *
+ * stdio short-circuit: when there's no sessionId in context AND AUTH_PROVIDER
+ * is not 'oidc', we treat the caller as trusted-local. stdio mode runs
+ * outside requestContext.run by design (the transport handler is single-user
+ * local on a process the user already controls), so requiring allowedBudgets
+ * there would break stdio entirely. This short-circuit is load-bearing for
+ * Claude Desktop / Claude Code compatibility.
+ */
+function _enforceBudgetAcl(toolName?: string): void {
+  const store = requestContext.getStore();
+  const sessionId = store?.sessionId;
+  const allowedBudgets = store?.allowedBudgets;
+
+  // Trusted-local short-circuit. stdio and startup health checks run with no
+  // sessionId; in non-OIDC modes those are by-construction trusted (single
+  // user, local process). The ACL only applies when an authenticated multi-
+  // user context is in play (AUTH_PROVIDER === 'oidc').
+  if (!sessionId && config.AUTH_PROVIDER !== 'oidc') {
+    return;
+  }
+
+  // OIDC + no allowedBudgets in context: the request slipped past the
+  // middleware. Defence-in-depth: refuse rather than fail open.
+  if (config.AUTH_PROVIDER === 'oidc' && !allowedBudgets) {
+    logger.warn(
+      JSON.stringify({
+        event: 'acl_denied',
+        reason: 'no_allowed_budgets_in_context',
+        sessionId: sessionId ?? null,
+        tool: toolName ?? null,
+      }),
+    );
+    throw new Error(
+      'Budget ACL: no allowedBudgets in request context. ' +
+        'This request bypassed the budget-acl middleware. Refusing for safety. See #156.',
+    );
+  }
+
+  // No restriction.
+  if (!allowedBudgets || allowedBudgets.includes('*')) return;
+
+  const target = getActiveBudgetConfig();
+  if (!allowedBudgets.includes(target.syncId)) {
+    logger.warn(
+      JSON.stringify({
+        event: 'acl_denied',
+        principal: null,
+        attemptedBudget: target.syncId,
+        allowedBudgets,
+        sessionId: sessionId ?? null,
+        tool: toolName ?? null,
+      }),
+    );
+    throw new Error(
+      `Budget ACL: budget "${target.name}" (${target.syncId}) is not in this session's allowedBudgets.`,
+    );
+  }
+}
+
+/**
  * Helper to run an operation with the Actual API ready, deciding the lifecycle
  * mode automatically:
  *
@@ -201,6 +294,11 @@ function _shouldDropPoolOnError(err: unknown): boolean {
  * `@actual-app/api` is a process-wide singleton.
  */
 export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
+  // ACL enforcement BEFORE pool branching or lock acquisition (#156).
+  // Denial here means the lock is never acquired and no upstream resource is
+  // touched.
+  _enforceBudgetAcl();
+
   const sessionId = _resolveSessionId();
 
   if (_hasPooledConnection(sessionId)) {
@@ -252,6 +350,9 @@ export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> 
  * generalised to single-write call sites.
  */
 export async function withActualApiWrite<T>(operation: () => Promise<T>): Promise<T> {
+  // ACL enforcement BEFORE pool branching or lock acquisition (#156).
+  _enforceBudgetAcl();
+
   const sessionId = _resolveSessionId();
 
   if (_hasPooledConnection(sessionId)) {
@@ -694,6 +795,10 @@ async function processWriteQueue() {
 }
 
 function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
+  // ACL enforcement at the write-queue entry (#156). Failing here means the
+  // op is never enqueued and no upstream resource is touched.
+  _enforceBudgetAcl();
+
   // Capture sessionId from AsyncLocalStorage at enqueue time. The setTimeout
   // below strips the ALS frame, so without capturing here the pool-branch
   // decision in processWriteQueue would always miss. See #158.
@@ -1884,25 +1989,39 @@ export async function getBudgets(): Promise<unknown[]> {
 }
 
 /**
- * Switch the active budget by name (case-insensitive, partial match supported).
+ * Switch the active budget by name (case-insensitive, EXACT match only).
  * The budget must be pre-configured via BUDGET_n_NAME env vars.
- * Switching is instant — no API call required; the next withActualApi
- * call will automatically connect to the new budget's server and sync ID.
+ *
+ * Issue #156:
+ *   * Per-session: writes to the per-session map keyed by current sessionId.
+ *     Stdio / non-session callers fall back to the env-default budget and
+ *     cannot switch (returns an error).
+ *   * ACL: refuses when the target budget's syncId is not in this session's
+ *     allowedBudgets.
+ *   * Exact match only (substring matching removed: it was a sharp edge that
+ *     allowed an LLM prompt-injection to walk the registry).
+ *   * Pool release: BEFORE mutating the session map, releases the existing
+ *     pool entry bound to the previous syncId. The next withActualApi call
+ *     materialises a fresh pool entry against the new budget. Without this,
+ *     the stale pool entry would serve the new request against the old
+ *     upstream.
  */
-export function switchBudget(name: string): { name: string; syncId: string; serverUrl: string } {
-  const key = name.toLowerCase();
-  let found: BudgetConfig | undefined = budgetRegistry.get(key);
-  let foundKey = key;
-  if (!found) {
-    // Partial / substring match
-    for (const [k, v] of budgetRegistry) {
-      if (k.includes(key) || key.includes(k)) {
-        found = v;
-        foundKey = k;
-        break;
-      }
-    }
+export async function switchBudget(name: string): Promise<{ name: string; syncId: string; serverUrl: string }> {
+  const store = requestContext.getStore();
+  const sessionId = store?.sessionId;
+  const allowedBudgets = store?.allowedBudgets;
+
+  // Stdio / no-session callers: per-session map has no slot for them, so the
+  // switch would have no effect. Refuse explicitly rather than silently no-op.
+  if (!sessionId) {
+    throw new Error(
+      'Budget switch requires an MCP session. Stdio/local callers operate on the env-default budget; ' +
+        'configure ACTUAL_BUDGET_SYNC_ID (or the BUDGET_n_* variants) to select a different default.',
+    );
   }
+
+  const key = name.toLowerCase();
+  const found: BudgetConfig | undefined = budgetRegistry.get(key);
   if (!found) {
     const available = [...budgetRegistry.values()].map(b => `"${b.name}"`).join(', ');
     throw new Error(
@@ -1911,9 +2030,64 @@ export function switchBudget(name: string): { name: string; syncId: string; serv
       `Add BUDGET_n_NAME/SYNC_ID/SERVER_URL vars to configure additional budgets.`,
     );
   }
-  activeBudgetKey = foundKey;
-  logger.info(`[ADAPTER] Active budget switched to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`);
+
+  // ACL enforcement: the target budget must be in this session's allowedBudgets.
+  // OIDC mode: explicit ACL required. Non-OIDC: short-circuit allow (single-user).
+  if (config.AUTH_PROVIDER === 'oidc') {
+    if (!allowedBudgets) {
+      logger.warn(
+        JSON.stringify({
+          event: 'acl_denied',
+          reason: 'no_allowed_budgets_in_context',
+          attemptedBudget: found.syncId,
+          sessionId,
+          tool: 'actual_budgets_switch',
+        }),
+      );
+      throw new Error(
+        `Budget ACL: cannot switch to "${found.name}". No allowedBudgets in request context.`,
+      );
+    }
+    if (!allowedBudgets.includes('*') && !allowedBudgets.includes(found.syncId)) {
+      logger.warn(
+        JSON.stringify({
+          event: 'acl_denied',
+          attemptedBudget: found.syncId,
+          allowedBudgets,
+          sessionId,
+          tool: 'actual_budgets_switch',
+        }),
+      );
+      throw new Error(
+        `Budget ACL: budget "${found.name}" (${found.syncId}) is not in this session's allowedBudgets.`,
+      );
+    }
+  }
+
+  // Release the existing pool entry (bound to the previous syncId) BEFORE
+  // mutating the session map. The next withActualApi call materialises a
+  // fresh entry against the new budget. Swallow shutdown errors: a stale or
+  // missing pool entry is benign at this point.
+  try {
+    await connectionPool.shutdownConnection(sessionId);
+  } catch (e) {
+    logger.debug(`[ADAPTER] switchBudget: shutdownConnection raised (likely no prior entry): ${e}`);
+  }
+
+  sessionBudgetState.set(sessionId, key);
+  logger.info(
+    `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
+  );
   return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+}
+
+/**
+ * Clear the per-session budget state for a session. Called from
+ * session_close so the per-session map does not accumulate stale entries
+ * after a session ends. See #156.
+ */
+export function clearSessionBudgetState(sessionId: string): void {
+  sessionBudgetState.delete(sessionId);
 }
 
 /**
