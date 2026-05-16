@@ -4,6 +4,27 @@
  * Returns true when a rejection should be logged but the server should keep
  * running. Centralised here so it can be unit-tested without importing the
  * full server entrypoint.
+ *
+ * INVARIANT: this module MUST remain side-effect-free.
+ *
+ * src/index.ts registers the process.on('unhandledRejection', ...) handler
+ * AFTER importing this module (ESM static imports are evaluated before the
+ * top-level body runs). Any side effect introduced here, e.g. importing a
+ * logger that performs winston/file-handle init, importing dotenv, or any
+ * code that runs at module load, opens a window during ESM evaluation in
+ * which an unhandled rejection bypasses this allow-list and crashes the
+ * server. That is exactly the latent regression the #152 fix was meant to
+ * prevent.
+ *
+ * Concretely:
+ *   - No imports (static, dynamic, require, await import) of project modules.
+ *   - Only node: builtins are permitted, and only if strictly necessary.
+ *   - No top-level statements other than function/export declarations.
+ *
+ * Enforcement: tests/unit/rejection-allowlist-purity.test.js parses this
+ * source file and exits non-zero if any forbidden construct is present, or
+ * if the sentinel below is missing. The sentinel makes deletion of this
+ * docblock a hard-fail at CI time.
  */
 export function isKnownBenignRejection(reason: unknown): boolean {
   const reasonStr = String(reason);
