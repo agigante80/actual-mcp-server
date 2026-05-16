@@ -632,13 +632,15 @@ This project follows a comprehensive testing strategy with multiple levels, from
 **Location:** `tests/unit/`  
 **Command:** `npm run test:unit-js`
 
-**Test Files (3 active):**
+**Test Files (5 active):**
 
 | File | What it tests | Assertions |
 |---|---|---|
 | `transactions_create.test.js` | Zod schema for `transactions_create`: valid input accepted, empty rejected | 2 |
 | `generated_tools.smoke.test.js` | All 63 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 63 + shape checks |
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
+| `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
+| `rejection-allowlist-purity.test.js` | Static analysis of `src/lib/rejection-allowlist.ts`: sentinel marker present; no static, dynamic, or CommonJS imports of non-node modules; no top-level side-effecting statements (#159) | 5 categories |
 
 **Coverage:**
 - ✅ All 63 tools: stub invocation + response-shape assertion
