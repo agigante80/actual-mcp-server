@@ -1,7 +1,7 @@
 // src/server/httpServer.ts
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.ts';
 import express, { Request, Response } from 'express';
-import { randomUUID } from 'crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
@@ -155,16 +155,18 @@ export async function startHttpServer(
     }
 
     const token = match[1];
-    
-    // Debug logging for token comparison
-    logger.debug(`[HTTP] Auth header received: "${authHeader}"`);
-    logger.debug(`[HTTP] Extracted token: "${token}" (length: ${token.length})`);
-    logger.debug(`[HTTP] Expected token: "${config.MCP_SSE_AUTHORIZATION}" (length: ${config.MCP_SSE_AUTHORIZATION?.length || 0})`);
-    logger.debug(`[HTTP] Tokens equal: ${token === config.MCP_SSE_AUTHORIZATION}`);
-    logger.debug(`[HTTP] Token hex dump (received): ${Buffer.from(token).toString('hex')}`);
-    logger.debug(`[HTTP] Token hex dump (expected): ${Buffer.from(config.MCP_SSE_AUTHORIZATION || '').toString('hex')}`);
-    
-    if (token !== config.MCP_SSE_AUTHORIZATION) {
+    const expected = config.MCP_SSE_AUTHORIZATION;
+
+    // Constant-time comparison to defeat timing oracles (#157).
+    // Length-equality short-circuit precedes timingSafeEqual because the
+    // function requires equal-length buffers. Token length is observable
+    // via response timing regardless; the secret bytes are not.
+    const tokenBuf = Buffer.from(token, 'utf8');
+    const expectedBuf = Buffer.from(expected, 'utf8');
+    const equal =
+      tokenBuf.length === expectedBuf.length && timingSafeEqual(tokenBuf, expectedBuf);
+
+    if (!equal) {
       logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid token`);
       res.status(401).json({ error: 'Unauthorized: Invalid token' });
       return false;
