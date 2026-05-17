@@ -2064,9 +2064,59 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     }
   }
 
-  // Release the existing pool entry (bound to the previous syncId) BEFORE
-  // mutating the session map. Swallow shutdown errors: a stale or missing
-  // pool entry is benign at this point.
+  // Fast path (#172): if the current pool entry's auth descriptor matches the
+  // target budget's (same serverUrl + password + encryptionPassword), skip
+  // release + re-auth. Just download the new budget file on the already-
+  // authenticated api singleton. Eliminates the upstream login burst when
+  // switching between budgets hosted on the same Actual server.
+  const currentEntry = connectionPool.getConnectionInfo(sessionId);
+  const sameAuth =
+    !!currentEntry &&
+    currentEntry.serverUrl === found.serverUrl &&
+    currentEntry.password === (found.password || '') &&
+    (currentEntry.encryptionPassword ?? '') === (found.encryptionPassword ?? '');
+
+  if (sameAuth && currentEntry!.syncId === found.syncId) {
+    // No-op: already on this exact budget. Keep session map consistent and return.
+    sessionBudgetState.set(sessionId, key);
+    logger.info(
+      `[ADAPTER] switchBudget no-op for session ${sessionId}: already on "${found.name}" (${found.syncId})`,
+    );
+    return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+  }
+
+  if (sameAuth) {
+    // Same server + creds, different syncId. Reload budget file in place.
+    logger.info(
+      `[ADAPTER] switchBudget fast path for session ${sessionId}: ` +
+        `same server, reloading budget "${found.name}" (${found.syncId})`,
+    );
+    if (_skipApiInitForTests) {
+      // Skip the real downloadBudget call in tests; tests verify the fast
+      // path was taken by spying on connectionPool.shutdownConnection.
+    } else {
+      await withApiLock(async () => {
+        if (found.encryptionPassword) {
+          const apiWithOptions = api as typeof api & {
+            downloadBudget: (id: string, options?: { password: string }) => Promise<void>;
+          };
+          await apiWithOptions.downloadBudget(found.syncId, { password: found.encryptionPassword });
+        } else {
+          await api.downloadBudget(found.syncId);
+        }
+      });
+    }
+    connectionPool.updateLoadedSyncId(sessionId, found.syncId);
+    sessionBudgetState.set(sessionId, key);
+    logger.info(
+      `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
+    );
+    return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+  }
+
+  // Slow path: different server or credentials. Release the existing pool
+  // entry (bound to the previous syncId / server) BEFORE mutating the session
+  // map. Swallow shutdown errors: a stale or missing pool entry is benign.
   try {
     await connectionPool.shutdownConnection(sessionId);
   } catch (e) {
@@ -2077,20 +2127,20 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   // calls for this session now return the new budget.
   sessionBudgetState.set(sessionId, key);
 
-  // Materialise a fresh pool entry for the new budget. Without this, the
-  // next withActualApi call would find no pool entry, fall back to the
-  // legacy init+shutdown path, and every subsequent call would do the
-  // same, producing exactly the upstream-auth-burst pattern that #134
-  // eliminated. Failure here is logged but not fatal: the legacy fallback
-  // will still work, just less efficiently.
+  // Materialise a fresh pool entry bound to the new budget. Without this, the
+  // next withActualApi call would find no pool entry and fall back to the
+  // legacy init+shutdown path. Failure here is logged but not fatal: the
+  // legacy fallback still works, just less efficiently.
   if (_skipApiInitForTests) {
-    // Tests prime the pool directly via connectionPool.connections.set();
-    // calling getConnection here would try to api.init() against the real
-    // upstream. Mark the singleton live and let the test prime the entry.
     setApiInitialized(true);
   } else {
     try {
-      await connectionPool.getConnection(sessionId);
+      await connectionPool.getConnection(sessionId, {
+        serverUrl: found.serverUrl,
+        password: found.password || '',
+        syncId: found.syncId,
+        encryptionPassword: found.encryptionPassword,
+      });
     } catch (poolErr) {
       logger.warn(
         `[ADAPTER] switchBudget: failed to materialise new pool entry for session ${sessionId}: ${poolErr}. ` +
