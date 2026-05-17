@@ -86,15 +86,37 @@ logger.info(
 );
 
 /**
- * Key (lowercased budget name) of the currently active budget.
- * Null = use the first entry in the registry (the default budget).
+ * Per-session active budget. Map from sessionId to lowercased budget key
+ * (matches the keys in budgetRegistry).
+ *
+ * Issue #156: previously a single module-level `activeBudgetKey` was shared
+ * across all sessions. In multi-user OIDC mode that meant one user's
+ * actual_budgets_switch silently flipped the active budget for every other
+ * concurrent session, leaking financial data across tenants. The per-session
+ * map closes that hole: each MCP sessionId has its own slot.
+ *
+ * Sessions without an entry (or callers outside any requestContext.run scope:
+ * stdio mode, startup health checks) fall back to the env-default budget
+ * (first entry in budgetRegistry).
+ *
+ * Lifecycle: entries are removed on session close via session_close.ts and
+ * implicitly when connectionPool.shutdownConnection runs (switchBudget calls
+ * it to drop the stale pool entry bound to the previous syncId).
  */
-let activeBudgetKey: string | null = null;
+const sessionBudgetState = new Map<string, string>();
 
 function getActiveBudgetConfig(): BudgetConfig {
-  if (activeBudgetKey) {
-    const found = budgetRegistry.get(activeBudgetKey);
-    if (found) return found;
+  // _resolveSessionId is declared below; function declarations hoist so this
+  // call works at runtime. If we're not in any requestContext.run scope (stdio,
+  // startup health checks), sessionId is undefined and we fall back to the
+  // env-default budget (first registry entry).
+  const sessionId = requestContext.getStore()?.sessionId;
+  if (sessionId) {
+    const key = sessionBudgetState.get(sessionId);
+    if (key) {
+      const found = budgetRegistry.get(key);
+      if (found) return found;
+    }
   }
   return [...budgetRegistry.values()][0];
 }
@@ -183,6 +205,77 @@ function _shouldDropPoolOnError(err: unknown): boolean {
 }
 
 /**
+ * Enforce per-request budget ACL before any pool branching or lock acquisition.
+ *
+ * Issue #156: the documented isolation model (CF-5 OIDC + AUTH_BUDGET_ACL)
+ * was never wired through to tool dispatch. canAccessBudget() in
+ * src/auth/budget-acl.ts had zero call sites; budgetAclMiddleware only
+ * attached req.allowedBudgets and trusted callers to honour it.
+ *
+ * This function is the single enforcement choke point: every withActualApi /
+ * withActualApiWrite call passes through it. If the resolved active budget's
+ * syncId is not in the request's allowedBudgets list, we throw with a clear
+ * message and log at warn level with structured fields.
+ *
+ * stdio short-circuit: when there's no sessionId in context AND AUTH_PROVIDER
+ * is not 'oidc', we treat the caller as trusted-local. stdio mode runs
+ * outside requestContext.run by design (the transport handler is single-user
+ * local on a process the user already controls), so requiring allowedBudgets
+ * there would break stdio entirely. This short-circuit is load-bearing for
+ * Claude Desktop / Claude Code compatibility.
+ */
+function _enforceBudgetAcl(toolName?: string): void {
+  const store = requestContext.getStore();
+  const sessionId = store?.sessionId;
+  const allowedBudgets = store?.allowedBudgets;
+
+  // Trusted-local short-circuit. stdio and startup health checks run with no
+  // sessionId; in non-OIDC modes those are by-construction trusted (single
+  // user, local process). The ACL only applies when an authenticated multi-
+  // user context is in play (AUTH_PROVIDER === 'oidc').
+  if (!sessionId && config.AUTH_PROVIDER !== 'oidc') {
+    return;
+  }
+
+  // OIDC + no allowedBudgets in context: the request slipped past the
+  // middleware. Defence-in-depth: refuse rather than fail open.
+  if (config.AUTH_PROVIDER === 'oidc' && !allowedBudgets) {
+    logger.warn(
+      JSON.stringify({
+        event: 'acl_denied',
+        reason: 'no_allowed_budgets_in_context',
+        sessionId: sessionId ?? null,
+        tool: toolName ?? null,
+      }),
+    );
+    throw new Error(
+      'Budget ACL: no allowedBudgets in request context. ' +
+        'This request bypassed the budget-acl middleware. Refusing for safety. See #156.',
+    );
+  }
+
+  // No restriction.
+  if (!allowedBudgets || allowedBudgets.includes('*')) return;
+
+  const target = getActiveBudgetConfig();
+  if (!allowedBudgets.includes(target.syncId)) {
+    logger.warn(
+      JSON.stringify({
+        event: 'acl_denied',
+        principal: null,
+        attemptedBudget: target.syncId,
+        allowedBudgets,
+        sessionId: sessionId ?? null,
+        tool: toolName ?? null,
+      }),
+    );
+    throw new Error(
+      `Budget ACL: budget "${target.name}" (${target.syncId}) is not in this session's allowedBudgets.`,
+    );
+  }
+}
+
+/**
  * Helper to run an operation with the Actual API ready, deciding the lifecycle
  * mode automatically:
  *
@@ -201,6 +294,11 @@ function _shouldDropPoolOnError(err: unknown): boolean {
  * `@actual-app/api` is a process-wide singleton.
  */
 export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
+  // ACL enforcement BEFORE pool branching or lock acquisition (#156).
+  // Denial here means the lock is never acquired and no upstream resource is
+  // touched.
+  _enforceBudgetAcl();
+
   const sessionId = _resolveSessionId();
 
   if (_hasPooledConnection(sessionId)) {
@@ -252,6 +350,9 @@ export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> 
  * generalised to single-write call sites.
  */
 export async function withActualApiWrite<T>(operation: () => Promise<T>): Promise<T> {
+  // ACL enforcement BEFORE pool branching or lock acquisition (#156).
+  _enforceBudgetAcl();
+
   const sessionId = _resolveSessionId();
 
   if (_hasPooledConnection(sessionId)) {
@@ -552,11 +653,19 @@ interface WriteOperation<T> {
   operation: () => Promise<T>;
   resolve: (value: T) => void;
   reject: (error: any) => void;
+  // sessionId captured at enqueue time so the pool-vs-legacy branch in
+  // processWriteQueue has the right context, even though setTimeout strips
+  // AsyncLocalStorage. See #158.
+  sessionId?: string;
 }
 
 let writeQueue: WriteOperation<any>[] = [];
 let isProcessingWrites = false;
 let writeSessionTimeout: NodeJS.Timeout | null = null;
+
+// Counter for diagnostic: writes that reused an existing pool connection
+// (skipped the per-op init). Surfaces in getConcurrencyState(). See #158.
+let writeConnectionReuseCount = 0;
 
 async function processWriteQueue() {
   // Atomically check and set processing flag to prevent race conditions
@@ -570,13 +679,38 @@ async function processWriteQueue() {
   }
   
   const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
-  logger.debug(`[WRITE QUEUE] Processing batch of ${batch.length} operations`);
+  // Pool-cooperation decision (#158): use the first queued op's captured
+  // sessionId as the batch's sessionId. In practice all ops batched together
+  // came from the same setTimeout window and same request, so they share
+  // a session. The heuristic is safe: a stale sessionId just means we take
+  // the legacy branch, never that we attribute one session's writes to
+  // another's pool entry.
+  const batchSessionId = batch[0]?.sessionId;
+  const usePoolBranch = !!batchSessionId && _hasPooledConnection(batchSessionId);
+  logger.debug(
+    `[WRITE QUEUE] Processing batch of ${batch.length} operations ` +
+      `(sessionId=${batchSessionId ?? 'none'}, poolBranch=${usePoolBranch})`,
+  );
 
   try {
     await withApiLock(async () => {
       try {
-        // Initialize API once for all queued writes
-        await initActualApiForOperation();
+        if (usePoolBranch) {
+          // Pool branch: api singleton already live for this session, no need
+          // to init or shutdown around the batch. Sync at the end to commit
+          // writes upstream. On infrastructure-level errors, release the pool
+          // entry so the next call materialises a fresh connection.
+          writeConnectionReuseCount++;
+          logger.debug(
+            `[WRITE QUEUE] Reusing pool connection for session ${batchSessionId} ` +
+              `(writeReuses=${writeConnectionReuseCount})`,
+          );
+        } else {
+          // Legacy branch: no pool entry, init+shutdown around the batch as
+          // before. initActualApiForOperation() still short-circuits if the
+          // api is somehow already live (e.g. another path init'd it).
+          await initActualApiForOperation();
+        }
 
         // Process all queued writes in the same session
         // Each operation handles its own success/failure
@@ -592,20 +726,37 @@ async function processWriteQueue() {
           })
         );
 
-        // Explicitly sync changes to server before shutdown
-        // This ensures all write operations are persisted
+        // Explicitly sync changes to server before shutdown (legacy) or just
+        // before returning (pool). Persistence guarantee in both branches.
         logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
         try {
           await (api as any).sync();
           logger.debug(`[WRITE QUEUE] Sync completed`);
         } catch (syncError) {
           logger.error('[WRITE QUEUE] Sync failed:', syncError);
+          // Pool branch: drop the connection on infrastructure-level sync
+          // failure so the next write re-initialises cleanly. Mirrors
+          // withActualApiWrite's policy.
+          if (usePoolBranch && _shouldDropPoolOnError(syncError)) {
+            logger.warn(
+              `[WRITE QUEUE] Releasing pool connection for session ${batchSessionId} after sync failure`,
+            );
+            try {
+              await connectionPool.shutdownConnection(batchSessionId!);
+            } catch (_e) {
+              /* swallow */
+            }
+          }
           // Don't throw - we still want to shutdown cleanly
           // Individual operation errors were already reported to callers
         }
 
-        // Shutdown after all writes complete and sync
-        await shutdownActualApi();
+        if (!usePoolBranch) {
+          // Legacy branch only: actually shut the singleton down.
+          // shutdownActualApi() itself short-circuits to sync-only if another
+          // path has active pool sessions, so this is safe under contention.
+          await shutdownActualApi();
+        }
         logger.debug(`[WRITE QUEUE] Batch completed successfully`);
       } catch (error) {
         logger.error('[WRITE QUEUE] Fatal error in write queue:', error);
@@ -617,7 +768,19 @@ async function processWriteQueue() {
             logger.error('[WRITE QUEUE] Error rejecting operation:', e);
           }
         });
-        await shutdownActualApi();
+        // Pool branch: drop the pool entry if the error suggests infrastructure
+        // corruption. Legacy branch: full shutdown.
+        if (usePoolBranch) {
+          if (_shouldDropPoolOnError(error)) {
+            try {
+              await connectionPool.shutdownConnection(batchSessionId!);
+            } catch (_e) {
+              /* swallow */
+            }
+          }
+        } else {
+          await shutdownActualApi();
+        }
       }
     });
   } finally {
@@ -632,8 +795,16 @@ async function processWriteQueue() {
 }
 
 function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
+  // ACL enforcement at the write-queue entry (#156). Failing here means the
+  // op is never enqueued and no upstream resource is touched.
+  _enforceBudgetAcl();
+
+  // Capture sessionId from AsyncLocalStorage at enqueue time. The setTimeout
+  // below strips the ALS frame, so without capturing here the pool-branch
+  // decision in processWriteQueue would always miss. See #158.
+  const sessionId = _resolveSessionId();
   return new Promise((resolve, reject) => {
-    writeQueue.push({ operation, resolve, reject });
+    writeQueue.push({ operation, resolve, reject, sessionId });
 
     // Clear existing timeout
     if (writeSessionTimeout) {
@@ -725,6 +896,11 @@ export function getConcurrencyState() {
     // structurally always 0; post-#134 it should grow at least linearly with
     // tool-call volume on healthy MCP sessions.
     connectionReuses: connectionReuseCount,
+    // Pool-cooperation observability for WRITES (issue #158). Before #158 the
+    // write path (processWriteQueue) never used the pool branch explicitly,
+    // so this counter stayed at 0 even when reads were reusing the pool.
+    // Post-#158 it grows with write volume on pooled sessions.
+    writeConnectionReuses: writeConnectionReuseCount,
   };
 }
 
@@ -1813,25 +1989,39 @@ export async function getBudgets(): Promise<unknown[]> {
 }
 
 /**
- * Switch the active budget by name (case-insensitive, partial match supported).
+ * Switch the active budget by name (case-insensitive, EXACT match only).
  * The budget must be pre-configured via BUDGET_n_NAME env vars.
- * Switching is instant — no API call required; the next withActualApi
- * call will automatically connect to the new budget's server and sync ID.
+ *
+ * Issue #156:
+ *   * Per-session: writes to the per-session map keyed by current sessionId.
+ *     Stdio / non-session callers fall back to the env-default budget and
+ *     cannot switch (returns an error).
+ *   * ACL: refuses when the target budget's syncId is not in this session's
+ *     allowedBudgets.
+ *   * Exact match only (substring matching removed: it was a sharp edge that
+ *     allowed an LLM prompt-injection to walk the registry).
+ *   * Pool release: BEFORE mutating the session map, releases the existing
+ *     pool entry bound to the previous syncId. The next withActualApi call
+ *     materialises a fresh pool entry against the new budget. Without this,
+ *     the stale pool entry would serve the new request against the old
+ *     upstream.
  */
-export function switchBudget(name: string): { name: string; syncId: string; serverUrl: string } {
-  const key = name.toLowerCase();
-  let found: BudgetConfig | undefined = budgetRegistry.get(key);
-  let foundKey = key;
-  if (!found) {
-    // Partial / substring match
-    for (const [k, v] of budgetRegistry) {
-      if (k.includes(key) || key.includes(k)) {
-        found = v;
-        foundKey = k;
-        break;
-      }
-    }
+export async function switchBudget(name: string): Promise<{ name: string; syncId: string; serverUrl: string }> {
+  const store = requestContext.getStore();
+  const sessionId = store?.sessionId;
+  const allowedBudgets = store?.allowedBudgets;
+
+  // Stdio / no-session callers: per-session map has no slot for them, so the
+  // switch would have no effect. Refuse explicitly rather than silently no-op.
+  if (!sessionId) {
+    throw new Error(
+      'Budget switch requires an MCP session. Stdio/local callers operate on the env-default budget; ' +
+        'configure ACTUAL_BUDGET_SYNC_ID (or the BUDGET_n_* variants) to select a different default.',
+    );
   }
+
+  const key = name.toLowerCase();
+  const found: BudgetConfig | undefined = budgetRegistry.get(key);
   if (!found) {
     const available = [...budgetRegistry.values()].map(b => `"${b.name}"`).join(', ');
     throw new Error(
@@ -1840,9 +2030,138 @@ export function switchBudget(name: string): { name: string; syncId: string; serv
       `Add BUDGET_n_NAME/SYNC_ID/SERVER_URL vars to configure additional budgets.`,
     );
   }
-  activeBudgetKey = foundKey;
-  logger.info(`[ADAPTER] Active budget switched to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`);
+
+  // ACL enforcement: the target budget must be in this session's allowedBudgets.
+  // OIDC mode: explicit ACL required. Non-OIDC: short-circuit allow (single-user).
+  if (config.AUTH_PROVIDER === 'oidc') {
+    if (!allowedBudgets) {
+      logger.warn(
+        JSON.stringify({
+          event: 'acl_denied',
+          reason: 'no_allowed_budgets_in_context',
+          attemptedBudget: found.syncId,
+          sessionId,
+          tool: 'actual_budgets_switch',
+        }),
+      );
+      throw new Error(
+        `Budget ACL: cannot switch to "${found.name}". No allowedBudgets in request context.`,
+      );
+    }
+    if (!allowedBudgets.includes('*') && !allowedBudgets.includes(found.syncId)) {
+      logger.warn(
+        JSON.stringify({
+          event: 'acl_denied',
+          attemptedBudget: found.syncId,
+          allowedBudgets,
+          sessionId,
+          tool: 'actual_budgets_switch',
+        }),
+      );
+      throw new Error(
+        `Budget ACL: budget "${found.name}" (${found.syncId}) is not in this session's allowedBudgets.`,
+      );
+    }
+  }
+
+  // Fast path (#172): if the current pool entry's auth descriptor matches the
+  // target budget's (same serverUrl + password + encryptionPassword), skip
+  // release + re-auth. Just download the new budget file on the already-
+  // authenticated api singleton. Eliminates the upstream login burst when
+  // switching between budgets hosted on the same Actual server.
+  const currentEntry = connectionPool.getConnectionInfo(sessionId);
+  const sameAuth =
+    !!currentEntry &&
+    currentEntry.serverUrl === found.serverUrl &&
+    currentEntry.password === (found.password || '') &&
+    (currentEntry.encryptionPassword ?? '') === (found.encryptionPassword ?? '');
+
+  if (sameAuth && currentEntry!.syncId === found.syncId) {
+    // No-op: already on this exact budget. Keep session map consistent and return.
+    sessionBudgetState.set(sessionId, key);
+    logger.info(
+      `[ADAPTER] switchBudget no-op for session ${sessionId}: already on "${found.name}" (${found.syncId})`,
+    );
+    return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+  }
+
+  if (sameAuth) {
+    // Same server + creds, different syncId. Reload budget file in place.
+    logger.info(
+      `[ADAPTER] switchBudget fast path for session ${sessionId}: ` +
+        `same server, reloading budget "${found.name}" (${found.syncId})`,
+    );
+    if (_skipApiInitForTests) {
+      // Skip the real downloadBudget call in tests; tests verify the fast
+      // path was taken by spying on connectionPool.shutdownConnection.
+    } else {
+      await withApiLock(async () => {
+        if (found.encryptionPassword) {
+          const apiWithOptions = api as typeof api & {
+            downloadBudget: (id: string, options?: { password: string }) => Promise<void>;
+          };
+          await apiWithOptions.downloadBudget(found.syncId, { password: found.encryptionPassword });
+        } else {
+          await api.downloadBudget(found.syncId);
+        }
+      });
+    }
+    connectionPool.updateLoadedSyncId(sessionId, found.syncId);
+    sessionBudgetState.set(sessionId, key);
+    logger.info(
+      `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
+    );
+    return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+  }
+
+  // Slow path: different server or credentials. Release the existing pool
+  // entry (bound to the previous syncId / server) BEFORE mutating the session
+  // map. Swallow shutdown errors: a stale or missing pool entry is benign.
+  try {
+    await connectionPool.shutdownConnection(sessionId);
+  } catch (e) {
+    logger.debug(`[ADAPTER] switchBudget: shutdownConnection raised (likely no prior entry): ${e}`);
+  }
+
+  // Update the per-session active-budget slot. Subsequent getActiveBudgetConfig
+  // calls for this session now return the new budget.
+  sessionBudgetState.set(sessionId, key);
+
+  // Materialise a fresh pool entry bound to the new budget. Without this, the
+  // next withActualApi call would find no pool entry and fall back to the
+  // legacy init+shutdown path. Failure here is logged but not fatal: the
+  // legacy fallback still works, just less efficiently.
+  if (_skipApiInitForTests) {
+    setApiInitialized(true);
+  } else {
+    try {
+      await connectionPool.getConnection(sessionId, {
+        serverUrl: found.serverUrl,
+        password: found.password || '',
+        syncId: found.syncId,
+        encryptionPassword: found.encryptionPassword,
+      });
+    } catch (poolErr) {
+      logger.warn(
+        `[ADAPTER] switchBudget: failed to materialise new pool entry for session ${sessionId}: ${poolErr}. ` +
+          'Subsequent calls will use the legacy init+shutdown fallback.',
+      );
+    }
+  }
+
+  logger.info(
+    `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
+  );
   return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+}
+
+/**
+ * Clear the per-session budget state for a session. Called from
+ * session_close so the per-session map does not accumulate stale entries
+ * after a session ends. See #156.
+ */
+export function clearSessionBudgetState(sessionId: string): void {
+  sessionBudgetState.delete(sessionId);
 }
 
 /**
