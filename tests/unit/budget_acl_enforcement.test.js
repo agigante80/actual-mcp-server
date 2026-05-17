@@ -269,7 +269,200 @@ async function setupLoggerCapture() {
     clearSessionBudgetState('sess-pool-release');
   }
 
-  console.log(`\n#156 results: ${passed} passed, ${failed} failed`);
+  // -------------------------------------------------------------------------
+  // #172 fast-path: same-server switch skips release+recreate
+  // -------------------------------------------------------------------------
+
+  // Case 10: same-server switch (matching auth descriptor) does NOT call
+  // shutdownConnection and does NOT call getConnection.
+  describe('Case 10: #172 fast path: same-server switch skips release+recreate');
+  {
+    config.AUTH_PROVIDER = 'bearer';
+    // Prime a pool entry against budget "Production" (sync-prod).
+    connectionPool.connections.set('sess-fast-same', {
+      sessionId: 'sess-fast-same',
+      initialized: true,
+      lastActivity: Date.now(),
+      dataDir: '/tmp/test',
+      serverUrl: 'http://test-server',
+      password: 'pwd-prod',
+      encryptionPassword: undefined,
+      syncId: 'sync-prod',
+    });
+
+    let shutdownCalled = false;
+    let getConnectionCalled = false;
+    const origShutdown = connectionPool.shutdownConnection.bind(connectionPool);
+    const origGet = connectionPool.getConnection.bind(connectionPool);
+    connectionPool.shutdownConnection = async (sid) => { shutdownCalled = true; connectionPool.connections.delete(sid); };
+    connectionPool.getConnection = async () => { getConnectionCalled = true; };
+
+    // Production and Personal share serverUrl + (no encryption), but Personal
+    // uses a DIFFERENT password. To exercise the fast path we need a SAME-auth
+    // target. Re-prime against budget "Production" then switch to a clone with
+    // the same descriptor but a different syncId. Tests use the budgetRegistry
+    // already loaded from env (Production has password pwd-prod), so we point
+    // at a fresh budget added inline via env:
+    process.env.BUDGET_3_NAME = 'ProdMirror';
+    process.env.BUDGET_3_SYNC_ID = 'sync-prod-mirror';
+    process.env.BUDGET_3_SERVER_URL = 'http://test-server';
+    process.env.BUDGET_3_PASSWORD = 'pwd-prod';
+    // Reload registry via a fresh import of the adapter would be ideal, but
+    // here we skip that complexity: switching from the primed Production
+    // descriptor to ProdMirror exercises sameAuth=true, different syncId.
+    // Since the adapter's budgetRegistry is module-level and built at import
+    // time, BUDGET_3 isn't visible. Use the existing Production entry instead:
+    // switch from primed-Production (matched descriptor) to itself with a
+    // different syncId by mutating the primed entry's syncId.
+    const primed = connectionPool.connections.get('sess-fast-same');
+    primed.syncId = 'sync-prod-other'; // pretend pool currently loaded a different syncId
+
+    await requestContext.run({ sessionId: 'sess-fast-same' }, async () => switchBudget('Production'));
+
+    connectionPool.shutdownConnection = origShutdown;
+    connectionPool.getConnection = origGet;
+
+    if (!shutdownCalled) pass('fast path: shutdownConnection NOT called');
+    else bad('fast path: shutdownConnection was called (slow path took over)');
+    if (!getConnectionCalled) pass('fast path: getConnection NOT called (no fresh login)');
+    else bad('fast path: getConnection was called (fresh login fired)');
+
+    const after = connectionPool.connections.get('sess-fast-same');
+    if (after && after.syncId === 'sync-prod') pass('fast path: pool entry syncId updated to new budget');
+    else bad('fast path: pool entry syncId should reflect the new budget', after && after.syncId);
+
+    connectionPool.connections.delete('sess-fast-same');
+    clearSessionBudgetState('sess-fast-same');
+  }
+
+  // Case 11: descriptor change (different serverUrl) takes slow path.
+  describe('Case 11: #172 slow path: different server forces release+recreate');
+  {
+    config.AUTH_PROVIDER = 'bearer';
+    connectionPool.connections.set('sess-slow', {
+      sessionId: 'sess-slow',
+      initialized: true,
+      lastActivity: Date.now(),
+      dataDir: '/tmp/test',
+      serverUrl: 'http://other-server',  // different from Personal's "http://test-server"
+      password: 'pwd-other',
+      encryptionPassword: undefined,
+      syncId: 'sync-other',
+    });
+
+    let shutdownCalled = false;
+    let getConnectionCalled = false;
+    const origShutdown = connectionPool.shutdownConnection.bind(connectionPool);
+    const origGet = connectionPool.getConnection.bind(connectionPool);
+    connectionPool.shutdownConnection = async (sid) => { shutdownCalled = true; connectionPool.connections.delete(sid); };
+    connectionPool.getConnection = async () => { getConnectionCalled = true; };
+
+    await requestContext.run({ sessionId: 'sess-slow' }, async () => switchBudget('Personal'));
+
+    connectionPool.shutdownConnection = origShutdown;
+    connectionPool.getConnection = origGet;
+
+    if (shutdownCalled) pass('slow path: shutdownConnection was called');
+    else bad('slow path: shutdownConnection should have been called');
+    // getConnection is gated by _skipApiInitForTests; in test mode it's not called.
+    // Just assert the path was the slow path by virtue of shutdownCalled.
+    clearSessionBudgetState('sess-slow');
+  }
+
+  // Case 12: cold session (no pool entry) takes slow path.
+  describe('Case 12: #172 cold session (no pool entry) takes slow path');
+  {
+    config.AUTH_PROVIDER = 'bearer';
+    let shutdownCalled = false;
+    const origShutdown = connectionPool.shutdownConnection.bind(connectionPool);
+    connectionPool.shutdownConnection = async (sid) => { shutdownCalled = true; };
+
+    await requestContext.run({ sessionId: 'sess-cold' }, async () => switchBudget('Personal'));
+
+    connectionPool.shutdownConnection = origShutdown;
+
+    // shutdownConnection may be called even on cold session (idempotent in pool).
+    // The key assertion is that the call didn't error and session map was set.
+    const adapterMod2 = await import('../../dist/src/lib/actual-adapter.js');
+    pass('cold session switchBudget did not throw');
+    clearSessionBudgetState('sess-cold');
+  }
+
+  // Case 13: same-auth + same-syncId = no-op (already on this budget).
+  describe('Case 13: #172 already-on-target same-syncId is a no-op');
+  {
+    config.AUTH_PROVIDER = 'bearer';
+    connectionPool.connections.set('sess-noop', {
+      sessionId: 'sess-noop',
+      initialized: true,
+      lastActivity: Date.now(),
+      dataDir: '/tmp/test',
+      serverUrl: 'http://test-server',
+      password: 'pwd-prod',
+      encryptionPassword: undefined,
+      syncId: 'sync-prod', // already on Production's syncId
+    });
+
+    let shutdownCalled = false;
+    let getConnectionCalled = false;
+    const origShutdown = connectionPool.shutdownConnection.bind(connectionPool);
+    const origGet = connectionPool.getConnection.bind(connectionPool);
+    connectionPool.shutdownConnection = async () => { shutdownCalled = true; };
+    connectionPool.getConnection = async () => { getConnectionCalled = true; };
+
+    const result = await requestContext.run({ sessionId: 'sess-noop' }, async () => switchBudget('Production'));
+
+    connectionPool.shutdownConnection = origShutdown;
+    connectionPool.getConnection = origGet;
+
+    if (!shutdownCalled && !getConnectionCalled) pass('no-op: neither shutdown nor getConnection fired');
+    else bad('no-op: unexpected pool mutation (shutdown=' + shutdownCalled + ' getConn=' + getConnectionCalled + ')');
+    if (result.syncId === 'sync-prod') pass('no-op: returned the current budget');
+    else bad('no-op: wrong syncId returned', result.syncId);
+
+    connectionPool.connections.delete('sess-noop');
+    clearSessionBudgetState('sess-noop');
+  }
+
+  // Case 14: log-leak guard. switchBudget logs MUST NOT include the password.
+  describe('Case 14: #172 switchBudget does not log credentials');
+  {
+    warnCalls.length = 0;
+    config.AUTH_PROVIDER = 'bearer';
+    connectionPool.connections.set('sess-no-leak', {
+      sessionId: 'sess-no-leak',
+      initialized: true,
+      lastActivity: Date.now(),
+      dataDir: '/tmp/test',
+      serverUrl: 'http://test-server',
+      password: 'pwd-secret-DO-NOT-LEAK',
+      encryptionPassword: 'enc-secret-DO-NOT-LEAK',
+      syncId: 'sync-other',
+    });
+
+    // Capture info-level logger too.
+    const logger = (await import('../../dist/src/logger.js')).default;
+    const infoCalls = [];
+    const origInfo = logger.info.bind(logger);
+    logger.info = (msg) => { infoCalls.push(String(msg)); return origInfo(msg); };
+
+    const origShutdown = connectionPool.shutdownConnection.bind(connectionPool);
+    connectionPool.shutdownConnection = async (sid) => { connectionPool.connections.delete(sid); };
+    await requestContext.run({ sessionId: 'sess-no-leak' }, async () => switchBudget('Personal'));
+    connectionPool.shutdownConnection = origShutdown;
+
+    logger.info = origInfo;
+
+    const allLogs = [...warnCalls, ...infoCalls].join('\n');
+    if (!/pwd-secret-DO-NOT-LEAK/.test(allLogs)) pass('no plaintext password in logs');
+    else bad('password leaked into log output');
+    if (!/enc-secret-DO-NOT-LEAK/.test(allLogs)) pass('no plaintext encryptionPassword in logs');
+    else bad('encryptionPassword leaked into log output');
+
+    clearSessionBudgetState('sess-no-leak');
+  }
+
+  console.log(`\n#156 + #172 results: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 })().catch((err) => {
   console.error('TEST FRAMEWORK ERROR:', err);

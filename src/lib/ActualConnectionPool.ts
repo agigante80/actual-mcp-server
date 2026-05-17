@@ -26,6 +26,16 @@ interface ActualConnection {
   initialized: boolean;
   lastActivity: number;
   dataDir: string;
+  // Auth descriptor: identifies the upstream Actual instance this pool entry
+  // is authenticated against. switchBudget compares incoming budget descriptor
+  // against these fields; if they match, the entry can be reused for the new
+  // budget without re-authenticating (just api.downloadBudget(newSyncId)). See #172.
+  serverUrl: string;
+  password: string;
+  encryptionPassword?: string;
+  // Currently-loaded budget on this pool entry. Tracks downloads after the
+  // initial init so switchBudget can decide whether to reload (#172).
+  syncId: string;
 }
 
 class ActualConnectionPool {
@@ -108,11 +118,43 @@ class ActualConnectionPool {
   }
 
   /**
-   * Get or create a connection for an MCP session
+   * Read-only view of the pool entry for a session. Used by switchBudget to
+   * compare the incoming budget's auth descriptor against the current entry's
+   * descriptor before deciding whether to reuse (fast path) or release+recreate
+   * (slow path). See #172.
    */
-  async getConnection(sessionId: string): Promise<void> {
+  getConnectionInfo(sessionId: string): Readonly<ActualConnection> | undefined {
+    return this.connections.get(sessionId);
+  }
+
+  /**
+   * Update the syncId tracked on a pool entry after a successful in-place
+   * downloadBudget(newSyncId) call. switchBudget's fast path uses this so
+   * subsequent comparisons reflect the loaded budget. See #172.
+   */
+  updateLoadedSyncId(sessionId: string, newSyncId: string): void {
+    const entry = this.connections.get(sessionId);
+    if (entry) {
+      entry.syncId = newSyncId;
+      entry.lastActivity = Date.now();
+    }
+  }
+
+  /**
+   * Get or create a connection for an MCP session.
+   *
+   * Optional `budgetOverride` lets callers bind the new pool entry to a
+   * specific budget (used by `switchBudget` in actual-adapter.ts so the
+   * post-switch entry hits the correct upstream). Without it, defaults
+   * come from env (`ACTUAL_SERVER_URL` / `ACTUAL_PASSWORD` / `ACTUAL_BUDGET_SYNC_ID`
+   * / `ACTUAL_BUDGET_PASSWORD`), matching pre-#172 behaviour. See #172.
+   */
+  async getConnection(
+    sessionId: string,
+    budgetOverride?: { serverUrl: string; password: string; syncId: string; encryptionPassword?: string },
+  ): Promise<void> {
     let conn = this.connections.get(sessionId);
-    
+
     if (conn && conn.initialized) {
       conn.lastActivity = Date.now();
       logger.debug(`[ConnectionPool] Reusing connection for session: ${sessionId}`);
@@ -129,16 +171,16 @@ class ActualConnectionPool {
 
     // Create new connection for this session
     logger.info(`[ConnectionPool] Creating Actual connection for session: ${sessionId} (${activeConnections + 1}/${this.MAX_CONCURRENT_SESSIONS})`);
-    
-    const SERVER_URL = config.ACTUAL_SERVER_URL;
-    const PASSWORD = config.ACTUAL_PASSWORD;
-    const BUDGET_SYNC_ID = config.ACTUAL_BUDGET_SYNC_ID;
-    const BUDGET_PASSWORD = process.env.ACTUAL_BUDGET_PASSWORD;
-    
+
+    const SERVER_URL = budgetOverride?.serverUrl ?? config.ACTUAL_SERVER_URL;
+    const PASSWORD = budgetOverride?.password ?? config.ACTUAL_PASSWORD;
+    const BUDGET_SYNC_ID = budgetOverride?.syncId ?? config.ACTUAL_BUDGET_SYNC_ID;
+    const BUDGET_PASSWORD = budgetOverride?.encryptionPassword ?? process.env.ACTUAL_BUDGET_PASSWORD;
+
     // Use shared data directory so changes persist across sessions
-    // This is critical - all sessions must share the same database to avoid data loss
+    // This is critical: all sessions must share the same database to avoid data loss
     const DATA_DIR = config.MCP_BRIDGE_DATA_DIR || DEFAULT_DATA_DIR;
-    
+
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
@@ -166,7 +208,13 @@ class ActualConnectionPool {
         sessionId,
         initialized: true,
         lastActivity: Date.now(),
-        dataDir: DATA_DIR
+        dataDir: DATA_DIR,
+        // Track auth descriptor + currently-loaded budget on the pool entry
+        // so switchBudget can decide whether to reuse this entry (#172).
+        serverUrl: SERVER_URL,
+        password: PASSWORD,
+        encryptionPassword: BUDGET_PASSWORD,
+        syncId: BUDGET_SYNC_ID,
       };
 
       this.connections.set(sessionId, conn);
@@ -236,7 +284,11 @@ class ActualConnectionPool {
         sessionId: 'shared',
         initialized: true,
         lastActivity: Date.now(),
-        dataDir: DATA_DIR
+        dataDir: DATA_DIR,
+        serverUrl: SERVER_URL,
+        password: PASSWORD,
+        encryptionPassword: BUDGET_PASSWORD,
+        syncId: BUDGET_SYNC_ID,
       };
 
       logger.info('[ConnectionPool] Shared connection ready');
