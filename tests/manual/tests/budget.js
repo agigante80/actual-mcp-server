@@ -105,10 +105,18 @@ export async function budgetTests(client, context) {
     console.log("  ❌ actual_budgets_list_available threw:", err.message);
   }
 
-  // ── 2. actual_budgets_switch (positive — prefer third budget if available, else second) ─
+  // ── 2. actual_budgets_switch (positive) ──────────────────────────────────
+  // Prefer a SAME-SERVER alternate budget so the test exercises the #172
+  // fast path (no upstream re-auth) rather than hammering the Actual server's
+  // login rate limiter on every cross-server switch. Fall back to any other
+  // budget if no same-server alternate exists.
   console.log("\nTesting actual_budgets_switch (positive)...");
-  const alternateBudget = availableBudgets.length > 2 ? availableBudgets[2]
-    : (availableBudgets.length > 1 ? availableBudgets[1] : availableBudgets[0]);
+  const firstBudget = availableBudgets[0];
+  const sameServerAlternate = availableBudgets.find(
+    (b, i) => i > 0 && firstBudget && b.serverUrl === firstBudget.serverUrl,
+  );
+  const alternateBudget = sameServerAlternate
+    || (availableBudgets.length > 1 ? availableBudgets[1] : availableBudgets[0]);
   let switchedToAlternate = false;
   if (alternateBudget) {
     try {
