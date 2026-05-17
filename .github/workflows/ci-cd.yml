@@ -406,9 +406,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, docker-publish]
+    # Tag-gated to prevent a double-publish race during releases: pushing a
+    # tagged release fires both push:branches:[main] and push:tags:[v*] for the
+    # same SHA, and both jobs would call npm publish for the same version. The
+    # main-push job would lose the race and report failure. See #153.
     if: |
       needs.version.outputs.is_release == 'true' &&
-      needs.docker-publish.result == 'success'
+      needs.docker-publish.result == 'success' &&
+      startsWith(github.ref, 'refs/tags/v')
     permissions:
       id-token: write  # required for npm Trusted Publishers (OIDC)
     steps:
@@ -596,6 +601,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, docker-publish, npm-publish, security-scan, docker-hub-description, deployment-test]
+    # Tag-gated for the same reason as npm-publish (see #153): tag is the
+    # canonical release identity. Without this gate, after npm-publish became
+    # tag-gated, main-push's npm-publish=skipped would no longer block release,
+    # so release would start running from both main-push and tag-push for every
+    # release. softprops/action-gh-release is idempotent (upserts by tag) but
+    # relying on that is incidental rather than designed.
     if: |
       always() &&
       needs.version.outputs.is_release == 'true' &&
@@ -603,7 +614,8 @@ jobs:
       (needs.npm-publish.result == 'success' || needs.npm-publish.result == 'skipped') &&
       (needs.security-scan.result == 'success' || needs.security-scan.result == 'skipped') &&
       (needs.docker-hub-description.result == 'success' || needs.docker-hub-description.result == 'skipped') &&
-      (needs.deployment-test.result == 'success' || needs.deployment-test.result == 'skipped')
+      (needs.deployment-test.result == 'success' || needs.deployment-test.result == 'skipped') &&
+      startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
     steps:

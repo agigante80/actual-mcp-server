@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import { connectionPool } from '../lib/ActualConnectionPool.js';
 import { shutdownActualForSession } from '../actualConnection.js';
+import { clearSessionBudgetState } from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
   sessionId: z.string().optional().describe('Session ID to close (partial match). If not provided, closes the oldest idle session.'),
@@ -95,7 +96,10 @@ const tool: ToolDefinition = {
       }
 
       await shutdownActualForSession(targetSessionId! as string);
-      
+      // Clear the per-session active-budget state so the map does not
+      // accumulate stale entries after a session ends. See #156.
+      clearSessionBudgetState(targetSessionId! as string);
+
       const newStats = connectionPool.getStats();
       
       return {
