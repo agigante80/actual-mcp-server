@@ -49,7 +49,10 @@ services:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:-http://actual-main:5006}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
-      # Optional: encryption password for E2E-encrypted default budget
+      # Optional: encryption password for E2E-encrypted default budget.
+      # #161: if you set this AND the upstream above is http://, the server
+      # refuses to start (cleartext password). Use an https:// upstream, or add
+      # - ALLOW_INSECURE_UPSTREAM=true when the hop is a trusted internal network.
       # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
       # Optional: friendly name for the default budget (default: "Default")
       # - BUDGET_DEFAULT_NAME=My Main Budget
@@ -133,7 +136,10 @@ services:
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID:?ACTUAL_BUDGET_SYNC_ID is required}
-      # Optional: encryption password for E2E-encrypted default budget
+      # Optional: encryption password for E2E-encrypted default budget.
+      # #161: if you set this AND the upstream above is http://, the server
+      # refuses to start (cleartext password). Use an https:// upstream, or add
+      # - ALLOW_INSECURE_UPSTREAM=true when the hop is a trusted internal network.
       # - ACTUAL_BUDGET_PASSWORD=${ACTUAL_BUDGET_PASSWORD}
       # Optional: friendly name for the default budget (default: "Default")
       # - BUDGET_DEFAULT_NAME=My Main Budget
