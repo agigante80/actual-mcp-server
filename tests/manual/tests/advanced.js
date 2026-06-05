@@ -373,37 +373,40 @@ export async function advancedTests(client, context, opts = {}) {
   // case-insensitive, a no-match pattern returns empty (the pre-#178 bug
   // returned the whole table here), and IS NOT NULL includes the seeded row.
   console.log("\nTesting imported_payee LIKE / IS NULL filtering (#178)...");
-  // Find any existing transaction to seed. Do not depend on context.transactionId:
-  // this block runs before transactionTests populates it, so query the DB directly.
+  // Self-contained: create a throwaway transaction with a unique marker so the
+  // assertions never depend on test ordering or pre-existing data. Deleted at
+  // the end. Best-effort: if creation fails (no account, write blocked, or the
+  // upstream is auth-rate-limiting after a heavy run) the block skips as
+  // informational rather than failing the suite; the operator accept/reject
+  // cases above already give positive and negative integration coverage.
+  const runtag = `${Date.now()}`;
+  const markerValue = `MCP178-AMAZON-${runtag}`;
+  const rowsOf = (r) => r?.result ?? (Array.isArray(r) ? r : []);
   let seedTxnId = null;
   try {
-    const anyTxn = (await callTool("actual_query_run", { query: "SELECT id FROM transactions ORDER BY date DESC LIMIT 1" }))?.result;
-    seedTxnId = Array.isArray(anyTxn) && anyTxn.length > 0 ? anyTxn[0].id : null;
-  } catch { /* fall through to skip */ }
+    const accts = rowsOf(await callTool("actual_accounts_list", {}));
+    const acctId = accts.find(a => !a.closed)?.id ?? accts[0]?.id ?? null;
+    if (acctId) {
+      // transactions_create does not accept imported_payee, so set it via update.
+      await callTool("actual_transactions_create", { account: acctId, date: today, amount: -178, notes: `MCP178SEED-${runtag}` });
+      const found = rowsOf(await callTool("actual_query_run", { query: `SELECT id FROM transactions WHERE notes = 'MCP178SEED-${runtag}'` }));
+      seedTxnId = found.length > 0 ? found[0].id : null;
+      if (seedTxnId) {
+        await callTool("actual_transactions_update", { id: seedTxnId, fields: { imported_payee: markerValue } });
+      }
+    }
+  } catch (err) {
+    console.log(`  ℹ skipped: could not create seed transaction (${err.message.slice(0, 80)})`);
+  }
   if (!seedTxnId) {
-    console.log("  ℹ skipped: budget has no transaction to seed imported_payee on");
+    console.log("  ℹ skipped: no seed transaction available");
   } else {
-    const runtag = `${Date.now()}`;
-    const markerValue = `MCP178-AMAZON-${runtag}`;
-    const rowsOf = (r) => r?.result ?? (Array.isArray(r) ? r : []);
     let impPassed = 0, impFailed = 0;
     const expect = (cond, ok, bad) => {
       if (cond) { console.log(`  ✓ ${ok}`); impPassed++; }
       else { console.log(`  ❌ ${bad}`); impFailed++; }
     };
-    // Seed the marker first. If this write fails for an infrastructure reason
-    // (e.g. the upstream Actual server is auth-rate-limiting after a heavy run),
-    // skip the whole block as informational rather than failing the suite: the
-    // operator accept/reject cases above already give positive and negative
-    // integration coverage, and the unit tests cover the translation.
-    let seeded = false;
     try {
-      await callTool("actual_transactions_update", { id: seedTxnId, fields: { imported_payee: markerValue } });
-      seeded = true;
-    } catch (err) {
-      console.log(`  ℹ skipped: could not seed imported_payee (${err.message.slice(0, 80)})`);
-    }
-    if (seeded) try {
       // Positive: a lowercase pattern must match the uppercase-seeded value,
       // because ActualQL $like normalises both sides (case and accent insensitive).
       const pos = rowsOf(await callTool("actual_query_run", {
@@ -433,14 +436,10 @@ export async function advancedTests(client, context, opts = {}) {
       console.log(`  ❌ imported_payee filtering test error: ${err.message}`);
       impFailed++;
     } finally {
-      // Restore: clear the marker so the test leaves no state behind.
-      try {
-        await callTool("actual_transactions_update", { id: seedTxnId, fields: { imported_payee: null } });
-      } catch { /* best-effort cleanup */ }
+      // Delete the throwaway transaction so the test leaves no state behind.
+      try { await callTool("actual_transactions_delete", { id: seedTxnId }); } catch { /* best-effort cleanup */ }
     }
-    if (seeded) {
-      console.log(`  imported_payee filtering: ${impPassed}/${impPassed + impFailed} passed${impFailed ? ` (${impFailed} failed)` : ''}`);
-    }
+    console.log(`  imported_payee filtering: ${impPassed}/${impPassed + impFailed} passed${impFailed ? ` (${impFailed} failed)` : ''}`);
   }
 }
 
