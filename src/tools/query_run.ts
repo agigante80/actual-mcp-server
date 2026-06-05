@@ -22,6 +22,15 @@ SQL SYNTAX (Preferred):
   • "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0 LIMIT 10"
   • "SELECT id, date, amount, category.name FROM transactions WHERE date >= '2025-01-01'"
 
+Supported WHERE operators:
+  • Comparison: =, !=, >, >=, <, <=
+  • IN (v1, v2, ...)
+  • LIKE / NOT LIKE for pattern search (case-insensitive, accent-insensitive; use % as wildcard)
+    e.g. "WHERE imported_payee LIKE '%amazon%'" to find raw bank-sync payee strings
+  • IS NULL / IS NOT NULL e.g. "WHERE imported_payee IS NULL" to find unmerged rows
+  • Combine conditions with AND. OR, REGEXP, NOT IN, and parenthesised groups are not yet
+    supported and will return an error (the query is never silently run unfiltered).
+
 IMPORTANT - Field Names:
   • Use payee.name (NOT payee_name) for payee names
   • Use category.name (NOT category_name) for category names
