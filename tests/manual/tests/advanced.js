@@ -335,6 +335,14 @@ export async function advancedTests(client, context, opts = {}) {
     { query: "SELECT id, amount FROM transactions WHERE payee_name = 'Test'",                                  shouldPass: false, label: "invalid field in WHERE" },
     { query: "SELECT id, payee_name, category_name FROM transactions",                                         shouldPass: false, label: "multiple invalid fields" },
     { query: "SELECT * FROM transactions WHERE account.id = '00000000-0000-0000-0000-000000000001'",           shouldPass: false, label: "invalid join path account.id" },
+    // #178 new WHERE operators: valid, must execute (not error)
+    { query: "SELECT id FROM transactions WHERE notes LIKE '%a%' LIMIT 5",                                     shouldPass: true,  label: "LIKE operator accepted" },
+    { query: "SELECT id FROM transactions WHERE imported_payee IS NULL LIMIT 5",                               shouldPass: true,  label: "IS NULL operator accepted" },
+    { query: "SELECT id FROM transactions WHERE imported_payee IS NOT NULL LIMIT 5",                           shouldPass: true,  label: "IS NOT NULL operator accepted" },
+    // #178 unsupported operators: must be rejected, never silently run unfiltered
+    { query: "SELECT id FROM transactions WHERE amount = 1 OR amount < 0",                                     shouldPass: false, label: "OR rejected" },
+    { query: "SELECT id FROM transactions WHERE notes REGEXP '^x'",                                            shouldPass: false, label: "REGEXP rejected" },
+    { query: "SELECT id FROM transactions WHERE amount NOT IN (1, 2)",                                         shouldPass: false, label: "NOT IN rejected" },
   ];
   let qvPassed = 0, qvFailed = 0;
   for (const { query, shouldPass, label } of queryValidationTests) {
@@ -358,6 +366,76 @@ export async function advancedTests(client, context, opts = {}) {
     }
   }
   console.log(`  Query validation: ${qvPassed}/${queryValidationTests.length} passed${qvFailed ? ` (${qvFailed} failed)` : ''}`);
+
+  // #178: prove LIKE / IS NULL actually FILTER against real ActualQL (the unit
+  // tests only assert the translated shape against a stub). Seed a known
+  // imported_payee on an existing transaction, then assert: positive match is
+  // case-insensitive, a no-match pattern returns empty (the pre-#178 bug
+  // returned the whole table here), and IS NOT NULL includes the seeded row.
+  console.log("\nTesting imported_payee LIKE / IS NULL filtering (#178)...");
+  const seedTxnId = context.transactionId;
+  if (!seedTxnId) {
+    console.log("  ℹ skipped: no context.transactionId to seed (expected outside the full run)");
+  } else {
+    const runtag = `${Date.now()}`;
+    const markerValue = `MCP178-AMAZON-${runtag}`;
+    const rowsOf = (r) => r?.result ?? (Array.isArray(r) ? r : []);
+    let impPassed = 0, impFailed = 0;
+    const expect = (cond, ok, bad) => {
+      if (cond) { console.log(`  ✓ ${ok}`); impPassed++; }
+      else { console.log(`  ❌ ${bad}`); impFailed++; }
+    };
+    // Seed the marker first. If this write fails for an infrastructure reason
+    // (e.g. the upstream Actual server is auth-rate-limiting after a heavy run),
+    // skip the whole block as informational rather than failing the suite: the
+    // operator accept/reject cases above already give positive and negative
+    // integration coverage, and the unit tests cover the translation.
+    let seeded = false;
+    try {
+      await callTool("actual_transactions_update", { id: seedTxnId, fields: { imported_payee: markerValue } });
+      seeded = true;
+    } catch (err) {
+      console.log(`  ℹ skipped: could not seed imported_payee (${err.message.slice(0, 80)})`);
+    }
+    if (seeded) try {
+      // Positive: a lowercase pattern must match the uppercase-seeded value,
+      // because ActualQL $like normalises both sides (case and accent insensitive).
+      const pos = rowsOf(await callTool("actual_query_run", {
+        query: `SELECT id, imported_payee FROM transactions WHERE imported_payee LIKE '%amazon-${runtag}%'`,
+      }));
+      expect(pos.some(r => r.id === seedTxnId),
+        `positive LIKE returned the seeded row case-insensitively (${pos.length} row(s))`,
+        `positive LIKE did not return the seeded row (got ${JSON.stringify(pos).slice(0, 140)})`);
+
+      // Negative: a pattern matching nothing must return empty, proving the
+      // filter is applied rather than silently dropped.
+      const neg = rowsOf(await callTool("actual_query_run", {
+        query: `SELECT id FROM transactions WHERE imported_payee LIKE '%zzznomatch-${runtag}%'`,
+      }));
+      expect(neg.length === 0,
+        "negative LIKE (no match) returned empty, filter honoured",
+        `negative LIKE returned ${neg.length} row(s): filter NOT applied`);
+
+      // IS NOT NULL must include the row we just seeded.
+      const notNull = rowsOf(await callTool("actual_query_run", {
+        query: "SELECT id FROM transactions WHERE imported_payee IS NOT NULL",
+      }));
+      expect(notNull.some(r => r.id === seedTxnId),
+        "IS NOT NULL included the seeded row",
+        "IS NOT NULL did not include the seeded row");
+    } catch (err) {
+      console.log(`  ❌ imported_payee filtering test error: ${err.message}`);
+      impFailed++;
+    } finally {
+      // Restore: clear the marker so the test leaves no state behind.
+      try {
+        await callTool("actual_transactions_update", { id: seedTxnId, fields: { imported_payee: null } });
+      } catch { /* best-effort cleanup */ }
+    }
+    if (seeded) {
+      console.log(`  imported_payee filtering: ${impPassed}/${impPassed + impFailed} passed${impFailed ? ` (${impFailed} failed)` : ''}`);
+    }
+  }
 }
 
 /**
