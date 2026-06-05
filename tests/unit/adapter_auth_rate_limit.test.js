@@ -17,6 +17,9 @@
 // Required env to let config.ts load
 process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL || 'http://test-server';
 process.env.ACTUAL_PASSWORD = 'sentinel-pwd-DO-NOT-LEAK';
+// #161: this fixture pairs an http upstream with an encryption password; that
+// combination is refused in production, so opt into the trusted-network override.
+process.env.ALLOW_INSECURE_UPSTREAM = 'true';
 process.env.ACTUAL_BUDGET_PASSWORD = 'sentinel-budget-pwd-DO-NOT-LEAK';
 process.env.MCP_SSE_AUTHORIZATION = 'sentinel-bearer-DO-NOT-LEAK';
 process.env.ACTUAL_BUDGET_SYNC_ID = 'unit-test-sync-id';

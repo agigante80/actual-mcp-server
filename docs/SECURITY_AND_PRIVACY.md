@@ -172,6 +172,15 @@ find ./logs -type f -mtime +30 -delete
 
 ### Data in Transit
 
+#### Encryption password over the upstream (#161)
+
+When an E2E budget encryption password is set (`ACTUAL_BUDGET_PASSWORD`, or a
+`BUDGET_N_ENCRYPTION_PASSWORD`), the server refuses to start if the matching
+upstream `ACTUAL_SERVER_URL` (or `BUDGET_N_SERVER_URL`) is `http://`, because the
+password would be sent in cleartext (CWE-319). Use `https://` for the upstream,
+or set `ALLOW_INSECURE_UPSTREAM=true` only when the hop is genuinely trusted
+(e.g. an isolated Docker network).
+
 #### HTTPS/TLS
 
 **Status**: ✅ Fully supported

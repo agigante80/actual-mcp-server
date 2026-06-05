@@ -67,12 +67,23 @@ export function parseBudgetRegistry(
       );
       process.exit(1);
     }
+    const encryptionPassword = env[`${prefix}ENCRYPTION_PASSWORD`];
+    // Mirror the default-budget check (#161): never send an E2E encryption
+    // password over an http:// upstream unless ALLOW_INSECURE_UPSTREAM is set.
+    if (encryptionPassword && env.ALLOW_INSECURE_UPSTREAM !== 'true' && /^http:\/\//i.test(serverUrl)) {
+      console.error(
+        `[CONFIG] BUDGET_${i}_ENCRYPTION_PASSWORD is set but the upstream URL is http:// (${serverUrl}). ` +
+        `Refusing to send the encryption password over plaintext (#161). ` +
+        `Use https:// or set ALLOW_INSECURE_UPSTREAM=true to override.`,
+      );
+      process.exit(1);
+    }
     registry.set(name.toLowerCase(), {
       name,
       serverUrl,
       password,
       syncId,
-      encryptionPassword: env[`${prefix}ENCRYPTION_PASSWORD`],
+      encryptionPassword,
     });
     i++;
   }
