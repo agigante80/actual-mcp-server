@@ -12,6 +12,7 @@ import logger from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
+import { connectionPool } from '../lib/ActualConnectionPool.js';
 import observability from '../observability.js';
 import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
@@ -98,35 +99,31 @@ export async function startHttpServer(
   }
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
-  const sessionLastActivity = new Map<string, number>();
   const sessionInitPromises = new Map<string, Promise<void>>();  // Track session init completion
-  // Use same timeout as ConnectionPool (SESSION_IDLE_TIMEOUT_MINUTES env var, default: 2 minutes)
-  const idleTimeoutMinutes = parseInt(process.env.SESSION_IDLE_TIMEOUT_MINUTES || '2', 10);
-  const SESSION_TIMEOUT_MS = idleTimeoutMinutes * 60 * 1000;
-  const SESSION_CLEANUP_INTERVAL_MS = 30 * 1000; // Check every 30 seconds
 
   // safe fallback if index didn't provide implementedTools
   const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
 
-  // Session cleanup: check for idle sessions periodically
-  const cleanupInterval = setInterval(async () => {
-    const now = Date.now();
-    const sessionsToCleanup: string[] = [];
-    
-    for (const [sessionId, lastActivity] of sessionLastActivity.entries()) {
-      if (now - lastActivity > SESSION_TIMEOUT_MS) {
-        sessionsToCleanup.push(sessionId);
+  // Session liveness and idle timing are owned solely by the connection pool
+  // (#167). httpServer no longer runs its own idle timer or activity map; it
+  // owns only the transport objects. When the pool removes a session (idle
+  // sweep or explicit close) it fires this eviction listener, which tears down
+  // the matching transport in the same window. This is what keeps the two
+  // tables from drifting: no "alive in httpServer, dead in the pool" state, and
+  // no transport object left behind for a session the client abandoned.
+  connectionPool.onSessionEvicted((sessionId: string) => {
+    const transport = transports.get(sessionId);
+    if (transport) {
+      try {
+        (transport as unknown as { close?: () => void }).close?.();
+      } catch (err) {
+        logger.debug(`[SESSION] Error closing transport for evicted session ${sessionId} (ignoring): ${err}`);
       }
     }
-    
-    for (const sessionId of sessionsToCleanup) {
-      logger.info(`[SESSION] Cleaning up idle session: ${sessionId}`);
-      transports.delete(sessionId);
-      sessionLastActivity.delete(sessionId);
-      sessionInitPromises.delete(sessionId);
-      await shutdownActualForSession(sessionId);
-    }
-  }, SESSION_CLEANUP_INTERVAL_MS);
+    transports.delete(sessionId);
+    sessionInitPromises.delete(sessionId);
+    logger.info(`[SESSION] Transport torn down for evicted session: ${sessionId}`);
+  });
 
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {
@@ -393,9 +390,10 @@ export async function startHttpServer(
             // Initialize connection pool for this session
             try {
               await connectToActualForSession(sid);
-              // Only add to transports/activity map if connection successful
+              // Only register the transport if the pool connection succeeded.
+              // The pool stamped lastActivity when it created the entry, so it
+              // is already the source of truth for this session's idle clock.
               transports.set(sid, transport);
-              sessionLastActivity.set(sid, Date.now());
               logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
               resolveInit?.();
             } catch (err) {
@@ -428,7 +426,18 @@ export async function startHttpServer(
         return;
       }
 
-      // sessionId present -> reuse
+      // sessionId present -> reuse. Transport presence is the liveness signal:
+      // the pool's eviction listener (#167) removes the transport the moment a
+      // session is genuinely evicted (idle sweep or explicit close), so a
+      // missing transport means "expired" and a present one means "serve it".
+      //
+      // We deliberately do NOT additionally gate on connectionPool.isLive() here.
+      // A pool entry can be absent while the MCP session is still perfectly
+      // usable: after a transient infra error the adapter drops the pool entry
+      // (without evicting the transport) so the next call re-establishes it via
+      // the legacy fallback. Rejecting those requests as "expired" would force a
+      // needless client re-initialize on every transient blip, re-introducing
+      // the session churn this server works to avoid.
       let transport = transports.get(sessionId);
       if (!transport) {
         // Check if session is currently being initialized
@@ -495,8 +504,8 @@ export async function startHttpServer(
         }
       }
       
-      // Update activity timestamp for valid session
-      sessionLastActivity.set(sessionId, Date.now());
+      // Refresh the pool's idle clock for this session (single source of truth, #167).
+      connectionPool.touch(sessionId);
 
       // Run in AsyncLocalStorage context so tools and the adapter can access
       // sessionId (pool branch, #134) and allowedBudgets (ACL enforcement, #156).
@@ -521,7 +530,7 @@ export async function startHttpServer(
       res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'No session id' }, id: null });
       return;
     }
-    sessionLastActivity.set(sessionId, Date.now()); // Track activity
+    connectionPool.touch(sessionId); // Refresh the pool's idle clock (#167)
     const transport = transports.get(sessionId);
     if (!transport) {
       res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Transport not ready' }, id: null });
@@ -608,12 +617,13 @@ export async function startHttpServer(
   // Cleanup on server shutdown
   const cleanup = async () => {
     logger.info('[SERVER] Shutting down, cleaning up sessions...');
-    clearInterval(cleanupInterval);
-    for (const sessionId of transports.keys()) {
+    // Snapshot the keys: shutdownActualForSession evicts, and the eviction
+    // listener deletes from `transports`, so iterating the live map would
+    // mutate it mid-iteration.
+    for (const sessionId of [...transports.keys()]) {
       await shutdownActualForSession(sessionId);
     }
     transports.clear();
-    sessionLastActivity.clear();
     sessionInitPromises.clear();
     // Also shut down the shared/pooled connections
     await shutdownActual();
