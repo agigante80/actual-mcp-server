@@ -373,9 +373,15 @@ export async function advancedTests(client, context, opts = {}) {
   // case-insensitive, a no-match pattern returns empty (the pre-#178 bug
   // returned the whole table here), and IS NOT NULL includes the seeded row.
   console.log("\nTesting imported_payee LIKE / IS NULL filtering (#178)...");
-  const seedTxnId = context.transactionId;
+  // Find any existing transaction to seed. Do not depend on context.transactionId:
+  // this block runs before transactionTests populates it, so query the DB directly.
+  let seedTxnId = null;
+  try {
+    const anyTxn = (await callTool("actual_query_run", { query: "SELECT id FROM transactions ORDER BY date DESC LIMIT 1" }))?.result;
+    seedTxnId = Array.isArray(anyTxn) && anyTxn.length > 0 ? anyTxn[0].id : null;
+  } catch { /* fall through to skip */ }
   if (!seedTxnId) {
-    console.log("  ℹ skipped: no context.transactionId to seed (expected outside the full run)");
+    console.log("  ℹ skipped: budget has no transaction to seed imported_payee on");
   } else {
     const runtag = `${Date.now()}`;
     const markerValue = `MCP178-AMAZON-${runtag}`;
