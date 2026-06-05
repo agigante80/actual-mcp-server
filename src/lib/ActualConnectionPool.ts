@@ -17,7 +17,7 @@ import config from '../config.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { setApiInitialized } from './apiState.js';
+import { isApiInitialized, setApiInitialized } from './apiState.js';
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
 
@@ -398,8 +398,13 @@ class ActualConnectionPool {
     logger.info(`[ConnectionPool] Shutting down connection for session: ${sessionId}`);
 
     try {
+      // Singleton-level guard (#164): skip api.shutdown() when the @actual-app/api
+      // singleton is already torn down (e.g. a prior session's shutdown in a
+      // sequential shutdownAll). Double-shutdown surfaces as "not initialized".
+      // The finally block below still runs so the #167 cleanup/eviction contract
+      // is preserved.
       const maybeApi = api as unknown as { shutdown?: Function };
-      if (typeof maybeApi.shutdown === 'function') {
+      if (typeof maybeApi.shutdown === 'function' && isApiInitialized()) {
         await (maybeApi.shutdown as () => Promise<unknown>)();
       }
 
@@ -435,8 +440,9 @@ class ActualConnectionPool {
     logger.info('[ConnectionPool] Shutting down shared connection');
 
     try {
+      // Singleton-level guard (#164): skip when already torn down.
       const maybeApi = api as unknown as { shutdown?: Function };
-      if (typeof maybeApi.shutdown === 'function') {
+      if (typeof maybeApi.shutdown === 'function' && isApiInitialized()) {
         await (maybeApi.shutdown as () => Promise<unknown>)();
       }
 
@@ -530,19 +536,22 @@ class ActualConnectionPool {
       this.cleanupInterval = null;
     }
 
-    // Shutdown all session connections
-    const shutdownPromises: Promise<void>[] = [];
-    for (const sessionId of this.connections.keys()) {
-      shutdownPromises.push(this.shutdownConnection(sessionId));
-    }
-    
-    // Shutdown shared connection
-    if (this.sharedConnection?.initialized) {
-      shutdownPromises.push(this.shutdownSharedConnection());
+    // Shut sessions down SEQUENTIALLY, not via Promise.all (#164). Each call
+    // hits the process-global @actual-app/api singleton; running them
+    // concurrently meant N calls reached api.shutdown() before any of their
+    // finally blocks set the singleton flag false, double-shutting-down the
+    // singleton ("not initialized" during graceful shutdown). Sessions are few
+    // (15 max) and shutdown is rare, so sequential is fine. The first call does
+    // the real shutdown; the isApiInitialized() guard makes the rest no-ops.
+    // Snapshot the keys: shutdownConnection deletes from `connections`.
+    for (const sessionId of [...this.connections.keys()]) {
+      await this.shutdownConnection(sessionId);
     }
 
-    await Promise.all(shutdownPromises);
-    
+    if (this.sharedConnection?.initialized) {
+      await this.shutdownSharedConnection();
+    }
+
     logger.info('[ConnectionPool] All connections shut down');
   }
 
