@@ -84,14 +84,14 @@ const tool: ToolDefinition = {
 
     // Close the session
     try {
-      // Verify session exists in connection pool
-      const connectionMap = (connectionPool as any).connections as Map<string, unknown>;
-      
-      if (!connectionMap.has(targetSessionId!)) {
+      // Verify the session exists via the pool's public surface (#171).
+      // Previously this cast connectionPool to `any` and read its private
+      // `connections` Map, which leaked internals and defeated type checking.
+      if (!connectionPool.has(targetSessionId!)) {
         return {
           success: false,
           message: `Session ${targetSessionId} not found in connection pool`,
-          availableSessions: Array.from(connectionMap.keys()),
+          availableSessions: stats.sessions.map(s => s.sessionId),
         };
       }
 
