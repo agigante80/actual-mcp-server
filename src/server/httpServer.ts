@@ -42,7 +42,9 @@ export async function startHttpServer(
   advertisedUrl?: string
 ) {
   const app = express();
-  app.use(express.json());
+  // Explicit body-size cap (#168). An oversized payload is rejected with HTTP 413
+  // rather than buffered unbounded. Tunable via MCP_HTTP_BODY_LIMIT (default 512kb).
+  app.use(express.json({ limit: config.MCP_HTTP_BODY_LIMIT }));
   const scheme = config.MCP_ENABLE_HTTPS ? 'https' : 'http';
 
   // --- OIDC / mcp-auth (CF-5) ---

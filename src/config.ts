@@ -13,6 +13,11 @@ export const configSchema = z.object({
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),
   MCP_HTTPS_KEY: z.string().optional(),
+  // Explicit cap on incoming JSON request bodies (#168). Passed to
+  // express.json({ limit }). Express accepts a byte string like '512kb' or '2mb'.
+  // Default 512kb is generous headroom over the largest legitimate batch payload
+  // while bounding the memory-exhaustion surface. Raise it for bulk-import jobs.
+  MCP_HTTP_BODY_LIMIT: z.string().default('512kb'),
   MAX_CONCURRENT_SESSIONS: z.string().default('15').transform(val => parseInt(val, 10)),
 
   // --- OIDC / mcp-auth (CF-5) ---
