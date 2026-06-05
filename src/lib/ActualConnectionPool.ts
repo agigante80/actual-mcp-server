@@ -116,6 +116,18 @@ class ActualConnectionPool {
   }
 
   /**
+   * Raw map presence for a session id, regardless of `initialized` state (#171).
+   * `hasConnection`/`isLive` are too strict for callers that only need to know
+   * whether an entry exists at all (e.g. session_close validating a target),
+   * and reaching into the private `connections` Map with an `as any` cast leaks
+   * pool internals into tool code. This is the public, type-checked surface for
+   * that check. Pure read: unknown ids return false and create no entry.
+   */
+  has(sessionId: string): boolean {
+    return this.connections.has(sessionId);
+  }
+
+  /**
    * Single source of truth for session liveness (#167). Returns true only if
    * the session has an initialized connection that has not passed the idle
    * timeout. Returns false for unknown or expired sessions, and never creates

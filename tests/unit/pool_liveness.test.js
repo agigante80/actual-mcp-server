@@ -135,5 +135,33 @@ describe('single source of truth: httpServer keeps no parallel activity map');
     'compiled httpServer.js no longer references sessionLastActivity (guards against re-introduction)');
 }
 
+// ---------------------------------------------------------------------------
+describe('has: raw map presence regardless of initialized (#171)');
+{
+  connectionPool.connections.clear();
+
+  seed('sess-present', Date.now());
+  assert(connectionPool.has('sess-present') === true, 'has returns true for a seeded session');
+
+  const before = connectionPool.getStats().totalSessions;
+  assert(connectionPool.has('sess-absent') === false, 'has returns false for an unknown session');
+  assert(connectionPool.getStats().totalSessions === before, 'has creates no entry for an unknown session');
+  unseed('sess-present');
+
+  // Presence without initialized: has is true, hasConnection is false.
+  connectionPool.connections.set('sess-uninit', {
+    sessionId: 'sess-uninit',
+    initialized: false,
+    lastActivity: Date.now(),
+    dataDir: '/tmp/test',
+    serverUrl: 'http://test-server',
+    password: 'x',
+    syncId: 'unit-test-sync-id',
+  });
+  assert(connectionPool.has('sess-uninit') === true, 'has is true for an uninitialized entry');
+  assert(connectionPool.hasConnection('sess-uninit') === false, 'hasConnection is false for the same uninitialized entry');
+  unseed('sess-uninit');
+}
+
 console.log(`\n[pool-liveness] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
