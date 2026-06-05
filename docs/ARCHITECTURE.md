@@ -665,6 +665,16 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 - **Input Validation**: Zod schemas for all tool inputs
 - **Type Safety**: Full TypeScript with strict mode
 
+### Session Liveness Ownership (#167)
+
+`ActualConnectionPool` is the single source of truth for session liveness and idle timing. There is one idle timer and one `SESSION_IDLE_TIMEOUT_MINUTES` value for the whole process, consumed only by the pool.
+
+- **Ownership split**: the pool owns the `connections` map, per-session `lastActivity`, the idle sweep timer, and the idle threshold. `httpServer` owns only the `transports` map (one StreamableHTTP transport object per session) plus `sessionInitPromises` (transport-init coordination).
+- **Per-request activity**: on every request `httpServer` calls `connectionPool.touch(sessionId)` so the pool's idle clock reflects real usage. Liveness for serving is decided purely by transport presence: the eviction listener (below) removes the transport the moment a session is genuinely evicted, so a missing transport means expired. `httpServer` deliberately does NOT additionally gate on `connectionPool.isLive()`, because a pool entry can be legitimately absent while the MCP session is still usable (after a transient infra error the adapter drops the pool entry without evicting the transport, and the next call re-establishes it through the legacy fallback). `isLive()` remains a pool query method for diagnostics.
+- **Eager teardown via eviction callback**: when the pool removes a session (idle sweep or explicit `session_close` / server shutdown) it fires a registered eviction listener. `httpServer` registers one that closes the transport and deletes its `transports` / `sessionInitPromises` entries, so both tables change in the same window. The mechanism is callback-based eager teardown, not lazy query-on-demand: a lazily-cleaned table would leak transport objects for sessions a client abandons without reconnecting.
+- **Paths that do NOT evict**: `switchBudget`'s slow path and infra-error drops call `connectionPool.shutdownConnection(sessionId)` without `{ evict: true }`, so the MCP session's transport survives a budget switch or a transient network error while the pool entry is recycled.
+- **Behavior change**: the effective idle window is now exactly the single configured value, not `min(httpServer, pool)`. Before this consolidation the httpServer table defaulted to 2 minutes and the pool to 5, so the two clocks could disagree and a session could be alive in one table and dead in the other.
+
 ---
 
 ## Technology Stack & Dependencies

@@ -43,9 +43,16 @@ class ActualConnectionPool {
   private cleanupInterval: NodeJS.Timeout | null = null;
   private readonly IDLE_TIMEOUT: number; // Configurable via SESSION_IDLE_TIMEOUT_MINUTES env var (default: 5 minutes)
   private readonly CLEANUP_INTERVAL: number; // Check frequency (default: 2 minutes)
-  private readonly MAX_CONCURRENT_SESSIONS: number; // Configurable via MAX_CONCURRENT_SESSIONS env var (default: 1)
+  private readonly MAX_CONCURRENT_SESSIONS: number; // Configurable via MAX_CONCURRENT_SESSIONS env var (default: 15)
   private sharedConnection: ActualConnection | null = null;
   private initializationPromise: Promise<void> | null = null;
+  // Eviction listeners. The pool is the single source of truth for session
+  // liveness and idle timing (#167); when it removes a session it notifies the
+  // transport layer (httpServer) so the transport object is torn down in the
+  // same window. This is callback-based eager teardown, not lazy query-on-demand:
+  // a lazily-cleaned table would leak transport objects for sessions a client
+  // abandons without reconnecting.
+  private evictionCallbacks: Array<(sessionId: string) => void> = [];
 
   constructor() {
     // Read from environment variable or default to 15
@@ -106,6 +113,64 @@ class ActualConnectionPool {
   hasConnection(sessionId: string): boolean {
     const conn = this.connections.get(sessionId);
     return conn?.initialized ?? false;
+  }
+
+  /**
+   * Single source of truth for session liveness (#167). Returns true only if
+   * the session has an initialized connection that has not passed the idle
+   * timeout. Returns false for unknown or expired sessions, and never creates
+   * an entry as a side effect. httpServer uses this as a per-request defensive
+   * guard against the race where the idle sweep evicts a session while a
+   * request for it is already in flight.
+   */
+  isLive(sessionId: string): boolean {
+    const conn = this.connections.get(sessionId);
+    if (!conn || !conn.initialized) return false;
+    return !this.isExpired(conn);
+  }
+
+  /**
+   * Single definition of "past the idle window". Shared by isLive and the idle
+   * sweep so the two can never disagree about where the boundary is (#167).
+   */
+  private isExpired(conn: ActualConnection): boolean {
+    return (Date.now() - conn.lastActivity) > this.IDLE_TIMEOUT;
+  }
+
+  /**
+   * Refresh a session's activity timestamp. Called by the transport layer on
+   * every request so the pool's idle clock reflects real usage (#167). Before
+   * this, the pool only stamped lastActivity at init/switch, so an actively
+   * used session's pool clock never advanced; httpServer kept a parallel
+   * activity map to compensate, which is the drift this consolidation removes.
+   * No-op for unknown sessions (does NOT create an entry).
+   */
+  touch(sessionId: string): void {
+    const conn = this.connections.get(sessionId);
+    if (conn) {
+      conn.lastActivity = Date.now();
+    }
+  }
+
+  /**
+   * Register a listener invoked when the pool removes a session (idle sweep or
+   * explicit close). httpServer registers one that closes the transport and
+   * drops its table entries, keeping both tables consistent (#167). Listeners
+   * must not throw; any error is logged and swallowed so one bad listener
+   * cannot abort the removal of others.
+   */
+  onSessionEvicted(cb: (sessionId: string) => void): void {
+    this.evictionCallbacks.push(cb);
+  }
+
+  private fireEviction(sessionId: string): void {
+    for (const cb of this.evictionCallbacks) {
+      try {
+        cb(sessionId);
+      } catch (err) {
+        logger.error(`[ConnectionPool] Eviction listener threw for session ${sessionId} (ignoring):`, err);
+      }
+    }
   }
 
   /**
@@ -301,23 +366,39 @@ class ActualConnectionPool {
   }
 
   /**
-   * Shutdown connection for a specific session
+   * Shutdown connection for a specific session.
+   *
+   * `opts.evict` controls whether eviction listeners fire (#167). Pass `true`
+   * when the session itself is ending (idle sweep, explicit session close) so
+   * the transport layer tears down its transport. Leave it false (default) when
+   * the pool entry is being recycled but the MCP session continues, e.g.
+   * switchBudget's slow path which shuts the entry down and immediately
+   * recreates it, or an infra-error drop where the next request re-establishes
+   * the connection: in those cases the transport must survive.
    */
-  async shutdownConnection(sessionId: string): Promise<void> {
+  async shutdownConnection(sessionId: string, opts: { evict?: boolean } = {}): Promise<void> {
     const conn = this.connections.get(sessionId);
-    
+
     if (!conn || !conn.initialized) {
       return;
     }
 
     logger.info(`[ConnectionPool] Shutting down connection for session: ${sessionId}`);
-    
+
     try {
       const maybeApi = api as unknown as { shutdown?: Function };
       if (typeof maybeApi.shutdown === 'function') {
         await (maybeApi.shutdown as () => Promise<unknown>)();
       }
 
+      logger.info(`[ConnectionPool] Connection shutdown complete for session: ${sessionId}`);
+
+    } catch (err) {
+      logger.error(`[ConnectionPool] Error shutting down connection for session ${sessionId}:`, err);
+    } finally {
+      // Remove the entry in all cases so liveness can never report a session
+      // alive after its shutdown was attempted. On error the singleton is in
+      // an unknown state, so we must not leave it reusable either.
       conn.initialized = false;
       this.connections.delete(sessionId);
       setApiInitialized(false);
@@ -325,12 +406,9 @@ class ActualConnectionPool {
       // NOTE: We do NOT delete the data directory because it's shared across all sessions
       // Deleting it would cause data loss for other active sessions
 
-      logger.info(`[ConnectionPool] Connection shutdown complete for session: ${sessionId}`);
-
-    } catch (err) {
-      logger.error(`[ConnectionPool] Error shutting down connection for session ${sessionId}:`, err);
-      // Even on error, the singleton is in an unknown state — don't reuse.
-      setApiInitialized(false);
+      if (opts.evict) {
+        this.fireEviction(sessionId);
+      }
     }
   }
 
@@ -408,11 +486,10 @@ class ActualConnectionPool {
    * Clean up idle connections that haven't been used recently
    */
   private async cleanupIdleConnections(): Promise<void> {
-    const now = Date.now();
     const connectionsToRemove: string[] = [];
 
     for (const [sessionId, conn] of this.connections.entries()) {
-      if (now - conn.lastActivity > this.IDLE_TIMEOUT) {
+      if (this.isExpired(conn)) {
         connectionsToRemove.push(sessionId);
       }
     }
@@ -421,7 +498,11 @@ class ActualConnectionPool {
       logger.info(`[ConnectionPool] Cleaning up ${connectionsToRemove.length} idle connections`);
       
       for (const sessionId of connectionsToRemove) {
-        await this.shutdownConnection(sessionId);
+        // evict: true so the transport layer tears down the matching transport
+        // in the same window (#167). This is the path that previously drifted:
+        // the pool's autonomous timer removed an entry httpServer's separate
+        // timer knew nothing about.
+        await this.shutdownConnection(sessionId, { evict: true });
       }
     }
   }

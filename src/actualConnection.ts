@@ -143,7 +143,12 @@ export async function shutdownActualForSession(sessionId: string) {
   }
   
   try {
-    await connectionPool.shutdownConnection(sessionId);
+    // evict: true so the pool tears down the matching httpServer transport too
+    // (#167). This wrapper is only used for session-ending events (explicit
+    // session_close, server shutdown); the adapter's switchBudget / infra-drop
+    // paths call connectionPool.shutdownConnection directly without evict so the
+    // transport survives a budget switch or transient error.
+    await connectionPool.shutdownConnection(sessionId, { evict: true });
     logger.info(`Actual API connection shutdown for session: ${sessionId}`);
   } catch (err) {
     logger.error(`Error shutting down Actual for session ${sessionId}:`, err);
