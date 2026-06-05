@@ -6,6 +6,10 @@ export const configSchema = z.object({
   ACTUAL_BUDGET_SYNC_ID: z.string().min(1),
   // Optional per-budget encryption password (leave unset for unencrypted budgets)
   ACTUAL_BUDGET_PASSWORD: z.string().optional(),
+  // Escape hatch for #161: allow an http:// upstream even when an E2E encryption
+  // password is set (e.g. an isolated Docker network where the hop is trusted).
+  // Off by default so a plaintext upstream + encryption password is refused.
+  ALLOW_INSECURE_UPSTREAM: z.string().optional().transform(val => val === 'true'),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
   MCP_BRIDGE_PORT: z.string().default('3000'),
   MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
@@ -44,6 +48,13 @@ export const configSchema = z.object({
   .refine(
     (cfg) => !cfg.MCP_ENABLE_HTTPS || (!!cfg.MCP_HTTPS_CERT && !!cfg.MCP_HTTPS_KEY),
     { message: 'MCP_ENABLE_HTTPS=true requires both MCP_HTTPS_CERT and MCP_HTTPS_KEY to be set.' },
+  )
+  // Refuse to send the E2E budget encryption password over a plaintext upstream
+  // (#161, CWE-319). If ACTUAL_BUDGET_PASSWORD is set, the default upstream must
+  // be https:// unless ALLOW_INSECURE_UPSTREAM=true is set explicitly.
+  .refine(
+    (cfg) => !cfg.ACTUAL_BUDGET_PASSWORD || cfg.ALLOW_INSECURE_UPSTREAM || !/^http:\/\//i.test(cfg.ACTUAL_SERVER_URL),
+    { message: 'ACTUAL_BUDGET_PASSWORD (E2E encryption) must not be sent over an http:// upstream. Use https:// for ACTUAL_SERVER_URL, or set ALLOW_INSECURE_UPSTREAM=true to override (e.g. a trusted isolated network).' },
   );
 
 export type Config = z.infer<typeof configSchema>;
