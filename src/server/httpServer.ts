@@ -591,9 +591,25 @@ export async function startHttpServer(
     res.send(txt);
   });
 
-  const tlsOptions = config.MCP_ENABLE_HTTPS
-    ? { cert: fs.readFileSync(config.MCP_HTTPS_CERT!), key: fs.readFileSync(config.MCP_HTTPS_KEY!) }
-    : undefined;
+  // config validation (#169) guarantees both paths are set when HTTPS is on, so
+  // the non-null assertions are safe. Wrap the reads so a missing/unreadable
+  // file fails with an actionable message naming the env vars and paths instead
+  // of an opaque ENOENT from readFileSync.
+  let tlsOptions: { cert: Buffer; key: Buffer } | undefined;
+  if (config.MCP_ENABLE_HTTPS) {
+    try {
+      tlsOptions = {
+        cert: fs.readFileSync(config.MCP_HTTPS_CERT!),
+        key: fs.readFileSync(config.MCP_HTTPS_KEY!),
+      };
+    } catch (err) {
+      const cause = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to read HTTPS cert/key (MCP_ENABLE_HTTPS=true). ` +
+        `MCP_HTTPS_CERT=${config.MCP_HTTPS_CERT}, MCP_HTTPS_KEY=${config.MCP_HTTPS_KEY}. Cause: ${cause}`,
+      );
+    }
+  }
 
   const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, () => {
     const advertised = advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`;

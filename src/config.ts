@@ -30,7 +30,16 @@ export const configSchema = z.object({
   // Example: {"alice@example.com":["budget-1"],"group:admin":["*"]}
   // Leave unset to allow all authenticated users to access all budgets.
   AUTH_BUDGET_ACL: z.string().optional(),
-});
+})
+  // When native TLS is enabled, both the cert and key paths must be provided.
+  // MCP_ENABLE_HTTPS is transformed to a boolean above, so this object-level
+  // refine sees the parsed value (a field-level refine would see the raw
+  // string). Without this, httpServer's readFileSync(config.MCP_HTTPS_CERT!)
+  // throws an opaque error at startup when a path is missing (#169).
+  .refine(
+    (cfg) => !cfg.MCP_ENABLE_HTTPS || (!!cfg.MCP_HTTPS_CERT && !!cfg.MCP_HTTPS_KEY),
+    { message: 'MCP_ENABLE_HTTPS=true requires both MCP_HTTPS_CERT and MCP_HTTPS_KEY to be set.' },
+  );
 
 export type Config = z.infer<typeof configSchema>;
 
