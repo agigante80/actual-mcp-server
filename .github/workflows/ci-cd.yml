@@ -45,7 +45,7 @@ permissions:
 # Environment Variables
 # ============================================================================
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '22'
   DOCKER_IMAGE_NAME: agigante80/actual-mcp-server
   DOCKER_PLATFORMS: 'linux/amd64,linux/arm64'
   REGISTRY: docker.io

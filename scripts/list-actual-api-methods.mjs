@@ -1,7 +1,13 @@
-// Polyfill navigator for Node.js — required by @actual-app/api v26.3.0+ which
+// Polyfill navigator for Node.js. Required by @actual-app/api v26.3.0+, which
 // uses navigator.platform at module load time inside the browser/Electron bundle.
+// v26.6.0 also reads navigator.userAgent at load time, so define it too or the
+// import throws "Cannot read properties of undefined (reading 'includes')" on
+// Node 20 (which has no native navigator). Node 21+ supplies both natively.
 if (typeof globalThis.navigator === 'undefined') {
-  globalThis.navigator = { platform: process.platform === 'win32' ? 'Win32' : 'Linux' };
+  globalThis.navigator = {
+    platform: process.platform === 'win32' ? 'Win32' : 'Linux',
+    userAgent: `Node.js/${process.version}`,
+  };
 }
 
 // Use dynamic import so the polyfill above runs first
