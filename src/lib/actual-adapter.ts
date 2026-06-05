@@ -1296,7 +1296,8 @@ export async function getAccountsWithBalances(): Promise<(components['schemas'][
 export async function deleteAccount(id: string): Promise<void> {
   observability.incrementToolCall('actual.accounts.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Non-idempotent: do not retry (#165).
+    await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function updateTransaction(id: string, fields: Partial<components['schemas']['Transaction']> | unknown): Promise<void> {
@@ -1333,7 +1334,10 @@ export async function updateTransactionBatch(
 export async function deleteTransaction(id: string): Promise<void> {
   observability.incrementToolCall('actual.transactions.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeleteTransaction(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Non-idempotent: do not retry (#165). A retry after a lost-response would
+    // re-issue the delete against an already-removed record and surface a
+    // confusing "not found" even though the first attempt succeeded.
+    await withConcurrency(() => retry(() => rawDeleteTransaction(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
@@ -1528,7 +1532,8 @@ export async function setBudgetCarryover(month: string, categoryId: string, flag
 export async function closeAccount(id: string): Promise<void> {
   observability.incrementToolCall('actual.accounts.close').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawCloseAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Non-idempotent: do not retry (#165).
+    await withConcurrency(() => retry(() => rawCloseAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function reopenAccount(id: string): Promise<void> {
@@ -1561,13 +1566,16 @@ export async function updateCategoryGroup(id: string, fields: unknown): Promise<
 export async function deleteCategoryGroup(id: string): Promise<void> {
   observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Non-idempotent: do not retry (#165).
+    await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function mergePayees(targetId: string, mergeIds: string[]): Promise<void> {
   observability.incrementToolCall('actual.payees.merge').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    // Non-idempotent: do not retry (#165). A second merge against an
+    // already-removed source payee can corrupt merge state or mislead.
+    await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
