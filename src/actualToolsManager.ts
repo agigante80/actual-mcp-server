@@ -36,6 +36,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_category_groups_delete',
   'actual_category_groups_get',
   'actual_category_groups_update',
+  'actual_payees_common_list',
   'actual_payees_create',
   'actual_payees_delete',
   'actual_payees_get',

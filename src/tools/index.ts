@@ -27,6 +27,7 @@ export { default as category_groups_delete } from './category_groups_delete.js';
 export { default as category_groups_get } from './category_groups_get.js';
 export { default as category_groups_update } from './category_groups_update.js';
 export { default as payee_rules_get } from './payee_rules_get.js';
+export { default as payees_common_list } from './payees_common_list.js';
 export { default as payees_create } from './payees_create.js';
 export { default as payees_delete } from './payees_delete.js';
 export { default as payees_get } from './payees_get.js';

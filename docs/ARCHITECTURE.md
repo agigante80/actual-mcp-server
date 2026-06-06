@@ -184,7 +184,8 @@ src/tools/
 ├── category_groups_create.ts
 ├── category_groups_update.ts
 ├── category_groups_delete.ts
-├── payees_get.ts                       # Payees (5 tools)
+├── payees_get.ts                       # Payees (6 tools)
+├── payees_common_list.ts
 ├── payees_create.ts
 ├── payees_update.ts
 ├── payees_delete.ts
@@ -324,7 +325,7 @@ actual-mcp-server/
 │   │   ├── streamable-http.js    # Compiled JS companion
 │   │   └── streamable-http.d.ts  # Type definitions
 │   │
-│   ├── tools/                    # MCP tool definitions (69 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (70 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -333,7 +334,7 @@ actual-mcp-server/
 │   │   ├── budget_updates_batch.ts # Batch budget operations
 │   │   ├── categories_*.ts       # Categories (4 tools)
 │   │   ├── category_groups_*.ts  # Category groups (4 tools)
-│   │   ├── payees_*.ts           # Payees (5 tools)
+│   │   ├── payees_*.ts           # Payees (6 tools)
 │   │   ├── payee_rules_get.ts    # Payee rules (1 tool)
 │   │   ├── rules_*.ts            # Rules (4 tools)
 │   │   ├── tags_*.ts             # Tags (4 tools)
@@ -420,7 +421,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 69 tools with MCP capabilities
+   └─> Registers 70 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

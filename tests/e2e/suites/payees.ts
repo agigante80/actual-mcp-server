@@ -1,7 +1,7 @@
 /**
  * tests/e2e/suites/payees.ts
  *
- * Registration function for payee tests (5 tools, 7 named tests) and
+ * Registration function for payee tests (6 tools, 8 named tests) and
  * payee rules tests (1 tool, 1 named test).
  * Writes state.ctx.payeeId and state.ctx.payeeId2.
  */
@@ -11,12 +11,26 @@ import { callTool, extractResult } from '../../shared/e2e-helpers.js';
 import type { SharedState } from './shared-context.js';
 
 export function registerPayeeTests(state: SharedState): void {
-  // ==================== PAYEES (5 tools) ====================
+  // ==================== PAYEES (6 tools) ====================
   test('actual_payees_get - should list payees', async ({ request }) => {
     const result = await callTool(request, state.sessionId, 'actual_payees_get');
     const payees = extractResult(result);
     expect(Array.isArray(payees)).toBeTruthy();
-    console.log(`✅ Listed ${payees.length} payees`);
+    console.log(`Listed ${payees.length} payees`);
+  });
+
+  test('actual_payees_common_list - should return recent frequent payees or empty array', async ({ request }) => {
+    const result = await callTool(request, state.sessionId, 'actual_payees_common_list');
+    const payees = extractResult(result);
+    // Empty is a valid success (no recent activity in last 12 weeks)
+    expect(Array.isArray(payees)).toBeTruthy();
+    expect(payees.length).toBeGreaterThanOrEqual(0);
+    expect(payees.length).toBeLessThanOrEqual(10);
+    for (const p of payees) {
+      expect(typeof p.id).toBe('string');
+      expect(typeof p.name).toBe('string');
+    }
+    console.log(`Common payees: ${payees.length} (empty is valid)`);
   });
 
   test('actual_payees_create - should create payee', async ({ request }) => {
