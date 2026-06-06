@@ -296,4 +296,41 @@ test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => 
     
     console.log('✅ All E2E tests completed successfully!');
   });
+
+  // #188: an unknown/expired mcp-session-id must get the MCP spec signal
+  // (HTTP 404 + JSON-RPC -32001) on a normal method, while tools/list stays
+  // exempt via the LobeChat discovery shim.
+  test('unknown session id -> 404 / -32001, tools/list shim exempt', async ({ request }) => {
+    const rpcUrl = new URL(httpPath, advertisedUrl).toString();
+    // A well-formed UUID that the server has never issued.
+    const bogusSession = '00000000-0000-4000-8000-000000000000';
+
+    // 1) A non-init method (tools/call) with the bogus session must 404 / -32001.
+    const callRes = await retryRequest(() => request.post(rpcUrl, {
+      data: JSON.stringify({ jsonrpc: '2.0', id: 101, method: 'tools/call', params: { name: 'actual_server_info', arguments: {} } }),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'mcp-session-id': bogusSession,
+      },
+    }));
+    expect(callRes.status()).toBe(404);
+    const callJson = await callRes.json();
+    expect(callJson?.error?.code).toBe(-32001);
+    console.log('✅ Unknown session on tools/call returned 404 / -32001');
+
+    // 2) tools/list with the same bogus session must still return tools (shim).
+    const listRes = await retryRequest(() => request.post(rpcUrl, {
+      data: JSON.stringify({ jsonrpc: '2.0', id: 102, method: 'tools/list', params: {} }),
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream',
+        'mcp-session-id': bogusSession,
+      },
+    }));
+    expect(listRes.status()).toBe(200);
+    const listJson = await listRes.json();
+    expect(Array.isArray(listJson?.result?.tools)).toBeTruthy();
+    console.log('✅ tools/list with unknown session still returned the tool list (shim exempt)');
+  });
 });
