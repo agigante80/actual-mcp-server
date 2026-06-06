@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { validateQueryShape } from '../lib/query-validator.js';
 
 const InputSchema = z.object({
   query: z.string().min(1).describe('ActualQL query string to execute'),
@@ -65,7 +66,11 @@ For details: https://actualbudget.org/docs/api/actual-ql/`,
       if (input.query.trim().startsWith('query ') && input.query.includes('{') && input.query.includes('}')) {
         throw new Error(`GraphQL syntax is not fully supported. Please use SQL instead.\n\nExample: SELECT id, date, amount, payee.name, category.name FROM transactions ORDER BY date DESC LIMIT 5\n\nYour query attempted: ${input.query.substring(0, 100)}...`);
       }
-      
+
+      // Read-only shape gate (#162): reject writes / schema changes / stacked
+      // statements before the query reaches the q() builder. Throws on violation.
+      validateQueryShape(input.query);
+
       const result = await adapter.runQuery(input.query);
       return { result };
     } catch (error: any) {

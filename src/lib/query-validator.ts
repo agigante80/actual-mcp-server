@@ -269,3 +269,45 @@ export function formatValidationErrors(result: ValidationResult): string {
   
   return messages.join('\n');
 }
+
+/**
+ * Read-only shape gate for actual_query_run (#162, CWE-89/CWE-20 defense in
+ * depth). The tool is SELECT-only, but the SQL surface is exactly what prompt
+ * injection targets, so reject data/schema-modification keywords and stacked
+ * statements before anything reaches the q() builder.
+ *
+ * The checks run on a copy with string literals blanked out, so a keyword or
+ * semicolon smuggled inside a quoted value cannot trip the gate, and a
+ * legitimate `WHERE notes LIKE '%update%'` is not a false positive. The #178
+ * WHERE operators (LIKE / NOT LIKE / IS NULL) are plain SELECT queries and pass
+ * unchanged.
+ *
+ * Throws on violation; returns void when the query is an allowed read.
+ */
+export function validateQueryShape(query: string): void {
+  // Blank out single- and double-quoted literals (keep the quotes so positions
+  // are roughly preserved, but drop their contents).
+  const stripped = query
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""');
+
+  // Stacked statements: a semicolon followed by more non-whitespace.
+  if (/;\s*\S/.test(stripped)) {
+    throw new Error('actual_query_run does not allow stacked statements (multiple statements separated by ";").');
+  }
+
+  // Data- and schema-modification keywords.
+  const FORBIDDEN = /\b(INSERT|UPDATE|DELETE|DROP|ALTER|ATTACH|DETACH|PRAGMA|CREATE|REPLACE|EXEC|EXECUTE|VACUUM|TRUNCATE|GRANT|REVOKE|MERGE|INTO)\b/i;
+  if (FORBIDDEN.test(stripped)) {
+    throw new Error('actual_query_run is read-only: data- and schema-modification keywords (INSERT, UPDATE, DELETE, DROP, etc.) are not allowed.');
+  }
+
+  // Must be a SELECT, or the bare-table-name fallthrough (a single identifier
+  // the adapter passes straight to q(<table>)).
+  const trimmed = stripped.trim();
+  const isSelect = /^SELECT\s+/i.test(trimmed);
+  const isBareTable = /^\w+$/.test(trimmed);
+  if (!isSelect && !isBareTable) {
+    throw new Error('actual_query_run only supports SELECT queries or a bare table name.');
+  }
+}
