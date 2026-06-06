@@ -511,6 +511,51 @@ async function expectCallError(tool, input, label) {
     { includeTransactions: true, limit: 50, offset: 100 },
     'includeTransactions:true with valid limit/offset accepted')) fail();
 
+  // ── actual_tags_create ──────────────────────────────────────────────────
+  console.log('\n[actual_tags_create -- schema validation]');
+  const tags_create_tool = await import('../../dist/src/tools/tags_create.js').then(m => m.default);
+
+  if (!expectParseError(tags_create_tool, {}, 'empty input -- missing tag field')) fail();
+  if (!expectParseError(tags_create_tool, { tag: '' }, 'empty tag string rejected')) fail();
+  if (!expectParseOk(tags_create_tool, { tag: 'groceries' }, 'minimal valid input accepted')) fail();
+  if (!expectParseOk(tags_create_tool,
+    { tag: 'groceries', color: '#33aa33', description: 'food' },
+    'full input accepted')) fail();
+
+  // ── actual_tags_update ──────────────────────────────────────────────────
+  console.log('\n[actual_tags_update -- schema validation]');
+  const tags_update_tool = await import('../../dist/src/tools/tags_update.js').then(m => m.default);
+
+  const VALID_TAG_UUID = '00000000-0000-0000-0000-0000000000aa';
+  if (!expectParseError(tags_update_tool, {}, 'empty input -- missing id')) fail();
+  if (!expectParseError(tags_update_tool,
+    { id: 'not-a-uuid', tag: 'food' },
+    'non-UUID id rejected')) fail();
+  if (!expectParseError(tags_update_tool,
+    { id: VALID_TAG_UUID },
+    'no mutable fields -- refine rejects')) fail();
+  if (!expectParseError(tags_update_tool,
+    { id: VALID_TAG_UUID, tag: '' },
+    'empty tag string rejected even when id present')) fail();
+  if (!expectParseOk(tags_update_tool,
+    { id: VALID_TAG_UUID, tag: 'food' },
+    'valid update with tag accepted')) fail();
+  if (!expectParseOk(tags_update_tool,
+    { id: VALID_TAG_UUID, color: '#112233' },
+    'valid update with only color accepted')) fail();
+  if (!expectParseOk(tags_update_tool,
+    { id: VALID_TAG_UUID, description: 'new desc' },
+    'valid update with only description accepted')) fail();
+
+  // ── actual_tags_delete ──────────────────────────────────────────────────
+  console.log('\n[actual_tags_delete -- schema validation]');
+  const tags_delete_tool = await import('../../dist/src/tools/tags_delete.js').then(m => m.default);
+
+  if (!expectParseError(tags_delete_tool, {}, 'empty input -- missing id')) fail();
+  if (!expectParseError(tags_delete_tool, { id: 'not-a-uuid' }, 'non-UUID id rejected')) fail();
+  if (!expectParseError(tags_delete_tool, { id: '' }, 'empty string id rejected')) fail();
+  if (!expectParseOk(tags_delete_tool, { id: VALID_TAG_UUID }, 'valid UUID id accepted')) fail();
+
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');
   if (failures > 0) {

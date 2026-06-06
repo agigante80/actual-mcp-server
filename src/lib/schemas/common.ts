@@ -73,6 +73,15 @@ export const ruleIdSchema = z
   .regex(UUID_PATTERN, 'Invalid rule ID format (expected UUID)')
   .describe('Rule UUID');
 
+/**
+ * Tag UUID validation
+ * Used for: tag management operations (update, delete)
+ */
+export const tagIdSchema = z
+  .string()
+  .regex(UUID_PATTERN, 'Invalid tag ID format (expected UUID)')
+  .describe('Tag UUID');
+
 // ============================================================================
 // DATE SCHEMAS
 // ============================================================================
@@ -199,7 +208,8 @@ export const CommonSchemas = {
   categoryGroupId: categoryGroupIdSchema,
   payeeId: payeeIdSchema,
   ruleId: ruleIdSchema,
-  
+  tagId: tagIdSchema,
+
   // Dates
   date: dateSchema,
   monthYear: monthYearSchema,

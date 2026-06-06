@@ -57,11 +57,16 @@ const {
   createSchedule: rawCreateSchedule,
   updateSchedule: rawUpdateSchedule,
   deleteSchedule: rawDeleteSchedule,
+  getTags: rawGetTags,
+  createTag: rawCreateTag,
+  updateTag: rawUpdateTag,
+  deleteTag: rawDeleteTag,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import retry, { isRetryableError } from './retry.js';
+import { notFoundMsg } from './errors.js';
 import logger from '../logger.js';
 import config from '../config.js';
 import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
@@ -2030,6 +2035,52 @@ export async function getServerVersion(): Promise<{ version: string } | { error:
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getTags(): Promise<any[]> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.tags.get').catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return await withConcurrency(() => retry(() => rawGetTags() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
+export async function createTag(tag: { tag: string; color?: string; description?: string }): Promise<string> {
+  observability.incrementToolCall('actual.tags.create').catch(() => {});
+  return queueWriteOperation(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const raw = await withConcurrency(() => retry(() => rawCreateTag(tag) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    return normalizeToId(raw);
+  });
+}
+
+export async function updateTag(id: string, fields: { tag?: string; color?: string; description?: string }): Promise<void> {
+  observability.incrementToolCall('actual.tags.update').catch(() => {});
+  return queueWriteOperation(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tags = await withConcurrency(() => retry(() => rawGetTags() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exists = (tags as any[]).some((t: any) => t.id === id);
+    if (!exists) {
+      throw new Error(notFoundMsg('Tag', id, 'actual_tags_list'));
+    }
+    await withConcurrency(() => retry(() => rawUpdateTag(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+  });
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  observability.incrementToolCall('actual.tags.delete').catch(() => {});
+  return queueWriteOperation(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tags = await withConcurrency(() => retry(() => rawGetTags() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const exists = (tags as any[]).some((t: any) => t.id === id);
+    if (!exists) {
+      throw new Error(notFoundMsg('Tag', id, 'actual_tags_list'));
+    }
+    await withConcurrency(() => retry(() => rawDeleteTag(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+  });
+}
+
 export default {
   getAccounts,
   getAccountsWithBalances,
@@ -2041,6 +2092,10 @@ export default {
   createCategory,
   getPayees,
   createPayee,
+  getTags,
+  createTag,
+  updateTag,
+  deleteTag,
   getBudgetMonths,
   getBudgetMonth,
   setBudgetAmount,

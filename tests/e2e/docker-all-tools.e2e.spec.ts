@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 63 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 67 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests
@@ -15,7 +15,7 @@ import {
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 63 TOOLS', () => {
+test.describe('Docker E2E - ALL 67 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
@@ -1523,6 +1523,71 @@ test.describe('Docker E2E - ALL 63 TOOLS', () => {
       console.log('✅ Fallback cleanup completed');
     } catch (error: any) {
       console.warn('⚠️  Some fallback cleanup operations failed:', error.message);
+    }
+  });
+
+  // ==================== TAGS ====================
+  test('actual_tags_list - should list tags', async ({ request }) => {
+    const result = await callTool(request, sessionId, 'actual_tags_list');
+    const data = extractResult(result);
+    expect(Array.isArray(data)).toBeTruthy();
+    console.log(`Tags listed: ${data.length}`);
+  });
+
+  test('actual_tags_create - should create a tag', async ({ request }) => {
+    const result = await callTool(request, sessionId, 'actual_tags_create', {
+      tag: 'mcp-e2e-test-tag',
+      color: '#33aa33',
+      description: 'Created by E2E test',
+    });
+    const data = extractResult(result);
+    expect(typeof data === 'string' || typeof data?.id === 'string').toBeTruthy();
+    console.log('Tag created');
+  });
+
+  test('actual_tags_create - upsert same name returns same id', async ({ request }) => {
+    const result1 = await callTool(request, sessionId, 'actual_tags_create', {
+      tag: 'mcp-e2e-upsert-tag',
+    });
+    const result2 = await callTool(request, sessionId, 'actual_tags_create', {
+      tag: 'mcp-e2e-upsert-tag',
+      color: '#0000ff',
+    });
+    const id1 = extractResult(result1);
+    const id2 = extractResult(result2);
+    expect(id1).toEqual(id2);
+    console.log('Upsert: same id returned for same tag name');
+  });
+
+  test('actual_tags_update - should update a tag', async ({ request }) => {
+    const createResult = await callTool(request, sessionId, 'actual_tags_create', {
+      tag: 'mcp-e2e-update-tag',
+    });
+    const tagId = extractResult(createResult);
+    if (typeof tagId === 'string') {
+      const result = await callTool(request, sessionId, 'actual_tags_update', {
+        id: tagId,
+        tag: 'mcp-e2e-update-tag-renamed',
+        color: '#112233',
+      });
+      const data = extractResult(result);
+      expect(data?.success).toBeTruthy();
+      console.log('Tag updated');
+    }
+  });
+
+  test('actual_tags_delete - should delete a tag', async ({ request }) => {
+    const createResult = await callTool(request, sessionId, 'actual_tags_create', {
+      tag: 'mcp-e2e-delete-tag',
+    });
+    const tagId = extractResult(createResult);
+    if (typeof tagId === 'string') {
+      const result = await callTool(request, sessionId, 'actual_tags_delete', {
+        id: tagId,
+      });
+      const data = extractResult(result);
+      expect(data?.success).toBeTruthy();
+      console.log('Tag deleted');
     }
   });
 });
