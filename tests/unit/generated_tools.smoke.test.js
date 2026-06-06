@@ -343,8 +343,8 @@ console.log('Running generated tools smoke tests');
         if (typeof res?.success !== 'boolean') shapeErr(`expected success boolean`);
         if (typeof res?.message !== 'string') shapeErr(`expected message string`);
       }
-      // tags_list: createTool wraps array in { result }
-      if (n === 'tags_list') {
+      // tags_list / payees_common_list: createTool wraps array in { result }
+      if (n === 'tags_list' || n === 'payees_common_list') {
         if (!Array.isArray(res?.result)) shapeErr(`expected { result: array }`);
       }
       // tags_create: createTool wraps returned id in { result }

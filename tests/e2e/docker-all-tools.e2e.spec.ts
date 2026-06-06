@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 69 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 70 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests
@@ -15,7 +15,7 @@ import {
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 69 TOOLS', () => {
+test.describe('Docker E2E - ALL 70 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
@@ -331,14 +331,36 @@ test.describe('Docker E2E - ALL 69 TOOLS', () => {
     console.log('✅ Category updated');
   });
 
-  // ==================== PAYEES (5 tools) ====================
+  // ==================== PAYEES (6 tools) ====================
   test('actual_payees_get - should list payees', async ({ request }) => {
-    console.log('👤 Testing actual_payees_get...');
+    console.log('Testing actual_payees_get...');
     const result = await callTool(request, sessionId, 'actual_payees_get');
     const payees = extractResult(result);
-    
+
     expect(Array.isArray(payees)).toBeTruthy();
-    console.log(`✅ Listed ${payees.length} payees`);
+    console.log(`Listed ${payees.length} payees`);
+  });
+
+  test('actual_payees_common_list - should return recent frequent payees or empty array', async ({ request }) => {
+    console.log('Testing actual_payees_common_list...');
+    const result = await callTool(request, sessionId, 'actual_payees_common_list');
+    const payees = extractResult(result);
+
+    // Empty list is a valid success result (no recent activity); both cases must pass.
+    expect(Array.isArray(payees)).toBeTruthy();
+    expect(payees.length).toBeGreaterThanOrEqual(0);
+    expect(payees.length).toBeLessThanOrEqual(10);
+
+    // Verify shape of each entry when results are present
+    for (const p of payees) {
+      expect(typeof p.id).toBe('string');
+      expect(typeof p.name).toBe('string');
+      // transfer_acct is optional
+      if ('transfer_acct' in p && p.transfer_acct !== undefined) {
+        expect(typeof p.transfer_acct).toBe('string');
+      }
+    }
+    console.log(`Common payees returned: ${payees.length} (empty is also valid)`);
   });
 
   test('actual_payees_create - should create payee', async ({ request }) => {

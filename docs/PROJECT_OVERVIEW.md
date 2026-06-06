@@ -5,7 +5,7 @@
 **Status:** Production-ready with ongoing enhancements  
 **Last Updated:** 2026-03-03  
 **Assessment Score:** 88/100 (EXCELLENT)  
-**Tool Count:** 69 MCP tools (verified LibreChat and LobeChat compatible)  
+**Tool Count:** 70 MCP tools (verified LibreChat and LobeChat compatible)  
 **Docker Images:** Available on Docker Hub and GitHub Container Registry
 
 ---
@@ -227,14 +227,15 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **69 tools implemented** (87% of core API coverage)
+- ✅ **70 tools implemented** (87% of core API coverage)
 - ✅ **Tags CRUD**: 4 tools for managing Actual Budget tags (actual_tags_list, create, update, delete)
 - ✅ **Notes**: 2 tools for reading and writing entity notes (actual_notes_get, actual_notes_update)
+- ✅ **Common payees**: actual_payees_common_list returns the top-10 recent non-transfer payees
 - ✅ **LibreChat and LobeChat verified**: all tools loading and functional
 - ✅ **Docker images published** to Docker Hub and GHCR
 - ✅ **CI/CD pipeline**: automated testing and deployment
 - ✅ **Security hardened**: Bearer auth, OIDC, HTTPS, non-root container
-- ✅ **Test coverage**: unit tests (69 tools), Docker Playwright E2E (all 69 tools), live integration suite (69/69 tools)
+- ✅ **Test coverage**: unit tests (70 tools), Docker Playwright E2E (all 70 tools), live integration suite (70/70 tools)
 
 ### Future Goals
 - 🎯 [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md): actionable errors across all tools

@@ -18,6 +18,7 @@ const {
   getCategories: rawGetCategories,
   createCategory: rawCreateCategory,
   getPayees: rawGetPayees,
+  getCommonPayees: rawGetCommonPayees,
   createPayee: rawCreatePayee,
   getBudgetMonths: rawGetBudgetMonths,
   getBudgetMonth: rawGetBudgetMonth,
@@ -1023,6 +1024,12 @@ export async function getPayees(): Promise<components['schemas']['Payee'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.payees.get').catch(() => {});
     return await withConcurrency(() => retry(() => rawGetPayees() as Promise<components['schemas']['Payee'][]>, { retries: 2, backoffMs: 200 }));
+  });
+}
+export async function getCommonPayees(): Promise<any[]> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.payees.commonList').catch(() => {});
+    return await withConcurrency(() => retry(() => rawGetCommonPayees() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function createPayee(payee: components['schemas']['Payee'] | unknown): Promise<string> {
@@ -2107,6 +2114,7 @@ export default {
   getCategories,
   createCategory,
   getPayees,
+  getCommonPayees,
   createPayee,
   getTags,
   createTag,

@@ -33,14 +33,14 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **69 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers 87% of the Actual Budget API.
+- **70 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers 87% of the Actual Budget API.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 69 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 70 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -342,9 +342,9 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 `actual_category_groups_get` · `actual_category_groups_create` · `actual_category_groups_update` · `actual_category_groups_delete`
 
-### Payees (6)
+### Payees (7)
 
-`actual_payees_get` · `actual_payees_create` · `actual_payees_update` · `actual_payees_delete` · `actual_payees_merge` · `actual_payee_rules_get`
+`actual_payees_get` · `actual_payees_common_list` · `actual_payees_create` · `actual_payees_update` · `actual_payees_delete` · `actual_payees_merge` · `actual_payee_rules_get`
 
 ### Tags (4)
 
@@ -647,7 +647,7 @@ Several MCP servers exist for personal finance management. Here's how this proje
 | **Version** | v0.4.26 | v1.11.1 | v0.2.0 | v0.1.0 |
 | **Budget App** | Actual Budget (self-hosted) | Actual Budget (self-hosted) | Actual Budget (self-hosted) | YNAB (cloud, subscription) |
 | **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
-| **Tool Count** | **63** | ~22 | 18 | 9 |
+| **Tool Count** | **70** | ~22 | 18 | 9 |
 | **Setup & Distribution** |||||
 | **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
 | **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
