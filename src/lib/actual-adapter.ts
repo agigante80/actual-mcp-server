@@ -445,6 +445,15 @@ export function _setSkipApiInitForTests(value: boolean): void {
   _skipApiInitForTests = value;
 }
 
+/**
+ * Test-only readback of the active budget for the current requestContext, so a
+ * restart-replay test (#189) can assert the per-principal preference is restored
+ * on a fresh session. NOT part of the package public surface.
+ */
+export function _getActiveBudgetConfigForTests(): BudgetConfig {
+  return getActiveBudgetConfig();
+}
+
 // ----------------------------------------------------------------------------
 // Auth-rate-limit retry — issue #127
 // ----------------------------------------------------------------------------
