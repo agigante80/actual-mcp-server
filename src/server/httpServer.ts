@@ -138,8 +138,18 @@ export async function startHttpServer(
 
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {
-    // OIDC mode: mcp-auth middleware has already validated the JWT and populated req.auth.
-    if (config.AUTH_PROVIDER === 'oidc') return true;
+    // OIDC mode: verify the request principal directly rather than inferring auth
+    // from configuration (#163, OWASP A07). The mcp-auth bearerAuth() middleware
+    // populates req.auth.subject on a verified request; if it is absent the
+    // request was NOT authenticated (middleware skipped/unmounted/null-auth), so
+    // we must reject instead of trusting that "config says OIDC".
+    if (config.AUTH_PROVIDER === 'oidc') {
+      const subject = (req as Request & { auth?: { subject?: string } }).auth?.subject;
+      if (subject) return true;
+      logger.warn(`[OIDC] Rejected request with no verified principal (req.auth.subject missing) from ${req.ip || req.connection.remoteAddress}`);
+      res.status(401).json({ error: 'Unauthorized: OIDC authentication required' });
+      return false;
+    }
 
     // Legacy static Bearer token mode (default).
     // If MCP_SSE_AUTHORIZATION is not configured, allow all requests
