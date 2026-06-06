@@ -30,6 +30,10 @@ console.log('Running generated tools smoke tests');
   apiDefault.getSchedules = async () => [{ id: '00000000-0000-0000-0000-000000000099' }];
   apiDefault.deleteSchedule = async () => {};
   apiDefault.deletePayee = async () => {};
+  apiDefault.getTags = async () => [{ id: '00000000-0000-0000-0000-0000000000aa', tag: 'groceries' }];
+  apiDefault.createTag = async () => 'tag-new';
+  apiDefault.updateTag = async () => {};
+  apiDefault.deleteTag = async () => {};
 
   const toolsIndex = await import('../../dist/src/tools/index.js');
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
@@ -100,6 +104,10 @@ console.log('Running generated tools smoke tests');
     updateSchedule: null,
     deleteSchedule: null,
     createTransfer: { success: true, from_id: '00000000-0000-0000-0000-000000000003', to_id: null },
+    getTags: [{ id: '00000000-0000-0000-0000-0000000000aa', tag: 'groceries' }],
+    createTag: 'tag-new',
+    updateTag: null,
+    deleteTag: null,
     // #141: transferBudgetAmount is the new atomic adapter method.
     transferBudgetAmount: {
       transferred: 5000,
@@ -172,6 +180,9 @@ console.log('Running generated tools smoke tests');
   if (name.includes('schedules_update')) inputExample.id = '00000000-0000-0000-0000-000000000099';
   if (name.includes('schedules_delete')) inputExample.id = '00000000-0000-0000-0000-000000000099';
   if (name.includes('transfers_create')) inputExample.from_account = '11111111-1111-1111-1111-111111111111', inputExample.to_account = '22222222-2222-2222-2222-222222222222', inputExample.amount = 5000, inputExample.date = '2025-01-15';
+  if (name.includes('tags_create')) inputExample.tag = 'groceries';
+  if (name.includes('tags_update')) inputExample.id = '00000000-0000-0000-0000-0000000000aa', inputExample.tag = 'food';
+  if (name.includes('tags_delete')) inputExample.id = '00000000-0000-0000-0000-0000000000aa';
   // server_get_version takes no parameters
 
       // Validate input parsing — only silently skip when no example was provided (tool may have required fields);
@@ -323,6 +334,18 @@ console.log('Running generated tools smoke tests');
       if (n === 'session_close') {
         if (typeof res?.success !== 'boolean') shapeErr(`expected success boolean`);
         if (typeof res?.message !== 'string') shapeErr(`expected message string`);
+      }
+      // tags_list: createTool wraps array in { result }
+      if (n === 'tags_list') {
+        if (!Array.isArray(res?.result)) shapeErr(`expected { result: array }`);
+      }
+      // tags_create: createTool wraps returned id in { result }
+      if (n === 'tags_create') {
+        if (typeof res?.result !== 'string') shapeErr(`expected { result: string id }`);
+      }
+      // tags_update / tags_delete: createTool wraps { success: true } in { result }
+      if (n === 'tags_update' || n === 'tags_delete') {
+        if (res?.result?.success !== true) shapeErr(`expected { result: { success: true } }`);
       }
       // ────────────────────────────────────────────────────────────────────
 

@@ -62,3 +62,7 @@ export { default as transactions_update_batch } from './transactions_update_batc
 export { default as transfers_create } from './transfers_create.js';
 export { default as session_close } from './session_close.js';
 export { default as session_list } from './session_list.js';
+export { default as tags_list } from './tags_list.js';
+export { default as tags_create } from './tags_create.js';
+export { default as tags_update } from './tags_update.js';
+export { default as tags_delete } from './tags_delete.js';

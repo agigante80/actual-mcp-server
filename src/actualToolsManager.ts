@@ -72,6 +72,10 @@ const IMPLEMENTED_TOOLS = [
   'actual_session_list',
   'actual_get_id_by_name',
   'actual_server_get_version',
+  'actual_tags_list',
+  'actual_tags_create',
+  'actual_tags_update',
+  'actual_tags_delete',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names
