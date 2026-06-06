@@ -750,4 +750,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.6.34 | **Tool Count:** 67 (verified LibreChat-compatible)
+**Version:** 0.6.35 | **Tool Count:** 69 (verified LibreChat-compatible)
