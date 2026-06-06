@@ -308,12 +308,12 @@ jobs:
           echo "- **Remaining**: $((100 - CHAR_COUNT))" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 5: Docker Build and Publish (Waits for ALL tests)
+  # Job 5a: Build per-arch images on NATIVE runners (no QEMU), push by digest
   # --------------------------------------------------------------------------
-  docker-publish:
-    name: Build & Publish Docker Images
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+  docker-build:
+    name: Build ${{ matrix.platform }} image
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
     needs: [version, lint, test, docker-e2e, validate-short-description]
     if: |
       always() &&
@@ -325,12 +325,96 @@ jobs:
       github.event.inputs.skip_docker_publish != 'true' &&
       (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' ||
        github.ref == 'refs/heads/development' || startsWith(github.ref, 'refs/tags/'))
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-latest
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: 🐳 Set up QEMU
-        uses: docker/setup-qemu-action@v4
+      - name: 🧮 Prepare per-arch vars
+        run: |
+          platform="${{ matrix.platform }}"
+          echo "PLATFORM_PAIR=${platform//\//-}" >> "$GITHUB_ENV"
+          DOCKER_HUB_IMAGE="${{ env.DOCKER_IMAGE_NAME }}"
+          REPO_NAME="${DOCKER_HUB_IMAGE##*/}"
+          echo "GHCR_IMAGE=ghcr.io/${{ github.repository_owner }}/${REPO_NAME}" >> "$GITHUB_ENV"
+
+      - name: 🐳 Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: 🔐 Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USER }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 🔐 Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 🏗️ Build and push by digest (${{ matrix.platform }})
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: ${{ matrix.platform }}
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+          outputs: |
+            type=image,"name=${{ env.DOCKER_IMAGE_NAME }},${{ env.GHCR_IMAGE }}",push-by-digest=true,name-canonical=true,push=true
+          cache-from: |
+            type=gha,scope=${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=develop-${{ env.PLATFORM_PAIR }}
+            type=gha,scope=main-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}-${{ env.PLATFORM_PAIR }}
+          labels: |
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+
+      - name: 🧾 Export digest
+        run: |
+          mkdir -p "${{ runner.temp }}/digests"
+          digest="${{ steps.build.outputs.digest }}"
+          touch "${{ runner.temp }}/digests/${digest#sha256:}"
+
+      - name: ⬆️ Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-${{ env.PLATFORM_PAIR }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # --------------------------------------------------------------------------
+  # Job 5b: Merge per-arch digests into multi-arch manifests and publish tags.
+  # Keeps the name "docker-publish" so every downstream needs.docker-publish
+  # gate (npm-publish, security-scan, docker-hub-description, deployment-test,
+  # release) keeps gating on the job that produces the published tags.
+  # --------------------------------------------------------------------------
+  docker-publish:
+    name: Build & Publish Docker Images
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [version, docker-build]
+    if: always() && needs.version.result == 'success' && needs.docker-build.result == 'success'
+    steps:
+      - name: ⬇️ Download per-arch digests
+        uses: actions/download-artifact@v4
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digests-*
+          merge-multiple: true
 
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -353,68 +437,103 @@ jobs:
         run: |
           DOCKER_VERSION="${{ needs.version.outputs.docker_version }}"
           DOCKER_HUB_IMAGE="${{ env.DOCKER_IMAGE_NAME }}"
-          # Extract just the repository name (after /) for GHCR
           REPO_NAME="${DOCKER_HUB_IMAGE##*/}"
           GHCR_IMAGE="ghcr.io/${{ github.repository_owner }}/${REPO_NAME}"
-          
-          # Base tags (using Docker-safe version)
-          TAGS="${DOCKER_HUB_IMAGE}:${DOCKER_VERSION},${GHCR_IMAGE}:${DOCKER_VERSION}"
-          
-          # Add branch-specific tags
+
+          # Per-registry tag lists (bare tag refs). Kept separate so each
+          # manifest is assembled from that registry's own pushed digests.
+          HUB_TAGS="${DOCKER_HUB_IMAGE}:${DOCKER_VERSION}"
+          GHCR_TAGS="${GHCR_IMAGE}:${DOCKER_VERSION}"
+
           if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:main,${GHCR_IMAGE}:main"
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:latest,${GHCR_IMAGE}:latest"
+            HUB_TAGS="${HUB_TAGS},${DOCKER_HUB_IMAGE}:main,${DOCKER_HUB_IMAGE}:latest"
+            GHCR_TAGS="${GHCR_TAGS},${GHCR_IMAGE}:main,${GHCR_IMAGE}:latest"
           elif [[ "${{ github.ref }}" == "refs/heads/develop" ]]; then
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:develop,${GHCR_IMAGE}:develop"
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:development,${GHCR_IMAGE}:development"
+            HUB_TAGS="${HUB_TAGS},${DOCKER_HUB_IMAGE}:develop,${DOCKER_HUB_IMAGE}:development"
+            GHCR_TAGS="${GHCR_TAGS},${GHCR_IMAGE}:develop,${GHCR_IMAGE}:development"
           elif [[ "${{ github.ref }}" == "refs/heads/development" ]]; then
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:development,${GHCR_IMAGE}:development"
+            HUB_TAGS="${HUB_TAGS},${DOCKER_HUB_IMAGE}:development"
+            GHCR_TAGS="${GHCR_TAGS},${GHCR_IMAGE}:development"
           fi
-          
+
           # Add latest tag ONLY for tagged releases (e.g., v1.0.0)
-          # NOT for branch builds, even if version is clean semver
           if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:latest,${GHCR_IMAGE}:latest"
+            HUB_TAGS="${HUB_TAGS},${DOCKER_HUB_IMAGE}:latest"
+            GHCR_TAGS="${GHCR_TAGS},${GHCR_IMAGE}:latest"
           fi
-          
+
           # Add custom suffix if provided
           if [[ -n "${{ github.event.inputs.docker_tag_suffix }}" ]]; then
             SUFFIX="${{ github.event.inputs.docker_tag_suffix }}"
-            TAGS="${TAGS},${DOCKER_HUB_IMAGE}:${DOCKER_VERSION}-${SUFFIX},${GHCR_IMAGE}:${DOCKER_VERSION}-${SUFFIX}"
+            HUB_TAGS="${HUB_TAGS},${DOCKER_HUB_IMAGE}:${DOCKER_VERSION}-${SUFFIX}"
+            GHCR_TAGS="${GHCR_TAGS},${GHCR_IMAGE}:${DOCKER_VERSION}-${SUFFIX}"
           fi
-          
-          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-          echo "📦 Docker tags: ${TAGS}"
 
-      - name: 🏗️ Build and push Docker images
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          platforms: ${{ env.DOCKER_PLATFORMS }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          build-args: |
-            VERSION=${{ needs.version.outputs.version }}
-          cache-from: |
-            type=gha,scope=${{ github.ref_name }}
-            type=gha,scope=develop
-            type=gha,scope=main
-          cache-to: type=gha,mode=max,scope=${{ github.ref_name }}
-          labels: |
-            org.opencontainers.image.version=${{ needs.version.outputs.version }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.source=${{ github.repositoryUrl }}
+          echo "hub_tags=${HUB_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_tags=${GHCR_TAGS}" >> "$GITHUB_OUTPUT"
+          echo "hub_image=${DOCKER_HUB_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "ghcr_image=${GHCR_IMAGE}" >> "$GITHUB_OUTPUT"
+          echo "📦 Docker Hub tags: ${HUB_TAGS}"
+          echo "📦 GHCR tags: ${GHCR_TAGS}"
+
+      - name: 🧩 Create and push multi-arch manifests
+        working-directory: ${{ runner.temp }}/digests
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          # Each digest file is a single-arch image digest (sha256 hex, no
+          # prefix), pushed by digest to BOTH registries by the build legs.
+          # The matrix builds exactly two arches, so we must have exactly two
+          # digests. Fail loudly rather than assemble a misleading single-arch
+          # manifest from a partial download (nullglob keeps an empty dir from
+          # turning the glob into a literal "*").
+          digest_files=( * )
+          if [[ ${#digest_files[@]} -ne 2 ]]; then
+            echo "Expected 2 per-arch digests, found ${#digest_files[@]}: ${digest_files[*]:-<none>}" >&2
+            exit 1
+          fi
+
+          hub_targets=()
+          ghcr_targets=()
+          IFS=',' read -ra _hub <<< "${{ steps.meta.outputs.hub_tags }}"
+          IFS=',' read -ra _ghcr <<< "${{ steps.meta.outputs.ghcr_tags }}"
+          for t in "${_hub[@]}"; do hub_targets+=( -t "$t" ); done
+          for t in "${_ghcr[@]}"; do ghcr_targets+=( -t "$t" ); done
+
+          hub_sources=()
+          ghcr_sources=()
+          for f in "${digest_files[@]}"; do
+            hub_sources+=( "${{ steps.meta.outputs.hub_image }}@sha256:${f}" )
+            ghcr_sources+=( "${{ steps.meta.outputs.ghcr_image }}@sha256:${f}" )
+          done
+
+          echo "Creating Docker Hub manifest from: ${hub_sources[*]}"
+          docker buildx imagetools create "${hub_targets[@]}" "${hub_sources[@]}"
+
+          echo "Creating GHCR manifest from: ${ghcr_sources[*]}"
+          docker buildx imagetools create "${ghcr_targets[@]}" "${ghcr_sources[@]}"
+
+      - name: 🔎 Inspect published manifest (assert both arches)
+        run: |
+          set -euo pipefail
+          first_tag="${{ steps.meta.outputs.hub_tags }}"
+          first_tag="${first_tag%%,*}"
+          echo "Inspecting ${first_tag}"
+          docker buildx imagetools inspect "${first_tag}"
 
       - name: 📋 Docker publish summary
         run: |
           echo "### 🐳 Docker Images Published" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Platforms**: \`${{ env.DOCKER_PLATFORMS }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tags**:" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms**: \`${{ env.DOCKER_PLATFORMS }}\` (built natively, no QEMU)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Docker Hub tags**:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "${{ steps.meta.outputs.tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.hub_tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **GHCR tags**:" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.meta.outputs.ghcr_tags }}" | tr ',' '\n' >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
@@ -710,7 +829,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, lint, test, docker-e2e, validate-short-description,
-            docker-publish, npm-publish, security-scan, deployment-test, release]
+            docker-build, docker-publish, npm-publish, security-scan, deployment-test, release]
     if: always()
     steps:
       - name: 📊 Generate pipeline summary
