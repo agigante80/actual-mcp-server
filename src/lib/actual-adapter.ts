@@ -61,7 +61,7 @@ const {
 } = api as any;
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
-import retry from './retry.js';
+import retry, { isRetryableError } from './retry.js';
 import logger from '../logger.js';
 import config from '../config.js';
 import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
@@ -190,18 +190,13 @@ function _hasPooledConnection(sessionId: string | undefined): sessionId is strin
  * actually corrupted but the error pattern doesn't match, the next call's op
  * will surface the same root cause and we'll catch it then.
  */
+// Whether an error is infrastructure-level (drop the pooled connection so the
+// next call re-inits cleanly). This is the SAME class as "retryable", so it
+// delegates to isRetryableError (#177): the pool-drop decision and the retry
+// decision share one pattern list and cannot drift. A consistency test pins
+// this equivalence.
 function _shouldDropPoolOnError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  const msg = err.message || '';
-  return (
-    msg.includes('Authentication failed') ||
-    msg.includes('ECONNRESET') ||
-    msg.includes('ECONNREFUSED') ||
-    msg.includes('socket hang up') ||
-    msg.includes('ETIMEDOUT') ||
-    msg.includes('out of memory') ||
-    msg.includes('ENOMEM')
-  );
+  return isRetryableError(err);
 }
 
 /**
@@ -1010,7 +1005,7 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     });
 
     // API docs say it returns id[], but reality is it can return "ok", array of IDs, or Transaction objects
-    const result = await withConcurrency(() => retry(() => rawAddTransactions(accountId, cleanedTxs, options) as Promise<unknown>, { retries: 2, backoffMs: 200 }));
+    const result = await withConcurrency(() => retry(() => rawAddTransactions(accountId, cleanedTxs, options) as Promise<unknown>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     
     // Handle various return formats
     if (result === 'ok') {
@@ -1035,7 +1030,7 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
 export async function importTransactions(accountId: string | undefined, txs: components['schemas']['TransactionInput'][] | unknown) : Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>{
   observability.incrementToolCall('actual.transactions.import').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawImportTransactions(accountId, txs) as Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>, { retries: 2, backoffMs: 200 }));
+    const raw = await withConcurrency(() => retry(() => rawImportTransactions(accountId, txs) as Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return raw || { added: [], updated: [], errors: [] };
   });
 }
@@ -1082,7 +1077,7 @@ export async function createTransfer(params: {
     };
 
     await withConcurrency(() =>
-      retry(() => rawAddTransactions(params.from_account, [sourceTx], { runTransfers: true }) as Promise<unknown>, { retries: 2, backoffMs: 200 })
+      retry(() => rawAddTransactions(params.from_account, [sourceTx], { runTransfers: true }) as Promise<unknown>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
     );
 
     return { success: true as const };
@@ -1129,7 +1124,7 @@ export async function createCategory(category: components['schemas']['Category']
   observability.incrementToolCall('actual.categories.create').catch(() => {});
   return queueWriteOperation(async () => {
     try {
-      const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200 }));
+      const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
       return normalizeToId(raw);
     } catch (error) {
       logger.error('[CREATE CATEGORY] Error creating category:', error);
@@ -1152,7 +1147,7 @@ export async function getPayees(): Promise<components['schemas']['Payee'][]> {
 export async function createPayee(payee: components['schemas']['Payee'] | unknown): Promise<string> {
   observability.incrementToolCall('actual.payees.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreatePayee(payee) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
+    const raw = await withConcurrency(() => retry(() => rawCreatePayee(payee) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return normalizeToId(raw);
   });
 }
@@ -1181,7 +1176,7 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
         `Category "${categoryId}" not found. Use actual_categories_get to list available categories.`
       );
     }
-    const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200 }));
+    const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return result;
   });
 }
@@ -1252,7 +1247,7 @@ export async function transferBudgetAmount(
 export async function createAccount(account: components['schemas']['Account'] | unknown, initialBalance?: number): Promise<string> {
   observability.incrementToolCall('actual.accounts.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreateAccount(account, initialBalance) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
+    const raw = await withConcurrency(() => retry(() => rawCreateAccount(account, initialBalance) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     // NO NEED for syncToServer() - shutdown() will handle persistence
     return id;
@@ -1261,7 +1256,7 @@ export async function createAccount(account: components['schemas']['Account'] | 
 export async function updateAccount(id: string, fields: Partial<components['schemas']['Account']> | unknown): Promise<void | null> {
   observability.incrementToolCall('actual.accounts.update').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdateAccount(id, fields) as Promise<void | null>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateAccount(id, fields) as Promise<void | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return null;
   });
 }
@@ -1304,7 +1299,7 @@ export async function updateTransaction(id: string, fields: Partial<components['
   observability.incrementToolCall('actual.transactions.update').catch(() => {});
   // Use write queue to batch concurrent updates in a single budget session
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
 export async function updateTransactionBatch(
@@ -1320,7 +1315,7 @@ export async function updateTransactionBatch(
     for (const { id, fields } of updates) {
       try {
         await withConcurrency(() =>
-          retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200 })
+          retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })
         );
         succeeded.push({ id });
       } catch (err) {
@@ -1343,7 +1338,7 @@ export async function deleteTransaction(id: string): Promise<void> {
 export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.categories.update').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
 export async function deleteCategory(id: string): Promise<void> {
@@ -1382,7 +1377,7 @@ export async function updatePayee(id: string, fields: Partial<components['schema
 
     // Update the payee's direct fields (name, transfer_acct, etc.)
     if (Object.keys(directFields).length > 0) {
-      await withConcurrency(() => retry(() => rawUpdatePayee(id, directFields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+      await withConcurrency(() => retry(() => rawUpdatePayee(id, directFields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     }
 
     // Handle category via the rules mechanism (same approach Actual Budget uses internally)
@@ -1410,7 +1405,7 @@ export async function updatePayee(id: string, fields: Partial<components['schema
               a.op === 'set' && a.field === 'category' ? { ...a, value: categoryValue } : a
             ),
           };
-          await withConcurrency(() => retry(() => rawUpdateRule(updatedRule) as Promise<void>, { retries: 0, backoffMs: 200 }));
+          await withConcurrency(() => retry(() => rawUpdateRule(updatedRule) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
           logger.debug(`[UPDATE PAYEE] Updated default category rule for payee ${id} to category ${categoryValue}`);
         }
       } else if (categoryValue !== null) {
@@ -1421,7 +1416,7 @@ export async function updatePayee(id: string, fields: Partial<components['schema
           conditions: [{ op: 'is', field: 'payee', value: id }],
           actions: [{ op: 'set', field: 'category', value: categoryValue }],
         };
-        await withConcurrency(() => retry(() => rawCreateRule(newRule) as Promise<unknown>, { retries: 0, backoffMs: 200 }));
+        await withConcurrency(() => retry(() => rawCreateRule(newRule) as Promise<unknown>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
         logger.debug(`[UPDATE PAYEE] Created default category rule for payee ${id} with category ${categoryValue}`);
       }
       // category=null + no existing rule = no-op (already clear)
@@ -1456,7 +1451,7 @@ export async function getRules(): Promise<unknown[]> {
 export async function createRule(rule: unknown): Promise<string> {
   observability.incrementToolCall('actual.rules.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
+    const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
   });
@@ -1484,7 +1479,7 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
     
     logger.debug(`[UPDATE RULE] Updating rule ${id} with merged fields: ${JSON.stringify(rule)}`);
     
-    await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     logger.debug(`[UPDATE RULE] Update completed for rule ${id}`);
   });
 }
@@ -1506,7 +1501,7 @@ export async function createSchedule(schedule: unknown): Promise<string> {
   return queueWriteOperation(async () => {
     // Note: rawCreateSchedule(schedule) passes the external schedule object directly.
     // Do NOT wrap in { schedule: ... } — that would double-nest and break date parsing.
-    const raw = await withConcurrency(() => retry(() => rawCreateSchedule(schedule as Record<string, unknown>) as Promise<string>, { retries: 0, backoffMs: 200 }));
+    const raw = await withConcurrency(() => retry(() => rawCreateSchedule(schedule as Record<string, unknown>) as Promise<string>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
   });
@@ -1514,7 +1509,7 @@ export async function createSchedule(schedule: unknown): Promise<string> {
 export async function updateSchedule(id: string, fields: unknown, resetNextDate?: boolean): Promise<void> {
   observability.incrementToolCall('actual.schedules.update').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdateSchedule(id, fields as Record<string, unknown>, resetNextDate) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateSchedule(id, fields as Record<string, unknown>, resetNextDate) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
 export async function deleteSchedule(id: string): Promise<void> {
@@ -1526,7 +1521,7 @@ export async function deleteSchedule(id: string): Promise<void> {
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
   observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
 export async function closeAccount(id: string): Promise<void> {
@@ -1552,7 +1547,7 @@ export async function getCategoryGroups(): Promise<unknown[]> {
 export async function createCategoryGroup(group: unknown): Promise<string> {
   observability.incrementToolCall('actual.category_groups.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreateCategoryGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200 }));
+    const raw = await withConcurrency(() => retry(() => rawCreateCategoryGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
   });
@@ -1560,7 +1555,7 @@ export async function createCategoryGroup(group: unknown): Promise<string> {
 export async function updateCategoryGroup(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.category_groups.update').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
 export async function deleteCategoryGroup(id: string): Promise<void> {
