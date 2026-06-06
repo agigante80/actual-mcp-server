@@ -385,7 +385,7 @@ npm run test:coverage
 **Stages**:
 1. **Lint & Type Check** (3 min)
    - `tsc` - TypeScript compilation
-   - `npm run check:coverage` - Tool coverage verification
+   - `npm run check:coverage` - API coverage auditor: classifies every @actual-app/api method as covered (mapped to a tool), intentionally internal (lifecycle), or a genuine gap, sourcing the tool set from IMPLEMENTED_TOOLS so it cannot drift. Guarded by `tests/unit/check_coverage.test.js` (#187).
    - `npm audit` - Security audit (non-blocking)
 
 2. **Test Suite** (3 min)
