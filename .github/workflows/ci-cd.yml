@@ -125,6 +125,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: version
+    # Least privilege (#170): this job installs actionlint at runtime, so scope it
+    # to read-only. Even if the download were compromised it cannot push to the
+    # repo or packages (the top-level permissions grant write; the publish jobs
+    # re-grant what they need).
+    permissions:
+      contents: read
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
