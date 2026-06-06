@@ -511,14 +511,18 @@ export async function startHttpServer(
             return;
           }
         
-          // For other methods, reject the request and tell client to re-initialize
+          // For other methods, reject with the MCP spec signal for a gone
+          // session: HTTP 404 + JSON-RPC -32001 "Session not found". This tells a
+          // spec-compliant client to start a new session (re-initialize without an
+          // mcp-session-id header) instead of treating it as a generic error.
+          // Previously this returned a non-spec 400 / -32000 (#188).
           logger.warn(`[SESSION] Session ${sessionId} not found (method: ${method}). Client must re-initialize.`);
-          res.status(400).json({
+          res.status(404).json({
             jsonrpc: '2.0',
             id: payload?.id ?? null,
-            error: { 
-              code: -32000, 
-              message: 'Session expired or invalid. Please re-initialize by calling initialize without mcp-session-id header.' 
+            error: {
+              code: -32001,
+              message: 'Session not found. Please re-initialize by calling initialize without mcp-session-id header.'
             },
           });
           return;
