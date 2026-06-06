@@ -69,8 +69,16 @@ export async function startHttpServer(
         new URL(`${config.OIDC_ISSUER}/.well-known/jwks`)
       );
       const customJwtVerify = async (token: string) => {
+        // Enforce the audience claim (#160, OWASP A07). Without it, any
+        // signature-valid token from the trusted issuer is accepted, so a token
+        // minted for a different relying party in a shared IdP tenant can be
+        // replayed against this server. OIDC_RESOURCE is the client-id the IdP
+        // puts in `aud` (Casdoor sets aud=clientId) and is required in OIDC mode,
+        // so it is always present here; the spread is defensive. jose throws
+        // ERR_JWT_CLAIM_VALIDATION_FAILED on a missing or mismatched aud.
         const { payload } = await jwtVerify(token, jwks, {
           issuer: config.OIDC_ISSUER,
+          ...(config.OIDC_RESOURCE ? { audience: config.OIDC_RESOURCE } : {}),
         });
         const rawAud = payload.aud;
         const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
@@ -90,7 +98,8 @@ export async function startHttpServer(
         httpPath,
         mcpAuth.bearerAuth(customJwtVerify, {
           resource: config.OIDC_RESOURCE,
-          // audience intentionally omitted: Casdoor sets aud=clientId (not the resource URL)
+          // Audience (aud=clientId) is enforced inside customJwtVerify via jose's
+          // jwtVerify audience option (#160), not here.
           requiredScopes,
           showErrorDetails: process.env.NODE_ENV !== 'production',
         }),
