@@ -140,12 +140,38 @@ When validation and review are both clean:
 2. Bump the patch version: `npm run version:bump -- patch`. It edits VERSION,
    package.json, and the doc markers (never edit those markers by hand), and
    prints the git commands. Commit the bump as
-   `chore(release): bump version to X.Y.Z`.
+   `chore(release): bump version to X.Y.Z`. (CI-only or dev-dependency-only
+   changes do not bump the product version; say so in the report.)
 3. `git push origin develop`.
 
+### Phase 8: Confirm CI is green (close the loop)
+
+Local validation is NOT CI validation. The GitHub Actions pipeline runs steps
+the local suite does not (workflow linting, multi-arch docker builds, the
+docker-e2e tool-count check) and runs in a different environment (different Node,
+different system tools such as `shellcheck`), so green-local can still be red-CI.
+This phase exists because a real run once pushed a green-local change that failed
+CI on every push and it was not noticed for a whole batch.
+
+After the push, find the CI run for the pushed commit and wait for it to finish:
+
+```
+git rev-parse HEAD                       # the pushed SHA
+gh run list --branch develop --limit 3   # find the CI/CD Pipeline run for that SHA
+gh run view <run-id>                      # poll until status is completed
+```
+
+- If the run concludes **success**, the ticket is done.
+- If any job fails, treat it as a Phase 5 finding: read `gh run view <id> --log-failed`,
+  then fix inline if in-scope and low-risk (re-validate, re-push, re-confirm CI),
+  or spin off a gate-ready ticket for an out-of-scope failure. A red CI run is NOT
+  a completed ticket, even when every local gate passed. Reproduce the failing CI
+  step locally with the SAME tool versions CI uses before claiming a fix.
+
 Stop here. Do not merge to `main`, do not tag, do not release. Report the commit
-hashes, the new version, and any follow-up tickets created (with their numbers
-and whether they were auto-implemented or left open).
+hashes, the new version, the CI run conclusion (with the run id), and any
+follow-up tickets created (with their numbers and whether they were
+auto-implemented or left open).
 
 ## Guardrails
 
@@ -161,6 +187,10 @@ and whether they were auto-implemented or left open).
   a cap stops the run with a report, it does not spin.
 - **Honest reporting.** If a phase fails or is skipped, say so with the evidence.
   Never claim green without the command output.
+- **A ticket is not done until CI is green.** Local validation passing is
+  necessary but not sufficient; always confirm the GitHub Actions run for the
+  pushed commit concluded `success` (Phase 8). Never report a ticket complete on
+  a red or unchecked CI run.
 
 ## Failure and resumption
 
