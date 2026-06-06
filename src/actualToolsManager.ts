@@ -76,6 +76,8 @@ const IMPLEMENTED_TOOLS = [
   'actual_tags_create',
   'actual_tags_update',
   'actual_tags_delete',
+  'actual_notes_get',
+  'actual_notes_update',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names

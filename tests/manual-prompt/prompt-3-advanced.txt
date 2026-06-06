@@ -18,6 +18,7 @@ WHAT IT TESTS
   Phase 7  — Transaction Summaries   (2 tools)
   Phase 8  — Budgets                 (11 tools)
   Phase 9  — Advanced Query & Sync   (2 tools)
+  Phase 9b: Notes                   (2 tools)
   Phase 10 — Session Management      (2 tools)
   Phase 11 — Concurrency             (optional, skipped by default)
   Phase 12 — Full Cleanup            (non-blocking)
@@ -133,6 +134,23 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 
 ---
 
+**Phase 9b — Notes (2 tools):**
+
+- actual_notes_update
+  Input: { id: "budget-2026-01", note: "#template 250 MCP-Notes-{TS}" }
+  Positive: expect success=true, id="budget-2026-01"
+  Negative: call with id="not-a-real-entity-MCP", note="x"
+    Expect: error field present mentioning entity not found
+
+- actual_notes_get
+  Input: { id: "budget-2026-01" }
+  Positive: expect found=true, note contains "MCP-Notes-{TS}"
+  Then call actual_notes_update with note="" to clear (cleanup)
+  Negative: call with id="budget-1970-01" (very old month, likely no note)
+    Expect: found=false with a clear message (no error thrown)
+
+---
+
 **Phase 10 — Session Management (2 tools):**
 
 - actual_session_list
@@ -200,11 +218,12 @@ PROMPT 3 (Advanced):
   Phase 7  Transaction Summaries:     X / 2
   Phase 8  Budgets:                   X / 11
   Phase 9  Query & Sync:              X / 2
+  Phase 9b Notes:                      X / 2
   Phase 10 Session Management:        X / 2
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 62
+  Total Tools Tested:   X / 64
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

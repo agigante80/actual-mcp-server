@@ -34,6 +34,8 @@ console.log('Running generated tools smoke tests');
   apiDefault.createTag = async () => 'tag-new';
   apiDefault.updateTag = async () => {};
   apiDefault.deleteTag = async () => {};
+  apiDefault.getNote = async () => ({ id: '00000000-0000-0000-0000-0000000000ab', note: 'hi' });
+  apiDefault.updateNote = async () => {};
 
   const toolsIndex = await import('../../dist/src/tools/index.js');
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
@@ -108,6 +110,8 @@ console.log('Running generated tools smoke tests');
     createTag: 'tag-new',
     updateTag: null,
     deleteTag: null,
+    getNote: { id: '00000000-0000-0000-0000-0000000000ab', note: 'hi' },
+    updateNote: null,
     // #141: transferBudgetAmount is the new atomic adapter method.
     transferBudgetAmount: {
       transferred: 5000,
@@ -183,6 +187,10 @@ console.log('Running generated tools smoke tests');
   if (name.includes('tags_create')) inputExample.tag = 'groceries';
   if (name.includes('tags_update')) inputExample.id = '00000000-0000-0000-0000-0000000000aa', inputExample.tag = 'food';
   if (name.includes('tags_delete')) inputExample.id = '00000000-0000-0000-0000-0000000000aa';
+  if (name.includes('notes_get')) inputExample.id = '00000000-0000-0000-0000-0000000000ab';
+  // notes_update: use a budget-YYYY-MM id to bypass the entity-lookup guard
+  // (the smoke test stubs return empty entity lists, so a UUID would fail the guard)
+  if (name.includes('notes_update')) inputExample.id = 'budget-2026-01', inputExample.note = '#template 250';
   // server_get_version takes no parameters
 
       // Validate input parsing — only silently skip when no example was provided (tool may have required fields);
@@ -346,6 +354,21 @@ console.log('Running generated tools smoke tests');
       // tags_update / tags_delete: createTool wraps { success: true } in { result }
       if (n === 'tags_update' || n === 'tags_delete') {
         if (res?.result?.success !== true) shapeErr(`expected { result: { success: true } }`);
+      }
+      // notes_get: createTool wraps the note result in { result }
+      if (n === 'notes_get') {
+        if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
+        const r = res.result;
+        if (typeof r?.found !== 'boolean') shapeErr(`expected result.found to be boolean`);
+        if (typeof r?.id !== 'string') shapeErr(`expected result.id to be a string`);
+      }
+      // notes_update: createTool wraps the result in { result }
+      if (n === 'notes_update') {
+        if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
+        const r = res.result;
+        if (r?.success !== true) shapeErr(`expected result.success=true`);
+        if (typeof r?.id !== 'string') shapeErr(`expected result.id to be a string`);
+        if (typeof r?.cleared !== 'boolean') shapeErr(`expected result.cleared to be boolean`);
       }
       // ────────────────────────────────────────────────────────────────────
 
