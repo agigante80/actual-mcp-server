@@ -343,6 +343,11 @@ export async function advancedTests(client, context, opts = {}) {
     { query: "SELECT id FROM transactions WHERE amount = 1 OR amount < 0",                                     shouldPass: false, label: "OR rejected" },
     { query: "SELECT id FROM transactions WHERE notes REGEXP '^x'",                                            shouldPass: false, label: "REGEXP rejected" },
     { query: "SELECT id FROM transactions WHERE amount NOT IN (1, 2)",                                         shouldPass: false, label: "NOT IN rejected" },
+    // #162 read-only gate: writes / schema changes / stacked statements rejected
+    { query: "UPDATE transactions SET notes = 'x'",                                                            shouldPass: false, label: "UPDATE rejected (#162)" },
+    { query: "DELETE FROM transactions",                                                                       shouldPass: false, label: "DELETE rejected (#162)" },
+    { query: "DROP TABLE transactions",                                                                        shouldPass: false, label: "DROP rejected (#162)" },
+    { query: "SELECT id FROM transactions LIMIT 1; DROP TABLE transactions",                                   shouldPass: false, label: "stacked statement rejected (#162)" },
   ];
   let qvPassed = 0, qvFailed = 0;
   for (const { query, shouldPass, label } of queryValidationTests) {
