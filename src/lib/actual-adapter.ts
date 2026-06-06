@@ -446,91 +446,16 @@ export function _setSkipApiInitForTests(value: boolean): void {
 // hold the API mutex (withApiLock) and starve other operations.
 // ----------------------------------------------------------------------------
 
-let authRetryCount = 0;          // monotonic, observability
-let authRetryFailureCount = 0;   // increments only when retry budget exhausted
-
-// The auth-rate-limit path uses a deliberately LARGER backoff than the generic
-// retry helper because Actual Budget's auth rate-limiter operates on a multi-
-// second sliding window, not a per-request burst. The generic 200ms base
-// would exhaust within 1.4s — well inside the upstream's window.
-//
-// Empirically (2026-05-06, #127):
-//   - 200ms base = 1.4s total: too short, every retry hits the throttle.
-//   - 2000ms base = 14s total: insufficient under heavy auth pressure
-//     (e.g. 10 rapid logins before a tool call still throttle 14s+).
-//   - 5000ms base = 5s + 10s + 10s = 25s total (each step capped by
-//     MAX_RETRY_DELAY_MS): clears the rate-limit window in light-pressure
-//     scenarios (3 rapid logins) without holding the API mutex unreasonably
-//     long.
-//
-// Beyond 25s, blocking the API mutex starts to harm tail latency for
-// unrelated tool calls. The proper long-term fix for sustained-pressure
-// scenarios is session reuse (avoid init+shutdown per op) — out of scope for
-// this ticket; tracked as a follow-up.
-const AUTH_RETRY_BASE_BACKOFF_MS = 5000;
-
-export function isRetryableAuthError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
-  return (
-    err.message.includes('Authentication failed: too-many-requests') ||
-    err.message.includes('Authentication failed: network-failure')
-  );
-}
-
-/**
- * Wrap an operation with retry-on-rate-limit. Used to wrap api.init() so
- * transient too-many-requests errors are absorbed transparently. The retry
- * budget is capped at DEFAULT_RETRY_ATTEMPTS (3) attempts and total wallclock
- * is bounded by MAX_RETRY_DELAY_MS via exponential backoff.
- *
- * Test-friendly: opts.maxRetries / opts.baseBackoffMs override the defaults
- * so unit tests can run fast.
- *
- * Log hygiene: this function never logs the upstream URL, password, or any
- * config-derived value — only the error class and the Actual error code
- * (extracted from the message) plus the attempt counter.
- */
-export async function withAuthRetry<T>(
-  operation: () => Promise<T>,
-  opts?: { maxRetries?: number; baseBackoffMs?: number },
-): Promise<T> {
-  const maxRetries = opts?.maxRetries ?? DEFAULT_RETRY_ATTEMPTS;
-  const baseBackoffMs = opts?.baseBackoffMs ?? AUTH_RETRY_BASE_BACKOFF_MS;
-  let attempt = 0;
-
-  while (true) {
-    try {
-      return await operation();
-    } catch (err) {
-      if (!isRetryableAuthError(err)) throw err;
-      attempt++;
-      if (attempt > maxRetries) {
-        // Budget exhausted: log + bump failure counter, but do NOT bump
-        // authRetryCount — that counter measures successful retry-and-sleep
-        // cycles, not failed final attempts.
-        authRetryFailureCount++;
-        const code = (err instanceof Error ? err.message.match(/Authentication failed: (\S+)/)?.[1] : null) || 'unknown';
-        logger.error(`[ADAPTER] Auth retry exhausted after ${maxRetries} retries (last code: ${code})`);
-        throw err;
-      }
-      // We're going to retry — count it and sleep with exponential backoff.
-      authRetryCount++;
-      const delay = Math.min(baseBackoffMs * Math.pow(2, attempt - 1), MAX_RETRY_DELAY_MS);
-      const code = (err instanceof Error ? err.message.match(/Authentication failed: (\S+)/)?.[1] : null) || 'unknown';
-      logger.debug(`[ADAPTER] Auth retry ${attempt}/${maxRetries} (code: ${code}) after ${delay}ms`);
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-}
-
-/**
- * Test-only: reset the auth retry observability counters. NOT exported via
- * the package public surface — only used by unit tests.
- */
-export function _resetAuthRetryCountersForTests(): void {
-  authRetryCount = 0;
-  authRetryFailureCount = 0;
-}
+// Auth-rate-limit retry subsystem extracted to ./actual-adapter/auth-retry.ts
+// (#166). Imported for internal use (wrapping api.init, getConcurrencyState)
+// and re-exported so the public surface and importers are unchanged.
+import {
+  isRetryableAuthError,
+  withAuthRetry,
+  _resetAuthRetryCountersForTests,
+  getAuthRetryCounts,
+} from './actual-adapter/auth-retry.js';
+export { isRetryableAuthError, withAuthRetry, _resetAuthRetryCountersForTests };
 
 /**
  * Initialize Actual API - based on s-stefanov/actual-mcp pattern
@@ -631,14 +556,11 @@ async function shutdownActualApi(): Promise<void> {
 
 import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, DEFAULT_RETRY_ATTEMPTS, MAX_RETRY_DELAY_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
-/**
- * Very small concurrency limiter for adapter calls. This prevents bursts from
- * overloading the actual server. It's intentionally tiny and in-memory; replace
- * with Bottleneck or p-queue for production.
- */
-let MAX_CONCURRENCY = parseInt(process.env.ACTUAL_API_CONCURRENCY || String(DEFAULT_CONCURRENCY_LIMIT), 10);
-let running = 0;
-const queue: Array<() => void> = [];
+// Concurrency limiter extracted to ./actual-adapter/concurrency.ts (#166).
+// Imported for internal use (every method wraps its raw call in withConcurrency)
+// and setMaxConcurrency is re-exported.
+import { withConcurrency, setMaxConcurrency, getConcurrencySnapshot } from './actual-adapter/concurrency.js';
+export { setMaxConcurrency };
 
 /**
  * Write operation queue with budget session management
@@ -835,56 +757,16 @@ export async function withWriteSession<T>(fn: () => Promise<T>): Promise<T> {
   return queueWriteOperation(fn);
 }
 
-function processQueue() {
-  if (running >= MAX_CONCURRENCY) return;
-  const next = queue.shift();
-  if (!next) return;
-  running++;
-  try {
-    next();
-  } catch (e) {
-    // next() will manage its own promise resolution
-    running--;
-    processQueue();
-  }
-}
-
-function withConcurrency<T>(fn: () => Promise<T>): Promise<T> {
-  if (running < MAX_CONCURRENCY) {
-    running++;
-    return fn().finally(() => {
-      running--;
-      processQueue();
-    });
-  }
-  return new Promise((resolve, reject) => {
-    queue.push(async () => {
-      try {
-        const r = await fn();
-        resolve(r);
-      } catch (err) {
-        reject(err);
-      } finally {
-        running--;
-        processQueue();
-      }
-    });
-  });
-}
-
 // Expose some helpers for testing concurrency
 export function getConcurrencyState() {
   return {
-    running,
-    queueLength: queue.length,
-    maxConcurrency: MAX_CONCURRENCY,
+    ...getConcurrencySnapshot(),
     // Auth-retry observability — issue #127. authRetries is monotonic over the
     // process lifetime; authRetryFailures only increments when retry budget
     // exhausted. A jump in authRetries without a matching jump in
     // authRetryFailures means the retry-with-backoff is absorbing rate-limit
     // pressure (healthy). Both jumping = upstream genuinely overloaded.
-    authRetries: authRetryCount,
-    authRetryFailures: authRetryFailureCount,
+    ...getAuthRetryCounts(),
     // Pool-cooperation observability — issue #134. connectionReuses increments
     // every time withActualApi reused an existing per-session pool connection
     // instead of running its own init+shutdown cycle. Pre-#134 this was
@@ -924,10 +806,6 @@ async function syncToServer(): Promise<void> {
   }
 }
 
-export function setMaxConcurrency(n: number) {
-  MAX_CONCURRENCY = n;
-}
-
 /**
  * Wrap a raw function with the standard adapter retry + concurrency behavior.
  * Useful for tests that want to exercise retry behavior without calling the real raw methods.
@@ -941,39 +819,10 @@ export function callWithRetry<T>(fn: () => Promise<T>, opts?: { retries?: number
 export const notifications = new EventEmitter();
 
 // --- Normalization helpers -------------------------------------------------
-export function normalizeToTransactionArray(raw: unknown): components['schemas']['Transaction'][] {
-  if (!raw) return [];
-  // If already an array of transactions
-  if (Array.isArray(raw) && (raw as unknown[]).every(r => typeof r === 'object')) return raw as components['schemas']['Transaction'][];
-  // If a single transaction object, wrap it
-  if (typeof raw === 'object' && raw !== null && 'id' in (raw as Record<string, unknown>)) return [raw as components['schemas']['Transaction']];
-  // If array of ids returned, convert to minimal Transaction objects
-  if (Array.isArray(raw) && (raw as unknown[]).every(r => typeof r === 'string')) {
-    return (raw as string[]).map(id => ({ id } as components['schemas']['Transaction']));
-  }
-  // Fallback: try to coerce
-  return Array.isArray(raw) ? (raw as components['schemas']['Transaction'][]) : [];
-}
-
-export function normalizeToId(raw: unknown): string {
-  if (typeof raw === 'string') return raw;
-  if (raw && typeof raw === 'object' && 'id' in (raw as Record<string, unknown>)) {
-    const idVal = (raw as Record<string, unknown>)['id'];
-    if (typeof idVal === 'string') return idVal;
-  }
-  if (Array.isArray(raw) && raw.length > 0 && typeof raw[0] === 'string') return raw[0] as string;
-  return String(raw ?? '');
-}
-
-export function normalizeImportResult(raw: unknown): { added?: string[]; updated?: string[]; errors?: string[] } {
-  if (!raw || typeof raw !== 'object') return { added: [], updated: [], errors: [] };
-  const r = raw as Record<string, unknown>;
-  return {
-    added: Array.isArray(r.added) ? (r.added as string[]) : [],
-    updated: Array.isArray(r.updated) ? (r.updated as string[]) : [],
-    errors: Array.isArray(r.errors) ? (r.errors as string[]) : [],
-  };
-}
+// Extracted to ./actual-adapter/normalize.ts (#166). Imported for internal use
+// and re-exported so the public surface and external importers are unchanged.
+import { normalizeToTransactionArray, normalizeToId, normalizeImportResult } from './actual-adapter/normalize.js';
+export { normalizeToTransactionArray, normalizeToId, normalizeImportResult };
 // ---------------------------------------------------------------------------
 
 export async function getAccounts(): Promise<components['schemas']['Account'][]> {
@@ -1787,122 +1636,10 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
   }
 }
 
-// Helper function to parse WHERE clause conditions.
-// Exported so it can be unit-tested directly.
-// Strip a single pair of surrounding quotes from a SQL value literal.
-function _stripWhereQuotes(s: string): string {
-  return s.trim().replace(/^['"]|['"]$/g, '');
-}
-
-// Coerce a SQL value literal to a number when it looks numeric, else keep the
-// (unquoted) string. Used for IN lists and comparison operands. Empty stays a
-// string so an empty literal is not silently turned into 0.
-function _coerceWhereValue(s: string): string | number {
-  const v = _stripWhereQuotes(s);
-  if (v === '') return v;
-  const n = Number(v);
-  return isNaN(n) ? v : n;
-}
-
-export function parseWhereClause(query: any, whereClause: string): any {
-  // OR is not supported. Detect it up front and fail loudly. Without this guard
-  // a clause like `amount = 100 OR amount < 0` is left as a single fragment by
-  // the AND-splitter, and the comparison regex's greedy value capture swallows
-  // `100 OR amount < 0` into the operand, running a silently-wrong filter rather
-  // than erroring. That silent mishandling is exactly what #178 set out to stop.
-  // This shares the AND-splitter's quote-naive simplicity: an " OR " inside a
-  // quoted value is a known limitation, the same as " AND ".
-  if (/\sOR\s/i.test(whereClause)) {
-    throw new Error(
-      `Unsupported WHERE condition: OR is not supported. ` +
-      `Supported operators: =, !=, >, >=, <, <=, IN (...), LIKE, NOT LIKE, IS NULL, IS NOT NULL. ` +
-      `Combine conditions with AND only.`,
-    );
-  }
-
-  // Split by AND. This is a simple parser: it does not handle OR or nested /
-  // parenthesised conditions (see the unsupported-operator throw below).
-  const conditions = whereClause.split(/\s+AND\s+/i);
-
-  for (const condition of conditions) {
-    const trimmedCondition = condition.trim();
-    if (!trimmedCondition) continue;
-
-    // IS NULL / IS NOT NULL: lets callers find unmerged rows (e.g. imported_payee
-    // IS NULL). ActualQL treats `field: null` as IS NULL and `$ne: null` as IS NOT NULL.
-    const nullMatch = trimmedCondition.match(/^([\w.]+)\s+IS\s+(NOT\s+)?NULL$/i);
-    if (nullMatch) {
-      const [, field, not] = nullMatch;
-      query = not
-        ? query.filter({ [field]: { $ne: null } })
-        : query.filter({ [field]: null });
-      continue;
-    }
-
-    // NOT LIKE (checked before LIKE so the longer keyword wins).
-    const notLikeMatch = trimmedCondition.match(/^([\w.]+)\s+NOT\s+LIKE\s+(.+)$/i);
-    if (notLikeMatch) {
-      const [, field, valueStr] = notLikeMatch;
-      query = query.filter({ [field]: { $notlike: _stripWhereQuotes(valueStr) } });
-      continue;
-    }
-
-    // LIKE: pattern match. ActualQL's $like runs through NORMALISE + UNICODE_LIKE,
-    // so it is case-insensitive and accent-insensitive. Use % as the wildcard,
-    // e.g. imported_payee LIKE '%amazon%'.
-    const likeMatch = trimmedCondition.match(/^([\w.]+)\s+LIKE\s+(.+)$/i);
-    if (likeMatch) {
-      const [, field, valueStr] = likeMatch;
-      query = query.filter({ [field]: { $like: _stripWhereQuotes(valueStr) } });
-      continue;
-    }
-
-    // IN clause: field IN (value1, value2, ...)
-    // [\w.]+ matches both simple fields (amount) and joined fields (category.name)
-    const inMatch = trimmedCondition.match(/^([\w.]+)\s+IN\s+\((.+)\)$/i);
-    if (inMatch) {
-      const [, field, valuesStr] = inMatch;
-      const values = valuesStr.split(',').map(_coerceWhereValue);
-      query = query.filter({ [field]: { $oneof: values } });
-      continue;
-    }
-
-    // Comparison operators: field >= value, field = value, etc.
-    // [\w.]+ matches both simple fields (amount) and joined fields (category.name, payee.name)
-    const compMatch = trimmedCondition.match(/^([\w.]+)\s*(>=|<=|>|<|=|!=)\s*(.+)$/);
-    if (compMatch) {
-      const [, field, operator, valueStr] = compMatch;
-      const operatorMap: { [key: string]: string } = {
-        '>=': '$gte',
-        '<=': '$lte',
-        '>': '$gt',
-        '<': '$lt',
-        '=': '$eq',
-        '!=': '$ne',
-      };
-      const actualOp = operatorMap[operator];
-      const finalValue = _coerceWhereValue(valueStr);
-      if (actualOp === '$eq') {
-        // Simple equality can use the direct field: value shorthand.
-        query = query.filter({ [field]: finalValue });
-      } else {
-        query = query.filter({ [field]: { [actualOp]: finalValue } });
-      }
-      continue;
-    }
-
-    // Nothing matched. Refuse to silently drop the condition: dropping it would
-    // run the query UNFILTERED and hand back misleading "matches everything"
-    // results. Fail loudly with an actionable error instead. See #178.
-    throw new Error(
-      `Unsupported WHERE condition: "${trimmedCondition}". ` +
-      `Supported operators: =, !=, >, >=, <, <=, IN (...), LIKE, NOT LIKE, IS NULL, IS NOT NULL. ` +
-      `OR, REGEXP, NOT IN, and parenthesised groups are not yet supported.`,
-    );
-  }
-
-  return query;
-}
+// WHERE-clause translation extracted to ./actual-adapter/query.ts (#166).
+// Imported for internal use by runQuery and re-exported (unit-tested directly).
+import { parseWhereClause } from './actual-adapter/query.js';
+export { parseWhereClause };
 export async function runBankSync(accountId?: string): Promise<void> {
   try {
     return await withActualApi(async () => {
