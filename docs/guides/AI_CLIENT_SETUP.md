@@ -255,6 +255,26 @@ In your AI client you should see:
 
 ---
 
+## Session Recovery After a Server Restart
+
+The HTTP transport is stateful: each client connection gets an `mcp-session-id`, and the live session lives in the server process memory. When the container is recreated (an env change, an image update, a host reboot), those in-memory sessions are gone. A client that reuses its cached `mcp-session-id` then receives the MCP spec signal:
+
+```
+HTTP 404  {"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found. Please re-initialize ..."}}
+```
+
+What a spec-compliant client should do on that 404 is send a fresh `initialize` (without an `mcp-session-id` header), cache the new id, and retry. The server cannot resurrect the old session id: the MCP SDK assigns a session id only during `initialize` and validates later requests by exact match, with no way to re-adopt a previously issued id.
+
+To make that recovery cheap (a quiet re-initialize, not a full sign-in), keep the OAuth token decoupled from the MCP session:
+
+- **Token lifetime and refresh:** configure your OIDC provider (e.g. Logto) so access tokens outlive a typical restart and the client holds a refresh token. With a valid cached/refreshed token, the post-404 `initialize` does not trigger a new consent screen. The server validates whatever token arrives on every request, so it never forces a re-consent on its own.
+- **Avoid needless recreates:** most settings do not require recreating the container; prefer a reload where possible.
+- **Known client limitation:** some clients (including the Claude app and Claude Code, per upstream reports) do not yet auto re-initialize on a 404 and require a manual reconnect of the connector. That is a client-side gap, not a server one; the server already returns the correct signal.
+
+**Active budget after recovery:** the server remembers each authenticated principal's last selected budget (keyed by a SHA-256 hash of the principal, never the raw identity) and restores it on the new session, after re-checking the live access list. So a user who switched budgets keeps that budget across a restart, provided their ACL still permits it.
+
+---
+
 ## Troubleshooting
 
 | Symptom | Likely Cause | Fix |

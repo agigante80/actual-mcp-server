@@ -65,6 +65,7 @@ import retry, { isRetryableError } from './retry.js';
 import logger from '../logger.js';
 import config from '../config.js';
 import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
+import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized } from './apiState.js';
@@ -110,12 +111,27 @@ function getActiveBudgetConfig(): BudgetConfig {
   // call works at runtime. If we're not in any requestContext.run scope (stdio,
   // startup health checks), sessionId is undefined and we fall back to the
   // env-default budget (first registry entry).
-  const sessionId = requestContext.getStore()?.sessionId;
+  const store = requestContext.getStore();
+  const sessionId = store?.sessionId;
   if (sessionId) {
     const key = sessionBudgetState.get(sessionId);
     if (key) {
       const found = budgetRegistry.get(key);
       if (found) return found;
+    }
+    // #189 Phase 1: no in-session selection yet (e.g. a fresh session after a
+    // server restart + client re-initialize). Restore the principal's persisted
+    // budget, but ONLY if the live ACL still permits it (pickAllowedPreferredBudget
+    // re-checks allowedBudgets, so a stale preference can never widen access).
+    // Memoize into the session slot so subsequent calls take the fast path above.
+    const restored = pickAllowedPreferredBudget(
+      getPreferredBudgetSyncId(store?.principal),
+      store?.allowedBudgets,
+      [...budgetRegistry.values()],
+    );
+    if (restored) {
+      sessionBudgetState.set(sessionId, restored.name.toLowerCase());
+      return restored;
     }
   }
   return [...budgetRegistry.values()][0];
@@ -1861,6 +1877,11 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     }
   }
 
+  // #189 Phase 1: the principal's chosen budget is persisted at each commit
+  // point below (paired with the sessionBudgetState write), NOT here, so a
+  // switch that throws before committing never leaves a stale preference. The
+  // helper is keyed by a hash of the principal and never throws.
+
   // Fast path (#172): if the current pool entry's auth descriptor matches the
   // target budget's (same serverUrl + password + encryptionPassword), skip
   // release + re-auth. Just download the new budget file on the already-
@@ -1876,6 +1897,8 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   if (sameAuth && currentEntry!.syncId === found.syncId) {
     // No-op: already on this exact budget. Keep session map consistent and return.
     sessionBudgetState.set(sessionId, key);
+    setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
+
     logger.info(
       `[ADAPTER] switchBudget no-op for session ${sessionId}: already on "${found.name}" (${found.syncId})`,
     );
@@ -1905,6 +1928,8 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     }
     connectionPool.updateLoadedSyncId(sessionId, found.syncId);
     sessionBudgetState.set(sessionId, key);
+    setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
+
     logger.info(
       `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
     );
@@ -1923,6 +1948,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   // Update the per-session active-budget slot. Subsequent getActiveBudgetConfig
   // calls for this session now return the new budget.
   sessionBudgetState.set(sessionId, key);
+  setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
   // Materialise a fresh pool entry bound to the new budget. Without this, the
   // next withActualApi call would find no pool entry and fall back to the

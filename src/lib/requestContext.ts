@@ -27,4 +27,9 @@ import { AsyncLocalStorage } from 'async_hooks';
 export const requestContext = new AsyncLocalStorage<{
   sessionId?: string;
   allowedBudgets?: string[];
+  // Authenticated principal (OIDC subject, or a stable constant for static-bearer
+  // mode). Used by the per-principal budget preference (#189) to restore a user's
+  // last active budget after a restart. Undefined when there is no authenticated
+  // identity (stdio / auth-disabled), in which case the preference simply no-ops.
+  principal?: string;
 }>();

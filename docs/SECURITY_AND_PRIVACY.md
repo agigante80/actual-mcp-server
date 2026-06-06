@@ -150,6 +150,19 @@ chown $USER:$USER ./actual-data
 # Windows: BitLocker
 ```
 
+#### Budget Preference Store
+
+**Location**: `MCP_BRIDGE_DATA_DIR/budget-preferences.json`
+
+**Contents**: a map from `sha256(principal)` to a budget sync id. It lets a re-initialized session (after a server restart) restore the user's last active budget.
+
+**Protection**:
+- ✅ Keys are SHA-256 hashes of the principal: the raw OIDC subject, email, or bearer token is never written to disk
+- ✅ Written with `0600` permissions, atomically (temp file + rename)
+- ✅ Never trusted as authorization: the live access list is re-checked before a stored budget is applied, so a stale entry cannot widen access
+- ✅ Safe to delete at any time (the feature simply falls back to the default budget)
+- Authentication itself is validated per request from the live token; nothing in this file grants access
+
 #### Log Files
 
 **Location**: `MCP_BRIDGE_LOG_DIR` (default: `./logs`)

@@ -28,6 +28,17 @@ import * as fs from 'node:fs';
 import { requestContext } from '../lib/requestContext.js';
 export { requestContext };
 
+// Resolve the authenticated principal for the per-principal budget preference
+// (#189). OIDC: the verified JWT subject. Static-bearer: a single shared
+// identity (all bearer callers are the same user). Auth-disabled: undefined, so
+// the preference simply no-ops. Never derived from a client-supplied value.
+function resolvePrincipal(req: Request): string | undefined {
+  if (config.AUTH_PROVIDER === 'oidc') {
+    return (req as Request & { auth?: { subject?: string } }).auth?.subject;
+  }
+  return config.MCP_SSE_AUTHORIZATION ? 'static-bearer' : undefined;
+}
+
 export async function startHttpServer(
   mcp: ActualMCPConnection,
   port: number,
@@ -435,7 +446,7 @@ export async function startHttpServer(
           // Run in AsyncLocalStorage context so tools can access sessionId
           // and the adapter can enforce per-request budget ACL (#156).
           const allowedBudgetsInit = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
-          await requestContext.run({ sessionId: undefined, allowedBudgets: allowedBudgetsInit }, async () => {
+          await requestContext.run({ sessionId: undefined, allowedBudgets: allowedBudgetsInit, principal: resolvePrincipal(req) }, async () => {
             await transport.handleRequest(req, res, req.body);
           });
         } catch (err: unknown) {
@@ -535,7 +546,7 @@ export async function startHttpServer(
       // Run in AsyncLocalStorage context so tools and the adapter can access
       // sessionId (pool branch, #134) and allowedBudgets (ACL enforcement, #156).
       const allowedBudgets = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
-      await requestContext.run({ sessionId, allowedBudgets }, async () => {
+      await requestContext.run({ sessionId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     } catch (err: unknown) {
