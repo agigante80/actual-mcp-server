@@ -78,3 +78,6 @@ playwright-report/
 # Claude Code local settings (machine-specific)
 .claude/settings.local.json
 .mcp.json
+
+# actionlint binary (installed in CI on demand, not committed; #170)
+/actionlint

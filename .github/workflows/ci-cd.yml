@@ -144,6 +144,20 @@ jobs:
       - name: 📊 Check tool coverage
         run: npm run check:coverage
 
+      - name: 🩺 Lint GitHub Actions workflows (actionlint)
+        env:
+          # SC2086 / SC2129 / SC2193 are benign shellcheck info/style findings on
+          # the current workflows; exclude them so actionlint enforces real
+          # workflow syntax and expression errors without a noisy pre-existing
+          # baseline (#170). Real errors (bad if: expressions, unknown contexts,
+          # invalid job needs) still fail the job.
+          SHELLCHECK_OPTS: -e SC2086 -e SC2129 -e SC2193
+        run: |
+          # Official installer, pinned to a specific actionlint version (avoids a
+          # third-party action and keeps the version reviewable).
+          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash | bash -s 1.7.12
+          ./actionlint -color
+
       - name: 📋 Lint summary
         if: always()
         run: |
