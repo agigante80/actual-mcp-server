@@ -556,6 +556,32 @@ async function expectCallError(tool, input, label) {
   if (!expectParseError(tags_delete_tool, { id: '' }, 'empty string id rejected')) fail();
   if (!expectParseOk(tags_delete_tool, { id: VALID_TAG_UUID }, 'valid UUID id accepted')) fail();
 
+  // ── actual_notes_get ────────────────────────────────────────────────────
+  console.log('\n[actual_notes_get -- schema validation]');
+  const notes_get_tool = await import('../../dist/src/tools/notes_get.js').then(m => m.default);
+
+  if (!expectParseError(notes_get_tool, {}, 'empty input -- missing id')) fail();
+  if (!expectParseError(notes_get_tool, { id: '' }, 'empty string id rejected')) fail();
+  if (!expectParseOk(notes_get_tool, { id: '00000000-0000-0000-0000-000000000001' }, 'UUID id accepted')) fail();
+  if (!expectParseOk(notes_get_tool, { id: 'budget-2026-01' }, 'budget-YYYY-MM id accepted')) fail();
+
+  // ── actual_notes_update ─────────────────────────────────────────────────
+  console.log('\n[actual_notes_update -- schema validation]');
+  const notes_update_tool = await import('../../dist/src/tools/notes_update.js').then(m => m.default);
+
+  if (!expectParseError(notes_update_tool, {}, 'empty input -- missing id and note')) fail();
+  if (!expectParseError(notes_update_tool, { id: '00000000-0000-0000-0000-000000000001' }, 'missing note rejected')) fail();
+  if (!expectParseError(notes_update_tool, { id: '', note: 'x' }, 'empty id rejected')) fail();
+  if (!expectParseOk(notes_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', note: 'hello' },
+    'valid UUID id with note accepted')) fail();
+  if (!expectParseOk(notes_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', note: '' },
+    'empty string note (clear) accepted')) fail();
+  if (!expectParseOk(notes_update_tool,
+    { id: 'budget-2026-01', note: '#template 250' },
+    'budget-YYYY-MM id with note accepted')) fail();
+
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');
   if (failures > 0) {

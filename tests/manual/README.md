@@ -30,6 +30,7 @@ tests/manual/
     ├── budget.js              ← budget: list/switch budgets, amounts, carryover, hold, transfer, batch
     ├── rules.js               ← rules: create (with/without op), update, delete, verify absence
     ├── schedule.js            ← schedules: get, create (one-off + recurring), update, delete, negative UUID test
+    ├── notes.js               ← notes: round-trip set/get, clear, budget-month template, orphan id guard
     ├── batch_uncategorized_rules_upsert.js
     │                          ← uncategorized txns · update_batch · rules_create_or_update (idempotency)
     └── advanced.js            ← composite functions: extendedTests, fullTests,
@@ -44,7 +45,7 @@ tests/manual/
 |---|---|---|
 | `sanity` | No | Protocol checks: tool count, server info, Actual Budget server version, SQL validation, GraphQL rejection |
 | `smoke` | No | Sanity + account balances, category/group listing, last 3 transactions |
-| `normal` | Yes | Smoke + full account lifecycle (create → update → close → reopen) |
+| `normal` | Yes | Smoke + full account lifecycle (create → update → close → reopen) + notes round-trip |
 | `extended` | Yes | Normal + category groups, categories, payees, transactions |
 | `full` | Yes | Extended + budgets, rules, schedules, batch/uncategorized txns, advanced queries |
 | `cleanup` | Yes | Standalone: finds and deletes all MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-* / MCP-Rule-* data |

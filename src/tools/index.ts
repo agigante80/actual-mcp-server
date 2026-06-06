@@ -66,3 +66,5 @@ export { default as tags_list } from './tags_list.js';
 export { default as tags_create } from './tags_create.js';
 export { default as tags_update } from './tags_update.js';
 export { default as tags_delete } from './tags_delete.js';
+export { default as notes_get } from './notes_get.js';
+export { default as notes_update } from './notes_update.js';

@@ -791,7 +791,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 ### Level 6: Manual Integration Tests 🧪 (Comprehensive: ~60s)
 
 **Purpose:** Test all 63 tools with real Actual Budget data  
-**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (10 domain modules)  
+**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (11 domain modules)  
 **Command:** `npm run test:integration:full`
 
 **Test Levels:**

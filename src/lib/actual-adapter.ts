@@ -61,6 +61,8 @@ const {
   createTag: rawCreateTag,
   updateTag: rawUpdateTag,
   deleteTag: rawDeleteTag,
+  getNote: rawGetNote,
+  updateNote: rawUpdateNote,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
@@ -2081,6 +2083,20 @@ export async function deleteTag(id: string): Promise<void> {
   });
 }
 
+export async function getNote(id: string): Promise<{ id: string; note: string } | null> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.notes.get').catch(() => {});
+    return await withConcurrency(() => retry(() => rawGetNote(id) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
+export async function updateNote(id: string, note: string): Promise<void> {
+  observability.incrementToolCall('actual.notes.update').catch(() => {});
+  return queueWriteOperation(async () => {
+    await withConcurrency(() => retry(() => rawUpdateNote(id, note) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+  });
+}
+
 export default {
   getAccounts,
   getAccountsWithBalances,
@@ -2096,6 +2112,8 @@ export default {
   createTag,
   updateTag,
   deleteTag,
+  getNote,
+  updateNote,
   getBudgetMonths,
   getBudgetMonth,
   setBudgetAmount,

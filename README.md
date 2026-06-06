@@ -33,14 +33,14 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **67 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, rules, budgets, batch operations, bank sync, and more. Covers 87% of the Actual Budget API.
+- **69 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers 87% of the Actual Budget API.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 67 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 69 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -356,6 +356,15 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_tags_create` | Create or upsert a tag by name; returns the tag UUID |
 | `actual_tags_update` | Update tag name, color, or description by UUID |
 | `actual_tags_delete` | Soft-delete a tag by UUID |
+
+### Notes (2)
+
+`actual_notes_get` · `actual_notes_update`
+
+| Tool | Description |
+|------|-------------|
+| `actual_notes_get` | Get the note for any entity (account/category/category-group/payee UUID, or budget-YYYY-MM) |
+| `actual_notes_update` | Set or clear the note for any entity; validates entity exists or matches budget-YYYY-MM pattern |
 
 ### Budgets (10)
 

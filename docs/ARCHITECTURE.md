@@ -198,6 +198,8 @@ src/tools/
 ├── tags_create.ts
 ├── tags_update.ts
 ├── tags_delete.ts
+├── notes_get.ts                        # Notes (2 tools)
+├── notes_update.ts
 ├── query_run.ts                        # Advanced ActualQL queries
 ├── bank_sync.ts                        # Bank synchronization
 └── index.ts                            # Tool exports
@@ -322,7 +324,7 @@ actual-mcp-server/
 │   │   ├── streamable-http.js    # Compiled JS companion
 │   │   └── streamable-http.d.ts  # Type definitions
 │   │
-│   ├── tools/                    # MCP tool definitions (67 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (69 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -335,6 +337,7 @@ actual-mcp-server/
 │   │   ├── payee_rules_get.ts    # Payee rules (1 tool)
 │   │   ├── rules_*.ts            # Rules (4 tools)
 │   │   ├── tags_*.ts             # Tags (4 tools)
+│   │   ├── notes_*.ts            # Notes (2 tools)
 │   │   ├── query_run.ts          # Advanced ActualQL queries
 │   │   ├── bank_sync.ts          # Bank synchronization
 │   │   └── index.ts              # Tool exports
@@ -417,7 +420,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 67 tools with MCP capabilities
+   └─> Registers 69 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

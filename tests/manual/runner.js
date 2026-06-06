@@ -34,6 +34,7 @@ import { createClient } from './mcp-client.js';
 import { sanityTests } from './tests/sanity.js';
 import { smokeTests } from './tests/smoke.js';
 import { accountTests } from './tests/account.js';
+import { notesTests } from './tests/notes.js';
 import { extendedTests, fullTests } from './tests/advanced.js';
 import { cleanupMcpTestAccounts } from './cleanup.js';
 
@@ -157,6 +158,9 @@ export async function run() {
     // --- NORMAL / EXTENDED / FULL ---
     await accountTests(client, context);
     guard.setLastCompleted('accountTests');
+
+    await notesTests(client, context);
+    guard.setLastCompleted('notesTests');
 
     if (level === "extended") {
       await extendedTests(client, context);

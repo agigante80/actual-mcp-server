@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 67 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 69 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests
@@ -15,7 +15,7 @@ import {
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 67 TOOLS', () => {
+test.describe('Docker E2E - ALL 69 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
@@ -1574,6 +1574,62 @@ test.describe('Docker E2E - ALL 67 TOOLS', () => {
       expect(data?.success).toBeTruthy();
       console.log('Tag updated');
     }
+  });
+
+  // ==================== NOTES ====================
+  test('actual_notes_get - should return clear result for id with no note', async ({ request }) => {
+    // Use a known budget month that very likely has no note set yet.
+    const result = await callTool(request, sessionId, 'actual_notes_get', {
+      id: 'budget-1970-01',
+    });
+    const data = extractResult(result);
+    // Either a note object (found=true) or a no-note object (found=false) is valid.
+    expect(typeof data?.found === 'boolean').toBeTruthy();
+    expect(typeof data?.id === 'string').toBeTruthy();
+    console.log(`notes_get (no-note path): found=${data?.found}, message=${data?.message ?? 'n/a'}`);
+  });
+
+  test('actual_notes_update + actual_notes_get - round-trip note on budget month', async ({ request }) => {
+    const testId = 'budget-2026-01';
+    const testNote = `E2E-notes-test-${Date.now()}`;
+
+    // Set the note.
+    const setResult = await callTool(request, sessionId, 'actual_notes_update', {
+      id: testId,
+      note: testNote,
+    });
+    const setData = extractResult(setResult);
+    expect(setData?.success).toBe(true);
+    expect(setData?.id).toBe(testId);
+    console.log('notes_update: set note OK');
+
+    // Read it back.
+    const getResult = await callTool(request, sessionId, 'actual_notes_get', { id: testId });
+    const getData = extractResult(getResult);
+    expect(getData?.found).toBe(true);
+    expect(getData?.note).toBe(testNote);
+    console.log(`notes_get: round-trip note matched: "${getData?.note}"`);
+
+    // Clear the note (cleanup).
+    const clearResult = await callTool(request, sessionId, 'actual_notes_update', {
+      id: testId,
+      note: '',
+    });
+    const clearData = extractResult(clearResult);
+    expect(clearData?.success).toBe(true);
+    expect(clearData?.cleared).toBe(true);
+    console.log('notes_update: clear OK');
+  });
+
+  test('actual_notes_update - orphan id returns error without writing', async ({ request }) => {
+    const result = await callTool(request, sessionId, 'actual_notes_update', {
+      id: 'not-a-real-entity-id',
+      note: 'should not be written',
+    });
+    const data = extractResult(result);
+    // The tool returns { error: '...' } and does NOT write.
+    expect(typeof data?.error === 'string').toBeTruthy();
+    console.log(`notes_update orphan guard: error="${String(data?.error).slice(0, 80)}"`);
   });
 
   test('actual_tags_delete - should delete a tag', async ({ request }) => {

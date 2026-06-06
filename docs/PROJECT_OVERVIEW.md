@@ -227,13 +227,14 @@ mcpServers:
 
 ### Current Achievements
 
-- ✅ **67 tools implemented** (87% of core API coverage)
+- ✅ **69 tools implemented** (87% of core API coverage)
 - ✅ **Tags CRUD**: 4 tools for managing Actual Budget tags (actual_tags_list, create, update, delete)
+- ✅ **Notes**: 2 tools for reading and writing entity notes (actual_notes_get, actual_notes_update)
 - ✅ **LibreChat and LobeChat verified**: all tools loading and functional
 - ✅ **Docker images published** to Docker Hub and GHCR
 - ✅ **CI/CD pipeline**: automated testing and deployment
 - ✅ **Security hardened**: Bearer auth, OIDC, HTTPS, non-root container
-- ✅ **Test coverage**: unit tests (67 tools), Docker Playwright E2E (all 67 tools), live integration suite (67/67 tools)
+- ✅ **Test coverage**: unit tests (69 tools), Docker Playwright E2E (all 69 tools), live integration suite (69/69 tools)
 
 ### Future Goals
 - 🎯 [Improved Error Messages](./feature/IMPROVED_ERROR_MESSAGES.md): actionable errors across all tools
