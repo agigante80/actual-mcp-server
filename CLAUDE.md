@@ -70,10 +70,10 @@ npm run test:mcp-client         # Connect as MCP client and exercise tools
 npm run dev -- --test-actual-connection  # Test Actual Budget connection only
 
 # Docker
-docker compose --profile dev up         # Hot-reload dev (HTTP :3000)
-docker compose --profile production up  # Nginx proxy on :3600 → app :3000
-docker compose --profile fullstack up   # Includes Actual Budget server on :5006
-# docker-compose.test.yaml + playwright.config.docker.ts are used by test:e2e:docker* scripts
+docker compose --profile dev up         # Hot-reload dev (app on :3000)
+docker compose --profile production up  # Production: MCP server on :3000
+# docker-compose.yaml defines only the dev and production profiles (no nginx, no bundled Actual server).
+# For a stack that also runs Actual Budget, use docker-compose.test.yaml (it + playwright.config.docker.ts back the test:e2e:docker* scripts).
 ```
 
 **Pre-commit mandatory**: `npm run build && npm run test:adapter && npm run test:unit-js && npm audit --audit-level=moderate`

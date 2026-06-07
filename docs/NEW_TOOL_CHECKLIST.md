@@ -2,7 +2,7 @@
 
 **Project:** Actual MCP Server  
 **Purpose:** Step-by-step checklist for every new MCP tool added to the project  
-**Last Updated:** 2026-03-03
+**Last Updated:** 2026-06-07
 
 Use this file every time a new tool is added. Print or open it alongside your editor and tick each box before committing. The checklist is ordered so that each step builds on the previous one.
 
@@ -42,8 +42,8 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 
 ### E2E Tests
 - [ ] Tool's happy-path call added to the appropriate `tests/e2e/suites/<domain>.ts` file
-- [ ] `EXPECTED_TOOL_COUNT` constant updated in `tests/e2e/mcp-client.playwright.spec.ts`
-- [ ] `EXPECTED_TOOL_COUNT` constant updated in `tests/e2e/docker-all-tools.e2e.spec.ts` (if present)
+- [ ] `EXPECTED_TOOL_COUNT` default bumped in `tests/manual/tests/sanity.js` (the only place that asserts an exact tool count)
+- [ ] `describe('Docker E2E - ALL <N> TOOLS', ...)` block-name count updated in `tests/e2e/docker-all-tools.e2e.spec.ts` (cosmetic label only; the spec does not assert a count, and `mcp-client.playwright.spec.ts` only checks `tools.length > 0`)
 - [ ] `npm run test:e2e` passes
 
 ### Documentation
@@ -98,6 +98,8 @@ const tool: ToolDefinition = {
 
 export default tool;
 ```
+
+> **Preferred for new tools:** use `createTool()` from `src/lib/toolFactory.ts` instead of a raw `ToolDefinition`. It wires up error handling, logging, and per-tool observability counters automatically. The legacy template above still works and matches most existing tools, but prefer the factory for anything new. See the "Tool Structure Pattern" section in CLAUDE.md.
 
 **Checklist for the tool file**:
 - Amounts always in **cents** (integer), never decimal dollars
@@ -231,6 +233,8 @@ For each scenario below that applies to this tool's schema, add a dedicated `it(
 | 10 | **Value out of range** | `limit`, amount constraints | message contains `positive` or the valid range |
 
 Scenarios 3, 7, 8, 9 are caught at API response time; cover those in Step 5b instead.
+
+> If you add a **new** file under `tests/unit/` (rather than extending `generated_tools.smoke.test.js` or `schema_validation.test.js`), append `&& node tests/unit/<your_file>.test.js` to the `test:unit-js` script in `package.json`. That script is an explicit chain, not a glob, so an unregistered file never runs.
 
 Run with:
 ```bash
@@ -419,7 +423,7 @@ See [`tests/manual-prompt/README.md`](../tests/manual-prompt/README.md) for usag
 
 #### Tool counts: batch update with `docs:sync`
 
-Run `npm run docs:sync` to update all `**Tool Count:**` markers in `README.md`, `ARCHITECTURE.md`, `TESTING_AND_RELIABILITY.md`, `docker/description/long.md`, and `docker/description/short.md` in one pass. Do not edit these counts manually.
+Run `npm run docs:sync` to update all `**Tool Count:**` markers across `README.md`, every file under `docs/`, and `.github/copilot-instructions.md` in one pass. Do not edit these counts manually. Note: it does not touch `docker/description/long.md` or `short.md` (they carry no tool-count marker), so update those by hand if their count text is wrong.
 
 #### `README.md`
 - Add a row for the new tool in the Available Tools table (tool name, description, key parameters)
@@ -501,8 +505,8 @@ When implementing a new lookup tool, the `call` function should:
 | `tests/unit/generated_tools.smoke.test.js` | **Add** stub response to `stubResponses` map (if new adapter method); add input example; add to `resultWrappers[]`, `successTools[]`, or custom `if (n === '...')` shape assertion |
 | `tests/unit/schema_validation.test.js` | **Add** negative schema tests for complex schemas |
 | `tests/e2e/suites/<domain>.ts` | **Add** happy-path call for the new tool |
-| `tests/e2e/mcp-client.playwright.spec.ts` | **Update** `EXPECTED_TOOL_COUNT` |
-| `tests/e2e/docker-all-tools.e2e.spec.ts` | **Update** `EXPECTED_TOOL_COUNT` |
+| `tests/manual/tests/sanity.js` | **Update** `EXPECTED_TOOL_COUNT` default (the only exact-count gate) |
+| `tests/e2e/docker-all-tools.e2e.spec.ts` | **Update** the `describe(...)` block-name count label (cosmetic) |
 | `tests/manual/tests/<module>.js` | **Add** positive + negative test block |
 | `tests/manual/README.md` | **Update** module table if new file added |
 | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
@@ -510,4 +514,4 @@ When implementing a new lookup tool, the `call` function should:
 | `README.md` | **Add** tool table row in Available Tools section |
 | `docs/ARCHITECTURE.md` | **Update** domain table if applicable |
 | `docs/TESTING_AND_RELIABILITY.md` | **Update** if new test module added |
-| `docker/description/long.md`, `short.md`, all tool-count docs | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers |
+| `README.md`, `docs/*.md`, `.github/copilot-instructions.md` | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers (docker/description/* carry no marker; update by hand) |
