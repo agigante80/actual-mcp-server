@@ -760,7 +760,7 @@ docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
 
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Security testing
 - [Architecture](./ARCHITECTURE.md) - Technical security design
-- [Roadmap](./ROADMAP.md) - Security improvements
+- Planned security work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues) (see the `security` label)
 
 ---
 
@@ -786,4 +786,4 @@ docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
 - **Team use**: Add rate limiting and audit logging
 - **Enterprise use**: Add RBAC, SIEM integration, compliance auditing
 
-See [ROADMAP.md](./ROADMAP.md) for planned security improvements.
+Planned security improvements are tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues) (see the `security` label; the rate-limiting and hardening work is issue #203).

@@ -768,4 +768,4 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 For more details:
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies
-- [Roadmap](./ROADMAP.md) - Future improvements
+- Planned and future work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues)

@@ -50,7 +50,6 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] `README.md`: new tool row added in Available Tools table
 - [ ] `docs/PROJECT_OVERVIEW.md`: API coverage % updated if changed
 - [ ] `docs/ARCHITECTURE.md`: tool listed in domain section (if relevant)
-- [ ] `docs/ROADMAP.md`: updated only if this is a new capability (not incremental); see Step 7
 - [ ] `docs/TESTING_AND_RELIABILITY.md`: test file entries updated if new test module added
 - [ ] `npm run docs:sync` run to batch-update all **Tool Count:** markers
 
@@ -433,11 +432,8 @@ Run `npm run docs:sync` to update all `**Tool Count:**` markers in `README.md`, 
 #### `docs/ARCHITECTURE.md`
 - Add the tool to the domain section table if the domain section lists tools explicitly
 
-#### `docs/ROADMAP.md`
-- **Only update if this tool represents a new capability**, not for incremental tools (e.g. adding a `_get`, `_delete`, or `_update` variant in a domain that already has tools)
-- If it was a planned roadmap item: mark it `✅ IMPLEMENTED in v0.X.Y`
-- If it is a genuinely new capability not previously planned: add a single brief entry; do not enumerate every individual tool name
-- Skip ROADMAP entirely for incremental additions
+#### Planned-work tracking (GitHub issues)
+- If this tool closes a planned-capability issue, reference it in the commit (`(#N)`) so the release step closes it; there is no roadmap file to update.
 
 #### `docs/TESTING_AND_RELIABILITY.md`
 - If you added a new test module file to `tests/manual/tests/`, add it to the test-file table
@@ -475,7 +471,7 @@ git commit -m "feat(tools): add actual_<tool_name>
 - Tests: unit smoke + negative path in tests/unit/
 - Manual tests: positive + negative in tests/manual/tests/<module>.js
 - Prompt: tests/manual-prompt/prompt-{1|2|3}-*.txt Phase N updated + README total updated
-- Docs: README tool row added; docs:sync run; ROADMAP updated if new capability
+- Docs: README tool row added; docs:sync run
 - Total tools: N → N+1 (XX% API coverage)"
 ```
 
@@ -518,6 +514,5 @@ When implementing a new lookup tool, the `call` function should:
 | `README.md` | **Add** tool table row in Available Tools section |
 | `docs/PROJECT_OVERVIEW.md` | **Update** API coverage % if changed |
 | `docs/ARCHITECTURE.md` | **Update** domain table if applicable |
-| `docs/ROADMAP.md` | **Update** only for new capabilities; skip for incremental tools |
 | `docs/TESTING_AND_RELIABILITY.md` | **Update** if new test module added |
 | `docker/description/long.md`, `short.md`, all tool-count docs | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers |

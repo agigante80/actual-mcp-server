@@ -51,4 +51,4 @@ On-device machine learning features: spending anomaly detection, ML-based catego
 - [ml.js ecosystem](https://github.com/mljs/ml)
 - [natural NLP library](https://github.com/NaturalNode/natural)
 - [`src/lib/actual-adapter.ts`](../../src/lib/actual-adapter.ts)
-- [`docs/feature/CF4_HYBRID_SEARCH.md`](./CF4_HYBRID_SEARCH.md) — embedding pipeline reuse possible
+- Hybrid search engine (GitHub issue [#195](https://github.com/agigante80/actual-mcp-server/issues/195)): embedding pipeline reuse possible

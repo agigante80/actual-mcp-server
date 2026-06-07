@@ -1003,7 +1003,7 @@ npm run test:integration:cleanup
 
 - [Architecture](./ARCHITECTURE.md) - System design and components
 - [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security testing policies
-- [Roadmap](./ROADMAP.md) - Future testing improvements
+- Planned and future work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues)
 
 ---
 
