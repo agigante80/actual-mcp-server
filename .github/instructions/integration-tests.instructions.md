@@ -19,6 +19,6 @@ Key rules:
 - **Read-back verification**: after every create/update, re-fetch and assert the change is visible
 - Test data naming: `MCP-{Type}-{TS}` (e.g. `MCP-Account-2026-03-03T14-30-22-456Z`)
 - Every tool that accepts a UUID must have a negative test using `'00000000-0000-0000-0000-000000000000'`
-- Error messages must be actionable — see `docs/feature/IMPROVED_ERROR_MESSAGES.md` scenario table
+- Error messages must be actionable. See the [error-message scenario table](https://github.com/agigante80/actual-mcp-server/blob/6dc70654c15f4ad610d2521e61a122c356332215/docs/feature/IMPROVED_ERROR_MESSAGES.md), tracked by issue #206.
 - Never add shared mutable state outside the `context` object
 - Cleanup is automatic: test runner prompts for cleanup at end, or pass `yes` as 4th argument

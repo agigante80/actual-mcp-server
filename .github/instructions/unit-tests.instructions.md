@@ -16,7 +16,7 @@ applyTo: "tests/unit/*.{js,ts}"
   const err = assert.throws(() => InputSchema.parse({...}));
   assert.match(err.message, /YYYY-MM-DD/); // not just assert.throws(...)
   ```
-- See the 10-scenario table in `docs/feature/IMPROVED_ERROR_MESSAGES.md` for guidance on which scenarios to cover
+- See the [10-scenario error-message table](https://github.com/agigante80/actual-mcp-server/blob/6dc70654c15f4ad610d2521e61a122c356332215/docs/feature/IMPROVED_ERROR_MESSAGES.md) (tracked by issue #206) for guidance on which scenarios to cover
 
 ### General
 - Run all unit tests with: `npm run test:unit-js`
