@@ -81,3 +81,6 @@ playwright-report/
 
 # actionlint binary (installed in CI on demand, not committed; #170)
 /actionlint
+
+# Claude Code runtime lock (ephemeral, per-session PID)
+.claude/scheduled_tasks.lock
