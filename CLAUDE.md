@@ -37,6 +37,16 @@ Common slip patterns to watch for (described abstractly to avoid the literal cha
 - `main` is only updated with explicit user permission (e.g. "push to main" or "release")
 - When the user says "push to github" without specifying a branch → push to `develop`
 
+**Incoming tickets are hypotheses, not ground truth.** For a `bug` or any
+behaviour-change ticket (especially external or spec-derived ones), reproduce the
+reported behaviour against the CURRENT code before writing a fix (the
+`implement-ticket` skill's "Reproduce first" phase, ideally via `/local-env`). If
+it does not reproduce, recharacterise or close it rather than fixing a phantom; if
+it reproduces differently, rewrite and re-gate. A behaviour change is not done
+until a check that was red is green. Test rigor (scenarios, unit + E2E tests) is
+the maintainer's responsibility enforced by the gate, NOT something an external
+reporter must provide: the issue templates ask reporters only for what they know.
+
 ## Commands
 
 ```bash

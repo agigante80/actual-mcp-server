@@ -60,6 +60,40 @@ Writing the body files: the `gh` sandbox cannot read `/tmp`, so write body files
 into the repo root as a dot-file (e.g. `./.ticket-<n>-body.md`) and delete them
 after the `gh` call.
 
+### Phase 1.5: Reproduce first (bug and behaviour-change tickets)
+
+Run this phase when the ticket is labelled `bug` OR proposes a change to existing
+observable behaviour. Skip it for greenfield features with nothing to reproduce,
+docs, and chore/CI tickets (say so in the report).
+
+An incoming ticket is a HYPOTHESIS, not ground truth. External and spec-derived
+tickets are routinely wrong: stale (the bug was fixed since), mis-scoped (only
+part of it is real), or mis-severity. Prove the reported behaviour against the
+CURRENT code before writing a fix, so you never "fix" a phantom.
+
+1. Reproduce against current code, preferring the live `/local-env` (it caught two
+   mischaracterised tickets that unit-level reasoning alone would have missed).
+   Write a focused failing check that demonstrates the reported behaviour and
+   capture its **red** result. That check is the start of the regression test, it
+   is not throwaway.
+2. Branch on the outcome, and report which happened with evidence:
+   - **Reproduces as described** -> proceed to Phase 2. The red check is the test
+     that must go green.
+   - **Does not reproduce** -> STOP. Do not implement. Recharacterise or close the
+     ticket (with the evidence), the same way the `payee_rules_get` and #211
+     "already fixed / not a crash" findings were handled.
+   - **Reproduces differently** (different severity, scope, or symptom) -> rewrite
+     the ticket body to match reality (re-title, re-label, fix the symptom), then
+     re-gate (Phase 1) before implementing.
+3. Tier the rigor by source: external / community / fork-harvested tickets get the
+   full treatment plus the mandatory security review; internal trivial changes can
+   be lighter. When unsure, do more.
+
+A behaviour change is not done until a check that was **red is green**. Carry the
+red check into Phase 2 (make it pass) and Phase 3 (it runs in the suite). If the
+fix changes observable behaviour, sweep every affected test, tool description, and
+doc in Phase 2, not just the line you changed.
+
 ### Phase 2: Implement
 
 Treat the now-10/10 ticket body as the spec. Read it in full plus CLAUDE.md, and
@@ -175,6 +209,12 @@ auto-implemented or left open).
 
 ## Guardrails
 
+- **A ticket is a hypothesis, not ground truth.** For bug and behaviour-change
+  tickets, reproduce against current code first (Phase 1.5). If it does not
+  reproduce, recharacterise or close it, do not implement a phantom. If it
+  reproduces differently, rewrite and re-gate. Never fix from the report alone.
+- **Red before green.** A behaviour change is not done until a check that was red
+  is green, and the fix sweeps every affected test, tool description, and doc.
 - **develop only.** Never push to `main`, never tag, never release. That stays a
   separate, explicit human step.
 - **No em or en dashes** anywhere (CLAUDE.md hard rule): not in commits, issue

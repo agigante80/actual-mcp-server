@@ -68,10 +68,18 @@ gh issue view <NUMBER> --repo agigante80/actual-mcp-server --json body --jq '.bo
 | Version < current | Trigger Step 0c auto-synthesis |
 | Version = current | Proceed to label validation |
 
-#### 0c. Auto-synthesis (runs when version is missing or outdated)
+#### 0c. Auto-synthesis (runs when version is missing or outdated, OR the maintainer-rigor sections are blank)
 
-When the issue body has no version marker or an outdated version, synthesise the missing
-content automatically rather than blocking. Run these steps in order:
+Since template v3, the reporter-facing forms make `acceptance`, `scenarios`,
+`unit_tests`, and `e2e_tests` OPTIONAL: those are maintainer responsibility, not
+something an external reporter must write. So a perfectly valid current-version
+bug or feature ticket can arrive with those sections empty. Treat that as the
+normal case for external tickets and ENRICH it, do not block it.
+
+Run synthesis when the issue body has no version marker, an outdated version, OR a
+current version with any of `acceptance` / `scenarios` / `unit_tests` / `e2e_tests`
+empty or placeholder-only. Synthesise the missing content automatically rather
+than blocking. Run these steps in order:
 
 **0c-i. Parse current template structure**
 
@@ -95,12 +103,21 @@ Spawn a `general-purpose` sub-agent with:
 
 | Section | Derived from |
 |---|---|
+| `acceptance` | Problem description → what must be true for the bug to be fixed (for a bug: "no longer reproducible with the steps above" + "regression test added") |
 | `scenarios` (GWT) | Problem description + acceptance criteria → 1 positive + 1 negative scenario per condition |
 | `unit_tests` | Acceptance criteria + referenced files → specific test file path, concrete input, expected output or error |
 | `e2e_tests` | UI-visible behaviour → specific suite file, setup steps, assertion; mark N/A for API-only tickets |
 | Thin sections | Preserve existing text, append what current template now requires |
 
 Do NOT use placeholder text. Every section must contain real, actionable content.
+
+**Bug reproduction and severity.** For a `bug` ticket, the gate's job is to ensure
+there is ENOUGH detail to reproduce (the reporter-required `reproduce`, version,
+and environment fields), not to verify the bug itself: actual reproduction happens
+in the implement-ticket "Reproduce first" phase, which can recharacterise or close
+a ticket that does not reproduce. Treat the reporter's `severity` as a hint, not a
+verdict; it is commonly wrong (an external "critical crash" may be a non-crash
+edge case) and may be corrected during implementation.
 
 **0c-iii. Produce the full updated body**
 
