@@ -331,13 +331,13 @@ npm run dev -- --test-actual-connection
 
 | Code Change | Required Documentation Updates |
 |-------------|-------------------------------|
-| **New MCP tool** | `README.md` (tool count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list |
-| **New API route/endpoint** | `docs/ARCHITECTURE.md` (endpoints), `docs/PROJECT_OVERVIEW.md` if user-facing |
+| **New MCP tool** | `README.md` (tool count + table), `docs/ARCHITECTURE.md` tool list |
+| **New API route/endpoint** | `docs/ARCHITECTURE.md` (endpoints), `README.md` if user-facing |
 | **Environment variable added** | `.env.example` (with comment), `docs/ARCHITECTURE.md` Configuration section, `README.md` env var table |
 | **Test changes** | `docs/TESTING_AND_RELIABILITY.md` (commands/coverage) |
 | **Security/auth changes** | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` (OIDC section) |
-| **New feature** | `docs/PROJECT_OVERVIEW.md`, `README.md` |
-| **Dependency update** | `docs/PROJECT_OVERVIEW.md` (tech stack) |
+| **New feature** | `README.md` |
+| **Dependency update** | `package.json` (the dependency source of truth) |
 | **Docker changes** | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
 | **AI client setup changes** | `docs/guides/AI_CLIENT_SETUP.md` (LibreChat/LobeChat config, networking, TLS) |
 | **Deployment changes** | `docs/guides/DEPLOYMENT.md` (Docker profiles, Kubernetes, upgrade steps) |
@@ -348,7 +348,6 @@ Never manually edit these markers — run `npm run docs:sync` instead.
 
 **Documentation Location**: Comprehensive docs in `/docs/` directory:
 - `ARCHITECTURE.md` - Component layers, data flow, transport protocols
-- `PROJECT_OVERVIEW.md` - Features, roadmap, assessment (88/100 score)
 - `NEW_TOOL_CHECKLIST.md` - Step-by-step checklist for adding a new tool (9 steps)
 - `guides/AI_CLIENT_SETUP.md` - LibreChat/LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC/ACL
 - `guides/DEPLOYMENT.md` - Docker, Docker Compose profiles, Kubernetes manifests, upgrade/logs

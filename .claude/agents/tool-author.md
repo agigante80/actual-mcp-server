@@ -160,7 +160,6 @@ Run `npm run docs:sync` to batch-update all `**Tool Count:**` markers.
 
 Manually update:
 - `README.md` — add row to Available Tools table
-- `docs/PROJECT_OVERVIEW.md` — update API coverage % if changed
 - `docs/ARCHITECTURE.md` — add to domain table if applicable
 
 ## Commit message format

@@ -97,9 +97,6 @@ jobs:
           # Update API version string in docs (best-effort, || true avoids failure
           # if a pattern has already been updated or doesn't exist)
           sed -i "s/@actual-app\/api \^[0-9.]*/@actual-app\/api ^${LATEST}/" README.md || true
-          sed -i "s/\`@actual-app\/api\` | \^[0-9.]*/\`@actual-app\/api\` | ^${LATEST}/" docs/PROJECT_OVERVIEW.md || true
-          sed -i "s/Requires compatible API version ([0-9.]*+)/Requires compatible API version (${LATEST}+)/" docs/PROJECT_OVERVIEW.md || true
-          sed -i "s/@actual-app\/api\*\* (\^[0-9.]*)/@actual-app\/api** (^${LATEST})/" docs/ARCHITECTURE.md || true
 
           git add -A
           git commit -m "chore(deps): upgrade @actual-app/api to ${LATEST}"

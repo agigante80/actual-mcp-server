@@ -280,11 +280,11 @@ When changing code, update these docs:
 
 | Change | Required updates |
 |--------|-----------------|
-| New tool | `README.md` (count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list, `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block name) |
+| New tool | `README.md` (count + table), `docs/ARCHITECTURE.md` tool list, `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block name) |
 | New env var | `.env.example`, `docs/ARCHITECTURE.md` config section, `README.md` env table |
 | Auth/security change | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` |
 | Docker change | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
-| New feature shipped | `docs/PROJECT_OVERVIEW.md`, delete its `docs/feature/*.md` spec |
+| New feature shipped | `README.md` if user-facing, delete its `docs/feature/*.md` spec |
 | New tool added | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` (add positive + negative scenario, update phase count); `tests/manual-prompt/README.md` Phase Overview total; run `npm run docs:sync` (updates `docker/description/long.md`, `docker/description/short.md`, and all `**Tool Count:**` markers) |
 | Test module added | `docs/TESTING_AND_RELIABILITY.md` (test-file table) |
 
