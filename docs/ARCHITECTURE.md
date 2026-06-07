@@ -2,7 +2,7 @@
 
 **Project:** Actual MCP Server  
 **Version:** 0.6.40  
-**Last Updated:** 2026-03-03
+**Last Updated:** 2026-06-07
 
 ---
 
@@ -77,7 +77,7 @@
 │  └────────────────────────────────────────────────────┘  │
 │                                                           │
 │  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐           │
-│  │Tool1│  │Tool2│  │Tool3│  │ ... │  │ 56  │           │
+│  │Tool1│  │Tool2│  │Tool3│  │ ... │  │ 70  │           │
 │  └─────┘  └─────┘  └─────┘  └─────┘  └─────┘           │
 └───────────────────────────────────────────────────────────┘
                             │
@@ -121,7 +121,10 @@
 | **Connection Manager** | `src/actualConnection.ts` | Actual Budget API lifecycle | `connectToActual()`, `shutdownActual()` |
 | **Tool Manager** | `src/actualToolsManager.ts` | Tool registry and dispatch | `registerTools()`, `callTool()` |
 | **MCP Connection** | `src/lib/ActualMCPConnection.ts` | MCP protocol implementation | `handleToolCall()`, `handleRequest()` |
-| **Adapter Layer** | `src/lib/actual-adapter.ts` | API wrapper with error handling | All Actual API functions |
+| **Adapter Layer** | `src/lib/actual-adapter.ts` (+ leaf modules in `src/lib/actual-adapter/`) | `withActualApi` wrapper: retry, concurrency, pooled vs legacy execution (#134, split in #166) | All Actual API functions |
+| **Connection Pool** | `src/lib/ActualConnectionPool.ts` | Per-session connections (up to `MAX_CONCURRENT_SESSIONS`, default 15), idle timeouts | `getConnection()`, `touch()`, `shutdownConnection()` |
+| **Request Context** | `src/lib/requestContext.ts` | `AsyncLocalStorage` carrying the active session id (and principal) across async boundaries | `requestContext.run()` |
+| **Singleton State** | `src/lib/apiState.ts` | Shared flag for the `@actual-app/api` singleton "live" state, probed by the adapter to decide pool reuse | `isApiInitialized()` |
 | **Configuration** | `src/config.ts` | Environment validation | `config`, `configSchema` |
 | **Logger** | `src/logger.ts` | Structured logging | `logger` singleton |
 | **Observability** | `src/observability.ts` | Metrics collection | `incrementToolCall()`, `getMetricsText()` |
@@ -136,7 +139,7 @@
 
 ### Tool Definitions
 
-53 tools organized by category:
+70 tools organized by category:
 
 ```
 src/tools/
@@ -306,24 +309,32 @@ actual-mcp-server/
 │   ├── tests_adapter_runner.ts   # Adapter test executor
 │   │
 │   ├── lib/                      # Core libraries
-│   │   ├── actual-adapter.ts     # Actual API wrapper (withActualApi, callWithRetry)
-│   │   ├── actual-schema.ts      # Shared Zod schema definitions
-│   │   ├── ActualConnectionPool.ts # Connection pool management
+│   │   ├── actual-adapter.ts     # withActualApi wrapper (retry, concurrency, pool cooperation)
+│   │   ├── actual-adapter/       # Leaf modules: normalize, query, auth-retry, concurrency (#166)
+│   │   ├── actual-schema.ts      # Actual DB schema for SQL validation
+│   │   ├── ActualConnectionPool.ts # Per-session connection pool (default 15, idle timeouts)
 │   │   ├── ActualMCPConnection.ts  # MCP protocol handler (EventEmitter-based)
-│   │   ├── ActualMCPConnection.js  # Compiled JS companion
+│   │   ├── apiState.ts             # Shared @actual-app/api singleton live-state flag
+│   │   ├── requestContext.ts       # AsyncLocalStorage carrying sessionId / principal
+│   │   ├── budget-registry.ts      # Parses BUDGET_N_* env vars into budget configs
+│   │   ├── budget-preference-store.ts # Per-principal preferred-budget store (#189)
 │   │   ├── constants.ts            # Configuration constants and limits
+│   │   ├── errors.ts               # notFoundMsg / constraintErrorMsg helpers
 │   │   ├── loggerFactory.ts        # Module-scoped logger factory
 │   │   ├── query-validator.ts      # ActualQL query validation
 │   │   ├── retry.ts                # Exponential backoff retry logic
-│   │   ├── toolFactory.ts          # Tool definition factory helpers
-│   │   └── schemas/                # Per-domain Zod schemas
+│   │   ├── toolFactory.ts          # createTool() factory helper
+│   │   └── schemas/                # Per-domain Zod schemas (CommonSchemas)
 │   │
 │   ├── server/                   # Transport implementations
-   │   ├── httpServer.ts         # HTTP transport
-   │   ├── httpServer_testing.ts # HTTP server for test environments
-│   │   ├── streamable-http.ts    # Streamable HTTP protocol implementation
-│   │   ├── streamable-http.js    # Compiled JS companion
-│   │   └── streamable-http.d.ts  # Type definitions
+│   │   ├── httpServer.ts         # HTTP transport (Express, StreamableHTTP, auth)
+│   │   ├── httpServer_testing.ts # HTTP server for test environments
+│   │   ├── stdioServer.ts        # stdio transport (Claude Desktop/Code)
+│   │   └── streamable-http.ts    # Streamable HTTP protocol implementation
+│   │
+│   ├── auth/                     # Authentication
+│   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
+│   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
 │   ├── tools/                    # MCP tool definitions (70 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
@@ -356,7 +367,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 63 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 70 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── suites/                        # Domain suite registration functions (one file per domain)
 │   │       ├── shared-context.ts          # SharedState / TestContext types
@@ -541,7 +552,7 @@ DEBUG=true                                # Enable debug logging
 
 ### Configuration Schema
 
-Validated by Zod schema in `src/config.ts`:
+Validated by a Zod schema in `src/config.ts`. The snippet below is illustrative, not exhaustive: `.env.example` and `src/config.ts` are authoritative. Notably, multi-budget mode adds `BUDGET_N_NAME`, `BUDGET_N_SYNC_ID`, `BUDGET_N_SERVER_URL`, `BUDGET_N_PASSWORD`, and `BUDGET_N_ENCRYPTION_PASSWORD` (N = 1, 2, 3...), and concurrency is tunable via `ACTUAL_API_CONCURRENCY`.
 
 ```typescript
 export const configSchema = z.object({
@@ -656,10 +667,10 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 
 ### Optimization Strategies
 
-1. **Connection Pooling**: Single persistent connection to Actual Budget
+1. **Per-session connection pool**: `ActualConnectionPool` holds one connection per MCP session (up to `MAX_CONCURRENT_SESSIONS`, default 15), with idle timeouts. While a session is active the `withActualApi` wrapper runs operations against the existing connection instead of re-running `api.init()` / `api.shutdown()` per call (pooled mode, #134), which removed the per-op upstream-login burst. Non-MCP callers fall back to the legacy init-to-shutdown cycle.
 2. **Local Caching**: Budget data cached to SQLite (MCP_BRIDGE_DATA_DIR)
 3. **Lazy Loading**: Dynamic imports for faster cold starts
-4. **Retry Logic**: Automatic recovery from transient failures
+4. **Retry Logic**: Automatic recovery from transient failures (the pool entry is dropped only on infrastructure errors, not on user/domain errors)
 
 ### Monitoring
 
@@ -688,78 +699,9 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 
 ## Technology Stack & Dependencies
 
-### Core Dependencies
+The dependency list lives in `package.json` (the source of truth) and is summarised in CLAUDE.md's "Tech Stack" line, so it is not duplicated here. A hand-maintained copy drifts: run `npm ls --depth=0` for the installed tree and `npm audit` for the current security posture.
 
-**Production Runtime:**
-- **@actual-app/api** (^26.5.2): Official Actual Budget API client
-  - Purpose: Core integration with Actual Budget server
-  - License: MIT
-  - Status: ✅ Current, actively maintained
-
-- **@modelcontextprotocol/sdk** (^1.18.2): Model Context Protocol SDK
-  - Purpose: MCP protocol implementation
-  - License: MIT
-  - Status: 🔄 Update available (1.22.0)
-  - Action: Scheduled for minor update
-
-- **express** (^4.21.2): Web server framework
-  - Purpose: HTTP transport layer
-  - License: MIT
-  - Status: ✅ Current (Express v5 available but deferred)
-  - Note: Major v5 migration planned for Q1 2026
-
-- **winston** (^3.18.3): Logging framework
-  - Purpose: Structured logging with daily rotation
-  - License: MIT
-  - Status: ✅ Current
-
-- **axios** (^1.12.2): HTTP client
-  - Purpose: External API calls
-  - License: MIT
-  - Status: 🔄 Update available (1.13.2)
-
-**Development Tools:**
-- **TypeScript** (^5.9.2): Type-safe development
-- **@playwright/test** (^1.56.0): E2E testing framework
-- **ts-node** (^10.9.1): TypeScript execution
-
-### Dependency Management
-
-**Automated Monitoring:**
-- **Dependabot**: Weekly security scans, auto-PRs for updates
-- **Renovate Bot**: Intelligent update grouping, auto-merge for low-risk patches
-- **CI/CD**: Automated testing on dependency changes
-
-**Security Posture:**
-- ✅ No known critical/high vulnerabilities (run `npm audit` for current status)
-- ✅ All packages actively maintained
-- ✅ Permissive licenses only (MIT, Apache-2.0, ISC, BSD)
-
-**Update Strategy:**
-- **Patch updates** (x.x.X): Auto-merge weekly after CI passes
-- **Minor updates** (x.X.x): Manual review for production deps
-- **Major updates** (X.x.x): Dedicated migration sprint with breaking change analysis
-
-**Monitoring:**
-- Daily automated dependency checks (1 AM UTC)
-- Automated security vulnerability alerts (Dependabot)
-- Automated dependency update PRs with auto-merge
-- See `.github/workflows/dependency-update.yml` for automation details
-
-### Third-Party Integrations
-
-**Actual Budget Server:**
-- REST API integration via @actual-app/api
-- Local SQLite cache for performance
-- Automatic sync on startup
-
-**LibreChat / MCP Clients:**
-- HTTP transport (default and only supported transport)
-
-**Monitoring & Observability:**
-- Prometheus metrics (`/metrics` endpoint)
-- Winston structured logging
-- Health checks (`/health` endpoint)
+Highlights: TypeScript (NodeNext/ESM) on Node 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Winston for logging, and Playwright for E2E. Dependency updates are automated (Dependabot weekly plus the scheduled Dependency Update workflow): patches auto-merge after CI, minor and major bumps get review.
 
 ---
 
