@@ -72,11 +72,10 @@
     "prom-client": "*"
   },
   "overrides": {
-    "ajv": "8.18.0",
     "fast-uri": "^3.1.2"
   },
   "comments": {
-    "security-overrides": "ajv>=8.18.0 (CVE alert #21), fast-uri>=3.1.2 (GHSA-q3j6-qgpj-74h6 + GHSA-v39h-62p7-jpjc). qs override removed in #190: express/body-parser's ^6.14.0 range now resolves the patched qs 6.15.2 (CVE-2026-8723, and the historical CVE-2025-15284 fixed in 6.14.1) without a pin."
+    "security-overrides": "fast-uri>=3.1.2 (GHSA-q3j6-qgpj-74h6 + GHSA-v39h-62p7-jpjc). ajv override removed in #191: ajv-formats' ^8.0.0 range now resolves the patched ajv 8.20.0 (the alert #21 ReDoS GHSA-2g4f-4pwh-qvx6 / CVE-2025-69873 was fixed in 8.18.0) without a pin. qs override removed in #190 (express ^6.14.0 resolves patched qs 6.15.2)."
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
