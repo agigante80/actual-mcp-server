@@ -195,6 +195,9 @@ jobs:
       - name: 🏗️ Build project
         run: npm run build
 
+      - name: 🔢 Enforce tool count (no drift in total-count literals)
+        run: npm run tool-count
+
       - name: 🔐 Run npm audit
         run: |
           echo "Running npm audit..."

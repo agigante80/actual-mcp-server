@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **63 tools** for conversational financial management. Supports two transports: **HTTP** (LibreChat/LobeChat/multi-user) and **stdio** (Claude Desktop/Claude Code).
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), providing **71 tools** for conversational financial management. Supports two transports: **HTTP** (LibreChat/LobeChat/multi-user) and **stdio** (Claude Desktop/Claude Code).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
-**Current Status**: Production-ready, 63 tools implemented
+**Current Status**: Production-ready, 71 tools implemented
 
 ## Architecture Essentials
 
@@ -80,7 +80,7 @@ export default tool;
 src/
 ├── index.ts                    # Entry point, CLI parsing, server startup
 ├── actualConnection.ts         # Actual Budget connection lifecycle
-├── actualToolsManager.ts       # Tool registry (63 tools in IMPLEMENTED_TOOLS array), dispatch, validation
+├── actualToolsManager.ts       # Tool registry (71 tools in IMPLEMENTED_TOOLS array), dispatch, validation
 ├── auth/
 │   ├── setup.ts                # createMcpAuth() factory (MCPAuth singleton, AUTH_PROVIDER=oidc)
 │   └── budget-acl.ts           # Per-user budget ACL (email/sub/group principals, AUTH_BUDGET_ACL)
@@ -114,7 +114,7 @@ npm run test:e2e                # Playwright E2E tests (initialize → tools/cal
 npx playwright test --grep "initialize -> tools/list" # Single E2E test by name
 
 # Tool Management
-npm run verify-tools            # Verify all 63 tools are correctly registered
+npm run verify-tools            # Verify all 71 tools are correctly registered
 npm run check:coverage          # List @actual-app/api methods vs current tool coverage
 
 # Debugging

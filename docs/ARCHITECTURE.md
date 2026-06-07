@@ -139,7 +139,7 @@
 
 ### Tool Definitions
 
-70 tools organized by category:
+71 tools organized by category:
 
 ```
 src/tools/
@@ -337,7 +337,7 @@ actual-mcp-server/
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
-│   ├── tools/                    # MCP tool definitions (70 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (71 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -368,7 +368,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 70 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 71 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── suites/                        # Domain suite registration functions (one file per domain)
 │   │       ├── shared-context.ts          # SharedState / TestContext types
@@ -433,7 +433,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 70 tools with MCP capabilities
+   └─> Registers 71 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

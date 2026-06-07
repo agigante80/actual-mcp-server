@@ -120,7 +120,7 @@ additional improvements the fast scan missed.
 | Unbounded-scan guard for `search_by_amount` (require account/date, prevent OOM crash) + `update_batch` hardening + try/catch | lsl9119:fix/search-by-amount-crash-and-batch-timeout | #194 | high | S | Reliability/DoS fix in tools we ship; upstream lacks the guard. Quick win; verify against the `transfer_acct` null-crash seen in /local-env. |
 | Semantic / hybrid search over transactions (embeddings, NL + "find similar"), pluggable Ollama/HF/OpenAI | ZanzyTHEbar:main | #195 | high | L | No upstream equivalent; heaviest item, optional-dep gated. |
 | OpenAPI-driven tool-stub codegen + generator-check CI | ZanzyTHEbar:main | #196 | med | M | We generate client types but not tool stubs. |
-| Meta-tool registry + dynamic tool dispatch | ZanzyTHEbar:main | #197 | med | M | Helps clients with tool-count caps; we register 70 tools statically. |
+| Meta-tool registry + dynamic tool dispatch | ZanzyTHEbar:main | #197 | med | M | Helps clients with tool-count caps; we register 71 tools statically. |
 | Pluggable auth factory + LDAP provider | ZanzyTHEbar:main | #198 | med | M | Adds LDAP + provider abstraction to our OIDC/bearer. |
 | Worker-thread session model + write coordinator | ZanzyTHEbar:main | #199 | med-high | L | Design reference for the session engine (cf. #134, #173); high risk to adopt. Filed as a spike. |
 | Dynamic budget auto-select / routing by operation context | ahmadrazach:main | #200 | med | S-M | Extends our multi-budget switch + #189 preference. |

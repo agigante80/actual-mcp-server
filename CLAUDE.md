@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **63 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **71 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
@@ -59,7 +59,7 @@ node dist/src/index.js --stdio  # Production stdio
 
 # Testing (validation sequence, run in this order)
 npm run build                   # Step 1: must compile cleanly
-npm run verify-tools            # Step 2: all 63 tools registered (reads dist/)
+npm run verify-tools            # Step 2: all 71 tools registered (reads dist/)
 npm run test:unit-js            # Step 3: unit + schema tests
 npm audit --audit-level=moderate # Step 4: no new vulnerabilities
 
@@ -131,7 +131,7 @@ Express + StreamableHTTP             StdioServerTransport
     ↓                                     ↓
 ActualMCPConnection (src/lib/ActualMCPConnection.ts)
     ↓
-ActualToolsManager (63 tools, Zod validation, dispatch) at src/actualToolsManager.ts
+ActualToolsManager (71 tools, Zod validation, dispatch) at src/actualToolsManager.ts
     ↓
 actual-adapter.ts (withActualApi wrapper, retry 3x, concurrency limit 5)
     ↓
