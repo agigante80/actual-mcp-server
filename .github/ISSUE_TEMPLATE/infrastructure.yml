@@ -53,6 +53,7 @@ body:
     id: priority
     attributes:
       label: Priority
+      description: "On triage a maintainer also applies the matching P0 to P3 label (and `icebox` if not committed), so priority is filterable: gh issue list --label P1"
       options:
         - P0 — Critical (active exploit, server won't start)
         - P1 — High (security risk, blocking CI)

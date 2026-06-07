@@ -105,6 +105,10 @@ Project-local slash commands in `.claude/commands/`:
 - `/full-review [target]`: orchestrates a multi-dimensional code review (architecture, security, performance, testing, best practices).
 - `/pr-enhance [PR# or description]`: enhances an existing pull request (description, labels, follow-ups).
 
+## Issue Labels
+
+Every issue carries at least one **area** label (`backend`, `infrastructure`, `security`, `actual-api`, `documentation`; the gate enforces this) and one **priority** label: `P0` (Critical), `P1` (High), `P2` (Medium), `P3` (Low). Speculative, not-yet-committed ideas also get `icebox`. Apply the priority label on triage so the backlog is filterable: `gh issue list --label P1`. The feature and infrastructure issue templates have a Priority dropdown whose selection should be mirrored to the matching label.
+
 ## Architecture
 
 ### Layered Design

@@ -434,6 +434,7 @@ Run `npm run docs:sync` to update all `**Tool Count:**` markers in `README.md`, 
 
 #### Planned-work tracking (GitHub issues)
 - If this tool closes a planned-capability issue, reference it in the commit (`(#N)`) so the release step closes it; there is no roadmap file to update.
+- Every issue should carry an **area** label and a **priority** label (`P0` to `P3`, plus `icebox` for not-yet-committed ideas). Apply the priority on triage so the backlog is filterable.
 
 #### `docs/TESTING_AND_RELIABILITY.md`
 - If you added a new test module file to `tests/manual/tests/`, add it to the test-file table
