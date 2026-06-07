@@ -71,6 +71,16 @@ body:
     validations:
       required: false
 
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## For maintainers (completed during triage)
+        Reporters can leave the fields below blank. The readiness gate
+        (/gate-ticket) synthesises acceptance criteria, test scenarios, and the
+        unit/E2E test plan from the report. For a bug or any behaviour change, the
+        fix is also validated by reproducing it first (red), then re-running after
+        the fix (green); see the implement-ticket skill.
   - type: textarea
     id: acceptance
     attributes:
@@ -81,7 +91,7 @@ body:
         - [ ] Unit smoke test added to `tests/unit/generated_tools.smoke.test.js`
         - [ ] `npm run build && npm run test:unit-js` passes
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: security
@@ -124,7 +134,7 @@ body:
         - When: [action is performed]
         - Then: [expected rejection / error message]
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: unit_tests
@@ -137,7 +147,7 @@ body:
         - [ ] Smoke entry added to `tests/unit/generated_tools.smoke.test.js` (new tools only)
         - [ ] `npm run build && npm run test:unit-js` passes
     validations:
-      required: true
+      required: false
 
   - type: textarea
     id: e2e_tests
@@ -151,7 +161,7 @@ body:
         - [ ] Negative: `[suite file]` — [bad state] → call tool → response contains error
         - [ ] Manual integration test added to `tests/manual/tests/<module>.js` if live-server behaviour must be verified
     validations:
-      required: true
+      required: false
 
   - type: markdown
     attributes:
