@@ -1,6 +1,6 @@
 ---
 name: fork-analysis
-description: Analyse every GitHub fork of this repo, and every meaningful BRANCH within each fork, to find features and functionality the forks added that upstream does not have, as a source of ideas to implement. Maintains docs/FORK_ANALYSIS.md as a cache so unchanged fork branches are skipped on the next run. Use whenever the user asks to "analyse the forks", "what do the forks add", "scan forks for features", "fork feature scan", "any new ideas from forks", or wants to harvest fork ideas, even if they do not say the word "fork-analysis".
+description: Analyse every GitHub fork of this repo, and every meaningful BRANCH within each fork, to find features and functionality the forks added that upstream does not have, as a source of ideas to implement. For each newly-identified idea it opens a gate-ready GitHub tracking ticket (crediting the origin fork and original author, linking the exact code to review, flagging that the imported external code MUST get a security review, and requiring positive plus negative scenarios and test cases before implementation). Maintains docs/FORK_ANALYSIS.md as a cache so unchanged fork branches are skipped on the next run. Use whenever the user asks to "analyse the forks", "what do the forks add", "scan forks for features", "fork feature scan", "any new ideas from forks", or wants to harvest fork ideas, even if they do not say the word "fork-analysis".
 ---
 
 # Fork analysis
@@ -125,7 +125,59 @@ A branch that is ahead but only contains noise (a dependabot-style bump, an
 upstream reconcile, a pure type refactor) gets verdict "no novel functionality"
 and is recorded as such, so it is not re-investigated.
 
-### 5. Update docs/FORK_ANALYSIS.md
+### 5. Open a tracking ticket for each NEW idea (automatic)
+
+For every NOVEL functionality item identified in step 4, open a gate-ready GitHub
+issue, UNLESS the doc already records a ticket number for that idea (dedup: never
+re-create a ticket on a re-run; the backlog table's `Ticket` column is the
+source of truth). Skip items the analysis judged genuinely not-applicable to
+upstream (record those in the doc without a ticket and say why).
+
+Use the bug or feature template (`<!-- template-version: 3 -->`) so it is
+gate-ready, with labels `enhancement` (or `bug` for a fix), an area label, and
+`security` (the security label forces the security-auditor into the readiness
+gate, which is mandatory here because the idea comes from external code). Write
+body files into the repo root as a dot-file and delete them after the `gh` call
+(the gh sandbox cannot read `/tmp`).
+
+The ticket body MUST contain all of:
+
+1. **Origin and attribution.** The fork (`owner/repo`), the branch, the commit
+   sha(s), a link to the commit/compare, and an explicit credit to the ORIGINAL
+   AUTHOR (the commit `author.login`, and the fork owner if different):
+   "Idea sourced from @<author> in <fork>:<branch>." Credit them; this is their
+   work.
+2. **What it is.** One or two sentences on the functionality and why it is worth
+   considering.
+3. **Code to review.** The exact files and links to the fork's version at that
+   branch (blob/raw URLs), plus the upstream files it would touch.
+4. **Status: NOT ready to implement, further analysis required.** State plainly
+   that this is a harvested idea from a fast scan, not a vetted spec, and must be
+   designed properly before any code is written.
+5. **A "Before implementation" task checklist** with, at minimum:
+   - [ ] Further analysis of the approach and how it fits our architecture (do
+     not copy-paste the fork code; reimplement to our conventions).
+   - [ ] **Search online for common / industry best practices** for this kind of
+     feature or fix, and align the design with them. The fork is one
+     implementation, not necessarily the best or the safest; validate the
+     approach against established patterns before adopting it.
+   - [ ] Positive AND negative scenarios defined (Given/When/Then).
+   - [ ] Positive AND negative test cases written (unit + e2e as applicable).
+   - [ ] **SECURITY REVIEW (MANDATORY): this idea comes from external/third-party
+     code. Run the security-auditor over the imported code and the reimplementation
+     before adoption; never trust or paste fork code unreviewed.**
+   - [ ] **Scan the SAME fork code for ADDITIONAL minor improvements the fast fork
+     scan missed.** The fork scan only flagged the headline change; read the full
+     diff and the surrounding files for adjacent fixes, edge-case handling, or
+     small improvements we did not capture, and fold the worthwhile ones in.
+6. The standard sections so it can pass the gate (acceptance criteria, security
+   considerations, rollback, etc.).
+
+After creating each ticket, capture its number to write into the doc (step 6).
+Report the new ticket numbers; do NOT implement them (this skill only harvests
+and tickets ideas).
+
+### 6. Update docs/FORK_ANALYSIS.md
 
 Rewrite the doc from the template. For every analysed or skipped `(fork, branch)`
 that has divergence, record a row: fork + link, branch, ahead/behind, head sha,
@@ -135,10 +187,14 @@ Maintain a deduplicated **Feature ideas backlog** section aggregating the novel
 functionality across all fork branches, each tagged with `fork:branch` and a rough
 effort/value note, so it reads as a candidate-ticket list.
 
+Record the ticket number created in step 5 next to each idea in the **Feature
+ideas backlog** table's `Ticket` column. This is the dedup key: on the next run,
+an idea that already has a ticket number is not re-ticketed.
+
 Keep prior verdicts for skipped branches verbatim (only refresh the `behind`
 count and note "unchanged, not re-analysed").
 
-### 6. Report
+### 7. Report
 
 Summarise to the user: how many fork branches were analysed vs cache-skipped vs
 no-divergence, and the new or changed feature ideas worth considering (point at
@@ -178,10 +234,13 @@ re-analysed only when its head sha changes; otherwise the prior verdict stands.
 
 Deduplicated candidate features worth considering for upstream. Not commitments.
 
-| Idea | From | Rough value | Rough effort | Notes / overlap with existing |
-|------|------|-------------|--------------|-------------------------------|
-| <feature> | owner/repo:branch | high/med/low | S/M/L | <does upstream partially have it?> |
+| Idea | From | Ticket | Rough value | Rough effort | Notes / overlap with existing |
+|------|------|--------|-------------|--------------|-------------------------------|
+| <feature> | owner/repo:branch | #NNN | high/med/low | S/M/L | <does upstream partially have it?> |
 ```
+
+The `Ticket` column is the dedup key: an idea that already has a ticket number is
+not re-ticketed on the next run.
 
 ## Guardrails
 
@@ -201,6 +260,13 @@ Deduplicated candidate features worth considering for upstream. Not commitments.
   as missing, confirm upstream does not already have it (we ship fast; a branch
   that diverged months ago may be behind us on something it once led).
 - **No em or en dashes**; absolute dates; one (fork, branch) per row.
-- **Ideas, not auto-tickets.** Surface the backlog; let the user choose what to
-  ticket. If they say so, hand a chosen idea to the normal ticket-creation flow.
+- **Auto-ticket every NEW idea, exactly once.** Open a gate-ready ticket per
+  novel finding (step 5), and record its number in the backlog `Ticket` column.
+  On a re-run, an idea that already has a ticket is NOT re-ticketed: dedup on that
+  column. Every such ticket MUST credit the original author, link the fork code to
+  review, state that further analysis is required, and carry the mandatory tasks:
+  search online for common practices, define positive AND negative scenarios and
+  test cases, run a security review of the external code, and scan the same fork
+  code for additional improvements the fast scan missed. This skill only harvests
+  and tickets ideas; it never implements them.
 ```
