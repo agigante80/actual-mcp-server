@@ -41,10 +41,57 @@ Hold these in a TodoWrite list so progress survives a long run.
 Run the phases in order. A phase that cannot pass after its bounded retries
 stops the run with a clear report rather than limping forward.
 
+**Order depends on ticket type.** For a `bug`, behaviour-change, or external /
+fork-harvested ticket, run **Phase 0 (Reproduce) BEFORE Phase 1 (Gate)**: gating,
+security-reviewing, and synthesising a ticket that turns out to be a phantom is
+wasted work, so prove it reproduces first and gate only what survives. For
+greenfield features, docs, and chore/CI tickets (nothing to reproduce), skip
+Phase 0 and start at Phase 1.
+
+### Phase 0: Reproduce first (bug, behaviour-change, and external/fork tickets)
+
+Run this FIRST, ahead of the gate, when the ticket is labelled `bug`, proposes a
+change to existing observable behaviour, OR is external / community /
+fork-harvested. Skip it only for greenfield features with nothing to reproduce,
+docs, and chore/CI tickets (say so in the report, then start at Phase 1).
+
+An incoming ticket is a HYPOTHESIS, not ground truth. External and spec-derived
+tickets are routinely wrong: stale (the bug was fixed since), mis-scoped (only
+part of it is real), or mis-severity. Prove the reported behaviour against the
+CURRENT code before spending any effort gating or building it, so you never gate,
+security-review, and "fix" a phantom.
+
+1. Reproduce against current code, preferring the live `/local-env` (it has caught
+   several mischaracterised tickets, four already-fixed fork/spec phantoms among
+   them, that unit-level reasoning alone would have missed). Write a focused
+   failing check that demonstrates the reported behaviour and capture its **red**
+   result. That check is the start of the regression test, it is not throwaway.
+2. Branch on the outcome, and report which happened with evidence:
+   - **Reproduces as described** -> proceed to Phase 1 (gate), then implement. The
+     red check is the test that must go green.
+   - **Does not reproduce** -> STOP. Do not gate, do not implement. Recharacterise
+     or close the ticket (with the evidence), the way the `payee_rules_get`, #211
+     "already fixed / not a crash", and #194 "already implemented" findings were
+     handled.
+   - **Reproduces differently** (different severity, scope, or symptom) -> rewrite
+     the ticket body to match reality (re-title, re-label, fix the symptom) before
+     gating.
+   - **Surfaces an out-of-scope sibling bug** (as reproducing #194 surfaced #212)
+     -> file a gate-ready ticket for it; do not expand this ticket's scope.
+3. Tier the rigor by source: external / community / fork-harvested tickets get the
+   full treatment plus the mandatory security review; internal trivial changes can
+   be lighter. When unsure, do more.
+
+A behaviour change is not done until a check that was **red is green**. Carry the
+red check into Phase 2 (make it pass) and Phase 3 (it runs in the suite). If the
+fix changes observable behaviour, sweep every affected test, tool description, and
+doc in Phase 2, not just the line you changed.
+
 ### Phase 1: Gate to 10/10
 
-The ticket must score 10/10 from every gate agent before any code is written, so
-the spec is unambiguous and testable.
+Gate only a ticket that survived Phase 0 (or one that skipped it: a greenfield
+feature, docs, or chore). The ticket must score 10/10 from every gate agent before
+any code is written, so the spec is unambiguous and testable.
 
 1. Run the gate: `Agent` tool, `subagent_type: ticket-gate`, prompt = the issue
    number.
@@ -59,40 +106,6 @@ the spec is unambiguous and testable.
 Writing the body files: the `gh` sandbox cannot read `/tmp`, so write body files
 into the repo root as a dot-file (e.g. `./.ticket-<n>-body.md`) and delete them
 after the `gh` call.
-
-### Phase 1.5: Reproduce first (bug and behaviour-change tickets)
-
-Run this phase when the ticket is labelled `bug` OR proposes a change to existing
-observable behaviour. Skip it for greenfield features with nothing to reproduce,
-docs, and chore/CI tickets (say so in the report).
-
-An incoming ticket is a HYPOTHESIS, not ground truth. External and spec-derived
-tickets are routinely wrong: stale (the bug was fixed since), mis-scoped (only
-part of it is real), or mis-severity. Prove the reported behaviour against the
-CURRENT code before writing a fix, so you never "fix" a phantom.
-
-1. Reproduce against current code, preferring the live `/local-env` (it caught two
-   mischaracterised tickets that unit-level reasoning alone would have missed).
-   Write a focused failing check that demonstrates the reported behaviour and
-   capture its **red** result. That check is the start of the regression test, it
-   is not throwaway.
-2. Branch on the outcome, and report which happened with evidence:
-   - **Reproduces as described** -> proceed to Phase 2. The red check is the test
-     that must go green.
-   - **Does not reproduce** -> STOP. Do not implement. Recharacterise or close the
-     ticket (with the evidence), the same way the `payee_rules_get` and #211
-     "already fixed / not a crash" findings were handled.
-   - **Reproduces differently** (different severity, scope, or symptom) -> rewrite
-     the ticket body to match reality (re-title, re-label, fix the symptom), then
-     re-gate (Phase 1) before implementing.
-3. Tier the rigor by source: external / community / fork-harvested tickets get the
-   full treatment plus the mandatory security review; internal trivial changes can
-   be lighter. When unsure, do more.
-
-A behaviour change is not done until a check that was **red is green**. Carry the
-red check into Phase 2 (make it pass) and Phase 3 (it runs in the suite). If the
-fix changes observable behaviour, sweep every affected test, tool description, and
-doc in Phase 2, not just the line you changed.
 
 ### Phase 2: Implement
 
@@ -209,10 +222,11 @@ auto-implemented or left open).
 
 ## Guardrails
 
-- **A ticket is a hypothesis, not ground truth.** For bug and behaviour-change
-  tickets, reproduce against current code first (Phase 1.5). If it does not
-  reproduce, recharacterise or close it, do not implement a phantom. If it
-  reproduces differently, rewrite and re-gate. Never fix from the report alone.
+- **A ticket is a hypothesis, not ground truth.** For bug, behaviour-change, and
+  external/fork tickets, reproduce against current code first (Phase 0), BEFORE
+  the gate, so a phantom is never gated or built. If it does not reproduce,
+  recharacterise or close it. If it reproduces differently, rewrite then gate.
+  Never fix from the report alone.
 - **Red before green.** A behaviour change is not done until a check that was red
   is green, and the fix sweeps every affected test, tool description, and doc.
 - **develop only.** Never push to `main`, never tag, never release. That stays a
