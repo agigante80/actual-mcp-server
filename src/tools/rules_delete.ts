@@ -24,10 +24,9 @@ const tool: ToolDefinition = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ruleExists = allRules.some((r: any) => r.id === input.id);
       if (!ruleExists) {
-        return {
-          error: notFoundMsg('Rule', input.id, 'actual_rules_get'),
-          success: false,
-        };
+        // Throw (not return {success:false}) so a non-existent id surfaces as an MCP
+        // error, consistent with every other delete tool's not-found behavior.
+        throw new Error(notFoundMsg('Rule', input.id, 'actual_rules_get'));
       }
       await rawDeleteRule(input.id);
       return { success: true };

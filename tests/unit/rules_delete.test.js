@@ -47,11 +47,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset();
     rulesResponse = [];
-    const res = await tool.call({ id: 'rule-missing' });
-    check(res?.success === false,                       'returns success: false');
-    check(res?.error?.includes('Rule'),                 'error mentions Rule');
-    check(res?.error?.includes('rule-missing'),         'error mentions the id');
-    check(res?.error?.includes('actual_rules_get'),     'error mentions list tool');
+    let threw = null;
+    try { await tool.call({ id: 'rule-missing' }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                       'throws on not-found');
+    check(threw?.message?.includes('Rule'),             'error mentions Rule');
+    check(threw?.message?.includes('rule-missing'),     'error mentions the id');
+    check(threw?.message?.includes('actual_rules_get'), 'error mentions list tool');
     check(withWriteSessionCalls === 1,                  'exactly one withWriteSession call');
     check(deleteCalls === 0,                            'rawDeleteRule NOT called');
   }

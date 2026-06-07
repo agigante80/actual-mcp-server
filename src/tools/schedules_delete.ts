@@ -27,10 +27,9 @@ const tool: ToolDefinition = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const scheduleExists = schedules.some((s: any) => s.id === input.id);
       if (!scheduleExists) {
-        return {
-          error: notFoundMsg('Schedule', input.id, 'actual_schedules_get'),
-          success: false,
-        };
+        // Throw (not return {success:false}) so a non-existent id surfaces as an MCP
+        // error, consistent with every other delete tool's not-found behavior.
+        throw new Error(notFoundMsg('Schedule', input.id, 'actual_schedules_get'));
       }
       try {
         await rawDeleteSchedule(input.id);
@@ -38,10 +37,9 @@ const tool: ToolDefinition = {
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes('NOT NULL constraint') || msg.includes('messages_crdt')) {
-          return {
-            error: constraintErrorMsg('Schedule', input.id, 'actual_schedules_get'),
-            success: false,
-          };
+          // Translate the raw SQLite constraint error into an actionable message, thrown
+          // for the same consistency reason as the not-found case above.
+          throw new Error(constraintErrorMsg('Schedule', input.id, 'actual_schedules_get'));
         }
         throw err;
       }

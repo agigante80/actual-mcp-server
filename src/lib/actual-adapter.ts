@@ -1217,6 +1217,20 @@ export async function updateTransactionBatch(
 export async function deleteTransaction(id: string): Promise<void> {
   observability.incrementToolCall('actual.transactions.delete').catch(() => {});
   return queueWriteOperation(async () => {
+    // Pre-flight existence check: the raw API silently no-ops on a missing id and would
+    // otherwise report success for a delete that removed nothing. A targeted ActualQL
+    // query by id keeps this cheap (indexed lookup, not a full-table scan).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const found = await withConcurrency(() =>
+      retry(async () => {
+        const res = (await rawRunQuery(q('transactions').filter({ id }).select(['id']))) as { data?: unknown[] };
+        return Array.isArray(res?.data) && res.data.length > 0;
+      }, { retries: 2, backoffMs: 200 })
+    );
+    if (!found) {
+      throw new Error(`Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
+    }
     // Non-idempotent: do not retry (#165). A retry after a lost-response would
     // re-issue the delete against an already-removed record and surface a
     // confusing "not found" even though the first attempt succeeded.

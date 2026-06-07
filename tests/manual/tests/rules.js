@@ -145,7 +145,7 @@ export async function rulesTests(client, context) {
   }
 
   // rules_delete — negative UUID test then real delete(s) + verify
-  // FIXED(BUG-9): actual_rules_delete with nil-UUID now returns { success: false, error } actionable error
+  // FIXED(BUG-9): actual_rules_delete with nil-UUID now throws an actionable not-found error
   console.log("\nTesting rules_delete (negative UUID)...");
   try {
     const nilResult = await callTool("actual_rules_delete", {

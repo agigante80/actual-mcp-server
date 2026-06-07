@@ -11,9 +11,8 @@ type Output = { success: boolean };
 const tool: ToolDefinition = {
   name: 'actual_transactions_delete',
   description: 'Delete a transaction from Actual Budget by its ID. ' +
-    'Note: if the transaction does not exist, the call will still return { success: true } ' +
-    'because the Actual Budget API does not distinguish between a successful delete and a no-op. ' +
-    'Use actual_transactions_filter to verify the transaction exists before deleting. ' +
+    'If the transaction does not exist, the call returns an actionable "not found" error ' +
+    '(the adapter verifies existence first, since the raw Actual Budget API silently no-ops on a missing id). ' +
     'This permanently removes the transaction and updates account balances accordingly. This operation cannot be undone.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

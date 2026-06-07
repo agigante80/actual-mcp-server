@@ -211,19 +211,25 @@ export async function transactionTests(client, context) {
     }
   }
 
-  // transactions_delete — negative UUID test then real delete + verify
-  // NOTE(BUG-8): actual_transactions_delete with nil-UUID returns {success:true} — this is a known Actual API limitation.
-  // The API does not distinguish between a successful delete and a no-op. See tool description for details.
+  // transactions_delete: negative UUID test then real delete + verify.
+  // FIXED(BUG-8): actual_transactions_delete with a non-existent id now throws an
+  // actionable "not found" error. The adapter pre-flights existence with a targeted
+  // ActualQL query, since the raw Actual API silently no-ops (CRDT) and would otherwise
+  // report success for a delete that removed nothing.
   console.log("\nTesting transactions_delete (negative UUID)...");
   {
-    const nilResult = await callTool("actual_transactions_delete", {
-      id: '00000000-0000-0000-0000-000000000000',
-    });
-    // This is expected to return { success: true } — Actual's CRDT store accepts the operation silently
-    if (nilResult?.success === true) {
-      console.log("  ✓ NOTE(BUG-8): transactions_delete nil-UUID returns success:true (known API limitation — CRDT no-op)");
-    } else {
-      console.log("  ⚠ Unexpected response for nil-UUID delete:", JSON.stringify(nilResult).slice(0, 120));
+    try {
+      const nilResult = await callTool("actual_transactions_delete", {
+        id: '00000000-0000-0000-0000-000000000000',
+      });
+      console.log("  ⚠ Expected a not-found error but tool returned:", JSON.stringify(nilResult).slice(0, 120));
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes('not found') && msg.includes('actual_transactions_get')) {
+        console.log(`  ✓ FIXED(BUG-8): transactions_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
+      } else {
+        console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+      }
     }
   }
 
