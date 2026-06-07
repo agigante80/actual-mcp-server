@@ -145,7 +145,8 @@
 src/tools/
 ├── server_info.ts                      # Server version / connection info
 ├── server_get_version.ts               # Actual Budget server version
-├── get_id_by_name.ts                   # Name → UUID lookup (accounts/categories/payees/schedules)
+├── get_id_by_name.ts                   # Exact name → UUID lookup (accounts/categories/payees/schedules)
+├── entities_search.ts                  # Pattern/fuzzy name search for accounts/categories/payees (#204)
 ├── session_list.ts                     # Session management (2 tools)
 ├── session_close.ts
 ├── accounts_create.ts                  # Accounts (7 tools)

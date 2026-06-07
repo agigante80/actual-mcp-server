@@ -47,6 +47,29 @@ export async function payeeTests(client, context) {
   console.log("✓ Created second payee:", payeeId2);
   context.payeeId2 = payeeId2;
 
+  // #204: actual_entities_search (pattern + fuzzy lookup, and the no-match contract)
+  console.log("\nTesting actual_entities_search (#204)...");
+  {
+    const contains = await callTool("actual_entities_search", { type: 'payees', query: `MCP-Payee-${timestamp}` });
+    const cm = contains?.matches || contains?.result?.matches || [];
+    if (cm.some(m => m.id === payeeId)) console.log(`  ✓ contains: found the created payee by partial name (${cm.length} match(es))`);
+    else console.log(`  ❌ contains: created payee not found:`, JSON.stringify(contains).slice(0, 140));
+
+    // fuzzy: drop a character to simulate a typo
+    const typo = `MCP-Paye-${timestamp}`;
+    const fuzzy = await callTool("actual_entities_search", { type: 'payees', query: typo, matchType: 'fuzzy' });
+    const fm = fuzzy?.matches || fuzzy?.result?.matches || [];
+    if (fm.some(m => m.id === payeeId)) console.log(`  ✓ fuzzy: typo "${typo}" still resolved the payee`);
+    else console.log(`  ⚠ fuzzy: typo did not resolve (matches: ${JSON.stringify(fm).slice(0, 120)})`);
+
+    // no-match contract: empty result, no error
+    const none = await callTool("actual_entities_search", { type: 'payees', query: 'zzz-nonexistent-zzz' });
+    const nm = none?.matches || none?.result?.matches || [];
+    const nc = none?.count ?? none?.result?.count;
+    if (nm.length === 0 && nc === 0 && !(none?.error || none?.result?.error)) console.log("  ✓ no-match: returns { matches: [], count: 0 } with no error");
+    else console.log("  ❌ no-match: unexpected:", JSON.stringify(none).slice(0, 140));
+  }
+
   // Verify payeeId2 create
   {
     const found = (await allPayees()).find(p => p.id === payeeId2);

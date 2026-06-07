@@ -73,6 +73,7 @@ async function expectCallError(tool, input, label) {
     get_id_by_name_tool,
     rules_update_tool,
     transactions_create_tool,
+    entities_search_tool,
   ] = await Promise.all([
     import('../../dist/src/tools/rules_create.js').then(m => m.default),
     import('../../dist/src/tools/budget_updates_batch.js').then(m => m.default),
@@ -93,6 +94,7 @@ async function expectCallError(tool, input, label) {
     import('../../dist/src/tools/get_id_by_name.js').then(m => m.default),
     import('../../dist/src/tools/rules_update.js').then(m => m.default),
     import('../../dist/src/tools/transactions_create.js').then(m => m.default),
+    import('../../dist/src/tools/entities_search.js').then(m => m.default),
   ]);
 
   let failures = 0;
@@ -581,6 +583,21 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(notes_update_tool,
     { id: 'budget-2026-01', note: '#template 250' },
     'budget-YYYY-MM id with note accepted')) fail();
+
+  // ── actual_entities_search (#204) ───────────────────────────────────────
+  console.log('\n[actual_entities_search]');
+
+  if (!expectParseError(entities_search_tool, { type: 'payees' }, 'missing query')) fail();
+  if (!expectParseError(entities_search_tool, { type: 'payees', query: '' }, 'empty query string')) fail();
+  if (!expectParseError(entities_search_tool, { type: 'payees', query: [] }, 'empty query array')) fail();
+  if (!expectParseError(entities_search_tool, { type: 'foo', query: 'x' }, 'unknown entity type')) fail();
+  if (!expectParseError(entities_search_tool, { type: 'payees', query: 'x', matchType: 'regex' },
+    'regex matchType rejected (out of scope)')) fail();
+  if (!expectParseError(entities_search_tool, { type: 'payees', query: 'x', limit: 0 }, 'limit below 1')) fail();
+  if (!expectParseError(entities_search_tool, { type: 'payees', query: 'x', limit: 101 }, 'limit above 100')) fail();
+  if (!expectParseOk(entities_search_tool, { type: 'payees', query: 'amazon' }, 'valid: defaults applied')) fail();
+  if (!expectParseOk(entities_search_tool, { type: 'categories', query: ['gro', 'rent'], matchType: 'fuzzy', limit: 5 },
+    'valid: multi-pattern fuzzy with limit')) fail();
 
   // ─── summary ─────────────────────────────────────────────────────────────
   console.log('');

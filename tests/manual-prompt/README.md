@@ -1,4 +1,4 @@
-# AI Prompt Tests — Manual Copy-Paste Suite
+# AI Prompt Tests: Manual Copy-Paste Suite
 
 **Project:** Actual MCP Server  
 **Purpose:** Copy-paste prompts for manually testing all 62 MCP tools via an AI chat session  
@@ -20,9 +20,9 @@ Because all three prompts run in the **same chat session**, the AI retains:
 
 | File | Coverage | When to use |
 |------|----------|-------------|
-| [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1** — 7 read-only tools | Always run first. Confirms the server is up and connected. |
-| [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2–6b** — ~39 CRUD tools | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules. |
-| [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7–12** — ~16 tools + full cleanup | Paste after Prompt 2 passes. Tests budgets, summaries, query engine, notes, session management, and cleans up everything. |
+| [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1**: 7 read-only tools | Always run first. Confirms the server is up and connected. |
+| [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2-6b**: ~39 CRUD tools | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules. |
+| [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7-12**: ~16 tools + full cleanup | Paste after Prompt 2 passes. Tests budgets, summaries, query engine, notes, session management, and cleans up everything. |
 
 ---
 
@@ -30,7 +30,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 
 1. **Start the MCP server** and open a new chat session in LibreChat, LobeChat, or any MCP-enabled client with a model that has tool access.
 
-2. **Paste Prompt 1** (`prompt-1-smoke.txt` — everything below `─── PROMPT START`).  
+2. **Paste Prompt 1** (`prompt-1-smoke.txt`: everything below `─── PROMPT START`).  
    The AI will test 7 read-only tools and produce one status line per tool.
 
 3. If **all Phase 1 tools pass**, paste **Prompt 2** into the **same chat session**.  
@@ -47,7 +47,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 
 | Phase | Prompt | Tools | Domain |
 |-------|--------|-------|--------|
-| 1 | Prompt 1 | 7 | Server info, read-only lists, `actual_get_id_by_name` |
+| 1 | Prompt 1 | 8 | Server info, read-only lists, `actual_get_id_by_name`, `actual_entities_search` |
 | 2 | Prompt 2 | 6 | Account CRUD |
 | 3 | Prompt 2 | 6 | Category Group & Category CRUD |
 | 4 | Prompt 2 | 5 | Payee CRUD + rules + merge |
@@ -60,10 +60,10 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 9 | Prompt 3 | 2 | Advanced query + bank sync |
 | 9b | Prompt 3 | 2 | Notes (get + update) |
 | 10 | Prompt 3 | 2 | Session management |
-| 11 | Prompt 3 | — | Concurrency (optional, skipped by default) |
-| 12 | Prompt 3 | — | Full cleanup |
+| 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
+| 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 64 tools across 3 prompts**
+**Total: 65 tools across 3 prompts**
 
 ---
 
@@ -76,7 +76,7 @@ All test data created by the AI follows the `MCP-{Type}-{TS}` pattern (e.g. `MCP
 ## Adding a New Tool
 
 When adding a new MCP tool, update the appropriate prompt file to include it:
-- Determine which phase it belongs to (by domain — see table above)
+- Determine which phase it belongs to (by domain: see table above)
 - Add both a **positive** and a **negative** test scenario
 - Update the phase header tool count in the prompt file
 - Update the total tool count in this README (Phase Overview table above)

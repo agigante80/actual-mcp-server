@@ -148,6 +148,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
   if (name.includes('transactions_update_batch')) inputExample.updates = [{ id: '00000000-0000-0000-0000-000000000001', fields: { notes: 'batch-test' } }];
+  if (name.includes('entities_search')) inputExample.type = 'payees', inputExample.query = 'kroger'; // matches getPayees stub { name: 'Kroger' }
   if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('accounts_create')) inputExample.name = 'New';
   if (name.includes('accounts_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated Name' };

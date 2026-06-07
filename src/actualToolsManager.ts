@@ -72,6 +72,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_session_close',
   'actual_session_list',
   'actual_get_id_by_name',
+  'actual_entities_search',
   'actual_server_get_version',
   'actual_tags_list',
   'actual_tags_create',
