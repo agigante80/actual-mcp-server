@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.6.40  
 **Purpose:** Define security policies, privacy practices, and incident response  
-**Last Updated:** 2026-03-03
+**Last Updated:** 2026-06-07
 
 ---
 
@@ -62,7 +62,7 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
 OIDC_SCOPES=                          # leave empty for Casdoor (no scope claim)
-AUTH_BUDGET_ACL=alice@example.com:budget-uuid-1
+AUTH_BUDGET_ACL={"alice@example.com":["budget-sync-id-1"]}
 ```
 
 **Casdoor compatibility**: Casdoor auth-code flow JWTs omit the `scope` claim.
@@ -70,10 +70,11 @@ Set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements a
 
 **Per-user Budget ACL** (`AUTH_BUDGET_ACL`):
 ```
-# Format: principal:budget-sync-id (comma-separated)
-AUTH_BUDGET_ACL=alice@example.com:aaa-bbb-ccc,group:admins:ddd-eee-fff
+# Format: a JSON object mapping each principal to an array of budget sync IDs.
+# Use "*" as the sync ID to grant wildcard (all-budget) access.
+AUTH_BUDGET_ACL={"alice@example.com":["aaa-bbb-ccc"],"group:admin":["*"]}
 ```
-Principals are matched against JWT claims `email`, `sub`, and `groups`.
+Principals are matched against the JWT `sub` claim, the `email` claim, and each entry of the `groups` (or `roles`) claim, where group entries match as `group:<name>`.
 If `AUTH_BUDGET_ACL` is not set, all authenticated users access the single configured budget.
 
 **Security Properties**:
@@ -595,9 +596,8 @@ npm audit fix
 - Lock file (`package-lock.json`) committed to git
 
 **Git Dependencies:**
-- Pin to specific commit SHA (not branch name)
-- Example: `@librechat/api` currently tracks `main` branch (⚠️ unpinned)
-- **Recommendation:** Pin to commit SHA for stability
+- None currently. All dependencies are pinned npm packages resolved through `package-lock.json`.
+- If a git dependency is ever added, pin it to a specific commit SHA rather than a branch name.
 
 **Version Overrides:**
 ```json
@@ -693,7 +693,7 @@ npm audit fix
 
 **Non-root user**:
 ```dockerfile
-USER node
+USER app
 ```
 
 **Minimal attack surface**:

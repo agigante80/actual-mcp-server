@@ -3,7 +3,7 @@
 **Project:** Actual MCP Server  
 **Version:** 0.6.40  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
-**Last Updated:** 2026-03-02
+**Last Updated:** 2026-06-07
 
 ---
 
@@ -33,8 +33,8 @@
 | Tool | Version | Purpose |
 |------|---------|---------|
 | **Node.js Built-in** | Native | Unit test runner |
-| **TypeScript** | ^5.9.2 | Type checking (compile-time testing) |
-| **Playwright** | ^1.56.0 | End-to-end testing |
+| **TypeScript** | ^6.0.3 | Type checking (compile-time testing) |
+| **Playwright** | ^1.60.0 | End-to-end testing |
 | **Custom Adapter Tests** | N/A | Smoke tests for Actual API |
 | **npm audit** | Native | Security vulnerability scanning |
 
@@ -44,17 +44,17 @@
 tests/
 ├── unit/                    # Unit tests (fast, isolated, offline)
 │   ├── transactions_create.test.js        # Zod schema validation (transactions_create)
-│   ├── generated_tools.smoke.test.js      # All 63 tools: stub adapter + correctness assertions
+│   ├── generated_tools.smoke.test.js      # All 70 tools: stub adapter + correctness assertions
 │   └── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
 ├── e2e/                     # End-to-end tests
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
 │   ├── docker.e2e.spec.ts                 # Docker smoke integration (full stack)
-│   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (63 tools)
+│   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (70 tools)
 │   └── run-docker-e2e.sh                  # Docker test orchestrator
 └── manual/                  # Live integration tests (real Actual Budget)
     ├── index.js              # Entry point, level-gated execution
     ├── cleanup.js            # Standalone MCP-* data cleanup
-    └── tests/               # Per-domain test modules (10 files)
+    └── tests/               # Per-domain test modules (13 files)
 ```
 
 **Docker-based E2E Tests**: Full stack integration testing with real Actual Budget server in Docker.
@@ -131,7 +131,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 **What Docker E2E tests verify:**
 - ✅ Docker build works correctly
 - ✅ Container networking (MCP ↔ Actual Budget)
-- ✅ Real tool execution (**all 63 tools at 100% coverage**)
+- ✅ Real tool execution (**all 70 tools at 100% coverage**)
 - ✅ Session management and persistence
 - ✅ Production-like deployment
 - ✅ Error handling and validation (15+ error scenarios)
@@ -139,7 +139,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 
 **Test Suites:**
 - **docker.e2e.spec.ts**: Basic smoke tests (11 tests)
-- **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (63 tools, 80+ test cases)
+- **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (70 tools, 80+ test cases)
 
 ### Individual Test Commands
 
@@ -180,7 +180,7 @@ Before running `git commit`:
 
 - [ ] `npm run build`: ✅ No TypeScript errors
 - [ ] `npm run test:adapter`: ✅ All adapter tests pass
-- [ ] `npm run test:unit-js`: ✅ All unit + schema tests pass (3 files, ~25 assertions)
+- [ ] `npm run test:unit-js`: ✅ All unit + schema tests pass (~52 files)
 - [ ] `npm audit --audit-level=moderate`: ✅ No moderate/high/critical vulnerabilities
 
 ### CI/CD Enforcement
@@ -211,15 +211,15 @@ GitHub Actions automatically runs:
 | File | What it tests |
 |---|---|
 | `transactions_create.test.js` | Zod schema: valid input accepted, empty input rejected |
-| `generated_tools.smoke.test.js` | All 63 tools: stub adapter, call succeeds, response shape correct |
+| `generated_tools.smoke.test.js` | All 70 tools: stub adapter, call succeeds, response shape correct |
 | `schema_validation.test.js` | Negative-path schemas: `rules_create`, `budget_updates_batch`, `budgets_transfer`, `budgets_setAmount` |
 
 **Run**:
 ```bash
-npm run test:unit-js   # runs all 3 files sequentially
+npm run test:unit-js   # runs the full unit chain (~52 files) sequentially
 ```
 
-**Coverage**: 63/63 tools smoke-validated (offline, stub adapter). 60+ negative-path assertions across 11+ tool schemas.
+**Coverage**: 70/70 tools smoke-validated (offline, stub adapter). 60+ negative-path assertions across 11+ tool schemas.
 
 ### 2. Adapter Tests
 
@@ -231,7 +231,7 @@ npm run test:unit-js   # runs all 3 files sequentially
 - `withActualApi` wrapper lifecycle (init/shutdown)
 - Retry logic: 3 attempts, exponential backoff, recovery from transient failures
 - Concurrency queue: 5-session limit, overflow queuing
-- 23 assertions total, no tool business logic
+- Adapter-infrastructure assertions only, no tool business logic
 
 **Run**:
 ```bash
@@ -242,13 +242,13 @@ npm run test:adapter
 
 **Purpose**: Test full user workflows
 
-**Location**: `test/e2e/` (Playwright)
+**Location**: `tests/e2e/` (Playwright)
 
-**Framework**: Playwright ^1.56.0
+**Framework**: Playwright ^1.60.0
 
 **Scenarios**:
 - MCP client connects to server
-- LibreChat loads all 63 tools
+- LibreChat loads all 70 tools
 - User performs complete workflow via chat
 
 **Run**:
@@ -256,7 +256,7 @@ npm run test:adapter
 npm run test:e2e
 ```
 
-**Status**: Fully operational. `docker-all-tools.e2e.spec.ts` covers all 63 tools end-to-end.
+**Status**: Fully operational. `docker-all-tools.e2e.spec.ts` covers all 70 tools end-to-end.
 
 ### 4. Connection Tests
 
@@ -277,7 +277,7 @@ npm run dev -- --test-actual-connection
 
 ### 5. Tool Tests (deprecated path; use unit tests instead)
 
-**Purpose**: Smoke test all 63 tools
+**Purpose**: Smoke test all 70 tools
 
 **Command**:
 ```bash
@@ -340,10 +340,10 @@ Planned integrations:
 
 ### Current Coverage
 
-- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 63 tools
+- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 70 tools
 - **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle), not per-tool
-- **Docker E2E**: 60/63 tools with named tests (real Actual Budget server); 2 tools excluded (`budgets_list_available` and `budgets_switch` require ≥2 budgets, and the CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
-- **Live Integration**: 63/63 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
+- **Docker E2E**: 68/70 tools with named tests (real Actual Budget server); 2 tools excluded (`budgets_list_available` and `budgets_switch` require ≥2 budgets, and the CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
+- **Live Integration**: 70/70 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
 
 ### Coverage Goals
 
@@ -351,8 +351,8 @@ Planned integrations:
 |-----------|---------|--------|----------|
 | Unit Tests | 80% | 90% | High |
 | Adapter Tests | 100% | 100% | Maintain |
-| Integration Tests | 0% | 50% | Medium |
-| E2E Tests | 0% | Basic workflows | Medium |
+| Integration Tests | 70/70 tools (live) | Maintain | Medium |
+| E2E Tests | All 70 tools (Docker) | Maintain | Medium |
 
 ### Measuring Coverage
 
@@ -465,7 +465,7 @@ cat .env | grep ACTUAL_
 npx playwright test --ui
 
 # Run specific test
-npx playwright test test/e2e/specific-test.spec.ts
+npx playwright test tests/e2e/specific-test.spec.ts
 
 # Debug mode
 npx playwright test --debug
@@ -497,7 +497,7 @@ npm audit --json | jq '.vulnerabilities'
 ### Unit Test Template
 
 ```javascript
-// test/unit/my_feature.test.js
+// tests/unit/my_feature.test.js
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { myFeature } from '../../dist/src/my-feature.js';
@@ -568,8 +568,7 @@ Track test improvements:
 
 ---
 
-## � Comprehensive Multi-Level Test Plan
-
+## Comprehensive Multi-Level Test Plan
 ### Test Pyramid Strategy
 
 This project follows a comprehensive testing strategy with multiple levels, from unit tests to full E2E integration. Each level builds upon the previous, ensuring complete coverage of both success and failure scenarios.
@@ -580,7 +579,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
                       /         \
                     /             \
                   /   Level 5:      \
-                /   Full E2E Tests    \    ← All 63 tools + Error scenarios
+                /   Full E2E Tests    \    ← All 70 tools + Error scenarios
               /     (Docker Stack)      \
             /                              \
           /        Level 4: Protocol E2E    \  ← MCP protocol compliance
@@ -605,14 +604,14 @@ This project follows a comprehensive testing strategy with multiple levels, from
 **Command:** `npm run test:adapter`
 
 **Coverage:**
-- ✅ All 63 tools registered correctly
+- ✅ All 70 tools registered correctly
 - ✅ Tool schemas valid (Zod validation)
 - ✅ Tool descriptions present
 - ✅ Basic tool invocation works
 
 **Test Files:**
 - `src/tests_adapter_runner.ts` - Main adapter test runner
-- `tests/unit/generated_tools.smoke.test.js` - All 63 tools smoke validation
+- `tests/unit/generated_tools.smoke.test.js` - All 70 tools smoke validation
 
 **Success Criteria:**
 - All tools found in registry
@@ -632,12 +631,12 @@ This project follows a comprehensive testing strategy with multiple levels, from
 **Location:** `tests/unit/`  
 **Command:** `npm run test:unit-js`
 
-**Test Files (5 active):**
+**Representative test files (the `test:unit-js` chain runs ~52):**
 
 | File | What it tests | Assertions |
 |---|---|---|
 | `transactions_create.test.js` | Zod schema for `transactions_create`: valid input accepted, empty rejected | 2 |
-| `generated_tools.smoke.test.js` | All 63 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 63 + shape checks |
+| `generated_tools.smoke.test.js` | All 70 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 70 + shape checks |
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
 | `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
 | `rejection-allowlist-purity.test.js` | Static analysis of `src/lib/rejection-allowlist.ts`: sentinel marker present; no static, dynamic, or CommonJS imports of non-node modules; no top-level side-effecting statements (#159) | 5 categories |
@@ -646,7 +645,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `budget_acl_enforcement.test.js` | Per-session active budget + ACL: stdio short-circuit; OIDC defence-in-depth refusal on missing allowedBudgets; allow on ACL match; warn-level structured denial log; `switchBudget` requires session, exact match only, releases pool entry before mutating session map (#156) | 15 |
 
 **Coverage:**
-- ✅ All 63 tools: stub invocation + response-shape assertion
+- ✅ All 70 tools: stub invocation + response-shape assertion
 - ✅ Schema parse rejection for empty/invalid inputs (11+ tools, 60+ cases)
 - ✅ Runtime guard rejection: `amount ≤ 0`, `fromId === toId` in `budgets_transfer`
 - ✅ Schema correctness: parse errors with provided examples surface as test failures
@@ -679,7 +678,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | Test | Success Case | Error Case |
 |------|-------------|------------|
 | Initialize | ✅ Valid protocol version | ❌ Unsupported version |
-| List Tools | ✅ Returns 63 tools | ❌ Timeout |
+| List Tools | ✅ Returns 70 tools | ❌ Timeout |
 | Call Tool | ✅ Executes tool | ❌ Tool not found |
 | Session Persistence | ✅ Same session across calls | ❌ Session expired |
 | Health Check | ✅ Status: ok | ❌ Status: not-initialized |
@@ -708,7 +707,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ✅ Docker build correctness
 - ✅ Container networking
 - ✅ Real Actual Budget integration
-- ✅ **ALL 63 tools execution (100% coverage)**
+- ✅ **ALL 70 tools execution (100% coverage)**
 - ✅ Session management (including `actual_session_close`)
 - ✅ Error handling (15+ error scenarios)
 - ✅ Regression tests (strict validation, large batches, edge cases)
@@ -719,7 +718,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 |---|-----------|-----------------|-----------------|
 | 1 | Initialize MCP session | ✅ Session created | ❌ Auth failure, timeout |
 | 2 | Verify services healthy | ✅ Status: ok | ❌ Not initialized, Actual unreachable |
-| 3 | List all tools | ✅ 63 tools returned | ❌ Timeout, server error |
+| 3 | List all tools | ✅ 70 tools returned | ❌ Timeout, server error |
 | 4 | Execute actual_server_info | ✅ Server version returned | ❌ Connection refused |
 | 5 | List accounts | ✅ Account array returned | ❌ Database error |
 | 6 | Create test account | ✅ Account ID returned | ❌ Duplicate name, validation error |
@@ -731,24 +730,10 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 **Comprehensive All-Tools Tests (docker-all-tools.e2e.spec.ts - 80+ tests, ~120s):**
 
-| Category | Tools Tested | Success Tests | Error Tests |
-|----------|--------------|---------------|-------------|
-| **Server Info** | 1 | ✅ 1 | - |
-| **Session Management** | 2 | ✅ 2 (incl. session_close) | - |
-| **Accounts** | 7 | ✅ 5 | ❌ 2 (missing name, invalid fields) |
-| **Category Groups** | 4 | ✅ 3 | - |
-| **Categories** | 4 | ✅ 3 | ❌ 1 (missing group_id) |
-| **Payees** | 5 | ✅ 5 | ❌ 1 (invalid fields) |
-| **Payee Rules** | 1 | ✅ 1 | - |
-| **Transactions** | 10 | ✅ 7 | ❌ 2 (invalid date/amount) |
-| **Budgets** | 9 | ✅ 9 | - |
-| **Rules** | 4 | ✅ 4 | - |
-| **Advanced/Query** | 2 | ✅ 6 | ❌ 6 (invalid queries) |
-| **Cleanup** | - | ✅ Auto-cleanup | - |
-| **TOTAL** | **51** | **✅ 46** | **❌ 12** |
+The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block `Docker E2E - ALL 70 TOOLS`): it exercises all 70 tools plus error scenarios. The per-category counts are not duplicated here, because a hand-maintained copy drifts.
 
 **Success Criteria:**
-- All 63 tools execute successfully
+- All 70 tools execute successfully
 - Error scenarios handled gracefully
 - Docker containers healthy
 - No data corruption
@@ -790,15 +775,15 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 ### Level 6: Manual Integration Tests 🧪 (Comprehensive: ~60s)
 
-**Purpose:** Test all 63 tools with real Actual Budget data  
-**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (11 domain modules)  
+**Purpose:** Test all 70 tools with real Actual Budget data  
+**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (13 domain modules)  
 **Command:** `npm run test:integration:full`
 
 **Test Levels:**
 
 #### SMOKE Level (3 tools)
 - ✅ Initialize session
-- ✅ List tools (51 expected)
+- ✅ List tools (70 expected, via EXPECTED_TOOL_COUNT)
 - ✅ List accounts
 
 **Error Scenarios:**
@@ -820,7 +805,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ❌ Delete non-existent account
 - ❌ Reopen already-open account
 
-#### FULL Level (63 tools - 100% coverage)
+#### FULL Level (70 tools, 100% coverage)
 
 **Account Tools (7):**
 - ✅ All NORMAL account tests
@@ -901,7 +886,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ❌ Close invalid session ID
 
 **Success Criteria:**
-- All 63 tools execute successfully
+- All 70 tools execute successfully
 - Error scenarios handled gracefully
 - Test data cleaned up properly
 - No data corruption
@@ -954,7 +939,7 @@ npm run test:all                 # All automated tests (90s)
 
 **Pre-Release (Manual):**
 ```bash
-# Full manual integration test with all 63 tools
+# Full manual integration test with all 70 tools
 npm run test:integration:full
 
 # Cleanup only (remove leftover MCP-* test data)
@@ -968,11 +953,11 @@ npm run test:integration:cleanup
 | Test Level | Current Coverage | Target Coverage | Priority |
 |------------|-----------------|-----------------|----------|
 | **Level 1:** Adapter Smoke | 100% (adapter infra) | 100% | ✅ Maintain |
-| **Level 2:** Unit Tests | 63/63 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
-| **Level 3:** Live Integration | 63/63 tools called | 63/63 | ✅ Maintain |
+| **Level 2:** Unit Tests | 70/70 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
+| **Level 3:** Live Integration | 70/70 tools called | 70/70 | ✅ Maintain |
 | **Level 4:** Protocol E2E | 100% (MCP compliance) | 100% | ✅ Maintain |
-| **Level 5:** Docker E2E | **60/63 tools** (100% named; 2 excluded for single-budget CI) | 100% | ✅ Maintain |
-| **Level 6:** Manual Full | 100% (63/63 tools) | 100% | ✅ Maintain |
+| **Level 5:** Docker E2E | **68/70 tools** (100% named; 2 excluded for single-budget CI) | 100% | ✅ Maintain |
+| **Level 6:** Manual Full | 100% (70/70 tools) | 100% | ✅ Maintain |
 | **Error Scenarios** | ~70% | 90% | 🟡 Medium |
 
 ---
@@ -980,8 +965,8 @@ npm run test:integration:cleanup
 ### Next Testing Improvements
 
 **High Priority:**
-1. ✅ **Completed:** Docker E2E tests with 60/63 tools named (2 excluded: `budgets_list_available`, `budgets_switch` due to single-budget CI constraint)
-2. ✅ **Completed:** Unit test suite with 3 files, 63-tool smoke, 23 negative-path assertions
+1. ✅ **Completed:** Docker E2E tests with 68/70 tools named (2 excluded: `budgets_list_available`, `budgets_switch` due to single-budget CI constraint)
+2. ✅ **Completed:** Unit test suite (~52 files), 70-tool smoke, 23 negative-path assertions
 3. ✅ **Completed:** All 6 delete tools promoted to named E2E tests with list-absence assertions; `afterAll` is now fallback-only
 4. ✅ **Completed:** Shared `tests/shared/mcp-protocol.js` utility (MCP envelope parsing, reused across E2E and integration tests)
 5. ⏳ **TODO:** Add business logic error tests (duplicate accounts, insufficient funds)
