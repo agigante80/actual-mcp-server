@@ -1187,6 +1187,20 @@ export async function updateTransaction(id: string, fields: Partial<components['
   observability.incrementToolCall('actual.transactions.update').catch(() => {});
   // Use write queue to batch concurrent updates in a single budget session
   return queueWriteOperation(async () => {
+    // Pre-flight existence check (#212): the raw API silently no-ops on a missing id,
+    // so an update that changed nothing would otherwise be reported as success. A
+    // targeted ActualQL query by id keeps this cheap (indexed lookup).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const found = await withConcurrency(() =>
+      retry(async () => {
+        const res = (await rawRunQuery(q('transactions').filter({ id }).select(['id']))) as { data?: unknown[] };
+        return Array.isArray(res?.data) && res.data.length > 0;
+      }, { retries: 2, backoffMs: 200 })
+    );
+    if (!found) {
+      throw new Error(`Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
+    }
     await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
@@ -1198,9 +1212,29 @@ export async function updateTransactionBatch(
   // Sequential loop (not Promise.all) is intentional: concurrent rawUpdateTransaction calls
   // within one session can interleave withMutation CRDT messages unpredictably.
   return queueWriteOperation(async () => {
+    // Nothing to do for an empty batch. The tool enforces min 1, but the adapter is a
+    // public export, so guard here and avoid an empty-$oneof existence query.
+    if (updates.length === 0) return { succeeded: [], failed: [] };
+    // Pre-flight existence check (#212): ONE query for all ids (not one per item),
+    // since the raw API silently no-ops on a missing id and would otherwise report
+    // a no-op as success. Missing ids are routed to failed[] without an update call.
+    const ids = updates.map((u) => u.id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const existing = await withConcurrency(() =>
+      retry(async () => {
+        const res = (await rawRunQuery(q('transactions').filter({ id: { $oneof: ids } }).select(['id']))) as { data?: Array<{ id: string }> };
+        return new Set(Array.isArray(res?.data) ? res.data.map((r) => r.id) : []);
+      }, { retries: 2, backoffMs: 200 })
+    );
+
     const succeeded: { id: string }[] = [];
     const failed: { id: string; error: string }[] = [];
     for (const { id, fields } of updates) {
+      if (!existing.has(id)) {
+        failed.push({ id, error: `Transaction "${id}" not found. Use actual_transactions_get to list transactions.` });
+        continue;
+      }
       try {
         await withConcurrency(() =>
           retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })

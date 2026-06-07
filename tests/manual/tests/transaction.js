@@ -114,6 +114,35 @@ export async function transactionTests(client, context) {
     } else {
       console.log(`  ❌ Verify update: expected amount -7500, got ${updatedTxn.amount}`);
     }
+
+    // FIXED(#212): update / update_batch must surface a non-existent id, not report success.
+    console.log("\nNEGATIVE (#212): transactions_update with a non-existent id...");
+    try {
+      const nilUpd = await callTool("actual_transactions_update", {
+        id: '00000000-0000-0000-0000-000000000000',
+        fields: { notes: 'repro-212' },
+      });
+      console.log("  ⚠ Expected a not-found error but tool returned:", JSON.stringify(nilUpd).slice(0, 120));
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes('not found') && msg.includes('actual_transactions_get')) {
+        console.log(`  ✓ FIXED(#212): transactions_update nil-id throws actionable error: ${msg.slice(0, 120)}`);
+      } else {
+        console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+      }
+    }
+
+    console.log("\nNEGATIVE (#212): update_batch with a valid + non-existent id...");
+    {
+      const batch = await callTool("actual_transactions_update_batch", { updates: [
+        { id: context.transactionId, fields: { notes: `MCP-Transaction-${timestamp}` } },
+        { id: '00000000-0000-0000-0000-000000000000', fields: { notes: 'repro-212' } },
+      ] });
+      const isolated = batch?.successCount === 1 && batch?.failureCount === 1 &&
+        (batch.failed || []).some(f => f.id === '00000000-0000-0000-0000-000000000000' && /not found/.test(f.error || ''));
+      if (isolated) console.log("  ✓ FIXED(#212): update_batch routes the non-existent id into failed[] with a not-found message");
+      else console.log("  ⚠ update_batch did not isolate the non-existent id:", JSON.stringify(batch).slice(0, 160));
+    }
   } else {
     console.log("\n  ⚠ Skipping update/verify (transaction not found by notes filter)");
   }
