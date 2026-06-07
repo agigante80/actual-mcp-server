@@ -1,1 +1,1 @@
-MCP server for Actual Budget: 62 tools, HTTP + stdio, LibreChat & Claude Desktop ready
+MCP server for Actual Budget: 71 tools, HTTP + stdio, LibreChat & Claude Desktop ready

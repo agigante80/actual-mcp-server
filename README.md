@@ -19,13 +19,13 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 ┌─────────────┐   MCP/HTTP    ┌──────────────────┐   Actual API   ┌──────────────┐
 │  LibreChat  │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  LobeChat   │               │  Server          │               │   Budget     │
-│  (remote)   │               │  (63 tools)      │               │   Server     │
+│  (remote)   │               │  (71 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 
 ┌─────────────┐   MCP/stdio   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  Claude     │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  Desktop    │               │  Server          │               │   Budget     │
-│  (local)    │               │  (63 tools)      │               │   Server     │
+│  (local)    │               │  (71 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 ```
 
@@ -33,14 +33,14 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **70 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers 87% of the Actual Budget API.
+- **71 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers 87% of the Actual Budget API.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 70 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 71 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -172,7 +172,7 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 }
 ```
 
-> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 63 tools are available.
+> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 71 tools are available.
 >
 > **`MCP_BRIDGE_DATA_DIR` should be an absolute path.** Without one, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
 
@@ -282,7 +282,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 ## Available Tools
 
-**63 tools** across 12 categories. All tools use the `actual_<category>_<action>` naming convention.
+**71 tools** across 12 categories. All tools use the `actual_<category>_<action>` naming convention.
 
 ### Accounts (7)
 
@@ -529,7 +529,7 @@ stdio is the simplest way to connect Claude Desktop directly to Actual Budget. T
 - No auth token. Process ownership is the security boundary.
 - All logs go to stderr so they never corrupt the JSON-RPC framing on stdout
 - The process exits when stdin closes (Claude Desktop shutting down)
-- All 63 tools are available, identical to HTTP mode
+- All 71 tools are available, identical to HTTP mode
 
 **Start manually to verify:**
 
@@ -606,7 +606,7 @@ See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-m
 | Command | What It Tests | Requires Live Server |
 |---------|---------------|---------------------|
 | `npm run build` | TypeScript compilation | No |
-| `npm run test:unit-js` | 63-tool smoke, schema validation, auth ACL | No |
+| `npm run test:unit-js` | 71-tool smoke, schema validation, auth ACL | No |
 | `npm run test:adapter` | Adapter, retry logic, concurrency | No |
 | `npm run test:e2e` | MCP protocol compliance (Playwright) | No |
 | `npm run test:e2e:docker:full` | Full stack integration | Yes (Docker) |
@@ -648,7 +648,7 @@ Several MCP servers exist for personal finance management. Here's how this proje
 | **Version** | v0.4.26 | v1.11.1 | v0.2.0 | v0.1.0 |
 | **Budget App** | Actual Budget (self-hosted) | Actual Budget (self-hosted) | Actual Budget (self-hosted) | YNAB (cloud, subscription) |
 | **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
-| **Tool Count** | **70** | ~22 | 18 | 9 |
+| **Tool Count** | **71** | ~22 | 18 | 9 |
 | **Setup & Distribution** |||||
 | **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
 | **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |

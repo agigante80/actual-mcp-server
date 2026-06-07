@@ -17,7 +17,7 @@ tests/e2e/
 │                                         tools/call → SSE streaming; spawns its own server
 │                                         process (or reuses Docker via USE_DOCKER_MCP_SERVER)
 ├── docker.e2e.spec.ts                 ← Smoke + health checks against Docker stack
-├── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 62 tools (~80 named tests)
+├── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 71 tools (~80 named tests)
 └── suites/                            ← Domain suite files (registration functions)
     ├── shared-context.ts              ← SharedState / TestContext types + createSharedState()
     ├── server.ts                      ← server_info, server_get_version, session_*
@@ -72,7 +72,7 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_SERVER_URL` | `http://mcp-server-test:3600` | MCP server URL |
-| `EXPECTED_TOOL_COUNT` | `63` | Expected tool count (must match `actualToolsManager.ts`) |
+| `EXPECTED_TOOL_COUNT` | `71` | Expected tool count (must match `actualToolsManager.ts`) |
 | `USE_DOCKER_MCP_SERVER` | `true` | Set to `false` to spawn a local server (mcp-client spec only) |
 
 ---
@@ -98,7 +98,7 @@ streaming, and session lifecycle.
 
 ### `docker-all-tools.e2e.spec.ts` (~1430 lines)
 
-**Purpose:** Comprehensive named tests for all 62 tools — success paths + error/negative paths.
+**Purpose:** Comprehensive named tests for all 71 tools — success paths + error/negative paths.
 
 - All tests share a single MCP session (`sessionId`) initialized in `beforeAll`
 - Tests run sequentially within a `test.describe` block; each **create** test stores
