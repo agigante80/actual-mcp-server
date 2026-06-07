@@ -53,6 +53,7 @@ ACTUAL_BUDGET_SYNC_ID=your-sync-id-here
 docker run -d \
   --name actual-mcp-server-backend \
   -p 3600:3600 \
+  -e MCP_BRIDGE_PORT=3600 \
   # Use the same URL you type in your browser to open Actual Budget.
   # Examples:
   #   http://localhost:5006          - Actual Budget on the same machine
@@ -78,11 +79,11 @@ curl http://localhost:3600/health
 ```bash
 # GitHub Container Registry (primary)
 ghcr.io/agigante80/actual-mcp-server:latest
-ghcr.io/agigante80/actual-mcp-server:0.4.26   # specific version
+ghcr.io/agigante80/actual-mcp-server:X.Y.Z   # pin a specific released version, e.g. 0.6.40
 
 # Docker Hub (mirror)
 agigante80/actual-mcp-server:latest
-agigante80/actual-mcp-server:0.4.26
+agigante80/actual-mcp-server:X.Y.Z
 ```
 
 ### Production docker run
@@ -96,6 +97,7 @@ docker run -d \
   --name actual-mcp-server-backend \
   --restart unless-stopped \
   -p 127.0.0.1:3600:3600 \
+  -e MCP_BRIDGE_PORT=3600 \
   -e ACTUAL_SERVER_URL=https://actual.yourdomain.com \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
@@ -129,21 +131,21 @@ cp .env.example .env
 
 ### Profiles
 
+`docker-compose.yaml` defines two profiles:
+
 | Profile | What it starts | Use case |
 |---|---|---|
-| `dev` | MCP server only, mounts `src/` for hot-reload | Local development |
-| `production` | MCP server + Nginx proxy | Production, single host |
-| `fullstack` | MCP server + Actual Budget server | All-in-one evaluation |
+| `dev` | MCP server, mounts `src/` for hot-reload | Local development |
+| `production` | MCP server only (resource limits, env-based config) | Production, single host |
+
+There is no bundled reverse proxy or Actual Budget server in `docker-compose.yaml`. For a stack that also runs Actual Budget (used by the Docker E2E tests), see `docker-compose.test.yaml`. For a reverse proxy, a commented Traefik example is included near the bottom of `docker-compose.yaml`.
 
 ```bash
 # Development (hot-reload source)
 docker compose --profile dev up -d
 
-# Production (Nginx proxy on port 3600, MCP on internal port 3000)
+# Production
 docker compose --profile production up -d
-
-# Full stack (includes Actual Budget server on port 5006)
-docker compose --profile fullstack up -d
 
 # View logs
 docker compose logs -f
@@ -153,8 +155,8 @@ docker compose down
 ```
 
 **Default ports:**
-- MCP server (HTTP): `3000` (dev) / `3600` (production via Nginx)
-- Actual Budget server (fullstack): `5006`
+- MCP server (HTTP): `3000`. Both the `dev` and `production` compose profiles set `MCP_BRIDGE_PORT=3000` and publish `3000:3000`.
+- A standalone `docker run` of the image listens on whatever `MCP_BRIDGE_PORT` you set (the application default is `3000`). The image's `EXPOSE` and `HEALTHCHECK` assume `3600`, so if you run the image directly, set `MCP_BRIDGE_PORT=3600` and map `-p 3600:3600` so the healthcheck and your published port agree.
 
 ### Production Compose deployment
 
@@ -172,7 +174,7 @@ docker compose --profile production up -d
 docker compose logs -f mcp-server-prod
 
 # 4. Verify health
-curl http://localhost:3600/health
+curl http://localhost:3000/health
 ```
 
 ---
@@ -295,6 +297,8 @@ spec:
             - secretRef:
                 name: actual-mcp-secrets
           env:
+            - name: MCP_BRIDGE_PORT
+              value: "3600"
             - name: ACTUAL_SERVER_URL
               value: "https://actual.yourdomain.com"
             - name: NODE_ENV

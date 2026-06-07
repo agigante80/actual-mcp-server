@@ -149,7 +149,7 @@ First, [start the Docker container](#starting-the-docker-container) below.
       "args": [
         "-y",
         "mcp-remote",
-        "https://localhost:3601/http",
+        "https://localhost:3600/http",
         "--header",
         "Authorization: Bearer your_secret_token"
       ],
@@ -213,7 +213,7 @@ docker run -d \
 
 # Verify
 curl http://localhost:3600/health
-# Expected: {"status":"ok","transport":"http","version":"..."}
+# Expected: {"status":"ok","transport":"streamable-http", ...}
 ```
 
 ---
@@ -500,7 +500,7 @@ Or use [jsonlint.com](https://jsonlint.com/) in a browser.
 
 ## Next steps
 
-- **[62 available tools](../../README.md#available-tools)**: complete list of what your AI can do with your budget
+- **[70 available tools](../../README.md#available-tools)**: complete list of what your AI can do with your budget
 - **[AI Client Setup Guide](AI_CLIENT_SETUP.md)**: LibreChat, LobeChat, Docker networking, HTTPS/TLS proxy, OIDC multi-user
 - **[Deployment Guide](DEPLOYMENT.md)**: Docker Compose profiles, production config
 
