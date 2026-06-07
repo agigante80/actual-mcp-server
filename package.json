@@ -71,12 +71,6 @@
   "optionalDependencies": {
     "prom-client": "*"
   },
-  "overrides": {
-    "fast-uri": "^3.1.2"
-  },
-  "comments": {
-    "security-overrides": "fast-uri>=3.1.2 (GHSA-q3j6-qgpj-74h6 + GHSA-v39h-62p7-jpjc). ajv override removed in #191: ajv-formats' ^8.0.0 range now resolves the patched ajv 8.20.0 (the alert #21 ReDoS GHSA-2g4f-4pwh-qvx6 / CVE-2025-69873 was fixed in 8.18.0) without a pin. qs override removed in #190 (express ^6.14.0 resolves patched qs 6.15.2)."
-  },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/express": "^5.0.3",
