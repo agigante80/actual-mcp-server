@@ -209,16 +209,19 @@ export async function scheduleTests(client, context) {
     }
   }
 
-  // ── 10. FIXED(BUG-11): Deleting non-existent schedule UUID now returns actionable error ──────────────────────
+  // 10. FIXED(BUG-11): Deleting a non-existent schedule UUID now THROWS an actionable error.
   console.log('\nNEGATIVE: Deleting non-existent schedule UUID...');
   {
-    const nilResult = await callTool('actual_schedules_delete', { id: NON_EXISTENT_UUID });
-    if (nilResult?.success === false && typeof nilResult?.error === 'string' && nilResult.error.includes('not found') && nilResult.error.includes('actual_schedules_get')) {
-      console.log(`  ✓ FIXED(BUG-11): schedules_delete nil-UUID returns actionable error: ${nilResult.error.slice(0, 120)}`);
-    } else if (nilResult?.success === false && typeof nilResult?.error === 'string') {
-      console.log(`  ⚠ Error returned but message not actionable: ${nilResult.error.slice(0, 120)}`);
-    } else {
-      console.log(`  ⚠ Unexpected response for nil-UUID delete: ${JSON.stringify(nilResult).slice(0, 120)}`);
+    try {
+      const nilResult = await callTool('actual_schedules_delete', { id: NON_EXISTENT_UUID });
+      console.log(`  ⚠ Expected a not-found error but tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes('not found') && msg.includes('actual_schedules_get')) {
+        console.log(`  ✓ FIXED(BUG-11): schedules_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
+      } else {
+        console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+      }
     }
   }
 

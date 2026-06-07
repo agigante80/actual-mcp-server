@@ -1,7 +1,9 @@
 // tests/unit/payees_delete.test.js
-// Regression test for #142: actual_payees_delete must invoke withWriteSession
-// exactly once per call (replacing the prior queueWriteOperation entry inside
-// adapter.deletePayee with a tool-layer wrapper for consistency).
+// Regression test: actual_payees_delete must route through the guarded
+// adapter.deletePayee (pre-flight existence check), NOT the raw api.deletePayee,
+// which throws a cryptic "Cannot destructure property 'transfer_acct' of null" on a
+// non-existent id. adapter.deletePayee owns the single write-cycle (#142) and turns a
+// missing id into an actionable "Payee not found" error.
 
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
@@ -14,60 +16,51 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
 (async () => {
   await import('../../dist/src/lib/node-polyfills.js');
-  const apiMod = await import('@actual-app/api');
-  const apiDefault = (apiMod.default || apiMod);
-
-  let deleteCalls = 0;
-  let deleteThrows = null;
-  apiDefault.deletePayee = async (_id) => {
-    deleteCalls++;
-    if (deleteThrows) throw deleteThrows;
-  };
-
-  const [tool, adapterMod] = await Promise.all([
-    import('../../dist/src/tools/payees_delete.js').then(m => m.default),
-    import('../../dist/src/lib/actual-adapter.js'),
-  ]);
+  const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
   const adapter = adapterMod.default;
+  const tool = (await import('../../dist/src/tools/payees_delete.js')).default;
 
-  let withWriteSessionCalls = 0;
-  const orig = adapter.withWriteSession;
-  adapter.withWriteSession = async (fn) => { withWriteSessionCalls++; return await fn(); };
+  // Stub the guarded adapter method the tool now calls (property access at call time,
+  // so reassignment is observed by the tool).
+  let deleteCalls = 0;
+  let lastId = null;
+  let deleteThrows = null;
+  const origDeletePayee = adapter.deletePayee;
+  adapter.deletePayee = async (id) => { deleteCalls++; lastId = id; if (deleteThrows) throw deleteThrows; };
 
-  const reset = () => { withWriteSessionCalls = 0; deleteCalls = 0; deleteThrows = null; };
+  const reset = () => { deleteCalls = 0; lastId = null; deleteThrows = null; };
 
-  console.log('\n[#142] payees_delete: positive happy path');
+  console.log('\npayees_delete: positive happy path');
   {
     reset();
     const res = await tool.call({ id: 'p-1' });
-    check(res?.success === true,         'returns success: true');
-    check(withWriteSessionCalls === 1,   'withWriteSession called exactly once');
-    check(deleteCalls === 1,             'rawDeletePayee called inside callback');
+    check(res?.success === true,    'returns success: true');
+    check(deleteCalls === 1,        'adapter.deletePayee called exactly once');
+    check(lastId === 'p-1',         'called with the supplied id');
   }
 
-  console.log('\n[#142] payees_delete: write-side error propagation');
+  console.log('\npayees_delete: not-found / write-side error propagates as a throw');
   {
     reset();
-    deleteThrows = new Error('Payee not found');
+    deleteThrows = new Error('Payee "p-missing" not found. Use actual_payees_get to list available payees.');
     let threw = null;
     try { await tool.call({ id: 'p-missing' }); } catch (e) { threw = e; }
-    check(threw?.message === 'Payee not found',     'underlying error propagates');
-    check(withWriteSessionCalls === 1,              'still exactly one withWriteSession call');
-    check(deleteCalls === 1,                        'rawDeletePayee was attempted');
+    check(threw instanceof Error,                'throws (does not swallow into success:false)');
+    check(threw?.message?.includes('not found'), 'actionable not-found message');
+    check(deleteCalls === 1,                     'adapter.deletePayee was attempted');
   }
 
-  console.log('\n[#142] payees_delete: schema rejection');
+  console.log('\npayees_delete: schema rejection');
   {
     reset();
     let threw = null;
     try { await tool.call({}); } catch (e) { threw = e; }
-    check(threw instanceof Error,        'throws on missing id');
-    check(withWriteSessionCalls === 0,   'withWriteSession NOT called on Zod fail');
-    check(deleteCalls === 0,             'rawDeletePayee NOT called');
+    check(threw instanceof Error,   'throws on missing id');
+    check(deleteCalls === 0,        'adapter.deletePayee NOT called on Zod fail');
   }
 
-  adapter.withWriteSession = orig;
+  adapter.deletePayee = origDeletePayee;
   console.log('');
-  if (failures === 0) console.log('[#142] All payees_delete tests passed ✓');
-  else { console.error(`[#142] ${failures} test(s) FAILED`); process.exit(2); }
+  if (failures === 0) console.log('All payees_delete tests passed ✓');
+  else { console.error(`${failures} test(s) FAILED`); process.exit(2); }
 })();

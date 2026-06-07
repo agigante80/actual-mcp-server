@@ -64,17 +64,18 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(deleteCalls === 1,             'rawDeleteCategoryGroup called inside callback');
   }
 
-  // Negative: read-side not-found, structured error
-  console.log('\n[#142] category_groups_delete: read-side not-found');
+  // Negative: read-side not-found now THROWS an actionable error (consistent with the
+  // other delete tools) instead of returning { success: false }.
+  console.log('\n[#142] category_groups_delete: read-side not-found throws');
   {
     reset();
     groupsResponse = [];
-    const res = await tool.call({ id: 'cg-missing' });
-    check(res?.success === false,                                      'returns success: false');
-    check(typeof res?.error === 'string',                              'error is string');
-    check(res?.error?.includes('Category group'),                      'error mentions Category group');
-    check(res?.error?.includes('cg-missing'),                          'error mentions the id');
-    check(res?.error?.includes('actual_category_groups_get'),          'error mentions list tool');
+    let threw = null;
+    try { await tool.call({ id: 'cg-missing' }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                                      'throws on not-found');
+    check(threw?.message?.includes('Category group'),                  'error mentions Category group');
+    check(threw?.message?.includes('cg-missing'),                      'error mentions the id');
+    check(threw?.message?.includes('actual_category_groups_get'),      'error mentions list tool');
     check(withWriteSessionCalls === 1,                                 'still exactly one withWriteSession call', `was ${withWriteSessionCalls}`);
     check(deleteCalls === 0,                                           'rawDeleteCategoryGroup NOT called');
   }

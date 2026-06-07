@@ -24,10 +24,9 @@ const tool: ToolDefinition = {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const groupExists = groups.some((g: any) => g.id === input.id);
       if (!groupExists) {
-        return {
-          error: notFoundMsg('Category group', input.id, 'actual_category_groups_get'),
-          success: false,
-        };
+        // Throw (not return {success:false}) so a non-existent id surfaces as an MCP
+        // error, consistent with every other delete tool's not-found behavior.
+        throw new Error(notFoundMsg('Category group', input.id, 'actual_category_groups_get'));
       }
       await rawDeleteCategoryGroup(input.id);
       return { success: true };

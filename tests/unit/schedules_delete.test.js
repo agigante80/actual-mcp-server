@@ -50,26 +50,28 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
     check(deleteCalls === 1,             'rawDeleteSchedule called inside callback');
   }
 
-  console.log('\n[#142] schedules_delete: read-side not-found');
+  console.log('\n[#142] schedules_delete: read-side not-found throws');
   {
     reset();
     schedulesResponse = [];
-    const res = await tool.call({ id: VALID_UUID });
-    check(res?.success === false,                       'returns success: false');
-    check(res?.error?.includes('Schedule'),             'error mentions Schedule');
+    let threw = null;
+    try { await tool.call({ id: VALID_UUID }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                       'throws on not-found');
+    check(threw?.message?.includes('Schedule'),         'error mentions Schedule');
     check(withWriteSessionCalls === 1,                  'exactly one withWriteSession call');
     check(deleteCalls === 0,                            'rawDeleteSchedule NOT called');
   }
 
-  console.log('\n[#142] schedules_delete: constraint-error translation');
+  console.log('\n[#142] schedules_delete: constraint-error translation throws');
   {
     reset();
     schedulesResponse = [{ id: VALID_UUID }];
     deleteThrows = new Error('SQLITE_CONSTRAINT: NOT NULL constraint failed: messages_crdt.dataset');
-    const res = await tool.call({ id: VALID_UUID });
-    check(res?.success === false,                       'returns success: false on constraint error');
-    check(typeof res?.error === 'string',               'error is structured string');
-    check(!res?.error?.includes('SQLITE_CONSTRAINT'),   'raw SQLite error not surfaced');
+    let threw = null;
+    try { await tool.call({ id: VALID_UUID }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                       'throws on constraint error');
+    check(typeof threw?.message === 'string',           'error is structured string');
+    check(!threw?.message?.includes('SQLITE_CONSTRAINT'),'raw SQLite error not surfaced');
     check(withWriteSessionCalls === 1,                  'still exactly one withWriteSession call');
     check(deleteCalls === 1,                            'rawDeleteSchedule was attempted');
   }
