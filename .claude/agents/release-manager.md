@@ -29,7 +29,7 @@ These run `scripts/version-bump.js` which:
 1. **Production-tag freshness check (added 2026-05-07).** Before bumping, the script queries `git ls-remote --tags origin` and aborts with a clear remediation message if the local `VERSION` is BEHIND the latest published `vX.Y.Z` tag. This guards against the failure mode where the scheduled `Dependency Update & Auto-Release` workflow has already shipped a release while a local branch was unsynced — bumping in that state would reuse a version number that's already on production. If you see the abort, run `git fetch origin && git merge origin/main` (or `--ff-only` if your branch is an ancestor) before retrying. Override only with `--force` when production is genuinely wrong.
 2. Bumps `VERSION` file and `package.json`
 3. Updates all `**Version:**` and `**Tool Count:**` markers across docs automatically
-4. Files updated: `README.md`, `docs/ARCHITECTURE.md`, `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md`, `docs/SECURITY_AND_PRIVACY.md`, `docs/TESTING_AND_RELIABILITY.md`, `.github/copilot-instructions.md`
+4. Files updated: every `**Version:**` / `**Tool Count:**` marker across `README.md`, every `docs/*.md` (the script enumerates the `docs/` directory dynamically), and `.github/copilot-instructions.md`
 
 **Never edit version markers manually** — always use the script.
 

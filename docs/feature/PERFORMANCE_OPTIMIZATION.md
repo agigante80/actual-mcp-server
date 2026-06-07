@@ -155,8 +155,8 @@ src/
 
 ## Integration Points with Other Features
 
-- **Hybrid Search Engine** ([docs/feature/CF4_HYBRID_SEARCH.md](./CF4_HYBRID_SEARCH.md)): The `ResponseCache` is first introduced as part of the hybrid search pipeline (caching search results tagged `['search', 'transactions']`). This feature generalises it to all tools. Both share the same singleton instance.
-- **Session Worker Manager** ([docs/feature/SESSION_WORKER_MANAGER.md](./SESSION_WORKER_MANAGER.md)): When Worker Threads are in use, the `ResponseCache` singleton must live in the manager process. Workers communicate cache operations via messages — the cache is never replicated per-worker.
+- **Hybrid Search Engine** (GitHub issue [#195](https://github.com/agigante80/actual-mcp-server/issues/195)): the `ResponseCache` would first be introduced as part of the hybrid search pipeline (caching search results tagged `['search', 'transactions']`). This feature generalises it to all tools. Both share the same singleton instance.
+- **Session Worker Manager** (GitHub issue [#199](https://github.com/agigante80/actual-mcp-server/issues/199)): when Worker Threads are in use, the `ResponseCache` singleton must live in the manager process. Workers communicate cache operations via messages, so the cache is never replicated per-worker.
 
 ---
 

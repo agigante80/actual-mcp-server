@@ -167,7 +167,7 @@ Flag documentation drift as a non-blocking review comment. Required updates when
 | New tool | `README.md` (count + table), `docs/PROJECT_OVERVIEW.md`, `docs/ARCHITECTURE.md` tool list |
 | New env var | `.env.example`, `docs/ARCHITECTURE.md` config section, `README.md` env table |
 | Auth/security change | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` |
-| New feature shipped | Delete `docs/feature/*.md` spec, remove from `docs/ROADMAP.md` |
+| New feature shipped | Delete `docs/feature/*.md` spec (planned work is tracked as GitHub issues) |
 
 **Never edit `**Version:**` or `**Tool Count:**` markers manually** — they are managed by `scripts/version-bump.js`.
 

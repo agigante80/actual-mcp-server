@@ -177,4 +177,4 @@ feat(tools): add actual_domain_action
 
 ## Full checklist: `docs/NEW_TOOL_CHECKLIST.md`
 
-The canonical 9-step guide covers everything above plus E2E tests, AI prompt test scripts, and ROADMAP updates. Always reference it for a complete checklist before committing.
+The canonical 9-step guide covers everything above plus E2E tests and AI prompt test scripts. Always reference it for a complete checklist before committing.

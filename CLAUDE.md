@@ -241,7 +241,7 @@ export default tool;
 
 **`mcp-remote` requires `--allow-http`** for HTTP connections, because it enforces HTTPS by default. Without the flag, clients see `URL must use HTTPS`. Some versions of Claude Desktop also enforce HTTPS at the app level; in that case, switch to native TLS (`MCP_ENABLE_HTTPS=true`).
 
-**Documentation hygiene**: Prefer deletion over archiving. When a feature ships, delete its `docs/feature/*.md` spec and remove its row from `docs/ROADMAP.md`. Never move to `archive/` folders; git history is the archive.
+**Documentation hygiene**: Prefer deletion over archiving. When a feature ships, delete its `docs/feature/*.md` spec. Planned and future work is tracked as GitHub issues, not a roadmap file. Never move to `archive/` folders; git history is the archive.
 
 **Version/tool count markers** (`**Version:**`, `**Tool Count:**`) across all docs are managed automatically by `scripts/version-bump.js` on `release:*` / `docs:sync`. Never edit them manually.
 
@@ -280,7 +280,7 @@ When changing code, update these docs:
 | New env var | `.env.example`, `docs/ARCHITECTURE.md` config section, `README.md` env table |
 | Auth/security change | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` |
 | Docker change | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
-| New feature shipped | `docs/PROJECT_OVERVIEW.md`, delete its `docs/feature/*.md` spec, remove from `docs/ROADMAP.md` |
+| New feature shipped | `docs/PROJECT_OVERVIEW.md`, delete its `docs/feature/*.md` spec |
 | New tool added | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` (add positive + negative scenario, update phase count); `tests/manual-prompt/README.md` Phase Overview total; run `npm run docs:sync` (updates `docker/description/long.md`, `docker/description/short.md`, and all `**Tool Count:**` markers) |
 | Test module added | `docs/TESTING_AND_RELIABILITY.md` (test-file table) |
 

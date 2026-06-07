@@ -336,7 +336,7 @@ npm run dev -- --test-actual-connection
 | **Environment variable added** | `.env.example` (with comment), `docs/ARCHITECTURE.md` Configuration section, `README.md` env var table |
 | **Test changes** | `docs/TESTING_AND_RELIABILITY.md` (commands/coverage) |
 | **Security/auth changes** | `docs/SECURITY_AND_PRIVACY.md`, `docs/guides/AI_CLIENT_SETUP.md` (OIDC section) |
-| **New feature** | `docs/PROJECT_OVERVIEW.md`, `docs/ROADMAP.md` (mark completed), `README.md` |
+| **New feature** | `docs/PROJECT_OVERVIEW.md`, `README.md` |
 | **Dependency update** | `docs/PROJECT_OVERVIEW.md` (tech stack) |
 | **Docker changes** | `docs/ARCHITECTURE.md`, `README.md`, `docs/guides/DEPLOYMENT.md` |
 | **AI client setup changes** | `docs/guides/AI_CLIENT_SETUP.md` (LibreChat/LobeChat config, networking, TLS) |
@@ -373,7 +373,7 @@ Never manually edit these markers — run `npm run docs:sync` instead.
 
 > **Prefer deletion over archiving.** Git history is the archive.
 
-- When a feature is fully implemented: **delete** its `docs/feature/*.md` spec file and remove its row from `docs/ROADMAP.md`
+- When a feature is fully implemented: **delete** its `docs/feature/*.md` spec file (planned and future work is tracked as GitHub issues, not a roadmap file)
 - When a document's content is merged elsewhere: **delete** the source file and remove all references to it
 - Do NOT move files to `archive/` or `deprecated/` folders
 - Do NOT leave `<!-- TODO -->` or `[PLANNED]` markers in files describing live behaviour

@@ -261,4 +261,4 @@ mcpServers:
 For detailed technical information, see:
 - [Architecture](./ARCHITECTURE.md) - System design and component flow
 - [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
-- [Roadmap](./ROADMAP.md) - Future improvements and priorities
+- Planned and future work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues)
