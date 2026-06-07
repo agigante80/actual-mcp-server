@@ -8,7 +8,7 @@
  * Credit: ZanzyTHEbar (https://github.com/ZanzyTHEbar)
  *
  * Adapted for this project's conventions:
- * - No wrapToolCall — uses direct call() pattern
+ * - No wrapToolCall: uses direct call() pattern
  * - Returns a plain BatchResult object (no { result } wrapper)
  */
 import { z } from 'zod';
@@ -49,7 +49,7 @@ type BatchResult = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_update_batch',
-  description: `Update multiple transactions in a single call. Accepts up to 100 {id, fields} pairs. Each update is applied independently — partial failures are reported per-item so you know exactly which succeeded and which failed.
+  description: `Update multiple transactions in a single call. Accepts up to 50 {id, fields} pairs. Each update is applied independently: partial failures are reported per-item so you know exactly which succeeded and which failed.
 
 Returns: { succeeded: [{id}], failed: [{id, error}], total, successCount, failureCount }
 
@@ -59,7 +59,7 @@ Example: { updates: [{ id: "txn-uuid-1", fields: { category: "cat-uuid" } }, { i
     try {
       const input = InputSchema.parse(args || {});
 
-      // Single adapter call — all updates share one init/sync/shutdown cycle (fixes issue #79).
+      // Single adapter call: all updates share one init/sync/shutdown cycle (fixes issue #79).
       // Calling adapter.updateTransaction() in a loop would trigger N separate budget sessions.
       const { succeeded, failed } = await adapter.updateTransactionBatch(input.updates);
 
