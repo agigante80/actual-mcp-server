@@ -48,7 +48,6 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 
 ### Documentation
 - [ ] `README.md`: new tool row added in Available Tools table
-- [ ] `docs/PROJECT_OVERVIEW.md`: API coverage % updated if changed
 - [ ] `docs/ARCHITECTURE.md`: tool listed in domain section (if relevant)
 - [ ] `docs/TESTING_AND_RELIABILITY.md`: test file entries updated if new test module added
 - [ ] `npm run docs:sync` run to batch-update all **Tool Count:** markers
@@ -420,14 +419,10 @@ See [`tests/manual-prompt/README.md`](../tests/manual-prompt/README.md) for usag
 
 #### Tool counts: batch update with `docs:sync`
 
-Run `npm run docs:sync` to update all `**Tool Count:**` markers in `README.md`, `PROJECT_OVERVIEW.md`, `ARCHITECTURE.md`, `TESTING_AND_RELIABILITY.md`, `docker/description/long.md`, and `docker/description/short.md` in one pass. Do not edit these counts manually.
+Run `npm run docs:sync` to update all `**Tool Count:**` markers in `README.md`, `ARCHITECTURE.md`, `TESTING_AND_RELIABILITY.md`, `docker/description/long.md`, and `docker/description/short.md` in one pass. Do not edit these counts manually.
 
 #### `README.md`
 - Add a row for the new tool in the Available Tools table (tool name, description, key parameters)
-
-#### `docs/PROJECT_OVERVIEW.md`
-- Update API coverage percentage if it changed
-- Add the tool to the feature list if it represents a new capability
 
 #### `docs/ARCHITECTURE.md`
 - Add the tool to the domain section table if the domain section lists tools explicitly
@@ -513,7 +508,6 @@ When implementing a new lookup tool, the `call` function should:
 | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
 | `tests/manual-prompt/README.md` | **Update** Phase Overview table total |
 | `README.md` | **Add** tool table row in Available Tools section |
-| `docs/PROJECT_OVERVIEW.md` | **Update** API coverage % if changed |
 | `docs/ARCHITECTURE.md` | **Update** domain table if applicable |
 | `docs/TESTING_AND_RELIABILITY.md` | **Update** if new test module added |
 | `docker/description/long.md`, `short.md`, all tool-count docs | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers |

@@ -59,7 +59,7 @@ npm audit --audit-level=moderate # No critical vulnerabilities
 
 - [ ] I have made corresponding changes to the documentation
 - [ ] I have updated the README if needed
-- [ ] I have updated `docs/` files relevant to the change (ARCHITECTURE, PROJECT_OVERVIEW, etc.)
+- [ ] I have updated `docs/` files relevant to the change (README, ARCHITECTURE, etc.)
 - [ ] I have added JSDoc comments for new functions
 - [ ] If adding a tool, I ran `npm run docs:sync` to update **Tool Count:** markers
 
