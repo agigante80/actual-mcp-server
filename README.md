@@ -396,13 +396,14 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 `actual_budget_updates_batch`: batch multiple budget updates in one call
 
-### Server Information & Lookup (3)
+### Server Information & Lookup (4)
 
 | Tool | Description |
 |------|-------------|
 | `actual_server_info` | Server status, version, build info |
 | `actual_server_get_version` | Actual Budget server version |
-| `actual_get_id_by_name` | Resolve name → UUID for accounts, categories, payees |
+| `actual_get_id_by_name` | Resolve an exact name → UUID for accounts, categories, payees |
+| `actual_entities_search` | Find accounts/categories/payees by a name pattern (contains/startsWith/endsWith/exact/fuzzy). Fixes "payee not found" from a partial or mistyped name |
 
 ### Session Management (2)
 

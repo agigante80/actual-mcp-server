@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 70 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 71 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests
@@ -15,7 +15,7 @@ import {
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 70 TOOLS', () => {
+test.describe('Docker E2E - ALL 71 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
@@ -482,6 +482,62 @@ test.describe('Docker E2E - ALL 70 TOOLS', () => {
     });
     testContext.payeeId2 = undefined; // Merged away
     console.log('✅ Payees merged');
+  });
+
+  // ==================== ENTITY SEARCH (1 tool) ====================
+  test('actual_entities_search - should find payees by partial name and confirm no-match contract', async ({ request }) => {
+    console.log('Testing actual_entities_search...');
+
+    // Fetch live payees so the test is robust against unknown seed data.
+    const payeesResult = await callTool(request, sessionId, 'actual_payees_get');
+    const allPayees: any[] = extractResult(payeesResult) ?? [];
+
+    const namedPayees = allPayees.filter((p: any) => typeof p.name === 'string' && p.name.length > 0);
+
+    if (namedPayees.length > 0) {
+      // Take a guaranteed substring of an existing payee name (min 2 chars from the middle).
+      const seedPayee = namedPayees[0];
+      const fullName: string = seedPayee.name;
+      const mid = Math.floor(fullName.length / 2);
+      const fragment = fullName.slice(Math.max(0, mid - 2), mid + 3).toLowerCase();
+
+      const searchResult = await callTool(request, sessionId, 'actual_entities_search', {
+        type: 'payees',
+        query: fragment,
+        matchType: 'contains',
+        limit: 50,
+      });
+      const data = extractResult(searchResult);
+
+      // Shape assertions: matches array, count, type, matchType always present.
+      expect(Array.isArray(data?.matches)).toBeTruthy();
+      expect(typeof data?.count).toBe('number');
+      expect(data?.type).toBe('payees');
+      expect(data?.matchType).toBe('contains');
+
+      // At least one match must be in the live payee list.
+      const liveIds = new Set(namedPayees.map((p: any) => p.id));
+      const matchedInLive = (data?.matches as any[]).some((m: any) => liveIds.has(m.id));
+      expect(matchedInLive).toBeTruthy();
+
+      console.log(`entities_search (contains "${fragment}"): ${data?.count} match(es), confirmed id in live payee list`);
+    } else {
+      console.log('entities_search: no named payees in budget (contains sub-test skipped)');
+    }
+
+    // No-match contract: a clearly-nonexistent query must return count:0, matches:[], no error.
+    const noMatchResult = await callTool(request, sessionId, 'actual_entities_search', {
+      type: 'payees',
+      query: 'zzz-definitely-nonexistent-payee-xqz-9999',
+      matchType: 'contains',
+      limit: 10,
+    });
+    const noMatchData = extractResult(noMatchResult);
+
+    expect(Array.isArray(noMatchData?.matches)).toBeTruthy();
+    expect(noMatchData?.matches).toHaveLength(0);
+    expect(noMatchData?.count).toBe(0);
+    console.log('entities_search (no-match): count=0, matches=[] confirmed (no error)');
   });
 
   // ==================== PAYEE RULES (1 tool) ====================
