@@ -125,7 +125,8 @@ export function registerPayeeTests(state: SharedState): void {
       });
       throw new Error('Should have failed with invalid field');
     } catch (error: any) {
-      expect(error.message).toMatch(/Unrecognized|invalid/i);
+      // #206: unrecognized keys now render as "unexpected field(s): X" via the central formatter.
+      expect(error.message).toMatch(/unexpected field/i);
       console.log('✅ Invalid field rejected');
     }
   });

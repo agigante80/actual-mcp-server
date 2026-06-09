@@ -191,6 +191,21 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
     console.log('✅ Account updated');
   });
 
+  // #206: prove the central error-formatter change does not regress the happy path over the wire.
+  test('actual_accounts_update - POSITIVE: valid update succeeds with no error', async ({ request }) => {
+    if (!testContext.accountId) test.skip();
+
+    console.log('✅ Testing happy path is unaffected by the #206 formatter change...');
+    const result = await callTool(request, sessionId, 'actual_accounts_update', {
+      id: testContext.accountId,
+      fields: { name: testContext.accountName + '-Updated2' },
+    });
+    const data = extractResult(result);
+    expect(data?.error).toBeFalsy();
+    expect(data?.success).toBe(true);
+    console.log('✅ Valid update returned success with no error');
+  });
+
   test('actual_accounts_update - ERROR: should reject invalid fields', async ({ request }) => {
     if (!testContext.accountId) test.skip();
     
@@ -202,7 +217,8 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
       });
       throw new Error('Should have failed with invalid field');
     } catch (error: any) {
-      expect(error.message).toMatch(/Unrecognized|invalid/i);
+      // #206: unrecognized keys now render as "unexpected field(s): X" via the central formatter.
+      expect(error.message).toMatch(/unexpected field/i);
       console.log('✅ Invalid field rejected correctly');
     }
   });
@@ -467,7 +483,8 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
       });
       throw new Error('Should have failed with invalid field');
     } catch (error: any) {
-      expect(error.message).toMatch(/Unrecognized|invalid/i);
+      // #206: unrecognized keys now render as "unexpected field(s): X" via the central formatter.
+      expect(error.message).toMatch(/unexpected field/i);
       console.log('✅ Invalid field rejected');
     }
   });

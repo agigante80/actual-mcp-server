@@ -61,102 +61,95 @@ Action operators: 'set', 'set-split-amount', 'link-schedule', 'append-notes'.
 Example: {stage: "post", conditionsOp: "and", conditions: [{field: "imported_payee", op: "contains", value: "Amazon"}], actions: [{op: "set", field: "category", value: "category-uuid"}]}`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    try {
-      const input = InputSchema.parse(args || {});
-      
-      // Validate that actions with op="set" have a field
-      for (const action of input.actions) {
-        if (action.op === 'set' && !action.field) {
-          throw new Error('Action with op="set" requires a "field" property (e.g., "category", "payee", "notes", "cleared")');
-        }
-        
-        // Validate action field values for ID-type fields
-        if (action.op === 'set' && action.field) {
-          // Check if using category field with text value instead of ID
-          if (action.field === 'category' && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
-            throw new Error(
-              `Action field "category" expects a category ID (UUID), but got text value "${action.value}". ` +
-              `Use the category UUID from your budget data. You can list categories to find the correct UUID.`
-            );
-          }
-          
-          // Check if using payee field with text value instead of ID
-          if (action.field === 'payee' && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
-            throw new Error(
-              `Action field "payee" expects a payee ID (UUID), but got text value "${action.value}". ` +
-              `Use the payee UUID from your budget data. You can list payees to find the correct UUID.`
-            );
-          }
-          
-          // Check if using account field with text value instead of ID
-          if (action.field === 'account' && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
-            throw new Error(
-              `Action field "account" expects an account ID (UUID), but got text value "${action.value}". ` +
-              `Use the account UUID from your budget data. You can list accounts to find the correct UUID.`
-            );
-          }
-        }
-        
-        // Validate append-notes and prepend-notes have string values
-        if ((action.op === 'append-notes' || action.op === 'prepend-notes') && typeof action.value !== 'string') {
-          throw new Error(
-            `Action "${action.op}" requires a string value, but got ${typeof action.value}. ` +
-            `Example: {op: "${action.op}", value: "text to ${action.op === 'append-notes' ? 'append' : 'prepend'}"}`
-          );
-        }
+    // Zod validation errors are formatted centrally by actualToolsManager (#206).
+    const input = InputSchema.parse(args || {});
+    
+    // Validate that actions with op="set" have a field
+    for (const action of input.actions) {
+      if (action.op === 'set' && !action.field) {
+        throw new Error('Action with op="set" requires a "field" property (e.g., "category", "payee", "notes", "cleared")');
       }
       
-      // Validate field usage to guide users toward correct field selection
-      for (const condition of input.conditions) {
-        const fieldInfo = FIELD_OPERATORS[condition.field];
-        
-        // Validate operator is compatible with field type
-        if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
+      // Validate action field values for ID-type fields
+      if (action.op === 'set' && action.field) {
+        // Check if using category field with text value instead of ID
+        if (action.field === 'category' && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
           throw new Error(
-            `Invalid operator "${condition.op}" for field "${condition.field}". ` +
-            `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}. ` +
-            `Please use one of these operators instead.`
+            `Action field "category" expects a category ID (UUID), but got text value "${action.value}". ` +
+            `Use the category UUID from your budget data. You can list categories to find the correct UUID.`
           );
         }
         
         // Check if using payee field with text value instead of ID
-        if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        if (action.field === 'payee' && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
           throw new Error(
-            `Field "payee" expects a payee ID (UUID), but got text value "${condition.value}". ` +
-            `To match payee names with text, use "imported_payee" field instead. ` +
-            `Example: {field: "imported_payee", op: "contains", value: "${condition.value}"}`
+            `Action field "payee" expects a payee ID (UUID), but got text value "${action.value}". ` +
+            `Use the payee UUID from your budget data. You can list payees to find the correct UUID.`
           );
         }
         
-        // Similar validation for account and category
-        if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        // Check if using account field with text value instead of ID
+        if (action.field === 'account' && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
           throw new Error(
-            `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
-            `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
-          );
-        }
-        
-        // Validate oneOf/notOneOf operators expect array values
-        if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
-          throw new Error(
-            `Operator "${condition.op}" expects an array of values, but got ${typeof condition.value}. ` +
-            `Example: {field: "${condition.field}", op: "${condition.op}", value: ["uuid-1", "uuid-2"]}`
+            `Action field "account" expects an account ID (UUID), but got text value "${action.value}". ` +
+            `Use the account UUID from your budget data. You can list accounts to find the correct UUID.`
           );
         }
       }
       
-      // No automatic translation - require explicit field names
-      const ruleData = JSON.parse(JSON.stringify(input)); // deep clone
-      
-      const ruleId = await adapter.createRule(ruleData);
-      return { id: ruleId, success: true };
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
-        throw new Error(`Invalid rule data: ${fieldErrors}`);
+      // Validate append-notes and prepend-notes have string values
+      if ((action.op === 'append-notes' || action.op === 'prepend-notes') && typeof action.value !== 'string') {
+        throw new Error(
+          `Action "${action.op}" requires a string value, but got ${typeof action.value}. ` +
+          `Example: {op: "${action.op}", value: "text to ${action.op === 'append-notes' ? 'append' : 'prepend'}"}`
+        );
       }
-      throw error;
     }
+    
+    // Validate field usage to guide users toward correct field selection
+    for (const condition of input.conditions) {
+      const fieldInfo = FIELD_OPERATORS[condition.field];
+      
+      // Validate operator is compatible with field type
+      if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
+        throw new Error(
+          `Invalid operator "${condition.op}" for field "${condition.field}". ` +
+          `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}. ` +
+          `Please use one of these operators instead.`
+        );
+      }
+      
+      // Check if using payee field with text value instead of ID
+      if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        throw new Error(
+          `Field "payee" expects a payee ID (UUID), but got text value "${condition.value}". ` +
+          `To match payee names with text, use "imported_payee" field instead. ` +
+          `Example: {field: "imported_payee", op: "contains", value: "${condition.value}"}`
+        );
+      }
+      
+      // Similar validation for account and category
+      if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        throw new Error(
+          `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
+          `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
+        );
+      }
+      
+      // Validate oneOf/notOneOf operators expect array values
+      if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
+        throw new Error(
+          `Operator "${condition.op}" expects an array of values, but got ${typeof condition.value}. ` +
+          `Example: {field: "${condition.field}", op: "${condition.op}", value: ["uuid-1", "uuid-2"]}`
+        );
+      }
+    }
+    
+    // No automatic translation - require explicit field names
+    const ruleData = JSON.parse(JSON.stringify(input)); // deep clone
+    
+    const ruleId = await adapter.createRule(ruleData);
+    return { id: ruleId, success: true };
   },
 };
 

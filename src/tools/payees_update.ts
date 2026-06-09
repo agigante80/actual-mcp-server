@@ -41,27 +41,21 @@ Example: Mark payee as transfer account:
 }`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    try {
-      const input = InputSchema.parse(args || {});
-      
-      if (!input.fields || Object.keys(input.fields).length === 0) {
-        throw new Error('No fields provided to update. Include at least one field: name or transfer_acct.');
-      }
-      
-      await adapter.updatePayee(input.id, input.fields);
-      
-      return { 
-        success: true,
-        payeeId: input.id,
-        updatedFields: Object.keys(input.fields),
-      };
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
-        throw new Error(`Invalid payee update data: ${fieldErrors}`);
-      }
-      throw error;
+    // Zod validation errors are formatted centrally by actualToolsManager (#206);
+    // this tool only adds its domain guard for an empty update.
+    const input = InputSchema.parse(args || {});
+
+    if (!input.fields || Object.keys(input.fields).length === 0) {
+      throw new Error('No fields provided to update. Include at least one field: name or transfer_acct.');
     }
+
+    await adapter.updatePayee(input.id, input.fields);
+
+    return {
+      success: true,
+      payeeId: input.id,
+      updatedFields: Object.keys(input.fields),
+    };
   },
 };
 

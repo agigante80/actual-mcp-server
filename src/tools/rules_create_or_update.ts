@@ -130,98 +130,91 @@ IMPORTANT Field Types:
 Returns: { id, created: boolean } — created=true if new rule was created, false if existing rule was updated.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    try {
-      const input = InputSchema.parse(args || {});
+    // Zod validation errors are formatted centrally by actualToolsManager (#206).
+    const input = InputSchema.parse(args || {});
 
-      // ── Validate conditions ──
-      for (const condition of input.conditions) {
-        const fieldInfo = FIELD_OPERATORS[condition.field];
-        if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
-          throw new Error(
-            `Invalid operator "${condition.op}" for field "${condition.field}". ` +
-            `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}.`,
-          );
-        }
-        if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
-          throw new Error(
-            `Field "payee" expects a UUID, but got "${condition.value}". ` +
-            `Use "imported_payee" for text matching instead.`,
-          );
-        }
-        if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
-          throw new Error(`Field "${condition.field}" expects a UUID, but got text "${condition.value}".`);
-        }
-        if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
-          throw new Error(`Operator "${condition.op}" expects an array of values.`);
-        }
+    // ── Validate conditions ──
+    for (const condition of input.conditions) {
+      const fieldInfo = FIELD_OPERATORS[condition.field];
+      if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
+        throw new Error(
+          `Invalid operator "${condition.op}" for field "${condition.field}". ` +
+          `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}.`,
+        );
       }
-
-      // ── Validate actions ──
-      for (const action of input.actions) {
-        if (action.op === 'set' && !action.field) {
-          throw new Error('Action with op="set" requires a "field" property.');
-        }
-        if (action.op === 'set' && action.field) {
-          for (const idField of ['category', 'payee', 'account'] as const) {
-            if (action.field === idField && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
-              throw new Error(`Action field "${idField}" expects a UUID, but got "${action.value}".`);
-            }
-          }
-        }
-        if (['append-notes', 'prepend-notes'].includes(action.op) && typeof action.value !== 'string') {
-          throw new Error(`Action "${action.op}" requires a string value.`);
-        }
+      if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        throw new Error(
+          `Field "payee" expects a UUID, but got "${condition.value}". ` +
+          `Use "imported_payee" for text matching instead.`,
+        );
       }
-
-      // Fetch existing rules and either update (matched) or create (no match) inside
-      // ONE withWriteSession cycle so the read and the write share a single lock
-      // acquisition (#142).
-      return await adapter.withWriteSession(async () => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const existingRules: any[] = await rawGetRules();
-        let matchedRule: (Record<string, unknown> & { id: string }) | null = null;
-
-        for (const rule of existingRules) {
-          const r = rule as Record<string, unknown>;
-          if (!r.id || typeof r.id !== 'string') continue;
-
-          const existingConditions = Array.isArray(r.conditions) ? r.conditions : [];
-          const existingConditionsOp = (r.conditionsOp as string) || 'and';
-
-          if (conditionsMatch(existingConditions, existingConditionsOp, input.conditions, input.conditionsOp)) {
-            matchedRule = r as Record<string, unknown> & { id: string };
-            break;
-          }
-        }
-
-        const ruleData = JSON.parse(JSON.stringify(input)); // deep clone for API call
-
-        if (matchedRule) {
-          // UPDATE existing rule. The Actual Budget API expects the FULL merged rule
-          // object passed as a single argument (matches adapter.updateRule's behaviour).
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const merged: any = {
-            id: matchedRule.id,
-            stage: ruleData.stage ?? (matchedRule as Record<string, unknown>).stage,
-            conditionsOp: ruleData.conditionsOp ?? (matchedRule as Record<string, unknown>).conditionsOp,
-            conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
-            actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
-          };
-          await rawUpdateRule(merged);
-          return { id: matchedRule.id, created: false };
-        } else {
-          // CREATE new rule
-          const rawId = await rawCreateRule(ruleData);
-          return { id: normalizeToId(rawId), created: true };
-        }
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const fieldErrors = error.issues.map((e: z.ZodIssue) => `${e.path.join('.')}: ${e.message}`).join('; ');
-        throw new Error(`Invalid rule data: ${fieldErrors}`);
+      if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        throw new Error(`Field "${condition.field}" expects a UUID, but got text "${condition.value}".`);
       }
-      throw error;
+      if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
+        throw new Error(`Operator "${condition.op}" expects an array of values.`);
+      }
     }
+
+    // ── Validate actions ──
+    for (const action of input.actions) {
+      if (action.op === 'set' && !action.field) {
+        throw new Error('Action with op="set" requires a "field" property.');
+      }
+      if (action.op === 'set' && action.field) {
+        for (const idField of ['category', 'payee', 'account'] as const) {
+          if (action.field === idField && typeof action.value === 'string' && !action.value.match(/^[0-9a-f-]{36}$/i)) {
+            throw new Error(`Action field "${idField}" expects a UUID, but got "${action.value}".`);
+          }
+        }
+      }
+      if (['append-notes', 'prepend-notes'].includes(action.op) && typeof action.value !== 'string') {
+        throw new Error(`Action "${action.op}" requires a string value.`);
+      }
+    }
+
+    // Fetch existing rules and either update (matched) or create (no match) inside
+    // ONE withWriteSession cycle so the read and the write share a single lock
+    // acquisition (#142).
+    return await adapter.withWriteSession(async () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const existingRules: any[] = await rawGetRules();
+      let matchedRule: (Record<string, unknown> & { id: string }) | null = null;
+
+      for (const rule of existingRules) {
+        const r = rule as Record<string, unknown>;
+        if (!r.id || typeof r.id !== 'string') continue;
+
+        const existingConditions = Array.isArray(r.conditions) ? r.conditions : [];
+        const existingConditionsOp = (r.conditionsOp as string) || 'and';
+
+        if (conditionsMatch(existingConditions, existingConditionsOp, input.conditions, input.conditionsOp)) {
+          matchedRule = r as Record<string, unknown> & { id: string };
+          break;
+        }
+      }
+
+      const ruleData = JSON.parse(JSON.stringify(input)); // deep clone for API call
+
+      if (matchedRule) {
+        // UPDATE existing rule. The Actual Budget API expects the FULL merged rule
+        // object passed as a single argument (matches adapter.updateRule's behaviour).
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const merged: any = {
+          id: matchedRule.id,
+          stage: ruleData.stage ?? (matchedRule as Record<string, unknown>).stage,
+          conditionsOp: ruleData.conditionsOp ?? (matchedRule as Record<string, unknown>).conditionsOp,
+          conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
+          actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
+        };
+        await rawUpdateRule(merged);
+        return { id: matchedRule.id, created: false };
+      } else {
+        // CREATE new rule
+        const rawId = await rawCreateRule(ruleData);
+        return { id: normalizeToId(rawId), created: true };
+      }
+    });
   },
 };
 
