@@ -196,14 +196,16 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
     if (!testContext.accountId) test.skip();
 
     console.log('✅ Testing happy path is unaffected by the #206 formatter change...');
+    // callTool throws on any tool error (including a validation error), so reaching the
+    // assertions already proves the happy path was not regressed. extractResult unwraps
+    // accounts_update's { success, accountId, updatedFields } envelope to the accountId.
     const result = await callTool(request, sessionId, 'actual_accounts_update', {
       id: testContext.accountId,
       fields: { name: testContext.accountName + '-Updated2' },
     });
     const data = extractResult(result);
-    expect(data?.error).toBeFalsy();
-    expect(data?.success).toBe(true);
-    console.log('✅ Valid update returned success with no error');
+    expect(data).toBe(testContext.accountId);
+    console.log('✅ Valid update succeeded with no validation error');
   });
 
   test('actual_accounts_update - ERROR: should reject invalid fields', async ({ request }) => {
