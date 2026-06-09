@@ -18,28 +18,8 @@ const tool: ToolDefinition = {
   description: "Create a category. REQUIRED: group_id (category group UUID). Use actual_category_groups_get to find available groups. Optional: is_income (boolean, defaults to false for expense categories).",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    // Validate input with helpful error messages
-    let input;
-    try {
-      input = InputSchema.parse(args || {});
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        const issues = error.issues.map(issue => {
-          if (issue.path.includes('group_id')) {
-            return `Invalid group_id: ${issue.message}. Use actual_category_groups_get to find valid category group UUIDs.`;
-          }
-          if (issue.path.includes('name')) {
-            return `Invalid name: ${issue.message}`;
-          }
-          if (issue.path.includes('is_income')) {
-            return `Invalid is_income: ${issue.message}. Must be true or false.`;
-          }
-          return `${issue.path.join('.')}: ${issue.message}`;
-        });
-        throw new Error(`Validation failed:\n${issues.join('\n')}`);
-      }
-      throw error;
-    }
+    // Zod validation errors are formatted centrally by actualToolsManager (#206).
+    const input = InputSchema.parse(args || {});
 
     try {
       // Input already has correct field names (group_id, is_income)

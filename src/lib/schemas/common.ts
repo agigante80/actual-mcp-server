@@ -53,7 +53,7 @@ export const categoryIdSchema = z
 export const categoryGroupIdSchema = z
   .string()
   .regex(UUID_PATTERN, 'Invalid category group ID format (expected UUID)')
-  .describe('Category group UUID');
+  .describe('Category group UUID; list with actual_category_groups_get');
 
 /**
  * Payee UUID validation

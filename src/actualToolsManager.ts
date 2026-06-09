@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import type { ZodTypeAny } from 'zod';
 import type { ToolDefinition } from '../types/tool.d.js';
+import { formatZodError } from './lib/zod-error-format.js';
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -185,14 +186,10 @@ class ActualToolsManager {
       logger.info(`[TOOL RESULT] ${name}: ${JSON.stringify(safe)}`);
       return safe;
     } catch (err: unknown) {
-      // Format Zod validation errors more clearly
+      // Format Zod validation errors into one actionable, consistent message (#206).
+      // Duck-type on `.issues` so any structurally-compatible ZodError is handled.
       if (err && typeof err === 'object' && 'issues' in err) {
-        const zodError = err as z.ZodError;
-        const issues = zodError.issues.map(issue => {
-          const path = issue.path.join('.');
-          return `${path}: ${issue.message}`;
-        }).join(', ');
-        const formattedMsg = `Validation error: ${issues}`;
+        const formattedMsg = formatZodError(err as z.ZodError, tool.inputSchema);
         logger.error(`[TOOL ERROR] ${name}: ${formattedMsg}`);
         throw new Error(formattedMsg);
       }

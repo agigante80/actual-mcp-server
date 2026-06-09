@@ -100,7 +100,7 @@ export async function accountTests(client, context) {
     await callTool("actual_accounts_update", { id: accountId, fields: { invalidField: "should fail" } });
     console.log("❌ REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
   } catch (err) {
-    if (err.message.includes("Unrecognized key") || err.message.includes("invalidField")) {
+    if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
       console.log("✓ Strict validation working (invalid field rejected)");
     } else {
       console.log("⚠ Different error than expected:", err.message);
