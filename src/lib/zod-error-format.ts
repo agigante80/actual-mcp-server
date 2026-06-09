@@ -103,6 +103,9 @@ function describeIssue(issue: any, schema: unknown): string {
   const pathStr = path.join('.');
   const hint = hintAt(schema, path);
   const withHint = (s: string) => (hint ? `${s} (${hint})` : s);
+  // Pass an already-actionable message through, prefixed with the field path when there is
+  // one (an empty path, e.g. a root-level issue, must not produce a leading ": ").
+  const withPath = (m: string) => (pathStr ? `${pathStr}: ${m}` : m);
   const msg: string = typeof issue?.message === 'string' ? issue.message : 'invalid input';
 
   switch (issue?.code) {
@@ -116,31 +119,27 @@ function describeIssue(issue: any, schema: unknown): string {
       const received = msg.startsWith('Invalid input: expected') ? /received (\w+)/.exec(msg)?.[1] : undefined;
       if (received === 'undefined') return withHint(`${pathStr} is required`);
       if (received) return withHint(`${pathStr}: expected ${issue.expected}, received ${received}`);
-      return `${pathStr}: ${msg}`;
+      return withPath(msg);
     }
 
-    case 'invalid_value': {
+    case 'invalid_value':
       // enum / literal: list the allowed options
-      if (Array.isArray(issue.values)) {
-        return `${pathStr}: allowed values: ${issue.values.join(', ')}`;
-      }
-      return `${pathStr}: ${msg}`;
-    }
+      return Array.isArray(issue.values) ? withPath(`allowed values: ${issue.values.join(', ')}`) : withPath(msg);
 
     case 'invalid_format':
       // regex / custom string formats already carry an actionable message
-      return `${pathStr}: ${msg}`;
+      return withPath(msg);
 
     case 'too_big': {
-      if (!msg.startsWith('Too big:')) return `${pathStr}: ${msg}`; // custom message
+      if (!msg.startsWith('Too big:')) return withPath(msg); // custom message
       const cmp = issue.inclusive === false ? 'less than' : 'at most';
-      return `${pathStr}: must be ${cmp} ${issue.maximum}${unitFor(issue.origin, issue.maximum)}`;
+      return withPath(`must be ${cmp} ${issue.maximum}${unitFor(issue.origin, issue.maximum)}`);
     }
 
     case 'too_small': {
-      if (!msg.startsWith('Too small:')) return `${pathStr}: ${msg}`; // custom message
+      if (!msg.startsWith('Too small:')) return withPath(msg); // custom message
       const cmp = issue.inclusive === false ? 'more than' : 'at least';
-      return `${pathStr}: must be ${cmp} ${issue.minimum}${unitFor(issue.origin, issue.minimum)}`;
+      return withPath(`must be ${cmp} ${issue.minimum}${unitFor(issue.origin, issue.minimum)}`);
     }
 
     case 'unrecognized_keys': {
@@ -154,7 +153,7 @@ function describeIssue(issue: any, schema: unknown): string {
     }
 
     default:
-      return pathStr ? `${pathStr}: ${msg}` : msg;
+      return withPath(msg);
   }
 }
 
@@ -172,5 +171,3 @@ export function formatZodError(error: z.ZodError | { issues?: unknown }, schema?
   const parts = issues.map((issue) => describeIssue(issue, schema));
   return `Validation error: ${parts.join(', ')}`;
 }
-
-export default formatZodError;
