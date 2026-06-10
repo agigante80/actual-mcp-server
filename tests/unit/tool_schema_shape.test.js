@@ -106,12 +106,15 @@ function walk(node, path, root, offenders, seen, depth) {
   }
 
   if (node.type === 'array') {
-    // A tuple publishes its element schemas under `prefixItems` and may omit `items`.
-    const prefixItems = Array.isArray(node.prefixItems) ? node.prefixItems : [];
-    if (prefixItems.length > 0) {
-      prefixItems.forEach((sub, i) => walk(sub, `${path}.prefixItems[${i}]`, root, offenders, seen, depth + 1));
-    } else if (node.items) {
-      walk(node.items, `${path}.items`, root, offenders, seen, depth + 1);
+    // Presence of the `prefixItems` KEY (not its length) marks a tuple. An empty tuple
+    // (`prefixItems: []`) is a valid, constructible `[]` and must not be flagged. A tuple may
+    // ALSO carry `items` as its rest-element schema, which must still be walked.
+    const isTuple = Array.isArray(node.prefixItems);
+    if (isTuple) {
+      node.prefixItems.forEach((sub, i) => walk(sub, `${path}.prefixItems[${i}]`, root, offenders, seen, depth + 1));
+      if (node.items !== undefined) walk(node.items, `${path}.items`, root, offenders, seen, depth + 1); // rest element
+    } else if (node.items !== undefined) {
+      walk(node.items, `${path}.items`, root, offenders, seen, depth + 1);   // isShapeless handles {} / non-object
     } else {
       offenders.push(`${path}.items`);      // array declaring neither items nor prefixItems
     }
@@ -119,10 +122,19 @@ function walk(node, path, root, offenders, seen, depth) {
     walk(node.items, `${path}.items`, root, offenders, seen, depth + 1);
   }
 
-  for (const key of ['anyOf', 'oneOf', 'allOf']) {
+  // A union member that is shapeless is the bug (a client choosing that alternative gets no
+  // shape), so anyOf/oneOf members are all walked. allOf is a conjunction: a shapeless `{}`
+  // member adds no constraint and is harmless, so it is skipped; shaped members are still
+  // descended to catch a shapeless field nested inside one.
+  for (const key of ['anyOf', 'oneOf']) {
     if (Array.isArray(node[key])) {
       node[key].forEach((sub, i) => walk(sub, `${path}.${key}[${i}]`, root, offenders, seen, depth + 1));
     }
+  }
+  if (Array.isArray(node.allOf)) {
+    node.allOf.forEach((sub, i) => {
+      if (!isShapeless(sub)) walk(sub, `${path}.allOf[${i}]`, root, offenders, seen, depth + 1);
+    });
   }
 }
 
@@ -185,6 +197,23 @@ function findShapeless(toolName, published) {
     };
     const off = findShapeless('c', cyclic);   // must return, not hang
     ok(Array.isArray(off) && off.length === 0, 'a $ref cycle terminates and is not flagged', JSON.stringify(off));
+  }
+
+  // ── Self-check: array/intersection edge cases (tuple rest, empty tuple, vacuous allOf) ──
+  console.log('\n[#224] detector self-check (tuple rest, empty tuple, vacuous allOf)');
+  {
+    const s = z.object({
+      tupleRestBad: z.tuple([z.string()], z.unknown()), // { prefixItems:[{string}], items:{} } -> .items flagged
+      emptyTupleOk: z.tuple([]),                         // { prefixItems:[] } -> NOT flagged (valid [])
+    });
+    const off = findShapeless('t', z.toJSONSchema(s));
+    ok(off.includes('t.tupleRestBad.items'), 'flags a shapeless tuple REST element', JSON.stringify(off));
+    ok(!off.some((p) => p.startsWith('t.emptyTupleOk')), 'does not flag an empty tuple', JSON.stringify(off));
+
+    // intersection with z.unknown() -> allOf:[{shaped},{}]; the {} member is vacuous, not a bug.
+    const inter = z.object({ both: z.intersection(z.object({ a: z.string() }), z.unknown()) });
+    const off2 = findShapeless('i', z.toJSONSchema(inter));
+    ok(!off2.some((p) => p.includes('allOf')), 'does not flag a vacuous {} member of an allOf intersection', JSON.stringify(off2));
   }
 
   // ── The guard: every published tool schema must be fully shaped (modulo the allowlist) ──
