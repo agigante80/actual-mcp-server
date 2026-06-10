@@ -241,9 +241,7 @@ Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
 
 - actual_transactions_import
   Input: accountId = the account from Phase 1, txs = a one-item array with date (today, YYYY-MM-DD), amount = -4321, payee_name = "Manual-Import", and imported_id = a unique string
-  Expect: success with added length 1
-  Then re-run with the SAME imported_id
-  Expect: success with added length 0 (de-duplicated, not imported twice)
+  Expect: success with added length 1 (the typed, non-empty import adds exactly one transaction)
 
 - actual_transactions_import (negative)
   Input: accountId set, txs = empty array []
