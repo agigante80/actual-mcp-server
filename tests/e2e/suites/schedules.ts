@@ -55,6 +55,20 @@ export function registerScheduleTests(state: SharedState): void {
     console.log('✅ Schedule updated and name verified in list');
   });
 
+  test('actual_schedules_update - should update date to a typed RecurConfig', async ({ request }) => {
+    if (!state.ctx.scheduleOneOffId) test.skip();
+    // #225: the `date` field now accepts a typed RecurConfig (frequency/start/endMode/...),
+    // not an open object. Update the one-off schedule into a monthly recurring one.
+    const result = await callTool(request, state.sessionId, 'actual_schedules_update', {
+      id: state.ctx.scheduleOneOffId,
+      date: { frequency: 'monthly', start: '2026-06-15', endMode: 'never', interval: 1 },
+      resetNextDate: true,
+    });
+    const data = extractResult(result);
+    expect(data?.success ?? data?.result?.success).toBe(true);
+    console.log('✅ Schedule date updated to a recurring RecurConfig');
+  });
+
   test('actual_schedules_delete - should delete schedule and verify gone', async ({ request }) => {
     if (!state.ctx.scheduleOneOffId) test.skip();
     const result = await callTool(request, state.sessionId, 'actual_schedules_delete', {

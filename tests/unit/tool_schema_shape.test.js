@@ -33,9 +33,8 @@ process.env.ACTUAL_PASSWORD       = process.env.ACTUAL_PASSWORD       ?? 'stub-p
 // carry a published shape. The entries below are Actual domain values that are polymorphic
 // or open by design (verified against z.toJSONSchema): a rule action's `value` includes an
 // object-valued branch (e.g. split actions) and its `options` is a free-form options bag
-// (both `z.object({}).passthrough()` in src/tools/rules_*.ts), and a schedule's `date` is a
-// date string OR an open `RecurConfig` object (src/tools/schedules_update.ts). These are
-// documented for clients via `.describe()`; they are open, not unconstructible.
+// (both `z.object({}).passthrough()` in src/tools/rules_*.ts). (Schedule `date` used to be
+// here too, but #225 typed it with the shared RecurConfigSchema, so it is no longer open.)
 const ALLOWLIST = new Set([
   'actual_rules_create.actions.items.value',
   'actual_rules_create.actions.items.options',
@@ -43,7 +42,6 @@ const ALLOWLIST = new Set([
   'actual_rules_create_or_update.actions.items.options',
   'actual_rules_update.fields.actions.items.value',
   'actual_rules_update.fields.actions.items.options',
-  'actual_schedules_update.date',
 ]);
 
 let failures = 0;
@@ -236,6 +234,21 @@ function findShapeless(toolName, published) {
   ok(offending.length === 0,
     'no tool publishes a shapeless node (the #217 class), allowlist aside',
     offending.length ? `shapeless: ${offending.join(', ')}` : '');
+
+  // ── #225 regression: schedules_update.date publishes a TYPED recurrence branch (it used
+  //    to be an open `z.object({}).passthrough()` that was allowlisted above) ──
+  console.log('\n[#225] actual_schedules_update.date is a typed recurrence config (not open)');
+  {
+    const upd = tools.find((t) => t.name === 'actual_schedules_update');
+    const date = upd && z.toJSONSchema(upd.inputSchema).properties?.date;
+    const branches = (date && (date.anyOf || date.oneOf)) || [];
+    const recur = branches.find((b) => b && b.type === 'object');
+    ok(!!recur, 'date has an object branch (the RecurConfig)', JSON.stringify(date));
+    ok(recur && recur.properties && recur.properties.frequency && recur.properties.endMode,
+      'the RecurConfig branch is typed (frequency/endMode present), not an open {}', JSON.stringify(recur));
+    ok(recur && recur.additionalProperties !== true && !(recur.additionalProperties && Object.keys(recur.additionalProperties).length === 0 && !recur.properties),
+      'the RecurConfig branch is not a shapeless open object');
+  }
 
   console.log('');
   if (failures === 0) console.log('[#224] All tool schema-shape guards passed ✓');
