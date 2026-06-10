@@ -42,13 +42,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   out('\n[#219] JSON format carries metadata + error stack (the dropped-data fix)');
   {
     const err = new Error('boom');
-    // mirrors createModuleLogger('TEST').error('op failed', err, { sessionId: 'abc' })
-    const rec = jsonLine({ level: 'error', message: '[TEST] op failed', module: 'TEST', error: err.message, stack: err.stack, sessionId: 'abc' });
+    // mirrors createModuleLogger('TEST').error('op failed', err, { userId: 'abc' })
+    const rec = jsonLine({ level: 'error', message: '[TEST] op failed', module: 'TEST', error: err.message, stack: err.stack, userId: 'abc' });
     eq(rec.level, 'error', 'level preserved');
     ok(typeof rec.message === 'string' && rec.message.includes('[TEST] op failed'), 'message includes module prefix');
     eq(rec.module, 'TEST', 'module promoted to a field');
     eq(rec.service, 'actual-mcp-server', 'service field present');
-    eq(rec.context?.sessionId, 'abc', 'user metadata nested under context');
+    eq(rec.context?.userId, 'abc', 'user metadata nested under context');
     ok(typeof rec.stack === 'string' && rec.stack.includes('boom'), 'error stack is present (was dropped before)');
     ok(typeof rec.timestamp === 'string' && rec.timestamp.includes('T'), 'ISO 8601 timestamp');
   }
@@ -57,10 +57,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   {
     // winston passes the SAME info object to every transport format; nesting must not
     // re-wrap context into context.context on the second/third pass.
-    const info = { level: 'info', message: '[T] x', module: 'T', sessionId: 'abc' };
+    const info = { level: 'info', message: '[T] x', module: 'T', userId: 'abc' };
     buildLogFormat(true).transform(info, {}); // transport 1 mutates info in place
     const second = JSON.parse(buildLogFormat(true).transform(info, {})[MESSAGE]); // transport 2 sees it
-    eq(second.context?.sessionId, 'abc', 'context still holds the field after a second transport pass');
+    eq(second.context?.userId, 'abc', 'context still holds the field after a second transport pass');
     ok(!('context' in (second.context || {})), 'context is NOT double-nested (no context.context)');
   }
 
@@ -78,7 +78,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   out('\n[#219] dev pretty format stays human-readable, not JSON');
   {
     const err = new Error('boom');
-    const line = prettyLine({ level: 'error', message: '[TEST] op failed', module: 'TEST', error: err.message, stack: err.stack, sessionId: 'abc' });
+    const line = prettyLine({ level: 'error', message: '[TEST] op failed', module: 'TEST', error: err.message, stack: err.stack, userId: 'abc' });
     ok(line.includes('[TEST] op failed'), 'pretty line contains the prefixed message');
     ok(!line.trimStart().startsWith('{'), 'pretty line is not JSON');
     ok(line.includes('boom'), 'pretty line includes the error stack (no longer dropped)');

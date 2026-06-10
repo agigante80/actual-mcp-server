@@ -8,7 +8,7 @@ import {
   ListToolsRequestSchema,
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
-import logger from '../logger.js';
+import logger, { resolveRequestId } from '../logger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
@@ -446,7 +446,8 @@ export async function startHttpServer(
           // Run in AsyncLocalStorage context so tools can access sessionId
           // and the adapter can enforce per-request budget ACL (#156).
           const allowedBudgetsInit = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
-          await requestContext.run({ sessionId: undefined, allowedBudgets: allowedBudgetsInit, principal: resolvePrincipal(req) }, async () => {
+          const requestId = resolveRequestId(req.get('x-correlation-id'));
+          await requestContext.run({ sessionId: undefined, requestId, allowedBudgets: allowedBudgetsInit, principal: resolvePrincipal(req) }, async () => {
             await transport.handleRequest(req, res, req.body);
           });
         } catch (err: unknown) {
@@ -546,7 +547,8 @@ export async function startHttpServer(
       // Run in AsyncLocalStorage context so tools and the adapter can access
       // sessionId (pool branch, #134) and allowedBudgets (ACL enforcement, #156).
       const allowedBudgets = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
-      await requestContext.run({ sessionId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {
+      const requestId = resolveRequestId(req.get('x-correlation-id'));
+      await requestContext.run({ sessionId, requestId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     } catch (err: unknown) {
