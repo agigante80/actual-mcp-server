@@ -243,6 +243,8 @@ export default tool;
 
 ## Key Conventions & Gotchas
 
+**Logging (structured, since #219)**: use `createModuleLogger('MODULE')` from `src/lib/loggerFactory.js`; never call `console.*` directly in source (the console is hijacked to winston for stdio framing safety). Pass structured context as the metadata object (`log.info('did x', { sessionId, count })`), not interpolated into the message, so it is queryable. Levels: `error` (a failure needing attention), `warn` (recoverable/suspicious), `info` (normal lifecycle), `debug` (developer internals). Output format is resolved in `src/logger.ts` straight from `process.env` (it loads before `config.ts`): `LOG_FORMAT=json|pretty`, precedence explicit `LOG_FORMAT` > `NODE_ENV=production` (json) > pretty. JSON records carry `{ timestamp, level, service, module, message, stack?, context }`. The format helpers `resolveLogConfig` / `buildLogFormat` are exported and unit-tested in `tests/unit/logger_structured.test.js`. Do not log secrets or PII (auth headers, tokens, passwords); central redaction is tracked in #220.
+
 **Amounts are always in integer cents**: `5000 = $50.00`, `-5000 = -$50.00`. Never use decimal dollars.
 
 **`MCP_SSE_AUTHORIZATION` must be the raw token only**, not `"Bearer token123"`. The server extracts the token from the `Authorization: Bearer <token>` header and compares directly.
