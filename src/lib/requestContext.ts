@@ -26,6 +26,9 @@ import { AsyncLocalStorage } from 'async_hooks';
  */
 export const requestContext = new AsyncLocalStorage<{
   sessionId?: string;
+  // Correlation id stamped on every log line (#221). Taken from an inbound
+  // `X-Correlation-ID` header when present, otherwise generated per request.
+  requestId?: string;
   allowedBudgets?: string[];
   // Authenticated principal (OIDC subject, or a stable constant for static-bearer
   // mode). Used by the per-principal budget preference (#189) to restore a user's

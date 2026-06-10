@@ -2,6 +2,10 @@ import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
+// requestContext only imports async_hooks, so this is safe to import from the early-loaded
+// logger module (no circular import).
+import { requestContext } from './lib/requestContext.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,11 +82,46 @@ export function resolveLogConfig(env: NodeJS.ProcessEnv = process.env): LogConfi
 const { useJson: USE_JSON, level: DEFAULT_LEVEL, service: SERVICE } = resolveLogConfig(process.env);
 
 // Fields that stay at the top level of a record; everything else is user metadata.
-const STANDARD_KEYS = new Set(['level', 'message', 'timestamp', 'service', 'module', 'stack', 'ms']);
+// `sessionId`/`requestId` are reserved correlation fields (#221), so they render top-level
+// rather than nested under `context`.
+const STANDARD_KEYS = new Set([
+  'level', 'message', 'timestamp', 'service', 'module', 'stack', 'ms', 'sessionId', 'requestId',
+]);
 
 // Promote a `service` field onto every record.
 const addService = winston.format((info) => {
   info.service = SERVICE;
+  return info;
+});
+
+/**
+ * Resolve a request correlation id: reuse a non-empty inbound `X-Correlation-ID`, else
+ * generate one. Exported so the HTTP layer and tests share the exact decision (#221).
+ *
+ * The inbound value is CLIENT-CONTROLLED and is stamped on every log line for the request,
+ * so it is sanitised first: control characters are stripped (prevents log-line forging in
+ * non-JSON consumers) and the length is capped (prevents per-line bloat from a hostile
+ * header). If nothing usable remains, a UUID is generated.
+ */
+const MAX_REQUEST_ID_LEN = 128;
+export function resolveRequestId(inbound?: string | null): string {
+  let id = typeof inbound === 'string' ? inbound.trim() : '';
+  if (id) {
+    // eslint-disable-next-line no-control-regex
+    id = id.replace(/[\u0000-\u001f\u007f]/g, '').slice(0, MAX_REQUEST_ID_LEN);
+  }
+  return id.length > 0 ? id : randomUUID();
+}
+
+// Stamp the active request's correlation ids onto every record (#221). Reads the
+// AsyncLocalStorage store; the context-derived id is authoritative, so it OVERWRITES any
+// caller-supplied `sessionId` metadata. When there is no active store (startup, CLI, stdio
+// without a request wrapper) it is a no-op and never throws. Must run after splat() (which
+// reverts top-level field additions made before it), so it is placed alongside addService.
+const addCorrelation = winston.format((info) => {
+  const store = requestContext.getStore();
+  if (store?.sessionId) info.sessionId = store.sessionId;
+  if (store?.requestId) info.requestId = store.requestId;
   return info;
 });
 
@@ -244,6 +283,7 @@ export function buildLogFormat(
       // reverts top-level field mutations made before it (nested objects survive as shared
       // refs), so redaction must run after splat to actually mask top-level secrets.
       redactSecrets(),
+      addCorrelation(), // #221: stamp sessionId/requestId (after splat, like addService)
       addService(),
       nestContext(),
       winston.format.json()
@@ -256,6 +296,7 @@ export function buildLogFormat(
     winston.format.errors({ stack: true }),
     winston.format.splat(),
     redactSecrets(), // #220: after splat (see note in the json branch)
+    addCorrelation(), // #221: stamp sessionId/requestId
     ...(colorize ? [winston.format.colorize()] : []),
     winston.format.printf((info) => {
       const rec = info as Record<string, unknown>;
