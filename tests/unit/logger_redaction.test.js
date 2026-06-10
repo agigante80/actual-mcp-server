@@ -94,10 +94,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   out('\n[#220] live: logger masks Authorization header + known secret value over the wire');
   {
     const { stderr, stdout } = capture(() => {
-      logger.info('inbound', { headers: { authorization: 'Bearer abc.def' }, note: 'LIVE-SECRET-TOKEN-XYZ123 here', accountId: 'a1' });
+      // `password` is a TOP-LEVEL sensitive key: it exercises the after-splat top-level
+      // redaction path end to end (the exact path the splat-ordering bug lived in).
+      logger.info('inbound', { headers: { authorization: 'Bearer abc.def' }, password: 'topsecretpw', note: 'LIVE-SECRET-TOKEN-XYZ123 here', accountId: 'a1' });
     });
     await sleep(20);
-    ok(!stderr.includes('Bearer abc.def'), 'raw Authorization value not in output', stderr.slice(0, 200));
+    ok(!stderr.includes('Bearer abc.def'), 'raw Authorization value (nested key) not in output', stderr.slice(0, 200));
+    ok(!stderr.includes('topsecretpw'), 'top-level sensitive KEY masked end-to-end through the live pipeline');
     ok(!stderr.includes('LIVE-SECRET-TOKEN-XYZ123'), 'configured secret value scrubbed from output');
     ok(stderr.includes('[REDACTED]'), 'redaction marker present');
     ok(stderr.includes('a1'), 'benign field preserved');
