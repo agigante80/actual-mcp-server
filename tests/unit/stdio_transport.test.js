@@ -4,8 +4,10 @@
 process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
 process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-unit-test';
-// Set stdio mode so the Winston Console transport routes to stderr
+// Set stdio mode so the Winston Console transport routes to stderr.
 process.env.MCP_STDIO_MODE = 'true';
+// Exercise the JSON format too (#219): structured output must still route to stderr only.
+process.env.LOG_FORMAT = process.env.LOG_FORMAT ?? 'json';
 
 let passed = 0;
 let failed = 0;

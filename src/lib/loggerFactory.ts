@@ -64,17 +64,21 @@ export interface ModuleLogger {
 export function createModuleLogger(moduleName: string): ModuleLogger {
   const prefix = `[${moduleName}]`;
 
+  // `module` is attached as a structured field (promoted to a top-level field by the
+  // logger format, #219) while the `[MODULE]` prefix is kept in the message for the
+  // pretty/dev output. `module` is spread LAST so it stays authoritative and a caller's
+  // metadata cannot accidentally overwrite it.
   return {
     info: (message: string, meta?: object) => {
-      logger.info(`${prefix} ${message}`, meta);
+      logger.info(`${prefix} ${message}`, { ...meta, module: moduleName });
     },
 
     debug: (message: string, meta?: object) => {
-      logger.debug(`${prefix} ${message}`, meta);
+      logger.debug(`${prefix} ${message}`, { ...meta, module: moduleName });
     },
 
     warn: (message: string, meta?: object) => {
-      logger.warn(`${prefix} ${message}`, meta);
+      logger.warn(`${prefix} ${message}`, { ...meta, module: moduleName });
     },
 
     error: (message: string, error?: Error, meta?: object) => {
@@ -83,9 +87,10 @@ export function createModuleLogger(moduleName: string): ModuleLogger {
           error: error.message,
           stack: error.stack,
           ...meta,
+          module: moduleName,
         });
       } else {
-        logger.error(`${prefix} ${message}`, meta);
+        logger.error(`${prefix} ${message}`, { ...meta, module: moduleName });
       }
     },
   };

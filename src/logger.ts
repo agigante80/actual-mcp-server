@@ -17,7 +17,6 @@ const LOG_DIR = process.env.MCP_BRIDGE_LOG_DIR
 const DATE_PATTERN = process.env.MCP_BRIDGE_ROTATE_DATEPATTERN || 'YYYY-MM-DD';
 const MAX_SIZE = process.env.MCP_BRIDGE_MAX_LOG_SIZE || '20m';
 const MAX_FILES = process.env.MCP_BRIDGE_MAX_FILES || '14d';
-const DEFAULT_LEVEL = process.env.MCP_BRIDGE_LOG_LEVEL || 'debug';
 
 function safeStringify(obj: unknown, maxLen = 2000) {
   try {
@@ -44,6 +43,115 @@ function safeStringify(obj: unknown, maxLen = 2000) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Log configuration + format (#219)
+//
+// Read straight from process.env, NOT from src/config.ts: this module is imported
+// during early bootstrap (before the Zod config is validated), exactly like the
+// existing MCP_STDIO_MODE / MCP_BRIDGE_LOG_LEVEL reads, so going through config would
+// risk an undefined format/level during start-up logging.
+// ---------------------------------------------------------------------------
+
+export interface LogConfig {
+  useJson: boolean;
+  level: string;
+  service: string;
+}
+
+/**
+ * Resolve the output format, level, and service name from the environment.
+ *
+ * Format precedence is deterministic: an explicit `LOG_FORMAT` ("json" | "pretty")
+ * wins; otherwise `NODE_ENV==='production'` selects JSON; otherwise pretty. The
+ * non-production default is therefore the human-readable text format, so existing
+ * log-text-scraping tests keep passing and JSON is an explicit opt-in or prod-only.
+ */
+export function resolveLogConfig(env: NodeJS.ProcessEnv = process.env): LogConfig {
+  const fmt = String(env.LOG_FORMAT || '').toLowerCase();
+  const isProd = env.NODE_ENV === 'production';
+  const useJson = fmt === 'json' ? true : fmt === 'pretty' ? false : isProd;
+  const level = env.MCP_BRIDGE_LOG_LEVEL || (isProd ? 'info' : 'debug');
+  const service = env.MCP_SERVICE_NAME || 'actual-mcp-server';
+  return { useJson, level, service };
+}
+
+const { useJson: USE_JSON, level: DEFAULT_LEVEL, service: SERVICE } = resolveLogConfig(process.env);
+
+// Fields that stay at the top level of a record; everything else is user metadata.
+const STANDARD_KEYS = new Set(['level', 'message', 'timestamp', 'service', 'module', 'stack', 'ms']);
+
+// Promote a `service` field onto every record.
+const addService = winston.format((info) => {
+  info.service = SERVICE;
+  return info;
+});
+
+// Collect non-standard fields into a single `context` object so JSON records have a
+// stable shape ({ timestamp, level, service, module, message, stack?, context? }).
+// winston hands the SAME info object to every transport's format, so this must be
+// idempotent: a record passing through more than one transport (e.g. STORE_LOGS=true
+// gives two file transports plus the console) must not re-nest `context` into
+// `context.context`. Excluding the `context` key from the move makes a second pass a
+// no-op, and any already-present context is merged rather than wrapped.
+const nestContext = winston.format((info) => {
+  const ctx: Record<string, unknown> = {};
+  for (const key of Object.keys(info)) {
+    if (!STANDARD_KEYS.has(key) && key !== 'context') {
+      ctx[key] = (info as Record<string, unknown>)[key];
+      delete (info as Record<string, unknown>)[key];
+    }
+  }
+  if (Object.keys(ctx).length > 0) {
+    const existing = (info as Record<string, unknown>).context;
+    (info as Record<string, unknown>).context =
+      existing && typeof existing === 'object' ? { ...(existing as object), ...ctx } : ctx;
+  }
+  return info;
+});
+
+/**
+ * Build the winston format. Reuses winston's own building blocks
+ * (`format.errors` + `format.splat` + `format.json`) rather than a hand-rolled
+ * serializer, so the metadata that loggerFactory already attaches flows through.
+ * The previous printf referenced only `{ timestamp, level, message }`, which is
+ * why metadata (including error stacks) was silently dropped.
+ */
+export function buildLogFormat(
+  useJson: boolean,
+  colorize: boolean = !!process.stdout.isTTY
+): winston.Logform.Format {
+  if (useJson) {
+    return winston.format.combine(
+      winston.format.timestamp(), // ISO 8601 UTC
+      winston.format.errors({ stack: true }),
+      winston.format.splat(),
+      addService(),
+      nestContext(),
+      winston.format.json()
+    );
+  }
+  // Colorize only for an interactive terminal, so piped output and log files do not get
+  // ANSI escape codes (also keeps the format deterministic and unit-testable).
+  return winston.format.combine(
+    winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+    winston.format.errors({ stack: true }),
+    winston.format.splat(),
+    ...(colorize ? [winston.format.colorize()] : []),
+    winston.format.printf((info) => {
+      const rec = info as Record<string, unknown>;
+      let line = `${rec.timestamp} ${rec.level}: ${rec.message}`;
+      if (rec.stack) line += `\n${rec.stack as string}`;
+      // Append any remaining metadata for dev readability (it is no longer dropped).
+      const extra: Record<string, unknown> = {};
+      for (const key of Object.keys(rec)) {
+        if (!STANDARD_KEYS.has(key)) extra[key] = rec[key];
+      }
+      if (Object.keys(extra).length > 0) line += ` ${safeStringify(extra, 1000)}`;
+      return line;
+    })
+  );
+}
+
 const transports: winston.transport[] = [];
 
 // file transports when enabled (capture debug+)
@@ -57,10 +165,8 @@ if (STORE_LOGS) {
       zippedArchive: true,
       maxSize: MAX_SIZE,
       maxFiles: MAX_FILES,
-      format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level}: ${message}`)
-      ),
+      // Files must never get ANSI colour, regardless of whether stdout is a TTY.
+      format: buildLogFormat(USE_JSON, false),
     });
 
   // debug transport collects debug+ messages into debug-%DATE%.log
@@ -69,8 +175,8 @@ if (STORE_LOGS) {
   transports.push(createDailyRotateTransport('error'));
 }
 
-// single console transport for terminal output (use same level)
-// In stdio mode all output must go to stderr — writing to stdout corrupts JSON-RPC framing.
+// single console transport for terminal output (use same level).
+// In stdio mode all output must go to stderr. Writing to stdout corrupts JSON-RPC framing.
 // MCP_STDIO_MODE is set by src/index.ts before this module is first imported.
 transports.push(
   new winston.transports.Console({
@@ -78,11 +184,7 @@ transports.push(
     ...(process.env.MCP_STDIO_MODE === 'true'
       ? { stderrLevels: ['error', 'warn', 'info', 'verbose', 'debug', 'silly', 'http'] }
       : {}),
-    format: winston.format.combine(
-      winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-      winston.format.colorize(),
-      winston.format.printf(({ timestamp, level, message }) => `${timestamp} ${level}: ${message}`)
-    ),
+    format: buildLogFormat(USE_JSON),
   })
 );
 
@@ -148,7 +250,7 @@ export function logTransportWithDirection(
       };
     }
   } catch {
-    // debug module not available or failed to patch — ignore
+    // debug module not available or failed to patch, ignore
   }
 })();
 
