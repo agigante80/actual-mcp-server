@@ -11,7 +11,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from './streamable-http.js';
-import logTransportWithDirection from '../logger.js';
+import { logTransportWithDirection } from '../logger.js';
 import logger from '../logger.js';
 // don't log at import time — only log when the server is actually started
 // console.error('Starting Streamable HTTP server...');
