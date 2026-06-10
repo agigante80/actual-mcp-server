@@ -669,18 +669,28 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
     console.log(`✅ Filtered ${txns.length} transactions`);
   });
 
-  test('actual_transactions_import - should import transactions', async ({ request }) => {
+  test('actual_transactions_import - imports a real transaction and de-dups by imported_id', async ({ request }) => {
     if (!testContext.accountId) test.skip();
-    
+
     console.log('📥 Testing actual_transactions_import...');
-    const result = await callTool(request, sessionId, 'actual_transactions_import', {
-      accountId: testContext.accountId,
-      txs: [], // Empty test
-    });
-    const importResult = extractResult(result);
-    
-    expect(importResult).toBeTruthy();
-    console.log('✅ Transaction import tested');
+    // #217: import a REAL transaction. The old `txs: []` succeeded vacuously and never
+    // exercised the schema/handler; a typed, non-empty `txs` array is now required.
+    const today = new Date().toISOString().split('T')[0];
+    const importedId = `e2e-import-${Date.now()}`;
+    const tx = { date: today, amount: -4321, payee_name: 'E2E-Import', imported_id: importedId };
+
+    const first = extractResult(await callTool(request, sessionId, 'actual_transactions_import', {
+      accountId: testContext.accountId, txs: [tx],
+    }));
+    expect(Array.isArray(first?.added)).toBeTruthy();
+    expect(first.added.length).toBe(1);
+
+    // re-import the SAME imported_id: must de-dup (no new transaction added)
+    const second = extractResult(await callTool(request, sessionId, 'actual_transactions_import', {
+      accountId: testContext.accountId, txs: [tx],
+    }));
+    expect(second.added.length).toBe(0);
+    console.log('✅ Imported 1 transaction and de-duped on re-import');
   });
 
   test('actual_transactions_uncategorized - should list uncategorized transactions', async ({ request }) => {
