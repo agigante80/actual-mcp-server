@@ -9,9 +9,14 @@
 // `"txs": {}`. This test fails the build (and names `tool -> property`) if any such
 // property reappears.
 //
-// Scope: shallow-but-useful. It checks every top-level property and one level into the
-// `items` of array properties. A nested shapeless field (object-within-object) is a
-// possible follow-up; no tool needs that depth today.
+// Scope: shallow-but-useful (the #223 gate scoped it deliberately). It checks every
+// top-level property and one level into the `items` of array properties, which catches the
+// common form: a bare `z.unknown()` property or `z.array(z.unknown())`. It does NOT yet
+// recurse into these deeper shapeless forms (tracked as a follow-up, see #224):
+//   - a `{}` branch inside a union, e.g. z.union([z.string(), z.unknown()]) -> anyOf:[...,{}]
+//   - the values of a record, e.g. z.record(z.string(), z.unknown()) -> additionalProperties:{}
+//   - a shapeless field inside a nested object, e.g. z.object({ raw: z.unknown() })
+// None of those exist in the current tool set; the guard passes today.
 
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
@@ -49,7 +54,11 @@ function findShapeless(toolName, published) {
     if (ALLOWLIST.has(`${toolName}.${propName}`)) continue;
     if (isShapeless(prop)) { offenders.push(propName); continue; }
     if (prop.type === 'array' && !ALLOWLIST.has(`${toolName}.${propName}.items`)) {
-      if (isShapeless(prop.items)) offenders.push(`${propName}.items`);
+      // A tuple publishes its element schemas under `prefixItems` and may omit `items`
+      // (z.toJSONSchema does this for z.tuple()). That is fully shaped, so do not flag a
+      // missing/empty `items` when shaped `prefixItems` are present.
+      const hasPrefixItems = Array.isArray(prop.prefixItems) && prop.prefixItems.length > 0;
+      if (!hasPrefixItems && isShapeless(prop.items)) offenders.push(`${propName}.items`);
     }
   }
   return offenders;
@@ -64,15 +73,18 @@ function findShapeless(toolName, published) {
   {
     const synthetic = z.object({
       good: z.string(),
-      bad: z.unknown(),                 // publishes {}
-      arrBad: z.array(z.unknown()),     // publishes { type: array, items: {} }
-      arrOk: z.array(z.string()),       // typed items, must NOT be flagged
+      bad: z.unknown(),                          // publishes {}
+      arrBad: z.array(z.unknown()),              // publishes { type: array, items: {} }
+      arrOk: z.array(z.string()),                // typed items, must NOT be flagged
+      tupleOk: z.tuple([z.string(), z.number()]), // publishes prefixItems, no items: must NOT be flagged
     });
     const offenders = findShapeless('synthetic_tool', z.toJSONSchema(synthetic));
     ok(offenders.includes('bad'), 'flags a z.unknown() property as shapeless', JSON.stringify(offenders));
     ok(offenders.includes('arrBad.items'), 'flags an array with z.unknown() items', JSON.stringify(offenders));
     ok(!offenders.includes('good') && !offenders.includes('arrOk') && !offenders.includes('arrOk.items'),
       'does NOT flag typed string / typed-array properties', JSON.stringify(offenders));
+    ok(!offenders.includes('tupleOk') && !offenders.includes('tupleOk.items'),
+      'does NOT flag a tuple (prefixItems present, items absent)', JSON.stringify(offenders));
   }
 
   // ── The guard: every published tool schema must be fully shaped ──
