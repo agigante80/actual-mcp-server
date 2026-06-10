@@ -44,7 +44,7 @@ function safeStringify(obj: unknown, maxLen = 2000) {
 }
 
 // ---------------------------------------------------------------------------
-// Log configuration + format (#219)
+// Log configuration (#219)
 //
 // Read straight from process.env, NOT from src/config.ts: this module is imported
 // during early bootstrap (before the Zod config is validated), exactly like the
@@ -109,6 +109,121 @@ const nestContext = winston.format((info) => {
   return info;
 });
 
+// ---------------------------------------------------------------------------
+// Secret / PII redaction (#220)
+//
+// Runs inside buildLogFormat (per-transport), specifically AFTER winston.format.splat():
+// splat() rebuilds the record from the original args and reverts top-level field mutations
+// made before it (nested objects survive only because they are shared refs), so redaction
+// placed before splat would silently fail to mask a top-level secret like `note`. Running
+// it per-transport in the SAME pipeline that serializes (before nestContext, which moves
+// fields under `context`) is the placement that actually reaches the output. It is
+// idempotent (masking and value-scrub both go to a constant), so the STORE_LOGS
+// multi-transport fan-out is safe. The live `note`/header tests pin this ordering: moving
+// redactSecrets before splat makes them fail.
+//
+// Two mechanisms: a key-name denylist for structured fields at any depth, and a finite
+// scrub of the actual configured secret VALUES (which catches a secret carried as a value
+// under a benign key, or inside a stringified message).
+// ---------------------------------------------------------------------------
+
+const REDACTED = '[REDACTED]';
+
+const SENSITIVE_KEYS = new Set([
+  'authorization', 'proxy-authorization', 'token', 'password', 'encryptionpassword',
+  'cookie', 'set-cookie', 'secret', 'apikey', 'api_key', 'x-api-key',
+  'access_token', 'refresh_token', 'client_secret',
+]);
+
+/** A metadata key is sensitive if its lowercased name is denylisted or ends in a secret suffix. */
+export function isSensitiveKey(key: string): boolean {
+  const low = key.toLowerCase();
+  if (SENSITIVE_KEYS.has(low)) return true;
+  return (
+    low.endsWith('password') ||
+    low.endsWith('secret') ||
+    low.endsWith('token') ||
+    low.includes('authorization') ||
+    low.includes('cookie')
+  );
+}
+
+/** The actual configured secret values, so a secret echoed as a VALUE is also masked. */
+export function collectSecretValues(env: NodeJS.ProcessEnv = process.env): string[] {
+  const out: string[] = [];
+  for (const [k, v] of Object.entries(env)) {
+    // length guard avoids masking short/common values that could collide with benign log
+    // text (a short secret is still masked by KEY name when under a sensitive field; only
+    // the free-text VALUE scrub is skipped for it).
+    if (typeof v === 'string' && v.length >= 8 && /(PASSWORD|SECRET|AUTHORIZATION|_TOKEN)$/.test(k)) {
+      out.push(v);
+    }
+  }
+  return out;
+}
+
+function scrubSecretValues(s: string, secrets: string[]): string {
+  let out = s;
+  for (const sec of secrets) {
+    if (sec && out.includes(sec)) out = out.split(sec).join(REDACTED);
+  }
+  return out;
+}
+
+const MAX_REDACT_DEPTH = 8;
+const MAX_REDACT_NODES = 2000;
+
+/**
+ * Return a redacted version of a value. NESTED objects/arrays are COPIED (copy-on-write),
+ * never mutated, so redacting a log record cannot corrupt a live caller object (e.g.
+ * `req.headers` passed by reference). Depth/node caps and a cycle guard bound pathological
+ * or cyclic structures.
+ */
+function redactValue(
+  val: unknown,
+  secrets: string[],
+  depth: number,
+  seen: WeakSet<object>,
+  counter: { n: number }
+): unknown {
+  if (val && typeof val === 'object') {
+    if (depth > MAX_REDACT_DEPTH || counter.n > MAX_REDACT_NODES) return '[Truncated]';
+    if (seen.has(val as object)) return '[Circular]';
+    seen.add(val as object);
+    if (Array.isArray(val)) return val.map((v) => redactValue(v, secrets, depth + 1, seen, counter));
+    const copy: Record<string, unknown> = {};
+    for (const key of Object.keys(val as Record<string, unknown>)) {
+      counter.n++;
+      copy[key] = isSensitiveKey(key)
+        ? REDACTED
+        : redactValue((val as Record<string, unknown>)[key], secrets, depth + 1, seen, counter);
+    }
+    return copy;
+  }
+  if (typeof val === 'string' && secrets.length > 0) return scrubSecretValues(val, secrets);
+  return val;
+}
+
+/**
+ * Mask sensitive keys and scrub known-secret values. The TOP-LEVEL record is mutated in
+ * place (winston hands the transport its own copy, and the winston Symbol keys must be
+ * preserved), but every NESTED object is replaced with a redacted copy so a shared live
+ * object (a request's headers) is never altered. Masking to a constant is idempotent.
+ */
+export function redactRecord<T>(record: T, secrets: string[] = []): T {
+  if (!record || typeof record !== 'object') return record;
+  const seen = new WeakSet<object>();
+  const counter = { n: 0 };
+  const rec = record as Record<string, unknown>;
+  for (const key of Object.keys(rec)) {
+    rec[key] = isSensitiveKey(key) ? REDACTED : redactValue(rec[key], secrets, 1, seen, counter);
+  }
+  return record;
+}
+
+const SECRET_VALUES = collectSecretValues(process.env);
+const redactSecrets = winston.format((info) => redactRecord(info, SECRET_VALUES));
+
 /**
  * Build the winston format. Reuses winston's own building blocks
  * (`format.errors` + `format.splat` + `format.json`) rather than a hand-rolled
@@ -125,6 +240,10 @@ export function buildLogFormat(
       winston.format.timestamp(), // ISO 8601 UTC
       winston.format.errors({ stack: true }),
       winston.format.splat(),
+      // #220: redact AFTER splat. splat() rebuilds the record from the original args and
+      // reverts top-level field mutations made before it (nested objects survive as shared
+      // refs), so redaction must run after splat to actually mask top-level secrets.
+      redactSecrets(),
       addService(),
       nestContext(),
       winston.format.json()
@@ -136,6 +255,7 @@ export function buildLogFormat(
     winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
     winston.format.errors({ stack: true }),
     winston.format.splat(),
+    redactSecrets(), // #220: after splat (see note in the json branch)
     ...(colorize ? [winston.format.colorize()] : []),
     winston.format.printf((info) => {
       const rec = info as Record<string, unknown>;
@@ -202,15 +322,17 @@ export function logTransportWithDirection(
   req: Request,
   data: unknown
 ) {
-  const meta = {
+  // Log STRUCTURED meta (not a pre-stringified blob) so the redaction format (#220) can
+  // mask sensitive header keys (Authorization, Cookie) and known-secret values in the
+  // payload before anything is written.
+  logger.debug('transport message', {
     direction,
     clientIp,
     method: req.method,
     url: req.originalUrl,
     headers: req.headers,
     payload: safeStringify(data, 2000),
-  };
-  logger.debug(safeStringify(meta, 4000));
+  });
 }
 
 // --- Wire debug module into winston and route console.* to winston only ---
