@@ -203,13 +203,17 @@ jobs:
           echo "Running npm audit..."
           npm audit --audit-level=high || echo "⚠️ Vulnerabilities found, but continuing..."
 
-      - name: 🧪 Run unit smoke tests
+      - name: 🧪 Run unit tests (full test:unit-js suite)
         env:
-          # Dummy credentials for smoke tests (don't connect to actual server)
+          # Dummy credentials for unit tests (they do not connect to a real Actual server)
           ACTUAL_SERVER_URL: http://localhost:5006
           ACTUAL_PASSWORD: dummy-password-for-tests
           ACTUAL_BUDGET_SYNC_ID: 00000000-0000-0000-0000-000000000000
-        run: node tests/unit/generated_tools.smoke.test.js
+        # #222: gate the whole test:unit-js chain (all unit files, including the
+        # generated-tools smoke test, the security-relevant redaction/correlation/ACL
+        # tests, and the schema-shape guards), not just the single smoke file. The build
+        # step above produces the dist/ that these tests import from.
+        run: npm run test:unit-js
 
       - name: 📋 Test summary
         if: always()
