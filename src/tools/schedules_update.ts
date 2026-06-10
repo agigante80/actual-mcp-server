@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { UUID_PATTERN } from '../lib/constants.js';
+import { RecurConfigSchema } from '../lib/schemas/recur.js';
 
 const InputSchema = z.object({
   id: z.string().regex(UUID_PATTERN, 'Invalid UUID format')
@@ -17,10 +18,12 @@ const InputSchema = z.object({
   amountOp: z.enum(['is', 'isapprox', 'isbetween']).optional()
     .describe('How to match the amount'),
   date: z.union([
-    z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    z.object({}).passthrough(),
+    z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+      .describe('YYYY-MM-DD: one-off schedule on this specific date'),
+    RecurConfigSchema
+      .describe('RecurConfig object (frequency, start, endMode, ...): recurring schedule'),
   ]).optional()
-    .describe('New date string (YYYY-MM-DD) or RecurConfig object'),
+    .describe('New date string (YYYY-MM-DD) or RecurConfig object. Set resetNextDate: true when changing this.'),
   posts_transaction: z.boolean().optional()
     .describe('Whether Actual auto-posts a transaction on each occurrence'),
   completed: z.boolean().optional()

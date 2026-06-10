@@ -221,6 +221,19 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(schedules_update_tool,
     { id: '00000000-0000-0000-0000-000000000001', name: 'Rent', resetNextDate: true },
     'valid update with name + resetNextDate')) fail();
+  // #225: date now accepts a one-off date string OR a typed RecurConfig (shared schema).
+  if (!expectParseOk(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', date: '2026-06-15', resetNextDate: true },
+    'valid update with a one-off date string')) fail();
+  if (!expectParseOk(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', date: { frequency: 'monthly', start: '2026-01-01', endMode: 'never', interval: 1 }, resetNextDate: true },
+    'valid update with a typed RecurConfig')) fail();
+  if (!expectParseError(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', date: { frequency: 'monthly' } },
+    'malformed RecurConfig (missing start/endMode) is rejected, not forwarded unshaped')) fail();
+  if (!expectParseError(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', date: { frequency: 'fortnightly', start: '2026-01-01', endMode: 'never' } },
+    'invalid RecurConfig frequency is rejected')) fail();
 
   // ── actual_schedules_delete ─────────────────────────────────────────────
   console.log('\n[actual_schedules_delete]');

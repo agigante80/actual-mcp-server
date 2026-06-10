@@ -2,25 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { UUID_PATTERN } from '../lib/constants.js';
-
-const RecurConfigSchema = z.object({
-  frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly'])
-    .describe('How often the schedule repeats'),
-  start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-    .describe('Start date in YYYY-MM-DD format'),
-  endMode: z.enum(['never', 'after_n_occurrences', 'on_date'])
-    .describe('When the schedule stops: never, after N occurrences, or on a specific date'),
-  interval: z.number().int().positive().optional()
-    .describe('Every N periods. Default: 1 (every period)'),
-  skipWeekend: z.boolean().optional()
-    .describe('If true, occurrence is moved when it falls on a weekend'),
-  weekendSolveMode: z.enum(['before', 'after']).optional()
-    .describe('Move to Friday before or Monday after the weekend. Requires skipWeekend: true'),
-  endOccurrences: z.number().int().positive().optional()
-    .describe('Number of occurrences before stopping. Required when endMode is after_n_occurrences'),
-  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
-    .describe('Date (YYYY-MM-DD) after which the schedule stops. Required when endMode is on_date'),
-});
+import { RecurConfigSchema } from '../lib/schemas/recur.js';
 
 const InputSchema = z.object({
   name: z.string().optional()
