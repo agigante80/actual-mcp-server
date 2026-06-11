@@ -29,8 +29,9 @@ function check(label, fn) {
 console.log('\n[port-alignment]');
 
 // Canonical source of truth: the src/config.ts MCP_BRIDGE_PORT Zod default.
+// Quote-tolerant so a formatter flipping ' to " does not crash the parse.
 const configSrc = read('src/config.ts');
-const canonMatch = configSrc.match(/MCP_BRIDGE_PORT:\s*z\.string\(\)\.default\('(\d+)'\)/);
+const canonMatch = configSrc.match(/MCP_BRIDGE_PORT:\s*z\.string\(\)\.default\(['"](\d+)['"]\)/);
 assert(canonMatch, 'could not parse MCP_BRIDGE_PORT default from src/config.ts');
 const CANON = canonMatch[1];
 console.log(`  canonical port (src/config.ts) = ${CANON}`);
@@ -67,12 +68,18 @@ check('.env.example MCP_BRIDGE_PORT matches canonical', () => {
   assert.strictEqual(m[1], CANON, `.env.example ${m[1]} != ${CANON}`);
 });
 
-check('every docker-compose.yaml MCP_BRIDGE_PORT env matches canonical', () => {
-  const envs = [...read('docker-compose.yaml').matchAll(/MCP_BRIDGE_PORT=(\d+)/g)];
-  assert(envs.length > 0, 'no MCP_BRIDGE_PORT env in docker-compose.yaml');
-  for (const e of envs) {
-    assert.strictEqual(e[1], CANON, `compose MCP_BRIDGE_PORT=${e[1]} != ${CANON}`);
+check('every compose MCP_BRIDGE_PORT env matches canonical (incl. CI compose)', () => {
+  // Only the MCP service defines MCP_BRIDGE_PORT, so this is safe to scan across
+  // both compose files without tripping on the upstream actual-server service.
+  // docker-compose.test.yaml is included so the CI stack cannot silently drift.
+  let total = 0;
+  for (const f of ['docker-compose.yaml', 'docker-compose.test.yaml']) {
+    for (const e of read(f).matchAll(/MCP_BRIDGE_PORT=(\d+)/g)) {
+      total++;
+      assert.strictEqual(e[1], CANON, `${f} MCP_BRIDGE_PORT=${e[1]} != ${CANON}`);
+    }
   }
+  assert(total > 0, 'no MCP_BRIDGE_PORT env found in any compose file');
 });
 
 check('every docker-compose.yaml port mapping matches canonical', () => {

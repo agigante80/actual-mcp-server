@@ -193,7 +193,7 @@ All other variables are optional. See [Configuration Reference](../../README.md#
 
 ---
 
-## Why the `/data` volume is required
+## Why the `/app/data` volume is required
 
 Actual Budget does not expose a REST API. The `@actual-app/api` library (used internally) works by:
 
@@ -206,9 +206,9 @@ This is documented in the [official Actual API docs](https://actualbudget.org/do
 
 > *"The API client contains all the code necessary to query your data and will work on a local copy."*
 
-The `/data` volume gives the container a persistent, writable place to store that local copy. **Without it the container has nowhere to write and will fail on startup.**
+The `/app/data` volume (the container's canonical data dir, `MCP_BRIDGE_DATA_DIR`) gives the container a persistent, writable place to store that local copy. **Without it the container has nowhere to write and will fail on startup.**
 
-> Even if Actual Budget and actual-mcp run on the same machine, actual-mcp needs **its own separate `/data` folder** - it must not share the Actual Budget data directory.
+> Even if Actual Budget and actual-mcp run on the same machine, actual-mcp needs **its own separate `/app/data` folder**: it must not share the Actual Budget data directory.
 
 This architecture also means actual-mcp and Actual Budget do **not** need to run on the same machine. You can have:
 - Actual Budget running on Server A
