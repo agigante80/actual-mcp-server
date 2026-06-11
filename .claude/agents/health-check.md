@@ -67,7 +67,7 @@ npm --version
 
 FAIL if npm is missing or below 10. Fix: `npm install -g npm@latest`
 
-### 3. Docker (project has docker-compose profiles: dev, production, fullstack)
+### 3. Docker (project has docker-compose profiles: dev, production)
 
 ```bash
 docker --version
@@ -140,9 +140,11 @@ else
 fi
 ```
 
-WARN if unreachable — required for integration tests and `npm run dev`.
-Fix: ensure Actual Budget server is running. Use `docker compose --profile fullstack up -d`
-to start a local one on port 5006.
+WARN if unreachable, required for integration tests and `npm run dev`.
+Fix: ensure your Actual Budget server is running and `ACTUAL_SERVER_URL` points at it.
+The default `docker-compose.yaml` does not bundle one; the E2E stack
+`docker-compose.test.yaml` spins up `actualbudget/actual-server` (container port 5006,
+published to host 5007 to avoid clashing with a local instance) for tests.
 
 ### 10. Git remote configured
 

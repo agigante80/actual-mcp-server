@@ -121,12 +121,12 @@ git clone https://github.com/agigante80/actual-mcp-server.git
 cd actual-mcp-server
 cp .env.example .env        # fill in ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID
 
-docker compose --profile production up -d   # Nginx proxy on :3600
+docker compose --profile production up -d   # production: MCP server listens on :3600
 # or
 docker compose --profile dev up -d          # dev mode with hot-reload
-# or
-docker compose --profile fullstack up -d    # includes Actual Budget server on :5006
 ```
+
+> The compose file defines only the `dev` and `production` profiles. The MCP server listens on `:3600` directly: there is no bundled reverse proxy and no bundled Actual Budget server, so point `ACTUAL_SERVER_URL` at your own Actual instance. For TLS, enable native HTTPS with `MCP_ENABLE_HTTPS=true` (plus `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY`), or front the server with your own reverse proxy.
 
 ### Option C: npm (HTTP server)
 

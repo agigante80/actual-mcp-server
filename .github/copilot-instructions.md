@@ -168,12 +168,11 @@ npm audit --audit-level=moderate # ✅ No critical vulnerabilities
 # Development with hot-reload
 docker compose --profile dev up
 
-# Production with Nginx proxy (connection pooling)
+# Production: MCP server listening on :3600 directly (no bundled proxy, no bundled Actual server)
 docker compose --profile production up
-
-# Full stack (includes Actual Budget server)
-docker compose --profile fullstack up
 ```
+
+The compose file defines only the `dev` and `production` profiles. There is no nginx tier and no bundled Actual Budget server; point `ACTUAL_SERVER_URL` at your own instance. For TLS, use native HTTPS (`MCP_ENABLE_HTTPS`), not `MCP_BRIDGE_USE_TLS` (which only advertises `https://` when TLS is terminated upstream).
 
 Default ports: MCP server HTTP (3600), Actual Budget (5006)
 

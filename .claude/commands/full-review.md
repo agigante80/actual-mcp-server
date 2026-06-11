@@ -375,7 +375,7 @@ Task:
     Evaluate:
     1. **Pre-commit sequence**: npm run build && npm run verify-tools && npm run test:unit-js && npm audit --audit-level=moderate
     2. **Git workflow**: Changes target develop branch (never main directly)
-    3. **Docker**: docker-compose.yaml changes backward-compatible with dev/production/fullstack profiles?
+    3. **Docker**: docker-compose.yaml changes backward-compatible with dev/production profiles?
     4. **Environment variables**: New env vars added to .env.example with documentation?
     5. **Version bump**: Does the change warrant a version bump? (tool additions do)
     6. **Dependency safety**: No npm overrides except for CVE-level security fixes?
