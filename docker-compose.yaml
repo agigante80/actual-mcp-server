@@ -26,7 +26,6 @@ services:
       - dev
     restart: unless-stopped
     ports:
-      - "3000:3000"
       - "3600:3600"
     volumes:
       # Mount source code for development
@@ -34,7 +33,8 @@ services:
       - ./dist:/app/dist
       # Required: local cache for the @actual-app/api library.
       # The API downloads your budget data locally to run queries; this MUST be a persistent path.
-      - ./actual-data:/data
+      # Canonical container data dir (#228): /app/data, the dir the image creates and chowns.
+      - ./actual-data:/app/data
       # Persist logs
       - ./logs:/app/logs
     environment:
@@ -79,8 +79,8 @@ services:
       # - BUDGET_3_ENCRYPTION_PASSWORD=${BUDGET_3_ENCRYPTION_PASSWORD}
 
       # MCP Bridge settings
-      - MCP_BRIDGE_DATA_DIR=/data
-      - MCP_BRIDGE_PORT=3000
+      - MCP_BRIDGE_DATA_DIR=/app/data
+      - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_BIND_HOST=0.0.0.0
       - MCP_BRIDGE_LOG_LEVEL=debug
       - MCP_BRIDGE_STORE_LOGS=true
@@ -121,11 +121,12 @@ services:
       - production
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "3600:3600"
     volumes:
       # Required: local cache for the @actual-app/api library.
       # The API downloads your budget data locally to run queries; this MUST be a persistent path.
-      - mcp-data:/data
+      # Canonical container data dir (#228): /app/data, the dir the image creates and chowns.
+      - mcp-data:/app/data
       # Persist logs
       - mcp-logs:/app/logs
     environment:
@@ -166,8 +167,8 @@ services:
       # - BUDGET_3_ENCRYPTION_PASSWORD=${BUDGET_3_ENCRYPTION_PASSWORD}
 
       # MCP Bridge settings
-      - MCP_BRIDGE_DATA_DIR=/data
-      - MCP_BRIDGE_PORT=3000
+      - MCP_BRIDGE_DATA_DIR=/app/data
+      - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_BIND_HOST=0.0.0.0
       - MCP_BRIDGE_LOG_LEVEL=info
       - MCP_BRIDGE_STORE_LOGS=true

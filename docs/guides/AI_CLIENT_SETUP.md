@@ -125,7 +125,7 @@ services:
       - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID}
       - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
     volumes:
-      - actual-mcp-data:/data
+      - actual-mcp-data:/app/data
 ```
 
 Verify connectivity from the AI client container:

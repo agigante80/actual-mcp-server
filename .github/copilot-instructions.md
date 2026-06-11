@@ -175,7 +175,7 @@ docker compose --profile production up
 docker compose --profile fullstack up
 ```
 
-Default ports: HTTP (3000), Nginx proxy (3600), Actual Budget (5006)
+Default ports: MCP server HTTP (3600), Actual Budget (5006)
 
 ## Common Patterns & Gotchas
 

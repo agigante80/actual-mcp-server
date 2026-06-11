@@ -73,15 +73,17 @@ npm run test:all                # Convenience: adapter + unit + docker:smoke (no
 
 # Tools
 npm run verify-tools            # Verify tool count + registration
+npm run tool-count              # CI-gated drift check (#193): rewrites stale total-count literals across docs/tests/constants with --fix; canonical = IMPLEMENTED_TOOLS length. Does NOT touch `**Tool Count:**` markers (version-bump.js owns those)
 npm run check:coverage          # List @actual-app/api methods vs tool coverage
 npm run test:mcp-client         # Connect as MCP client and exercise tools
 
 # Manual connection tests (requires .env)
 npm run dev -- --test-actual-connection  # Test Actual Budget connection only
+npm run direct-sync             # Diagnostic: connect to Actual + run bank sync per account, bypassing the MCP layer (scripts/direct-sync/bank-sync-direct.mjs). Reads the same ACTUAL_*/BUDGET_n_* env vars. Flags: --budget <name>, --list/--dry-run, --no-file-log
 
 # Docker
-docker compose --profile dev up         # Hot-reload dev (app on :3000)
-docker compose --profile production up  # Production: MCP server on :3000
+docker compose --profile dev up         # Hot-reload dev (app on :3600)
+docker compose --profile production up  # Production: MCP server on :3600
 # docker-compose.yaml defines only the dev and production profiles (no nginx, no bundled Actual server).
 # For a stack that also runs Actual Budget, use docker-compose.test.yaml (it + playwright.config.docker.ts back the test:e2e:docker* scripts).
 ```

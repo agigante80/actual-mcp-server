@@ -54,8 +54,8 @@ export interface ModuleLogger {
  * import { createModuleLogger } from '../lib/loggerFactory.js';
  * 
  * const log = createModuleLogger('HTTP');
- * log.info('Server started', { port: 3000 });
- * // Output: [HTTP] Server started { port: 3000 }
+ * log.info('Server started', { port: 3600 });
+ * // Output: [HTTP] Server started { port: 3600 }
  * 
  * log.error('Connection failed', new Error('Timeout'), { retries: 3 });
  * // Output: [HTTP] Connection failed { error: 'Timeout', stack: '...', retries: 3 }

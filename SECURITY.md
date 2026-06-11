@@ -93,8 +93,8 @@ We will publicly acknowledge security researchers who responsibly disclose vulne
    ```bash
    # Use firewall rules to limit access
    # Example: Only allow from LibreChat server IP
-   iptables -A INPUT -p tcp --dport 3000 -s 10.0.0.5 -j ACCEPT
-   iptables -A INPUT -p tcp --dport 3000 -j DROP
+   iptables -A INPUT -p tcp --dport 3600 -s 10.0.0.5 -j ACCEPT
+   iptables -A INPUT -p tcp --dport 3600 -j DROP
    ```
 
 5. **Regular Updates**:

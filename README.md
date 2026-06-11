@@ -84,12 +84,12 @@ docker run -d \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
   -e MCP_SSE_AUTHORIZATION=your_secret_token \
-  -v actual-mcp-data:/data \        # required, see note below
+  -v actual-mcp-data:/app/data \        # required, see note below
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
 ```
 
-> **Why the `/data` volume is required:** Actual Budget does not expose a REST API. The official `@actual-app/api` library (used internally by this server) works by downloading a local copy of your budget data, running all queries on that local copy, then syncing changes back. The `/data` volume gives the container a persistent, writable place to store that local copy. Without it the container has nowhere to write and will fail on startup. See the [Actual API docs](https://actualbudget.org/docs/api/) for details.
+> **Why the `/app/data` volume is required:** Actual Budget does not expose a REST API. The official `@actual-app/api` library (used internally by this server) works by downloading a local copy of your budget data, running all queries on that local copy, then syncing changes back. The `/app/data` volume gives the container a persistent, writable place to store that local copy (it is the directory the image creates and owns as the runtime user). Without it the container has nowhere to write and will fail on startup. See the [Actual API docs](https://actualbudget.org/docs/api/) for details.
 >
 > **actual-mcp does not need to run on the same machine as Actual Budget.** You can have Actual Budget on one server and actual-mcp on another - as long as `ACTUAL_SERVER_URL` points to your Actual Budget instance, everything works.
 
@@ -147,7 +147,7 @@ npm run build
 npm run dev -- --http
 ```
 
-Server starts at `http://localhost:3000/http` (dev) or `http://localhost:3600/http` (Docker).
+Server starts at `http://localhost:3600/http` by default (the listen port is `MCP_BRIDGE_PORT`, default `3600`).
 
 ### Option D: stdio (Claude Desktop native, no Docker or HTTP server needed)
 
@@ -429,7 +429,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
 | **MCP Server Settings** ||||
-| `MCP_BRIDGE_PORT` | `3000` (dev) / `3600` (Docker) | No | Port for MCP server to listen on |
+| `MCP_BRIDGE_PORT` | `3600` | No | Port for MCP server to listen on |
 | `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
 | `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite). **Required to be a persistent path.** The `@actual-app/api` library downloads a local copy of your budget here to run queries; use a volume mount in Docker to persist it across restarts |
 | `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | No | Public hostname/IP for server (shown in logs) |

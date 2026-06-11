@@ -33,7 +33,7 @@ npm run build
 npm run dev -- --http --debug
 ```
 
-The server starts at `http://localhost:3000/http` by default.
+The server starts at `http://localhost:3600/http` by default.
 
 **Minimum `.env`:**
 
@@ -64,7 +64,7 @@ docker run -d \
   -e ACTUAL_PASSWORD=your_password \
   -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
   -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
-  -v actual-mcp-data:/data \
+  -v actual-mcp-data:/app/data \
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
 
@@ -106,7 +106,7 @@ docker run -d \
   -e MCP_BRIDGE_LOG_LEVEL=info \
   -e MCP_BRIDGE_STORE_LOGS=true \
   -e NODE_ENV=production \
-  -v actual-mcp-data:/data \
+  -v actual-mcp-data:/app/data \
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
 
@@ -155,8 +155,10 @@ docker compose down
 ```
 
 **Default ports:**
-- MCP server (HTTP): `3000`. Both the `dev` and `production` compose profiles set `MCP_BRIDGE_PORT=3000` and publish `3000:3000`.
-- A standalone `docker run` of the image listens on whatever `MCP_BRIDGE_PORT` you set (the application default is `3000`). The image's `EXPOSE` and `HEALTHCHECK` assume `3600`, so if you run the image directly, set `MCP_BRIDGE_PORT=3600` and map `-p 3600:3600` so the healthcheck and your published port agree.
+- MCP server (HTTP): `3600`. Both the `dev` and `production` compose profiles set `MCP_BRIDGE_PORT=3600` and publish `3600:3600`.
+- A standalone `docker run` of the image listens on whatever `MCP_BRIDGE_PORT` you set (the application default is `3600`). The image's `EXPOSE` and `HEALTHCHECK` also use `3600`, so a direct `docker run` is consistent out of the box: map `-p 3600:3600` and the healthcheck and your published port agree.
+
+> **Upgrading from an earlier version?** The Compose profiles previously published the MCP server on host port `3000`; they now use `3600` to match the published image and all guides. If you reach the server on `3000` today, update your host mapping, reverse proxy, or client URL to `3600`. Your budget data is unaffected: the named volume and the host data directory are unchanged, only the in-container mount path moved from `/data` to `/app/data` together with `MCP_BRIDGE_DATA_DIR`, so the same files are still read.
 
 ### Production Compose deployment
 
@@ -174,7 +176,7 @@ docker compose --profile production up -d
 docker compose logs -f mcp-server-prod
 
 # 4. Verify health
-curl http://localhost:3000/health
+curl http://localhost:3600/health
 ```
 
 ---
@@ -320,14 +322,14 @@ spec:
               cpu: "500m"
           volumeMounts:
             - name: data
-              mountPath: /data
+              mountPath: /app/data
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: actual-mcp-data
 ```
 
-> **Note:** Actual Budget requires persistent storage for its SQLite files. Use a `PersistentVolumeClaim` mounted at `/data`.
+> **Note:** The MCP server keeps a local SQLite copy of your budget data (downloaded by `@actual-app/api`) and needs persistent storage for it. Mount a `PersistentVolumeClaim` at `/app/data`, the container's canonical data dir (`MCP_BRIDGE_DATA_DIR`).
 
 ---
 
