@@ -30,7 +30,7 @@ docker run -d \
   -e ACTUAL_PASSWORD="your-password" \
   -e ACTUAL_BUDGET_SYNC_ID="your-budget-id" \
   -e MCP_SSE_AUTHORIZATION="$(openssl rand -hex 32)" \
-  -v actual-mcp-data:/data \
+  -v actual-mcp-data:/app/data \
   agigante80/actual-mcp-server:latest
 
 # Also available on GHCR:
@@ -84,7 +84,7 @@ docker run -d \
   -e MCP_ENABLE_HTTPS=true \
   -e MCP_HTTPS_CERT=/app/certs/cert.pem \
   -e MCP_HTTPS_KEY=/app/certs/key.pem \
-  -v actual-mcp-data:/data \
+  -v actual-mcp-data:/app/data \
   -v $(pwd)/certs:/app/certs:ro \
   agigante80/actual-mcp-server:latest
 ```

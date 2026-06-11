@@ -23,6 +23,11 @@ RUN addgroup -S app && adduser -S app -G app
 # Create data directory with proper ownership BEFORE switching to non-root user
 RUN mkdir -p /app/data && chown -R app:app /app/data
 
+# Canonical in-image data dir (#228): point the app's default at exactly the
+# directory created and chowned above, so a bare `docker run` as the non-root
+# `app` user can write its Actual data without EACCES. Overridable at runtime.
+ENV MCP_BRIDGE_DATA_DIR=/app/data
+
 USER app
 
 EXPOSE 3600

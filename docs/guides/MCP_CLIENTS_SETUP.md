@@ -208,7 +208,7 @@ docker run -d \
   -e ACTUAL_PASSWORD=your_actual_password \
   -e ACTUAL_BUDGET_SYNC_ID=your-sync-id \
   -e MCP_SSE_AUTHORIZATION=your_secret_token \
-  -v actual-mcp-data:/data \
+  -v actual-mcp-data:/app/data \
   ghcr.io/agigante80/actual-mcp-server:latest
 
 # Verify

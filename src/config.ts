@@ -11,7 +11,7 @@ export const configSchema = z.object({
   // Off by default so a plaintext upstream + encryption password is refused.
   ALLOW_INSECURE_UPSTREAM: z.string().optional().transform(val => val === 'true'),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
-  MCP_BRIDGE_PORT: z.string().default('3000'),
+  MCP_BRIDGE_PORT: z.string().default('3600'),
   MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),

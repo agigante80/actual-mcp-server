@@ -76,9 +76,11 @@ export const WRITE_SESSION_DELAY_MS = 100;
 export const DEFAULT_BIND_HOST = 'localhost';
 
 /**
- * Default HTTP port for MCP server
+ * Default HTTP port for MCP server. Canonical default is 3600 (#230): it matches
+ * the listen-port fallback in src/index.ts, the Dockerfile EXPOSE/HEALTHCHECK, the
+ * published image, .env.example, and every deployment guide.
  */
-export const DEFAULT_HTTP_PORT = 3000;
+export const DEFAULT_HTTP_PORT = 3600;
 
 /**
  * Default HTTP path for MCP server endpoint
