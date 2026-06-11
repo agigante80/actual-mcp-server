@@ -56,7 +56,7 @@
     "release:minor": "npm run version:bump -- minor",
     "release:patch": "npm run version:bump -- patch",
     "tool-count": "node scripts/tool-count.mjs",
-    "config-drift": "node scripts/config-drift.mjs"
+    "config-drift": "npm run build && node scripts/config-drift.mjs"
   },
   "dependencies": {
     "@actual-app/api": "^26.6.0",

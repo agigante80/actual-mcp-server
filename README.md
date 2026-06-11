@@ -424,7 +424,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | **Actual Budget Connection** ||||
-| `ACTUAL_SERVER_URL` | `http://localhost:5006` | Yes | URL of your Actual Budget server. Use the same URL you type in your browser: `http://localhost:5006` (local), `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), or `http://actual:5006` (container name if on the same Docker network) |
+| `ACTUAL_SERVER_URL` | _(none)_ | Yes | URL of your Actual Budget server. Use the same URL you type in your browser: `http://localhost:5006` (local), `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), or `http://actual:5006` (container name if on the same Docker network) |
 | `ACTUAL_PASSWORD` | _(none)_ | Yes | Password for Actual Budget server |
 | `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
@@ -437,7 +437,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
 | `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
 | **Transport Configuration** ||||
-| `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode: `--http` or `--stdio` |
+| `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode. Only `--http` is a valid value; stdio is selected via the `--stdio` CLI flag, not this var |
 | `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
 | `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
 | `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`) |
@@ -457,8 +457,8 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_HTTPS_KEY` | _(none)_ | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
 | **Logging Configuration** ||||
 | `MCP_BRIDGE_STORE_LOGS` | `false` | No | Enable file logging (vs console only) |
-| `MCP_BRIDGE_LOG_DIR` | `./logs` | No | Directory for log files (if `STORE_LOGS=true`) |
-| `MCP_BRIDGE_LOG_LEVEL` | `debug` | No | Log level: `error`, `warn`, `info`, `debug` |
+| `MCP_BRIDGE_LOG_DIR` | `app/logs` (beside the install) | No | Directory for log files (if `STORE_LOGS=true`). `.env.example` and Docker set it explicitly (e.g. `./logs`, `/app/logs`) |
+| `MCP_BRIDGE_LOG_LEVEL` | `debug` (dev) / `info` (prod) | No | Log level: `error`, `warn`, `info`, `debug` |
 | `LOG_FORMAT` | auto | No | Log output format: `json` or `pretty`. Precedence: explicit `LOG_FORMAT` wins, else `NODE_ENV=production` selects `json`, else `pretty` |
 | `MCP_SERVICE_NAME` | `actual-mcp-server` | No | Service name stamped on every structured (json) log record |
 | **Log Rotation** (when `MCP_BRIDGE_STORE_LOGS=true`) ||||
@@ -466,12 +466,12 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | No | Rotate when file reaches size (e.g., `20m`, `100m`) |
 | `MCP_BRIDGE_ROTATE_DATEPATTERN` | `YYYY-MM-DD` | No | Date pattern for rotated log filenames |
 | **Development & Debugging** ||||
-| `DEBUG` | `false` | No | Enable debug mode (verbose logging) |
-| `LOG_LEVEL` | `info` | No | Log level override: `error`, `warn`, `info`, `debug` |
+| `DEBUG` | _(none)_ | No | Enable debug mode (verbose logging) when set to any truthy value |
+| `LOG_LEVEL` | _(none)_ | No | Debug-detection toggle: set to `debug` to enable extra transport debug output. Distinct from `MCP_BRIDGE_LOG_LEVEL` (the winston level); has no default and is not itself a log level |
 | `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | No | Enable transport-level debug logging |
 | **Advanced/Internal** ||||
 | `ACTUAL_API_CONCURRENCY` | `5` | No | Max concurrent Actual API operations |
-| `NODE_ENV` | `production` | No | Node environment; `production` hides stack traces in error responses |
+| `NODE_ENV` | _(none)_ / `production` | No | Node environment. No app default; the Docker image sets `production`, which selects json logs and hides stack traces in error responses |
 | `VERSION` | auto-detected | No | Server version (auto-set by build/Docker) |
 | `TZ` | `UTC` | No | Timezone for timestamps (e.g., `America/New_York`) |
 

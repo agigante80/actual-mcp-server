@@ -41,9 +41,10 @@ function check(label, fn) {
 
 console.log('\n[config-drift]');
 
-// Schema keys from src/config.ts text (configSchema is a ZodEffects after .refine,
-// so it has no .shape; the flat z.object keys are the source of truth).
-const schemaKeys = [...read('src/config.ts').matchAll(/^\s{2}([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1]);
+// Schema keys come from the COMPILED schema itself (configSchema.shape is reachable
+// in Zod v4 even after .refine), the same source the drift script uses. No brittle
+// text parse, so an indentation change cannot silently drop a key.
+const schemaKeys = Object.keys(configSchema.shape);
 const allowNames = RAW_ENV_ALLOWLIST.map((v) => v.name);
 const canonical = canonicalConfigVars(schemaKeys);
 const mustDocument = documentedConfigVars(schemaKeys);
@@ -51,11 +52,29 @@ const mustDocument = documentedConfigVars(schemaKeys);
 const isOs = (n) => OS_LEVEL_ENV.includes(n);
 const accountedFor = (n) => canonical.has(n) || isDynamicFamilyVar(n) || isOs(n);
 
-// Parse the documented var names.
+// Documented var names: .env.example (uncommented and commented), and the README env
+// table ONLY (scoped to the `| Variable | Default | ... |` table so a backtick var in
+// some other table cannot falsely count as documented).
 const envNames = new Set([...read('.env.example').matchAll(/^#?\s*([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1]));
-const readmeNames = new Set([...read('README.md').matchAll(/^\|\s*`([A-Z][A-Z0-9_]+)`/gm)].map((m) => m[1]));
+function readmeEnvTableVars(md) {
+  const lines = md.split('\n');
+  const header = lines.findIndex((l) => /^\|\s*Variable\s*\|\s*Default\s*\|/.test(l));
+  const names = new Set();
+  if (header === -1) return names;
+  for (let i = header + 1; i < lines.length; i++) {
+    if (!lines[i].startsWith('|')) break;
+    const m = lines[i].match(/^\|\s*`([A-Z][A-Z0-9_]+)`/);
+    if (m) names.add(m[1]);
+  }
+  return names;
+}
+const readmeNames = readmeEnvTableVars(read('README.md'));
 
-// Enumerate every process.env.X read across src/.
+// Enumerate every env read across src/: the dotted form `process.env.X`, the bracket
+// form `process.env['X']`, AND the indirect `env.X` alias form (a helper that takes
+// `env: NodeJS.ProcessEnv`, e.g. logger.ts resolveLogConfig reading env.LOG_FORMAT).
+// The lookbehind excludes `process.env.X` from the alias match so it is not counted
+// twice. This closes the blind spot for a NEW indirect read added in that pattern.
 function walk(dir) {
   const out = [];
   for (const name of readdirSync(dir)) {
@@ -65,15 +84,13 @@ function walk(dir) {
   }
   return out;
 }
-// Catches the dotted form `process.env.X` and the bracket form `process.env['X']`.
-// Indirect reads via a helper that takes `env: NodeJS.ProcessEnv` (e.g.
-// logger.ts resolveLogConfig reading `env.LOG_FORMAT`) are not matched here; those
-// vars are covered by the allowlist instead. The enumeration's job is to catch a
-// NEW direct process.env read that nobody added to the schema or the allowlist.
 const envReads = new Set();
-const ENV_READ_RE = /process\.env(?:\.([A-Z][A-Z0-9_]+)|\[['"]([A-Z][A-Z0-9_]+)['"]\])/g;
+const DIRECT_RE = /process\.env(?:\.([A-Z][A-Z0-9_]+)|\[['"]([A-Z][A-Z0-9_]+)['"]\])/g;
+const ALIAS_RE = /(?<!process\.)\benv\.([A-Z][A-Z0-9_]+)/g;
 for (const file of walk(join(ROOT, 'src'))) {
-  for (const m of readFileSync(file, 'utf8').matchAll(ENV_READ_RE)) envReads.add(m[1] || m[2]);
+  const src = readFileSync(file, 'utf8');
+  for (const m of src.matchAll(DIRECT_RE)) envReads.add(m[1] || m[2]);
+  for (const m of src.matchAll(ALIAS_RE)) envReads.add(m[1]);
 }
 
 check('schema and allowlist names are disjoint (a var is not both)', () => {
@@ -81,9 +98,11 @@ check('schema and allowlist names are disjoint (a var is not both)', () => {
   assert.strictEqual(overlap.length, 0, `allowlist overlaps schema: ${overlap.join(', ')}`);
 });
 
-check('ENUMERATION: every process.env.X read in src/ is schema or allowlist', () => {
-  const unaccounted = [...envReads].filter((n) => !canonical.has(n)).sort();
-  assert.strictEqual(unaccounted.length, 0, `unaccounted process.env reads: ${unaccounted.join(', ')}`);
+check('ENUMERATION: every env read in src/ is schema, allowlist, or a dynamic family', () => {
+  // accountedFor allows the dynamic BUDGET_ family (e.g. BUDGET_DEFAULT_NAME, read via
+  // the env.X alias in budget-registry.ts) and OS-level vars, alongside canonical.
+  const unaccounted = [...envReads].filter((n) => !accountedFor(n)).sort();
+  assert.strictEqual(unaccounted.length, 0, `unaccounted env reads: ${unaccounted.join(', ')}`);
 });
 
 check('COVERAGE: every documented canonical var is in .env.example and README', () => {

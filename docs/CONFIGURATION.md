@@ -22,7 +22,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |
 |----------|------|---------|----------|--------|--------|--------------|-------|
 | `ACTUAL_SERVER_URL` | url string | (none) | Yes | no | schema | config | Actual Budget server URL |
-| `ACTUAL_PASSWORD` | string | `''` | Yes | yes | schema | config | Actual Budget server password |
+| `ACTUAL_PASSWORD` | string | (none) | Yes | yes | schema | config | Actual Budget server password (Zod default is the empty string) |
 | `ACTUAL_BUDGET_SYNC_ID` | string | (none) | Yes | no | schema | config | Default budget sync ID |
 | `ACTUAL_BUDGET_PASSWORD` | string | (none) | No | yes | schema | config; also raw at `actualConnection.ts:33`, `ActualConnectionPool.ts:255,338` | E2E encryption password |
 | `ALLOW_INSECURE_UPSTREAM` | bool string | `false` | No | no | schema | config | Allow `http://` upstream with an encryption password set (#161) |
@@ -75,7 +75,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |
 |----------|------|---------|----------|--------|--------|--------------|-------|
 | `MCP_BRIDGE_STORE_LOGS` | bool string | `false` | No | no | raw | `logger.ts:14` | Enable file logging |
-| `MCP_BRIDGE_LOG_DIR` | path | `./logs` | No | no | raw | `logger.ts:15` | Log file directory |
+| `MCP_BRIDGE_LOG_DIR` | path | `app/logs` (beside the install) | No | no | raw | `logger.ts:15` | Log file directory. When unset the code falls back to `app/logs` next to the module; `.env.example` and Docker set it explicitly (`./logs`, `/app/logs`) |
 | `MCP_BRIDGE_LOG_LEVEL` | enum | `debug` (dev) / `info` (prod) | No | no | raw | `logger.ts:77` | Winston log level |
 | `LOG_LEVEL` | enum | (none) | No | no | raw | `utils.ts` | Debug-detection toggle, DISTINCT from `MCP_BRIDGE_LOG_LEVEL` |
 | `LOG_FORMAT` | enum | auto (`json` if prod, else `pretty`) | No | no | raw | `logger.ts:74` | Output format |
@@ -93,7 +93,7 @@ example members; the README env table uses the `BUDGET_N_*` notation.
 
 | Variable | Type | Default | Required | Secret | Source | Notes |
 |----------|------|---------|----------|--------|--------|-------|
-| `BUDGET_DEFAULT_NAME` | string | (none) | No | no | dynamic | Friendly name for the default budget |
+| `BUDGET_DEFAULT_NAME` | string | `Default` | No | no | dynamic | Friendly name for the default budget |
 | `BUDGET_n_NAME` | string | (none) | No | no | dynamic | Name of budget n |
 | `BUDGET_n_SYNC_ID` | string | (none) | No | no | dynamic | Sync ID of budget n |
 | `BUDGET_n_SERVER_URL` | url string | falls back to `ACTUAL_SERVER_URL` | No | no | dynamic | Server URL for budget n |
@@ -104,7 +104,7 @@ example members; the README env table uses the `BUDGET_N_*` notation.
 
 | Variable | Default | Source | Notes |
 |----------|---------|--------|-------|
-| `TZ` | (host) | os | Container timezone, read by the OS/runtime, not the app |
+| `TZ` | `UTC` (host) | os | Container timezone, read by the OS/runtime, not the app. The app sets no default; container images commonly default to UTC |
 | `NODE_ENV` | (none) / `production` | raw (internal) | Selects prod log format and behaviours |
 | `DEBUG` | (none) | raw (internal) | Framework debug toggle |
 | `MCP_STDIO_MODE` | `false` | raw (internal, not documented) | Mirrors the `--stdio` CLI flag; set in-process before the logger import |

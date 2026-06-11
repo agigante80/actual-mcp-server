@@ -8,15 +8,14 @@
  *
  *   1. Every DOCUMENTED canonical var (schema keys + allowlist entries not flagged
  *      `documented: false`) appears in BOTH .env.example and the README env table.
- *   2. Every documented var in .env.example / the README table maps back to a
+ *   2. Every documented var in .env.example / the README env table maps back to a
  *      canonical var, a dynamic family (BUDGET_*), or an OS-level var (TZ); nothing
  *      is documented that the code does not actually understand.
  *
- * The registry data comes from the COMPILED module (dist/src/lib/config-registry.js),
+ * Both the schema keys and the registry come from the COMPILED modules under dist/,
  * the same source the unit test tests/unit/config_drift.test.js imports, so the two
- * enforcement paths can never disagree on the allowlist. Only the schema keys are
- * read from src/config.ts as text (the compiled configSchema is a ZodEffects after
- * .refine, so it has no .shape). Run `npm run build` first if dist is stale.
+ * enforcement paths can never disagree. Run `npm run config-drift` (which builds
+ * first) rather than invoking this file against a stale dist.
  *
  *   node scripts/config-drift.mjs            # --check (default): exit 1 on drift
  *   node scripts/config-drift.mjs --check
@@ -30,26 +29,47 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 const mode = process.argv.includes('--fix') ? 'fix' : 'check';
 
-let registry;
+// Dummy required env so importing the compiled config (which validates process.env
+// at module load) does not exit; real values, if present, win.
+process.env.ACTUAL_SERVER_URL ||= 'http://localhost:5006';
+process.env.ACTUAL_PASSWORD ??= '';
+process.env.ACTUAL_BUDGET_SYNC_ID ||= '00000000-0000-0000-0000-000000000000';
+
+let configMod, registry;
 try {
+  configMod = await import('../dist/src/config.js');
   registry = await import('../dist/src/lib/config-registry.js');
 } catch {
-  console.error('config-drift: could not load dist/src/lib/config-registry.js. Run `npm run build` first.');
+  console.error('config-drift: could not load compiled modules under dist/. Run `npm run build` first.');
   process.exit(2);
 }
 const { canonicalConfigVars, documentedConfigVars, OS_LEVEL_ENV, isDynamicFamilyVar } = registry;
 
-// Schema keys from src/config.ts (the flat z.object; configSchema is a ZodEffects).
-const schemaKeys = [...read('src/config.ts').matchAll(/^\s{2}([A-Z][A-Z0-9_]+):/gm)].map((m) => m[1]);
+// Schema keys from the compiled schema itself (not a text regex).
+const schemaKeys = Object.keys(configMod.configSchema.shape);
 
 const canonical = canonicalConfigVars(schemaKeys);
 const mustDocument = documentedConfigVars(schemaKeys);
 const isOs = (n) => OS_LEVEL_ENV.includes(n);
 const accountedFor = (n) => canonical.has(n) || isDynamicFamilyVar(n) || isOs(n);
 
-// Documented var names in .env.example (uncommented and commented) and the README env table.
+// Documented var names: .env.example (uncommented and commented), and the README env
+// table ONLY (scoped to the table whose header is `| Variable | Default | ... |`, so a
+// backtick-uppercase first cell in some other table cannot count as documentation).
 const envNames = new Set([...read('.env.example').matchAll(/^#?\s*([A-Z][A-Z0-9_]+)=/gm)].map((m) => m[1]));
-const readmeNames = new Set([...read('README.md').matchAll(/^\|\s*`([A-Z][A-Z0-9_]+)`/gm)].map((m) => m[1]));
+function readmeEnvTableVars(md) {
+  const lines = md.split('\n');
+  const header = lines.findIndex((l) => /^\|\s*Variable\s*\|\s*Default\s*\|/.test(l));
+  const names = new Set();
+  if (header === -1) return names;
+  for (let i = header + 1; i < lines.length; i++) {
+    if (!lines[i].startsWith('|')) break;
+    const m = lines[i].match(/^\|\s*`([A-Z][A-Z0-9_]+)`/);
+    if (m) names.add(m[1]);
+  }
+  return names;
+}
+const readmeNames = readmeEnvTableVars(read('README.md'));
 
 const missingFromEnv = [...mustDocument].filter((n) => !envNames.has(n)).sort();
 const missingFromReadme = [...mustDocument].filter((n) => !readmeNames.has(n)).sort();
