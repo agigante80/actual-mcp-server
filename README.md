@@ -428,6 +428,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `ACTUAL_PASSWORD` | _(none)_ | Yes | Password for Actual Budget server |
 | `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
+| `ALLOW_INSECURE_UPSTREAM` | `false` | No | Allow an `http://` upstream even when `ACTUAL_BUDGET_PASSWORD` is set (#161). Off by default so a plaintext upstream plus an encryption password is refused |
 | **MCP Server Settings** ||||
 | `MCP_BRIDGE_PORT` | `3600` | No | Port for MCP server to listen on |
 | `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
@@ -439,10 +440,11 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode: `--http` or `--stdio` |
 | `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
 | `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
+| `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`) |
 | **Session Management** ||||
 | `USE_CONNECTION_POOL` | `true` | No | Enable session-based connection pooling |
 | `MAX_CONCURRENT_SESSIONS` | `15` | No | Maximum concurrent MCP sessions allowed |
-| `SESSION_IDLE_TIMEOUT_MINUTES` | `5` (pool) / `2` (HTTP) | No | Minutes before idle session cleanup |
+| `SESSION_IDLE_TIMEOUT_MINUTES` | `5` | No | Minutes before idle session cleanup |
 | **Security & Authentication** ||||
 | `AUTH_PROVIDER` | `none` | No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
 | `MCP_SSE_AUTHORIZATION` | _(none)_ | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
@@ -457,6 +459,8 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_BRIDGE_STORE_LOGS` | `false` | No | Enable file logging (vs console only) |
 | `MCP_BRIDGE_LOG_DIR` | `./logs` | No | Directory for log files (if `STORE_LOGS=true`) |
 | `MCP_BRIDGE_LOG_LEVEL` | `debug` | No | Log level: `error`, `warn`, `info`, `debug` |
+| `LOG_FORMAT` | auto | No | Log output format: `json` or `pretty`. Precedence: explicit `LOG_FORMAT` wins, else `NODE_ENV=production` selects `json`, else `pretty` |
+| `MCP_SERVICE_NAME` | `actual-mcp-server` | No | Service name stamped on every structured (json) log record |
 | **Log Rotation** (when `MCP_BRIDGE_STORE_LOGS=true`) ||||
 | `MCP_BRIDGE_MAX_FILES` | `14d` | No | Keep rotated logs for N days (e.g., `14d`, `30d`) |
 | `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | No | Rotate when file reaches size (e.g., `20m`, `100m`) |
