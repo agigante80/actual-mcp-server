@@ -305,6 +305,7 @@ When changing code, update these docs:
 ## Documentation Map
 
 - `docs/ARCHITECTURE.md`: component layers, data flow, transport protocols
+- `docs/CONFIGURATION.md`: canonical inventory of every config variable (type, default, source, read site). A var is canonical if it is a Zod schema key in `src/config.ts` OR an entry in `RAW_ENV_ALLOWLIST` in `src/lib/config-registry.ts`. The drift guard `scripts/config-drift.mjs` (run in CI via `tests/unit/config_drift.test.js`) fails the build when the schema/allowlist, `.env.example`, and the README env table disagree. Run `npm run config-drift` after touching any config var.
 - `docs/NEW_TOOL_CHECKLIST.md`: canonical 9-step guide for adding tools
 - `docs/TESTING_AND_RELIABILITY.md`: test-file inventory, integration test module table
 - `docs/guides/AI_CLIENT_SETUP.md`: LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL

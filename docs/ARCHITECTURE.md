@@ -490,7 +490,13 @@ npm run dev -- --http --test-mcp-client
 
 ### Environment Variables
 
-All configuration via environment variables. See `.env.example` for complete reference.
+All configuration via environment variables. The canonical inventory of every
+variable (type, default, source, read site) is [docs/CONFIGURATION.md](CONFIGURATION.md);
+`.env.example` carries the same set with inline comments. A variable is canonical if it
+is a Zod schema key in `src/config.ts` OR an entry in `RAW_ENV_ALLOWLIST` in
+`src/lib/config-registry.ts`. The drift guard `scripts/config-drift.mjs` (run in CI via
+`tests/unit/config_drift.test.js`) fails the build if the schema/allowlist,
+`.env.example`, and the README env table disagree.
 
 #### Required Variables
 
