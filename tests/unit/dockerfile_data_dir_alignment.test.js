@@ -53,20 +53,27 @@ check('no dead chown of a non-canonical dir remains in the Dockerfile', () => {
   }
 });
 
-check('every compose MCP_BRIDGE_DATA_DIR env matches canonical', () => {
-  const envs = [...compose.matchAll(/MCP_BRIDGE_DATA_DIR=(\S+)/g)];
-  assert(envs.length > 0, 'no MCP_BRIDGE_DATA_DIR env in docker-compose.yaml');
-  for (const e of envs) {
-    assert.strictEqual(e[1], CANON, `compose MCP_BRIDGE_DATA_DIR=${e[1]} != ${CANON}`);
+check('every compose MCP_BRIDGE_DATA_DIR env matches canonical (incl. CI compose)', () => {
+  // Only the MCP service defines MCP_BRIDGE_DATA_DIR, so scanning both compose
+  // files is safe (the upstream actual-server service has no such var). Including
+  // docker-compose.test.yaml stops the CI stack from silently drifting.
+  let total = 0;
+  for (const f of ['docker-compose.yaml', 'docker-compose.test.yaml']) {
+    for (const e of read(f).matchAll(/MCP_BRIDGE_DATA_DIR=(\S+)/g)) {
+      total++;
+      assert.strictEqual(e[1], CANON, `${f} MCP_BRIDGE_DATA_DIR=${e[1]} != ${CANON}`);
+    }
   }
+  assert(total > 0, 'no MCP_BRIDGE_DATA_DIR env found in any compose file');
 });
 
 check('every compose data-volume mount target matches canonical', () => {
   // Data volumes are exactly the ./actual-data (bind) and mcp-data (named) mounts.
   // Anchor the source precisely so an unrelated volume whose name merely ends in
-  // "actual-data" (e.g. ./backups/old-actual-data) is not mis-captured.
+  // "actual-data" (e.g. ./backups/old-actual-data) is not mis-captured. Capture the
+  // target up to the next colon so a valid mode suffix (:ro, :rw, :z) is not swallowed.
   const lines = compose.split('\n').filter((l) => !l.trim().startsWith('#'));
-  const mounts = [...lines.join('\n').matchAll(/-\s+(?:\.\/actual-data|mcp-data):(\S+)/g)];
+  const mounts = [...lines.join('\n').matchAll(/-\s+(?:\.\/actual-data|mcp-data):([^:\s]+)/g)];
   assert(mounts.length > 0, 'no actual-data/mcp-data mounts found in docker-compose.yaml');
   for (const m of mounts) {
     assert.strictEqual(m[1], CANON, `compose data mount target ${m[1]} != ${CANON}`);
