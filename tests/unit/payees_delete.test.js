@@ -15,7 +15,6 @@ const fail = (label, d = '') => { console.error(`  ✗ FAIL: ${label}${d ? ' (' 
 const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
   const adapter = adapterMod.default;
   const tool = (await import('../../dist/src/tools/payees_delete.js')).default;

@@ -11,8 +11,6 @@
  * need to support multiple instances or we'd need request queuing.
  */
 
-// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
-import './node-polyfills.js';
 import api from '@actual-app/api';
 import logger from '../logger.js';
 import config from '../config.js';

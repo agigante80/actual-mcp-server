@@ -67,7 +67,7 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 
 - [Actual Budget](https://actualbudget.org/) server running (local or remote)
 - Your **Budget Sync ID**: Actual → Settings → Show Advanced Settings → Sync ID
-- **Node.js 20+** (npm method) or **Docker**
+- **Node.js 22+** (npm method) or **Docker**
 
 ### Option A: Docker (recommended)
 

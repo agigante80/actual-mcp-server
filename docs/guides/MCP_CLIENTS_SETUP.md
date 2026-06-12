@@ -34,7 +34,7 @@ This is in contrast to the **HTTP transport** (`--http`), where the server runs 
 - ✅ Your **server URL** and **password** for Actual Budget
 
 For stdio options (Sections 1 to 4 below):
-- ✅ **Node.js 20+**: [download](https://nodejs.org/). Check with `node --version`
+- ✅ **Node.js 22+**: [download](https://nodejs.org/). Check with `node --version`
 - ✅ The server available via `npx` (no install needed), or cloned and built from source for development
 - ✅ **Data directory created**: pick an absolute path and create it before starting:
   ```bash

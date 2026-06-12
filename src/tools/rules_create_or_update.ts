@@ -17,8 +17,6 @@
  * - No wrapToolCall — uses direct call() pattern
  * - Reuses exact same ConditionSchema / ActionSchema / FIELD_OPERATORS as rules_create.ts
  */
-// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
-import '../lib/node-polyfills.js';
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter, { normalizeToId } from '../lib/actual-adapter.js';

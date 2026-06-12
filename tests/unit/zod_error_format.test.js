@@ -14,7 +14,6 @@ const eq = (got, want, l) => got === want ? pass(l) : fail(l, `got ${JSON.string
 const ok = (cond, l, d = '') => cond ? pass(l) : fail(l, d);
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const { z } = await import('zod');
   const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
 

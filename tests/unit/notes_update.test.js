@@ -15,7 +15,6 @@ const BUDGET_MONTH_ID  = 'budget-2026-01';
 const ORPHAN_ID        = 'not-a-real-entity';
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
 

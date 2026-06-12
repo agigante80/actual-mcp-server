@@ -350,15 +350,6 @@ async function main() {
   await logger.debug('Data directory ready', { dataDir });
 
   // ── load @actual-app/api ──────────────────────────────────────────────────
-  // @actual-app/api v26.3+ accesses navigator.platform at module evaluation time.
-  // Node.js doesn't define navigator, so we polyfill it before the dynamic import.
-  if (typeof globalThis.navigator === 'undefined') {
-    Object.defineProperty(globalThis, 'navigator', {
-      value: { platform: 'node', userAgent: 'node' },
-      writable: true,
-      configurable: true,
-    });
-  }
   let api;
   try {
     api = await import('@actual-app/api');

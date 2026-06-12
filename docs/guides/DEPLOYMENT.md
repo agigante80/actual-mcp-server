@@ -8,7 +8,7 @@ This guide covers all deployment methods for the Actual MCP Server.
 
 - **Actual Budget server** running and accessible (local, Docker, or remote)
 - Your **Budget Sync ID** from Actual: Settings → Show Advanced Settings → Sync ID
-- **Node.js 20+** (for npm method) or **Docker** (for container methods)
+- **Node.js 22+** (for npm method) or **Docker** (for container methods)
 
 ---
 

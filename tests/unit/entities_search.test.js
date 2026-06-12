@@ -33,7 +33,6 @@ const FIXTURE = {
 };
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
   adapter.getPayees = async () => FIXTURE.payees;
   adapter.getCategories = async () => FIXTURE.categories;
