@@ -1,4 +1,6 @@
 // src/actualToolsManager.ts
+// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
+import './lib/node-polyfills.js';
 import * as ActualApi from '@actual-app/api';
 import logger from './logger.js';
 import { z } from 'zod';
