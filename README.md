@@ -55,10 +55,9 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 - [Available Tools](#available-tools)
 - [Configuration](#configuration)
 - [Multi-Budget Switching](#multi-budget-switching)
-- [Transport & Authentication](#transport--authentication)
+- [Transport & Authentication](#transport-authentication)
 - [Testing](#testing)
 - [Documentation](#documentation)
-- [Comparison with Similar Projects](#comparison-with-similar-projects)
 - [Contributing](#contributing)
 - [License](#license)
 - [Disclaimer](#disclaimer)
@@ -638,74 +637,14 @@ See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md
 | [docs/SECURITY_AND_PRIVACY.md](docs/SECURITY_AND_PRIVACY.md) | Auth models, threat model, hardening |
 | [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md) | Test strategy, coverage, reliability patterns |
 | [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) | Step-by-step guide for adding a new MCP tool |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Development setup, code standards, PR process |
+| [CONTRIBUTING.md](.github/CONTRIBUTING.md) | Development setup, code standards, PR process |
 | [.env.example](.env.example) | Fully annotated environment variable reference |
-
----
-
-## Comparison with Similar Projects
-
-Several MCP servers exist for personal finance management. Here's how this project compares with the closest alternatives.
-
-> **Snapshot date**: 2026-03-20. Versions and features reflect each project's latest release at that date.
-
-### Feature Comparison
-
-| Feature | **agigante80/actual-mcp-server** | [s-stefanov/actual-mcp](https://github.com/s-stefanov/actual-mcp) | [henfrydls/actual-budget-mcp](https://github.com/henfrydls/actual-budget-mcp) | [WGDevelopment/ynab-mcp-server](https://github.com/WGDevelopment/ynab-mcp-server) |
-|---|---|---|---|---|
-| **Version** | v0.4.26 | v1.11.1 | v0.2.0 | v0.1.0 |
-| **Budget App** | Actual Budget (self-hosted) | Actual Budget (self-hosted) | Actual Budget (self-hosted) | YNAB (cloud, subscription) |
-| **Language** | TypeScript / Node.js | TypeScript / Node.js | TypeScript / Node.js | Python |
-| **Tool Count** | **71** | ~22 | 18 | 9 |
-| **Setup & Distribution** |||||
-| **Transport** | HTTP + stdio | STDIO + SSE option | STDIO | STDIO |
-| **Docker support** | ✅ Full (image + Compose) | ✅ Image only | ❌ | ❌ |
-| **Published package (npx/pip)** | ✅ `npx actual-mcp-server` | ✅ `npx actual-mcp` | ✅ `npx actual-budget-mcp` | ✅ `pip install ynab-mcp` |
-| **Security & Access** |||||
-| **Authentication** | ✅ Bearer token + OIDC (JWKS) | ⚠️ Optional Bearer token | ❌ None (local only) | ✅ OS keyring / env var |
-| **Read-only mode** | ❌ All tools always available | ✅ Write requires `--enable-write` flag | ❌ | ✅ Most tools are read-only |
-| **Multi-budget switching** | ✅ Runtime switch via tool | ❌ | ❌ | ✅ (YNAB natively multi-budget) |
-| **Production & Reliability** |||||
-| **Connection pooling** | ✅ Up to 15 concurrent sessions | ❌ | ❌ | ❌ |
-| **Retry / backoff** | ✅ 3 attempts, exponential backoff | ❌ | ❌ | ❌ |
-| **Automated test suite** | ✅ Unit + E2E + integration | ❌ | ❌ | ❌ |
-| **Transactions** |||||
-| **Create / update / delete** | ✅ | ✅ | ✅ | ✅ |
-| **Import & reconcile** | ✅ `actual_transactions_import` | ❌ | ❌ | ❌ |
-| **Scheduled / recurring** | ❌ (planned) | ❌ | ❌ | ❌ |
-| **Analysis & Reporting** |||||
-| **ActualQL custom queries** | ✅ 6 exclusive tools + `actual_query_run` | ❌ | ❌ | N/A |
-| **Summary by category / payee** | ✅ | ✅ spending-by-category | ✅ | ❌ |
-| **Spending projections / forecast** | ❌ | ❌ | ✅ end-of-month forecast | ❌ |
-| **Budget vs actual comparison** | ✅ via `actual_budgets_getMonth` | ❌ | ✅ dedicated tool | ✅ month summary |
-| **Bank sync** | ✅ GoCardless / SimpleFIN | ❌ | ✅ | ❌ (YNAB handles sync natively) |
-| **Budget Management** |||||
-| **Set / transfer / carryover / hold** | ✅ Full (10 tools) | ❌ | ✅ Partial | ✅ Partial |
-| **Batch budget updates** | ✅ `actual_budget_updates_batch` | ❌ | ❌ | ❌ |
-| **Accounts, Payees & Rules** |||||
-| **Account lifecycle (close/reopen)** | ✅ | ❌ | ❌ | N/A |
-| **Payee merging** | ✅ `actual_payees_merge` | ❌ | ❌ | N/A |
-| **Payee rules management** | ✅ Full CRUD | ✅ Full CRUD | ❌ | N/A |
-| **UX & Usability** |||||
-| **Natural language date parsing** | ❌ YYYY-MM-DD required | ❌ | ✅ "last month", "yesterday" | ❌ |
-| **Bilingual support** | ❌ | ❌ | ✅ English + Spanish | ❌ |
-| **Auto name → UUID resolution** | ⚠️ Explicit tool (`actual_get_id_by_name`) | ❌ | ✅ Automatic in all tools | ❌ |
-| **AI prompt templates** | ❌ | ✅ financial-insights, budget-review | ❌ | ❌ |
-| **Tested AI clients** | LibreChat, LobeChat | Claude Desktop, Codex | Claude Desktop, Cursor, VS Code | Claude Code |
-| **License** | MIT | MIT | MIT | MIT |
-
-### When to choose which project
-
-- **This project**: best for production deployments, multi-user environments (OIDC), LibreChat/LobeChat, Docker-native setup, or for Claude Desktop users who want a native stdio connection without any HTTP server overhead.
-- **s-stefanov/actual-mcp**: the original implementation; good for Claude Desktop with STDIO transport, AI-generated prompt templates, and built-in read-only mode.
-- **henfrydls/actual-budget-mcp**: best for Spanish-speaking users, Cursor/VS Code integration, or when you want natural-language dates, automatic name resolution, and spending forecasts without any server setup.
-- **WGDevelopment/ynab-mcp-server**: only option if you're a YNAB user; privacy-first design with OS keyring token storage and local-LLM focus.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, code standards, and the PR process.
+Contributions are welcome! See [CONTRIBUTING.md](.github/CONTRIBUTING.md) for development setup, code standards, and the PR process.
 
 Quick flow:
 1. Fork → `git checkout -b feature/my-feature`

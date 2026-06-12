@@ -33,7 +33,7 @@ export function getCanonicalCount() {
 const FILES = [
   'README.md', 'CLAUDE.md', '.github/copilot-instructions.md',
   'docs/ARCHITECTURE.md', 'docs/guides/AI_CLIENT_SETUP.md', 'docs/TESTING_AND_RELIABILITY.md', 'docs/FORK_ANALYSIS.md',
-  'CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
+  '.github/CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
   'tests/manual/tests/sanity.js', 'tests/manual/runner.js', 'tests/e2e/README.md', 'tests/manual/README.md',
   'tests/e2e/docker-all-tools.e2e.spec.ts',
 ];
@@ -83,7 +83,6 @@ export const TOTAL_PATTERNS = [
   // "N-tool smoke" phrasing, the Docker Hub description headings, and two TESTING
   // table cells (a "+ shape checks" count and an "N/N" coverage cell without "tools").
   // All are whole-server totals; none can match a single-digit per-domain subset.
-  { re: /\*\*Tool Count\*\* \| \*\*(\d{2,3})\*\*/g, label: 'comparison table **Tool Count** | **N**' },
   { re: /(\d{2,3})-tool smoke/gi, label: 'N-tool smoke (hyphenated)' },
   { re: /\*\*(\d{2,3}) Implemented Tools\*\*/g, label: '**N Implemented Tools** (docker)' },
   { re: /Available Tools \((\d{2,3}) Total\)/g, label: 'Available Tools (N Total) (docker)' },

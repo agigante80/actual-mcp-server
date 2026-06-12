@@ -129,7 +129,7 @@ After: ...
 - [ ] I have considered security implications of my changes
 - [ ] I have not introduced any security vulnerabilities
 - [ ] I have not exposed sensitive information (passwords, tokens, etc.)
-- [ ] If applicable, I have updated SECURITY.md
+- [ ] If applicable, I have updated .github/SECURITY.md
 
 ## 📝 Additional Notes
 

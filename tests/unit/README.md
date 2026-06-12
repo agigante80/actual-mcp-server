@@ -107,7 +107,7 @@ await expectCallError(tool, validInput, 'runtime guard label');
 - Increment `failures` with `fail()` on any assertion that returns `false`.
 - Exit code is `2` on any failure — do not swallow failures.
 
-**What to cover** (scenarios per tool, in priority order):
+### What to cover (scenarios per tool, in priority order)
 1. Missing required field
 2. Wrong type for a required field (string instead of number, etc.)
 3. Invalid enum value
