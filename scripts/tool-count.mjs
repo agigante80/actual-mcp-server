@@ -69,7 +69,6 @@ export const TOTAL_PATTERNS = [
   { re: /│\s*\((\d{2,3}) tools\)/g, label: 'ASCII diagram (N tools)' },
   { re: /(\d{2,3}) tools loaded with/g, label: 'N tools loaded with' },
   { re: /Budget: (\d{2,3}) tools/g, label: 'Budget: N tools (short desc)' },
-  { re: /Budget - (\d{2,3}) tools/g, label: 'Budget - N tools (constants)' },
   { re: /(\d{2,3}) tools smoke validation/gi, label: 'N tools smoke validation' },
   { re: /(\d{2,3}) tools execute successfully/gi, label: 'N tools execute successfully' },
   { re: /(\d{2,3}) tools[:)] (?:stub|response-shape| stub|registered correctly)/gi, label: 'N tools: stub (TESTING)' },

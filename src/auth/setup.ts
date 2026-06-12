@@ -65,8 +65,3 @@ export function createMcpAuth(): MCPAuth | null {
 
   return _instance;
 }
-
-/** Reset the singleton (test helper). */
-export function _resetMcpAuthForTests(): void {
-  _instance = null;
-}

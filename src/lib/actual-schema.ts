@@ -243,12 +243,3 @@ export function isValidField(tableName: string, fieldName: string): boolean {
 export function isValidJoinPath(path: string): boolean {
   return path in JOIN_PATHS;
 }
-
-/**
- * Get field type information
- */
-export function getFieldType(tableName: string, fieldName: string): string | null {
-  const table = ACTUAL_SCHEMA[tableName];
-  if (!table || !(fieldName in table)) return null;
-  return table[fieldName].type;
-}

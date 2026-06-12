@@ -319,11 +319,13 @@ Dead/unused code (unused files, exports, types, orphaned modules) is detected by
 via the committed `knip.json`:
 
 ```bash
-npm run knip            # report-only (knip --no-exit-code)
+npm run knip            # blocking since #237: exits nonzero on any dead code
 ```
 
-- **CI/CD**: a report-only `Check for dead code` step in the `Lint Code` job (advisory; it
-  always exits 0 in this phase, graduating to failing mode is a separate follow-up).
+- **CI/CD**: the `Check for dead code` step in the `Lint Code` job runs `npm run knip` in
+  failing mode (#237): it exits nonzero on any unused file/export/type and FAILS the job, so
+  new dead code cannot merge. `tests/unit/knip_config.test.js` guards that `scripts.knip`
+  stays failing-mode (no `--no-exit-code`).
 - **Guard tests** (in `test:unit-js`, fail CI on drift): `tests/unit/knip_config.test.js`
   (every `knip.json` entry root exists on disk) and `tests/unit/advertised_tools_sync.test.js`
   (every `actual_<domain>_<action>` tool name advertised in `README.md` resolves to

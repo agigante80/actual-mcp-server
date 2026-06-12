@@ -204,7 +204,7 @@ export async function startHttpServer(
     return true;
   };
 
-  // Create a fresh Server instance similar to httpServer_testing
+  // Create a fresh Server instance per session
   function createServerInstance() {
     // ensure capabilities.tools is an object mapping tool name -> {}
     const capabilitiesObj = capabilities && Object.keys(capabilities).length

@@ -75,7 +75,7 @@ npm run test:all                # Convenience: adapter + unit + docker:smoke (no
 npm run verify-tools            # Verify tool count + registration
 npm run tool-count              # CI-gated drift check (#193): rewrites stale total-count literals across docs/tests/constants with --fix; canonical = IMPLEMENTED_TOOLS length. Does NOT touch `**Tool Count:**` markers (version-bump.js owns those)
 npm run check:coverage          # List @actual-app/api methods vs tool coverage
-npm run knip                    # Dead-code detection (#234): unused files/exports/types via the committed knip.json. Report-only (knip --no-exit-code), gated advisory in the Lint Code CI job. Run the /code-health-auditor skill for triage + ticketing.
+npm run knip                    # Dead-code detection (#234): unused files/exports/types via the committed knip.json. Blocking since #237: `knip` exits nonzero on any dead code and FAILS the Lint Code CI job. Run the /code-health-auditor skill for triage + ticketing.
 npm run test:mcp-client         # Connect as MCP client and exercise tools
 
 # Manual connection tests (requires .env)
@@ -314,7 +314,7 @@ When changing code, update these docs:
 - `docs/guides/AI_CLIENT_SETUP.md`: LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL
 - `docs/guides/MCP_CLIENTS_SETUP.md`: per-client setup recipes (Claude Desktop, Cursor, etc.); complements AI_CLIENT_SETUP.md
 - `docs/audit/dep-audit-cache.json`: cache used by `/dep-auditor` to skip recently-checked libraries; do not edit manually
-- `docs/audit/deadcode-audit-cache.json`: cache used by `/code-health-auditor` (#234) to avoid re-filing dead-code findings (keyed `kind:path:symbol`); the skill maintains it. The committed `knip.json` is the dead-code config (report-only in CI); `tests/unit/knip_config.test.js` guards its entry points and `tests/unit/advertised_tools_sync.test.js` guards that README-advertised tool names exist in `IMPLEMENTED_TOOLS`.
+- `docs/audit/deadcode-audit-cache.json`: cache used by `/code-health-auditor` (#234) to avoid re-filing dead-code findings (keyed `kind:path:symbol`); the skill maintains it. The committed `knip.json` is the dead-code config (blocking in CI since #237: `knip` exits nonzero on dead code); `tests/unit/knip_config.test.js` guards its entry points and that `scripts.knip` stays failing-mode (no `--no-exit-code`), and `tests/unit/advertised_tools_sync.test.js` guards that README-advertised tool names exist in `IMPLEMENTED_TOOLS`.
 - `docs/guides/DEPLOYMENT.md`: Docker Compose profiles, Kubernetes, upgrade steps
 - `docs/SECURITY_AND_PRIVACY.md`: auth models, threat model
 - `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools

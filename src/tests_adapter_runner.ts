@@ -52,7 +52,7 @@ runAdapterTests().catch((e) => {
 
 // Concurrency and retry tests
 import { callWithRetry, getConcurrencyState, setMaxConcurrency } from './lib/actual-adapter.js';
-import retry from './lib/retry.js';
+import { retry } from './lib/retry.js';
 
 async function runConcurrencyAndRetryTests() {
   console.log('Running concurrency and retry tests...');

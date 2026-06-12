@@ -138,38 +138,3 @@ export function createTool<TInput = any, TOutput = any>(
     },
   };
 }
-
-/**
- * Batch create multiple tools with shared configuration
- * Useful for creating related tools (CRUD operations) with common patterns
- * 
- * @param baseConfig - Shared configuration for all tools
- * @param tools - Array of tool-specific overrides
- * @returns Array of tool definitions
- * 
- * @example
- * ```typescript
- * export const accountTools = createTools(
- *   { namePrefix: 'actual_accounts_' },
- *   [
- *     { name: 'create', schema: createSchema, handler: createHandler },
- *     { name: 'update', schema: updateSchema, handler: updateHandler },
- *     { name: 'delete', schema: deleteSchema, handler: deleteHandler },
- *   ]
- * );
- * ```
- */
-export function createTools<TInput = any, TOutput = any>(
-  baseConfig: Partial<ToolConfig<TInput, TOutput>> & { namePrefix?: string },
-  tools: Array<Partial<ToolConfig<TInput, TOutput>> & Pick<ToolConfig<TInput, TOutput>, 'name'>>
-): ToolDefinition[] {
-  const { namePrefix = '', ...sharedConfig } = baseConfig;
-  
-  return tools.map((toolConfig) =>
-    createTool({
-      ...sharedConfig,
-      ...toolConfig,
-      name: namePrefix + toolConfig.name,
-    } as ToolConfig<TInput, TOutput>)
-  );
-}

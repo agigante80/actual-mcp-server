@@ -64,7 +64,7 @@ const {
 } = api as any;
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
-import retry, { isRetryableError } from './retry.js';
+import { retry, isRetryableError } from './retry.js';
 import { notFoundMsg } from './errors.js';
 import logger from '../logger.js';
 import config from '../config.js';

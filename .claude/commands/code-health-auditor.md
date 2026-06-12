@@ -58,10 +58,12 @@ was passed, re-triage every finding regardless of cache.
 ## Step 2 - Run Knip (dead code)
 
 ```bash
-npm run knip
+npx knip --no-exit-code
 ```
 
-This uses the committed `knip.json` (report-only, always exits 0). Parse the report into
+This uses the committed `knip.json`. Since #237 the gated `npm run knip` is failing-mode
+(exits nonzero on any dead code), so this skill runs `npx knip --no-exit-code` directly to
+always capture the full report for triage regardless of exit code. Parse the report into
 findings of kind `unused-file`, `unused-export`, `unused-type`, `duplicate-export`.
 
 **Allowlist (do NOT file; these are alive or intentional):**
