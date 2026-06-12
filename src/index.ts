@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
 // Add global error handlers
-let isHandlingQueryError = false;
 
 process.on('unhandledRejection', (reason, promise) => {
   console.error('=== UNHANDLED REJECTION ===');
@@ -151,20 +150,17 @@ export {};
     { startHttpServer },
     { startStdioServer },
     loggerModule,
-    osModule,
     utilsModule,
     actualToolsManagerModule,
   ] = await Promise.all([
     import('./server/httpServer.js'),
     import('./server/stdioServer.js'),
     import('./logger.js'),
-    import('os'),
     import('./utils.js'),
     import('./actualToolsManager.js'),
   ]);
 
   const logger = (loggerModule as unknown as { default: typeof console }).default;
-  const os = osModule as typeof import('os');
   const { getLocalIp } = (utilsModule as unknown as { getLocalIp: () => string });
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
 

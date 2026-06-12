@@ -7,7 +7,6 @@ const InputSchema = z.object({
   query: z.string().min(1).describe('ActualQL query string to execute'),
 });
 
-type Output = unknown;
 
 const tool: ToolDefinition = {
   name: 'actual_query_run',

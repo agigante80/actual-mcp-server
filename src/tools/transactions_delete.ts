@@ -6,7 +6,6 @@ const InputSchema = z.object({
   id: z.string().describe('Transaction ID to delete'),
 });
 
-type Output = { success: boolean };
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_delete',

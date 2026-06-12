@@ -6,7 +6,6 @@ const InputSchema = z.object({
   accountId: z.string().nullable().optional().describe('Optional account ID to sync a specific account. If omitted, syncs all linked accounts.'),
 });
 
-type Output = void;
 
 const tool: ToolDefinition = {
   name: 'actual_bank_sync',

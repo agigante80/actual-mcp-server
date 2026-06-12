@@ -1,9 +1,7 @@
 // src/actualToolsManager.ts
-import * as ActualApi from '@actual-app/api';
 import logger from './logger.js';
 import { z } from 'zod';
 
-import type { ZodTypeAny } from 'zod';
 import type { ToolDefinition } from '../types/tool.d.js';
 import { formatZodError } from './lib/zod-error-format.js';
 
@@ -127,24 +125,6 @@ const API_TOOL_MAP: Record<string, string> = {
   getServerVersion: 'actual_server_get_version',
 };
 
-// Define Account schema for validation (simplified example)
-const AccountSchema = z.object({
-  id: z.string().optional(),
-  name: z.string(),
-  type: z.string(), // Consider enum if you have fixed valid types
-  offbudget: z.boolean().optional().default(false),
-  closed: z.boolean().optional().default(false),
-});
-
-// Input schema for get_accounts - no args
-const GetAccountsInputSchema = z.object({});
-
-// Input schema for get_account_balance
-const GetAccountBalanceInputSchema = z.object({
-  id: z.string().optional().describe('Account ID to get balance for (optional; defaults to first account)'),
-  cutoff: z.string().optional().describe('Optional ISO date string cutoff'),
-});
-
 class ActualToolsManager {
   private tools: Map<string, ToolDefinition> = new Map();
 
@@ -154,7 +134,7 @@ class ActualToolsManager {
     // Dynamically import all tool modules from src/tools/index.ts
     const toolModules = (await import('./tools/index.js')) as Record<string, unknown>;
     let count = 0;
-    for (const [key, tool] of Object.entries(toolModules)) {
+    for (const [_key, tool] of Object.entries(toolModules)) {
       const t = tool as unknown as { name?: string };
       if (t && t.name) {
         this.tools.set(t.name, tool as unknown as ToolDefinition);

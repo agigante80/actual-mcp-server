@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import type { components } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
@@ -13,7 +12,6 @@ const InputSchema = z.object({
   }).strict().optional().describe('Fields to update - only recognized fields allowed'),
 });
 
-type Output = { success: boolean };
 
 const tool: ToolDefinition = {
   name: 'actual_payees_update',

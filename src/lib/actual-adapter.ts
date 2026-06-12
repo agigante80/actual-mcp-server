@@ -583,7 +583,7 @@ async function shutdownActualApi(): Promise<void> {
   }
 }
 
-import { BANK_SYNC_SETTLE_MS, DEFAULT_CONCURRENCY_LIMIT, DEFAULT_RETRY_ATTEMPTS, MAX_RETRY_DELAY_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { BANK_SYNC_SETTLE_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 // Concurrency limiter extracted to ./actual-adapter/concurrency.ts (#166).
 // Imported for internal use (every method wraps its raw call in withConcurrency)
@@ -808,31 +808,6 @@ export function getConcurrencyState() {
     // Post-#158 it grows with write volume on pooled sessions.
     writeConnectionReuses: writeConnectionReuseCount,
   };
-}
-
-/**
- * Sync local changes to the Actual Budget server.
- * 
- * This function should be called after write operations (create, update, delete)
- * to ensure changes are properly synced to the remote server. Without syncing,
- * changes may only exist locally and could be lost.
- * 
- * Note: Adds a small delay to ensure local changes are committed before syncing.
- */
-async function syncToServer(): Promise<void> {
-  try {
-    // Small delay to ensure local changes are committed to the database
-    // before attempting to sync to the server
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // TypeScript doesn't recognize sync in the type definitions, but it exists at runtime
-    console.log('[SYNC] Calling api.sync()...');
-    await (api as any).sync();
-    console.log('[SYNC] api.sync() completed successfully');
-  } catch (err) {
-    // Log but don't throw - sync failures shouldn't break the operation
-    console.error('[SYNC] Sync to server failed:', err);
-  }
 }
 
 /**

@@ -4,7 +4,6 @@ import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({});
 
-type Output = unknown;
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_get_all',

@@ -13,16 +13,6 @@ const InputSchema = z.object({
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
 });
 
-type Output = {
-  transactions: unknown[];
-  count: number;
-  totalAmount: number;
-  amountRange: {
-    min?: number;
-    max?: number;
-  };
-};
-
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_amount',
   description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses.',

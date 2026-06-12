@@ -6,8 +6,6 @@
  */
 
 import {
-  ACTUAL_SCHEMA,
-  JOIN_PATHS,
   getTableFields,
   getTableNames,
   isValidTable,
