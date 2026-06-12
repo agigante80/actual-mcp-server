@@ -1,4 +1,6 @@
 // lib/ActualMCPConnection.ts
+// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
+import './node-polyfills.js';
 import { EventEmitter } from 'events';
 import * as actual from '@actual-app/api';
 import actualToolsManager from '../actualToolsManager.js';

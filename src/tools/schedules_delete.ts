@@ -1,3 +1,5 @@
+// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
+import '../lib/node-polyfills.js';
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';

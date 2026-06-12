@@ -1,3 +1,5 @@
+// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
+import './lib/node-polyfills.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

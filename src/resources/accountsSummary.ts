@@ -1,4 +1,6 @@
 // Example resource: summary of all accounts
+// #232: load the navigator polyfill before @actual-app/api so the Node 20 global is defined first.
+import '../lib/node-polyfills.js';
 import api from '@actual-app/api';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const { getAccounts } = api as any;
