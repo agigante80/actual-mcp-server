@@ -127,9 +127,14 @@ after the `gh` call; `/tmp` is not readable from the sandbox.
 
 Merge the triaged findings into `docs/audit/deadcode-audit-cache.json`: set `lastSeen` to
 today for every finding seen this run, `firstSeen` on new ones, `status` + `ticket` for filed
-ones, and `lastFullAudit` to now if `--full` was passed. Do not drop entries for findings not
-seen this run (they may be transiently masked); mark them but keep them. Skip this step
-entirely in `--dry-run`.
+ones, and `lastFullAudit` to now if `--full` was passed.
+
+Delete over archiving: when a `filed` finding is no longer present in a SUCCESSFUL Knip report
+(the dead code shipped and was removed), DELETE its cache entry. The closed GitHub issue is the
+history, so the cache must not accumulate resolved cruft. Keep only: `allowlisted` / `wontfix`
+entries (intentional, permanent) and `filed` entries still open. The one exception is a run that
+FAILED to produce a valid report (e.g. a build error masked findings): do not delete on a failed
+run, since absence then is not proof of resolution. Skip this step entirely in `--dry-run`.
 
 ---
 
