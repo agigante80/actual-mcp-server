@@ -16,7 +16,7 @@
 - [Configuration](#configuration)
 - [Transport Protocols](#transport-protocols)
 - [Error Handling](#error-handling)
-- [Performance & Reliability](#performance--reliability)
+- [Performance & Reliability](#performance-reliability)
 
 ---
 
