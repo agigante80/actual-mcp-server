@@ -49,7 +49,7 @@ export async function startHttpServer(
   serverInstructions: string,                    // was passed by index.ts
   toolSchemas: Record<string, unknown>,              // was passed by index.ts
   version: string,                               // server version from package.json
-  _bindHost = 'localhost',
+  bindHost = 'localhost',                        // #239: interface to bind; forwarded to listen()
   advertisedUrl?: string
 ) {
   const app = express();
@@ -649,7 +649,7 @@ export async function startHttpServer(
     }
   }
 
-  const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, () => {
+  const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, bindHost, () => {
     const advertised = advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`;
     console.info(`MCP Streamable HTTP Server listening on ${port}`);
     console.info(`📨 MCP endpoint: ${advertised}`);

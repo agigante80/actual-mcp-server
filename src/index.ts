@@ -298,7 +298,8 @@ export {};
     // If requested, run the MCP client-side tests now that all variables are ready
     if (useTestMcpClient) {
       logger.info('⚙️  --test-mcp-client specified, starting HTTP server and running client-side MCP tests...');
-      // start server in http mode (bind to configured PORT)
+      // start server in http mode. Bind all interfaces by default (#239): advertisedUrl
+      // uses the LAN IP (getLocalIp), so the self-test client must be able to reach it.
       await startHttpServer(
         mcp,
         PORT,
@@ -309,7 +310,7 @@ export {};
         SERVER_INSTRUCTIONS,
         toolSchemas,
         version,
-        process.env.MCP_BRIDGE_BIND_HOST || 'localhost',
+        process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
         advertisedUrl
       );
 

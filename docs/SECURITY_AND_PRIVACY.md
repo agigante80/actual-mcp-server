@@ -238,6 +238,19 @@ MCP_HTTPS_KEY=/app/certs/key.pem
 
 **Recommendation**: Deploy Actual Budget and MCP server on same network/host
 
+#### Network exposure and bind host (#239)
+
+The HTTP server defaults to binding `0.0.0.0` (all interfaces). The `/health` and
+`/metrics` endpoints are intentionally UNAUTHENTICATED (they are liveness and Prometheus
+scrape targets), so on an exposed interface anyone who can reach the port can read them.
+
+**Recommendation**: limit the listening interface with `MCP_BRIDGE_BIND_HOST`. Set it to
+`127.0.0.1` to restrict the server (including `/health` and `/metrics`) to loopback, or to a
+specific private address to keep it off untrusted networks. As of #239 this value is honored:
+it is passed to `app.listen()`, so the server binds only to the configured interface. Leave it
+at `0.0.0.0` only when remote clients must reach the MCP endpoint directly, and pair that with
+authentication (`MCP_SSE_AUTHORIZATION` or OIDC) and ideally a reverse proxy.
+
 ---
 
 ## 🔒 Secure Coding Practices
