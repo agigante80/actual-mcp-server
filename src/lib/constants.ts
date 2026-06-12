@@ -79,6 +79,9 @@ export const DEFAULT_BIND_HOST = 'localhost';
  * Default HTTP port for MCP server. Canonical default is 3600 (#230): it matches
  * the listen-port fallback in src/index.ts, the Dockerfile EXPOSE/HEALTHCHECK, the
  * published image, .env.example, and every deployment guide.
+ *
+ * @public Consumed by the text-parsing port_alignment guard (tests/unit/port_alignment.test.js),
+ * not by a runtime import, so Knip cannot see the usage. Alive: removing it breaks the guard.
  */
 export const DEFAULT_HTTP_PORT = 3600;
 

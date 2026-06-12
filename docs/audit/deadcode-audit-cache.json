@@ -1,0 +1,27 @@
+{
+  "_comment": "Cache for the code-health-auditor skill (#234). Keyed by kind:path:symbol. Seeded with the intentional allowlist so those findings are never filed; genuine dead code is discovered and filed by the first manual run of the skill. Do not edit by hand beyond the allowlist; the skill maintains it.",
+  "lastFullAudit": null,
+  "findings": {
+    "unused-file:src/prompts/showLargeTransactions.ts:": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "allowlisted",
+      "ticket": null,
+      "notes": "Intentional unshipped MCP prompt scaffolding; server advertises prompts:false. Declared as an entry in knip.json."
+    },
+    "unused-file:src/resources/accountsSummary.ts:": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "allowlisted",
+      "ticket": null,
+      "notes": "Intentional unshipped MCP resource scaffolding; server advertises resources:false. Declared as an entry in knip.json."
+    },
+    "unused-export:src/lib/constants.ts:DEFAULT_HTTP_PORT": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "allowlisted",
+      "ticket": null,
+      "notes": "Alive via the text-parsing port_alignment guard, not a runtime import. Tagged @public in source."
+    }
+  }
+}
