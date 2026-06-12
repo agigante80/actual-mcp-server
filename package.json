@@ -57,7 +57,7 @@
     "release:patch": "npm run version:bump -- patch",
     "tool-count": "node scripts/tool-count.mjs",
     "config-drift": "npm run build && node scripts/config-drift.mjs",
-    "knip": "knip --no-exit-code"
+    "knip": "knip"
   },
   "dependencies": {
     "@actual-app/api": "^26.6.0",

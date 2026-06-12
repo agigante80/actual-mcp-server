@@ -59,5 +59,23 @@ check('NEGATIVE: a non-existent entry root is detected and named', () => {
   assert.deepStrictEqual(missing, ['src/nonexistent'], 'guard must flag exactly the missing root');
 });
 
+// #237: the Knip CI gate runs in FAILING mode. A `--no-exit-code` in scripts.knip silently
+// reverts it to report-only (dead code stops failing CI), so this guard forbids it.
+function knipScriptIsReportOnly(scriptValue) {
+  return /--no-exit-code/.test(String(scriptValue || ''));
+}
+
+check('package.json scripts.knip is in failing mode (no --no-exit-code)', () => {
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const knip = pkg.scripts && pkg.scripts.knip;
+  assert.ok(knip, 'package.json must define a scripts.knip');
+  assert.ok(!knipScriptIsReportOnly(knip), `scripts.knip must not contain --no-exit-code (found: "${knip}")`);
+});
+
+check('NEGATIVE: a report-only knip script (--no-exit-code) is detected', () => {
+  assert.strictEqual(knipScriptIsReportOnly('knip --no-exit-code'), true);
+  assert.strictEqual(knipScriptIsReportOnly('knip'), false);
+});
+
 console.log(`\n[knip-config] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

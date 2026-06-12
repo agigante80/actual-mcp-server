@@ -39,16 +39,6 @@ export const DEFAULT_CONCURRENCY_LIMIT = 5;
 // ============================================================================
 
 /**
- * Default timeout for API operations in milliseconds
- */
-export const DEFAULT_OPERATION_TIMEOUT_MS = 30000;
-
-/**
- * Timeout for server shutdown grace period
- */
-export const SHUTDOWN_GRACE_PERIOD_MS = 5000;
-
-/**
  * How long (ms) to wait after calling rawRunBankSync for the SDK's background
  * promise to surface a BankSyncError as an unhandledRejection.
  *
@@ -71,11 +61,6 @@ export const WRITE_SESSION_DELAY_MS = 100;
 // ============================================================================
 
 /**
- * Default HTTP server bind host
- */
-export const DEFAULT_BIND_HOST = 'localhost';
-
-/**
  * Default HTTP port for MCP server. Canonical default is 3600 (#230): it matches
  * the listen-port fallback in src/index.ts, the Dockerfile EXPOSE/HEALTHCHECK, the
  * published image, .env.example, and every deployment guide.
@@ -84,20 +69,6 @@ export const DEFAULT_BIND_HOST = 'localhost';
  * not by a runtime import, so Knip cannot see the usage. Alive: removing it breaks the guard.
  */
 export const DEFAULT_HTTP_PORT = 3600;
-
-/**
- * Default HTTP path for MCP server endpoint
- */
-export const DEFAULT_HTTP_PATH = '/';
-
-/**
- * Server information
- * Note: version is read from package.json at startup and passed as a parameter.
- */
-export const SERVER_INFO = {
-  name: 'actual-budget-mcp',
-  description: 'MCP server for Actual Budget - 71 tools for finance management',
-} as const;
 
 // ============================================================================
 // VALIDATION & LIMITS
@@ -127,27 +98,3 @@ export const MONTH_PATTERN = /^\d{4}-\d{2}$/;
  * UUID pattern for ID validation
  */
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// ============================================================================
-// LOGGING
-// ============================================================================
-
-/**
- * Log level for production environments
- */
-export const PRODUCTION_LOG_LEVEL = 'info';
-
-/**
- * Log level for development environments
- */
-export const DEVELOPMENT_LOG_LEVEL = 'debug';
-
-/**
- * Maximum number of log files to retain
- */
-export const MAX_LOG_FILES = 14;
-
-/**
- * Maximum size of a single log file before rotation
- */
-export const MAX_LOG_FILE_SIZE = '20m';

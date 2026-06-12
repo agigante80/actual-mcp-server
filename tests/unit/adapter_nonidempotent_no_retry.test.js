@@ -15,7 +15,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const { default: retry } = await import('../../dist/src/lib/retry.js');
+const { retry } = await import('../../dist/src/lib/retry.js');
 
 let passed = 0, failed = 0;
 function check(label, cond) {
