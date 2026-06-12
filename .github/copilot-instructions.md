@@ -199,7 +199,7 @@ The adapter includes automatic retry logic (3 attempts, exponential backoff):
 await adapter.addTransactions(data); // Auto-retries on transient failures
 
 // For custom operations, use retry() from src/lib/retry.ts
-import retry from './lib/retry.js';
+import { retry } from './lib/retry.js';
 const result = await retry(() => riskyOperation(), { retries: 3, backoffMs: 200 });
 ```
 
@@ -291,7 +291,7 @@ npm run test:e2e  # Spawns server, tests full MCP flow
 **Common LibreChat Issues**:
 1. **Tools don't load**: Ensure server started with `--http` flag
 2. **Auth failures**: Verify `MCP_SSE_AUTHORIZATION` token is correct
-3. **Timeout errors**: Increase `DEFAULT_OPERATION_TIMEOUT_MS` in `src/lib/constants.ts`
+3. **Timeout errors**: Tune the retry/backoff in `src/lib/constants.ts` (`DEFAULT_RETRY_ATTEMPTS`, `DEFAULT_RETRY_BACKOFF_MS`)
 4. **Silent failures**: Tool succeeded but no UI feedback - check LibreChat logs
 
 ## Testing Strategies
