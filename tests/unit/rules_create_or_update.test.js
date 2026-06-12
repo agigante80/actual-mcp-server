@@ -12,7 +12,6 @@ const fail = (label, d = '') => { console.error(`  ✗ FAIL: ${label}${d ? ' (' 
 const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
 

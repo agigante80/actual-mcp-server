@@ -20,7 +20,6 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   // The tool destructures const { getCategoryGroups, deleteCategoryGroup } = api at module init;
   // we install proxy functions that delegate to mutable refs so we can swap behaviour per case.
   // Polyfill globalThis.navigator first; @actual-app/api v26 reads it at module load.
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apiDefault = (apiMod.default || apiMod);

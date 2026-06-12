@@ -25,7 +25,6 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
 (async () => {
   // Stub api.sync() so processWriteQueue's trailing sync becomes a no-op.
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};

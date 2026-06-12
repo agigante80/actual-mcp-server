@@ -708,7 +708,7 @@ DEFAULT_CONCURRENCY_LIMIT = 5   // max simultaneous API calls
 
 The dependency list lives in `package.json` (the source of truth) and is summarised in CLAUDE.md's "Tech Stack" line, so it is not duplicated here. A hand-maintained copy drifts: run `npm ls --depth=0` for the installed tree and `npm audit` for the current security posture.
 
-Highlights: TypeScript (NodeNext/ESM) on Node 20+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Winston for logging, and Playwright for E2E. Dependency updates are automated (Dependabot weekly plus the scheduled Dependency Update workflow): patches auto-merge after CI, minor and major bumps get review.
+Highlights: TypeScript (NodeNext/ESM) on Node 22+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Winston for logging, and Playwright for E2E. Dependency updates are automated (Dependabot weekly plus the scheduled Dependency Update workflow): patches auto-merge after CI, minor and major bumps get review.
 
 ---
 

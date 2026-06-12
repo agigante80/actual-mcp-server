@@ -14,7 +14,6 @@ const ENTITY_ID = '00000000-0000-0000-0000-000000000001';
 const BUDGET_MONTH_ID = 'budget-2026-01';
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
 

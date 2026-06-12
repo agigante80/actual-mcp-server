@@ -19,7 +19,6 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 const NIL = '00000000-0000-0000-0000-000000000000';
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};

@@ -10,16 +10,6 @@
 // Exports analyzeCoverage() for tests/unit/check_coverage.test.js, and prints a
 // three-bucket report when run directly (npm run check:coverage).
 
-// Polyfill navigator for Node.js. @actual-app/api v26.3.0+ reads navigator.platform
-// and v26.6.0 reads navigator.userAgent at module load; Node 20 has no native
-// navigator, so define both or the import throws.
-if (typeof globalThis.navigator === 'undefined') {
-  globalThis.navigator = {
-    platform: process.platform === 'win32' ? 'Win32' : 'Linux',
-    userAgent: `Node.js/${process.version}`,
-  };
-}
-
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';

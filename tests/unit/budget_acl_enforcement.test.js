@@ -47,7 +47,6 @@ async function setupLoggerCapture() {
 }
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};

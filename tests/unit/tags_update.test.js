@@ -14,7 +14,6 @@ const EXISTING_ID = '00000000-0000-0000-0000-0000000000aa';
 const NONEXISTENT_ID = '11111111-1111-1111-1111-111111111111';
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
 

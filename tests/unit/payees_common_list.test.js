@@ -17,7 +17,6 @@ const STUB_PAYEES = [
 ];
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
 

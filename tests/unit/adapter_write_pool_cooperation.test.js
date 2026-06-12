@@ -30,7 +30,6 @@ function assert(cond, msg) {
 
 (async () => {
   // Stub api.sync so the trailing sync in processWriteQueue is a no-op.
-  await import('../../dist/src/lib/node-polyfills.js');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   let syncCallCount = 0;

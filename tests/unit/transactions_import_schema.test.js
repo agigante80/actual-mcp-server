@@ -15,7 +15,6 @@ const ok = (cond, l, d = '') => (cond ? pass(l) : fail(l, d));
 const eq = (g, w, l) => ok(g === w, l, `got ${JSON.stringify(g)} want ${JSON.stringify(w)}`);
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const { z } = await import('zod');
   const tool = (await import('../../dist/src/tools/transactions_import.js')).default;
 

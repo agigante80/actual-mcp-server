@@ -143,7 +143,6 @@ function findShapeless(toolName, published) {
 }
 
 (async () => {
-  await import('../../dist/src/lib/node-polyfills.js');
   const { z } = await import('zod');
 
   // ── Self-check: the deep walk must flag every shapeless form and none of the legitimate
