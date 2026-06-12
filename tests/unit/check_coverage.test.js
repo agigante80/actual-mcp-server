@@ -15,11 +15,6 @@ import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-// @actual-app/api needs navigator at import time (Node 20). Polyfill before import.
-if (typeof globalThis.navigator === 'undefined') {
-  globalThis.navigator = { platform: 'Linux', userAgent: `Node.js/${process.version}` };
-}
-
 const here = dirname(fileURLToPath(import.meta.url));
 const { analyzeCoverage, readImplementedTools, API_TO_TOOL, INTERNAL_METHODS } =
   await import('../../scripts/list-actual-api-methods.mjs');

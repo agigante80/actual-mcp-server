@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "ES2022", // Node.js 20+ (Node 22 in Docker) supports ES2022 fully
+    "target": "ES2022", // Node.js 22+ supports ES2022 fully
     "module": "NodeNext", // Use Node.js ESM module resolution
     "outDir": "dist", // Output compiled files here
     "rootDir": ".", // Source files root (includes src/, generated/, types/)
