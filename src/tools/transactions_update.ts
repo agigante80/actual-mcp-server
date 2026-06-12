@@ -20,7 +20,6 @@ const InputSchema = z.object({
   }).describe('Fields to update'),
 });
 
-type Output = { success: boolean };
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_update',

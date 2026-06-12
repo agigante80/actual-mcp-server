@@ -49,7 +49,7 @@ export async function startHttpServer(
   serverInstructions: string,                    // was passed by index.ts
   toolSchemas: Record<string, unknown>,              // was passed by index.ts
   version: string,                               // server version from package.json
-  bindHost = 'localhost',
+  _bindHost = 'localhost',
   advertisedUrl?: string
 ) {
   const app = express();

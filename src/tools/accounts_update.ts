@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import type { components } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 

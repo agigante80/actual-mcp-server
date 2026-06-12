@@ -13,13 +13,6 @@ const InputSchema = z.object({
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
 });
 
-type Output = {
-  transactions: unknown[];
-  count: number;
-  totalAmount: number;
-  payeeName: string;
-};
-
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_payee',
   description: 'Search transactions by payee name. Returns all transactions for a specific payee with optional date range, category, and amount filters. Useful for analyzing spending patterns with specific vendors or service providers.',

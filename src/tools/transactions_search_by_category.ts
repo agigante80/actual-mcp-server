@@ -12,13 +12,6 @@ const InputSchema = z.object({
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
 });
 
-type Output = {
-  transactions: unknown[];
-  count: number;
-  totalAmount: number;
-  categoryName: string;
-};
-
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_category',
   description: 'Search transactions by category name. Returns all transactions in a specific category with optional date range, account, and amount filters. Perfect for analyzing spending in budget categories.',

@@ -12,7 +12,7 @@ const tool: ToolDefinition = {
   name: 'actual_session_close',
   description: 'Close an idle MCP session to free up connection slots. Useful when you get "Max concurrent sessions reached" errors. Only closes sessions other than the current one.',
   inputSchema: InputSchema,
-  call: async (args: unknown, meta?: unknown) => {
+  call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     const stats = connectionPool.getStats();
     

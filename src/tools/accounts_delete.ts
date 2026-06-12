@@ -6,7 +6,6 @@ const InputSchema = z.object({
   id: z.string().describe('Account ID to delete'),
 });
 
-type Output = { success: boolean };
 
 const tool: ToolDefinition = {
   name: 'actual_accounts_delete',

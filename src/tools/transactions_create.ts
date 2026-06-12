@@ -15,7 +15,6 @@ const InputSchema = z.object({
   imported_id: z.string().optional().describe('Original imported transaction ID'),
 });
 
-type Output = { success: true; id: string | null } | { success: false; error: string; id: null };
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_create',

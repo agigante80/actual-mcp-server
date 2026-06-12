@@ -12,13 +12,6 @@ const InputSchema = z.object({
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
 });
 
-type Output = {
-  transactions: unknown[];
-  count: number;
-  totalAmount: number;
-  month: string;
-};
-
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
   description: 'Search transactions for a specific month. Returns all transactions matching the month and optional filters (account, category, payee, amount range). Efficiently queries by date range.',

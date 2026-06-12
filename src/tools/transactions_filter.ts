@@ -15,7 +15,6 @@ const InputSchema = z.object({
   reconciled: z.boolean().nullable().optional().describe('Filter by reconciled status'),
 });
 
-type Output = unknown;
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_filter',

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { paths } from '../../generated/actual-client/types.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
@@ -11,7 +10,6 @@ const InputSchema = z.object({
 }).passthrough(); // Allow other fields to pass through
 
 // RESPONSE_TYPE: string
-type Output = unknown; // refine using generated types (paths['/categories']['post'])
 
 const tool: ToolDefinition = {
   name: 'actual_categories_create',

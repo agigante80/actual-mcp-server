@@ -1,4 +1,4 @@
-export async function testMcpClient(advertisedUrl: string, port: number, httpPath: string) {
+export async function testMcpClient(advertisedUrl: string, _port: number, httpPath: string) {
   // Try builtin fetch or fallback to node-fetch if necessary
   const globalFetch = (globalThis as unknown as { fetch?: unknown }).fetch;
   // Minimal response-like interface used by this test harness
@@ -103,12 +103,10 @@ export async function testMcpClient(advertisedUrl: string, port: number, httpPat
   }
 
   // Accept either a tools array or derive tools from capabilities.tools object
-  let initTools: string[] = [];
-  if (Array.isArray(initResult['tools'])) {
-    initTools = initResult['tools'] as string[];
-  } else if (initResult['capabilities'] && typeof (initResult['capabilities'] as Record<string, unknown>)['tools'] === 'object') {
-    initTools = Object.keys((initResult['capabilities'] as Record<string, unknown>)['tools'] as Record<string, unknown>);
-  } else {
+  const hasTools = Array.isArray(initResult['tools'])
+    || (initResult['capabilities'] != null
+        && typeof (initResult['capabilities'] as Record<string, unknown>)['tools'] === 'object');
+  if (!hasTools) {
     throw new Error('initialize result.tools missing or not array and capabilities.tools not present');
   }
 
@@ -124,7 +122,6 @@ export async function testMcpClient(advertisedUrl: string, port: number, httpPat
     console.warn('Warning: serverInstructions present but in unexpected shape — continuing tests');
   }
 
-  // replace usages below with initTools where needed
   console.info('Initialize OK: capabilities/tools/serverInstructions present');
 
   // call tools/list (JSON-RPC) to verify RPC path works

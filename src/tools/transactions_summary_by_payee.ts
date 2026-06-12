@@ -9,19 +9,6 @@ const InputSchema = z.object({
   limit: z.number().optional().default(50).describe('Optional: Maximum number of payees to return (default: 50, ordered by totalAmount descending)'),
 });
 
-type Output = {
-  summary: Array<{
-    payeeName: string;
-    totalAmount: number;
-    transactionCount: number;
-  }>;
-  totalAmount: number;
-  dateRange: {
-    startDate: string;
-    endDate: string;
-  };
-};
-
 const tool: ToolDefinition = {
   name: 'actual_transactions_summary_by_payee',
   description: 'Get spending summary grouped by payee using ActualQL aggregation. Returns total amount and transaction count per payee for a date range. Useful for identifying top vendors and analyzing merchant spending patterns. Results are ordered by total amount (highest first).',
