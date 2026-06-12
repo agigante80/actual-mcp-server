@@ -75,6 +75,7 @@ npm run test:all                # Convenience: adapter + unit + docker:smoke (no
 npm run verify-tools            # Verify tool count + registration
 npm run tool-count              # CI-gated drift check (#193): rewrites stale total-count literals across docs/tests/constants with --fix; canonical = IMPLEMENTED_TOOLS length. Does NOT touch `**Tool Count:**` markers (version-bump.js owns those)
 npm run check:coverage          # List @actual-app/api methods vs tool coverage
+npm run knip                    # Dead-code detection (#234): unused files/exports/types via the committed knip.json. Report-only (knip --no-exit-code), gated advisory in the Lint Code CI job. Run the /code-health-auditor skill for triage + ticketing.
 npm run test:mcp-client         # Connect as MCP client and exercise tools
 
 # Manual connection tests (requires .env)
@@ -106,11 +107,12 @@ Five **project-specific** subagents live in `.claude/agents/`. Delegate to them 
 | `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
 | `ticket-gate` | Readiness gate for GitHub issues. Runs 4 specialist agents to score a ticket before implementation (all must score 10/10) |
 
-Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `health-check`). Use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain.
+Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `code-health-auditor`, `health-check`). Use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain. (`dep-auditor` owns dependency health; `code-health-auditor` (#234) owns source dead code and doc-to-code drift.)
 
 Project-local slash commands in `.claude/commands/`:
 
-- `/dep-auditor [--full]`: dependency health audit. Runs Knip, npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything).
+- `/dep-auditor [--full]`: DEPENDENCY health audit. Runs Knip (unused deps), npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything).
+- `/code-health-auditor [--full] [--dry-run]`: SOURCE code-health audit (#234). Runs the committed Knip config (dead files/exports/types) plus the doc-to-code drift guards, triages against the documented allowlist, and opens gate-ready tickets for genuine findings (cache-first via `docs/audit/deadcode-audit-cache.json`). Run MANUALLY; no scheduling. Complements `/dep-auditor` (it owns deps, this owns source).
 - `/local-env`: full local deployment pipeline for the dev environment.
 - `/gate-ticket <issue-number>`: runs the ticket readiness gate on a GitHub issue (all 4 specialist agents must score 10/10 before implementation).
 - `/ci-health`: checks all GitHub Actions workflows for failures, opens P0 tickets, and auto-fixes safe failures.
@@ -301,6 +303,7 @@ When changing code, update these docs:
 | New feature shipped | `README.md` if user-facing, delete its `docs/feature/*.md` spec |
 | New tool added | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` (add positive + negative scenario, update phase count); `tests/manual-prompt/README.md` Phase Overview total; run `npm run docs:sync` (updates `docker/description/long.md`, `docker/description/short.md`, and all `**Tool Count:**` markers) |
 | Test module added | `docs/TESTING_AND_RELIABILITY.md` (test-file table) |
+| New tool/prompt/resource/script | run `npm run knip` (a new unused export/file is reported) and `node tests/unit/advertised_tools_sync.test.js` (a tool advertised in README must be in `IMPLEMENTED_TOOLS`); for a brand-new entry-point category, add it to `knip.json` `entry` |
 
 ## Documentation Map
 
@@ -311,6 +314,7 @@ When changing code, update these docs:
 - `docs/guides/AI_CLIENT_SETUP.md`: LibreChat/LobeChat setup, Docker networking, TLS, OIDC/ACL
 - `docs/guides/MCP_CLIENTS_SETUP.md`: per-client setup recipes (Claude Desktop, Cursor, etc.); complements AI_CLIENT_SETUP.md
 - `docs/audit/dep-audit-cache.json`: cache used by `/dep-auditor` to skip recently-checked libraries; do not edit manually
+- `docs/audit/deadcode-audit-cache.json`: cache used by `/code-health-auditor` (#234) to avoid re-filing dead-code findings (keyed `kind:path:symbol`); the skill maintains it. The committed `knip.json` is the dead-code config (report-only in CI); `tests/unit/knip_config.test.js` guards its entry points and `tests/unit/advertised_tools_sync.test.js` guards that README-advertised tool names exist in `IMPLEMENTED_TOOLS`.
 - `docs/guides/DEPLOYMENT.md`: Docker Compose profiles, Kubernetes, upgrade steps
 - `docs/SECURITY_AND_PRIVACY.md`: auth models, threat model
 - `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools

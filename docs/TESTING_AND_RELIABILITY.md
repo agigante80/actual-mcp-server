@@ -313,6 +313,28 @@ npm audit
 - **CI/CD**: Fails on high/critical vulnerabilities
 - **Regular**: Run `npm audit fix` monthly
 
+### Code Health & Dead-Code Detection (#234)
+
+Dead/unused code (unused files, exports, types, orphaned modules) is detected by **Knip**
+via the committed `knip.json`:
+
+```bash
+npm run knip            # report-only (knip --no-exit-code)
+```
+
+- **CI/CD**: a report-only `Check for dead code` step in the `Lint Code` job (advisory; it
+  always exits 0 in this phase, graduating to failing mode is a separate follow-up).
+- **Guard tests** (in `test:unit-js`, fail CI on drift): `tests/unit/knip_config.test.js`
+  (every `knip.json` entry root exists on disk) and `tests/unit/advertised_tools_sync.test.js`
+  (every `actual_<domain>_<action>` tool name advertised in `README.md` resolves to
+  `IMPLEMENTED_TOOLS`, catching documented-but-missing/renamed tools). These join the existing
+  doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,
+  `dockerfile_data_dir_alignment`, `compose_profile_sync`.
+- **Periodic deep sweep**: the manual `/code-health-auditor` skill runs Knip plus the drift
+  guards, triages against the allowlist, and opens gate-ready tickets for genuine findings
+  (cache-first via `docs/audit/deadcode-audit-cache.json`). Run on demand; not scheduled.
+  It owns SOURCE dead code; `/dep-auditor` owns DEPENDENCY health.
+
 ### Manual Security Checks
 
 ```bash

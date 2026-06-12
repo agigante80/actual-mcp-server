@@ -150,6 +150,13 @@ jobs:
       - name: 📊 Check tool coverage
         run: npm run check:coverage
 
+      # #234: dead-code detection (Knip). Report-only for now: `knip --no-exit-code`
+      # always exits 0, so this step is advisory and never fails the job (no
+      # continue-on-error needed). Graduating to failing mode (removing --no-exit-code)
+      # is a separate follow-up PR after the baseline dead code is cleaned.
+      - name: 🪦 Check for dead code (Knip, report-only)
+        run: npm run knip
+
       - name: 🩺 Lint GitHub Actions workflows (actionlint)
         run: |
           # Official installer, pinned to a specific actionlint version (avoids a

@@ -71,8 +71,12 @@ After the audit completes, update the cache with new check dates and statuses.
 ### Check 1: Unused dependencies
 
 ```bash
-npx knip --no-exit-code
+npm run knip   # committed knip.json (#234), report-only
 ```
+
+Scope (#234): file only DEPENDENCY findings here. The unused files, exports, and types that
+Knip also reports are SOURCE dead code, owned by the `/code-health-auditor` skill; do not
+file them here.
 
 Categorise by prod vs dev severity. Note: `@actual-app/api` and `@modelcontextprotocol/sdk`
 may appear unused by static analysis — they are consumed via dynamic ESM imports and

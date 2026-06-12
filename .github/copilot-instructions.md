@@ -107,7 +107,7 @@ npm run start                   # Production mode (requires build first)
 
 # Testing
 npm run test:adapter            # Adapter smoke tests (concurrency, retry logic)
-npm run test:unit-js            # All unit tests (4 files)
+npm run test:unit-js            # Full unit + guard test suite (~60 files, incl. drift guards: tool_count, config_drift, port_alignment, compose_profile_sync, advertised_tools_sync, knip_config)
 node tests/unit/transactions_create.test.js          # Run a single unit test file
 node tests/unit/schema_validation.test.js            # Schema validation tests only
 npm run test:e2e                # Playwright E2E tests (initialize → tools/call → streaming)
@@ -116,6 +116,7 @@ npx playwright test --grep "initialize -> tools/list" # Single E2E test by name
 # Tool Management
 npm run verify-tools            # Verify all 71 tools are correctly registered
 npm run check:coverage          # List @actual-app/api methods vs current tool coverage
+npm run knip                    # Dead-code detection (#234): unused files/exports via committed knip.json (report-only)
 
 # Debugging
 npm run test:mcp-client         # Connect as MCP client and exercise tools (requires build)

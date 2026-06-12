@@ -37,10 +37,16 @@ If the file does not exist, treat all libraries as uncached. If `--full` was pas
 
 ## Step 2 — Check 1: Unused dependencies (Knip)
 
-Run:
+Knip is now committed and configured (#234): use the project config, not bare `npx knip`.
+
 ```bash
-npx knip --no-exit-code 2>&1
+npm run knip 2>&1   # uses the committed knip.json (report-only)
 ```
+
+Scope split (#234): this auditor owns DEPENDENCY findings only (unused or duplicate
+`package.json` entries). The unused FILES, EXPORTS, and TYPES that Knip also reports are
+SOURCE dead code, owned by the `/code-health-auditor` skill. Do NOT file source dead-code
+tickets here; leave them to `/code-health-auditor`.
 
 **Known false positives — exclude from tickets:**
 - `tsconfig-paths` — used by `scripts/register-tsconfig-paths.js` at runtime
@@ -48,7 +54,7 @@ npx knip --no-exit-code 2>&1
 - `@types/*` packages — compile-time only, not detectable by Knip
 - `@playwright/test` — test-only, conditionally executed
 
-For any remaining unused dependencies or exports flagged by Knip, prepare one ticket:
+For any remaining unused DEPENDENCY flagged by Knip (not exports/files: those go to `/code-health-auditor`), prepare one ticket:
 
 > **Title:** `fix: remove unused dependencies (Knip)`
 > **Labels:** `infrastructure`
