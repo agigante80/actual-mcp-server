@@ -651,9 +651,12 @@ export async function startHttpServer(
 
   const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, bindHost, () => {
     const advertised = advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`;
+    // #239: when bound to a specific (non all-interfaces) host the server is NOT on
+    // loopback, so point the health hint at the actual bind host instead of localhost.
+    const healthHost = (!bindHost || bindHost === '0.0.0.0' || bindHost === '::') ? 'localhost' : bindHost;
     console.info(`MCP Streamable HTTP Server listening on ${port}`);
     console.info(`📨 MCP endpoint: ${advertised}`);
-    console.info(`❤️ Health check: ${scheme}://localhost:${port}/health`);
+    console.info(`❤️ Health check: ${scheme}://${healthHost}:${port}/health`);
     if (config.AUTH_PROVIDER === 'oidc') {
       logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required — issuer: ${config.OIDC_ISSUER})`);
     } else if (config.MCP_SSE_AUTHORIZATION) {
