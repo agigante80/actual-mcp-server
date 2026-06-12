@@ -329,9 +329,7 @@ actual-mcp-server/
 │   │
 │   ├── server/                   # Transport implementations
 │   │   ├── httpServer.ts         # HTTP transport (Express, StreamableHTTP, auth)
-│   │   ├── httpServer_testing.ts # HTTP server for test environments
-│   │   ├── stdioServer.ts        # stdio transport (Claude Desktop/Code)
-│   │   └── streamable-http.ts    # Streamable HTTP protocol implementation
+│   │   └── stdioServer.ts        # stdio transport (Claude Desktop/Code)
 │   │
 │   ├── auth/                     # Authentication
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
