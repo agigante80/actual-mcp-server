@@ -105,9 +105,16 @@ function attemptMismatches(readme, expected) {
 
 // A rotting coverage percentage like "Covers 87% of the Actual Budget API". The claim must be
 // qualitative (no number that can drift). Returns the offending literal, or null if clean.
+// Tolerates a period/newline between the number and the phrase (so "Covers 87%. Actual Budget
+// API ..." cannot slip through), and also catches a bare "Covers NN%" lead-in. The README
+// carries no legitimate "NN%" literal, so these are safe to forbid wholesale.
 function coveragePercentLiteral(readme) {
-  const m = readme.match(/\d+%[^.\n]*Actual Budget API/i);
-  return m ? m[0] : null;
+  const patterns = [
+    /\d+%[\s\S]{0,40}Actual Budget API/i, // "87% of the Actual Budget API", period/newline tolerant
+    /Covers\s+\d+%/i,                     // "Covers 87%" lead-in regardless of what follows
+  ];
+  for (const re of patterns) { const m = readme.match(re); if (m) return m[0]; }
+  return null;
 }
 
 console.log('\n[readme-stats-sync]');
@@ -157,6 +164,11 @@ check('NEGATIVE: a drifted concurrent-sessions number is detected', () => {
 check('NEGATIVE: a reintroduced coverage percentage is detected', () => {
   const lit = coveragePercentLiteral('and more. Covers 87% of the Actual Budget API.');
   assert.strictEqual(lit, '87% of the Actual Budget API');
+});
+
+check('NEGATIVE: a percentage split from the phrase by a period does not slip through', () => {
+  assert.ok(coveragePercentLiteral('Covers 87%. The Actual Budget API is fully mapped.'),
+    'a percentage near the coverage claim must be caught even across a period');
 });
 
 console.log(`\n[readme-stats-sync] Results: ${passed} passed, ${failed} failed`);
