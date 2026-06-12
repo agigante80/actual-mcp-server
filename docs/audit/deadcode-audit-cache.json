@@ -22,6 +22,118 @@
       "status": "allowlisted",
       "ticket": null,
       "notes": "Alive via the text-parsing port_alignment guard, not a runtime import. Tagged @public in source."
+    },
+    "unused-file:src/server/streamable-http.ts:": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "orphaned server shim cluster (.ts/.js/.d.ts) + httpServer_testing.ts"
+    },
+    "unused-file:src/server/httpServer_testing.ts:": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "orphaned; only importer is the streamable-http cluster"
+    },
+    "unused-export:src/lib/constants.ts:DEFAULT_OPERATION_TIMEOUT_MS": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:SHUTDOWN_GRACE_PERIOD_MS": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:DEFAULT_BIND_HOST": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:DEFAULT_HTTP_PATH": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:SERVER_INFO": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:PRODUCTION_LOG_LEVEL": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:DEVELOPMENT_LOG_LEVEL": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:MAX_LOG_FILES": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/lib/constants.ts:MAX_LOG_FILE_SIZE": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead constant"
+    },
+    "unused-export:src/auth/setup.ts:_resetMcpAuthForTests": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "unused test helper"
+    },
+    "unused-export:src/lib/actual-schema.ts:getFieldType": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead helper"
+    },
+    "unused-export:src/lib/toolFactory.ts:createTools": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead helper"
+    },
+    "unused-export:src/utils.ts:logTransport": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "dead helper"
+    },
+    "duplicate-export:src/lib/retry.ts:retry": {
+      "firstSeen": "2026-06-12",
+      "lastSeen": "2026-06-12",
+      "status": "filed",
+      "ticket": "#237",
+      "notes": "retry exported named and default"
     }
   }
 }
