@@ -1,4 +1,8 @@
-# Actual MCP Server
+<p align="center">
+  <img src="unraid/actual-mcp-icon.png" alt="Actual MCP Server icon" width="128" height="128">
+</p>
+
+<h1 align="center">Actual MCP Server</h1>
 
 [![npm version](https://img.shields.io/npm/v/actual-mcp-server)](https://www.npmjs.com/package/actual-mcp-server)
 [![npm downloads](https://img.shields.io/npm/dm/actual-mcp-server)](https://www.npmjs.com/package/actual-mcp-server)
