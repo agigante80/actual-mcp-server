@@ -15,8 +15,8 @@ The ticket-gate agent handles all steps:
 2. Label validation — requires at least one area label (`api`, `backend`, `infrastructure`, `security`, `testing`, `docs`)
 3. Fetches the issue from agigante80/actual-mcp-server
 4. Reads project context (CLAUDE.md, actual-adapter.ts, toolFactory.ts, schemas/common.ts)
-5. Selects dynamic agents based on labels and content (security-auditor, architect-review)
-6. Runs 4 core agents + dynamic agents sequentially
+5. Runs the 6 core agents (tool-author, qa, release-manager, actual-api, security-auditor, architect-review); any whose domain the ticket does not touch auto-score 10 (N/A)
+6. Adds any content-triggered specialists, and runs all agents sequentially
 7. Compiles and posts the scorecard as a GitHub comment
 8. Returns PASS or BLOCKED with specific required changes
 

@@ -105,7 +105,7 @@ Five **project-specific** subagents live in `.claude/agents/`. Delegate to them 
 | `qa` | Writing, reviewing, or debugging tests at any layer (unit, integration, E2E, manual) |
 | `release-manager` | Version bumps, docs sync, GitHub issue triage, closing fixed tickets |
 | `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
-| `ticket-gate` | Readiness gate for GitHub issues. Runs 4 specialist agents to score a ticket before implementation (all must score 10/10) |
+| `ticket-gate` | Readiness gate for GitHub issues (forge-kit ticket-gate v1). Runs 6 core specialist agents (tool-author, qa, release-manager, actual-api, security-auditor, architect-review) to score a ticket before implementation (all must score 10/10; an agent whose domain the ticket does not touch auto-scores 10 N/A) |
 
 Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `code-health-auditor`, `health-check`). Use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain. (`dep-auditor` owns dependency health; `code-health-auditor` (#234) owns source dead code and doc-to-code drift.)
 
@@ -114,7 +114,7 @@ Project-local slash commands in `.claude/commands/`:
 - `/dep-auditor [--full]`: DEPENDENCY health audit. Runs Knip (unused deps), npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything).
 - `/code-health-auditor [--full] [--dry-run]`: SOURCE code-health audit (#234). Runs the committed Knip config (dead files/exports/types) plus the doc-to-code drift guards, triages against the documented allowlist, and opens gate-ready tickets for genuine findings (cache-first via `docs/audit/deadcode-audit-cache.json`). Run MANUALLY; no scheduling. Complements `/dep-auditor` (it owns deps, this owns source).
 - `/local-env`: full local deployment pipeline for the dev environment.
-- `/gate-ticket <issue-number>`: runs the ticket readiness gate on a GitHub issue (all 4 specialist agents must score 10/10 before implementation).
+- `/gate-ticket <issue-number>`: runs the ticket readiness gate on a GitHub issue (all 6 core specialist agents must score 10/10 before implementation; a non-touched domain auto-scores 10 N/A).
 - `/ci-health`: checks all GitHub Actions workflows for failures, opens P0 tickets, and auto-fixes safe failures.
 - `/full-review [target]`: orchestrates a multi-dimensional code review (architecture, security, performance, testing, best practices).
 - `/pr-enhance [PR# or description]`: enhances an existing pull request (description, labels, follow-ups).
