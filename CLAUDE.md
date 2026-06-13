@@ -315,6 +315,7 @@ When changing code, update these docs:
 - `docs/guides/MCP_CLIENTS_SETUP.md`: per-client setup recipes (Claude Desktop, Cursor, etc.); complements AI_CLIENT_SETUP.md
 - `docs/audit/dep-audit-cache.json`: cache used by `/dep-auditor` to skip recently-checked libraries; do not edit manually
 - `docs/audit/deadcode-audit-cache.json`: cache used by `/code-health-auditor` (#234) to avoid re-filing dead-code findings (keyed `kind:path:symbol`); the skill maintains it. The committed `knip.json` is the dead-code config (blocking in CI since #237: `knip` exits nonzero on dead code); `tests/unit/knip_config.test.js` guards its entry points and that `scripts.knip` stays failing-mode (no `--no-exit-code`), and `tests/unit/advertised_tools_sync.test.js` guards that README-advertised tool names exist in `IMPLEMENTED_TOOLS`.
+- `docs/audit/FORK_ANALYSIS.md`: fork-feature analysis maintained by the `fork-analysis` skill (one row per analysed fork branch, both a cache so unchanged branches are skipped next run and a source of implementation ideas). Lives alongside the other skill-maintained audit artifacts; `scripts/tool-count.mjs` scans it for tool-count drift.
 - `docs/guides/DEPLOYMENT.md`: Docker Compose profiles, Kubernetes, upgrade steps
 - `docs/SECURITY_AND_PRIVACY.md`: auth models, threat model
 - `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools

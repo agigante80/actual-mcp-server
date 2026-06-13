@@ -1,12 +1,12 @@
 ---
 name: fork-analysis
-description: Analyse every GitHub fork of this repo, and every meaningful BRANCH within each fork, to find features and functionality the forks added that upstream does not have, as a source of ideas to implement. For each newly-identified idea it opens a gate-ready GitHub tracking ticket (crediting the origin fork and original author, linking the exact code to review, flagging that the imported external code MUST get a security review, and requiring positive plus negative scenarios and test cases before implementation). Maintains docs/FORK_ANALYSIS.md as a cache so unchanged fork branches are skipped on the next run. Use whenever the user asks to "analyse the forks", "what do the forks add", "scan forks for features", "fork feature scan", "any new ideas from forks", or wants to harvest fork ideas, even if they do not say the word "fork-analysis".
+description: Analyse every GitHub fork of this repo, and every meaningful BRANCH within each fork, to find features and functionality the forks added that upstream does not have, as a source of ideas to implement. For each newly-identified idea it opens a gate-ready GitHub tracking ticket (crediting the origin fork and original author, linking the exact code to review, flagging that the imported external code MUST get a security review, and requiring positive plus negative scenarios and test cases before implementation). Maintains docs/audit/FORK_ANALYSIS.md as a cache so unchanged fork branches are skipped on the next run. Use whenever the user asks to "analyse the forks", "what do the forks add", "scan forks for features", "fork feature scan", "any new ideas from forks", or wants to harvest fork ideas, even if they do not say the word "fork-analysis".
 ---
 
 # Fork analysis
 
 Survey the repo's forks AND each fork's branches, identify functionality a fork
-branch has that upstream lacks, and record it in `docs/FORK_ANALYSIS.md` so the
+branch has that upstream lacks, and record it in `docs/audit/FORK_ANALYSIS.md` so the
 work is not repeated next time unless that branch has actually changed. The goal
 is a curated, low-noise list of ideas worth turning into tickets, not a raw diff
 dump.
@@ -36,7 +36,7 @@ absolute (UTC) in the doc.
 ## Inputs and state
 
 - `REPO`: `agigante80/actual-mcp-server` (the upstream).
-- The cache: `docs/FORK_ANALYSIS.md`. Each row is a `(fork, branch)` pair and
+- The cache: `docs/audit/FORK_ANALYSIS.md`. Each row is a `(fork, branch)` pair and
   records that branch's `head` sha and `pushed`/analysed date at the time it was
   last looked at, plus the verdict. A `(fork, branch)` whose head sha is unchanged
   since the last analysis is skipped (its prior verdict carries forward). Branches
@@ -46,7 +46,7 @@ absolute (UTC) in the doc.
 
 ### 1. Read the cache
 
-Read `docs/FORK_ANALYSIS.md` if it exists. Build a map of
+Read `docs/audit/FORK_ANALYSIS.md` if it exists. Build a map of
 `(fork, branch) -> { head, last_analysed_date, verdict }`. If the file does not
 exist, this is the first run: create it from the template below.
 
@@ -177,7 +177,7 @@ After creating each ticket, capture its number to write into the doc (step 6).
 Report the new ticket numbers; do NOT implement them (this skill only harvests
 and tickets ideas).
 
-### 6. Update docs/FORK_ANALYSIS.md
+### 6. Update docs/audit/FORK_ANALYSIS.md
 
 Rewrite the doc from the template. For every analysed or skipped `(fork, branch)`
 that has divergence, record a row: fork + link, branch, ahead/behind, head sha,
@@ -201,7 +201,7 @@ no-divergence, and the new or changed feature ideas worth considering (point at
 the backlog section). Offer to open tickets for the most valuable ideas, but do
 not open them automatically.
 
-## docs/FORK_ANALYSIS.md template
+## docs/audit/FORK_ANALYSIS.md template
 
 ```
 # Fork analysis
