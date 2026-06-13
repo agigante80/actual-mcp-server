@@ -20,7 +20,7 @@ Replacement patterns:
 - Range: use the word "to" or "through". "v0.6.4 to v0.6.6", "Monday through Friday".
 - Strong pause or contrast: split into two sentences.
 
-Mechanical enforcement: a PreToolUse hook at `.claude/hooks/no_dashes_hook.py` (registered in `.claude/settings.local.json`) blocks any `Edit`, `MultiEdit`, `Write`, or `Bash` tool call whose payload contains an em or en dash, and tells the model how to restructure. The hook script's output is shown back to the model verbatim. Self-check before submitting tool calls regardless of whether the hook is currently armed.
+Mechanical enforcement: a PreToolUse hook at `.claude/hooks/block-dashes.py` (forge-kit canonical `block-dashes-version: 1`, registered in `.claude/settings.local.json`) blocks any `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, or `Bash` tool call whose payload contains an em or en dash, and tells the model how to restructure. The hook script's output is shown back to the model verbatim. Self-check before submitting tool calls regardless of whether the hook is currently armed.
 
 Common slip patterns to watch for (described abstractly to avoid the literal characters):
 - Tables that use a wide horizontal-bar punctuation as a separator inside cells (replace with a colon, or restructure into a sub-table).
