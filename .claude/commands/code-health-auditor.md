@@ -1,3 +1,5 @@
+<!-- code-health-auditor-version: 1 -->
+
 Run a source code-health audit for actual-mcp-server and create GitHub issues for genuine findings.
 
 ## Usage
@@ -17,8 +19,26 @@ findings here.)
 ## Provenance / canonical source
 
 This skill is the canonical copy. The sibling project `agigante80/Actual-sync#130` adopts the
-same `code-health-auditor` shape; if it diverges, reconcile against this copy. Keep
-project-specific values (paths, labels) minimal so the two stay alignable.
+same `code-health-auditor` shape; if it diverges, reconcile against this copy. The
+`<!-- code-health-auditor-version: 1 -->` marker at the top is the drift signal: bump it when
+the shared logic changes, and a sibling whose marker is behind is due for a re-sync.
+
+**Project-specific values (swap these per repo; the surrounding logic stays identical):**
+- Repo name in the opening line and the report (`actual-mcp-server` to the sibling's name).
+- The Step 2 allowlist: the `@public` / `DEFAULT_HTTP_PORT` example, `src/prompts/**`,
+  `src/resources/**`, `generated/**`, and the `SERVER_INFO` key example are this repo's
+  intentional-or-generated paths. The sibling lists its own.
+- The Step 3 guard names (`tool_count_sync`, `config_drift`, `port_alignment`,
+  `dockerfile_data_dir_alignment`, `compose_profile_sync`, `advertised_tools_sync`) are this
+  repo's committed drift guards. The sibling substitutes its own guard set.
+- The cross-reference issue (`#234` here; the sibling cross-references `Actual-sync#130`) and
+  any `#NNN` callout such as the `#237` Knip-is-failing-mode note.
+- The triage label filter (`gh issue list --label infrastructure`), the area/priority labels,
+  and the `<!-- template-version: 3 -->` issue-template marker follow each repo's conventions.
+
+Everything else (the cache path `docs/audit/deadcode-audit-cache.json`, the `kind:path:symbol`
+key scheme, the `--full` / `--dry-run` semantics, the Knip-then-drift-guards flow, the
+delete-over-archive cache rule, and the deps-go-to-dep-auditor boundary) is shared verbatim.
 
 ## Overview
 
