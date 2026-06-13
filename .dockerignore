@@ -24,7 +24,6 @@ certs/
 
 # CI/CD and repo tooling (not needed at build time)
 .github/
-renovate.json
 
 # Compose and test config (not part of the app image)
 docker-compose*.yaml
