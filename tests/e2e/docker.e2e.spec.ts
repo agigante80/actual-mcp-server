@@ -407,3 +407,26 @@ test.describe('Docker E2E - Error Handling', () => {
     console.log('✅ Validation error:', callJson.error.message);
   });
 });
+
+// #227: the image now starts as ROOT and the entrypoint applies PUID/PGID, fixes
+// volume ownership, then drops to the non-root `app` user via su-exec before
+// exec-ing the app. The runtime UID is not observable over HTTP (the Playwright
+// runner has no Docker access), so the host-side behavioural UID checks live in
+// tests/manual/tests/entrypoint.js (run by /local-env full). What IS observable
+// here is the contract: under the privilege-drop entrypoint the built container
+// boots, drops privileges, and serves a healthy server that can write its data
+// dir, so a regression in the entrypoint (e.g. a failed chown aborting fail-closed,
+// or the app never starting) surfaces as an unhealthy container.
+test.describe('Docker E2E - Entrypoint privilege drop', () => {
+  test('container boots healthy under the PUID/PGID privilege-drop entrypoint', async ({ request }) => {
+    const isHealthy = await waitForMCPHealth(request, `${DEFAULT_MCP_SERVER_URL}/health`);
+    expect(isHealthy).toBeTruthy();
+    const healthRes = await request.get(`${DEFAULT_MCP_SERVER_URL}/health`);
+    expect(healthRes.ok()).toBeTruthy();
+    const health = await healthRes.json();
+    // 'ok' means the entrypoint dropped to the non-root user, the app started,
+    // and it connected to Actual Budget by writing its data dir without EACCES.
+    expect(health.status).toBe('ok');
+    console.log('✅ Healthy under the privilege-drop entrypoint:', health);
+  });
+});

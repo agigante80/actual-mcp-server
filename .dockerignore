@@ -29,8 +29,9 @@ certs/
 docker-compose*.yaml
 playwright.config*.ts
 
-# Docker hub description scripts
+# Docker hub description scripts (but keep the entrypoint, which the image COPYs in)
 docker/
+!docker/entrypoint.sh
 
 # Test fixtures
 test-data/

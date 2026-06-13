@@ -1,0 +1,7 @@
+<?xml version="1.0"?>
+<!-- #227: deliberately malformed Unraid template. Used ONLY by the negative step
+     of .github/workflows/unraid-xmllint.yml to prove the xmllint gate fails on
+     bad XML. It must NOT be valid: the <Container> tag is never closed. -->
+<Container version="2">
+  <Name>invalid-fixture</Name>
+  <Repository>example/never-published

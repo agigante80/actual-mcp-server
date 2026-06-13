@@ -114,6 +114,23 @@ docker run -d \
 curl http://localhost:3600/health
 ```
 
+### Unraid and PUID/PGID (#227)
+
+The image starts as root, then an entrypoint aligns the runtime user to `PUID`/`PGID`,
+fixes ownership of the writable volumes (`/app/data`, `/app/logs`), and drops privileges
+to the non-root `app` user before starting the server. This lets the container write a
+host appdata directory owned by a different UID without `EACCES`.
+
+- On Unraid, set `PUID=99` and `PGID=100` (nobody:users) so it can write the appdata mounts.
+- Off Unraid, omit `PUID`/`PGID`: they default to 1001 and the behavior is unchanged. If an
+  orchestrator forces a non-root user (`--user`), the entrypoint is a no-op and `PUID`/`PGID`
+  are ignored.
+
+actual-mcp-server is published to the Unraid Community Applications catalog via
+`unraid/actual-mcp-server.xml`; see [docs/UNRAID_CA_PUBLISHING.md](../UNRAID_CA_PUBLISHING.md).
+Set a strong `MCP_SSE_AUTHORIZATION` token before exposing the port: a blank token disables
+all HTTP authentication.
+
 ---
 
 ## Method 3: Docker Compose

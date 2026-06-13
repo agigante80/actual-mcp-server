@@ -1,0 +1,40 @@
+name: Validate Unraid templates
+
+# Mirrors the official Community Applications gate (selfhosters/unRAID-CA-templates),
+# which validates submissions with xmllint well-formedness only (#227).
+
+on:
+  push:
+    paths:
+      - 'unraid/**.xml'
+      - 'ca_profile.xml'
+      - 'tests/fixtures/invalid-unraid.xml'
+      - '.github/workflows/unraid-xmllint.yml'
+  pull_request:
+    paths:
+      - 'unraid/**.xml'
+      - 'ca_profile.xml'
+      - 'tests/fixtures/invalid-unraid.xml'
+      - '.github/workflows/unraid-xmllint.yml'
+  workflow_dispatch:
+
+jobs:
+  xmllint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install xmllint
+        run: sudo apt-get update && sudo apt-get install -y libxml2-utils
+
+      - name: Validate Unraid template + CA profile XML well-formedness
+        run: xmllint --noout unraid/*.xml ca_profile.xml
+
+      - name: Negative check (the malformed fixture MUST fail xmllint)
+        run: |
+          if xmllint --noout tests/fixtures/invalid-unraid.xml 2>/dev/null; then
+            echo "ERROR: tests/fixtures/invalid-unraid.xml parsed as valid; the negative xmllint path is not being exercised." >&2
+            exit 1
+          fi
+          echo "OK: the malformed fixture correctly fails xmllint."

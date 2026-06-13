@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<CommunityApplications>
+  <Icon>https://raw.githubusercontent.com/agigante80/actual-mcp-server/main/unraid/actual-mcp-icon-512.png</Icon>
+  <Profile>MCP server that connects AI assistants (LibreChat, LobeChat, Claude Desktop, Cursor) to a self-hosted Actual Budget instance, exposing 71 tools for conversational financial management over HTTP. Set a strong MCP auth token before exposing the port. Support via the GitHub issues link below.</Profile>
+  <WebPage>https://github.com/agigante80/actual-mcp-server</WebPage>
+  <Forum>https://github.com/agigante80/actual-mcp-server/issues</Forum>
+</CommunityApplications>

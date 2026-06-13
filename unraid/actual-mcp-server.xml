@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>actual-mcp-server</Name>
+  <Repository>ghcr.io/agigante80/actual-mcp-server:latest</Repository>
+  <Registry>https://github.com/agigante80/actual-mcp-server/pkgs/container/actual-mcp-server</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/agigante80/actual-mcp-server/issues</Support>
+  <Project>https://github.com/agigante80/actual-mcp-server</Project>
+  <Overview>Model Context Protocol (MCP) server that connects AI assistants (LibreChat, LobeChat, Claude Desktop, Cursor) to your self-hosted Actual Budget instance, exposing 71 tools for conversational financial management over HTTP.&#xD;
+&#xD;
+Fill in the "Actual server URL", "Actual server password", and "Actual server Sync ID" below, and SET A STRONG "MCP auth token": a blank token disables all HTTP authentication and exposes your financial data unauthenticated on the LAN. See the project README.</Overview>
+  <Category>Productivity: Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:3600]/health</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/agigante80/actual-mcp-server/main/unraid/actual-mcp-server.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/agigante80/actual-mcp-server/main/unraid/actual-mcp-icon-512.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Description>MCP server with 71 tools for AI-driven financial management with Actual Budget, over the HTTP transport (for LibreChat, LobeChat, and other remote MCP clients).&#xD;&#xD;SETUP: fill in "Actual server URL", "Actual server password" and "Actual server Sync ID" (the Sync ID is in Actual Budget: open the budget, Settings, Show advanced settings, Sync ID).&#xD;&#xD;SECURITY, READ THIS: you MUST set a strong "MCP auth token" (MCP_SSE_AUTHORIZATION). A BLANK token disables ALL HTTP authentication, so anyone who can reach the port can read and modify your financial data unauthenticated on the LAN. Generate one with `openssl rand -hex 32`. The /health and /metrics endpoints are unauthenticated by design. The token travels in PLAINTEXT over HTTP on the default 0.0.0.0 bind, so for any non-loopback exposure put a reverse proxy (or native TLS via MCP_ENABLE_HTTPS with cert/key) in front. Keep the bind host at 0.0.0.0 (do NOT set it to your server's LAN IP) or the endpoint is unreachable in bridge mode.&#xD;&#xD;OWNERSHIP: on Unraid keep PUID=99 and PGID=100 so the container can write the appdata Data and Logs directories.</Description>
+  <Config Name="WebUI / Health Port" Target="3600" Default="3600" Mode="tcp" Description="MCP HTTP endpoint and the unauthenticated health/metrics endpoints (/http, /health, /metrics)." Type="Port" Display="always" Required="true" Mask="false">3600</Config>
+  <Config Name="Data" Target="/app/data" Default="/mnt/user/appdata/actual-mcp-server/data" Mode="rw" Description="Persistent data: the local copy of your Actual Budget data (SQLite) the server downloads to run queries against." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/actual-mcp-server/data</Config>
+  <Config Name="Logs" Target="/app/logs" Default="/mnt/user/appdata/actual-mcp-server/logs" Mode="rw" Description="Rotated application log files." Type="Path" Display="always" Required="false" Mask="false">/mnt/user/appdata/actual-mcp-server/logs</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User ID the service runs as. On Unraid use 99 (nobody) so it can write the appdata directories." Type="Variable" Display="always" Required="false" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group ID the service runs as. On Unraid use 100 (users)." Type="Variable" Display="always" Required="false" Mask="false">100</Config>
+  <Config Name="Timezone" Target="TZ" Default="Europe/Madrid" Mode="" Description="Container timezone used for log timestamps, e.g. America/New_York." Type="Variable" Display="always" Required="false" Mask="false">Europe/Madrid</Config>
+  <Config Name="MCP auth token" Target="MCP_SSE_AUTHORIZATION" Default="" Mode="" Description="REQUIRED. The raw Bearer token clients must send. Generate with `openssl rand -hex 32`. A BLANK value disables all HTTP authentication and exposes your data unauthenticated on the LAN." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Actual server URL" Target="ACTUAL_SERVER_URL" Default="" Mode="" Description="Your Actual Budget server URL, e.g. https://actual.example.com or http://192.168.1.50:5006." Type="Variable" Display="always" Required="true" Mask="false"/>
+  <Config Name="Actual server password" Target="ACTUAL_PASSWORD" Default="" Mode="" Description="Your Actual Budget server password." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Actual server Sync ID" Target="ACTUAL_BUDGET_SYNC_ID" Default="" Mode="" Description="The budget Sync ID (Actual Budget: open the budget, Settings, Show advanced settings, Sync ID)." Type="Variable" Display="always" Required="true" Mask="true"/>
+  <Config Name="Node Environment" Target="NODE_ENV" Default="production" Mode="" Description="Node.js runtime environment. Leave as production unless debugging." Type="Variable" Display="advanced" Required="false" Mask="false">production</Config>
+</Container>
