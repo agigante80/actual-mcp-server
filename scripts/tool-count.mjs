@@ -32,7 +32,7 @@ export function getCanonicalCount() {
 // In-scope files. NOT package.json and NOT the `**Tool Count:**` markers (version-bump.js owns those).
 const FILES = [
   'README.md', 'CLAUDE.md', '.github/copilot-instructions.md',
-  'docs/ARCHITECTURE.md', 'docs/guides/AI_CLIENT_SETUP.md', 'docs/TESTING_AND_RELIABILITY.md', 'docs/FORK_ANALYSIS.md',
+  'docs/ARCHITECTURE.md', 'docs/guides/AI_CLIENT_SETUP.md', 'docs/TESTING_AND_RELIABILITY.md', 'docs/audit/FORK_ANALYSIS.md',
   '.github/CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
   'tests/manual/tests/sanity.js', 'tests/manual/runner.js', 'tests/e2e/README.md', 'tests/manual/README.md',
   'tests/e2e/docker-all-tools.e2e.spec.ts',
