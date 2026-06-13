@@ -117,6 +117,21 @@ function coveragePercentLiteral(readme) {
   return null;
 }
 
+// #241: the README prose must not hardcode a dependency version that drifts from package.json
+// (the guarded badges already convey them). Returns every unguarded dependency-version literal
+// found. The version-bearing badges use a hyphen ("TypeScript-6.0", "MCP-1.29"), and bare
+// package-name mentions carry no version, so neither is matched here.
+function dependencyVersionLiterals(readme) {
+  const patterns = [
+    /@modelcontextprotocol\/sdk`?\s*[v^]?\d+\.\d+/gi, // "@modelcontextprotocol/sdk ^1.25.2"
+    /@actual-app\/api`?\s*[v^]?\d+\.\d+/gi,           // "@actual-app/api ^26.3.0"
+    /\bTypeScript\s+\d+\.\d+/g,                        // prose "TypeScript 5.9" (not the badge)
+  ];
+  const hits = [];
+  for (const re of patterns) hits.push(...[...readme.matchAll(re)].map((m) => m[0]));
+  return hits;
+}
+
 console.log('\n[readme-stats-sync]');
 
 const README = read('README.md');
@@ -141,6 +156,12 @@ check('"N attempts, exponential backoff" matches DEFAULT_RETRY_ATTEMPTS in src/l
 check('README carries no hardcoded coverage percentage (de-hardcoded)', () => {
   const lit = coveragePercentLiteral(README);
   assert.strictEqual(lit, null, `README still claims a rotting coverage percentage: "${lit}"`);
+});
+
+check('README prose carries no unguarded dependency-version literal (de-hardcoded)', () => {
+  const hits = dependencyVersionLiterals(README);
+  assert.deepStrictEqual(hits, [],
+    `README hardcodes dependency version(s) that can drift from package.json: ${hits.join('; ')}`);
 });
 
 // ----- NEGATIVE in-test fixtures: prove each comparator flags synthetic drift -----
@@ -169,6 +190,22 @@ check('NEGATIVE: a reintroduced coverage percentage is detected', () => {
 check('NEGATIVE: a percentage split from the phrase by a period does not slip through', () => {
   assert.ok(coveragePercentLiteral('Covers 87%. The Actual Budget API is fully mapped.'),
     'a percentage near the coverage claim must be caught even across a period');
+});
+
+check('NEGATIVE: reintroduced unguarded dependency-version literals are detected', () => {
+  const hits = dependencyVersionLiterals(
+    '- **Language**: TypeScript 5.9\n- **MCP SDK**: `@modelcontextprotocol/sdk` ^1.29.0\n- **Actual API**: `@actual-app/api` ^26.6.0',
+  );
+  assert.ok(hits.some((h) => /TypeScript 5\.9/.test(h)), `must flag TypeScript prose version, got ${JSON.stringify(hits)}`);
+  assert.ok(hits.some((h) => h.includes('@modelcontextprotocol/sdk')), 'must flag the MCP SDK version literal');
+  assert.ok(hits.some((h) => h.includes('@actual-app/api')), 'must flag the Actual API version literal');
+});
+
+check('POSITIVE: bare package-name mentions and the hyphenated badges are NOT flagged', () => {
+  const hits = dependencyVersionLiterals(
+    'The `@actual-app/api` library downloads data. badge/TypeScript-6.0-blue badge/MCP-1.29-orange',
+  );
+  assert.deepStrictEqual(hits, [], `comparator must not false-positive on bare names/badges, got ${JSON.stringify(hits)}`);
 });
 
 console.log(`\n[readme-stats-sync] Results: ${passed} passed, ${failed} failed`);
