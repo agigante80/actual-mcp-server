@@ -147,7 +147,10 @@ def check_green():
         name = r.get("workflowName", "?")
         if status != "completed":
             pending.append(f"{name} ({status})")
-        elif concl != "success":
+        elif concl not in ("success", "skipped", "neutral"):
+            # `skipped`/`neutral` are benign non-failures (a conditional or
+            # path-filtered workflow that chose not to run), NOT a red CI. Only
+            # real failures (failure/cancelled/timed_out/startup_failure) block.
             bad.append(f"{name}: {concl} {r.get('url','')}")
     if bad:
         return False, "CI is RED on develop HEAD: " + "; ".join(bad[:5])
