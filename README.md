@@ -657,9 +657,9 @@ Quick flow:
 ## Architecture
 
 - **Runtime**: Node.js 22 (Alpine Linux in Docker)
-- **Language**: TypeScript 5.9 (ESM, NodeNext module resolution)
-- **MCP SDK**: `@modelcontextprotocol/sdk` ^1.25.2
-- **Actual API**: `@actual-app/api` ^26.3.0
+- **Language**: TypeScript (ESM, NodeNext module resolution)
+- **MCP SDK**: `@modelcontextprotocol/sdk`
+- **Actual API**: `@actual-app/api`
 - **Validation**: Zod (runtime types + JSON Schema for tool inputs)
 - **Transports**: Express + StreamableHTTP (`--http`) · `StdioServerTransport` (`--stdio`)
 - **Logging**: Winston with daily rotation (all output routed to stderr in stdio mode)
