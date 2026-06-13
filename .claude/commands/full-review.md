@@ -3,6 +3,8 @@ description: "Orchestrate comprehensive multi-dimensional code review using spec
 argument-hint: "<target path or description> [--security-focus] [--performance-critical] [--strict-mode]"
 ---
 
+<!-- full-review-version: 1 -->
+
 # Comprehensive Code Review Orchestrator
 
 ## CRITICAL BEHAVIORAL RULES
@@ -153,7 +155,25 @@ Task:
     For each finding: Severity, architectural impact, improvement recommendation.
 ```
 
-After both complete, consolidate into `.full-review/01-quality-architecture.md`.
+After both complete, consolidate into `.full-review/01-quality-architecture.md`:
+
+```markdown
+# Phase 1: Code Quality & Architecture Review
+
+## Code Quality Findings
+
+[Summary from 1A, organized by severity]
+
+## Architecture Findings
+
+[Summary from 1B, organized by severity]
+
+## Critical Issues for Phase 2 Context
+
+[List any findings that should inform security or performance review]
+```
+
+Update `state.json`: set `current_step` to 2, `current_phase` to 2, add steps 1A and 1B to `completed_steps`.
 
 ---
 
@@ -230,7 +250,25 @@ Task:
     For each finding: Severity, estimated latency/memory impact, fix with code example.
 ```
 
-After both complete, consolidate into `.full-review/02-security-performance.md`.
+After both complete, consolidate into `.full-review/02-security-performance.md`:
+
+```markdown
+# Phase 2: Security & Performance Review
+
+## Security Findings
+
+[Summary from 2A, organized by severity]
+
+## Performance Findings
+
+[Summary from 2B, organized by severity]
+
+## Critical Issues for Phase 3 Context
+
+[List findings that affect testing or documentation requirements]
+```
+
+Update `state.json`: set `current_step` to "checkpoint-1", add steps 2A and 2B to `completed_steps`.
 
 ---
 
@@ -325,7 +363,21 @@ Task:
     For each finding: Severity, what is missing or inaccurate, specific documentation recommendation.
 ```
 
-After both complete, consolidate into `.full-review/03-testing-documentation.md`.
+After both complete, consolidate into `.full-review/03-testing-documentation.md`:
+
+```markdown
+# Phase 3: Testing & Documentation Review
+
+## Test Coverage Findings
+
+[Summary from 3A, organized by severity]
+
+## Documentation Findings
+
+[Summary from 3B, organized by severity]
+```
+
+Update `state.json`: set `current_step` to 4, `current_phase` to 4, add steps 3A and 3B to `completed_steps`.
 
 ---
 
@@ -383,7 +435,21 @@ Task:
     For each finding: Severity, operational risk, specific improvement recommendation.
 ```
 
-After both complete, consolidate into `.full-review/04-best-practices.md`.
+After both complete, consolidate into `.full-review/04-best-practices.md`:
+
+```markdown
+# Phase 4: Best Practices & Standards
+
+## Framework & Language Findings
+
+[Summary from 4A, organized by severity]
+
+## CI/CD & DevOps Findings
+
+[Summary from 4B, organized by severity]
+```
+
+Update `state.json`: set `current_step` to 5, `current_phase` to 5, add steps 4A and 4B to `completed_steps`.
 
 ---
 
@@ -446,10 +512,34 @@ Read all `.full-review/*.md` files. Generate the final consolidated report.
 - Flags applied: [list active flags]
 ```
 
-Update `state.json`: set `status` to `"complete"`.
+Update `state.json`: set `status` to `"complete"` and `last_updated` to the current timestamp.
 
 ---
 
 ## Completion
 
-Present the final summary and remind the user to run the pre-merge checklist before pushing to `origin/develop`.
+Present the final summary:
+
+```
+Comprehensive code review complete for: $ARGUMENTS
+
+## Review Output Files
+- Scope: .full-review/00-scope.md
+- Quality & Architecture: .full-review/01-quality-architecture.md
+- Security & Performance: .full-review/02-security-performance.md
+- Testing & Documentation: .full-review/03-testing-documentation.md
+- Best Practices: .full-review/04-best-practices.md
+- Final Report: .full-review/05-final-report.md
+
+## Summary
+- Total findings: [count]
+- Critical: [X] | High: [Y] | Medium: [Z] | Low: [W]
+
+## Next Steps
+1. Review the full report at .full-review/05-final-report.md
+2. Address Critical (P0) issues immediately
+3. Plan High (P1) fixes before merging to origin/develop
+4. Add Medium (P2) and Low (P3) items to the backlog
+```
+
+Then remind the user to run the pre-merge checklist before pushing to `origin/develop`.
