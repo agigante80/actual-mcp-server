@@ -8,13 +8,11 @@ on:
     paths:
       - 'unraid/**.xml'
       - 'ca_profile.xml'
-      - 'tests/fixtures/invalid-unraid.xml'
       - '.github/workflows/unraid-xmllint.yml'
   pull_request:
     paths:
       - 'unraid/**.xml'
       - 'ca_profile.xml'
-      - 'tests/fixtures/invalid-unraid.xml'
       - '.github/workflows/unraid-xmllint.yml'
   workflow_dispatch:
 
@@ -31,10 +29,17 @@ jobs:
       - name: Validate Unraid template + CA profile XML well-formedness
         run: xmllint --noout unraid/*.xml ca_profile.xml
 
-      - name: Negative check (the malformed fixture MUST fail xmllint)
+      - name: Negative check (a malformed template MUST fail xmllint)
+        # Generate the malformed XML at runtime in the runner temp dir, NOT in the
+        # repo: a committed malformed *.xml would be picked up by the Community
+        # Applications scanner (which globs the repo for <Container> templates) and
+        # reported as `template_parse_failed`. Keeping it out of the tree exercises
+        # the xmllint failure path without polluting the repo the CA scanner reads.
         run: |
-          if xmllint --noout tests/fixtures/invalid-unraid.xml 2>/dev/null; then
-            echo "ERROR: tests/fixtures/invalid-unraid.xml parsed as valid; the negative xmllint path is not being exercised." >&2
+          BAD="$RUNNER_TEMP/invalid-unraid.xml"
+          printf '<Container version="2">\n  <Name>invalid-fixture</Name>\n  <Repository>example/never-published\n' > "$BAD"
+          if xmllint --noout "$BAD" 2>/dev/null; then
+            echo "ERROR: the malformed XML parsed as valid; the negative xmllint path is not being exercised." >&2
             exit 1
           fi
-          echo "OK: the malformed fixture correctly fails xmllint."
+          echo "OK: a malformed template correctly fails xmllint."
