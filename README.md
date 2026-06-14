@@ -12,6 +12,7 @@
 [![MCP Protocol](https://img.shields.io/badge/MCP-1.29-orange)](https://modelcontextprotocol.io/)
 [![Docker Pulls](https://img.shields.io/docker/pulls/agigante80/actual-mcp-server)](https://hub.docker.com/r/agigante80/actual-mcp-server)
 [![Docker Image Size](https://img.shields.io/docker/image-size/agigante80/actual-mcp-server/latest)](https://hub.docker.com/r/agigante80/actual-mcp-server)
+[![Unraid Community Apps](https://img.shields.io/badge/Unraid-Community%20Apps-f15a2c?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg)
 [![GitHub Actions CI](https://github.com/agigante80/actual-mcp-server/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/agigante80/actual-mcp-server/actions)
 [![GitHub stars](https://img.shields.io/github/stars/agigante80/actual-mcp-server?style=social)](https://github.com/agigante80/actual-mcp-server)
 
@@ -178,6 +179,22 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 > **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 71 tools are available.
 >
 > **`MCP_BRIDGE_DATA_DIR` should be an absolute path.** Without one, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
+
+### Option E: Unraid (Community Applications)
+
+[![Unraid Community Applications](https://img.shields.io/badge/Unraid-Install%20from%20CA-f15a2c?logo=unraid&logoColor=white)](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg)
+
+Actual MCP Server is published in the Unraid **Community Applications** store: **[ca.unraid.net/apps/actual-mcp-server](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg)**. This runs the HTTP transport, the right choice for LibreChat, LobeChat, and other remote MCP clients.
+
+Install it from the **Apps** tab (Community Applications):
+
+1. Open the **Apps** tab and search for **`actual-mcp-server`**, then click **Install**.
+2. Fill in **Actual server URL**, **Actual server password**, and **Actual server Sync ID** (the Sync ID is in Actual Budget: open the budget, **Settings, Show advanced settings, Sync ID**).
+3. **Set a strong MCP auth token.** Generate one with `openssl rand -hex 32`. A blank token disables all HTTP authentication and exposes your financial data unauthenticated on the LAN, so this is required (see [Transport & Authentication](#transport-authentication)).
+4. Leave **PUID=99** and **PGID=100** (`nobody:users`) so the container can write the appdata Data and Logs directories, then start it.
+5. Reach the health endpoint via the container's **WebUI** link (port `3600`); point your MCP client at `http://[server-ip]:3600/http` with the Bearer token.
+
+The Unraid template lives in [`unraid/actual-mcp-server.xml`](unraid/actual-mcp-server.xml). For the publishing workflow see [docs/UNRAID_CA_PUBLISHING.md](docs/UNRAID_CA_PUBLISHING.md).
 
 ### Connect an AI client
 
