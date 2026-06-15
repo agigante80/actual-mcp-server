@@ -149,12 +149,14 @@ export {};
   const [
     { startHttpServer },
     { startStdioServer },
+    { enforceHttpAuthPosture },
     loggerModule,
     utilsModule,
     actualToolsManagerModule,
   ] = await Promise.all([
     import('./server/httpServer.js'),
     import('./server/stdioServer.js'),
+    import('./lib/authPosture.js'),
     import('./logger.js'),
     import('./utils.js'),
     import('./actualToolsManager.js'),
@@ -295,6 +297,26 @@ export {};
       }
     }
 
+    // #242: the interface both the self-test and the normal HTTP path bind to.
+    const bindHost = process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0';
+
+    // #242: HTTP auth required-by-default. Decide ONCE, before binding, whether
+    // the configured posture is safe. On a non-loopback bind with no auth and no
+    // explicit opt-out this refuses startup (exit 1) rather than silently serving
+    // financial data open on the LAN. stdio mode never reaches this check.
+    if (useHttp || useTestMcpClient) {
+      const decision = enforceHttpAuthPosture({
+        bindHost,
+        hasStaticToken: !!process.env.MCP_SSE_AUTHORIZATION,
+        oidcEnabled: process.env.AUTH_PROVIDER === 'oidc',
+        allowUnauthenticated: process.env.MCP_ALLOW_UNAUTHENTICATED === 'true',
+      });
+      // enforceHttpAuthPosture already called process.exit(1) on 'refuse'. This
+      // explicit return makes the open-start path structurally unreachable even
+      // if process.exit were ever non-terminal, so we never bind on a refuse.
+      if (decision === 'refuse') return;
+    }
+
     // If requested, run the MCP client-side tests now that all variables are ready
     if (useTestMcpClient) {
       logger.info('⚙️  --test-mcp-client specified, starting HTTP server and running client-side MCP tests...');
@@ -310,7 +332,7 @@ export {};
         SERVER_INSTRUCTIONS,
         toolSchemas,
         version,
-        process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
+        bindHost,
         advertisedUrl
       );
 
@@ -358,7 +380,7 @@ export {};
         toolSchemas,
         version,
         // bind host (ensure server accepts connections on that interface)
-        process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0',
+        bindHost,
         // advertised URL shown to clients
         advertisedUrl
       );
