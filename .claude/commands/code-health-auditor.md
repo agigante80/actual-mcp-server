@@ -100,9 +100,10 @@ was truly dead. File a ticket so that removal happens behind that net, never on 
 **Public-API / exports caveat.** An export with no internal caller is NOT dead if it is a library
 entry point or a surface a consumer reaches by name: the package's published exports, a tool/prompt/
 resource the server advertises, or a symbol a text-parsing guard reads. This is exactly what the
-`entry` and `ignore` config in `knip.json` is for. Before filing an `unused-export`/`unused-file`
-finding, confirm it is not such an entry point; if it is one Knip does not yet know about, prefer
-widening `knip.json` (or the allowlist below) over filing a removal.
+`entry` config in `knip.json` is for (declaring entry points so consumer-facing exports are not
+flagged). Before filing an `unused-export`/`unused-file` finding, confirm it is not such an entry
+point; if it is one Knip does not yet know about, prefer widening `knip.json` (or the allowlist
+below) over filing a removal.
 
 **Allowlist (do NOT file; these are alive or intentional):**
 - Anything tagged `@public` in source (e.g. `DEFAULT_HTTP_PORT`, consumed by the text-parsing
