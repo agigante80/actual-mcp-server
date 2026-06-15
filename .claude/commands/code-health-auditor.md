@@ -86,6 +86,24 @@ This uses the committed `knip.json`. Since #237 the gated `npm run knip` is fail
 always capture the full report for triage regardless of exit code. Parse the report into
 findings of kind `unused-file`, `unused-export`, `unused-type`, `duplicate-export`.
 
+> The dead-code methodology here follows forge-kit's `find-dead-code` skill (the canonical
+> dead-code reference); this command is the ticket-filing superset for this repo (dead code plus
+> doc-to-code drift plus gate-ready issues).
+
+**The load-bearing rule: Knip flags CANDIDATES, not verdicts.** Never treat a Knip line as proof
+that a symbol is dead, and (per the no-auto-remove rule) never remove it here regardless. The real
+safety net is the build plus the full test suite: static analysis cannot see dynamic references
+(reflection, string-keyed dispatch, a name that appears only in a config or a text-parsing guard),
+so a symbol that compiles and keeps every test green when removed is the only confirmation that it
+was truly dead. File a ticket so that removal happens behind that net, never on Knip's say-so alone.
+
+**Public-API / exports caveat.** An export with no internal caller is NOT dead if it is a library
+entry point or a surface a consumer reaches by name: the package's published exports, a tool/prompt/
+resource the server advertises, or a symbol a text-parsing guard reads. This is exactly what the
+`entry` and `ignore` config in `knip.json` is for. Before filing an `unused-export`/`unused-file`
+finding, confirm it is not such an entry point; if it is one Knip does not yet know about, prefer
+widening `knip.json` (or the allowlist below) over filing a removal.
+
 **Allowlist (do NOT file; these are alive or intentional):**
 - Anything tagged `@public` in source (e.g. `DEFAULT_HTTP_PORT`, consumed by the text-parsing
   port_alignment guard, not by an import).
@@ -96,6 +114,13 @@ findings of kind `unused-file`, `unused-export`, `unused-type`, `duplicate-expor
 
 Everything else Knip reports is a GENUINE finding to triage (file unless cached as
 `allowlisted`/`wontfix`).
+
+**Optional coverage / runtime cross-check (high-value suspected-dead modules only).** For a
+non-trivial module Knip flags (or a whole file you suspect is dead but cannot confirm statically),
+strengthen the signal before filing: a module with **0 coverage in the test suite AND no hits in
+production telemetry** is a strong dead lead, whereas **low coverage alone is NOT dead** (it may be
+used-but-untested). Use this only when the payoff justifies it; the static Knip pass plus the
+build-and-test safety net is the default, and this cross-check never turns into an auto-removal.
 
 ---
 
