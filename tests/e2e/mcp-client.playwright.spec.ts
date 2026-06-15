@@ -46,6 +46,9 @@ test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => 
       LOG_LEVEL: 'info',
       MCP_BRIDGE_PORT: '3601',  // Use different port for E2E tests
       MCP_BRIDGE_PUBLIC_HOST: 'localhost',  // Force localhost instead of external IP
+      // #242: this local-spawn fallback runs --http with no token on the default
+      // 0.0.0.0 bind, which now fails closed; opt out so the e2e server boots.
+      MCP_ALLOW_UNAUTHENTICATED: 'true',
     };
     
     serverProc = spawn(node, [entry, ...args], { cwd: ROOT, env: testEnv });

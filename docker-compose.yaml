@@ -82,6 +82,10 @@ services:
       - MCP_BRIDGE_DATA_DIR=/app/data
       - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_BIND_HOST=0.0.0.0
+      # #242: this dev profile binds 0.0.0.0 with no auth, so it opts out of the
+      # required-by-default HTTP auth gate to keep `--profile dev up` working. This
+      # is a local hot-reload stack only; never carry this into a real deployment.
+      - MCP_ALLOW_UNAUTHENTICATED=true
       - MCP_BRIDGE_LOG_LEVEL=debug
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs
@@ -170,6 +174,10 @@ services:
       - MCP_BRIDGE_DATA_DIR=/app/data
       - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_BIND_HOST=0.0.0.0
+      # #242: HTTP auth is required-by-default. On this 0.0.0.0 (non-loopback)
+      # bind the server refuses to start unless you set MCP_SSE_AUTHORIZATION (or
+      # AUTH_PROVIDER=oidc) below. To run open deliberately behind your own
+      # authenticating proxy, set MCP_ALLOW_UNAUTHENTICATED=true.
       - MCP_BRIDGE_LOG_LEVEL=info
       - MCP_BRIDGE_STORE_LOGS=true
       - MCP_BRIDGE_LOG_DIR=/app/logs

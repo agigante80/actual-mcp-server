@@ -14,6 +14,11 @@ export const configSchema = z.object({
   MCP_BRIDGE_PORT: z.string().default('3600'),
   MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),
+  // #242: explicit opt-out for the required-by-default HTTP auth gate. When auth
+  // is unconfigured AND the bind is non-loopback, the server refuses to start
+  // unless this is the exact string 'true'. Strict parse (only 'true' enables)
+  // so a typo like 'yes'/'1' cannot silently leave the server open.
+  MCP_ALLOW_UNAUTHENTICATED: z.string().optional().transform(val => val === 'true'),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),
   MCP_HTTPS_KEY: z.string().optional(),

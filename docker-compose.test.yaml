@@ -71,8 +71,12 @@ services:
       - MCP_BRIDGE_LOG_LEVEL=info
       - MAX_CONCURRENT_SESSIONS=15
       - NODE_ENV=test
-      # No auth for testing; MCP_SSE_AUTHORIZATION left empty intentionally
+      # No auth for testing; MCP_SSE_AUTHORIZATION left empty intentionally.
+      # #242 makes HTTP auth required-by-default on a non-loopback (0.0.0.0) bind,
+      # so the open posture this suite exercises must opt out explicitly or the
+      # server refuses to start.
       - MCP_SSE_AUTHORIZATION=
+      - MCP_ALLOW_UNAUTHENTICATED=true
     volumes:
       - mcp-test-data:/app/data
       - bootstrap-data:/tmp:ro

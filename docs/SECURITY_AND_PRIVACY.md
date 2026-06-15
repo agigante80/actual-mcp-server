@@ -251,6 +251,29 @@ it is passed to `app.listen()`, so the server binds only to the configured inter
 at `0.0.0.0` only when remote clients must reach the MCP endpoint directly, and pair that with
 authentication (`MCP_SSE_AUTHORIZATION` or OIDC) and ideally a reverse proxy.
 
+#### HTTP auth is required by default (#242)
+
+A blank `MCP_SSE_AUTHORIZATION` with `AUTH_PROVIDER` unset used to disable all HTTP
+authentication silently, and the server binds `0.0.0.0` by default, so a forgotten token
+published the server open on the LAN. As of #242 the server fails closed instead: in HTTP mode,
+if the bind host is non-loopback (anything other than `127.0.0.1`, `::1`, `localhost`,
+`::ffff:127.0.0.1`, so the `0.0.0.0` default counts) AND neither `MCP_SSE_AUTHORIZATION` nor
+`AUTH_PROVIDER=oidc` is configured, the server logs a clear error and exits non-zero before
+binding. The decision is made once at startup against the configured bind host (not per request
+on `req.ip`, which a reverse proxy and a spoofed `X-Forwarded-For` could otherwise bypass).
+
+Unaffected: loopback binds (local dev), stdio mode, and any deployment with a token or OIDC
+configured. The per-request Bearer/OIDC checks are unchanged.
+
+**Opt-out**: set `MCP_ALLOW_UNAUTHENTICATED=true` (the exact string `true`) to run open
+deliberately, for example behind your own authenticating proxy. The server then starts with a
+loud warning on every boot.
+
+**Upgrade note (behavior change)**: an existing HTTP deployment on a non-loopback bind with no
+token and no OIDC that previously started open will now refuse to start. The startup error names
+the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or
+`AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior.
+
 ---
 
 ## 🔒 Secure Coding Practices

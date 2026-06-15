@@ -468,6 +468,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | **Security & Authentication** ||||
 | `AUTH_PROVIDER` | `none` | No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
 | `MCP_SSE_AUTHORIZATION` | _(none)_ | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
+| `MCP_ALLOW_UNAUTHENTICATED` | `false` | No | Opt-out for required-by-default HTTP auth (#242). On a non-loopback bind with no token and no OIDC the server refuses to start; set to `true` to run open deliberately (e.g. behind your own proxy) |
 | `OIDC_ISSUER` | _(none)_ | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
 | `OIDC_RESOURCE` | _(none)_ | No | Expected `aud` claim in JWT (your client ID) |
 | `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |

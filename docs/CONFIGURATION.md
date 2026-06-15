@@ -62,6 +62,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 |----------|------|---------|----------|--------|--------|--------------|-------|
 | `AUTH_PROVIDER` | enum | `none` | No | no | schema | config | `none` (static Bearer) or `oidc` |
 | `MCP_SSE_AUTHORIZATION` | string | (none) | No | yes | schema | config | Static Bearer token (raw token, not `Bearer ...`) |
+| `MCP_ALLOW_UNAUTHENTICATED` | bool string | `false` | No | no | schema | `index.ts` | #242 opt-out: only `true` lets HTTP serve unauthenticated on a non-loopback bind; otherwise the server refuses to start |
 | `OIDC_ISSUER` | url string | (none) | If oidc | no | schema | config | OIDC issuer URL |
 | `OIDC_RESOURCE` | url string | (none) | No | no | schema | config | Expected `aud` claim |
 | `OIDC_SCOPES` | csv string | (none) | No | no | schema | config | Comma-separated required scopes |
