@@ -56,7 +56,7 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 - [Available Tools](#available-tools)
 - [Configuration](#configuration)
 - [Multi-Budget Switching](#multi-budget-switching)
-- [Transport & Authentication](#transport-authentication)
+- [Transport & Authentication](#transport--authentication)
 - [Testing](#testing)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
@@ -190,7 +190,7 @@ Install it from the **Apps** tab (Community Applications):
 
 1. Open the **Apps** tab and search for **`actual-mcp-server`**, then click **Install**.
 2. Fill in **Actual server URL**, **Actual server password**, and **Actual server Sync ID** (the Sync ID is in Actual Budget: open the budget, **Settings, Show advanced settings, Sync ID**).
-3. **Set a strong MCP auth token.** Generate one with `openssl rand -hex 32`. A blank token disables all HTTP authentication and exposes your financial data unauthenticated on the LAN, so this is required (see [Transport & Authentication](#transport-authentication)).
+3. **Set a strong MCP auth token.** Generate one with `openssl rand -hex 32`. A blank token disables all HTTP authentication and exposes your financial data unauthenticated on the LAN, so this is required (see [Transport & Authentication](#transport--authentication)).
 4. Leave **PUID=99** and **PGID=100** (`nobody:users`) so the container can write the appdata Data and Logs directories, then start it.
 5. Reach the health endpoint via the container's **WebUI** link (port `3600`); point your MCP client at `http://[server-ip]:3600/http` with the Bearer token.
 
