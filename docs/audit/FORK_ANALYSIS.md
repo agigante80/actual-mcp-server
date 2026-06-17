@@ -16,7 +16,7 @@ branches (snapshots/mirrors of upstream) are rolled into one row per fork.
 
 | Fork | Branch | Ahead | Behind | Head | Analysed on | Verdict |
 |------|--------|------:|------:|------|-------------|---------|
-| [dsqr84](https://github.com/dsqr84/actual-mcp-server) | **develop** | 5 | 13 | `95ee4e3` | 2026-06-17 | **novel: OIDC robustness + IdP compatibility cluster (ticketed #244)** |
+| [dsqr84](https://github.com/dsqr84/actual-mcp-server) | **develop** | 5 | 13 | `95ee4e3` | 2026-06-17 | **novel: OIDC robustness cluster. Confirmed bugs shipped via #244 (v0.7.10); security-sensitive remainder split to #245** |
 | [dsqr84](https://github.com/dsqr84/actual-mcp-server) | main | 3 | 13 | `f7cfcb3` | 2026-06-17 | subset of develop (older 3 of the 5 OIDC commits); covered by #244 |
 | [plainprogrammer](https://github.com/plainprogrammer/actual-mcp-server) | claude/beautiful-babbage-8kkzrh | 1 | 54 | `2361cf2` | 2026-06-17 | no novel functionality (personal SECURITY_ASSESSMENT.md doc; its top finding is already fixed by #242) |
 | [plainprogrammer](https://github.com/plainprogrammer/actual-mcp-server) | (main) | 0 | 54 | `bc1822c` | 2026-06-17 | no divergence |
@@ -89,7 +89,8 @@ that already has a ticket is not re-ticketed on the next run.
 
 | Idea | From | Ticket | Value | Effort | Notes / status |
 |------|------|--------|:-----:|:------:|----------------|
-| OIDC robustness + IdP compatibility (JWKS discovery, flexible audience, expired-JWT no-crash/clean-401, per-session JWT caching, sessionPrincipals cleanup) | dsqr84:develop | #244 | high | M | NEW this run. Auth-path fixes from external code; mandatory security review. |
+| OIDC JWKS discovery + clean 401 + subject population (confirmed bugs) | dsqr84:develop | #244 | high | M | SHIPPED on develop (v0.7.10). JWKS discovery, 401-not-500, subject fix, https/same-origin hardening, OIDC_ALLOW_INSECURE_ISSUER opt-out. |
+| OIDC audience flexibility + per-session validation caching (security trade-offs) | dsqr84:develop | #245 | med | M | SPLIT from #244. NOT a reproduced bug; touches #160/#163. Left open for an explicit design decision. |
 | Unbounded-scan guard for `search_by_amount` + `update_batch` hardening | lsl9119:fix/search-by-amount-crash-and-batch-timeout | #194 | high | S | SHIPPED (#194 closed). |
 | Semantic / hybrid search over transactions (pluggable embeddings) | ZanzyTHEbar:main | #195 | high | L | SHIPPED (#195 closed). |
 | OpenAPI-driven tool-stub codegen + generator-check CI | ZanzyTHEbar:main | #196 | med | M | SHIPPED (#196 closed). |
