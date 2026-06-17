@@ -55,7 +55,6 @@ export const TOTAL_PATTERNS = [
   { re: /\*\*(\d{2,3}) tools, the most comprehensive/gi, label: 'why-project bullet' },
   { re: /(\d{2,3}) tools tested end-to-end/gi, label: 'N tools tested end-to-end' },
   { re: /(\d{2,3}) tools organized by category/gi, label: 'N tools organized by category' },
-  { re: /(\d{2,3}) tools statically/gi, label: 'N tools statically' },
   { re: /(\d{2,3}) tools registered/gi, label: 'N tools registered' },
   { re: /Registers (\d{2,3}) tools/g, label: 'Registers N tools' },
   { re: /(?:exposing|providing|exposes|provides) \*\*(\d{2,3}) tools\*\*/gi, label: 'exposing **N tools**' },
