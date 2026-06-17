@@ -16,7 +16,9 @@ import { connectionPool } from '../lib/ActualConnectionPool.js';
 import observability from '../observability.js';
 import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
+import { discoverJwksUri } from '../lib/oidc-discovery.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
@@ -75,10 +77,14 @@ export async function startHttpServer(
       // Custom jose-based JWT verifier — bypasses mcp-auth's strict PKCE/discovery
       // validation that fails when the IdP (e.g. Casdoor v2.13) doesn't advertise
       // code_challenge_methods_supported in its discovery document.
-      // JWKS is fetched lazily on the first request and cached by jose internally.
-      const jwks = createRemoteJWKSet(
-        new URL(`${config.OIDC_ISSUER}/.well-known/jwks`)
-      );
+      // #244: resolve the JWKS URI from the issuer's OpenID discovery document
+      // instead of a hardcoded `${OIDC_ISSUER}/.well-known/jwks` (which 404s for
+      // most IdPs). discoverJwksUri fetches discovery once at startup and fails
+      // closed on a non-https issuer, a cross-origin redirect, a missing/invalid
+      // jwks_uri, or a jwks_uri on a different host than the issuer. jose's
+      // createRemoteJWKSet then fetches the keys lazily and caches them.
+      const jwksUri = await discoverJwksUri(config.OIDC_ISSUER, config.OIDC_ALLOW_INSECURE_ISSUER);
+      const jwks = createRemoteJWKSet(new URL(jwksUri));
       const customJwtVerify = async (token: string) => {
         // Enforce the audience claim (#160, OWASP A07). Without it, any
         // signature-valid token from the trusted issuer is accepted, so a token
@@ -87,15 +93,31 @@ export async function startHttpServer(
         // puts in `aud` (Casdoor sets aud=clientId) and is required in OIDC mode,
         // so it is always present here; the spread is defensive. jose throws
         // ERR_JWT_CLAIM_VALIDATION_FAILED on a missing or mismatched aud.
-        const { payload } = await jwtVerify(token, jwks, {
-          issuer: config.OIDC_ISSUER,
-          ...(config.OIDC_RESOURCE ? { audience: config.OIDC_RESOURCE } : {}),
-        });
+        //
+        // #244: map a jose verification failure (expired, malformed, wrong aud,
+        // bad signature) to MCPAuthTokenVerificationError so mcp-auth's bearer
+        // handler returns a clean 401 with a WWW-Authenticate header instead of
+        // re-throwing the raw jose error as a 500. Pass only the jose error as
+        // the cause (never the raw token), so no token material leaks.
+        let payload: Awaited<ReturnType<typeof jwtVerify>>['payload'];
+        try {
+          ({ payload } = await jwtVerify(token, jwks, {
+            issuer: config.OIDC_ISSUER,
+            ...(config.OIDC_RESOURCE ? { audience: config.OIDC_RESOURCE } : {}),
+          }));
+        } catch (err) {
+          throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
+        }
         const rawAud = payload.aud;
         const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
         const rawScope = typeof payload.scope === 'string' ? payload.scope : '';
         return {
           token,
+          // #244: populate subject from the JWT `sub` claim. mcp-auth sets
+          // req.auth to exactly this object, and authenticateRequest (#163) plus
+          // budget-acl.ts key off req.auth.subject; without it OIDC mode rejects
+          // every request (subject undefined) even with a valid token.
+          subject: typeof payload.sub === 'string' ? payload.sub : undefined,
           issuer: payload.iss ?? config.OIDC_ISSUER!,
           clientId: audience[0] ?? '',
           audience,

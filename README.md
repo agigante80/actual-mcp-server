@@ -470,6 +470,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_SSE_AUTHORIZATION` | _(none)_ | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
 | `MCP_ALLOW_UNAUTHENTICATED` | `false` | No | Opt-out for required-by-default HTTP auth (#242). On a non-loopback bind with no token and no OIDC the server refuses to start; set to `true` to run open deliberately (e.g. behind your own proxy) |
 | `OIDC_ISSUER` | _(none)_ | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
+| `OIDC_ALLOW_INSECURE_ISSUER` | `false` | No | Allow a plaintext (http) OIDC issuer on a trusted network (#244). Off by default (http issuer refused at startup); set `true` only for local/LAN testing |
 | `OIDC_RESOURCE` | _(none)_ | No | Expected `aud` claim in JWT (your client ID) |
 | `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |
 | `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
