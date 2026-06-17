@@ -56,6 +56,15 @@ MCP_SSE_AUTHORIZATION=your_generated_token
 **How it works**: The server validates JWTs using JWKS from the OIDC issuer.
 No PKCE flow runs on the server. The MCP client (e.g., LibreChat) handles the OAuth code exchange.
 
+**JWKS discovery and transport security (#244)**: the JWKS URI is resolved from the issuer's
+OpenID discovery document (`/.well-known/openid-configuration`), not a hardcoded path, so standard
+IdPs work. The issuer must be https (a plaintext issuer lets a network attacker swap the JWKS and
+forge tokens); a loopback issuer is allowed for local dev, and `OIDC_ALLOW_INSECURE_ISSUER=true`
+is an explicit opt-out for a trusted-network http issuer (for example a LAN Casdoor). The resolved
+`jwks_uri` must be https and same-origin with the issuer, the discovery fetch does not follow
+redirects, and a failed or expired token now returns a clean 401 (the jose error is wrapped, never
+the token, so no token material leaks).
+
 **Configuration**:
 ```bash
 AUTH_PROVIDER=oidc

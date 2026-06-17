@@ -35,6 +35,12 @@ export const configSchema = z.object({
   AUTH_PROVIDER: z.enum(['none', 'oidc']).default('none'),
   // OIDC issuer URL (e.g. https://auth.example.com/realms/myrealm). Required when AUTH_PROVIDER=oidc.
   OIDC_ISSUER: z.string().optional(),
+  // #244: escape hatch for a plaintext (http) OIDC issuer on a trusted network
+  // (e.g. a LAN Casdoor for local testing). Off by default: an http issuer is
+  // refused because a network attacker could swap the JWKS and forge tokens.
+  // Set to 'true' ONLY when the issuer hop is genuinely trusted. Mirrors
+  // ALLOW_INSECURE_UPSTREAM (#161). Loopback issuers never need this.
+  OIDC_ALLOW_INSECURE_ISSUER: z.string().optional().transform(val => val === 'true'),
   // This server's resource identifier URL (e.g. https://actual-mcp.example.com). Required when AUTH_PROVIDER=oidc.
   OIDC_RESOURCE: z.string().optional(),
   // Comma-separated required scopes (e.g. "read,write"). Optional.
