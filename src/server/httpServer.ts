@@ -108,16 +108,23 @@ export async function startHttpServer(
         } catch (err) {
           throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
         }
+        // #244: require a usable `sub`. authenticateRequest (#163) and budget-acl
+        // key authorization on req.auth.subject, so a token with no string `sub`
+        // cannot be mapped to a principal. Reject it here as an invalid token (a
+        // clean 401) rather than letting it through to a downstream subject check.
+        if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+          throw new MCPAuthTokenVerificationError('invalid_token');
+        }
         const rawAud = payload.aud;
         const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
         const rawScope = typeof payload.scope === 'string' ? payload.scope : '';
         return {
           token,
-          // #244: populate subject from the JWT `sub` claim. mcp-auth sets
-          // req.auth to exactly this object, and authenticateRequest (#163) plus
-          // budget-acl.ts key off req.auth.subject; without it OIDC mode rejects
-          // every request (subject undefined) even with a valid token.
-          subject: typeof payload.sub === 'string' ? payload.sub : undefined,
+          // #244: populate subject from the JWT `sub` claim (guaranteed a non-empty
+          // string by the check above). mcp-auth sets req.auth to exactly this
+          // object, and authenticateRequest (#163) plus budget-acl.ts key off
+          // req.auth.subject; without it OIDC mode rejects every request.
+          subject: payload.sub,
           issuer: payload.iss ?? config.OIDC_ISSUER!,
           clientId: audience[0] ?? '',
           audience,

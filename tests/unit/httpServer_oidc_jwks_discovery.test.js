@@ -81,6 +81,9 @@ const customJwtVerify = async (token) => {
   } catch (err) {
     throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
   }
+  if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
+    throw new MCPAuthTokenVerificationError('invalid_token');
+  }
   const rawAud = payload.aud; const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
   return { token, subject: payload.sub, issuer: payload.iss ?? ISS, clientId: audience[0] ?? '', audience, scopes: [], expiresAt: payload.exp, claims: payload };
 };
@@ -106,6 +109,11 @@ async function status(token) {
 }
 await checkA('expired JWT -> 401', async () => assert.strictEqual(await status(expired), 401));
 await checkA('malformed token -> 401', async () => assert.strictEqual(await status('not.a.jwt'), 401));
+await checkA('signature-valid token with NO sub -> 401 (invalid_token)', async () => {
+  const noSub = await new SignJWT({ scope: 'openid' }).setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+    .setIssuer(ISS).setAudience(AUD).setIssuedAt(now - 60).setExpirationTime(now + 3600).sign(privateKey);
+  assert.strictEqual(await status(noSub), 401);
+});
 await checkA('valid JWT -> 200 and req.auth.subject set', async () => {
   assert.strictEqual(await status(valid), 200);
   assert.strictEqual(lastAuthSubject, 'user-123');
@@ -126,6 +134,10 @@ check('httpServer uses discoverJwksUri + jwksUri (not the hardcoded URL construc
 });
 check('httpServer maps verify failures to MCPAuthTokenVerificationError', () => {
   assert.ok(/catch\s*\(err\)[\s\S]{0,160}MCPAuthTokenVerificationError\('invalid_token'/.test(src), 'expected 401 mapping in customJwtVerify');
+});
+check('httpServer rejects a token with no usable sub (invalid_token)', () => {
+  assert.ok(/payload\.sub[\s\S]{0,120}MCPAuthTokenVerificationError\('invalid_token'\)/.test(src), 'expected a missing-sub rejection');
+  assert.ok(src.includes('subject: payload.sub,'), 'expected subject populated from payload.sub');
 });
 
 console.log(`\n[oidc-jwks-discovery] Results: ${failed === 0 ? 'all passed' : failed + ' failed'}`);
