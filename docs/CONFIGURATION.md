@@ -66,6 +66,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `OIDC_ISSUER` | url string | (none) | If oidc | no | schema | config | OIDC issuer URL |
 | `OIDC_ALLOW_INSECURE_ISSUER` | bool string | `false` | No | no | schema | `httpServer.ts` | #244 opt-out: allow an http OIDC issuer on a trusted network (default refuses non-https/non-loopback issuers at startup) |
 | `OIDC_RESOURCE` | url string | (none) | No | no | schema | config | Expected `aud` claim |
+| `OIDC_ACCEPTED_AUDIENCES` | csv string | (none) | No | no | schema | `httpServer.ts` | #245 extra accepted `aud` values beyond `OIDC_RESOURCE` (strict allowlist; for IdPs that put the client-id in `aud`, e.g. Authentik) |
 | `OIDC_SCOPES` | csv string | (none) | No | no | schema | config | Comma-separated required scopes |
 | `AUTH_BUDGET_ACL` | json string | (none) | No | no | schema | config | Per-user budget ACL map |
 | `MCP_ENABLE_HTTPS` | bool string | `false` | No | no | schema | config; also raw at `index.ts:277,286` | Native TLS switch (canonical TLS knob) |

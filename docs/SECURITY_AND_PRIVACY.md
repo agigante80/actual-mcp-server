@@ -65,6 +65,13 @@ is an explicit opt-out for a trusted-network http issuer (for example a LAN Casd
 redirects, and a failed or expired token now returns a clean 401 (the jose error is wrapped, never
 the token, so no token material leaks).
 
+**Audience allowlist (#245)**: the `aud` claim is validated against a strict, closed set: the
+required `OIDC_RESOURCE` plus any explicitly configured `OIDC_ACCEPTED_AUDIENCES` (comma-separated,
+for IdPs like Authentik that put the client-id in `aud`). The membership check stays inside jose,
+empties are filtered, and there is no wildcard or accept-any path, so a token whose `aud` is outside
+the configured set is still rejected (the cross-relying-party replay protection from #160 holds).
+With no extras configured the set is exactly `[OIDC_RESOURCE]`, unchanged from before.
+
 **Configuration**:
 ```bash
 AUTH_PROVIDER=oidc

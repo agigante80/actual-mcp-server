@@ -19,6 +19,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
 import { discoverJwksUri } from '../lib/oidc-discovery.js';
+import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
@@ -74,6 +75,23 @@ export async function startHttpServer(
         ? config.OIDC_SCOPES.split(',').map((s) => s.trim()).filter(Boolean)
         : [];
 
+      // #245: the strict, closed audience allowlist (OIDC_RESOURCE plus any
+      // explicitly configured OIDC_ACCEPTED_AUDIENCES). jose treats the array as
+      // match-any membership, so an IdP that puts the client-id in `aud` works
+      // while an `aud` outside the set is still rejected (#160 preserved). No
+      // wildcard, empties filtered; default is exactly [OIDC_RESOURCE].
+      const acceptedAudiences = buildAcceptedAudiences(config.OIDC_RESOURCE, config.OIDC_ACCEPTED_AUDIENCES);
+      // #245: fail closed if the allowlist is empty (e.g. a whitespace-only
+      // OIDC_RESOURCE that passes the truthy check in setup.ts but trims away).
+      // Never fall through to "no audience option", which would disable the #160
+      // audience check and accept any aud from the trusted issuer.
+      if (acceptedAudiences.length === 0) {
+        throw new Error(
+          'OIDC mode requires a non-empty OIDC_RESOURCE (the JWT audience). Refusing to start ' +
+            'without audience enforcement, which would allow cross-relying-party token replay (#160/#245).',
+        );
+      }
+
       // Custom jose-based JWT verifier that bypasses mcp-auth's strict PKCE/discovery
       // validation that fails when the IdP (e.g. Casdoor v2.13) doesn't advertise
       // code_challenge_methods_supported in its discovery document.
@@ -89,10 +107,11 @@ export async function startHttpServer(
         // Enforce the audience claim (#160, OWASP A07). Without it, any
         // signature-valid token from the trusted issuer is accepted, so a token
         // minted for a different relying party in a shared IdP tenant can be
-        // replayed against this server. OIDC_RESOURCE is the client-id the IdP
-        // puts in `aud` (Casdoor sets aud=clientId) and is required in OIDC mode,
-        // so it is always present here; the spread is defensive. jose throws
-        // ERR_JWT_CLAIM_VALIDATION_FAILED on a missing or mismatched aud.
+        // replayed against this server. The accepted set is the strict allowlist
+        // built above (#245: OIDC_RESOURCE plus configured extras); it is always
+        // non-empty because OIDC_RESOURCE is required in OIDC mode, so the spread
+        // is defensive. jose throws ERR_JWT_CLAIM_VALIDATION_FAILED on a missing
+        // or out-of-set aud.
         //
         // #244: map a jose verification failure (expired, malformed, wrong aud,
         // bad signature) to MCPAuthTokenVerificationError so mcp-auth's bearer
@@ -103,7 +122,9 @@ export async function startHttpServer(
         try {
           ({ payload } = await jwtVerify(token, jwks, {
             issuer: config.OIDC_ISSUER,
-            ...(config.OIDC_RESOURCE ? { audience: config.OIDC_RESOURCE } : {}),
+            // Guaranteed non-empty by the startup guard above, so audience is
+            // always enforced (#160/#245); never omit it.
+            audience: acceptedAudiences,
           }));
         } catch (err) {
           throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
