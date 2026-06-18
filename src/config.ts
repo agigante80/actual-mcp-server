@@ -43,6 +43,11 @@ export const configSchema = z.object({
   OIDC_ALLOW_INSECURE_ISSUER: z.string().optional().transform(val => val === 'true'),
   // This server's resource identifier URL (e.g. https://actual-mcp.example.com). Required when AUTH_PROVIDER=oidc.
   OIDC_RESOURCE: z.string().optional(),
+  // #245: extra accepted JWT audiences beyond OIDC_RESOURCE, comma-separated.
+  // For IdPs that put the client-id (not the resource URI) in `aud`, e.g. Authentik.
+  // Strict closed allowlist: the accepted set is OIDC_RESOURCE plus these; never a
+  // wildcard. Default empty, so single-audience deployments are unchanged.
+  OIDC_ACCEPTED_AUDIENCES: z.string().optional(),
   // Comma-separated required scopes (e.g. "read,write"). Optional.
   OIDC_SCOPES: z.string().optional(),
   // JSON map of principal → budget sync-ID list for per-user budget ACL.
