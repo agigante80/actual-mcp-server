@@ -23,7 +23,7 @@ import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 
-// AsyncLocalStorage for request context — moved to src/lib/requestContext.ts
+// AsyncLocalStorage for request context: moved to src/lib/requestContext.ts
 // so adapter code can import it without a circular dependency on httpServer.
 // Re-exported here for backward compatibility with any callers that imported
 // `requestContext` from this module.
@@ -74,7 +74,7 @@ export async function startHttpServer(
         ? config.OIDC_SCOPES.split(',').map((s) => s.trim()).filter(Boolean)
         : [];
 
-      // Custom jose-based JWT verifier — bypasses mcp-auth's strict PKCE/discovery
+      // Custom jose-based JWT verifier that bypasses mcp-auth's strict PKCE/discovery
       // validation that fails when the IdP (e.g. Casdoor v2.13) doesn't advertise
       // code_challenge_methods_supported in its discovery document.
       // #244: resolve the JWKS URI from the issuer's OpenID discovery document
@@ -145,7 +145,7 @@ export async function startHttpServer(
         }),
         budgetAclMiddleware as express.RequestHandler,
       );
-      logger.info(`[OIDC] JWT authentication enabled — issuer: ${config.OIDC_ISSUER}`);
+      logger.info(`[OIDC] JWT authentication enabled. Issuer: ${config.OIDC_ISSUER}`);
     }
   }
 
@@ -437,7 +437,7 @@ export async function startHttpServer(
         // when rejectInit fires (e.g. session init fails before any tools/call
         // arrives), the rejection would otherwise hit process.on('unhandledRejection')
         // and exit the server. The original error is already logged inside the
-        // onsessioninitialized catch block below — we deliberately do NOT re-log here
+        // onsessioninitialized catch block below: we deliberately do NOT re-log here
         // to avoid duplicate noise and any risk of leaking credentials.
         initPromise.catch(() => {});
 
@@ -687,7 +687,7 @@ export async function startHttpServer(
     console.info(`📨 MCP endpoint: ${advertised}`);
     console.info(`❤️ Health check: ${scheme}://${healthHost}:${port}/health`);
     if (config.AUTH_PROVIDER === 'oidc') {
-      logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required — issuer: ${config.OIDC_ISSUER})`);
+      logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required; issuer: ${config.OIDC_ISSUER})`);
     } else if (config.MCP_SSE_AUTHORIZATION) {
       logger.info(`🔒 HTTP authentication enabled (static Bearer token required)`);
     } else {
