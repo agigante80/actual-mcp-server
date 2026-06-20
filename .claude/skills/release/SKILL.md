@@ -3,6 +3,8 @@ name: release
 description: The develop-to-main release. Fast-forward main to develop, tag the new version, confirm the publish pipeline is green, AND close the implemented tickets the release ships. Use whenever the user asks to "release", "merge to main", "ship to main", "push to main", "cut a release", "do a release", "release vX.Y.Z", or "promote develop to main". This is the ONLY sanctioned path to main; implement-ticket and merge-pr deliberately stop at develop.
 ---
 
+<!-- release-version: 2 -->
+
 # Release (develop to main)
 
 Promote the current `develop` to `main` as a versioned release, then close the
@@ -35,7 +37,13 @@ the same up front and STOP with a clear report if any fails, rather than forcing
 2. develop is version-bumped: the `VERSION` on develop is greater than the latest
    published tag (`git describe --tags --abbrev=0 origin/main`). If not, the
    change needs `npm run version:bump -- patch` committed on develop first.
-3. develop CI is green on its HEAD: find the CI/CD Pipeline run for
+3. version sources agree: run `npm run version:check` (the `scripts/version-check.js`
+   cross-source guard). It fails if the canonical `VERSION` and its mirrors
+   (`package.json`, doc `**Version:**` markers, container labels) disagree, so drift
+   is caught before the release rather than during it. If it fails, run
+   `npm run version:bump -- sync` (re-syncs mirrors without bumping) and commit on
+   develop first. This guard also runs in the `Validate` CI workflow and pre-commit.
+4. develop CI is green on its HEAD: find the CI/CD Pipeline run for
    `origin/develop` HEAD and confirm it concluded `success`. A red or in-progress
    develop is not releasable.
 

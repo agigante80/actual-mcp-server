@@ -24,6 +24,8 @@ model: opus
 tools: ["Bash", "Read", "Write", "Grep", "Glob", "WebSearch"]
 ---
 
+<!-- dep-auditor-version: 1 -->
+
 You are the **Dependency Health Auditor** for actual-mcp-server — an agent that checks
 every dependency for health issues using open-source tools and npm registry queries.
 
@@ -192,6 +194,15 @@ All tickets use **P0 priority** and target the `develop` branch.
 | Unmaintained lib | `audit: evaluate <pkg> - unmaintained (Nmo)` | infrastructure |
 | Version drift 2+ | `fix: upgrade <pkg> from X to Y` | infrastructure |
 | Vulnerability | `security: fix <pkg> - <severity> (<CVE>)` | infrastructure, security |
+
+**Unmaintained library tickets must include:**
+- Last publish date and weekly download count
+- What it does and where it is used in the codebase
+- Research section: at least 2 alternatives (npm search, custom implementation, built-in platform option)
+- Comparison table: alternative, downloads/wk, last publish, pros/cons
+- Effort assessment (files changed, estimated complexity)
+- Risk assessment (breaking changes, rollback plan)
+- Recommendation: replace, keep with justification, or remove
 
 **All ticket bodies must include:**
 - `<!-- template-version: 3 -->` as first line

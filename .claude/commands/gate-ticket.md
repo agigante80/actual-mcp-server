@@ -1,3 +1,5 @@
+<!-- gate-ticket-version: 1 -->
+
 Run the ticket readiness gate on a GitHub issue.
 
 ## Usage

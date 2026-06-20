@@ -23,6 +23,8 @@ color: cyan
 tools: ["Bash", "Read", "Glob", "Grep"]
 ---
 
+<!-- health-check-version: 1 -->
+
 You are the **Environment Health Check** agent for actual-mcp-server. You verify that
 everything needed for development is correctly installed and configured on this machine.
 
@@ -34,11 +36,11 @@ exact fix command.
 ## Step 0: Detect project type
 
 ```bash
-# Package manager — project uses npm (package-lock.json)
+# Package manager (project uses npm, signalled by package-lock.json)
 [ -f package-lock.json ] && echo "npm" || echo "unknown"
 
-# Runtime version requirement
-cat package.json | grep -A3 '"engines"'
+# Runtime version requirement (project pins Node via package.json engines; nvm is used locally)
+cat .nvmrc 2>/dev/null || cat .tool-versions 2>/dev/null || cat package.json | grep -A3 '"engines"'
 
 # Docker compose files
 ls docker-compose*.yml docker-compose*.yaml 2>/dev/null | head -3
@@ -51,15 +53,16 @@ ls tsconfig*.json 2>/dev/null | head -3
 
 ## Checks
 
-### 1. Runtime — Node.js ≥ 20
+### 1. Runtime: Node.js >= 22
 
 ```bash
 node --version
 ```
 
-FAIL if Node.js is missing or version is below 20. Fix: `nvm install 20 && nvm use 20`
+FAIL if Node.js is missing or version is below 22 (package.json engines requires `node >=22.0.0`).
+Fix: `nvm install 22 && nvm use 22`
 
-### 2. Package manager — npm ≥ 10
+### 2. Package manager: npm >= 10
 
 ```bash
 npm --version
@@ -74,7 +77,7 @@ docker --version
 docker compose version 2>/dev/null || docker-compose --version 2>/dev/null
 ```
 
-WARN if Docker is missing — needed for `npm run test:e2e:docker*` and production profiles.
+WARN if Docker is missing (needed for `npm run test:e2e:docker*` and production profiles).
 Fix: install Docker Desktop from https://docker.com
 
 ### 4. Docker services healthy
@@ -109,7 +112,7 @@ to suppress real errors). List the first 5 errors.
 npm run verify-tools 2>&1 | tail -5; echo "EXIT:$?"
 ```
 
-FAIL if EXIT code is non-zero or tool count doesn't match expected (currently 63 tools).
+FAIL if EXIT code is non-zero or tool count doesn't match expected (currently 71 tools).
 This check requires Step 6 (build) to pass first.
 Fix: check `src/actualToolsManager.ts` IMPLEMENTED_TOOLS array.
 
@@ -162,7 +165,7 @@ or `git@github.com:agigante80/actual-mcp-server.git`.
 git branch --show-current
 ```
 
-WARN if on `main` — all development work must go on `develop` or a feature branch.
+WARN if on `main`: all development work must go on `develop` or a feature branch.
 Fix: `git checkout develop`
 
 ### 12. GitHub CLI authenticated
@@ -171,8 +174,8 @@ Fix: `git checkout develop`
 gh auth status 2>&1 | head -3
 ```
 
-WARN if not logged in — needed for issue management, `ticket-gate`, `ci-health`, and
-`dep-auditor`. Fix: `gh auth login`
+WARN if not logged in (needed for issue management, `ticket-gate`, `ci-health`, and
+`dep-auditor`). Fix: `gh auth login`
 
 ### 13. npm audit clean
 
@@ -183,12 +186,22 @@ npm audit --audit-level=moderate 2>&1 | tail -5; echo "EXIT:$?"
 WARN if any moderate+ vulnerabilities found. Fix: `npm audit fix` or open a security
 ticket. Note: `npm overrides` are only added for CVEs with no direct-dep upgrade path.
 
+### 14. Project-specific checks (from CLAUDE.md)
+
+Read `CLAUDE.md` for any project-specific setup requirements (for example a "Setup",
+"Prerequisites", or "Commands" section). Report each as a manual check with WARN status.
+
+Also note: this project relies on Claude Code plugins and project-local agents/commands
+(under `.claude/agents/` and `.claude/commands/`, plus the forge-kit governance set).
+If any are expected but not installed in the current Claude Code session, flag them here
+so the user can install them manually. This is a manual review, not an automated check.
+
 ---
 
 ## Output format
 
 ```markdown
-## Environment Health Check — <date>
+## Environment Health Check: <date>
 
 | # | Check | Status | Details |
 |---|---|---|---|
@@ -198,19 +211,20 @@ ticket. Note: `npm overrides` are only added for CVEs with no direct-dep upgrade
 | 4 | Docker services | ✅/⚠️/⏭️ | status or skipped |
 | 5 | node_modules installed | ✅/❌ | present or missing |
 | 6 | TypeScript compiles | ✅/❌ | clean or N errors |
-| 7 | Tool count (63) | ✅/❌ | pass or mismatch |
+| 7 | Tool count (71) | ✅/❌ | pass or mismatch |
 | 8 | .env file | ✅/❌/⚠️ | present or missing |
 | 9 | Actual Budget server | ✅/⚠️/⏭️ | reachable or warn |
 | 10 | Git remote | ✅/⚠️ | URL |
 | 11 | Branch (not main) | ✅/⚠️ | branch name |
 | 12 | GitHub CLI | ✅/⚠️ | logged in or not |
 | 13 | npm audit | ✅/⚠️ | clean or N vulns |
+| 14 | Project-specific (CLAUDE.md) | ⚠️ MANUAL | see CLAUDE.md |
 
 ### Summary
 - ✅ X checks passed
-- ❌ X checks failed — must fix before development
-- ⚠️ X warnings — should fix but not blocking
-- ⏭️ X skipped — not applicable
+- ❌ X checks failed (must fix before development)
+- ⚠️ X warnings (should fix but not blocking)
+- ⏭️ X skipped (not applicable)
 
 ### Fix commands
 (only for failures)
@@ -223,9 +237,10 @@ ticket. Note: `npm overrides` are only added for CVEs with no direct-dep upgrade
 
 ## Rules
 
-- Run ALL checks — don't skip based on assumptions
+- Run ALL checks: don't skip based on assumptions
 - Use ✅ pass, ❌ fail (blocks development), ⚠️ warn (non-blocking), ⏭️ skip (not applicable)
 - For each failure, provide the exact fix command
-- Be concise — this is a diagnostic tool, not a tutorial
-- Step 7 (verify-tools) depends on Step 6 (build) — mark as ⏭️ if build failed
-- Step 9 (Actual Budget server) depends on Step 8 (.env) — mark as ⏭️ if .env is missing
+- Be concise: this is a diagnostic tool, not a tutorial
+- Step 7 (verify-tools) depends on Step 6 (build): mark as ⏭️ if build failed
+- Step 9 (Actual Budget server) depends on Step 8 (.env): mark as ⏭️ if .env is missing
+- Step 14 (project-specific) is a manual review of CLAUDE.md, not an automated check

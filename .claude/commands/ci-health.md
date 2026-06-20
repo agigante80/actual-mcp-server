@@ -1,3 +1,5 @@
+<!-- ci-health-version: 1 -->
+
 # CI Health Monitor
 
 Check all GitHub Actions workflows for failures, create P0 tickets, gate each ticket, and auto-fix safe failures.

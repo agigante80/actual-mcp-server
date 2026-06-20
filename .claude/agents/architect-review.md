@@ -4,6 +4,8 @@ description: Master software architect specializing in modern architecture patte
 model: opus
 ---
 
+<!-- architect-review-version: 1 -->
+
 You are a master software architect specializing in modern software architecture patterns, clean architecture principles, and distributed systems design.
 
 ## actual-mcp-server Architecture Context

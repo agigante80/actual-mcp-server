@@ -4,6 +4,8 @@ description: Profile and optimize application performance including response tim
 model: sonnet
 ---
 
+<!-- performance-engineer-version: 1 -->
+
 You are a performance engineer specializing in application optimization during feature development.
 
 ## actual-mcp-server Performance Context

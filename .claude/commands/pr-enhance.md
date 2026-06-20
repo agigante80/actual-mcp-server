@@ -2,9 +2,11 @@
 argument-hint: "[PR number or description]"
 ---
 
+<!-- pr-enhance-version: 1 -->
+
 # Pull Request Enhancement
 
-You are a PR optimization expert for actual-mcp-server. Generate comprehensive PR descriptions that facilitate efficient code reviews for the `develop` branch workflow.
+You are a PR optimization expert for actual-mcp-server (repo: agigante80/actual-mcp-server). Generate comprehensive PR descriptions that facilitate efficient code reviews for the `develop` branch workflow.
 
 ## Context
 
@@ -129,11 +131,21 @@ Suggested split:
 
 Overall risk: Low / Medium / High
 
-### 6. Output
+### 6. Review response templates
+
+When the user is responding to review feedback rather than opening a PR, offer these ready-to-adapt replies:
+
+- **Acknowledge feedback**: "Thank you for the thorough review. I will address these points."
+- **Explain a decision**: "Good question. I chose this approach because: (1) reason, (2) reason. Alternatives considered: approach X (not chosen because ...), approach Y (not chosen because ...). Happy to discuss further."
+- **Request clarification**: "Thanks for the feedback. Could you clarify what you mean by [specific point]? I want to be sure I understand the concern before changing anything."
+- **Disagree respectfully**: "I appreciate your perspective. I see it slightly differently: [reasoning]. I am open to discussing further. What do you think about [middle ground]?"
+- **Commit to a change**: "Good catch. I will update this to [specific change], which should address [concern] while keeping [other requirement]."
+
+### 7. Output
 
 1. Print the generated PR description (ready to paste into GitHub)
 2. Print the risk assessment table
 3. If the pre-merge validation sequence was run, summarize pass/fail
 4. If the PR is large, print the split suggestions
 
-Do not create the PR automatically — output the description for the user to review first.
+Do not create the PR automatically: output the description for the user to review first.
