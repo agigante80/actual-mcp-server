@@ -473,6 +473,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `OIDC_ALLOW_INSECURE_ISSUER` | `false` | No | Allow a plaintext (http) OIDC issuer on a trusted network (#244). Off by default (http issuer refused at startup); set `true` only for local/LAN testing |
 | `OIDC_RESOURCE` | _(none)_ | No | Expected `aud` claim in JWT (your client ID) |
 | `OIDC_ACCEPTED_AUDIENCES` | _(none)_ | No | Extra accepted `aud` values beyond `OIDC_RESOURCE`, comma-separated (#245). For IdPs that put the client-id in `aud` (e.g. Authentik). Strict allowlist, never a wildcard |
+| `OIDC_JWKS_TRUSTED_HOSTS` | _(none)_ | No | Hostnames allowed to serve JWKS from a different origin than the issuer (#254). Required for Google: `www.googleapis.com`. Exact match only, no wildcards |
 | `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |
 | `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
 | `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS. Requires `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` |

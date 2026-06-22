@@ -49,6 +49,50 @@ check('accepts a same-origin jwks_uri with a matching explicit port', () => {
 });
 check('rejects a jwks_uri with embedded credentials', () => throws(() => resolveJwksUri({ jwks_uri: 'https://user:pass@idp.example.com/keys' }, 'https://idp.example.com'), /embedded credentials/));
 
+console.log('\n[oidc-jwks-discovery] resolveJwksUri trusted-host allowlist (#254)');
+check('trusted host listed: cross-origin JWKS allowed', () => {
+  const got = resolveJwksUri({ jwks_uri: 'https://jwks.external.com/keys' }, 'https://idp.example.com', false, ['jwks.external.com']);
+  assert.strictEqual(got, 'https://jwks.external.com/keys');
+});
+check('trusted host not listed: cross-origin JWKS rejected', () => throws(
+  () => resolveJwksUri({ jwks_uri: 'https://jwks.external.com/keys' }, 'https://idp.example.com', false, ['other.com']),
+  /does not match the issuer origin/,
+));
+check('empty allowlist (default): cross-origin JWKS rejected (regression guard)', () => throws(
+  () => resolveJwksUri({ jwks_uri: 'https://www.googleapis.com/oauth2/v3/certs' }, 'https://accounts.google.com'),
+  /does not match the issuer origin/,
+));
+check('Google-style setup: trusted host allows googleapis.com', () => {
+  const got = resolveJwksUri(
+    { jwks_uri: 'https://www.googleapis.com/oauth2/v3/certs' },
+    'https://accounts.google.com',
+    false,
+    ['www.googleapis.com'],
+  );
+  assert.strictEqual(got, 'https://www.googleapis.com/oauth2/v3/certs');
+});
+check('trailing comma in env var (empty entry filtered): only real hostname trusted', () => {
+  const hosts = 'jwks.external.com,'.split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+  assert.deepStrictEqual(hosts, ['jwks.external.com']);
+  const got = resolveJwksUri({ jwks_uri: 'https://jwks.external.com/keys' }, 'https://idp.example.com', false, hosts);
+  assert.strictEqual(got, 'https://jwks.external.com/keys');
+});
+check('whitespace-only entry (entry filtered): only real hostname trusted', () => {
+  const hosts = ' , jwks.external.com'.split(',').map(h => h.trim().toLowerCase()).filter(Boolean);
+  assert.deepStrictEqual(hosts, ['jwks.external.com']);
+  const got = resolveJwksUri({ jwks_uri: 'https://jwks.external.com/keys' }, 'https://idp.example.com', false, hosts);
+  assert.strictEqual(got, 'https://jwks.external.com/keys');
+});
+check('exact hostname match required: subdomain of trusted host is rejected', () => throws(
+  () => resolveJwksUri({ jwks_uri: 'https://sub.jwks.external.com/keys' }, 'https://idp.example.com', false, ['jwks.external.com']),
+  /does not match the issuer origin/,
+));
+check('source assertion: OIDC_JWKS_TRUSTED_HOSTS appears in resolveJwksUri implementation', () => {
+  const src = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), '../../src/lib/oidc-discovery.ts'), 'utf8');
+  assert.ok(src.includes('OIDC_JWKS_TRUSTED_HOSTS'), 'expected OIDC_JWKS_TRUSTED_HOSTS referenced in oidc-discovery.ts');
+  assert.ok(src.includes('trustedHosts'), 'expected trustedHosts parameter in resolveJwksUri');
+});
+
 console.log('\n[oidc-jwks-discovery] assertSecureIssuer (downgrade guard)');
 check('https issuer ok', () => { assertSecureIssuer('https://idp.example.com'); });
 check('loopback http issuer ok (local dev)', () => { assertSecureIssuer('http://localhost:8080'); });

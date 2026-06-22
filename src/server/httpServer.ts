@@ -101,7 +101,7 @@ export async function startHttpServer(
       // closed on a non-https issuer, a cross-origin redirect, a missing/invalid
       // jwks_uri, or a jwks_uri on a different host than the issuer. jose's
       // createRemoteJWKSet then fetches the keys lazily and caches them.
-      const jwksUri = await discoverJwksUri(config.OIDC_ISSUER, config.OIDC_ALLOW_INSECURE_ISSUER);
+      const jwksUri = await discoverJwksUri(config.OIDC_ISSUER, config.OIDC_ALLOW_INSECURE_ISSUER, config.OIDC_JWKS_TRUSTED_HOSTS);
       const jwks = createRemoteJWKSet(new URL(jwksUri));
       const customJwtVerify = async (token: string) => {
         // Enforce the audience claim (#160, OWASP A07). Without it, any

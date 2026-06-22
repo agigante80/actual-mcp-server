@@ -48,6 +48,14 @@ export const configSchema = z.object({
   // Strict closed allowlist: the accepted set is OIDC_RESOURCE plus these; never a
   // wildcard. Default empty, so single-audience deployments are unchanged.
   OIDC_ACCEPTED_AUDIENCES: z.string().optional(),
+  // #254: opt-in allowlist of hostnames permitted to serve JWKS from a different
+  // origin than the issuer. Empty by default (cross-origin JWKS fetch refused).
+  // Required for Google (OIDC_ISSUER=https://accounts.google.com whose jwks_uri is
+  // https://www.googleapis.com/oauth2/v3/certs). Exact hostname match only; no
+  // wildcards or substrings. Trailing comma / whitespace-only entries are ignored.
+  OIDC_JWKS_TRUSTED_HOSTS: z.string().optional().transform(
+    (val) => val?.split(',').map((h) => h.trim().toLowerCase()).filter(Boolean) ?? [],
+  ),
   // Comma-separated required scopes (e.g. "read,write"). Optional.
   OIDC_SCOPES: z.string().optional(),
   // JSON map of principal → budget sync-ID list for per-user budget ACL.

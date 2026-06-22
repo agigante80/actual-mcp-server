@@ -1,7 +1,7 @@
 import { createModuleLogger } from './loggerFactory.js';
 
 /**
- * OIDC JWKS discovery (#244).
+ * OIDC JWKS discovery (#244, #254).
  *
  * Background: the OIDC verifier used to build its key set from a hardcoded
  * `${OIDC_ISSUER}/.well-known/jwks`, which is wrong for most identity providers
@@ -15,8 +15,8 @@ import { createModuleLogger } from './loggerFactory.js';
  *   - the resolved `jwks_uri` must be https and on the SAME host as the issuer, so
  *     a tampered or misconfigured discovery document cannot point key fetching at
  *     an attacker-controlled host. Cross-host issuers (for example Google, which
- *     serves keys from googleapis.com) are intentionally not auto-trusted; that is
- *     a separate, configurable follow-up (#245).
+ *     serves keys from googleapis.com) are intentionally not auto-trusted; they
+ *     require the operator to explicitly set OIDC_JWKS_TRUSTED_HOSTS (#254).
  *
  * The pure helpers (assertSecureIssuer, resolveJwksUri) are unit-tested without a
  * network; discoverJwksUri wraps them around a single startup fetch and fails
@@ -71,12 +71,14 @@ export function assertSecureIssuer(issuer: string | undefined, allowInsecure = f
 /**
  * Pure: resolve and validate the `jwks_uri` from a parsed discovery document
  * against the issuer. Throws (fail closed) if it is missing, not https, carries
- * embedded credentials, or is not same-origin (scheme + host + port) with the issuer.
+ * embedded credentials, or is not same-origin (scheme + host + port) with the
+ * issuer -- unless the JWKS hostname is in `trustedHosts` (#254).
  */
 export function resolveJwksUri(
   discoveryDoc: { jwks_uri?: unknown } | null | undefined,
   issuer: string | undefined,
   allowInsecure = false,
+  trustedHosts: string[] = [],
 ): string {
   const issuerUrl = assertSecureIssuer(issuer, allowInsecure);
   if (!discoveryDoc || typeof discoveryDoc !== 'object') {
@@ -102,9 +104,15 @@ export function resolveJwksUri(
   // same host is a different service, so comparing origins keeps the guarantee the
   // security review asked for. Both are https here, so this is effectively host+port.
   if (jwks.origin.toLowerCase() !== issuerUrl.origin.toLowerCase()) {
-    throw new Error(
-      `OIDC "jwks_uri" origin (${jwks.origin}) does not match the issuer origin (${issuerUrl.origin}); ` +
-        'refusing a cross-origin key fetch. A cross-host issuer (e.g. Google) needs an explicit trusted-host allowlist (#245).',
+    const jwksHostname = jwks.hostname.toLowerCase();
+    if (!trustedHosts.includes(jwksHostname)) {
+      throw new Error(
+        `OIDC "jwks_uri" origin (${jwks.origin}) does not match the issuer origin (${issuerUrl.origin}); ` +
+          'refusing a cross-origin key fetch. A cross-host issuer (e.g. Google) needs an explicit trusted-host allowlist (#254).',
+      );
+    }
+    logger.info(
+      `[OIDC] Cross-host JWKS fetch allowed for ${jwksUri} (host "${jwksHostname}" in OIDC_JWKS_TRUSTED_HOSTS)`,
     );
   }
   return jwks.toString();
@@ -118,6 +126,7 @@ export function resolveJwksUri(
 export async function discoverJwksUri(
   issuer: string | undefined,
   allowInsecure = false,
+  trustedHosts: string[] = [],
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
   assertSecureIssuer(issuer, allowInsecure);
@@ -142,7 +151,7 @@ export async function discoverJwksUri(
   } catch {
     throw new Error(`OIDC discovery document at ${discoveryUrl} is not valid JSON`);
   }
-  const jwksUri = resolveJwksUri(doc as { jwks_uri?: unknown }, issuer, allowInsecure);
+  const jwksUri = resolveJwksUri(doc as { jwks_uri?: unknown }, issuer, allowInsecure, trustedHosts);
   logger.info('Resolved JWKS URI from OIDC discovery', { jwksUri });
   return jwksUri;
 }
