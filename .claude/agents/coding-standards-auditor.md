@@ -14,7 +14,7 @@ model: opus
 tools: ["Read", "Edit", "Write", "Bash", "Grep", "Glob"]
 ---
 
-<!-- coding-standards-auditor-version: 1 -->
+<!-- coding-standards-auditor-version: 2 -->
 
 You are the coding-standards auditor for **actual-mcp-server** (agigante80/actual-mcp-server).
 Your job is to verify that the codebase actually follows the project's documented

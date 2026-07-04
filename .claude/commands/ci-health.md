@@ -1,4 +1,4 @@
-<!-- ci-health-version: 1 -->
+<!-- ci-health-version: 3 -->
 
 # CI Health Monitor
 
@@ -16,7 +16,7 @@ Auto-discover all workflow files:
 ls .github/workflows/*.yml .github/workflows/*.yaml 2>/dev/null
 ```
 
-Detect the working branch (always `develop` for this project — never push fixes directly to `main`):
+Detect the working branch (always `develop` for this project, never push fixes directly to `main`):
 
 ```bash
 git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || echo "develop"
@@ -39,9 +39,18 @@ Report a summary table:
 
 | Workflow | Status | Failed jobs |
 |---|---|---|
-| ci.yml | pass/fail | job1, job2 |
+| ci-cd.yml | pass/fail | job1, job2 |
+| auto-release-on-dependency.yml | pass/fail | - |
 
 If ALL workflows are passing, report "All workflows green" and stop.
+
+**Classify governance workflows separately.** A red **release / version-gate** failure (for
+example, `scripts/version-bump.js` aborting because the local `VERSION` is behind the latest
+published tag, or a version-bump enforcement step failing) is an *intentional governance
+signal*, **not** a CI breakage. Do not file a P0 bug for it and do not carry it into the fix
+phases; surface it as "action: run `git fetch origin && git merge origin/main`, then bump per
+the release process" and move on (see Phase 4). Releases are a human responsibility in this
+project (`release:*` scripts are never run by automation).
 
 ### Phase 2: Create tickets for failures
 
@@ -100,9 +109,13 @@ git push origin develop
 ```
 
 **DO NOT AUTO-IMPLEMENT** (investigate only, leave a comment):
-- E2E test failures — comment: "E2E: investigation complete, manual review required before fix"
-- Security scan findings — comment with findings summary, do not auto-fix
-- Integration test failures — require live server, leave investigation notes
+- E2E test failures: comment "E2E: investigation complete, manual review required before fix"
+- Security scan findings: comment with findings summary, do not auto-fix
+- Integration test failures: require live server, leave investigation notes
+- Release / version-gate failures: the bump is a human decision. Never auto-bump the version
+  or run `scripts/version-bump.js --force` to make a workflow green; that defeats the gate's
+  entire purpose (the freshness check exists to catch parallel bumps). Comment the required
+  action, or skip it entirely per Phase 1.
 
 ### Phase 5: Verify
 
@@ -118,10 +131,11 @@ Report whether the fix was pushed and a new run is in progress.
 
 ## Rules
 
-- **Never hard-code workflow file names** — always discover via `ls .github/workflows/`
-- **Working branch is `develop`** — never push fixes directly to `main` without explicit user permission
+- **Never hard-code workflow file names:** always discover via `ls .github/workflows/`
+- **Working branch is `develop`:** never push fixes directly to `main` without explicit user permission
 - **Gate review must pass 10/10** before implementing any fix
-- **One commit per fix** — not one big commit for everything
+- **One commit per fix:** not one big commit for everything
 - **Pre-commit sequence is mandatory** before every push: `npm run build && npm run verify-tools && npm run test:unit-js && npm audit --audit-level=moderate`
-- **No duplicate tickets** — always search before creating
-- **npm overrides are last resort** — only for security CVEs with no direct-dep upgrade available
+- **No duplicate tickets:** always search before creating
+- **npm overrides are last resort:** only for security CVEs with no direct-dep upgrade available
+- **Never auto-bump the version** to silence a release / version-gate failure
