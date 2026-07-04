@@ -1,7 +1,7 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.7.11",
+  "version": "0.7.12",
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.0.0"
@@ -60,7 +60,7 @@
     "knip": "knip"
   },
   "dependencies": {
-    "@actual-app/api": "^26.6.0",
+    "@actual-app/api": "^26.7.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "debug": "^4.4.3",
     "dotenv": "^17.4.2",
