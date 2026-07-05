@@ -154,6 +154,30 @@ ACTUAL_PASSWORD=your_actual_budget_password
 
 ---
 
+## 🔒 Production Branch Protection (#267)
+
+Two repository rulesets protect `main` server-side (configured 2026-07-05; they live in repo
+settings, so this section is the versioned record of their intended shape):
+
+1. **`main: append-only (no force pushes, no deletion)`**: blocks force pushes and branch
+   deletion for EVERYONE, no bypass actors. Even an allowlisted or stolen credential cannot
+   rewrite or erase history; main is append-only.
+2. **`main: restrict pushes to release paths`**: the `update` rule restricts direct pushes to
+   exactly two bypass principals: the repository admin role (the maintainer's `/release`
+   fast-forward) and the `actual-mcp-dependency-updater` GitHub App, App ID 2603676 (the
+   auto-release lane in `dependency-update.yml`, which pushes main and release tags with an
+   App-token-authenticated checkout since #261).
+
+Rationale and the full options analysis live in issue #267. Client-side guards (the
+release-gate hook and the version-bump freshness abort) remain as defense in depth, but the
+rulesets make the develop-first policy hold for every machine and credential, and they also
+prevent Dependabot security-update PRs (which always target the default branch) from being
+merged outside the release path. If these rulesets are changed, update this section; drift
+between this record and `gh api repos/agigante80/actual-mcp-server/rulesets` output is a
+red flag.
+
+---
+
 ## 🛡️ Data Protection
 
 ### Data at Rest
