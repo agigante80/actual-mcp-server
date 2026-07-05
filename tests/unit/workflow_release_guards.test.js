@@ -8,9 +8,12 @@
 // / compose_profile_sync).
 //
 // Invariants:
-//   (a) the App-token step runs BEFORE any checkout, and EVERY checkout step
+//   (a) the App-token step runs BEFORE any checkout, EVERY checkout step
 //       authenticates with it (a later unauthenticated checkout would rewrite
-//       the persisted credential back to GITHUB_TOKEN)
+//       the persisted credential back to GITHUB_TOKEN), and every checkout
+//       carries an EXPLICIT `persist-credentials: true` (#262): the persisted
+//       App credential authenticates the pushes, so it must not depend on the
+//       upstream default surviving the next checkout major
 //   (b) no token-in-URL auth anywhere (x-access-token in a remote URL)
 //   (c) the bump step resyncs package-lock.json after version:bump and before
 //       the commit that snapshots the release
@@ -57,16 +60,28 @@ function stepBlocks(text) {
   return parts.filter((p) => /^\s+- name: /.test(p) || /(^|\n)\s+- name: /.test(p)).slice(0);
 }
 
-// (a) App token generated before any checkout; every checkout uses it.
+// (a) App token generated before any checkout; every checkout uses it AND
+// carries an explicit `persist-credentials: true` (#262): the persisted App
+// credential is what authenticates the later pushes to main, so disabling
+// persistence (in any YAML spelling) breaks the release exactly like a
+// missing `token:`, and relying on the upstream default is pin-fragile.
+// Comment lines are stripped before matching so prose ABOUT the setting can
+// neither satisfy nor trip the detector.
+function withoutComments(block) {
+  return block.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
+}
 function appTokenAuthenticatesEveryCheckout(text) {
   const blocks = stepBlocks(text);
   const tokenIdx = blocks.findIndex((b) => b.includes('create-github-app-token'));
   const checkouts = blocks
-    .map((b, i) => ({ b, i }))
+    .map((b, i) => ({ b: withoutComments(b), i }))
     .filter(({ b }) => b.includes('uses: actions/checkout@'));
   if (tokenIdx === -1 || checkouts.length === 0) return false;
   return checkouts.every(({ b, i }) =>
-    i > tokenIdx && b.includes('token: ${{ steps.token.outputs.token }}'));
+    i > tokenIdx &&
+    b.includes('token: ${{ steps.token.outputs.token }}') &&
+    /persist-credentials:\s*['"]?true\b/i.test(b) &&
+    !/persist-credentials:\s*['"]?false\b/i.test(b));
 }
 
 // (b) Token-in-URL auth writes the secret into .git/config; banned.
@@ -156,9 +171,9 @@ console.log('\n[workflow-release-guards]');
 
 const wf = readFileSync(WORKFLOW, 'utf8');
 
-check('(a) App-token step precedes checkout and every checkout authenticates with it', () => {
+check('(a) App-token step precedes checkout; every checkout authenticates with it and keeps credential persistence explicitly on', () => {
   assert.ok(appTokenAuthenticatesEveryCheckout(wf),
-    'create-github-app-token must run before any actions/checkout, and every checkout must pass token: ${{ steps.token.outputs.token }}, or pushes authenticate as GITHUB_TOKEN and never trigger ci-cd.yml (#261 fix 2)');
+    'create-github-app-token must run before any actions/checkout, every checkout must pass token: ${{ steps.token.outputs.token }} AND an explicit persist-credentials: true (no false in any spelling), or pushes authenticate as GITHUB_TOKEN / lose the credential and never trigger ci-cd.yml (#261 fix 2, #262)');
 });
 
 check('(b) no token-in-URL (x-access-token) auth anywhere in the workflow', () => {
@@ -205,15 +220,26 @@ check('(h) the retired auto-release-on-dependency lane stays retired', () => {
 });
 
 // NEGATIVE fixtures: each detector must catch its regression when reintroduced.
-check('NEGATIVE (a): checkout before token step, missing token:, or a second unauthenticated checkout is detected', () => {
+check('NEGATIVE (a): checkout before token step, missing token:, a second unauthenticated checkout, or persistence loss is detected', () => {
   const before = '      - name: Checkout\n        uses: actions/checkout@v4\n      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3';
   assert.strictEqual(appTokenAuthenticatesEveryCheckout(before), false, 'checkout before token step must fail');
-  const noToken = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          ref: main';
+  const noToken = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          ref: main\n          persist-credentials: true';
   assert.strictEqual(appTokenAuthenticatesEveryCheckout(noToken), false, 'checkout without token: must fail');
-  const secondUnauthed = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          token: ${{ steps.token.outputs.token }}\n      - name: Checkout again\n        uses: actions/checkout@v4\n        with:\n          ref: develop';
-  assert.strictEqual(appTokenAuthenticatesEveryCheckout(secondUnauthed), false, 'a second checkout without token: must fail');
-  const ok = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          token: ${{ steps.token.outputs.token }}';
+  const ok = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          token: ${{ steps.token.outputs.token }}\n          persist-credentials: true';
   assert.strictEqual(appTokenAuthenticatesEveryCheckout(ok), true, 'the compliant shape must pass');
+  const secondUnauthed = ok + '\n      - name: Checkout again\n        uses: actions/checkout@v4\n        with:\n          ref: develop';
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(secondUnauthed), false, 'a second checkout without token: must fail');
+  const noExplicitPersist = ok.replace('\n          persist-credentials: true', '');
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(noExplicitPersist), false,
+    'a checkout relying on the upstream persist-credentials default must fail: pin it explicitly (#262)');
+  for (const spelling of ['false', '"false"', "'false'", 'False', 'FALSE']) {
+    const persistOff = ok.replace('persist-credentials: true', `persist-credentials: ${spelling}`);
+    assert.strictEqual(appTokenAuthenticatesEveryCheckout(persistOff), false,
+      `persist-credentials: ${spelling} must fail: the persisted credential authenticates the pushes (#262)`);
+  }
+  const commentOnly = ok + '\n          # never set persist-credentials: false here (#262)';
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(commentOnly), true,
+    'a comment MENTIONING persist-credentials: false must not trip the detector');
 });
 
 check('NEGATIVE (b): a reintroduced x-access-token URL is detected', () => {

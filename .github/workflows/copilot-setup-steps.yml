@@ -1,5 +1,5 @@
 # Pre-installs dependencies into Copilot coding agent's ephemeral environment.
-# The job MUST be named 'copilot-setup-steps' — Copilot looks for this exact name.
+# The job MUST be named 'copilot-setup-steps': Copilot looks for this exact name.
 # Reference: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment
 
 on:
@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
