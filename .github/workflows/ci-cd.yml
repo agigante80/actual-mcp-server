@@ -67,7 +67,7 @@ jobs:
       is_release: ${{ steps.version.outputs.is_release }}
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 📝 Extract version
         id: version
@@ -133,7 +133,7 @@ jobs:
       contents: read
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
@@ -188,7 +188,7 @@ jobs:
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
@@ -240,7 +240,7 @@ jobs:
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
@@ -251,7 +251,7 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
-      # Playwright browsers are NOT installed on the host — tests run inside the
+      # Playwright browsers are NOT installed on the host: tests run inside the
       # mcr.microsoft.com/playwright:v1.57.0-jammy Docker container (e2e-test-runner
       # service in docker-compose.test.yaml) which already has Playwright pre-installed.
 
@@ -304,7 +304,7 @@ jobs:
     needs: version
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: ✅ Validate short description length
         run: |
@@ -349,7 +349,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🧮 Prepare per-arch vars
         run: |
@@ -551,7 +551,7 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
-  # Job 6: Publish to npm (via Trusted Publishers — no NPM_TOKEN needed)
+  # Job 6: Publish to npm (via Trusted Publishers: no NPM_TOKEN needed)
   # --------------------------------------------------------------------------
   npm-publish:
     name: Publish to npm
@@ -570,7 +570,7 @@ jobs:
       id-token: write  # required for npm Trusted Publishers (OIDC)
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v4
@@ -616,7 +616,7 @@ jobs:
       security-events: write
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 🐳 Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -670,7 +670,7 @@ jobs:
       needs.docker-publish.result == 'success'
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: 📝 Read Docker descriptions
         id: get-desc
@@ -772,7 +772,7 @@ jobs:
       contents: write
     steps:
       - name: 📥 Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -869,7 +869,7 @@ jobs:
 # Required Secrets:
 # - DOCKERHUB_USER: Docker Hub username
 # - DOCKERHUB_TOKEN: Docker Hub access token
-# - NPM_TOKEN: NOT needed — npm publishing uses Trusted Publishers (OIDC, id-token: write)
+# - NPM_TOKEN: NOT needed: npm publishing uses Trusted Publishers (OIDC, id-token: write)
 # - GITHUB_TOKEN: Automatically provided by GitHub Actions
 # ============================================================================
 

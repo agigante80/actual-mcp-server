@@ -52,11 +52,15 @@ jobs:
       # GITHUB_TOKEN pushes never fire ci-cd.yml, which is how v0.7.12 shipped
       # with no Docker image (#261 fix 2).
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: main
           fetch-depth: 0          # full history needed for merge + tagging
           token: ${{ steps.token.outputs.token }}
+          # Explicit, not default-reliant (#262): the persisted App credential is
+          # what authenticates the pushes to main and the tag; an upstream major
+          # flipping the default would otherwise break the release lane silently.
+          persist-credentials: true
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
