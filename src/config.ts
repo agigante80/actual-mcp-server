@@ -48,6 +48,11 @@ export const configSchema = z.object({
   // Strict closed allowlist: the accepted set is OIDC_RESOURCE plus these; never a
   // wildcard. Default empty, so single-audience deployments are unchanged.
   OIDC_ACCEPTED_AUDIENCES: z.string().optional(),
+  // #254: opt-in allowlist of cross-origin JWKS hosts, comma-separated `host` or
+  // `host:port` entries (e.g. "www.googleapis.com" for a Google issuer). Raw string
+  // here; parsed fail-fast by buildTrustedJwksHosts (oidc-discovery.ts) at the
+  // composition root, per the #245 pattern. Default empty: same-origin only.
+  OIDC_JWKS_TRUSTED_HOSTS: z.string().optional(),
   // Comma-separated required scopes (e.g. "read,write"). Optional.
   OIDC_SCOPES: z.string().optional(),
   // JSON map of principal → budget sync-ID list for per-user budget ACL.
