@@ -204,6 +204,9 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
 OIDC_SCOPES=                          # leave empty for Casdoor (no 'scope' claim)
+# Only for IdPs whose JWKS lives on a different host than the issuer (#254).
+# Google: issuer accounts.google.com serves keys from www.googleapis.com:
+# OIDC_JWKS_TRUSTED_HOSTS=www.googleapis.com
 ```
 
 **Per-user budget access control** (`AUTH_BUDGET_ACL`):

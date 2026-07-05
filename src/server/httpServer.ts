@@ -18,7 +18,7 @@ import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
-import { discoverJwksUri } from '../lib/oidc-discovery.js';
+import { discoverJwksUri, buildTrustedJwksHosts } from '../lib/oidc-discovery.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import * as https from 'node:https';
@@ -101,7 +101,14 @@ export async function startHttpServer(
       // closed on a non-https issuer, a cross-origin redirect, a missing/invalid
       // jwks_uri, or a jwks_uri on a different host than the issuer. jose's
       // createRemoteJWKSet then fetches the keys lazily and caches them.
-      const jwksUri = await discoverJwksUri(config.OIDC_ISSUER, config.OIDC_ALLOW_INSECURE_ISSUER);
+      // #254: opt-in cross-origin JWKS trusted hosts (e.g. Google serves keys from
+      // www.googleapis.com). Parsed fail-fast here at the composition root and
+      // threaded as a parameter; empty (the default) keeps same-origin-only.
+      const jwksUri = await discoverJwksUri(
+        config.OIDC_ISSUER,
+        config.OIDC_ALLOW_INSECURE_ISSUER,
+        buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS),
+      );
       const jwks = createRemoteJWKSet(new URL(jwksUri));
       const customJwtVerify = async (token: string) => {
         // Enforce the audience claim (#160, OWASP A07). Without it, any

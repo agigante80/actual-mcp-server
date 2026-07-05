@@ -102,6 +102,8 @@ services:
       # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
       # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
       # - OIDC_RESOURCE=${OIDC_RESOURCE}
+      # - OIDC_ACCEPTED_AUDIENCES=${OIDC_ACCEPTED_AUDIENCES}  # extra 'aud' values (#245)
+      # - OIDC_JWKS_TRUSTED_HOSTS=${OIDC_JWKS_TRUSTED_HOSTS}  # cross-host JWKS, e.g. Google (#254)
       # - OIDC_SCOPES=${OIDC_SCOPES}
       # - AUTH_BUDGET_ACL=${AUTH_BUDGET_ACL}
 
@@ -194,6 +196,8 @@ services:
       # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
       # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
       # - OIDC_RESOURCE=${OIDC_RESOURCE}
+      # - OIDC_ACCEPTED_AUDIENCES=${OIDC_ACCEPTED_AUDIENCES}  # extra 'aud' values (#245)
+      # - OIDC_JWKS_TRUSTED_HOSTS=${OIDC_JWKS_TRUSTED_HOSTS}  # cross-host JWKS, e.g. Google (#254)
       # - OIDC_SCOPES=${OIDC_SCOPES}
       # - AUTH_BUDGET_ACL=${AUTH_BUDGET_ACL}
 

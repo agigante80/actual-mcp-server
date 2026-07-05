@@ -72,6 +72,21 @@ empties are filtered, and there is no wildcard or accept-any path, so a token wh
 the configured set is still rejected (the cross-relying-party replay protection from #160 holds).
 With no extras configured the set is exactly `[OIDC_RESOURCE]`, unchanged from before.
 
+**Cross-origin JWKS allowlist (#254)**: by default the resolved `jwks_uri` must be same-origin
+with the issuer. `OIDC_JWKS_TRUSTED_HOSTS` (comma-separated `host` or `host:port`, exact match,
+lowercased, no wildcards) is an opt-in relaxation of ONLY that same-origin check, for IdPs that
+legitimately serve keys from another host (Google: issuer `accounts.google.com`, JWKS on
+`www.googleapis.com`). An allowlisted cross-origin `jwks_uri` must be https with NO exemption:
+neither `OIDC_ALLOW_INSECURE_ISSUER` (the #244 opt-out covers a same-origin LAN issuer only)
+nor a loopback host relaxes the cross-origin path, so the allowlist can never produce a
+plaintext third-party key fetch. Also still enforced: no embedded credentials, no discovery
+redirects, the discovery timeout, and the audience allowlist. Matching is port-strict
+(`URL.host`), a bare-host entry does not trust odd ports on that host, entries are validated by
+a canonical URL round-trip at startup (a `:443` suffix, raw-unicode IDN, or unbracketed IPv6
+throws instead of sitting inert), and every allowlist acceptance is logged with issuer origin
+and JWKS host for an audit trail. Empty (default) means the same-origin-only behaviour is
+byte-identical to before.
+
 **Configuration**:
 ```bash
 AUTH_PROVIDER=oidc

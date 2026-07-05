@@ -15,12 +15,14 @@ import { createModuleLogger } from './loggerFactory.js';
  *   - the resolved `jwks_uri` must be https and on the SAME host as the issuer, so
  *     a tampered or misconfigured discovery document cannot point key fetching at
  *     an attacker-controlled host. Cross-host issuers (for example Google, which
- *     serves keys from googleapis.com) are intentionally not auto-trusted; that is
- *     a separate, configurable follow-up (#245).
+ *     serves keys from googleapis.com) are never auto-trusted; the operator can
+ *     allowlist specific cross-origin JWKS hosts via OIDC_JWKS_TRUSTED_HOSTS
+ *     (#254, opt-in, exact host:port match, https required unconditionally).
  *
- * The pure helpers (assertSecureIssuer, resolveJwksUri) are unit-tested without a
- * network; discoverJwksUri wraps them around a single startup fetch and fails
- * closed on any problem.
+ * The helpers (assertSecureIssuer, buildTrustedJwksHosts, resolveJwksUri) are
+ * network-free and unit-tested directly (resolveJwksUri logs on the allowlist
+ * accept path, otherwise side-effect free); discoverJwksUri wraps them around a
+ * single startup fetch and fails closed on any problem.
  */
 
 const logger = createModuleLogger('OIDC_DISCOVERY');
@@ -32,6 +34,48 @@ const DISCOVERY_TIMEOUT_MS = 10_000;
 
 export function isLoopbackHost(host: string | undefined): boolean {
   return host ? LOOPBACK_HOSTS.has(host.toLowerCase()) : false;
+}
+
+/**
+ * Parse OIDC_JWKS_TRUSTED_HOSTS (comma-separated `host` or `host:port`
+ * entries) into a normalized, deduplicated allowlist (#254). Mirrors the #245
+ * buildAcceptedAudiences pattern: config stays a raw string, parsing happens
+ * here, and the result is threaded as a parameter. Entries are trimmed,
+ * lowercased, and empties dropped, then validated by a URL round-trip: an
+ * entry must equal `new URL('https://' + entry).host`, which rejects in one
+ * rule everything that could never match a real jwks_uri host: schemes,
+ * paths, credentials, wildcards, whitespace, empty or non-numeric ports,
+ * default-port `:443` suffixes (URL.host elides them, so such an entry would
+ * be silently inert), raw-unicode IDN (URL.host is punycode), and unbracketed
+ * IPv6. THROWS on the first invalid entry so a misconfigured allowlist fails
+ * fast at startup instead of silently failing closed at the first
+ * cross-origin issuer.
+ */
+export function buildTrustedJwksHosts(configured: string | undefined): string[] {
+  if (!configured) return [];
+  const entries = configured
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  for (const entry of entries) {
+    let canonical: string | undefined;
+    try {
+      canonical = new URL(`https://${entry}`).host;
+    } catch {
+      canonical = undefined;
+    }
+    // WHATWG URL does not forbid "*" in a hostname, so the round-trip alone
+    // would let a wildcard through; there is deliberately no wildcard matching.
+    if (entry.includes('*') || canonical !== entry) {
+      throw new Error(
+        `OIDC_JWKS_TRUSTED_HOSTS entry is invalid: "${entry}". Entries must be canonical URL ` +
+          'hosts: a bare lowercase hostname, optionally with a NON-default port (host:port; ' +
+          '":443" is elided by URL parsing and would never match), no scheme, path, ' +
+          'credentials, or wildcards; IDN as punycode; IPv6 in brackets.',
+      );
+    }
+  }
+  return Array.from(new Set(entries));
 }
 
 /**
@@ -69,14 +113,20 @@ export function assertSecureIssuer(issuer: string | undefined, allowInsecure = f
 }
 
 /**
- * Pure: resolve and validate the `jwks_uri` from a parsed discovery document
- * against the issuer. Throws (fail closed) if it is missing, not https, carries
- * embedded credentials, or is not same-origin (scheme + host + port) with the issuer.
+ * Network-free: resolve and validate the `jwks_uri` from a parsed discovery
+ * document against the issuer. Throws (fail closed) if it is missing, not
+ * https, carries embedded credentials, or is not same-origin (scheme + host +
+ * port) with the issuer, UNLESS the jwks host is explicitly listed in
+ * `trustedHosts` (#254): an allowlisted cross-origin jwks_uri is accepted,
+ * must still be https (no OIDC_ALLOW_INSECURE_ISSUER or loopback exemption on
+ * the cross-origin path), and the acceptance is audit-logged (the one side
+ * effect of this function).
  */
 export function resolveJwksUri(
   discoveryDoc: { jwks_uri?: unknown } | null | undefined,
   issuer: string | undefined,
   allowInsecure = false,
+  trustedHosts: string[] = [],
 ): string {
   const issuerUrl = assertSecureIssuer(issuer, allowInsecure);
   if (!discoveryDoc || typeof discoveryDoc !== 'object') {
@@ -102,10 +152,38 @@ export function resolveJwksUri(
   // same host is a different service, so comparing origins keeps the guarantee the
   // security review asked for. Both are https here, so this is effectively host+port.
   if (jwks.origin.toLowerCase() !== issuerUrl.origin.toLowerCase()) {
-    throw new Error(
-      `OIDC "jwks_uri" origin (${jwks.origin}) does not match the issuer origin (${issuerUrl.origin}); ` +
-        'refusing a cross-origin key fetch. A cross-host issuer (e.g. Google) needs an explicit trusted-host allowlist (#245).',
-    );
+    // #254: opt-in escape hatch for legitimately cross-host IdPs (Google serves
+    // JWKS from www.googleapis.com). Matching is on URL.host (hostname PLUS any
+    // non-default port), exact and lowercased: a bare-host entry does not trust
+    // odd ports on that host, preserving this file's origin-level strictness.
+    // Empty allowlist (the default) makes this branch behave exactly as before.
+    const jwksHost = jwks.host.toLowerCase();
+    if (!trustedHosts.includes(jwksHost)) {
+      throw new Error(
+        `OIDC "jwks_uri" origin (${jwks.origin}) does not match the issuer origin (${issuerUrl.origin}); ` +
+          `refusing a cross-origin key fetch. Checked host "${jwksHost}" against ` +
+          `OIDC_JWKS_TRUSTED_HOSTS [${trustedHosts.join(', ')}]; matching is exact on host:port ` +
+          '(#254). A cross-host issuer (e.g. Google) needs its JWKS host explicitly allowlisted.',
+      );
+    }
+    // An allowlisted CROSS-ORIGIN fetch must be https, with no exemption: not
+    // for OIDC_ALLOW_INSECURE_ISSUER (the #244 opt-out covers a same-origin LAN
+    // issuer, never third-party key hosts) and not for loopback (a shared-host
+    // process could bind the port). Without this, combining the two opt-ins
+    // would newly permit a plaintext cross-origin key fetch that pre-#254 code
+    // always refused.
+    if (jwks.protocol !== 'https:') {
+      throw new Error(
+        `OIDC cross-origin "jwks_uri" allowed by OIDC_JWKS_TRUSTED_HOSTS must use https (got ${jwks.protocol}); ` +
+          'the OIDC_ALLOW_INSECURE_ISSUER opt-out never extends to cross-origin key fetches (#254).',
+      );
+    }
+    // Audit trail: a normally-rejected cross-origin trust was relaxed by operator config.
+    logger.info('cross-origin JWKS host allowed by OIDC_JWKS_TRUSTED_HOSTS', {
+      issuerOrigin: issuerUrl.origin,
+      jwksHost,
+      jwksUri: jwks.toString(),
+    });
   }
   return jwks.toString();
 }
@@ -118,6 +196,7 @@ export function resolveJwksUri(
 export async function discoverJwksUri(
   issuer: string | undefined,
   allowInsecure = false,
+  trustedHosts: string[] = [],
   fetchImpl: typeof fetch = fetch,
 ): Promise<string> {
   assertSecureIssuer(issuer, allowInsecure);
@@ -142,7 +221,7 @@ export async function discoverJwksUri(
   } catch {
     throw new Error(`OIDC discovery document at ${discoveryUrl} is not valid JSON`);
   }
-  const jwksUri = resolveJwksUri(doc as { jwks_uri?: unknown }, issuer, allowInsecure);
+  const jwksUri = resolveJwksUri(doc as { jwks_uri?: unknown }, issuer, allowInsecure, trustedHosts);
   logger.info('Resolved JWKS URI from OIDC discovery', { jwksUri });
   return jwksUri;
 }
