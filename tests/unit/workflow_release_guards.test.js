@@ -1,0 +1,193 @@
+// tests/unit/workflow_release_guards.test.js
+//
+// #261: structural invariants of the auto-release workflow. The v0.7.12 incident
+// (no Docker image, npm-ci-broken main, silently skipped develop sync, fictional
+// release notes) traced to four defects in dependency-update.yml. Each invariant
+// below locks one fix in place so a refactor cannot silently reintroduce the
+// failure mode. Mirrors the text-parsing guard pattern (knip_config / port_alignment
+// / compose_profile_sync).
+//
+// Invariants:
+//   (a) the App-token step runs BEFORE any checkout, and EVERY checkout step
+//       authenticates with it (a later unauthenticated checkout would rewrite
+//       the persisted credential back to GITHUB_TOKEN)
+//   (b) no token-in-URL auth anywhere (x-access-token in a remote URL)
+//   (c) the bump step resyncs package-lock.json after version:bump and before
+//       the commit that snapshots the release
+//   (d) no `} || {` compound guard anywhere (explicit if control flow required)
+//   (e) the Release action runs only AFTER the ci-cd watch guard (anchored on
+//       the `gh run watch` behavior, not on display names)
+//   (f) the release body computes the tool count; no hardcoded count literal
+//   (g) behavioral: package-lock.json root version fields agree with
+//       package.json (catches a stale-lock bump from ANY path, including the
+//       manual release lane, via the mandatory pre-commit test run)
+//
+// Run: node tests/unit/workflow_release_guards.test.js
+
+import assert from 'assert';
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const WORKFLOW = join(ROOT, '.github', 'workflows', 'dependency-update.yml');
+
+let passed = 0;
+let failed = 0;
+function check(label, fn) {
+  try { fn(); console.log(`  ok: ${label}`); passed++; }
+  catch (err) { console.error(`  FAIL: ${label} -> ${err.message}`); failed++; }
+}
+
+// Split a workflow into step blocks: each block starts at a "- name:" line.
+// Text before the first step (triggers, permissions) is dropped.
+function stepBlocks(text) {
+  const parts = text.split(/\n(?=\s+- name: )/);
+  return parts.filter((p) => /^\s+- name: /.test(p) || /(^|\n)\s+- name: /.test(p)).slice(0);
+}
+
+// (a) App token generated before any checkout; every checkout uses it.
+function appTokenAuthenticatesEveryCheckout(text) {
+  const blocks = stepBlocks(text);
+  const tokenIdx = blocks.findIndex((b) => b.includes('create-github-app-token'));
+  const checkouts = blocks
+    .map((b, i) => ({ b, i }))
+    .filter(({ b }) => b.includes('uses: actions/checkout@'));
+  if (tokenIdx === -1 || checkouts.length === 0) return false;
+  return checkouts.every(({ b, i }) =>
+    i > tokenIdx && b.includes('token: ${{ steps.token.outputs.token }}'));
+}
+
+// (b) Token-in-URL auth writes the secret into .git/config; banned.
+function hasTokenInUrlAuth(text) {
+  return text.includes('x-access-token:');
+}
+
+// (c) The bump step must resync the lockfile after bumping and before committing.
+function bumpResyncsLockfile(text) {
+  const bumpStep = stepBlocks(text).find((b) => b.includes('npm run version:bump'));
+  if (!bumpStep) return false;
+  const bump = bumpStep.indexOf('npm run version:bump');
+  const resync = bumpStep.indexOf('npm install --package-lock-only');
+  const commit = bumpStep.indexOf('git commit');
+  return resync > bump && commit > resync;
+}
+
+// (d) The `} || {` compound guard suppresses errexit inside the left group and
+// produced the false "Develop fast-forwarded" success in run 28632676467.
+function hasCompoundGuardPattern(text) {
+  return /\}\s*\|\|\s*\{/.test(text);
+}
+
+// (e) The Release action must come after the guard that watches the ci-cd run
+// on the new tag. Anchored on behavior-bearing text (`gh run watch` and the
+// release action's `uses:` line), not on renameable step display names.
+function releaseGatedByGuard(text) {
+  const watchIdx = text.indexOf('gh run watch');
+  const releaseIdx = text.indexOf('uses: softprops/action-gh-release');
+  return watchIdx !== -1 && releaseIdx !== -1 && watchIdx < releaseIdx;
+}
+
+// (f) A hardcoded tool count (the "62 MCP tools" drift) is banned; the body must
+// interpolate the computed count.
+function hardcodedToolCount(text) {
+  return /\b\d+\s+(MCP\s+)?tools\b/i.test(text);
+}
+function computesToolCount(text) {
+  return text.includes('steps.bump.outputs.tool_count');
+}
+
+// (g) Behavioral lock agreement: catches a stale-lock version bump from ANY
+// lane (auto-release or the manual release skill) when the mandatory pre-commit
+// unit suite runs on the bumped tree.
+function lockfileAgreesWithPackageJson(root) {
+  const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8'));
+  const lock = JSON.parse(readFileSync(join(root, 'package-lock.json'), 'utf8'));
+  return lock.version === pkg.version && lock.packages[''].version === pkg.version;
+}
+
+console.log('\n[workflow-release-guards]');
+
+const wf = readFileSync(WORKFLOW, 'utf8');
+
+check('(a) App-token step precedes checkout and every checkout authenticates with it', () => {
+  assert.ok(appTokenAuthenticatesEveryCheckout(wf),
+    'create-github-app-token must run before any actions/checkout, and every checkout must pass token: ${{ steps.token.outputs.token }}, or pushes authenticate as GITHUB_TOKEN and never trigger ci-cd.yml (#261 fix 2)');
+});
+
+check('(b) no token-in-URL (x-access-token) auth anywhere in the workflow', () => {
+  assert.ok(!hasTokenInUrlAuth(wf),
+    'token-in-URL auth duplicates the credential path and risks the token surfacing in logged remote URLs; authenticate through the checkout step instead (#261 fix 2)');
+});
+
+check('(c) bump step resyncs package-lock.json between version:bump and the commit', () => {
+  assert.ok(bumpResyncsLockfile(wf),
+    'npm install --package-lock-only must run after npm run version:bump and before git commit in the same step, or the release commit fails npm ci (#261 fix 1)');
+});
+
+check('(d) no `} || {` compound guard anywhere (explicit if control flow)', () => {
+  assert.ok(!hasCompoundGuardPattern(wf),
+    'the `} || {` compound guard swallows failures under errexit and skips the sync PR (#261 fix 3)');
+});
+
+check('(e) Release action runs only after the ci-cd watch guard', () => {
+  assert.ok(releaseGatedByGuard(wf),
+    'gh run watch (the publish guard) must appear before uses: softprops/action-gh-release (#261 fix 5)');
+});
+
+check('(f) release body computes the tool count; no hardcoded count literal', () => {
+  assert.ok(!hardcodedToolCount(wf),
+    'hardcoded tool-count literal found; interpolate the computed count instead (#261 fix 4)');
+  assert.ok(computesToolCount(wf),
+    'release body must interpolate steps.bump.outputs.tool_count (#261 fix 4)');
+});
+
+check('(g) package-lock.json root version fields agree with package.json', () => {
+  assert.ok(lockfileAgreesWithPackageJson(ROOT),
+    'package-lock.json version fields disagree with package.json: a version bump was committed without npm install --package-lock-only, so npm ci will fail at this commit (#261 fix 1)');
+});
+
+// NEGATIVE fixtures: each detector must catch its regression when reintroduced.
+check('NEGATIVE (a): checkout before token step, missing token:, or a second unauthenticated checkout is detected', () => {
+  const before = '      - name: Checkout\n        uses: actions/checkout@v4\n      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3';
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(before), false, 'checkout before token step must fail');
+  const noToken = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          ref: main';
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(noToken), false, 'checkout without token: must fail');
+  const secondUnauthed = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          token: ${{ steps.token.outputs.token }}\n      - name: Checkout again\n        uses: actions/checkout@v4\n        with:\n          ref: develop';
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(secondUnauthed), false, 'a second checkout without token: must fail');
+  const ok = '      - name: Generate GitHub App token\n        uses: actions/create-github-app-token@v3\n      - name: Checkout\n        uses: actions/checkout@v4\n        with:\n          token: ${{ steps.token.outputs.token }}';
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(ok), true, 'the compliant shape must pass');
+});
+
+check('NEGATIVE (b): a reintroduced x-access-token URL is detected', () => {
+  assert.strictEqual(hasTokenInUrlAuth('git remote set-url origin "https://x-access-token:${T}@github.com/o/r.git"'), true);
+  assert.strictEqual(hasTokenInUrlAuth('git push origin main'), false);
+});
+
+check('NEGATIVE (c): a resync outside the bump step, or after the commit, is detected', () => {
+  const outside = '      - name: Bump\n        run: |\n          npm run version:bump -- patch\n          git commit -m x\n      - name: Later\n        run: npm install --package-lock-only';
+  assert.strictEqual(bumpResyncsLockfile(outside), false, 'resync in a different step must fail');
+  const after = '      - name: Bump\n        run: |\n          npm run version:bump -- patch\n          git commit -m x\n          npm install --package-lock-only';
+  assert.strictEqual(bumpResyncsLockfile(after), false, 'resync after the commit must fail');
+  const ok = '      - name: Bump\n        run: |\n          npm run version:bump -- patch\n          npm install --package-lock-only\n          git commit -m x';
+  assert.strictEqual(bumpResyncsLockfile(ok), true, 'the compliant order must pass');
+});
+
+check('NEGATIVE (d): a reintroduced `} || {` compound guard is detected', () => {
+  assert.strictEqual(hasCompoundGuardPattern('{\n  git merge --ff-only main\n} || {\n  echo fallback\n}'), true);
+  assert.strictEqual(hasCompoundGuardPattern('if ! git merge --ff-only main; then\n  echo fallback\nfi'), false);
+});
+
+check('NEGATIVE (e): a Release action reordered before the watch guard is detected', () => {
+  const fixture = 'uses: softprops/action-gh-release@v3\n...\ngh run watch "$RUN_ID" --exit-status';
+  assert.strictEqual(releaseGatedByGuard(fixture), false);
+});
+
+check('NEGATIVE (f): a reintroduced hardcoded count literal is detected', () => {
+  assert.strictEqual(hardcodedToolCount('All 62 MCP tools validated'), true);
+  assert.strictEqual(hardcodedToolCount('all 71 tools registered'), true);
+  assert.strictEqual(hardcodedToolCount('All ${{ steps.bump.outputs.tool_count }} MCP tools validated'), false);
+});
+
+console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);
