@@ -1,9 +1,16 @@
 version: 2
+# Version-update PRs target develop (#265): main is fast-forward-only from
+# develop, so a bot PR against main is structurally unmergeable. Residual lane:
+# Dependabot SECURITY-update PRs ignore target-branch and always go to the
+# default branch (a platform limitation); handle those via the merge-pr
+# supersession flow or the npm audit gate, or disable security updates in repo
+# settings if the noise recurs.
 updates:
   # Enable version updates for npm
   # Note: @actual-app/api updates are handled by dependency-update.yml workflow
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "daily"
       time: "09:00"
@@ -51,6 +58,7 @@ updates:
   # Monitor GitHub Actions workflow dependencies
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -64,6 +72,7 @@ updates:
   # Monitor Docker base images
   - package-ecosystem: "docker"
     directory: "/"
+    target-branch: "develop"
     schedule:
       interval: "weekly"
       day: "monday"
