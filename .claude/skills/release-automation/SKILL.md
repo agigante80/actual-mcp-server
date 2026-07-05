@@ -52,7 +52,7 @@ regression. In this repo the primitive is implemented twice, single-sourced by i
 | Lane | Trigger | Policy on `equal` | Status here |
 |---|---|---|---|
 | **A (Gate)** | promoting `develop` to `main` (the `/release` fast-forward) | **block the promotion** | installed (local hook + bump-script guard) |
-| **B (Auto-release on dependency)** | verified `@actual-app/api` update, CI green | auto-patch + tag + release | installed (two workflows, see below) |
+| **B (Auto-release on dependency)** | verified `@actual-app/api` update, CI green | auto-patch + tag + release | installed (one workflow, see below) |
 | **C (Auto-release on merge)** | every green merge to the production branch | auto-patch + tag + release | **not installed, and should stay out** |
 
 The routing rule: **auto-bump only where there is no human author and impact is bounded**
@@ -84,30 +84,35 @@ Zero machinery: no tokens, no recursion, no concurrency. It only reads.
 
 The one auto-bump that is safe by construction: the author is automation (no human to make the
 bump call) and the impact is bounded (consume an upstream `@actual-app/api` release -> PATCH).
-Two workflows implement it:
+One workflow implements it:
 
 - **`.github/workflows/dependency-update.yml`** (scheduled daily 01:00 UTC + manual dispatch):
   a single sequential job that checks npm for a new `@actual-app/api`, installs it on a
   temporary `deps/actual-api-<version>` branch, then runs build, tool-coverage check, unit
   tests, and the full Docker E2E suite. Only if ALL are green does it run
-  `npm run version:bump -- patch`, fast-forward `main` from the branch, tag `vX.Y.Z`, create
-  the GitHub Release, delete the branch, and fast-forward `develop` back in sync (or open a
+  `npm run version:bump -- patch` (plus `npm install --package-lock-only` so the release
+  commit passes `npm ci`, per #261), fast-forward `main` from the branch, tag `vX.Y.Z`, verify
+  the tag actually triggered the publish pipeline and watch it to success, create the GitHub
+  Release only after that guard passes, then fast-forward `develop` back in sync (or open a
   sync PR if develop diverged, per #145). Because the job is sequential, a red step means no
   bump, no merge, no tag.
-- **`.github/workflows/auto-release-on-dependency.yml`** (`workflow_run` after the
-  "CI/CD Pipeline" workflow completes on `main`): fires only on `conclusion == 'success'` (the
-  guard added after v0.4.23 shipped on red CI), checks out the exact **validated `head_sha`**,
-  and confirms the commit actually changed the `@actual-app/api` version line in
-  `package.json` (a diff check, not a commit-message grep, per #148). On a confirmed
-  dependency change it patch-bumps, commits `VERSION` + `package.json`, pushes via
-  `HEAD:main` (workflow_run runs on a detached HEAD), tags, and creates the Release.
 
-Because the scheduled lane writes and must trigger the downstream publish pipeline, it uses a
-**GitHub App token** (`secrets.APP_ID` / `APP_PRIVATE_KEY`, `git remote set-url` before push,
-per #145): pushes made with the default `GITHUB_TOKEN` do not trigger workflows on the same
-repo, so `ci-cd.yml` would never fire on the auto-bumped commit. Adopting the App token forfeits
-that free loop immunity, which is why the lane's scope gate (only a real `@actual-app/api`
-change) and the sequential all-green precondition matter.
+A second lane (a `workflow_run` listener that reacted to CI/CD success on `main`) was retired
+by #266 (2026-07-05): it still pushed with `GITHUB_TOKEN`, so its tag could never trigger the
+publish pipeline (the same failure mode as the v0.7.12 incident, whose root causes lived in
+`dependency-update.yml` and were fixed by #261); it duplicated the writer role on `main` and
+the tag namespace (double-bump risk); and its notes hardcoded a stale tool count. Invariant (h)
+in `tests/unit/workflow_release_guards.test.js` keeps it retired: no workflow may use a
+`workflow_run` trigger, and no governance file may reference the retired workflow's
+identifier. `dependency-update.yml` is the ONLY auto-release writer to main.
+
+Because the scheduled lane writes and must trigger the downstream publish pipeline, the
+**GitHub App token** (`secrets.APP_ID` / `APP_PRIVATE_KEY`) authenticates the CHECKOUT
+(`token:` on `actions/checkout`, per #261; the old `git remote set-url` token-in-URL form is
+banned by guard invariant b): pushes made with the default `GITHUB_TOKEN` do not trigger
+workflows on the same repo, so `ci-cd.yml` would never fire on the auto-bumped commit. Adopting
+the App token forfeits that free loop immunity, which is why the lane's scope gate (only a real
+`@actual-app/api` change) and the sequential all-green precondition matter.
 
 Dependabot (`.github/dependabot.yml`) and Renovate (`renovate.json`) also file PRs, but those
 target `develop` and ship through the normal implement-ticket / merge-pr / `release` path; they
@@ -120,10 +125,11 @@ dependency scope gate. It is only correct on a true continuous-deployment trunk 
 merge is genuinely a release. This repo is the opposite by design: releases are deliberate,
 batched, human-triggered promotions of `develop` to `main` via the `release` skill, which also
 closes the shipped tickets. Installing Lane C would bypass that skill's ticket-closing step and
-conflict with the existing Lane B on the same CI run.
+add a second automated writer to main alongside the scheduled Lane B (the same double-writer
+hazard whose other instance #266 retired).
 
 **Lane C supersedes Lane B: never install both.** If this project ever moved to a CD trunk,
-Lane C would replace both the Lane A gate's `equal` policy and the dependency workflows, not
+Lane C would replace both the Lane A gate's `equal` policy and the dependency workflow, not
 join them. Until then: gate + Lane B, no Lane C.
 
 ## Maintaining the installation
@@ -134,9 +140,9 @@ The lanes are installed; maintenance means keeping them wired to reality:
    the only writer and `npm run version:check` as the drift guard. Never hand-edit `VERSION`,
    `**Version:**`, or `**Tool Count:**` markers (`scripts/version-bump.js` is in the
    do-not-modify tier of `CLAUDE.md`).
-2. If the "CI/CD Pipeline" workflow in `.github/workflows/ci-cd.yml` is renamed, update the
-   `workflow_run.workflows` list in `auto-release-on-dependency.yml`, or Lane B's trigger goes
-   silently dead.
+2. If `.github/workflows/ci-cd.yml` is renamed (the FILE, not just the display name), update
+   the publish guard in `dependency-update.yml` (`gh run list --workflow ci-cd.yml`), or the
+   guard reports "never triggered" on every release and blocks the GitHub Release step.
 3. If the dependency lane's scope ever widens beyond `@actual-app/api`, keep the diff-based
    detection (never a commit-message grep) and keep the release strictly behind a green full
    test run.

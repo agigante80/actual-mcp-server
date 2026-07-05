@@ -40,7 +40,7 @@ Report a summary table:
 | Workflow | Status | Failed jobs |
 |---|---|---|
 | ci-cd.yml | pass/fail | job1, job2 |
-| auto-release-on-dependency.yml | pass/fail | - |
+| dependency-update.yml | pass/fail | - |
 
 If ALL workflows are passing, report "All workflows green" and stop.
 
