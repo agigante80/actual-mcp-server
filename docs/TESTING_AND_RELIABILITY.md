@@ -331,7 +331,8 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   (every `actual_<domain>_<action>` tool name advertised in `README.md` resolves to
   `IMPLEMENTED_TOOLS`, catching documented-but-missing/renamed tools). These join the existing
   doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,
-  `dockerfile_data_dir_alignment`, `compose_profile_sync`.
+  `dockerfile_data_dir_alignment`, `compose_profile_sync`, and
+  `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement).
 - **Periodic deep sweep**: the manual `/code-health-auditor` skill runs Knip plus the drift
   guards, triages against the allowlist, and opens gate-ready tickets for genuine findings
   (cache-first via `docs/audit/deadcode-audit-cache.json`). Run on demand; not scheduled.
@@ -667,6 +668,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `httpServer_bearer_auth.test.js` | Hardened bearer auth path: `timingSafeEqual` comparison with length-equality short-circuit; forbids re-introduction of token-content debug log lines (#157) | 12 |
 | `adapter_write_pool_cooperation.test.js` | Write path uses the pool branch when a pooled session is in context: `writeConnectionReuses` increments; legacy branch otherwise; `api.sync()` runs in both branches (#158) | 7 |
 | `budget_acl_enforcement.test.js` | Per-session active budget + ACL: stdio short-circuit; OIDC defence-in-depth refusal on missing allowedBudgets; allow on ACL match; warn-level structured denial log; `switchBudget` requires session, exact match only, releases pool entry before mutating session map (#156) | 15 |
+| `workflow_release_guards.test.js` | Structural invariants of `dependency-update.yml` (#261): App-token-authenticated checkouts, no token-in-URL auth, lockfile resync inside the bump step, explicit sync control flow, Release gated behind the ci-cd watch guard, computed tool count; plus the behavioral lock-agreement check (package-lock.json version fields match package.json) that catches a stale-lock bump from any lane | 7 + 6 negative |
 
 **Coverage:**
 - ✅ All 71 tools: stub invocation + response-shape assertion

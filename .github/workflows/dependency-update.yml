@@ -15,7 +15,7 @@ name: Dependency Update & Auto-Release
 #          - create a GitHub Release
 #
 # Because this is a single sequential job, GitHub automatically stops at the
-# first failing step — no version bump, no merge, no release if CI is red.
+# first failing step: no version bump, no merge, no release if CI is red.
 # No PR or auto-merge machinery is needed.
 # -----------------------------------------------------------------------------
 
@@ -28,6 +28,7 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  actions: read      # the publish guard reads ci-cd run status via gh (#261 fix 5)
 
 jobs:
   update-test-release:
@@ -39,18 +40,23 @@ jobs:
       # -----------------------------------------------------------------------
       # 1. Setup
       # -----------------------------------------------------------------------
-      - name: Checkout main
-        uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0          # full history needed for merge + tagging
-
       - name: Generate GitHub App token
         id: token
         uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      # The App token (not GITHUB_TOKEN) authenticates the checkout, so every
+      # later push is made by the App bot and triggers downstream workflows.
+      # GITHUB_TOKEN pushes never fire ci-cd.yml, which is how v0.7.12 shipped
+      # with no Docker image (#261 fix 2).
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0          # full history needed for merge + tagging
+          token: ${{ steps.token.outputs.token }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -59,7 +65,7 @@ jobs:
           cache: 'npm'
 
       # -----------------------------------------------------------------------
-      # 2. Version check — bail out early if already up to date
+      # 2. Version check: bail out early if already up to date
       # -----------------------------------------------------------------------
       - name: Check for new @actual-app/api version
         id: versions
@@ -70,7 +76,7 @@ jobs:
           echo "latest=$LATEST"   >> $GITHUB_OUTPUT
           if [ "$CURRENT" = "$LATEST" ]; then
             echo "update_needed=false" >> $GITHUB_OUTPUT
-            echo "✅ Already on latest: $CURRENT — nothing to do"
+            echo "✅ Already on latest: $CURRENT: nothing to do"
           else
             echo "update_needed=true" >> $GITHUB_OUTPUT
             echo "🔔 Update available: $CURRENT → $LATEST"
@@ -103,14 +109,14 @@ jobs:
           echo "✅ Working branch '$BRANCH' created and committed"
 
       # -----------------------------------------------------------------------
-      # 4. Lint — TypeScript compilation
+      # 4. Lint: TypeScript compilation
       # -----------------------------------------------------------------------
       - name: 🔍 TypeScript build
         if: steps.versions.outputs.update_needed == 'true'
         run: npm run build
 
       # -----------------------------------------------------------------------
-      # 5. Lint — Tool coverage check
+      # 5. Lint: Tool coverage check
       # -----------------------------------------------------------------------
       - name: 🔍 Check tool coverage
         if: steps.versions.outputs.update_needed == 'true'
@@ -143,18 +149,27 @@ jobs:
         run: docker compose -f docker-compose.test.yaml down -v --remove-orphans
 
       # -----------------------------------------------------------------------
-      # 8. All green — bump version and commit
+      # 8. All green: bump version and commit
       # -----------------------------------------------------------------------
       - name: 🔢 Bump patch version
         if: steps.versions.outputs.update_needed == 'true'
         id: bump
         run: |
+          OLD=$(node -p "require('./package.json').version")
           npm run version:bump -- patch
+          # Resync the lockfile: version-bump.js does not touch package-lock.json,
+          # and a stale lock makes npm ci fail at the release commit (#261 fix 1).
+          npm install --package-lock-only
           NEW=$(node -p "require('./package.json').version")
+          # Canonical tool count via scripts/tool-count.mjs (#193): never re-derive
+          # it with a private grep that can drift from IMPLEMENTED_TOOLS.
+          TOOL_COUNT=$(node -e "import('./scripts/tool-count.mjs').then(m => console.log(m.getCanonicalCount()))")
+          echo "old_version=$OLD" >> $GITHUB_OUTPUT
           echo "new_version=$NEW" >> $GITHUB_OUTPUT
+          echo "tool_count=$TOOL_COUNT" >> $GITHUB_OUTPUT
           git add -A
           git commit -m "chore(release): bump version to ${NEW}"
-          echo "✅ Version bumped to ${NEW}"
+          echo "✅ Version bumped to ${NEW} (lockfile resynced; ${TOOL_COUNT} tools)"
 
       # -----------------------------------------------------------------------
       # 9. Merge working branch → main, tag, push, clean up branch
@@ -166,12 +181,10 @@ jobs:
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
           LATEST: ${{ steps.versions.outputs.latest }}
         run: |
-          # Route subsequent pushes through the App token (#145). Pushes by
-          # GITHUB_TOKEN (the credential helper actions/checkout configured)
-          # do not trigger workflow runs on the same repo, so ci-cd.yml
-          # never fires on the auto-bumped commit. Switching the remote URL
-          # to use the App token makes downstream workflows trigger normally.
-          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          # Checkout is authenticated with the App token (#261 fix 2), so these
+          # pushes are made by the App bot and trigger downstream workflows
+          # (GITHUB_TOKEN pushes would not). Guarded by
+          # tests/unit/workflow_release_guards.test.js invariants (a) and (b).
 
           # Push the branch first so the tag is reachable from origin
           git push origin "${BRANCH}"
@@ -182,7 +195,7 @@ jobs:
 
           # Tag the release commit
           git tag -a "v${NEW_VERSION}" \
-            -m "Release v${NEW_VERSION} — @actual-app/api ${LATEST}"
+            -m "Release v${NEW_VERSION}: @actual-app/api ${LATEST}"
 
           git push origin main
           git push origin "v${NEW_VERSION}"
@@ -191,25 +204,43 @@ jobs:
           git push origin --delete "${BRANCH}"
           echo "✅ Merged, tagged v${NEW_VERSION}, branch deleted"
 
-          # Keep develop in sync with the auto-released main (#145). If develop
-          # has divergent commits the fast-forward aborts; in that case open a
-          # sync PR rather than failing the run or letting the branches drift.
-          {
-            git fetch origin develop:develop
-            git checkout develop
-            git merge --ff-only main
-            git push origin develop
-            echo "✅ Develop fast-forwarded to v${NEW_VERSION}"
-          } || {
-            echo "⚠ Develop has diverged or sync failed; opening sync PR"
-            gh pr create --base develop --head main \
-              --title "chore: sync develop with auto-release main (v${NEW_VERSION})" \
-              --body "Automated PR from dependency-update.yml. Develop has diverged from main; merge could not be fast-forward. Resolve any conflicts and merge to keep develop in sync." \
-              || echo "⚠ Sync PR creation failed; manual merge from main to develop required"
-          }
+      # -----------------------------------------------------------------------
+      # 10. Verify the tag push actually triggered the publish pipeline (#261)
+      #     ci-cd.yml on the tag is what builds and publishes the Docker image.
+      #     If it never fires (the v0.7.12 failure mode) or fails, this job must
+      #     fail loudly and the GitHub Release below must NOT be created. The
+      #     tag itself is already pushed and immutable; on guard failure the
+      #     remediation is manual (rerun ci-cd or cut the next patch).
+      # -----------------------------------------------------------------------
+      - name: 🔎 Verify ci-cd pipeline triggered and succeeded
+        if: steps.versions.outputs.update_needed == 'true'
+        timeout-minutes: 30
+        env:
+          # github.token (not the App token): the guard only READS run status,
+          # needs the actions:read permission granted above, and cannot expire
+          # mid-watch the way the 1-hour App installation token could.
+          GH_TOKEN: ${{ github.token }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          # Discovery waits on runner-queue latency, not execution: be generous
+          # (40 polls x 15s = 10 minutes). `|| true` keeps a transient gh/API
+          # error from aborting the loop under errexit; it retries instead.
+          echo "Waiting for the CI/CD Pipeline run on tag v${NEW_VERSION} (poll 15s, timeout 10m)..."
+          for _ in $(seq 1 40); do
+            RUN_ID=$(gh run list --workflow ci-cd.yml --branch "v${NEW_VERSION}" --event push --limit 1 --json databaseId --jq '.[0].databaseId // empty' || true)
+            if [ -n "$RUN_ID" ]; then break; fi
+            sleep 15
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::ci-cd.yml never triggered on tag v${NEW_VERSION}. The push likely authenticated as GITHUB_TOKEN instead of the App (see #261); failing before the GitHub Release is created."
+            exit 1
+          fi
+          echo "Found ci-cd run ${RUN_ID}; watching it to completion..."
+          gh run watch "$RUN_ID" --exit-status --interval 30
+          echo "✅ Publish pipeline succeeded; safe to create the GitHub Release."
 
       # -----------------------------------------------------------------------
-      # 10. Create GitHub Release
+      # 11. Create GitHub Release (only reached after the publish guard passed)
       # -----------------------------------------------------------------------
       - name: 📦 Create GitHub Release
         if: steps.versions.outputs.update_needed == 'true'
@@ -221,23 +252,24 @@ jobs:
             ## 🤖 Automated Dependency Update Release
 
             This release was automatically created after all CI checks passed on
-            a temporary working branch — lint, unit tests, and Docker E2E tests
+            a temporary working branch: lint, unit tests, and Docker E2E tests
             (full suite) were green before anything was merged to `main`.
 
             ### Changes
             - ⬆️ Upgraded `@actual-app/api` to version `${{ steps.versions.outputs.latest }}`
-            - 🔢 Version bumped from `${{ steps.versions.outputs.current }}` to `${{ steps.bump.outputs.new_version }}`
+            - 🔢 Version bumped from `${{ steps.bump.outputs.old_version }}` to `${{ steps.bump.outputs.new_version }}`
 
             ### What's Updated
             - Actual Budget API integration updated to latest version
-            - All 62 MCP tools validated with new API version
-            - Docker images rebuilt and published
+            - All ${{ steps.bump.outputs.tool_count }} MCP tools validated with the new API version
+            - Docker images rebuilt and published by the tag pipeline (verified before this release was created)
 
             ### CI Checks Passed ✅
             - TypeScript compilation (no type errors)
-            - Tool coverage check (all 62 tools registered)
+            - Tool coverage check (all ${{ steps.bump.outputs.tool_count }} tools registered)
             - Unit + schema tests
             - Docker E2E full suite
+            - Publish pipeline (ci-cd.yml) confirmed triggered and green on the tag
 
             ---
 
@@ -249,7 +281,7 @@ jobs:
             - [@actual-app/api@${{ steps.versions.outputs.latest }}](https://www.npmjs.com/package/@actual-app/api/v/${{ steps.versions.outputs.latest }})
 
             ---
-            🤖 Automated release — no manual intervention required
+            🤖 Automated release: no manual intervention required
           draft: false
           prerelease: false
           generate_release_notes: false
@@ -257,7 +289,41 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # -----------------------------------------------------------------------
-      # 11. Summary
+      # 12. Keep develop in sync with the auto-released main (#145)
+      #     Runs AFTER the guard and Release so a sync problem can never block
+      #     the publish verification or the Release itself (#261 fix 3). The
+      #     old brace-group-or-fallback construct here suppressed errexit, so a
+      #     failed ff-merge logged a false success and skipped the sync PR.
+      # -----------------------------------------------------------------------
+      - name: 🔄 Sync develop with released main
+        if: steps.versions.outputs.update_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEW_VERSION: ${{ steps.bump.outputs.new_version }}
+        run: |
+          git fetch origin develop:develop
+          git checkout develop
+          if git merge --ff-only main && git push origin develop; then
+            echo "✅ Develop fast-forwarded to v${NEW_VERSION}"
+          else
+            # Assigned on its own line so a transient gh failure hits errexit
+            # loudly instead of being swallowed inside a test condition, which
+            # would falsely report an existing sync PR (#261 fix 3).
+            OPEN_SYNC_PRS=$(gh pr list --base develop --head main --state open --json number --jq 'length')
+            if [ "$OPEN_SYNC_PRS" != "0" ]; then
+              echo "⚠ Develop has diverged; a main to develop sync PR is already open, nothing to do"
+            elif gh pr create --base develop --head main \
+              --title "chore: sync develop with auto-release main (v${NEW_VERSION})" \
+              --body "Automated PR from dependency-update.yml. Develop has diverged from main; merge could not be fast-forward. Resolve any conflicts and merge to keep develop in sync."; then
+              echo "⚠ Develop has diverged; opened a sync PR"
+            else
+              echo "::error::develop sync failed AND no sync PR exists or could be created; manual merge from main to develop is required (#261 fix 3)"
+              exit 1
+            fi
+          fi
+
+      # -----------------------------------------------------------------------
+      # 13. Summary
       # -----------------------------------------------------------------------
       - name: ✅ Summary (released)
         if: steps.versions.outputs.update_needed == 'true'
@@ -270,12 +336,12 @@ jobs:
           echo "| Version | \`${{ steps.bump.outputs.new_version }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Release | [v${{ steps.bump.outputs.new_version }}](https://github.com/${{ github.repository }}/releases/tag/v${{ steps.bump.outputs.new_version }}) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ Lint · Unit tests · Docker E2E — all green before merge" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Lint · Unit tests · Docker E2E: all green before merge" >> $GITHUB_STEP_SUMMARY
 
       - name: ⏭️ Summary (no update)
         if: steps.versions.outputs.update_needed == 'false'
         run: |
           echo "### ✅ Already Up to Date" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Current version \`${{ steps.versions.outputs.current }}\` is the latest — nothing to do." >> $GITHUB_STEP_SUMMARY
+          echo "Current version \`${{ steps.versions.outputs.current }}\` is the latest: nothing to do." >> $GITHUB_STEP_SUMMARY
 
