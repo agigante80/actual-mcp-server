@@ -331,8 +331,9 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   (every `actual_<domain>_<action>` tool name advertised in `README.md` resolves to
   `IMPLEMENTED_TOOLS`, catching documented-but-missing/renamed tools). These join the existing
   doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,
-  `dockerfile_data_dir_alignment`, `compose_profile_sync`, and
-  `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement).
+  `dockerfile_data_dir_alignment`, `compose_profile_sync`,
+  `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement), and
+  `bot_target_branch` (#265: dependabot blocks and the inert renovate config target develop).
 - **Periodic deep sweep**: the manual `/code-health-auditor` skill runs Knip plus the drift
   guards, triages against the allowlist, and opens gate-ready tickets for genuine findings
   (cache-first via `docs/audit/deadcode-audit-cache.json`). Run on demand; not scheduled.
@@ -669,6 +670,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `adapter_write_pool_cooperation.test.js` | Write path uses the pool branch when a pooled session is in context: `writeConnectionReuses` increments; legacy branch otherwise; `api.sync()` runs in both branches (#158) | 7 |
 | `budget_acl_enforcement.test.js` | Per-session active budget + ACL: stdio short-circuit; OIDC defence-in-depth refusal on missing allowedBudgets; allow on ACL match; warn-level structured denial log; `switchBudget` requires session, exact match only, releases pool entry before mutating session map (#156) | 15 |
 | `workflow_release_guards.test.js` | Structural invariants of `dependency-update.yml` (#261): App-token-authenticated checkouts with credential persistence explicitly pinned on (#262: any `persist-credentials: false` spelling, or reliance on the upstream default, fails), no token-in-URL auth, lockfile resync inside the bump step, explicit sync control flow, Release gated behind the ci-cd watch guard, computed tool count; the behavioral lock-agreement check (package-lock.json version fields match package.json) that catches a stale-lock bump from any lane; and the #266 absence guard keeping the retired second auto-release lane retired (file gone, no tracked reference to its identifier under .claude/ or .github/, and no workflow_run trigger in any workflow) | 8 + 7 negative |
+| `bot_target_branch.test.js` | #265: every dependabot update block carries target-branch develop and the inert renovate config's baseBranches includes develop with the activation warning; a bot PR against fast-forward-only main is structurally unmergeable | 2 + 2 negative |
 
 **Coverage:**
 - ✅ All 71 tools: stub invocation + response-shape assertion
