@@ -65,6 +65,7 @@ const {
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import { retry, isRetryableError } from './retry.js';
+import { withOpTimeout } from './opTimeout.js';
 import { notFoundMsg } from './errors.js';
 import logger from '../logger.js';
 import config from '../config.js';
@@ -155,6 +156,10 @@ function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
   _apiSessionLock = new Promise<void>(resolve => { release = resolve; });
   return prevLock.then(() => fn()).finally(() => release());
 }
+
+// Per-op timeout (#270) lives in ./opTimeout.ts so ActualConnectionPool can bound
+// its own session-open init/download without a circular import back into this
+// module (which imports the pool singleton).
 
 // ----------------------------------------------------------------------------
 // Per-session pool cooperation — issue #134
@@ -322,7 +327,7 @@ export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> 
       try {
         connectionReuseCount++;
         logger.debug(`[ADAPTER] Reusing pool connection for session ${sessionId} (reuses=${connectionReuseCount})`);
-        return await operation();
+        return await withOpTimeout(operation);
       } catch (err) {
         // Only drop the pool connection on errors that suggest the api
         // singleton itself is in a bad state. User-input validation /
@@ -345,7 +350,7 @@ export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> 
   return withApiLock(async () => {
     try {
       await initActualApiForOperation();
-      return await operation();
+      return await withOpTimeout(operation);
     } finally {
       await shutdownActualApi();
     }
@@ -375,13 +380,13 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
       try {
         connectionReuseCount++;
         logger.debug(`[ADAPTER] Reusing pool connection for write session ${sessionId} (reuses=${connectionReuseCount})`);
-        const result = await operation();
+        const result = await withOpTimeout(operation);
         // Propagate the write to the server so other clients (and our next
         // read) see it. Pre-#134 this happened implicitly via api.shutdown().
         try {
           const apiAny = api as unknown as { sync?: () => Promise<unknown> };
           if (typeof apiAny.sync === 'function') {
-            await apiAny.sync();
+            await withOpTimeout(() => apiAny.sync!(), 'sync');
           }
         } catch (syncErr) {
           // Sync failure on a write IS infrastructure-level — drop the pool
@@ -411,7 +416,7 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
   return withApiLock(async () => {
     try {
       await initActualApiForOperation();
-      return await operation();
+      return await withOpTimeout(operation);
     } finally {
       await shutdownActualApi();
     }
@@ -512,19 +517,28 @@ async function initActualApiForOperation(): Promise<void> {
 
     // Wrap api.init in auth-rate-limit retry so a transient too-many-requests
     // doesn't surface to the caller (and doesn't trigger #132's crash path).
-    await withAuthRetry(() => api.init({
+    // Bound EACH init attempt with the op timeout (#270), inside withAuthRetry:
+    // a stalled login rejects per attempt, and a timeout is not an auth error so
+    // withAuthRetry does not retry it. Wrapping per-attempt (not the whole retry
+    // loop) means legitimate #127 auth-rate-limit backoff (up to ~25s) is not
+    // counted against ACTUAL_OP_TIMEOUT_MS.
+    await withAuthRetry(() => withOpTimeout(() => api.init({
       dataDir: DATA_DIR,
       serverURL: budget.serverUrl,
       password: budget.password || '',
-    }));
+    }), 'init'));
 
     logger.debug('[ADAPTER] Downloading budget');
 
+    // Bound downloadBudget (#270): the legacy stdio path re-downloads on every
+    // op, and a stall here was the production hang. On timeout it rejects and
+    // the mutex releases.
     if (budget.encryptionPassword) {
+      const encryptionPassword = budget.encryptionPassword;
       const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-      await apiWithOptions.downloadBudget(budget.syncId, { password: budget.encryptionPassword });
+      await withOpTimeout(() => apiWithOptions.downloadBudget(budget.syncId, { password: encryptionPassword }), 'downloadBudget');
     } else {
-      await api.downloadBudget(budget.syncId);
+      await withOpTimeout(() => api.downloadBudget(budget.syncId), 'downloadBudget');
     }
 
     setApiInitialized(true);
@@ -553,7 +567,7 @@ async function shutdownActualApi(): Promise<void> {
       try {
         const apiAny = api as unknown as { sync?: () => Promise<unknown> };
         if (typeof apiAny.sync === 'function') {
-          await apiAny.sync();
+          await withOpTimeout(() => apiAny.sync!(), 'sync');
           logger.debug('[ADAPTER] api.sync() instead of shutdown (pool has active sessions)');
         }
       } catch (syncErr) {
@@ -570,7 +584,10 @@ async function shutdownActualApi(): Promise<void> {
   try {
     const maybeApi = api as unknown as { shutdown?: () => Promise<void> };
     if (typeof maybeApi.shutdown === 'function') {
-      await maybeApi.shutdown();
+      // Bound shutdown too (#270): it runs inside withApiLock, so a stalled
+      // shutdown would hold the mutex just like a stalled op. Errors here are
+      // already best-effort (swallowed below), and a timeout is one of them.
+      await withOpTimeout(() => maybeApi.shutdown!(), 'shutdown');
       logger.debug('[ADAPTER] Actual API shutdown complete');
     }
   } catch (err) {
@@ -663,7 +680,10 @@ async function processWriteQueue() {
         await Promise.allSettled(
           batch.map(async ({ operation, resolve, reject }) => {
             try {
-              const result = await operation();
+              // Bound each queued write (#270): a stalled op must reject its own
+              // promise (so withWriteSession callers don't hang) and let the
+              // batch settle so the api mutex releases.
+              const result = await withOpTimeout(operation);
               resolve(result);
             } catch (error) {
               logger.error('[WRITE QUEUE] Operation failed:', error);
@@ -676,7 +696,7 @@ async function processWriteQueue() {
         // before returning (pool). Persistence guarantee in both branches.
         logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
         try {
-          await (api as any).sync();
+          await withOpTimeout(() => (api as any).sync(), 'sync');
           logger.debug(`[WRITE QUEUE] Sync completed`);
         } catch (syncError) {
           logger.error('[WRITE QUEUE] Sync failed:', syncError);
@@ -1958,13 +1978,15 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
       // path was taken by spying on connectionPool.shutdownConnection.
     } else {
       await withApiLock(async () => {
+        // Bound the in-place budget reload too (#270).
         if (found.encryptionPassword) {
+          const encryptionPassword = found.encryptionPassword;
           const apiWithOptions = api as typeof api & {
             downloadBudget: (id: string, options?: { password: string }) => Promise<void>;
           };
-          await apiWithOptions.downloadBudget(found.syncId, { password: found.encryptionPassword });
+          await withOpTimeout(() => apiWithOptions.downloadBudget(found.syncId, { password: encryptionPassword }), 'downloadBudget');
         } else {
-          await api.downloadBudget(found.syncId);
+          await withOpTimeout(() => api.downloadBudget(found.syncId), 'downloadBudget');
         }
       });
     }

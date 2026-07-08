@@ -449,6 +449,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
 | `ALLOW_INSECURE_UPSTREAM` | `false` | No | Allow an `http://` upstream even when `ACTUAL_BUDGET_PASSWORD` is set (#161). Off by default so a plaintext upstream plus an encryption password is refused |
+| `ACTUAL_OP_TIMEOUT_MS` | `30000` | No | Per-operation timeout (ms) for every upstream Actual API call (init, budget download, sync, and each tool operation). A stalled call rejects after this bound so it cannot hold the global API mutex forever and hang subsequent tool calls (#270). Set to `0` to disable |
 | **MCP Server Settings** ||||
 | `MCP_BRIDGE_PORT` | `3600` | No | Port for MCP server to listen on |
 | `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |

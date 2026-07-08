@@ -2,11 +2,11 @@
 # deploy-and-test.sh
 # Periodic maintenance / update script.
 #
-# PREREQUISITES — all services must already be installed, configured,
+# PREREQUISITES: all services must already be installed, configured,
 # and running before this script is used for the first time:
 #
 #   • Actual Budget   (Finance-actual-budget/docker-compose.yml)
-#   • Actual MCP Server — TWO containers from the same image:
+#   • Actual MCP Server: TWO containers from the same image:
 #       - actual-mcp-server-backend  port 3600  OIDC/Casdoor  (LibreChat, LobeChat)
 #       - actual-mcp-bearer-backend  port 3601  Bearer token  (automated tests)
 #     Both defined in: actual-mcp-server/docker-compose-local-build.yaml
@@ -22,7 +22,9 @@
 #   4. Independently restart LibreChat        (picks up new image if any)
 #   5. Independently restart LobeChat         (picks up new image if any)
 #   6. Wait for actual-mcp-bearer-backend (port 3601) to become healthy
-#   7. Run integration tests against bearer instance (port 3601)
+#   7. Run HTTP integration tests against bearer instance (port 3601)
+#   8. Run stdio smoke against the same container (both transports covered)
+#   9. (full level only) Run the #270 upstream-stall regression check
 #
 # DOCUMENTATION
 #   Each service has its own README in $DOCKER_DIR and its subdirectories.
@@ -46,6 +48,7 @@ DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
 DEV_DIR="$HOME/dev-github-personal/actual-mcp-server"
 MCP_SERVER_URL="https://localhost:3601/http"
 MCP_AUTH_TOKEN="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
+STDIO_CONTAINER="actual-mcp-bearer-backend"   # container the stdio smoke execs into
 # Parse positional + flag args
 TEST_LEVEL="full"
 BANK_SYNC_FLAG=""   # empty = disabled
@@ -60,7 +63,7 @@ if [ "${MCP_TEST_BANK_SYNC:-}" = "true" ]; then
   BANK_SYNC_FLAG="true"
 fi
 HEALTH_RETRIES=30          # × 3s = 90s max wait
-# Count registered tools directly from source — stays correct automatically
+# Count registered tools directly from source, stays correct automatically
 EXPECTED_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts")
 
 # ── Colours ────────────────────────────────────────────────────────────────
@@ -71,17 +74,17 @@ err()  { echo -e "${RED}✗ $*${NC}" >&2; }
 
 echo ""
 echo -e "${YELLOW}╔══════════════════════════════════════════════════════╗${NC}"
-echo -e "${YELLOW}║  Actual MCP Server — Deploy & Integration Test       ║${NC}"
+echo -e "${YELLOW}║  Actual MCP Server: Deploy & Integration Test        ║${NC}"
 echo -e "${YELLOW}╚══════════════════════════════════════════════════════╝${NC}"
 echo ""
 
 # ── 1. Sync code & rebuild MCP image ──────────────────────────────────────
-info "Step 1/7 — Sync latest code & rebuild MCP server image..."
+info "Step 1/9: Sync latest code & rebuild MCP server image..."
 bash "$DOCKER_DIR/actual-mcp-server/sync-and-build.sh"
 ok "MCP image rebuilt"
 
 # ── 2. Pull latest upstream images ────────────────────────────────────────
-info "Step 2/7 — Pulling latest upstream images..."
+info "Step 2/9: Pulling latest upstream images..."
 
 pull_image() {
   local image="$1"
@@ -89,9 +92,9 @@ pull_image() {
   local output
   output=$(docker pull "$image" 2>&1)
   if echo "$output" | grep -q "Status: Downloaded newer image"; then
-    ok "$label — new image downloaded"
+    ok "$label: new image downloaded"
   elif echo "$output" | grep -q "Status: Image is up to date"; then
-    ok "$label — already up to date"
+    ok "$label: already up to date"
   else
     # Print last line as summary
     echo "  $image: $(echo "$output" | tail -1)"
@@ -104,7 +107,7 @@ pull_image "ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest"  "LibreChat R
 pull_image "lobehub/lobe-chat-database:latest"                      "LobeChat"
 
 # ── 3. Recreate MCP server containers ─────────────────────────────────────
-info "Step 3/7 — Recreating both MCP server containers (OIDC:3600 + Bearer:3601)..."
+info "Step 3/9: Recreating both MCP server containers (OIDC:3600 + Bearer:3601)..."
 docker compose \
   -f "$DOCKER_DIR/actual-mcp-server/docker-compose-local-build.yaml" \
   up -d --force-recreate
@@ -112,21 +115,21 @@ ok "actual-mcp-server-backend (OIDC, port 3600) recreated"
 ok "actual-mcp-bearer-backend (Bearer, port 3601) recreated"
 
 # ── 4. Restart LibreChat ────────────────────────────────────────────────────
-info "Step 4/7 — Restarting LibreChat (ai-librechat, ai-librechat-rag-api)..."
+info "Step 4/9: Restarting LibreChat (ai-librechat, ai-librechat-rag-api)..."
 docker compose \
   -f "$DOCKER_DIR/LibreChat/docker-compose.yml" \
   up -d --force-recreate ai-librechat ai-librechat-rag-api
 ok "LibreChat restarted (mongo/pgvector/meilisearch untouched)"
 
 # ── 5. Restart LobeChat ────────────────────────────────────────────────────
-info "Step 5/7 — Restarting LobeChat (lobe)..."
+info "Step 5/9: Restarting LobeChat (lobe)..."
 docker compose \
   -f "$DOCKER_DIR/lobechatAI/docker-compose.yml" \
   up -d --force-recreate lobe
 ok "LobeChat restarted (postgres/minio/casdoor untouched)"
 
 # ── 6. Wait for bearer MCP server health ─────────────────────────────────
-info "Step 6/7 — Waiting for actual-mcp-bearer-backend (port 3601) to become healthy..."
+info "Step 6/9: Waiting for actual-mcp-bearer-backend (port 3601) to become healthy..."
 for i in $(seq 1 "$HEALTH_RETRIES"); do
   STATUS=$(docker inspect --format='{{.State.Health.Status}}' actual-mcp-bearer-backend 2>/dev/null || true)
   if [ "$STATUS" = "healthy" ]; then
@@ -134,20 +137,20 @@ for i in $(seq 1 "$HEALTH_RETRIES"); do
     break
   fi
   if [ "$i" -eq "$HEALTH_RETRIES" ]; then
-    err "MCP server did not become healthy after $((HEALTH_RETRIES * 3))s — aborting tests"
+    err "MCP server did not become healthy after $((HEALTH_RETRIES * 3))s, aborting tests"
     docker logs --tail 30 actual-mcp-bearer-backend >&2
     exit 1
   fi
-  echo "  ($i/${HEALTH_RETRIES}) status=${STATUS:-unknown} — waiting 3s..."
+  echo "  ($i/${HEALTH_RETRIES}) status=${STATUS:-unknown}, waiting 3s..."
   sleep 3
 done
 
-# ── 7. Run integration tests against bearer instance (port 3601) ───────────
+# ── 7. Run HTTP integration tests against bearer instance (port 3601) ──────
 BANK_SYNC_LABEL=""
 if [ -n "$BANK_SYNC_FLAG" ]; then
   BANK_SYNC_LABEL=" + bank-sync"
 fi
-info "Step 7/7 — Running integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, tools=${EXPECTED_TOOL_COUNT})..."
+info "Step 7/9: HTTP integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
 EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
   MCP_TEST_BANK_SYNC="${BANK_SYNC_FLAG}" \
@@ -158,4 +161,77 @@ EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
   "$TEST_LEVEL" \
   yes
 echo ""
-ok "All done — deploy-and-test complete"
+
+# ── 8. Run stdio smoke against the same container ──────────────────────────
+# The HTTP suite above never touches the stdio transport. This runs the server
+# over stdin/stdout (docker exec into the bearer container, reusing its config)
+# and does a real MCP round-trip, so both transports are exercised every run.
+info "Step 8/9: stdio smoke against ${STDIO_CONTAINER} (functional round-trip, tools=${EXPECTED_TOOL_COUNT})..."
+echo ""
+EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
+  MCP_STDIO_CONTAINER="$STDIO_CONTAINER" \
+  node "$DEV_DIR/scripts/stdio-smoke.mjs"
+echo ""
+
+# ── 9. (full level only) #270 upstream-stall regression (stdio + HTTP) ──────
+# Reproduces the personal-finance production hang: a stalled upstream operation
+# must reject within a bounded time (per-op timeout) and release the global api
+# mutex, instead of hanging forever and wedging every subsequent tool call.
+# stdio hits this on every op (legacy init+download); HTTP hits it at session
+# open / pool init. Heavy (injects netem packet loss on the Actual server via a
+# privileged sidecar), so it runs only at the `full` level. While
+# scripts/known-failing/270 exists the bug is expected: a reproduced hang is
+# reported but does NOT fail the pipeline. Deleting that marker (done when #270
+# is fixed) makes both checks enforcing.
+KNOWN_FAILING_270="$DEV_DIR/scripts/known-failing/270"
+
+# run_270_regression <label> <script> [env assignments...]
+# Applies the marker-gated verdict. Exits the pipeline on a real failure.
+run_270_regression() {
+  local label="$1"; shift
+  local script="$1"; shift
+  info "  #270 regression (${label})..."
+  set +e
+  env "$@" node "$script"
+  local rc=$?
+  set -e
+  if [ "$rc" -eq 0 ]; then
+    ok "  #270/${label}: stalled op rejected within bound (correct)"
+    if [ -f "$KNOWN_FAILING_270" ]; then
+      err "  #270/${label} now behaves correctly but scripts/known-failing/270 still exists. Delete it so the regression enforces."
+      exit 1
+    fi
+  elif [ "$rc" -eq 2 ]; then
+    if [ -f "$KNOWN_FAILING_270" ]; then
+      info "  #270/${label} hang reproduced (EXPECTED while scripts/known-failing/270 exists). Not failing the pipeline."
+    else
+      err "  #270/${label} regression FAILED: stalled op hung and no known-failing marker is present."
+      exit 1
+    fi
+  else
+    err "  #270/${label} regression harness error (rc=$rc)."
+    exit 1
+  fi
+  echo ""
+}
+
+if [ "$TEST_LEVEL" = "full" ]; then
+  info "Step 9/9: #270 upstream-stall regression (stdio gated) + HTTP diagnostic..."
+  echo ""
+  # stdio: deterministic, gated. A stdio client has no request timeout, so a
+  # server-side op hang is directly observable and this is a valid #270 gate.
+  run_270_regression "stdio" "$DEV_DIR/scripts/regression-270-stall.mjs" "MCP_STDIO_CONTAINER=$STDIO_CONTAINER"
+  # HTTP: informational only. The StreamableHTTP client times out a stalled
+  # request (~11s), so a client-observed rejection cannot prove the server
+  # released the mutex; that server-side guarantee is gated by the unit test
+  # tests/unit/adapter_op_timeout.test.js instead. This never fails the pipeline.
+  info "  #270 HTTP diagnostic (informational; server-side guarantee is in tests/unit/adapter_op_timeout.test.js)..."
+  set +e
+  env "MCP_AUTH_TOKEN=$MCP_AUTH_TOKEN" "MCP_HTTP_URL=$MCP_SERVER_URL" \
+    node "$DEV_DIR/scripts/diag-270-http.mjs"
+  set -e
+  echo ""
+else
+  info "Step 9/9: #270 upstream-stall regression skipped (runs at 'full' level only; current level=${TEST_LEVEL})."
+fi
+ok "All done: deploy-and-test complete (HTTP + stdio${TEST_LEVEL:+, level=$TEST_LEVEL})"
