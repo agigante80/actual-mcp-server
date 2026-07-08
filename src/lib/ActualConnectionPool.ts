@@ -18,6 +18,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { isApiInitialized, setApiInitialized } from './apiState.js';
+import { withOpTimeout } from './opTimeout.js';
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
 
@@ -263,23 +264,29 @@ class ActualConnectionPool {
     }
 
     try {
-      await api.init({
+      // Bound the session-open init/download (#270): this is the HTTP exposure.
+      // A stalled upstream here would otherwise hang session open unbounded and,
+      // because the api singleton is process-global, wedge other sessions too.
+      await withOpTimeout(() => api.init({
         dataDir: DATA_DIR,
         serverURL: SERVER_URL,
         password: PASSWORD,
-      });
-      // Mark the singleton as live so the adapter's pool-cooperation branch
-      // (withActualApi in actual-adapter.ts) can safely skip its per-op init.
-      setApiInitialized(true);
+      }), 'pool init');
 
       logger.info(`[ConnectionPool] Downloading budget for session: ${sessionId}`);
 
       if (BUDGET_PASSWORD) {
         const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-        await apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
+        await withOpTimeout(() => apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD }), 'pool downloadBudget');
       } else {
-        await api.downloadBudget(BUDGET_SYNC_ID);
+        await withOpTimeout(() => api.downloadBudget(BUDGET_SYNC_ID), 'pool downloadBudget');
       }
+
+      // Mark the singleton as live only AFTER the budget is downloaded (#270):
+      // setting it before downloadBudget left a poisoning window where the
+      // adapter's pool-cooperation branch could reuse a connection whose budget
+      // never loaded (a stalled/failed download would leak isApiInitialized=true).
+      setApiInitialized(true);
 
       conn = {
         sessionId,
@@ -343,19 +350,23 @@ class ActualConnectionPool {
     }
 
     try {
-      await api.init({
+      // Bound the session-open init/download (#270), same as getConnection.
+      await withOpTimeout(() => api.init({
         dataDir: DATA_DIR,
         serverURL: SERVER_URL,
         password: PASSWORD,
-      });
-      setApiInitialized(true);
+      }), 'pool init');
 
       if (BUDGET_PASSWORD) {
         const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-        await apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
+        await withOpTimeout(() => apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD }), 'pool downloadBudget');
       } else {
-        await api.downloadBudget(BUDGET_SYNC_ID);
+        await withOpTimeout(() => api.downloadBudget(BUDGET_SYNC_ID), 'pool downloadBudget');
       }
+
+      // Mark live only after a successful download (#270): avoids the poisoning
+      // window where a stalled/failed download would leak isApiInitialized=true.
+      setApiInitialized(true);
 
       this.sharedConnection = {
         sessionId: 'shared',

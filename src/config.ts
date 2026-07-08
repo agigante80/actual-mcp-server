@@ -6,6 +6,28 @@ export const configSchema = z.object({
   ACTUAL_BUDGET_SYNC_ID: z.string().min(1),
   // Optional per-budget encryption password (leave unset for unencrypted budgets)
   ACTUAL_BUDGET_PASSWORD: z.string().optional(),
+  // #270: bound every upstream Actual API operation (api.init, downloadBudget,
+  // sync, and each tool operation body) so a stalled call cannot hold the
+  // process-global api mutex forever and hang all subsequent tool calls. On
+  // timeout the operation rejects with a clear error, the mutex releases, and
+  // later calls proceed. Default 30000ms (30s): generous for a healthy
+  // init+download on a large budget, short enough that a stalled upstream
+  // recovers in seconds instead of wedging the session. Set to 0 to disable the
+  // bound (not recommended). A non-numeric or negative value falls back to the
+  // default. `0` disables the bound. Any other positive value is clamped to the
+  // range [250ms, 2147483647ms]:
+  //   - Floor 250ms: a smaller positive value would time out real operations
+  //     almost immediately (a self-inflicted DoS footgun, e.g. a typo'd `25`).
+  //     Use `0` to disable deliberately rather than a tiny value.
+  //   - Ceiling 2147483647ms (~24.8 days, the 32-bit setTimeout max): a larger
+  //     value overflows setTimeout and silently clamps to 1ms, timing out
+  //     everything.
+  ACTUAL_OP_TIMEOUT_MS: z.string().default('30000').transform(val => {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n) || n < 0) return 30000;
+    if (n === 0) return 0;
+    return Math.min(Math.max(n, 250), 2147483647);
+  }),
   // Escape hatch for #161: allow an http:// upstream even when an E2E encryption
   // password is set (e.g. an isolated Docker network where the hop is trusted).
   // Off by default so a plaintext upstream + encryption password is refused.

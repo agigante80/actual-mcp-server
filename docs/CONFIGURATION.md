@@ -26,6 +26,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `ACTUAL_BUDGET_SYNC_ID` | string | (none) | Yes | no | schema | config | Default budget sync ID |
 | `ACTUAL_BUDGET_PASSWORD` | string | (none) | No | yes | schema | config; also raw at `actualConnection.ts:33`, `ActualConnectionPool.ts:255,338` | E2E encryption password |
 | `ALLOW_INSECURE_UPSTREAM` | bool string | `false` | No | no | schema | config | Allow `http://` upstream with an encryption password set (#161) |
+| `ACTUAL_OP_TIMEOUT_MS` | int string (ms) | `30000` | No | no | schema | config; read at `actual-adapter.ts` `withOpTimeout` | Per-operation timeout bounding every upstream call (init, download, sync, op body) so a stall cannot hold the global API mutex forever (#270). `0` disables |
 
 ## MCP server
 

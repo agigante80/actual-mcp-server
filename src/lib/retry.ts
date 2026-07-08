@@ -22,6 +22,12 @@ export const TRANSIENT_ERROR_PATTERNS: readonly string[] = [
   'ETIMEDOUT',
   'out of memory',
   'ENOMEM',
+  // #270: the adapter's per-op timeout (withOpTimeout) rejects a stalled upstream
+  // call with a message containing "timed out". Classing it transient means the
+  // pooled connection is dropped so the session re-inits cleanly on the next
+  // call. The timeout error is thrown OUTSIDE any retry(), so this does not cause
+  // a retry storm; it only feeds the pool-drop decision.
+  'timed out',
 ];
 
 /**
