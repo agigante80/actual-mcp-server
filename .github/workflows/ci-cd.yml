@@ -572,14 +572,27 @@ jobs:
       - name: 📥 Checkout repository
         uses: actions/checkout@v7
 
-      - name: 🔧 Setup Node.js
+      # Publish on Node 24 (bundles npm 11.16.0), NOT the global NODE_VERSION (22,
+      # npm 10.9.8). Trusted Publishers OIDC needs npm >= 11.5.1; upgrading the old
+      # bundled npm in place via `npm install -g npm@latest` dropped npm's own
+      # bundled `sigstore` module and broke `npm publish --provenance` with
+      # "Cannot find module 'sigstore'" (#274). A Node whose bundled npm already
+      # meets the requirement keeps sigstore intact and removes the fragile step.
+      - name: 🔧 Setup Node.js 24 (bundled npm >= 11.5.1 for Trusted Publishers OIDC)
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '24'
           cache: 'npm'
 
-      - name: ⬆️ Upgrade npm (npm 11.5.1+ required for Trusted Publishers OIDC)
-        run: npm install -g npm@latest
+      - name: ✅ Assert npm >= 11.5.1 (bundled, no in-place self-upgrade)
+        run: |
+          NPM_V="$(npm --version)"
+          echo "npm version: ${NPM_V}"
+          LOWEST="$(printf '%s\n%s\n' "${NPM_V}" '11.5.1' | sort -V | head -n1)"
+          if [ "${LOWEST}" != '11.5.1' ]; then
+            echo "npm ${NPM_V} is below 11.5.1 (Trusted Publishers OIDC requires >= 11.5.1)"
+            exit 1
+          fi
 
       - name: 📦 Install dependencies
         run: npm ci
