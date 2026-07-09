@@ -34,6 +34,19 @@ on:
         default: ''
 
 # ============================================================================
+# Concurrency (#272)
+# ============================================================================
+# Cancel a superseded in-progress run for the SAME non-release ref (a feature
+# branch or PR that got a newer push), to cut runner-queue pressure. Release
+# refs are protected: on a `main` push or a `vX.Y.Z` tag, cancel-in-progress is
+# false so a release run is NEVER auto-cancelled (the release gate depends on it
+# finishing). Same-ref release runs are rare and singular in practice, so the
+# per-ref group is safe for them.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/v') }}
+
+# ============================================================================
 # Permissions
 # ============================================================================
 permissions:
@@ -678,8 +691,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, docker-publish]
+    # Tag-gated (#271): updating the Docker Hub README is a release-publication
+    # concern, not a per-commit check. Running it on every main push added two
+    # extra jobs to the queue on the exact path that blocks tagging. Runs on
+    # vX.Y.Z tags only now.
     if: |
-      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) &&
+      startsWith(github.ref, 'refs/tags/v') &&
       needs.docker-publish.result == 'success'
     steps:
       - name: 📥 Checkout repository
@@ -716,8 +733,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, docker-publish]
+    # Tag-gated (#271): pull-testing the published image is a release-publication
+    # concern. Keeping it off bare main pushes shortens the main-push run that the
+    # release gate waits on before tagging.
     if: |
       always() &&
+      startsWith(github.ref, 'refs/tags/v') &&
       needs.version.result == 'success' &&
       needs.docker-publish.result == 'success'
     steps:
