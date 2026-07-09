@@ -939,7 +939,16 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
   });
 
   test('actual_budget_updates_batch - should handle large batch (35 ops)', async ({ request }) => {
-    test.setTimeout(60000); // Large batch operations can take longer
+    // #273: 120s, not 60s. This tool runs all 35 updates as ONE write-queue
+    // operation through the single process-global api mutex (withApiLock). The
+    // per-op timeout (ACTUAL_OP_TIMEOUT_MS, default 30s) bounds EXECUTION while
+    // the lock is held, but NOT the wait to acquire the lock. Under the full
+    // 63-test parallel Docker E2E load on a shared/slow CI runner, this request
+    // can queue behind other operations and legitimately exceed 60s (observed:
+    // a 60s Playwright disposal, not an op-timeout error). 120s stays well above
+    // the 30s op-timeout, so a genuine op-timeout still surfaces as a clear tool
+    // error rather than a Playwright "Request context disposed".
+    test.setTimeout(120000);
     if (!testContext.categoryId) test.skip();
     
     console.log('💰 Testing large batch update (35 operations)...');
