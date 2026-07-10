@@ -75,8 +75,33 @@ the same up front and STOP with a clear report if any fails, rather than forcing
    `origin/develop` HEAD and confirm it concluded `success`. A red or in-progress
    develop is not releasable.
 
+5. dual-transport evidence (#280): `.release/dual-transport-report.json` exists, its
+   `sha` equals `git rev-parse origin/develop`, its `level` is `full`, and BOTH
+   transports report `exit: 0` and `residue: 0`.
+
+   ```bash
+   node -e '
+     const r = require("./.release/dual-transport-report.json");
+     const { execSync } = require("child_process");
+     const head = execSync("git rev-parse origin/develop").toString().trim();
+     const ok = r.sha === head && r.level === "full" &&
+       r.transports.http.exit === 0 && r.transports.http.residue === 0 &&
+       r.transports.stdio.exit === 0 && r.transports.stdio.residue === 0;
+     if (!ok) { console.error("dual-transport evidence invalid or stale:", JSON.stringify(r)); process.exit(1); }
+     console.log("dual-transport evidence OK for", head.slice(0,7));
+   '
+   ```
+
+   The SHA equality IS the freshness guard: any new commit on develop invalidates the
+   artifact, so evidence cannot be recycled across changes. If the SHA does not match,
+   the evidence is stale: re-run `bash scripts/deploy-and-test.sh full`.
+
+   HTTP-only evidence is not sufficient. stdio is the transport half our Claude Desktop
+   users run on, and it had no integration write-path coverage at all until #280.
+
 If a precondition fails, report exactly which one and the single next action (run
-the bump, wait for CI, etc.). Do not override the hook with `--force`.
+the bump, wait for CI, re-run the dual-transport gate, etc.). Do not override the hook
+with `--force`.
 
 ## Pipeline
 

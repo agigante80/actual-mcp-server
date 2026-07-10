@@ -37,6 +37,8 @@ Common slip patterns to watch for (described abstractly to avoid the literal cha
 - `main` is only updated with explicit user permission (e.g. "push to main" or "release")
 - When the user says "push to github" without specifying a branch → push to `develop`
 
+**A promotion to `main` REQUIRES a passing full integration run over BOTH transports (`MCP_TEST_TRANSPORT=http` and `MCP_TEST_TRANSPORT=stdio`) with a green zero-residue assertion.** Run `bash scripts/deploy-and-test.sh full`; it writes `.release/dual-transport-report.json`, which the `release` skill verifies against the develop HEAD sha. HTTP-only evidence is not sufficient: stdio is the transport half our Claude Desktop users run on, and it had no write-path coverage until #280.
+
 **Incoming tickets are hypotheses, not ground truth.** For a `bug` or any
 behaviour-change ticket (especially external or spec-derived ones), reproduce the
 reported behaviour against the CURRENT code before writing a fix (the
@@ -281,6 +283,9 @@ export default tool;
 | `MCP_TEST_MAX_SESSION_RETRIES` | 3 | Session-expired re-initialisations per logical chain (closure-state, survives recursion) |
 | `MCP_TEST_CIRCUIT_THRESHOLD` | 10 | Consecutive failed `callMCP` invocations before the circuit breaker opens |
 | `MCP_TEST_MAX_RUNTIME_MS` | per-level (sanity 60s, smoke 120s, normal 300s, extended 600s, full 900s) | Wall-clock budget in `runner.js`; exceeding it exits **code 2** (distinct from code 1 used for assertion failures) with `Aborted after N min, server appears unhealthy` |
+| `MCP_TEST_TRANSPORT` | `http` | Which transport the suite runs over: `http` or `stdio` (#280) |
+| `MCP_TEST_BUDGET_SYNC_ID` | unset | Designates a budget as DISPOSABLE. The pre-run residue sweep deletes nothing unless this matches the budget the server has loaded. Unset = sweep skipped (#280) |
+| `MCP_TEST_SWEEP_MAX` | 50 | Abort the sweep rather than delete more than this many objects (wrong-budget signal) (#280) |
 
 ## File Safety Tiers
 
