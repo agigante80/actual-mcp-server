@@ -8,9 +8,10 @@
 // Run: node tests/unit/node_version_guard.test.js
 
 import assert from 'assert';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
+import { spawnSync } from 'child_process';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, unlinkSync } from 'fs';
 import { tmpdir } from 'os';
-import { fileURLToPath } from 'url';
+import { fileURLToPath, pathToFileURL } from 'url';
 import { dirname, join } from 'path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -220,6 +221,131 @@ check('the REAL tree resolves to the real root floor', () => {
 check('the running interpreter satisfies the floor it declares (self-consistency)', () => {
   const rootPkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
   assert.strictEqual(checkNodeVersion(process.version, rootPkg.engines.node).ok, true);
+});
+
+// ---------------------------------------------------------------------------
+// #277: the version reads must come from the ROOT package.json, not the tsc
+// mirror at dist/package.json.
+// ---------------------------------------------------------------------------
+
+check('VERSION: findRootPackageJson exposes the root version, not the mirror version', () => {
+  const tmp = tempTree('nvg-ver-');
+  const start = join(tmp, 'dist', 'src');
+  mkdirSync(start, { recursive: true });
+  writeFileSync(join(tmp, 'package.json'), JSON.stringify({ name: 'actual-mcp-server', version: '9.9.9', engines: { node: '>=22.0.0' } }));
+  writeFileSync(join(tmp, 'dist', 'package.json'), JSON.stringify({ name: 'actual-mcp-server', version: '0.0.1', engines: { node: '>=22.0.0' } }));
+  assert.strictEqual(findRootPackageJson(start).version, '9.9.9');
+});
+
+check('PURITY: src/index.ts no longer uses import attributes for package.json', () => {
+  // These were the exact construct that crashed on Node 18 (#275). Strip comments and
+  // string literals first: the guard's own error message legitimately MENTIONS the syntax.
+  const src = readFileSync(join(ROOT, 'src', 'index.ts'), 'utf8');
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\/.*$/gm, '')
+    .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+    .replace(/`(?:[^`\\]|\\.)*`/g, '``');
+  assert.ok(!/\bwith\s*:?\s*\{\s*type\s*:/.test(code), 'src/index.ts must not use import attributes');
+  assert.ok(!/import\(['"]\.\.\/package\.json/.test(code), 'src/index.ts must not dynamically import package.json');
+});
+
+check('VERSION: banner, --version, and actual_server_info all report the ROOT version', () => {
+  // The core regression. Comparing resolver functions to each other can pass while every
+  // user-visible output is still wrong, so assert on OBSERVABLE output: the stdout of
+  // `--version`, the `--help` banner line, and the actual_server_info version field.
+  //
+  // PLANT a hostile dist/package.json mirror for the duration, then restore the tree.
+  //
+  // Since #277 removed the JSON imports from src/index.ts, package.json left tsc's input
+  // set, so `tsc` no longer emits that mirror at all and the file normally does NOT exist.
+  // We create one anyway: a mirror can still be present in a dist/ tree built by an older
+  // version, and resolution must ignore it either way. Planting it is also the only way to
+  // prove these outputs are not reading it.
+  //
+  // Note the normalisation: server_info.ts and the startup banner append `-dev-<sha>` on a
+  // non-main branch, while `--version` prints the raw version. Compare BASE versions.
+  const distPkgPath = join(ROOT, 'dist', 'package.json');
+  const preexisting = existsSync(distPkgPath) ? readFileSync(distPkgPath, 'utf8') : null;
+  const rootPkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  const rootVersion = rootPkg.version;
+  const base = (v) => String(v).split('-dev-')[0].trim();
+  const env = { ...process.env };
+  delete env.VERSION; // else every path short-circuits to the env value and proves nothing
+
+  try {
+    writeFileSync(distPkgPath, JSON.stringify({ ...rootPkg, version: '0.0.0-stale' }));
+
+    const entry = join(ROOT, 'dist', 'src', 'index.js');
+
+    // (a) `node dist/src/index.js --version` stdout
+    const versionOut = spawnSync(process.execPath, [entry, '--version'], { encoding: 'utf8', env });
+    assert.strictEqual(versionOut.status, 0, `--version exited ${versionOut.status}: ${versionOut.stderr}`);
+    assert.strictEqual(base(versionOut.stdout), base(rootVersion), '--version must print the ROOT version');
+    assert.ok(!versionOut.stdout.includes('0.0.0-stale'), '--version must not read the dist mirror');
+
+    // (b) the `--help` banner line, which embeds the same reader's result
+    const helpOut = spawnSync(process.execPath, [entry, '--help'], { encoding: 'utf8', env });
+    const bannerLine = helpOut.stdout.split('\n').find((l) => l.startsWith('actual-mcp-server v'));
+    assert.ok(bannerLine, 'help output must carry the banner line');
+    assert.strictEqual(base(bannerLine.replace('actual-mcp-server v', '')), base(rootVersion));
+    assert.ok(!helpOut.stdout.includes('0.0.0-stale'), 'banner must not read the dist mirror');
+
+    // (c) the actual_server_info version field (a pure local tool: no adapter, no live server)
+    const infoUrl = pathToFileURL(join(ROOT, 'dist', 'src', 'tools', 'server_info.js')).href;
+    const infoScript =
+      `const t = (await import(${JSON.stringify(infoUrl)})).default;` +
+      'const r = await t.call({}); process.stdout.write(r.server.version);';
+    const infoOut = spawnSync(process.execPath, ['--input-type=module', '-e', infoScript], { encoding: 'utf8', env });
+    assert.strictEqual(infoOut.status, 0, `server_info exited ${infoOut.status}: ${infoOut.stderr}`);
+    assert.strictEqual(base(infoOut.stdout), base(rootVersion), 'actual_server_info must report the ROOT version');
+    assert.ok(!infoOut.stdout.includes('0.0.0-stale'), 'server_info must not read the dist mirror');
+  } finally {
+    // Restore exactly what we found: the file back if it existed, otherwise no file at all.
+    if (preexisting === null) unlinkSync(distPkgPath);
+    else writeFileSync(distPkgPath, preexisting);
+  }
+});
+
+check('MIRROR: a clean build no longer emits dist/package.json at all', () => {
+  // The deepest fix. dist/package.json only ever existed because src/index.ts imported
+  // ../package.json, which pulled it into tsc's input set (rootDir is "."). With the
+  // imports gone, the mirror is gone, so the class of bug cannot recur through this path.
+  // Guarded rather than asserted on a possibly-dirty tree: only meaningful right after a
+  // build, so we assert the CAUSE (no JSON import of package.json anywhere in src/).
+  const files = [join(ROOT, 'src', 'index.ts')];
+  for (const f of files) {
+    const code = readFileSync(f, 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/^\s*\/\/.*$/gm, '');
+    assert.ok(
+      !/import\(['"]\.\.\/package\.json['"]/.test(code),
+      `${f} must not import package.json, or tsc will re-emit the dist mirror`,
+    );
+  }
+});
+
+check('FALLBACK: a missing root package.json yields a fallback, and never throws', () => {
+  // findRootPackageJson returns null rather than throwing, which is what lets
+  // readRootVersion() in index.ts degrade to process.env.VERSION / 'unknown'.
+  const tmp = tempTree('nvg-nopkg-');
+  const start = join(tmp, 'a', 'b');
+  mkdirSync(start, { recursive: true });
+  assert.doesNotThrow(() => findRootPackageJson(start));
+  assert.strictEqual(findRootPackageJson(start), null);
+});
+
+check('enforceNodeVersion fires exactly once, no matter how often the module is imported', () => {
+  // index.ts imports the module for findRootPackageJson; that must not re-run the guard.
+  const guardUrl = pathToFileURL(join(ROOT, 'dist', 'src', 'lib', 'node-version-guard.js')).href;
+  const script =
+    `const a = await import(${JSON.stringify(guardUrl)});` +
+    `const b = await import(${JSON.stringify(guardUrl)});` +
+    'process.stdout.write(String(a === b));';
+  const out = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.strictEqual(out.stdout, 'true', 'ESM module caching means the top-level side effect runs once');
 });
 
 console.log(`\n[node-version-guard] Results: ${passed} passed, ${failed} failed`);

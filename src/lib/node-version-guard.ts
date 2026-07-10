@@ -23,11 +23,13 @@
  *  3. The floor is never hardcoded. It comes from `engines.node` in the root
  *     package.json, so bumping the floor needs no change here.
  *
- * On the root package.json: `tsc` emits a mirror at `dist/package.json` (rootDir is
- * "." and resolveJsonModule is on), and in a dev tree that mirror goes stale. Reading
- * it would reintroduce the class of bug this guard exists to prevent, so we walk up
- * looking for the package.json that identifies itself as this package, rather than
- * trusting a fixed relative depth.
+ * On the root package.json: a `dist/package.json` mirror can sit between this module and
+ * the real root. `tsc` emitted one for as long as any source file imported
+ * `../package.json` (rootDir is "." and resolveJsonModule is on), and in a dev tree it
+ * went stale. #277 removed those imports, so a clean build no longer produces it, but a
+ * dist/ tree built by an older version still can. Reading it would reintroduce the class
+ * of bug this guard exists to prevent, so we walk up looking for the package.json that
+ * identifies itself as this package, rather than trusting a fixed relative depth.
  */
 
 import { existsSync, readFileSync, writeSync } from 'node:fs';
@@ -90,8 +92,10 @@ export function checkNodeVersion(running: string, range: string): VersionVerdict
   };
 }
 
-interface PackageManifest {
+export interface PackageManifest {
   name?: string;
+  /** #277: read by src/index.ts so the version comes from the root manifest, not the dist mirror. */
+  version?: string;
   engines?: { node?: string };
 }
 
@@ -100,11 +104,11 @@ interface PackageManifest {
  * Depth-independent, so it resolves identically from `bin/` and from `dist/src/lib/`.
  * Returns null when not found, or when the file is unreadable or not valid JSON.
  *
- * Takes the OUTERMOST match, not the first one. This matters: the `dist/package.json`
- * mirror also carries `name: "actual-mcp-server"` and an `engines` block, and it is
- * structurally identical to the root apart from a possibly stale `version`. A
- * first-match-wins walk from `dist/src/lib/` would therefore stop at the mirror,
- * which is precisely the stale read this guard must avoid. The root always sits
+ * Takes the OUTERMOST match, not the first one. This matters when a `dist/package.json`
+ * mirror is present (see above): it also carries `name: "actual-mcp-server"` and an
+ * `engines` block, and is structurally identical to the root apart from a possibly stale
+ * `version`. A first-match-wins walk from `dist/src/lib/` would therefore stop at the
+ * mirror, which is precisely the stale read this guard must avoid. The root always sits
  * above the mirror, so the last match on the way up is the right one.
  *
  * The walk stops at a `node_modules` boundary so that an installed copy resolves to

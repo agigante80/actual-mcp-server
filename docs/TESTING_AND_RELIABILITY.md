@@ -344,6 +344,10 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   floor is read from the ROOT `package.json` and not the stale `dist/package.json` mirror, and
   that the module stays dependency-free and stdout-clean. The `Node Floor Guard` CI job proves
   the guard actually fires by running both entry points on a real below-floor Node.
+  The same file also covers #277: `--version`, the `--help` banner, and `actual_server_info`
+  must all report the ROOT version, asserted on observable process output against a planted
+  hostile `dist/package.json`, not by comparing resolver functions to each other. Removing the
+  JSON imports from `src/index.ts` also stops `tsc` emitting that mirror in the first place.
 - **Periodic deep sweep**: the manual `/code-health-auditor` skill runs Knip plus the drift
   guards, triages against the allowlist, and opens gate-ready tickets for genuine findings
   (cache-first via `docs/audit/deadcode-audit-cache.json`). Run on demand; not scheduled.
