@@ -150,18 +150,18 @@ export function residueCount(r) {
  */
 export async function sweepResidue(callTool, env = process.env) {
   const decision = assertSweepAllowed(env); // throws with code 4 on a mismatch
-  if (decision === 'skip') return { swept: 0, skipped: true };
+  if (decision === 'skip') return { swept: 0, failed: 0, skipped: true };
 
   const found = await findResidue(callTool);
   const total = residueCount(found);
   if (total === 0) {
     console.log('  ✓ Sweep: budget already clean, nothing to remove.');
-    return { swept: 0, skipped: false };
+    return { swept: 0, failed: 0, skipped: false };
   }
 
   const cap = parseInt(env.MCP_TEST_SWEEP_MAX || String(DEFAULT_SWEEP_MAX), 10);
   console.log(`\n  -- Sweep preview (${total} object(s), cap ${cap}) --`);
-  for (const a of found.openAccounts) console.log(`     close  account   ${a.name}`);
+  for (const a of found.openAccounts) console.log(`     remove account   ${a.name}`);
   for (const p of found.payees) console.log(`     delete payee     ${p.name}`);
   for (const c of found.categories) console.log(`     delete category  ${c.name}`);
   for (const g of found.groups) console.log(`     delete group     ${g.name}`);
@@ -177,20 +177,53 @@ export async function sweepResidue(callTool, env = process.env) {
     throw err;
   }
 
-  const swallow = (label) => (err) => console.log(`     ! ${label} failed: ${err.message}`);
+  // Count real outcomes. The old code swallowed each per-op failure and then printed an
+  // unconditional success, so a balance-bearing account (which actual_accounts_close
+  // cannot close without a transferAccountId) silently survived while the sweep claimed
+  // to have removed it, and the next run failed the zero-residue assertion (#287). Count
+  // only what is actually gone, and report anything that could not be removed.
+  let swept = 0, failed = 0;
+  const tryRemove = async (label, name, fn) => {
+    try { await fn(); swept++; }
+    catch (err) { console.log(`     ! ${label} "${name}" failed: ${err.message}`); failed++; }
+  };
 
   // Order matters: rules and schedules reference payees/categories, so remove them first.
-  for (const r of found.rules) await callTool('actual_rules_delete', { id: r.id }).catch(swallow('rule delete'));
-  for (const s of found.schedules) await callTool('actual_schedules_delete', { id: s.id }).catch(swallow('schedule delete'));
-  for (const p of found.payees) await callTool('actual_payees_delete', { id: p.id }).catch(swallow('payee delete'));
-  for (const c of found.categories) await callTool('actual_categories_delete', { id: c.id }).catch(swallow('category delete'));
-  for (const g of found.groups) await callTool('actual_category_groups_delete', { id: g.id }).catch(swallow('group delete'));
-  // NEVER actual_accounts_delete: an account holding transactions cannot be safely
-  // hard-deleted (cleanup.js documents the infinite retry loops). Close it instead.
-  for (const a of found.openAccounts) await callTool('actual_accounts_close', { id: a.id }).catch(swallow('account close'));
+  for (const r of found.rules) await tryRemove('rule delete', r.id, () => callTool('actual_rules_delete', { id: r.id }));
+  for (const s of found.schedules) await tryRemove('schedule delete', s.name, () => callTool('actual_schedules_delete', { id: s.id }));
+  for (const p of found.payees) await tryRemove('payee delete', p.name, () => callTool('actual_payees_delete', { id: p.id }));
+  for (const c of found.categories) await tryRemove('category delete', c.name, () => callTool('actual_categories_delete', { id: c.id }));
+  for (const g of found.groups) await tryRemove('group delete', g.name, () => callTool('actual_category_groups_delete', { id: g.id }));
+  // Accounts (#287): an OPEN account with a non-zero balance cannot be closed without a
+  // transferAccountId, so the old close-only path silently failed. Zero the balance by
+  // deleting the account's transactions, then delete the account; fall back to closing it
+  // (with a zero balance, close succeeds) so it lands in the accepted terminal state
+  // rather than as open residue. The legacy "NEVER actual_accounts_delete" caution was a
+  // pre-#134 per-op-init timeout; since #134 the session is pooled and the delete is
+  // bounded by the #270 op-timeout, so it no longer loops (verified live during the
+  // v0.8.13 release cleanup).
+  for (const a of found.openAccounts) {
+    await tryRemove('account remove', a.name, async () => {
+      const txns = list(await callTool('actual_transactions_get', { accountId: a.id }).catch(() => []));
+      for (const t of txns) {
+        if (t?.id) await callTool('actual_transactions_delete', { id: t.id }).catch(() => {});
+      }
+      try {
+        await callTool('actual_accounts_delete', { id: a.id });
+      } catch {
+        // Balance is zero now, so close is the fallback. If this ALSO throws, it propagates
+        // to tryRemove, which records the account as failed (not swept): the summary stays honest.
+        await callTool('actual_accounts_close', { id: a.id });
+      }
+    });
+  }
 
-  console.log(`  ✓ Sweep removed ${total} object(s).\n`);
-  return { swept: total, skipped: false };
+  if (failed === 0) {
+    console.log(`  ✓ Sweep removed ${swept} object(s).\n`);
+  } else {
+    console.log(`  ⚠ Sweep removed ${swept} object(s); ${failed} could NOT be removed (see failures above). The budget is NOT clean.\n`);
+  }
+  return { swept, failed, skipped: false };
 }
 
 /**
