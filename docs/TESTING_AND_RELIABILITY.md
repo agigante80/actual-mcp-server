@@ -332,8 +332,18 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   `IMPLEMENTED_TOOLS`, catching documented-but-missing/renamed tools). These join the existing
   doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,
   `dockerfile_data_dir_alignment`, `compose_profile_sync`,
-  `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement), and
-  `bot_target_branch` (#265: dependabot blocks and the inert renovate config target develop).
+  `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement),
+  `bot_target_branch` (#265: dependabot blocks and the inert renovate config target develop), and
+  `node_version_drift` (#275: `engines.node` is canonical; the Dockerfile `FROM node:` tags,
+  every workflow's Node pin, and the README must agree with it. Run standalone with
+  `npm run node-version-drift`).
+- **Node floor guard** (#275): `tests/unit/node_version_guard.test.js` covers
+  `src/lib/node-version-guard.ts`, which rejects an unsupported interpreter at startup rather
+  than letting it die later with a cryptic `ERR_IMPORT_ASSERTION_TYPE_MISSING`. The unit test
+  pins the comparator truth table, the fail-open behaviour on an unparseable range, that the
+  floor is read from the ROOT `package.json` and not the stale `dist/package.json` mirror, and
+  that the module stays dependency-free and stdout-clean. The `Node Floor Guard` CI job proves
+  the guard actually fires by running both entry points on a real below-floor Node.
 - **Periodic deep sweep**: the manual `/code-health-auditor` skill runs Knip plus the drift
   guards, triages against the allowlist, and opens gate-ready tickets for genuine findings
   (cache-first via `docs/audit/deadcode-audit-cache.json`). Run on demand; not scheduled.
