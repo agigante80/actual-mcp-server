@@ -628,6 +628,11 @@ OIDC_RESOURCE=your-client-id    # must match 'aud' JWT claim
 OIDC_SCOPES=                    # leave empty for Casdoor
 ```
 
+**OAuth discovery endpoints (automatic in OIDC mode).** When `AUTH_PROVIDER=oidc`, the server publishes the two metadata documents an OAuth client needs to bootstrap a login, so `mcp-remote` and Claude.ai's native connector can discover the flow without manual endpoint configuration:
+
+- `GET /.well-known/oauth-protected-resource` (RFC 9728): identifies this server as a protected resource and points at your `OIDC_ISSUER` as the authorization server.
+- `GET /.well-known/oauth-authorization-server` (RFC 8414, #285): the authorization server metadata (its `authorization_endpoint` / `token_endpoint` / `registration_endpoint`), re-served from your IdP's own OpenID discovery document. This is here because several clients look for it on the resource-server origin, and some IdPs (e.g. Authentik) do not expose it where those clients look. It is fetched once at startup and served verbatim, exposes only endpoints your IdP already publishes publicly, and requires no authentication (a client reads it before it has a token). No extra configuration is needed; it is absent when `AUTH_PROVIDER` is not `oidc`.
+
 See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format and Casdoor notes.
 
 ---

@@ -224,6 +224,8 @@ Principal key formats:
 
 **Casdoor note**: Casdoor JWTs do not include a `scope` claim. Set `OIDC_SCOPES=` (empty string) to disable scope enforcement.
 
+**OAuth discovery for Claude.ai / mcp-remote (#285)**: with `AUTH_PROVIDER=oidc`, the server automatically publishes both OAuth metadata documents a client needs to start a login: `/.well-known/oauth-protected-resource` (RFC 9728) and `/.well-known/oauth-authorization-server` (RFC 8414). The RFC 8414 document is re-served from your IdP's own OpenID discovery doc, which lets clients that resolve that path against the resource-server origin (and IdPs like Authentik that do not expose it where clients look) complete the flow. No configuration is required: point your OIDC client at the server's base URL and it discovers `OIDC_ISSUER`'s `authorization_endpoint` / `token_endpoint` automatically. If a client cannot find the token endpoint against a bare-OIDC IdP, confirm `AUTH_PROVIDER=oidc` is set (the endpoints exist only in OIDC mode).
+
 ---
 
 ## Verification

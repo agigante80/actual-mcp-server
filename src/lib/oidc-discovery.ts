@@ -189,16 +189,26 @@ export function resolveJwksUri(
 }
 
 /**
- * Fetch the issuer's OpenID discovery document and return a validated `jwks_uri`.
- * Fails closed on any problem (non-https issuer, redirect, non-200, bad JSON,
- * missing/invalid/cross-host jwks_uri). `fetchImpl` is injectable for testing.
+ * Fetch the issuer's OpenID discovery document ONCE and return both the raw
+ * document and its validated `jwks_uri` (#285). Fails closed on any problem
+ * (non-https issuer, redirect, non-200, bad JSON, missing/invalid/cross-host
+ * jwks_uri). `fetchImpl` is injectable for testing.
+ *
+ * The returned `metadata` is the IdP's own public discovery document. Its
+ * intended second use (beyond resolving the JWKS URI) is to be re-served
+ * verbatim at `/.well-known/oauth-authorization-server` as RFC 8414 Authorization
+ * Server Metadata, so a client that resolves that well-known path against this
+ * resource server (as mcp-remote and Claude.ai do) can find the IdP's
+ * `token_endpoint`. Because this fetch happens ONCE at startup and the document
+ * is served from memory, no request ever triggers an outbound fetch (no
+ * request-path SSRF surface).
  */
-export async function discoverJwksUri(
+export async function discoverOidcMetadata(
   issuer: string | undefined,
   allowInsecure = false,
   trustedHosts: string[] = [],
   fetchImpl: typeof fetch = fetch,
-): Promise<string> {
+): Promise<{ jwksUri: string; metadata: Record<string, unknown> }> {
   assertSecureIssuer(issuer, allowInsecure);
   const base = issuer!.endsWith('/') ? issuer!.slice(0, -1) : issuer!;
   const discoveryUrl = `${base}/.well-known/openid-configuration`;
@@ -221,7 +231,26 @@ export async function discoverJwksUri(
   } catch {
     throw new Error(`OIDC discovery document at ${discoveryUrl} is not valid JSON`);
   }
+  // resolveJwksUri validates that `doc` is an object AND resolves/validates the
+  // jwks_uri (https, same-origin or explicitly allowlisted). It throws (fail
+  // closed) on any problem, so reaching past it guarantees a usable object with a
+  // trusted jwks_uri before the document is exposed.
   const jwksUri = resolveJwksUri(doc as { jwks_uri?: unknown }, issuer, allowInsecure, trustedHosts);
   logger.info('Resolved JWKS URI from OIDC discovery', { jwksUri });
+  return { jwksUri, metadata: doc as Record<string, unknown> };
+}
+
+/**
+ * Back-compat convenience: resolve only the validated `jwks_uri`. Delegates to
+ * discoverOidcMetadata so the single hardened fetch and every fail-closed check
+ * are shared. Retained for callers (and their tests) that only need the key set.
+ */
+export async function discoverJwksUri(
+  issuer: string | undefined,
+  allowInsecure = false,
+  trustedHosts: string[] = [],
+  fetchImpl: typeof fetch = fetch,
+): Promise<string> {
+  const { jwksUri } = await discoverOidcMetadata(issuer, allowInsecure, trustedHosts, fetchImpl);
   return jwksUri;
 }
