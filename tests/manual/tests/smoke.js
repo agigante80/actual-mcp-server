@@ -1,7 +1,7 @@
 /**
  * tests/smoke.js
  *
- * SMOKE TESTS — sanity checks plus extra read-only coverage:
+ * SMOKE TESTS: sanity checks plus extra read-only coverage:
  * account balances, category/group listing, recent transactions.
  *
  * Reads from context:  (none)

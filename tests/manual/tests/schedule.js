@@ -1,14 +1,15 @@
+import { fail } from '../assert.js';
 /**
  * tests/manual/tests/schedule.js
  *
- * SCHEDULE TESTS — getSchedules, createSchedule, updateSchedule, deleteSchedule.
+ * SCHEDULE TESTS: getSchedules, createSchedule, updateSchedule, deleteSchedule.
  *
  * Covers:
  *   positive: list • create one-off • create recurring • update name
  *             update with resetNextDate • delete created schedule
  *   negative: delete non-existent UUID (expect error, not crash)
  *
- * Naming pattern: MCP-Schedule-{timestamp} — matched by cleanup.js
+ * Naming pattern: MCP-Schedule-{timestamp}: matched by cleanup.js
  *
  * Reads from context:  (none required)
  * Writes to context:   scheduleOneOffId, scheduleRecurId
@@ -30,7 +31,7 @@ export async function scheduleTests(client, context) {
   const listResult = await callTool('actual_schedules_get', {});
   const initialSchedules = listResult?.schedules ?? listResult?.result?.schedules ?? listResult ?? [];
   if (!Array.isArray(initialSchedules)) {
-    console.log(`  ❌ expected schedules array, got: ${JSON.stringify(listResult).slice(0, 100)}`);
+    fail(`expected schedules array, got: ${JSON.stringify(listResult).slice(0, 100)}`);
   } else {
     console.log(`  ✓ schedules listed: ${initialSchedules.length} found`);
   }
@@ -52,10 +53,10 @@ export async function scheduleTests(client, context) {
       console.log(`  ✓ one-off schedule created: ${scheduleOneOffId}`);
       context.scheduleOneOffId = scheduleOneOffId;
     } else {
-      console.log(`  ❌ create one-off: unexpected response: ${JSON.stringify(created).slice(0, 120)}`);
+      fail(`create one-off: unexpected response: ${JSON.stringify(created).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log(`  ❌ create one-off failed: ${err.message}`);
+    fail(`create one-off failed: ${err.message}`);
   }
 
   // ── 3. Verify one-off appears in list ────────────────────────────────────
@@ -66,7 +67,7 @@ export async function scheduleTests(client, context) {
     if (found) {
       console.log(`  ✓ verify create: schedule found in list (name="${found.name}", next_date="${found.next_date}")`);
     } else {
-      console.log(`  ❌ verify create: schedule ${scheduleOneOffId} not found in list`);
+      fail(`verify create: schedule ${scheduleOneOffId} not found in list`);
     }
   }
 
@@ -92,10 +93,10 @@ export async function scheduleTests(client, context) {
       console.log(`  ✓ recurring schedule created: ${scheduleRecurId}`);
       context.scheduleRecurId = scheduleRecurId;
     } else {
-      console.log(`  ❌ create recurring: unexpected response: ${JSON.stringify(createdRecur).slice(0, 120)}`);
+      fail(`create recurring: unexpected response: ${JSON.stringify(createdRecur).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log(`  ❌ create recurring failed: ${err.message}`);
+    fail(`create recurring failed: ${err.message}`);
   }
 
   // ── 5. Verify recurring has next_date populated ───────────────────────────
@@ -110,7 +111,7 @@ export async function scheduleTests(client, context) {
         console.log(`  ⚠ verify recurring: next_date not populated (may be server behaviour)`);
       }
     } else {
-      console.log(`  ❌ verify recurring: schedule ${scheduleRecurId} not found in list`);
+      fail(`verify recurring: schedule ${scheduleRecurId} not found in list`);
     }
   }
 
@@ -136,10 +137,10 @@ export async function scheduleTests(client, context) {
       if (foundUpdated?.name === updatedName) {
         console.log(`  ✓ verify update: name="${foundUpdated.name}"`);
       } else {
-        console.log(`  ❌ verify update: expected name "${updatedName}", got "${foundUpdated?.name}"`);
+        fail(`verify update: expected name "${updatedName}", got "${foundUpdated?.name}"`);
       }
     } catch (err) {
-      console.log(`  ❌ update name failed: ${err.message}`);
+      fail(`update name failed: ${err.message}`);
     }
   }
 
@@ -164,7 +165,7 @@ export async function scheduleTests(client, context) {
         console.log(`  ⚠ update with resetNextDate: unexpected response: ${JSON.stringify(updateRecurResult).slice(0, 120)}`);
       }
     } catch (err) {
-      console.log(`  ❌ update recurring + resetNextDate failed: ${err.message}`);
+      fail(`update recurring + resetNextDate failed: ${err.message}`);
     }
   }
 
@@ -186,10 +187,10 @@ export async function scheduleTests(client, context) {
       if (!stillThere) {
         console.log(`  ✓ verify delete: schedule no longer in list`);
       } else {
-        console.log(`  ❌ verify delete: schedule ${scheduleOneOffId} still in list after deletion`);
+        fail(`verify delete: schedule ${scheduleOneOffId} still in list after deletion`);
       }
     } catch (err) {
-      console.log(`  ❌ delete one-off failed: ${err.message}`);
+      fail(`delete one-off failed: ${err.message}`);
     }
   }
 
@@ -205,7 +206,7 @@ export async function scheduleTests(client, context) {
         console.log(`  ⚠ delete recurring: unexpected response: ${JSON.stringify(delRecurResult).slice(0, 120)}`);
       }
     } catch (err) {
-      console.log(`  ❌ delete recurring failed: ${err.message}`);
+      fail(`delete recurring failed: ${err.message}`);
     }
   }
 
@@ -225,5 +226,5 @@ export async function scheduleTests(client, context) {
     }
   }
 
-  console.log('\n  (Schedule cleanup complete — all MCP-Schedule-* entries removed above)');
+  console.log('\n  (Schedule cleanup complete: all MCP-Schedule-* entries removed above)');
 }

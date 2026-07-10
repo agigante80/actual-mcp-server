@@ -1,7 +1,8 @@
+import { fail } from '../assert.js';
 /**
  * tests/payee.js
  *
- * PAYEE TESTS — create, update, merge payees; get payee rules.
+ * PAYEE TESTS: create, update, merge payees; get payee rules.
  * Includes full coverage of the category field on payee update:
  *   - category creates a "set category" rule for the payee
  *   - setting category twice does NOT create a duplicate rule (update path)
@@ -53,7 +54,7 @@ export async function payeeTests(client, context) {
     const contains = await callTool("actual_entities_search", { type: 'payees', query: `MCP-Payee-${timestamp}` });
     const cm = contains?.matches || contains?.result?.matches || [];
     if (cm.some(m => m.id === payeeId)) console.log(`  ✓ contains: found the created payee by partial name (${cm.length} match(es))`);
-    else console.log(`  ❌ contains: created payee not found:`, JSON.stringify(contains).slice(0, 140));
+    else fail([`contains: created payee not found:`, JSON.stringify(contains).slice(0, 140)].map(String).join(" "));
 
     // fuzzy: drop a character to simulate a typo
     const typo = `MCP-Paye-${timestamp}`;
@@ -67,15 +68,15 @@ export async function payeeTests(client, context) {
     const nm = none?.matches || none?.result?.matches || [];
     const nc = none?.count ?? none?.result?.count;
     if (nm.length === 0 && nc === 0 && !(none?.error || none?.result?.error)) console.log("  ✓ no-match: returns { matches: [], count: 0 } with no error");
-    else console.log("  ❌ no-match: unexpected:", JSON.stringify(none).slice(0, 140));
+    else fail(["no-match: unexpected:", JSON.stringify(none).slice(0, 140)].map(String).join(" "));
   }
 
   // Verify payeeId2 create
   {
     const found = (await allPayees()).find(p => p.id === payeeId2);
-    if (!found) console.log("  ❌ Verify payee2 create: not found in list (id:", payeeId2, ")");
+    if (!found) fail(["Verify payee2 create: not found in list (id:", payeeId2, ")"].map(String).join(" "));
     else if (found.name === `MCP-Payee2-${timestamp}`) console.log(`  ✓ Verify payee2 create: name="${found.name}"`);
-    else console.log(`  ❌ Verify payee2 create: expected "MCP-Payee2-${timestamp}", got "${found.name}"`);
+    else fail(`Verify payee2 create: expected "MCP-Payee2-${timestamp}", got "${found.name}"`);
   }
 
   // ── Category-via-rules: full lifecycle ─────────────────────────────────
@@ -106,17 +107,17 @@ export async function payeeTests(client, context) {
         if (action.value === context.categoryId) {
           console.log(`  ✓ Verify create rule: rule created with categoryId=${context.categoryId}`);
         } else {
-          console.log(`  ❌ Verify create rule: action value=${action.value}, expected ${context.categoryId}`);
+          fail(`Verify create rule: action value=${action.value}, expected ${context.categoryId}`);
         }
       } else {
-        console.log(`  ❌ Verify create rule: no 'set category' action found in ${rulesAfterSetArr.length} rule(s)`);
+        fail(`Verify create rule: no 'set category' action found in ${rulesAfterSetArr.length} rule(s)`);
       }
     } catch (err) {
-      console.log("❌ Set category FAILED:", err.message);
+      fail(["Set category FAILED:", err.message].map(String).join(" "));
     }
 
     // ── 2. SET category again (update / no-duplication path) ──────────────
-    console.log("\nSetting same category again (update rule — no duplicate)...");
+    console.log("\nSetting same category again (update rule: no duplicate)...");
     try {
       await callTool("actual_payees_update", {
         id: payeeId,
@@ -136,10 +137,10 @@ export async function payeeTests(client, context) {
       if (setCatRules.length === 1) {
         console.log(`  ✓ No-dup: exactly 1 'set category' rule (no duplicate created)`);
       } else {
-        console.log(`  ❌ No-dup: expected 1 'set category' rule, got ${setCatRules.length}`);
+        fail(`No-dup: expected 1 'set category' rule, got ${setCatRules.length}`);
       }
     } catch (err) {
-      console.log("❌ Update (no-dup) category FAILED:", err.message);
+      fail(["Update (no-dup) category FAILED:", err.message].map(String).join(" "));
     }
 
     // ── 3. CLEAR category (delete rule path) ──────────────────────────────
@@ -163,10 +164,10 @@ export async function payeeTests(client, context) {
       if (remainingCatRules.length === 0) {
         console.log(`  ✓ Clear rule: no 'set category' rule remains after clear`);
       } else {
-        console.log(`  ❌ Clear rule: expected 0 'set category' rules, got ${remainingCatRules.length}`);
+        fail(`Clear rule: expected 0 'set category' rules, got ${remainingCatRules.length}`);
       }
     } catch (err) {
-      console.log("❌ Clear category FAILED:", err.message);
+      fail(["Clear category FAILED:", err.message].map(String).join(" "));
     }
 
     // ── 4. NEGATIVE: non-existent payee UUID with category ────────────────
@@ -176,7 +177,7 @@ export async function payeeTests(client, context) {
         id: '00000000-0000-0000-0000-000000000000',
         fields: { category: context.categoryId },
       });
-      // Actual may silently succeed (rule created for unknown payee — benign)
+      // Actual may silently succeed (rule created for unknown payee: benign)
       console.log("  ⚠ Non-existent payee update with category did not throw (Actual allows orphan rules)");
     } catch (err) {
       console.log("  ✓ Non-existent payee UUID correctly produced error:", err.message.slice(0, 80));
@@ -188,9 +189,9 @@ export async function payeeTests(client, context) {
   // Verify create
   {
     const found = (await allPayees()).find(p => p.id === payeeId);
-    if (!found) console.log("  ❌ Verify create: payee not found in list (id:", payeeId, ")");
+    if (!found) fail(["Verify create: payee not found in list (id:", payeeId, ")"].map(String).join(" "));
     else if (found.name === `MCP-Payee-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
-    else console.log(`  ❌ Verify create: expected "MCP-Payee-${timestamp}", got "${found.name}"`);
+    else fail(`Verify create: expected "MCP-Payee-${timestamp}", got "${found.name}"`);
   }
 
   // Update name
@@ -204,16 +205,16 @@ export async function payeeTests(client, context) {
   // Verify update
   {
     const found = (await allPayees()).find(p => p.id === payeeId);
-    if (!found) console.log("  ❌ Verify update: payee not found in list");
+    if (!found) fail("Verify update: payee not found in list");
     else if (found.name === `MCP-Payee-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
-    else console.log(`  ❌ Verify update: expected "MCP-Payee-${timestamp}-Updated", got "${found.name}"`);
+    else fail(`Verify update: expected "MCP-Payee-${timestamp}-Updated", got "${found.name}"`);
   }
 
-  // REGRESSION: strict validation — invalid field
+  // REGRESSION: strict validation: invalid field
   console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
   try {
     await callTool("actual_payees_update", { id: payeeId, fields: { invalidField: "should fail" } });
-    console.log("❌ REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
+    fail("REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
   } catch (err) {
     if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
       console.log("✓ Strict validation working (invalid field rejected)");
@@ -231,20 +232,20 @@ export async function payeeTests(client, context) {
   // Verify merge
   {
     const gone = (await allPayees()).find(p => p.id === payeeId2);
-    if (gone) console.log(`  ❌ Verify merge: payee2 still exists (should have been merged away)`);
+    if (gone) fail(`Verify merge: payee2 still exists (should have been merged away)`);
     else console.log(`  ✓ Verify merge: payee2 no longer in list (confirmed deleted by merge)`);
 
     // P5: also assert the target payee (payeeId) still exists
     const target = (await allPayees()).find(p => p.id === payeeId);
-    if (!target) console.log(`  ❌ Verify merge: target payee1 absent after merge (should still exist)`);
+    if (!target) fail(`Verify merge: target payee1 absent after merge (should still exist)`);
     else console.log(`  ✓ Verify merge: target payee1 still present (name="${target.name}")`);
   }
 
-  // Payee rules — after category was set then cleared above, expect 0 rules
-  console.log("\nGetting payee rules (after category cleared — expect 0)...");
+  // Payee rules: after category was set then cleared above, expect 0 rules
+  console.log("\nGetting payee rules (after category cleared: expect 0)...");
   const rules = await callTool("actual_payee_rules_get", { payeeId });
   const rulesArr = Array.isArray(rules) ? rules : (rules?.rules ?? rules?.result ?? null);
-  if (!Array.isArray(rulesArr)) console.log("  ❌ Verify payee rules: expected array, got", typeof rulesArr);
+  if (!Array.isArray(rulesArr)) fail(["Verify payee rules: expected array, got", typeof rulesArr].map(String).join(" "));
   else console.log(`  ✓ Payee rules: ${rulesArr.length} rule(s) (expected 0 for new payee)`);
 
   // FIXED(BUG-3): actual_payee_rules_get with non-existent payeeId now returns actionable error with empty rules array
@@ -266,7 +267,7 @@ export async function payeeTests(client, context) {
   console.log("\nNEGATIVE: payees_delete with nil-UUID...");
   try {
     const nilRes = await callTool("actual_payees_delete", { id: '00000000-0000-0000-0000-000000000000' });
-    // The adapter throws a descriptive error — this catch handles it
+    // The adapter throws a descriptive error: this catch handles it
     console.log("  ⚠ Expected an error but tool returned:", JSON.stringify(nilRes).slice(0, 120));
   } catch (err) {
     const msg = err.message || String(err);
@@ -287,13 +288,13 @@ export async function payeeTests(client, context) {
       const afterPayees = await allPayees();
       const stillExists = afterPayees.find(p => p.id === payeeId);
       if (stillExists) {
-        console.log("  ❌ Verify delete: payee still present in list");
+        fail("Verify delete: payee still present in list");
       } else {
         console.log("  ✓ Verify delete: payee no longer in list");
         context.payeeId = null;
       }
     } catch (err) {
-      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+      fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   } else {
     console.log("  ⚠ Skipping delete (payeeId not available after merge)");
