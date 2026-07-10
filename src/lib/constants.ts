@@ -98,3 +98,22 @@ export const MONTH_PATTERN = /^\d{4}-\d{2}$/;
  * UUID pattern for ID validation
  */
 export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * #276: the Actual Budget SERVER version range this build's `@actual-app/api` is known
+ * to work with. HAND-MAINTAINED: `@actual-app/api` v26 exposes no supported-server range
+ * (verified: getServerVersion just proxies the server's build.version), so there is no
+ * upstream fact to derive this from and no #275-style drift guard is possible.
+ *
+ * UPDATE THIS when bumping `@actual-app/api`: set `minVersion` to the oldest server the new
+ * client supports, and `testedMaxMajor` to the newest server major it has been tested
+ * against. The check is ADVISORY only (the real compatibility contract is the migration
+ * check `@actual-app/api` runs at downloadBudget), so a wrong value here can at most produce
+ * a spurious or missing warning, never a broken deployment.
+ */
+export const SUPPORTED_ACTUAL_SERVER_RANGE = {
+  /** Oldest server version this client supports. Below this: "too old" warning. */
+  minVersion: '25.0.0',
+  /** Newest server MAJOR tested against `@actual-app/api` v26. Above this: "newer than tested". */
+  testedMaxMajor: 26,
+} as const;
