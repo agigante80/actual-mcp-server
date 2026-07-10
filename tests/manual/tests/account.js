@@ -1,7 +1,8 @@
+import { fail } from '../assert.js';
 /**
  * tests/account.js
  *
- * ACCOUNT TESTS — full account lifecycle: create → update → close → reopen.
+ * ACCOUNT TESTS: full account lifecycle: create → update → close → reopen.
  * Each step is verified by re-listing accounts.
  *
  * Reads from context:  (none)
@@ -31,18 +32,18 @@ export async function accountTests(client, context) {
       if (!found) {
         console.log(`  ✓ ${label}: account correctly absent from list (closed accounts excluded) [${total} open accounts]`);
       } else {
-        console.log(`  ❌ ${label}: expected account to be absent but it was found`);
+        fail(`${label}: expected account to be absent but it was found`);
         console.log(`     Account: ${JSON.stringify(found)}`);
       }
     } else {
       if (!found) {
-        console.log(`  ❌ ${label}: account NOT found in list (${total} accounts)`);
+        fail(`${label}: account NOT found in list (${total} accounts)`);
       } else {
         const ok = check(found);
         if (ok === true) {
           console.log(`  ✓ ${label}: account found [ name="${found.name}", offbudget=${found.offbudget}, closed=${found.closed} ] [${total} accounts]`);
         } else {
-          console.log(`  ❌ ${label}: account found but assertion failed — ${ok}`);
+          fail(`${label}: account found but assertion failed: ${ok}`);
           console.log(`     Account: ${JSON.stringify(found)}`);
         }
       }
@@ -66,7 +67,7 @@ export async function accountTests(client, context) {
   const balance = await callTool("actual_accounts_get_balance", { id: accountId });
   const balanceVal = typeof balance === 'object' ? (balance.balance ?? balance.result) : balance;
   if (balanceVal === 0) console.log(`  ✓ Balance: ${balanceVal} (expected 0 for new account)`);
-  else console.log(`  ❌ Balance: expected 0 for new account, got ${balanceVal}`);
+  else fail(`Balance: expected 0 for new account, got ${balanceVal}`);
 
   // FIXED(BUG-5): accounts_get_balance with non-existent id now returns actionable error
   console.log("\nNEGATIVE A4: accounts_get_balance with non-existent id...");
@@ -94,11 +95,11 @@ export async function accountTests(client, context) {
     a => (a.name === updatedName && a.offbudget === true) ||
       `expected name="${updatedName}" offbudget=true, got name="${a.name}" offbudget=${a.offbudget}`);
 
-  // REGRESSION: strict validation — invalid field
+  // REGRESSION: strict validation: invalid field
   console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
   try {
     await callTool("actual_accounts_update", { id: accountId, fields: { invalidField: "should fail" } });
-    console.log("❌ REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
+    fail("REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
   } catch (err) {
     if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
       console.log("✓ Strict validation working (invalid field rejected)");
@@ -136,14 +137,14 @@ export async function accountTests(client, context) {
   await listAndVerify("After reopen", accountId, true,
     a => (a.closed === false) || `expected closed=false, got closed=${a.closed}`);
 
-  // Reset offbudget to false — the update test set it to true, but downstream tests
+  // Reset offbudget to false: the update test set it to true, but downstream tests
   // (e.g. batch/uncategorized) create transactions in context.accountId and expect it
   // to be on-budget so those transactions appear in the uncategorized list.
   await callTool("actual_accounts_update", { id: accountId, fields: { offbudget: false } });
   await listAndVerify("After offbudget reset", accountId, true,
     a => (a.offbudget === false) || `expected offbudget=false, got offbudget=${a.offbudget}`);
 
-  // actual_accounts_delete — uses a separate disposable account (no transactions)
+  // actual_accounts_delete: uses a separate disposable account (no transactions)
   // so Actual hard-deletes it cleanly without tombstoning.
   console.log("\nTesting actual_accounts_delete...");
   const deleteTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -157,6 +158,6 @@ export async function accountTests(client, context) {
     const all = await callTool("actual_accounts_list", {});
     const found = Array.isArray(all) ? all.find(a => a.id === deleteAccId) : null;
     if (!found) console.log(`  ✓ Verify delete: account no longer present in list`);
-    else console.log(`  ❌ Verify delete: account still present after delete! ${JSON.stringify(found)}`);
+    else fail(`Verify delete: account still present after delete! ${JSON.stringify(found)}`);
   }
 }

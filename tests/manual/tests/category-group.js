@@ -1,7 +1,8 @@
+import { fail } from '../assert.js';
 /**
  * tests/category-group.js
  *
- * CATEGORY GROUP TESTS — create and update an MCP-Group-* category group.
+ * CATEGORY GROUP TESTS: create and update an MCP-Group-* category group.
  *
  * Reads from context:  (none)
  * Writes to context:   categoryGroupId
@@ -35,9 +36,9 @@ export async function categoryGroupTests(client, context) {
     const gd = await callTool("actual_category_groups_get", {});
     const all = gd.groups || gd || [];
     const found = Array.isArray(all) ? all.find(g => g.id === groupId) : null;
-    if (!found) console.log("  ❌ Verify create: group not found in list (id:", groupId, ")");
+    if (!found) fail(["Verify create: group not found in list (id:", groupId, ")"].map(String).join(" "));
     else if (found.name === `MCP-Group-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
-    else console.log(`  ❌ Verify create: expected "MCP-Group-${timestamp}", got "${found.name}"`);
+    else fail(`Verify create: expected "MCP-Group-${timestamp}", got "${found.name}"`);
   }
 
   // Update
@@ -53,12 +54,12 @@ export async function categoryGroupTests(client, context) {
     const gd = await callTool("actual_category_groups_get", {});
     const all = gd.groups || gd || [];
     const found = Array.isArray(all) ? all.find(g => g.id === groupId) : null;
-    if (!found) console.log("  ❌ Verify update: group not found in list");
+    if (!found) fail("Verify update: group not found in list");
     else if (found.name === `MCP-Group-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
-    else console.log(`  ❌ Verify update: expected "MCP-Group-${timestamp}-Updated", got "${found.name}"`);
+    else fail(`Verify update: expected "MCP-Group-${timestamp}-Updated", got "${found.name}"`);
   }
 
-  // category_groups_delete — create a disposable group, negative UUID test, delete, verify absence
+  // category_groups_delete: create a disposable group, negative UUID test, delete, verify absence
   // NOTE: We create a second group for the delete test so context.categoryGroupId (needed by category tests) remains intact.
   // FIXED(BUG-10): actual_category_groups_delete with nil-UUID now returns { success: false, error } actionable error
   console.log("\nTesting category_groups_delete (CG3): creating disposable group for delete test...");
@@ -94,12 +95,12 @@ export async function categoryGroupTests(client, context) {
       const all = gd.groups || gd || [];
       const stillExists = Array.isArray(all) ? all.find(g => g.id === disposableGroupId) : null;
       if (stillExists) {
-        console.log("  ❌ Verify delete: disposable group still present in list");
+        fail("Verify delete: disposable group still present in list");
       } else {
         console.log("  ✓ Verify delete: disposable group no longer in list");
       }
     } catch (err) {
-      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+      fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   }
 }

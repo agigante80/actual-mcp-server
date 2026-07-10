@@ -1,7 +1,7 @@
 /**
  * tests/sanity.js
  *
- * SANITY TESTS — protocol-level, read-only. Zero writes to Actual Budget.
+ * SANITY TESTS: protocol-level, read-only. Zero writes to Actual Budget.
  * Fastest level; use it to verify any fresh deployment.
  *
  * Reads from context:  (none)

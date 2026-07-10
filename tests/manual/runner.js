@@ -33,6 +33,7 @@ import { config as loadDotenv } from 'dotenv';
 import { createClient } from './mcp-client.js';
 import { createClient as createStdioClient } from './mcp-client-stdio.js';
 import { sweepResidue, assertNoResidue, EXIT_RESIDUE, EXIT_UNSAFE_BUDGET } from './residue.js';
+import { failureCount, failureList } from './assert.js';
 import { sanityTests } from './tests/sanity.js';
 import { smokeTests } from './tests/smoke.js';
 import { accountTests } from './tests/account.js';
@@ -306,19 +307,38 @@ export async function run() {
       console.log("\n✓ All cleanup operations completed");
     }
 
-    // #280: the gate. The suite's own cleanup phase has just run; prove it left nothing
-    // behind. A leak stops being silent accumulation and becomes an attributable failure.
-    // Exit 3 is distinct from 1 (assertion failure) and 2 (runtime budget).
+    // #280 + #281: single end-of-suite decision. Evaluate BOTH the residue assertion and
+    // the assertion-failure ledger, print BOTH verdicts, then exit with a defined
+    // precedence. A failed assertion (exit 1) is the primary signal and wins the exit code,
+    // but the residue leak is still reported. Exit 2 (runtime budget) and exit 4 (unsafe
+    // budget) fire earlier where they already do and are unchanged.
+    let residue = 0;
     if (['normal', 'extended', 'full'].includes(level)) {
       console.log("\n--- Post-run zero-residue assertion ---");
-      const remaining = await assertNoResidue(client.callTool);
-      if (remaining > 0) {
-        console.error(`\n❌ ${remaining} test object(s) survived cleanup. The next run cannot be validated against a dirty budget.`);
-        await teardown();
-        if (guard) guard.clear();
-        rl.close();
-        process.exit(EXIT_RESIDUE);
+      residue = await assertNoResidue(client.callTool);
+    }
+
+    // #281: a failed assertion in any module now FAILS the run. Before this, modules printed
+    // ❌ and the runner exited 0, so "the suite passed" meant "the runner reached the end".
+    const failures = failureCount();
+    if (failures > 0) {
+      console.error(`\n❌ ${failures} assertion(s) FAILED. This run is a failure, not a pass:`);
+      for (const f of failureList()) console.error(`   - ${f}`);
+      if (residue > 0) {
+        console.error(`\n(Also: ${residue} test object(s) survived cleanup; see the residue verdict above.)`);
       }
+      await teardown();
+      if (guard) guard.clear();
+      rl.close();
+      process.exit(1);
+    }
+
+    if (residue > 0) {
+      console.error(`\n❌ ${residue} test object(s) survived cleanup. The next run cannot be validated against a dirty budget.`);
+      await teardown();
+      if (guard) guard.clear();
+      rl.close();
+      process.exit(EXIT_RESIDUE);
     }
 
     console.log("\n=== ✓ TESTING COMPLETE ===");

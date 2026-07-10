@@ -1,7 +1,8 @@
+import { fail } from '../assert.js';
 /**
  * tests/category.js
  *
- * CATEGORY TESTS — create and update an MCP-Cat-* category inside the group
+ * CATEGORY TESTS: create and update an MCP-Cat-* category inside the group
  * created by categoryGroupTests.
  *
  * Reads from context:  categoryGroupId (skips if absent)
@@ -44,9 +45,9 @@ export async function categoryTests(client, context) {
   // Verify create
   {
     const found = flattenCats(await callTool("actual_categories_get", {})).find(c => c.id === categoryId);
-    if (!found) console.log("  ❌ Verify create: category not found in list (id:", categoryId, ")");
+    if (!found) fail(["Verify create: category not found in list (id:", categoryId, ")"].map(String).join(" "));
     else if (found.name === `MCP-Cat-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
-    else console.log(`  ❌ Verify create: expected "MCP-Cat-${timestamp}", got "${found.name}"`);
+    else fail(`Verify create: expected "MCP-Cat-${timestamp}", got "${found.name}"`);
   }
 
   // Update
@@ -60,16 +61,16 @@ export async function categoryTests(client, context) {
   // Verify update
   {
     const found = flattenCats(await callTool("actual_categories_get", {})).find(c => c.id === categoryId);
-    if (!found) console.log("  ❌ Verify update: category not found in list");
+    if (!found) fail("Verify update: category not found in list");
     else if (found.name === `MCP-Cat-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
-    else console.log(`  ❌ Verify update: expected "MCP-Cat-${timestamp}-Updated", got "${found.name}"`);
+    else fail(`Verify update: expected "MCP-Cat-${timestamp}-Updated", got "${found.name}"`);
   }
 
   // FIXED(BUG-1): actual_categories_delete with nil-UUID now returns actionable error (pre-flight check in adapter)
   console.log("\nNEGATIVE: categories_delete with nil-UUID...");
   try {
     const nilRes = await callTool("actual_categories_delete", { id: '00000000-0000-0000-0000-000000000000' });
-    // The adapter throws a descriptive error — this catch handles it
+    // The adapter throws a descriptive error: this catch handles it
     console.log("  ⚠ Expected an error but tool returned:", JSON.stringify(nilRes).slice(0, 120));
   } catch (err) {
     const msg = err.message || String(err);
@@ -90,13 +91,13 @@ export async function categoryTests(client, context) {
       const afterCats = flattenCats(await callTool("actual_categories_get", {}));
       const stillExists = afterCats.find(c => c.id === context.categoryId);
       if (stillExists) {
-        console.log("  ❌ Verify delete: category still present in list");
+        fail("Verify delete: category still present in list");
       } else {
         console.log("  ✓ Verify delete: category no longer in list");
         context.categoryId = null;
       }
     } catch (err) {
-      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+      fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   } else {
     console.log("  ⚠ Skipping delete (no categoryId in context)");

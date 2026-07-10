@@ -1,9 +1,10 @@
+import { fail } from '../assert.js';
 /**
  * tests/transaction.js
  *
- * TRANSACTION TESTS — create, get, update, filter, import.
+ * TRANSACTION TESTS: create, get, update, filter, import.
  *
- * Reads from context:  accountId (logged for reference only — not used for API calls; txAccountId is created locally), payeeId (optional), categoryId (optional)
+ * Reads from context:  accountId (logged for reference only: not used for API calls; txAccountId is created locally), payeeId (optional), categoryId (optional)
  * Writes to context:   transactionId
  */
 
@@ -24,7 +25,7 @@ export async function transactionTests(client, context) {
 
   // Create a dedicated on-budget account for transaction tests so they are not affected
   // by the offbudget=true flag set in the account regression test (account.js).
-  // Do NOT write txAccountId to context — it is local to this test block.
+  // Do NOT write txAccountId to context: it is local to this test block.
   const txAcctName = `MCP-Tx-${timestamp}`;
   const txAcctResult = await callTool("actual_accounts_create", { name: txAcctName, balance: 0 });
   const txAccountId = txAcctResult.id || txAcctResult.result || txAcctResult;
@@ -50,7 +51,7 @@ export async function transactionTests(client, context) {
   const txn = await callTool("actual_transactions_create", txnParams);
   console.log("✓ Created transaction (finding via notes filter...)");
 
-  // actual_transactions_create does not return an ID — locate it by notes filter
+  // actual_transactions_create does not return an ID: locate it by notes filter
   console.log("\nVerifying create: searching by notes...");
   const noteFilter = await callTool("actual_transactions_filter", {
     accountId: txAccountId,
@@ -59,19 +60,19 @@ export async function transactionTests(client, context) {
   const noteResults = Array.isArray(noteFilter) ? noteFilter : (noteFilter.result || []);
   const createdTxn = noteResults.find(t => t.notes === `MCP-Transaction-${timestamp}`);
   if (!createdTxn) {
-    console.log("  ❌ Verify create: transaction not found by notes filter");
+    fail("Verify create: transaction not found by notes filter");
   } else {
     context.transactionId = createdTxn.id;
     console.log(`  ✓ Verify create: found id="${createdTxn.id}"`);
     if (createdTxn.amount === -5000) console.log(`  ✓ Verify create: amount=${createdTxn.amount} (-$50.00)`);
-    else console.log(`  ❌ Verify create: expected amount -5000, got ${createdTxn.amount}`);
+    else fail(`Verify create: expected amount -5000, got ${createdTxn.amount}`);
     if (context.categoryId) {
       if (createdTxn.category === context.categoryId) console.log(`  ✓ Verify create: category="${createdTxn.category}"`);
-      else console.log(`  ❌ Verify create: expected category "${context.categoryId}", got "${createdTxn.category}"`);
+      else fail(`Verify create: expected category "${context.categoryId}", got "${createdTxn.category}"`);
     }
   }
 
-  // T3: transactions_create with non-existent account UUID — API may reject or silently succeed
+  // T3: transactions_create with non-existent account UUID: API may reject or silently succeed
   // Note: Pre-flight account check was removed (caused API session mixing that broke writes)
   // Now relies on the Actual API to handle invalid accounts
   console.log("\nNEGATIVE T3: transactions_create with non-existent account UUID...");
@@ -100,7 +101,7 @@ export async function transactionTests(client, context) {
     await callTool("actual_transactions_update", { id: context.transactionId, fields: { amount: -7500 } });
     console.log("✓ Transaction updated");
 
-    // Verify update — re-filter by notes since there's no get-by-id tool
+    // Verify update: re-filter by notes since there's no get-by-id tool
     const updateFilter = await callTool("actual_transactions_filter", {
       accountId: txAccountId,
       notes: `MCP-Transaction-${timestamp}`,
@@ -108,11 +109,11 @@ export async function transactionTests(client, context) {
     const updateResults = Array.isArray(updateFilter) ? updateFilter : (updateFilter.result || []);
     const updatedTxn = updateResults.find(t => t.id === context.transactionId);
     if (!updatedTxn) {
-      console.log("  ❌ Verify update: transaction not found by notes filter after update");
+      fail("Verify update: transaction not found by notes filter after update");
     } else if (updatedTxn.amount === -7500) {
       console.log(`  ✓ Verify update: amount=${updatedTxn.amount} (-$75.00)`);
     } else {
-      console.log(`  ❌ Verify update: expected amount -7500, got ${updatedTxn.amount}`);
+      fail(`Verify update: expected amount -7500, got ${updatedTxn.amount}`);
     }
 
     // FIXED(#212): update / update_batch must surface a non-existent id, not report success.
@@ -164,7 +165,7 @@ export async function transactionTests(client, context) {
     } else if (getTxnsArr !== null && getTxnsArr.length === 0) {
       console.log(`  ⚠ Verify get: returned 0 transactions YTD (account may be empty before today)`);
     } else {
-      console.log(`  ❌ Verify get: expected array, got ${JSON.stringify(getTxnsResult).slice(0, 120)}`);
+      fail(`Verify get: expected array, got ${JSON.stringify(getTxnsResult).slice(0, 120)}`);
     }
   }
 
@@ -192,10 +193,10 @@ export async function transactionTests(client, context) {
   const filteredTxns = await callTool("actual_transactions_filter", { accountId: txAccountId });
   const filteredArr = Array.isArray(filteredTxns) ? filteredTxns : (filteredTxns.result || []);
   if (filteredArr.length >= 1) console.log(`  ✓ Found ${filteredArr.length} transaction(s) for account`);
-  else console.log("  ❌ Filter returned 0 transactions (expected at least 1 after create)");
+  else fail("Filter returned 0 transactions (expected at least 1 after create)");
 
-  // Import with real data — import one transaction then read it back (T6)
-  console.log("\nTesting transaction import (with data — T6 read-back)...");
+  // Import with real data: import one transaction then read it back (T6)
+  console.log("\nTesting transaction import (with data: T6 read-back)...");
   const importDate = new Date().toISOString().split('T')[0];
   const importAmount = -3300; // -$33.00, distinctive value
   const importNotes = `MCP-Import-${timestamp}`;
@@ -215,10 +216,10 @@ export async function transactionTests(client, context) {
   } else if (Array.isArray(importErrors) && importErrors.length === 0) {
     console.log("  ✓ Verify import: errors=[] (no import errors)");
   } else {
-    console.log(`  ❌ Verify import: expected errors=[], got ${JSON.stringify(importErrors)}`);
+    fail(`Verify import: expected errors=[], got ${JSON.stringify(importErrors)}`);
   }
 
-  // T6: read-back — confirm imported transaction is present
+  // T6: read-back: confirm imported transaction is present
   {
     const afterImport = await callTool("actual_transactions_filter", {
       accountId: txAccountId,
@@ -236,7 +237,7 @@ export async function transactionTests(client, context) {
     } else if (afterArr.length >= 1) {
       console.log(`  ⚠ T6 Verify import read-back: ${afterArr.length} txn(s) found but none matched notes+amount (may be deduplicated)`);
     } else {
-      console.log(`  ❌ T6 Verify import read-back: no transactions found after import`);
+      fail(`T6 Verify import read-back: no transactions found after import`);
     }
   }
 
@@ -276,13 +277,13 @@ export async function transactionTests(client, context) {
       const afterArr = Array.isArray(afterDelete) ? afterDelete : (afterDelete.result || []);
       const stillExists = afterArr.find(t => t.id === context.transactionId);
       if (stillExists) {
-        console.log("  ❌ Verify delete: transaction still present in filter results");
+        fail("Verify delete: transaction still present in filter results");
       } else {
         console.log("  ✓ Verify delete: transaction no longer in filter results");
         context.transactionId = null;
       }
     } catch (err) {
-      console.log("  ❌ Delete threw unexpectedly:", err.message?.slice(0, 120));
+      fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   } else {
     console.log("  ⚠ Skipping delete (no transactionId in context)");
@@ -291,54 +292,54 @@ export async function transactionTests(client, context) {
   // ── actual_transactions_uncategorized tests ───────────────────────────────
   console.log("\n--- actual_transactions_uncategorized ---");
 
-  // Positive — summary only (default mode)
+  // Positive: summary only (default mode)
   {
     const summary = await callTool("actual_transactions_uncategorized", {});
     if (typeof summary?.totalCount !== 'number') {
-      console.log("  ❌ summary: totalCount not a number");
+      fail("summary: totalCount not a number");
     } else if (typeof summary?.totalAmount !== 'number') {
-      console.log("  ❌ summary: totalAmount not a number");
+      fail("summary: totalAmount not a number");
     } else if (!Array.isArray(summary?.byAccount)) {
-      console.log("  ❌ summary: byAccount not an array");
+      fail("summary: byAccount not an array");
     } else if ('transactions' in summary) {
-      console.log("  ❌ summary: transactions key must be absent by default");
+      fail("summary: transactions key must be absent by default");
     } else {
       console.log(`  ✓ summary: totalCount=${summary.totalCount}, byAccount entries=${summary.byAccount.length}, transactions absent`);
     }
   }
 
-  // Positive — with transactions (includeTransactions:true)
+  // Positive: with transactions (includeTransactions:true)
   {
     const listResult = await callTool("actual_transactions_uncategorized", {
       includeTransactions: true,
       limit: 5,
     });
     if (!Array.isArray(listResult?.transactions)) {
-      console.log("  ❌ list: transactions not an array");
+      fail("list: transactions not an array");
     } else if (typeof listResult?.hasMore !== 'boolean') {
-      console.log("  ❌ list: hasMore not a boolean");
+      fail("list: hasMore not a boolean");
     } else if ((listResult?.transactions ?? []).length > 5) {
-      console.log("  ❌ list: returned more than limit:5 transactions");
+      fail("list: returned more than limit:5 transactions");
     } else {
       console.log(`  ✓ list: ${listResult.transactions.length} transactions returned, hasMore=${listResult.hasMore}`);
     }
   }
 
-  // Negative — non-existent accountId → totalCount:0, byAccount:[]
+  // Negative: non-existent accountId → totalCount:0, byAccount:[]
   {
     const nilId = '00000000-0000-0000-0000-000000000000';
     const nilResult = await callTool("actual_transactions_uncategorized", { accountId: nilId });
     if (nilResult?.totalCount !== 0) {
-      console.log(`  ❌ negative accountId: expected totalCount:0, got ${nilResult?.totalCount}`);
+      fail(`negative accountId: expected totalCount:0, got ${nilResult?.totalCount}`);
     } else if (!Array.isArray(nilResult?.byAccount) || nilResult.byAccount.length !== 0) {
-      console.log("  ❌ negative accountId: expected byAccount:[]");
+      fail("negative accountId: expected byAccount:[]");
     } else {
       console.log("  ✓ negative accountId: totalCount:0 and byAccount:[] as expected");
     }
   }
 
   // Teardown: close then delete the dedicated transaction test account.
-  // close() must come first — Actual tombstones (hard-deletes) accounts with zero
+  // close() must come first: Actual tombstones (hard-deletes) accounts with zero
   // transactions on close(), making them unrecoverable. We need close() to set
   // closed=1 before delete() removes the record cleanly.
   try {

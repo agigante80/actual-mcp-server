@@ -3,9 +3,9 @@
  *
  * Composite test suites that chain domain-specific test modules.
  *
- * extendedTests — categories, payees, transactions (all CRUD entities)
- * fullTests     — budgets, rules, advanced misc
- * advancedTests — bank sync, raw SQL query
+ * extendedTests: categories, payees, transactions (all CRUD entities)
+ * fullTests: budgets, rules, advanced misc
+ * advancedTests: bank sync, raw SQL query
  *
  * Reads from context:  populated by the individual test modules
  * Writes to context:   delegated to the individual test modules
@@ -19,6 +19,7 @@ import { budgetTests } from './budget.js';
 import { rulesTests } from './rules.js';
 import { batchUncategorizedRulesUpsertTests } from './batch_uncategorized_rules_upsert.js';
 import { scheduleTests } from './schedule.js';
+import { fail, skip } from '../assert.js';
 
 /**
  * @param {{ callTool: Function }} client
@@ -47,13 +48,13 @@ export async function advancedTests(client, context, opts = {}) {
     } else if (typeof total === 'number' && total >= 1) {
       console.log(`  ✓ Verify session_list: totalSessions=${total}, activeSessions=${sessionList?.activeSessions ?? sessionList?.result?.activeSessions}`);
     } else {
-      console.log(`  ❌ Verify session_list: expected totalSessions >= 1, got ${JSON.stringify(sessionList).slice(0, 120)}`);
+      fail(`Verify session_list: expected totalSessions >= 1, got ${JSON.stringify(sessionList).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ session_list failed:", err.message);
   }
 
-  // Session close — no sessionId, closes oldest idle session (or reports none to close)
+  // Session close: no sessionId, closes oldest idle session (or reports none to close)
   console.log("\nTesting session close (no-op, current session protected)...");
   try {
     const closeResult = await callTool("actual_session_close", {});
@@ -86,7 +87,7 @@ export async function advancedTests(client, context, opts = {}) {
     if (typeof count === 'number' && typeof totalAmount === 'number') {
       console.log(`  ✓ Verify search_by_month: count=${count}, totalAmount=${totalAmount} cents`);
     } else {
-      console.log(`  ❌ Verify search_by_month: unexpected response shape: ${JSON.stringify(byMonth).slice(0, 120)}`);
+      fail(`Verify search_by_month: unexpected response shape: ${JSON.stringify(byMonth).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ search_by_month failed:", err.message);
@@ -105,13 +106,13 @@ export async function advancedTests(client, context, opts = {}) {
     if (Array.isArray(transactions)) {
       console.log(`  ✓ Verify search_by_amount: returned ${transactions.length} transaction(s)`);
     } else {
-      console.log(`  ❌ Verify search_by_amount: expected array, got ${JSON.stringify(byAmount).slice(0, 120)}`);
+      fail(`Verify search_by_amount: expected array, got ${JSON.stringify(byAmount).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ search_by_amount failed:", err.message);
   }
 
-  // actual_transactions_search_by_category (no filter — all categories)
+  // actual_transactions_search_by_category (no filter: all categories)
   console.log("\nSearching transactions by category (actual_transactions_search_by_category)...");
   try {
     const byCategory = await callTool("actual_transactions_search_by_category", {
@@ -122,13 +123,13 @@ export async function advancedTests(client, context, opts = {}) {
     if (Array.isArray(transactions)) {
       console.log(`  ✓ Verify search_by_category: returned ${transactions.length} transaction(s)`);
     } else {
-      console.log(`  ❌ Verify search_by_category: unexpected response: ${JSON.stringify(byCategory).slice(0, 120)}`);
+      fail(`Verify search_by_category: unexpected response: ${JSON.stringify(byCategory).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ search_by_category failed:", err.message);
   }
 
-  // actual_transactions_search_by_payee (no filter — all payees)
+  // actual_transactions_search_by_payee (no filter: all payees)
   console.log("\nSearching transactions by payee (actual_transactions_search_by_payee)...");
   try {
     const byPayee = await callTool("actual_transactions_search_by_payee", {
@@ -139,7 +140,7 @@ export async function advancedTests(client, context, opts = {}) {
     if (Array.isArray(transactions)) {
       console.log(`  ✓ Verify search_by_payee: returned ${transactions.length} transaction(s)`);
     } else {
-      console.log(`  ❌ Verify search_by_payee: unexpected response: ${JSON.stringify(byPayee).slice(0, 120)}`);
+      fail(`Verify search_by_payee: unexpected response: ${JSON.stringify(byPayee).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ search_by_payee failed:", err.message);
@@ -156,7 +157,7 @@ export async function advancedTests(client, context, opts = {}) {
     if (Array.isArray(data)) {
       console.log(`  ✓ Verify summary_by_category: returned ${data.length} category group(s)`);
     } else {
-      console.log(`  ❌ Verify summary_by_category: unexpected response: ${JSON.stringify(sumByCat).slice(0, 120)}`);
+      fail(`Verify summary_by_category: unexpected response: ${JSON.stringify(sumByCat).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ summary_by_category failed:", err.message);
@@ -173,16 +174,16 @@ export async function advancedTests(client, context, opts = {}) {
     if (Array.isArray(data)) {
       console.log(`  ✓ Verify summary_by_payee: returned ${data.length} payee group(s)`);
     } else {
-      console.log(`  ❌ Verify summary_by_payee: unexpected response: ${JSON.stringify(sumByPayee).slice(0, 120)}`);
+      fail(`Verify summary_by_payee: unexpected response: ${JSON.stringify(sumByPayee).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("⚠ summary_by_payee failed:", err.message);
   }
 
-  // ── actual_get_id_by_name — all 4 supported types ──────────────────────────
+  // ── actual_get_id_by_name: all 4 supported types ──────────────────────────
   console.log("\nTesting actual_get_id_by_name (all 4 supported types)...");
 
-  // Type: 'accounts' — list accounts, pick first
+  // Type: 'accounts': list accounts, pick first
   try {
     const accts = await callTool("actual_accounts_list", {});
     const firstAcct = Array.isArray(accts) && accts.length > 0 ? accts[0] : null;
@@ -192,16 +193,16 @@ export async function advancedTests(client, context, opts = {}) {
       if (resolvedId === firstAcct.id) {
         console.log(`  ✓ get_id_by_name [accounts]: "${firstAcct.name}" → ${resolvedId}`);
       } else {
-        console.log(`  ❌ get_id_by_name [accounts]: expected id=${firstAcct.id}, got ${JSON.stringify(res).slice(0, 120)}`);
+        fail(`get_id_by_name [accounts]: expected id=${firstAcct.id}, got ${JSON.stringify(res).slice(0, 120)}`);
       }
     } else {
-      console.log("  ℹ get_id_by_name [accounts]: no accounts found to resolve — skipped");
+      console.log("  ℹ get_id_by_name [accounts]: no accounts found to resolve: skipped");
     }
   } catch (err) {
-    console.log("  ❌ get_id_by_name [accounts]:", err.message);
+    fail(["get_id_by_name [accounts]:", err.message].map(String).join(" "));
   }
 
-  // Type: 'categories' — list categories, pick first
+  // Type: 'categories': list categories, pick first
   try {
     const cats = await callTool("actual_categories_get", {});
     const flatCats = Array.isArray(cats) ? cats : [];
@@ -212,20 +213,20 @@ export async function advancedTests(client, context, opts = {}) {
       if (resolvedId === firstCat.id) {
         console.log(`  ✓ get_id_by_name [categories]: "${firstCat.name}" → ${resolvedId}`);
       } else {
-        console.log(`  ❌ get_id_by_name [categories]: expected id=${firstCat.id}, got ${JSON.stringify(res).slice(0, 120)}`);
+        fail(`get_id_by_name [categories]: expected id=${firstCat.id}, got ${JSON.stringify(res).slice(0, 120)}`);
       }
     } else {
-      console.log("  ℹ get_id_by_name [categories]: no categories found to resolve — skipped");
+      console.log("  ℹ get_id_by_name [categories]: no categories found to resolve: skipped");
     }
   } catch (err) {
-    console.log("  ❌ get_id_by_name [categories]:", err.message);
+    fail(["get_id_by_name [categories]:", err.message].map(String).join(" "));
   }
 
-  // Type: 'payees' — list payees, pick first non-transfer payee
+  // Type: 'payees': list payees, pick first non-transfer payee
   try {
     const payees = await callTool("actual_payees_get", {});
     const flatPayees = Array.isArray(payees) ? payees : [];
-    // Transfer payees have transfer_acct set — skip them
+    // Transfer payees have transfer_acct set: skip them
     const firstPayee = flatPayees.find(p => p?.name && !p?.transfer_acct);
     if (firstPayee?.name) {
       const res = await callTool("actual_get_id_by_name", { type: 'payees', name: firstPayee.name });
@@ -233,18 +234,18 @@ export async function advancedTests(client, context, opts = {}) {
       if (resolvedId === firstPayee.id) {
         console.log(`  ✓ get_id_by_name [payees]: "${firstPayee.name}" → ${resolvedId}`);
       } else {
-        console.log(`  ❌ get_id_by_name [payees]: expected id=${firstPayee.id}, got ${JSON.stringify(res).slice(0, 120)}`);
+        fail(`get_id_by_name [payees]: expected id=${firstPayee.id}, got ${JSON.stringify(res).slice(0, 120)}`);
       }
     } else {
-      console.log("  ℹ get_id_by_name [payees]: no non-transfer payees found to resolve — skipped");
+      console.log("  ℹ get_id_by_name [payees]: no non-transfer payees found to resolve: skipped");
     }
   } catch (err) {
-    console.log("  ❌ get_id_by_name [payees]:", err.message);
+    fail(["get_id_by_name [payees]:", err.message].map(String).join(" "));
   }
 
-  // Type: 'schedules' — list first, then resolve by name (may be empty in any budget)
+  // Type: 'schedules': list first, then resolve by name (may be empty in any budget)
   try {
-    // actual_get_id_by_name for schedules — we must find a real schedule name to look up
+    // actual_get_id_by_name for schedules: we must find a real schedule name to look up
     // Use actual_query_run to get the first schedule name from the DB
     const schedResult = await callTool("actual_query_run", { query: "SELECT id, name FROM schedules LIMIT 1" });
     const schedRows = schedResult?.result ?? (Array.isArray(schedResult) ? schedResult : []);
@@ -255,26 +256,26 @@ export async function advancedTests(client, context, opts = {}) {
       if (typeof resolvedId === 'string' && resolvedId.length > 0) {
         console.log(`  ✓ get_id_by_name [schedules]: "${firstSched.name}" → ${resolvedId}`);
       } else {
-        console.log(`  ❌ get_id_by_name [schedules]: could not resolve "${firstSched.name}", got ${JSON.stringify(res).slice(0, 120)}`);
+        fail(`get_id_by_name [schedules]: could not resolve "${firstSched.name}", got ${JSON.stringify(res).slice(0, 120)}`);
       }
     } else {
-      console.log("  ℹ get_id_by_name [schedules]: no schedules in budget — skipped (expected for new/test budgets)");
+      console.log("  ℹ get_id_by_name [schedules]: no schedules in budget: skipped (expected for new/test budgets)");
     }
   } catch (err) {
-    // DB query failure or schedule lookup failure — informational
-    console.log("  ℹ get_id_by_name [schedules]: could not test — informational:", err.message);
+    // DB query failure or schedule lookup failure: informational
+    console.log("  ℹ get_id_by_name [schedules]: could not test: informational:", err.message);
   }
 
-  // Bank sync — opt-in only (set MCP_TEST_BANK_SYNC=true to enable).
+  // Bank sync: opt-in only (set MCP_TEST_BANK_SYNC=true to enable).
   // Skipped by default: takes 30-90s per account, requires GoCardless/SimpleFIN.
   if (opts.bankSync) {
-    console.log("\nBank sync — negative-path tests...");
+    console.log("\nBank sync: negative-path tests...");
     try {
       await client.callMCP("tools/call", {
         name: "actual_bank_sync",
         arguments: { accountId: "00000000-0000-0000-0000-000000000000" },
       }, 0, 0, 10000);
-      console.log("  ❌ non-existent accountId: expected error but got success");
+      fail("non-existent accountId: expected error but got success");
     } catch (err) {
       const msg = err.message || String(err);
       const ok = /not found|not configured|local account/i.test(msg);
@@ -292,9 +293,9 @@ export async function advancedTests(client, context, opts = {}) {
     }
 
     if (accounts.length === 0) {
-      console.log("  ℹ No accounts found — bank sync skipped");
+      console.log("  ℹ No accounts found: bank sync skipped");
     } else {
-      console.log(`\nBank sync — ${accounts.length} account(s)...`);
+      console.log(`\nBank sync: ${accounts.length} account(s)...`);
       let syncOk = 0, syncFailed = 0;
       for (const acct of accounts) {
         const label = `${acct.name} (${acct.id})`;
@@ -302,7 +303,7 @@ export async function advancedTests(client, context, opts = {}) {
           const raw = await client.callMCP("tools/call", {
             name: "actual_bank_sync",
             arguments: { accountId: acct.id },
-          }, 0 /* maxRetries — never retry bank sync */, 0, 90000 /* 90s per account */);
+          }, 0 /* maxRetries: never retry bank sync */, 0, 90000 /* 90s per account */);
           const syncText = raw?.content?.[0]?.text;
           const syncResult = syncText
             ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })()
@@ -322,9 +323,9 @@ export async function advancedTests(client, context, opts = {}) {
       }
       console.log(`  Bank sync: ${syncOk} succeeded, ${syncFailed} not configured/failed (out of ${accounts.length})`);
     }
-  } else { console.log("\n⏭ Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)"); }
+  } else { skip("Bank sync skipped (set MCP_TEST_BANK_SYNC=true to enable)"); }
 
-  // SQL query validation — exercises the query-validator middleware via actual_query_run.
+  // SQL query validation: exercises the query-validator middleware via actual_query_run.
   // Valid queries should succeed; invalid ones should be rejected before execution.
   console.log("\nTesting query validation (actual_query_run)...");
   const queryValidationTests = [
@@ -334,7 +335,7 @@ export async function advancedTests(client, context, opts = {}) {
     { query: "SELECT id, date, amount, payee.name FROM transactions LIMIT 10",                                 shouldPass: true,  label: "join path payee.name" },
     { query: "SELECT id, amount, category.name FROM transactions WHERE amount < 0",                            shouldPass: true,  label: "join path category.name" },
     { query: "SELECT id, date, amount FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 20",         shouldPass: true,  label: "WHERE + ORDER BY" },
-    // invalid — validator should reject before hitting Actual
+    // invalid: validator should reject before hitting Actual
     { query: "SELECT id, payee_name FROM transactions LIMIT 5",                                                shouldPass: false, label: "invalid field payee_name" },
     { query: "SELECT id, category_name FROM transactions",                                                     shouldPass: false, label: "invalid field category_name" },
     { query: "SELECT * FROM transaction LIMIT 10",                                                             shouldPass: false, label: "singular table name" },
@@ -363,7 +364,7 @@ export async function advancedTests(client, context, opts = {}) {
         console.log(`  ✓ ${label}`);
         qvPassed++;
       } else {
-        console.log(`  ❌ ${label}: expected rejection but query succeeded`);
+        fail(`${label}: expected rejection but query succeeded`);
         qvFailed++;
       }
     } catch (err) {
@@ -371,7 +372,7 @@ export async function advancedTests(client, context, opts = {}) {
         console.log(`  ✓ ${label}: correctly rejected`);
         qvPassed++;
       } else {
-        console.log(`  ❌ ${label}: expected success but got: ${err.message}`);
+        fail(`${label}: expected success but got: ${err.message}`);
         qvFailed++;
       }
     }
@@ -413,9 +414,9 @@ export async function advancedTests(client, context, opts = {}) {
     console.log("  ℹ skipped: no seed transaction available");
   } else {
     let impPassed = 0, impFailed = 0;
-    const expect = (cond, ok, bad) => {
+    const check = (cond, ok, bad) => {
       if (cond) { console.log(`  ✓ ${ok}`); impPassed++; }
-      else { console.log(`  ❌ ${bad}`); impFailed++; }
+      else { fail(`${bad}`); impFailed++; }
     };
     try {
       // Positive: a lowercase pattern must match the uppercase-seeded value,
@@ -423,7 +424,7 @@ export async function advancedTests(client, context, opts = {}) {
       const pos = rowsOf(await callTool("actual_query_run", {
         query: `SELECT id, imported_payee FROM transactions WHERE imported_payee LIKE '%amazon-${runtag}%'`,
       }));
-      expect(pos.some(r => r.id === seedTxnId),
+      check(pos.some(r => r.id === seedTxnId),
         `positive LIKE returned the seeded row case-insensitively (${pos.length} row(s))`,
         `positive LIKE did not return the seeded row (got ${JSON.stringify(pos).slice(0, 140)})`);
 
@@ -432,7 +433,7 @@ export async function advancedTests(client, context, opts = {}) {
       const neg = rowsOf(await callTool("actual_query_run", {
         query: `SELECT id FROM transactions WHERE imported_payee LIKE '%zzznomatch-${runtag}%'`,
       }));
-      expect(neg.length === 0,
+      check(neg.length === 0,
         "negative LIKE (no match) returned empty, filter honoured",
         `negative LIKE returned ${neg.length} row(s): filter NOT applied`);
 
@@ -440,11 +441,11 @@ export async function advancedTests(client, context, opts = {}) {
       const notNull = rowsOf(await callTool("actual_query_run", {
         query: "SELECT id FROM transactions WHERE imported_payee IS NOT NULL",
       }));
-      expect(notNull.some(r => r.id === seedTxnId),
+      check(notNull.some(r => r.id === seedTxnId),
         "IS NOT NULL included the seeded row",
         "IS NOT NULL did not include the seeded row");
     } catch (err) {
-      console.log(`  ❌ imported_payee filtering test error: ${err.message}`);
+      fail(`imported_payee filtering test error: ${err.message}`);
       impFailed++;
     } finally {
       // Delete the throwaway transaction so the test leaves no state behind.

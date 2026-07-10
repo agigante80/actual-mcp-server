@@ -1,7 +1,8 @@
+import { fail } from '../assert.js';
 /**
  * tests/rules.js
  *
- * RULES TESTS — create (with and without 'op'), update, verify.
+ * RULES TESTS: create (with and without 'op'), update, verify.
  * Regression test: rule action without 'op' field should default to 'set'.
  *
  * Reads from context:  categoryId (used as rule action value)
@@ -20,7 +21,7 @@ export async function rulesTests(client, context) {
   let rulesOwnedGroupId = null;
   let rulesOwnedCatId = null;
 
-  // Ensure we have a categoryId for rule actions — fetch one from the live server if context is null.
+  // Ensure we have a categoryId for rule actions: fetch one from the live server if context is null.
   // Budget tests may have left the adapter on a different budget, so explicitly switch back to the
   // first available (default) budget before trying to fetch categories.
   if (!context.categoryId) {
@@ -30,7 +31,7 @@ export async function rulesTests(client, context) {
         await callTool("actual_budgets_switch", { budgetName: avail.budgets[0].name });
         console.log(`  ℹ Reset to first budget "${avail.budgets[0].name}" before fetching categories`);
       }
-    } catch (_) { /* best-effort — ignore if multi-budget not configured */ }
+    } catch (_) { /* best-effort: ignore if multi-budget not configured */ }
 
     const catData = await callTool("actual_categories_get", {});
     const raw = catData.result || catData.categories || catData;
@@ -42,8 +43,8 @@ export async function rulesTests(client, context) {
       context.categoryId = firstCat.id;
       console.log(`  ℹ Using existing category for rule actions: "${firstCat.name}" (${firstCat.id})`);
     } else {
-      // No category found at all — create a disposable one so the test can run.
-      console.log("  ℹ No category found — creating disposable category group + category for rules tests...");
+      // No category found at all: create a disposable one so the test can run.
+      console.log("  ℹ No category found: creating disposable category group + category for rules tests...");
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
       const newGroup = await callTool("actual_category_groups_create", { name: `MCP-RulesTest-Group-${ts}` });
       rulesOwnedGroupId = newGroup.id || newGroup.result || newGroup;
@@ -65,29 +66,29 @@ export async function rulesTests(client, context) {
   const rules = rulesData.rules || rulesData.result || rulesData || [];
   console.log("✓ Rules found:", Array.isArray(rules) ? rules.length : 0);
 
-  // REGRESSION: create rule without 'op' field — should default to 'set'
+  // REGRESSION: create rule without 'op' field: should default to 'set'
   console.log("\nREGRESSION: Creating rule without 'op' field (should default to 'set')...");
   const ruleWithoutOp = await callTool("actual_rules_create", {
     stage: "pre",
     conditionsOp: "and",
     conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-no-op-test" }],
-    actions: [{ field: "category", value: context.categoryId }], // no 'op' — should default to 'set'
+    actions: [{ field: "category", value: context.categoryId }], // no 'op': should default to 'set'
   });
   const ruleWithoutOpId = ruleWithoutOp.id || ruleWithoutOp.result || ruleWithoutOp;
   console.log("✓ Rule created without 'op' (defaulted to 'set'):", ruleWithoutOpId);
   context.ruleWithoutOpId = ruleWithoutOpId;
 
-  // Verify ruleWithoutOp — action should have op='set' defaulted by the server
+  // Verify ruleWithoutOp: action should have op='set' defaulted by the server
   {
     const rd = await callTool("actual_rules_get", {});
     const allRules = rd.rules || rd.result || rd || [];
     const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleWithoutOpId) : null;
     if (!found) {
-      console.log("  ❌ Verify ruleWithoutOp: not found in list (id:", ruleWithoutOpId, ")");
+      fail(["Verify ruleWithoutOp: not found in list (id:", ruleWithoutOpId, ")"].map(String).join(" "));
     } else {
       const action = found.actions?.[0];
       if (action?.op === 'set') console.log(`  ✓ Verify ruleWithoutOp: action.op defaulted to "set"`);
-      else console.log(`  ❌ Verify ruleWithoutOp: expected action.op="set", got "${action?.op}" (rule: ${JSON.stringify(action)})`);
+      else fail(`Verify ruleWithoutOp: expected action.op="set", got "${action?.op}" (rule: ${JSON.stringify(action)})`);
     }
   }
 
@@ -109,11 +110,11 @@ export async function rulesTests(client, context) {
     const allRules = rd.rules || rd.result || rd || [];
     const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleId) : null;
     if (!found) {
-      console.log("  ❌ Verify create: rule not found in list (id:", ruleId, ")");
+      fail(["Verify create: rule not found in list (id:", ruleId, ")"].map(String).join(" "));
     } else {
       const cond = found.conditions?.[0];
       if (cond?.value === "MCP-Rule-test-marker") console.log(`  ✓ Verify create: condition value="${cond.value}"`);
-      else console.log(`  ❌ Verify create: expected condition value "MCP-Rule-test-marker", got "${cond?.value}"`);
+      else fail(`Verify create: expected condition value "MCP-Rule-test-marker", got "${cond?.value}"`);
     }
   }
 
@@ -136,15 +137,15 @@ export async function rulesTests(client, context) {
     const allRules = rd.rules || rd.result || rd || [];
     const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleId) : null;
     if (!found) {
-      console.log("  ❌ Verify update: rule not found in list");
+      fail("Verify update: rule not found in list");
     } else {
       const cond = found.conditions?.[0];
       if (cond?.value === "MCP-Rule-updated-marker") console.log(`  ✓ Verify update: condition value="${cond.value}"`);
-      else console.log(`  ❌ Verify update: expected condition value "MCP-Rule-updated-marker", got "${cond?.value}"`);
+      else fail(`Verify update: expected condition value "MCP-Rule-updated-marker", got "${cond?.value}"`);
     }
   }
 
-  // rules_delete — negative UUID test then real delete(s) + verify
+  // rules_delete: negative UUID test then real delete(s) + verify
   // FIXED(BUG-9): actual_rules_delete with nil-UUID now throws an actionable not-found error
   console.log("\nTesting rules_delete (negative UUID)...");
   try {
@@ -177,13 +178,13 @@ export async function rulesTests(client, context) {
       console.log("✓ Delete call completed");
       const ids = await allRuleIds();
       if (ids.includes(id)) {
-        console.log(`  ❌ Verify delete: ${label} still present in rules list`);
+        fail(`Verify delete: ${label} still present in rules list`);
       } else {
         console.log(`  ✓ Verify delete: ${label} no longer in rules list`);
         context[idKey] = null;
       }
     } catch (err) {
-      console.log(`  ❌ Delete of ${label} threw unexpectedly:`, err.message?.slice(0, 120));
+      fail([`Delete of ${label} threw unexpectedly:`, err.message?.slice(0, 120)].map(String).join(" "));
     }
   }
 
