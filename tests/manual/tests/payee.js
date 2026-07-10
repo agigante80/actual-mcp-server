@@ -183,7 +183,7 @@ export async function payeeTests(client, context) {
       console.log("  ✓ Non-existent payee UUID correctly produced error:", err.message.slice(0, 80));
     }
   } else {
-    console.log("\n⚠ Skipping category-via-rules tests: context.categoryId not set (run at extended level)");
+    console.log("\n⏭ category-via-rules: skipped. Blocked on #284 (payees_update{category} creates no queryable rule) and context.categoryId nulled by category.js.");
   }
 
   // Verify create
