@@ -117,8 +117,9 @@ test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => 
   test('initialize -> tools/list -> tools/call -> SSE connect', async ({ request }) => {
     console.log('🧪 Starting E2E test...');
     
-    // 1) probe well-known resource with retry
-    const probeUrl = new URL('/.well-known/oauth-protected-resource', advertisedUrl).toString();
+    // 1) probe the server-info endpoint with retry (#286: moved off the reserved
+    // /.well-known/oauth-protected-resource OAuth path to /mcp-info, now a bare object)
+    const probeUrl = new URL('/mcp-info', advertisedUrl).toString();
     const probeRes = await retryRequest(() => request.get(probeUrl));
     expect(probeRes.ok()).toBeTruthy();
     const probeJson = await probeRes.json();
