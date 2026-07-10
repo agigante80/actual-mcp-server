@@ -245,11 +245,15 @@ export async function advancedTests(client, context, opts = {}) {
 
   // Type: 'schedules': list first, then resolve by name (may be empty in any budget)
   try {
-    // actual_get_id_by_name for schedules: we must find a real schedule name to look up
-    // Use actual_query_run to get the first schedule name from the DB
-    const schedResult = await callTool("actual_query_run", { query: "SELECT id, name FROM schedules LIMIT 1" });
-    const schedRows = schedResult?.result ?? (Array.isArray(schedResult) ? schedResult : []);
-    const firstSched = Array.isArray(schedRows) && schedRows.length > 0 ? schedRows[0] : null;
+    // #282: no schedule exists in a clean/test budget here, so this always skipped and the
+    // schedule-resolution path of get_id_by_name was never tested. Seed one, resolve it, delete it.
+    const seedSchedName = `MCP-Schedule-IdByName-${Date.now()}`;
+    let seedSchedId = null;
+    try {
+      const mk = await callTool("actual_schedules_create", { name: seedSchedName, date: "2026-06-15", amount: -4200, amountOp: "is", posts_transaction: false });
+      seedSchedId = mk?.id ?? mk?.result?.id ?? (typeof mk === "string" ? mk : null);
+    } catch (err) { console.log(`  warn get_id_by_name [schedules]: could not seed a schedule (${err.message?.slice(0,80)})`); }
+    const firstSched = seedSchedId ? { id: seedSchedId, name: seedSchedName } : null;
     if (firstSched?.name) {
       const res = await callTool("actual_get_id_by_name", { type: 'schedules', name: firstSched.name });
       const resolvedId = res?.id ?? res?.result?.id;
@@ -258,8 +262,9 @@ export async function advancedTests(client, context, opts = {}) {
       } else {
         fail(`get_id_by_name [schedules]: could not resolve "${firstSched.name}", got ${JSON.stringify(res).slice(0, 120)}`);
       }
+      if (seedSchedId) { try { await callTool("actual_schedules_delete", { id: seedSchedId }); } catch { /* residue sweep covers it */ } }
     } else {
-      console.log("  ℹ get_id_by_name [schedules]: no schedules in budget: skipped (expected for new/test budgets)");
+      console.log("  ℹ get_id_by_name [schedules]: schedule seed unavailable; block skipped");
     }
   } catch (err) {
     // DB query failure or schedule lookup failure: informational
@@ -411,7 +416,7 @@ export async function advancedTests(client, context, opts = {}) {
     console.log(`  ℹ skipped: could not create seed transaction (${err.message.slice(0, 80)})`);
   }
   if (!seedTxnId) {
-    console.log("  ℹ skipped: no seed transaction available");
+    console.log("  ⏭ imported_payee filtering: skipped, seed not visible to actual_query_run (blocked on #283, cold-query window)");
   } else {
     let impPassed = 0, impFailed = 0;
     const check = (cond, ok, bad) => {
