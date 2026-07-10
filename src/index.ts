@@ -1,3 +1,9 @@
+// #275: MUST be the first import. ES modules evaluate their imports depth-first in
+// source order, so this arms the Node floor check before zod, before the rejection
+// allowlist, and before the handlers below. `npm start` and the documented
+// `node dist/src/index.js --stdio` reach this file without going through bin/, so the
+// guard cannot live in bin/ alone.
+import './lib/node-version-guard.js';
 import { z } from 'zod';
 import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
 // Add global error handlers
@@ -10,6 +16,16 @@ process.on('unhandledRejection', (reason, promise) => {
     console.error('Stack:', reason.stack);
   }
   console.error('===========================');
+
+  // #275 backstop. The guard above catches both entry points, but a consumer that
+  // imports this package as a library reaches neither. Import attributes are the one
+  // construct here that fails on an under-floor Node, and it fails asynchronously,
+  // so name the real cause rather than letting the reader chase a packaging bug.
+  if ((reason as { code?: string } | undefined)?.code === 'ERR_IMPORT_ASSERTION_TYPE_MISSING') {
+    console.error(`⚠️  This almost certainly means Node ${process.version} is too old.`);
+    console.error('⚠️  actual-mcp-server requires the Node version in package.json "engines".');
+    console.error('⚠️  Import attributes (`with { type: "json" }`) need Node 22 or newer.');
+  }
 
   if (isKnownBenignRejection(reason)) {
     console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');

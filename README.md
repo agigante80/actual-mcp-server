@@ -134,6 +134,8 @@ docker compose --profile dev up -d          # dev mode with hot-reload
 
 ### Option C: npm (HTTP server)
 
+> **Requires Node.js 22+.** npm and npx do not enforce this, so check with `node --version` first. On an older Node the server refuses to start and tells you so. Note that `npx` runs whichever `node` is first on your `PATH`, which is not always the one you installed most recently.
+
 ```bash
 # Quick start via npx (no clone needed):
 ACTUAL_SERVER_URL=http://localhost:5006 \
