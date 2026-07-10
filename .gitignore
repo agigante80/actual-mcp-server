@@ -85,3 +85,6 @@ playwright-report/
 # Claude Code runtime lock (ephemeral, per-session PID)
 .claude/scheduled_tasks.lock
 .private-journal/
+
+# #280: local release evidence (dual-transport run report). Never committed.
+.release/

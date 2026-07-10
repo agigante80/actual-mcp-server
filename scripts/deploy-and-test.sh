@@ -22,8 +22,8 @@
 #   4. Independently restart LibreChat        (picks up new image if any)
 #   5. Independently restart LobeChat         (picks up new image if any)
 #   6. Wait for actual-mcp-bearer-backend (port 3601) to become healthy
-#   7. Run HTTP integration tests against bearer instance (port 3601)
-#   8. Run stdio smoke against the same container (both transports covered)
+#   7. Run the integration suite over HTTP against the bearer instance (port 3601)
+#   8. Run the SAME integration suite over stdio (#280: real parity, not a smoke)
 #   9. (full level only) Run the #270 upstream-stall regression check
 #
 # DOCUMENTATION
@@ -145,32 +145,102 @@ for i in $(seq 1 "$HEALTH_RETRIES"); do
   sleep 3
 done
 
-# ── 7. Run HTTP integration tests against bearer instance (port 3601) ──────
+# ── 7. Run the integration suite over HTTP (bearer instance, port 3601) ────
+# #280: this is HALF the gate. Step 8 runs the SAME suite over stdio. A promotion to
+# main requires both, because a defect in stdio framing under a write-heavy sequence
+# would otherwise be caught by nothing we run.
 BANK_SYNC_LABEL=""
 if [ -n "$BANK_SYNC_FLAG" ]; then
   BANK_SYNC_LABEL=" + bank-sync"
 fi
+
+# The authoritative active budget, read from the running server itself. The residue sweep
+# refuses to delete anything unless MCP_TEST_BUDGET_SYNC_ID matches this. `actual_budgets_get_all`
+# returns the budget-file LIST with no active marker, so list membership is NOT evidence.
+ACTIVE_SYNC_ID="$(docker exec "$STDIO_CONTAINER" printenv ACTUAL_BUDGET_SYNC_ID 2>/dev/null || true)"
+
 info "Step 7/9: HTTP integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
+set +e
 EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
   MCP_TEST_BANK_SYNC="${BANK_SYNC_FLAG}" \
+  MCP_TEST_TRANSPORT=http \
+  MCP_ACTIVE_BUDGET_SYNC_ID="${ACTIVE_SYNC_ID}" \
   NODE_TLS_REJECT_UNAUTHORIZED=0 \
   node "$DEV_DIR/tests/manual/index.js" \
   "$MCP_SERVER_URL" \
   "$MCP_AUTH_TOKEN" \
   "$TEST_LEVEL" \
   yes
+HTTP_EXIT=$?
+set -e
+if [ "$HTTP_EXIT" -ne 0 ]; then
+  err "HTTP integration run failed (exit ${HTTP_EXIT})"
+  exit "$HTTP_EXIT"
+fi
 echo ""
 
-# ── 8. Run stdio smoke against the same container ──────────────────────────
-# The HTTP suite above never touches the stdio transport. This runs the server
-# over stdin/stdout (docker exec into the bearer container, reusing its config)
-# and does a real MCP round-trip, so both transports are exercised every run.
-info "Step 8/9: stdio smoke against ${STDIO_CONTAINER} (functional round-trip, tools=${EXPECTED_TOOL_COUNT})..."
+# ── 8. Run the SAME integration suite over stdio ───────────────────────────
+# #280: stdio previously got only scripts/stdio-smoke.mjs (initialize, tools/list, two
+# READ-ONLY calls). It now runs the identical level-gated module suite through
+# `docker exec ... --stdio`, so both transports have equal write-path coverage.
+# The old smoke is still used at sanity/smoke levels, where the full suite does not run.
+info "Step 8/9: stdio integration tests against ${STDIO_CONTAINER} (level=${TEST_LEVEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
-EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
-  MCP_STDIO_CONTAINER="$STDIO_CONTAINER" \
-  node "$DEV_DIR/scripts/stdio-smoke.mjs"
+STDIO_EXIT=0
+case "$TEST_LEVEL" in
+  normal|extended|full)
+    set +e
+    EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
+      MCP_TEST_BANK_SYNC="${BANK_SYNC_FLAG}" \
+      MCP_TEST_TRANSPORT=stdio \
+      MCP_STDIO_CONTAINER="$STDIO_CONTAINER" \
+      MCP_ACTIVE_BUDGET_SYNC_ID="${ACTIVE_SYNC_ID}" \
+      node "$DEV_DIR/tests/manual/index.js" \
+      "$MCP_SERVER_URL" \
+      "$MCP_AUTH_TOKEN" \
+      "$TEST_LEVEL" \
+      yes
+    STDIO_EXIT=$?
+    set -e
+    ;;
+  *)
+    set +e
+    EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
+      MCP_STDIO_CONTAINER="$STDIO_CONTAINER" \
+      node "$DEV_DIR/scripts/stdio-smoke.mjs"
+    STDIO_EXIT=$?
+    set -e
+    ;;
+esac
+if [ "$STDIO_EXIT" -ne 0 ]; then
+  err "stdio integration run failed (exit ${STDIO_EXIT})"
+  exit "$STDIO_EXIT"
+fi
+echo ""
+
+# ── 8b. Emit the release evidence artifact ─────────────────────────────────
+# #280: the release skill's precondition 5 verifies this file. The `sha` makes the
+# evidence unforgeable across commits: any new commit on develop invalidates it, so a
+# promotion can never rest on a stale or recycled run. Never committed (.gitignore).
+#
+# `residue: 0` is sound by construction, not an assumption: the runner exits 3 when its
+# post-run zero-residue assertion finds anything, and both branches above abort the script
+# on a non-zero exit. Reaching this line therefore means both transports asserted clean.
+REPORT_DIR="$DEV_DIR/.release"
+mkdir -p "$REPORT_DIR"
+cat > "$REPORT_DIR/dual-transport-report.json" <<JSON
+{
+  "sha": "$(git -C "$DEV_DIR" rev-parse HEAD)",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "level": "${TEST_LEVEL}",
+  "transports": {
+    "http":  { "exit": ${HTTP_EXIT}, "residue": 0 },
+    "stdio": { "exit": ${STDIO_EXIT}, "residue": 0 }
+  }
+}
+JSON
+ok "Release evidence written: .release/dual-transport-report.json"
 echo ""
 
 # ── 9. (full level only) #270 upstream-stall regression (stdio + HTTP) ──────

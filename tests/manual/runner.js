@@ -31,6 +31,8 @@ import { stdin as input, stdout as output } from 'node:process';
 import { config as loadDotenv } from 'dotenv';
 
 import { createClient } from './mcp-client.js';
+import { createClient as createStdioClient } from './mcp-client-stdio.js';
+import { sweepResidue, assertNoResidue, EXIT_RESIDUE, EXIT_UNSAFE_BUDGET } from './residue.js';
 import { sanityTests } from './tests/sanity.js';
 import { smokeTests } from './tests/smoke.js';
 import { accountTests } from './tests/account.js';
@@ -44,6 +46,8 @@ loadDotenv();
 // Default targets the bearer instance (port 3601) — safe for automated tests.
 // The OIDC instance (port 3600) requires a Casdoor JWT and cannot be tested without a browser.
 const MCP_URL = process.argv[2] || process.env.MCP_SERVER_URL || "http://localhost:3601/http";
+// #280: `http` (default) or `stdio`. Both run the SAME level-gated module suite.
+const TRANSPORT = (process.env.MCP_TEST_TRANSPORT || 'http').toLowerCase();
 const rawToken = process.argv[3] || process.env.MCP_AUTH_TOKEN || "MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6";
 let level = (process.argv[4] || process.env.MCP_TEST_LEVEL || '').toLowerCase() || null;
 let cleanup = process.argv[5] ? process.argv[5].toLowerCase() : null; // 'yes'|'no'|null
@@ -94,13 +98,30 @@ function startWallClockGuard(levelName) {
 export async function run() {
   const rl = readline.createInterface({ input, output });
   let guard = null;
+  let client = null;
+
+  // #280: the stdio transport spawns `docker exec`. An orphaned child holds the
+  // container's data dir and is the documented cause of the data-dir contention hangs,
+  // so tear it down on EVERY exit path, including signals. Idempotent by design.
+  const teardown = async () => { try { await client?.close?.(); } catch { /* already gone */ } };
+  const onSignal = (sig) => { teardown().finally(() => process.exit(sig === 'SIGINT' ? 130 : 143)); };
+  process.once('SIGINT', () => onSignal('SIGINT'));
+  process.once('SIGTERM', () => onSignal('SIGTERM'));
 
   try {
-    const client = createClient({ url: MCP_URL, rl });
+    // #280: transport selection. `http` (default) preserves every existing behaviour;
+    // `stdio` runs the SAME 13 modules over the other transport, which previously had
+    // zero write-path coverage.
+    client = TRANSPORT === 'stdio'
+      ? createStdioClient({ container: process.env.MCP_STDIO_CONTAINER, rl })
+      : createClient({ url: MCP_URL, rl });
 
-    // Set token from CLI / env, or prompt interactively
+    // Set token from CLI / env, or prompt interactively.
+    // The stdio client's setToken() is a no-op: container access IS the authentication.
     if (rawToken) {
       client.setToken(`Bearer ${rawToken}`);
+    } else if (TRANSPORT === 'stdio') {
+      // No token needed over stdio; do not prompt.
     } else {
       console.log("=== MCP Actual Budget Automated Tester ===");
       console.log(`Target: ${MCP_URL}`);
@@ -119,6 +140,7 @@ export async function run() {
 
     console.log("=== MCP Actual Budget Automated Tester ===");
     console.log(`Target: ${MCP_URL}`);
+    console.log(`Transport: ${TRANSPORT.toUpperCase()}`);
     console.log(`Test level: ${level.toUpperCase()}\n`);
 
     // Start the wall-clock guard now that we know the level. The guard fires
@@ -131,6 +153,28 @@ export async function run() {
     guard.setLastCompleted('initialize');
 
     const context = {};
+
+    // #280: start from a known-clean budget at mutating levels, so the suite's own count
+    // assertions are stable and a previous crashed run cannot pollute this one. The sweep
+    // refuses to touch a budget that has not been designated disposable AND is not the one
+    // the server actually has loaded. See tests/manual/residue.js.
+    const MUTATING = ['normal', 'extended', 'full'];
+    if (MUTATING.includes(level)) {
+      console.log('--- Pre-run residue sweep ---');
+      try {
+        await sweepResidue(client.callTool);
+      } catch (err) {
+        if (err.code === EXIT_UNSAFE_BUDGET) {
+          console.error(`\n❌ ${err.message}`);
+          await teardown();
+          if (guard) guard.clear();
+          rl.close();
+          process.exit(EXIT_UNSAFE_BUDGET);
+        }
+        throw err;
+      }
+      guard.setLastCompleted('sweepResidue');
+    }
 
     // --- CLEANUP (standalone) ---
     if (level === "cleanup") {
@@ -262,6 +306,21 @@ export async function run() {
       console.log("\n✓ All cleanup operations completed");
     }
 
+    // #280: the gate. The suite's own cleanup phase has just run; prove it left nothing
+    // behind. A leak stops being silent accumulation and becomes an attributable failure.
+    // Exit 3 is distinct from 1 (assertion failure) and 2 (runtime budget).
+    if (['normal', 'extended', 'full'].includes(level)) {
+      console.log("\n--- Post-run zero-residue assertion ---");
+      const remaining = await assertNoResidue(client.callTool);
+      if (remaining > 0) {
+        console.error(`\n❌ ${remaining} test object(s) survived cleanup. The next run cannot be validated against a dirty budget.`);
+        await teardown();
+        if (guard) guard.clear();
+        rl.close();
+        process.exit(EXIT_RESIDUE);
+      }
+    }
+
     console.log("\n=== ✓ TESTING COMPLETE ===");
 
   } catch (err) {
@@ -271,8 +330,12 @@ export async function run() {
       console.error("\nStack trace:");
       console.error(err.stack);
     }
+    await teardown();
     process.exit(1);
   } finally {
+    // Runs on the success path and on every non-exit() failure. teardown() is idempotent,
+    // so calling it again from an exit path above is harmless.
+    await teardown();
     if (guard) guard.clear();
     rl.close();
   }
