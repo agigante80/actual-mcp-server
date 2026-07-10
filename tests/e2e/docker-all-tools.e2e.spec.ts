@@ -939,16 +939,20 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
   });
 
   test('actual_budget_updates_batch - should handle large batch (35 ops)', async ({ request }) => {
-    // #273: 120s, not 60s. This tool runs all 35 updates as ONE write-queue
-    // operation through the single process-global api mutex (withApiLock). The
-    // per-op timeout (ACTUAL_OP_TIMEOUT_MS, default 30s) bounds EXECUTION while
-    // the lock is held, but NOT the wait to acquire the lock. Under the full
-    // 63-test parallel Docker E2E load on a shared/slow CI runner, this request
-    // can queue behind other operations and legitimately exceed 60s (observed:
-    // a 60s Playwright disposal, not an op-timeout error). 120s stays well above
-    // the 30s op-timeout, so a genuine op-timeout still surfaces as a clear tool
-    // error rather than a Playwright "Request context disposed".
-    test.setTimeout(120000);
+    // #278: back to 60s. This test was never slow, it was DEADLOCKED, and it was a
+    // correct canary. #273 raised the timeout to 120s on the theory that the request
+    // queued behind others on the api mutex "under the full 63-test parallel load".
+    // That cannot be: playwright.config.docker.ts sets `workers: 1` and `retries: 0`,
+    // so these tests run serially and nothing contends for the mutex.
+    //
+    // The real cause was a lost wakeup in the adapter's write queue: this test fires
+    // its write ~11ms after the previous test's response, landing while that batch was
+    // still draining (the response is sent from inside Promise.allSettled, before
+    // api.sync() and before the lock releases). The enqueued op was never dispatched,
+    // so it hung until an unrelated later write drained the queue. No timeout value can
+    // fix a hang. Fixed in src/lib/actual-adapter.ts; regression pinned by
+    // tests/unit/adapter_write_queue_wakeup.test.js.
+    test.setTimeout(60000);
     if (!testContext.categoryId) test.skip();
     
     console.log('💰 Testing large batch update (35 operations)...');

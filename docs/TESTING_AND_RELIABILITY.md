@@ -337,6 +337,15 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   `node_version_drift` (#275: `engines.node` is canonical; the Dockerfile `FROM node:` tags,
   every workflow's Node pin, and the README must agree with it. Run standalone with
   `npm run node-version-drift`).
+- **Write-queue wakeup guard** (#278): `tests/unit/adapter_write_queue_wakeup.test.js` pins the
+  lost-wakeup regression in `src/lib/actual-adapter.ts`. A write enqueued while a previous batch
+  was draining used to be stranded (never dispatched, promise never settled) until an unrelated
+  later write drained the queue. `withOpTimeout` (#270) cannot catch that: it bounds execution,
+  not queue residency. The test also pins the debounce COALESCING property (5 same-tick writes
+  produce exactly ONE batch, via `_getWriteQueueBatchCountForTests()`), because a fix that drained
+  on every enqueue would close the deadlock and silently multiply init/sync cycles. Cases that
+  depend on `ACTUAL_OP_TIMEOUT_MS` run in child processes: `config.ts` reads `process.env` once at
+  module load, so an in-process env override is silently ignored and the assertion becomes vacuous.
 - **Node floor guard** (#275): `tests/unit/node_version_guard.test.js` covers
   `src/lib/node-version-guard.ts`, which rejects an unsupported interpreter at startup rather
   than letting it die later with a cryptic `ERR_IMPORT_ASSERTION_TYPE_MISSING`. The unit test
