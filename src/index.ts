@@ -2,10 +2,38 @@
 // source order, so this arms the Node floor check before zod, before the rejection
 // allowlist, and before the handlers below. `npm start` and the documented
 // `node dist/src/index.js --stdio` reach this file without going through bin/, so the
-// guard cannot live in bin/ alone.
-import './lib/node-version-guard.js';
+// guard cannot live in bin/ alone. Importing the named export does not change that:
+// the module's top-level `enforceNodeVersion()` still fires here, exactly once.
+import { findRootPackageJson } from './lib/node-version-guard.js';
+import { dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
+
+/**
+ * #277: the single version reader for this module.
+ *
+ * This used to be a dynamic JSON import of `../package.json` carrying an import
+ * attribute, which from the compiled `dist/src/index.js` resolved to `dist/package.json`:
+ * a mirror that tsc emitted precisely BECAUSE of this import (rootDir is "."), and that
+ * went stale between a version bump and the next build. `src/tools/server_info.ts` reads
+ * the ROOT manifest, so the two disagreed. Removing the import removes the mirror too.
+ *
+ * `findRootPackageJson` walks up to the outermost package.json named actual-mcp-server,
+ * skipping that mirror. It never throws (it swallows unreadable and malformed files), so
+ * the try/catch is belt-and-braces around a future change rather than a live path.
+ * Removing the import attributes also removes the last instance of the construct that
+ * crashed on Node 18 in #275.
+ */
+function readRootVersion(): string {
+  try {
+    const manifest = findRootPackageJson(dirname(fileURLToPath(import.meta.url)));
+    return manifest?.version ?? process.env.VERSION ?? 'unknown';
+  } catch {
+    return process.env.VERSION ?? 'unknown';
+  }
+}
+
 // Add global error handlers
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -114,8 +142,7 @@ if (
 
 if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
     argsEarly.includes('--version') || argsEarly.includes('-v')) {
-  const pkg = await import('../package.json', { with: { type: 'json' } });
-  const version = pkg.default.version;
+  const version = readRootVersion();
   if (argsEarly.includes('--version') || argsEarly.includes('-v')) {
     console.log(version);
   } else {
@@ -182,12 +209,11 @@ export {};
   const { getLocalIp } = (utilsModule as unknown as { getLocalIp: () => string });
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
 
-  // Load version from environment (Docker build-time) or package.json (local dev)
+  // Load version from environment (Docker build-time) or the ROOT package.json (local dev)
   let VERSION = process.env.VERSION;
   if (!VERSION || VERSION === 'unknown') {
-    const packageJson = await import('../package.json', { with: { type: 'json' } });
-    VERSION = packageJson.default.version;
-    
+    VERSION = readRootVersion();
+
     // Append git commit hash for development builds
     try {
       const { execSync } = await import('child_process');
