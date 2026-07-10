@@ -1610,7 +1610,17 @@ export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
     // Defensive narrowing to the requested payee. @actual-app/api already scopes
     // payee-rules-get to the id; the filter must use the real rule shape (payee
     // referenced in a condition/action), NOT a nonexistent `payee_id` column.
-    return allRules.filter((r) => ruleReferencesPayee(r, payeeId));
+    const filtered = allRules.filter((r) => ruleReferencesPayee(r, payeeId));
+    // Upstream already scopes to the payee, so this filter should be a no-op. If it
+    // ever drops rows, the serialized rule shape has drifted and the predicate is now
+    // silently under-matching: exactly the failure class that made #284 return empty
+    // for months. Surface it instead of hiding it.
+    if (filtered.length !== allRules.length) {
+      logger.debug('[ADAPTER] getPayeeRules post-filter dropped rows; rule shape may have drifted', {
+        payeeId, upstream: allRules.length, kept: filtered.length,
+      });
+    }
+    return filtered;
   });
 }
 export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {
