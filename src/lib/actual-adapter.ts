@@ -68,6 +68,7 @@ import { retry, isRetryableError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
 import { notFoundMsg } from './errors.js';
 import logger from '../logger.js';
+import { checkServerVersionOnce } from './server-version-guard.js';
 import config from '../config.js';
 import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
@@ -313,11 +314,25 @@ function _enforceBudgetAcl(toolName?: string): void {
  * In either mode `withApiLock` serialises against concurrent callers because
  * `@actual-app/api` is a process-wide singleton.
  */
-export async function withActualApi<T>(operation: () => Promise<T>): Promise<T> {
+export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<T> {
   // ACL enforcement BEFORE pool branching or lock acquisition (#156).
   // Denial here means the lock is never acquired and no upstream resource is
   // touched.
   _enforceBudgetAcl();
+
+  // #276: on the FIRST successful op, warn (once) if the Actual server version is outside
+  // the range this build supports. It runs inside the op while the connection is live and
+  // reuses it via rawGetServerVersion (NOT the withActualApi-wrapped getServerVersion, which
+  // would re-enter the lock). The once-guard flips its flag synchronously, so this never
+  // repeats per session or op. It is advisory: it never throws and never blocks the op.
+  const operation = async (): Promise<T> => {
+    const result = await rawOperation();
+    await checkServerVersionOnce(
+      () => rawGetServerVersion() as Promise<{ version: string } | { error: string }>,
+      logger,
+    );
+    return result;
+  };
 
   const sessionId = _resolveSessionId();
 
