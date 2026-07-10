@@ -1583,13 +1583,34 @@ export async function mergePayees(targetId: string, mergeIds: string[]): Promise
     await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
+/**
+ * Does a serialized Actual rule reference this payee? The payee id lives INSIDE a
+ * condition or action whose `field` is 'payee': as `value` (op 'is'/'isNot') or as
+ * a member of `value` (op 'oneOf', an array). A serialized rule has NO top-level
+ * `payee_id` column, so the original BUG-3 post-filter (`r.payee_id === payeeId`)
+ * matched nothing and made actual_payee_rules_get always return empty. This mirrors
+ * `@actual-app/api`'s own getRulesForPayee, which scans payee-typed ids in the rule.
+ */
+export function ruleReferencesPayee(rule: unknown, payeeId: string): boolean {
+  const r = rule as { conditions?: unknown; actions?: unknown };
+  const clauses = [
+    ...(Array.isArray(r?.conditions) ? r.conditions : []),
+    ...(Array.isArray(r?.actions) ? r.actions : []),
+  ] as Array<{ field?: unknown; value?: unknown }>;
+  return clauses.some((c) => {
+    if (c?.field !== 'payee') return false;
+    return Array.isArray(c.value) ? c.value.includes(payeeId) : c?.value === payeeId;
+  });
+}
 export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.payees.getPayeeRules').catch(() => {});
     const allRules = await withConcurrency(() => retry(() => rawGetPayeeRules(payeeId) as Promise<unknown[]>, { retries: 2, backoffMs: 200 }));
     if (!Array.isArray(allRules)) return [];
-    // API ignores payeeId filter — apply post-filter (BUG-3)
-    return allRules.filter((r: any) => r?.payee_id === payeeId);
+    // Defensive narrowing to the requested payee. @actual-app/api already scopes
+    // payee-rules-get to the id; the filter must use the real rule shape (payee
+    // referenced in a condition/action), NOT a nonexistent `payee_id` column.
+    return allRules.filter((r) => ruleReferencesPayee(r, payeeId));
   });
 }
 export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {
