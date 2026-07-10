@@ -1,4 +1,4 @@
-import { fail } from '../assert.js';
+import { fail, skip } from '../assert.js';
 /**
  * tests/payee.js
  *
@@ -8,7 +8,8 @@ import { fail } from '../assert.js';
  *   - setting category twice does NOT create a duplicate rule (update path)
  *   - setting category to null removes the rule (clear path)
  *
- * Reads from context:  categoryId (required for category tests)
+ * Reads from context:  categoryId (optional: reused if set, else a throwaway category is
+ *                       created in context.categoryGroupId for the category-via-rules block)
  * Writes to context:   payeeId, payeeId2 (cleared to null after merge)
  */
 
@@ -83,13 +84,47 @@ export async function payeeTests(client, context) {
   // The payees table has no 'category' column. The adapter stores it as a
   // "payee is X → set category" rule. We test create, no-dup update, and clear.
 
-  if (context.categoryId) {
+  // #282: this block used to run only `if (context.categoryId)`, but category.js deletes
+  // its own category and sets context.categoryId = null before payeeTests runs, so the
+  // block ALWAYS skipped (never exercised the payee default-category feature). Acquire a
+  // category for the block instead: reuse context.categoryId if present, else create a
+  // throwaway (in the existing group, or a throwaway group) and delete it at the end. The
+  // #280 residue sweep covers any leak.
+  let catForPayee = context.categoryId;
+  let throwawayCatId = null;
+  let throwawayGroupId = null;
+  if (!catForPayee) {
+    // Acquiring a category is best-effort: if a create fails (write blocked, upstream
+    // rate-limiting after a heavy run), skip this block honestly rather than aborting the
+    // whole payee module. Any partial throwaway (a created group) is torn down here and
+    // otherwise covered by the #280 residue sweep.
+    try {
+      let groupId = context.categoryGroupId;
+      if (!groupId) {
+        const grp = await callTool("actual_category_groups_create", { name: `MCP-PayeeCatGroup-${timestamp}` });
+        groupId = grp.id || grp.groupId || grp.result || grp;
+        throwawayGroupId = groupId;
+      }
+      const cat = await callTool("actual_categories_create", { name: `MCP-PayeeCat-${timestamp}`, group_id: groupId });
+      throwawayCatId = cat.categoryId || cat.id || cat.result || cat;
+      catForPayee = throwawayCatId;
+      console.log(`  ℹ category-via-rules: created throwaway category ${catForPayee} (context.categoryId was nulled by category.js)`);
+    } catch {
+      catForPayee = null;
+      if (throwawayGroupId) {
+        try { await callTool("actual_category_groups_delete", { id: throwawayGroupId }); } catch { /* residue sweep covers */ }
+        throwawayGroupId = null;
+      }
+    }
+  }
+
+  if (catForPayee) {
     // ── 1. SET category (create rule path) ────────────────────────────────
     console.log("\nSetting default category on payee (create rule path)...");
     try {
       await callTool("actual_payees_update", {
         id: payeeId,
-        fields: { category: context.categoryId },
+        fields: { category: catForPayee },
       });
       console.log("✓ actual_payees_update with category succeeded");
 
@@ -104,10 +139,10 @@ export async function payeeTests(client, context) {
       );
       if (setCatRule) {
         const action = setCatRule.actions.find(a => a.op === 'set' && a.field === 'category');
-        if (action.value === context.categoryId) {
-          console.log(`  ✓ Verify create rule: rule created with categoryId=${context.categoryId}`);
+        if (action.value === catForPayee) {
+          console.log(`  ✓ Verify create rule: rule created with categoryId=${catForPayee}`);
         } else {
-          fail(`Verify create rule: action value=${action.value}, expected ${context.categoryId}`);
+          fail(`Verify create rule: action value=${action.value}, expected ${catForPayee}`);
         }
       } else {
         fail(`Verify create rule: no 'set category' action found in ${rulesAfterSetArr.length} rule(s)`);
@@ -121,7 +156,7 @@ export async function payeeTests(client, context) {
     try {
       await callTool("actual_payees_update", {
         id: payeeId,
-        fields: { category: context.categoryId },
+        fields: { category: catForPayee },
       });
       console.log("✓ Second actual_payees_update with same category succeeded");
 
@@ -175,7 +210,7 @@ export async function payeeTests(client, context) {
     try {
       await callTool("actual_payees_update", {
         id: '00000000-0000-0000-0000-000000000000',
-        fields: { category: context.categoryId },
+        fields: { category: catForPayee },
       });
       // Actual may silently succeed (rule created for unknown payee: benign)
       console.log("  ⚠ Non-existent payee update with category did not throw (Actual allows orphan rules)");
@@ -183,7 +218,17 @@ export async function payeeTests(client, context) {
       console.log("  ✓ Non-existent payee UUID correctly produced error:", err.message.slice(0, 80));
     }
   } else {
-    console.log("\n⏭ category-via-rules: skipped. Blocked on #284 (payees_update{category} creates no queryable rule) and context.categoryId nulled by category.js.");
+    skip("category-via-rules: no category available (could not create a throwaway; write blocked or rate-limited). Environmental skip, not a feature gap.");
+  }
+
+  // Clean up the throwaway category/group if this block created them (#282).
+  if (throwawayCatId) {
+    try { await callTool("actual_categories_delete", { id: throwawayCatId }); }
+    catch (err) { console.log(`  ⚠ throwaway category cleanup failed (residue sweep will catch): ${err.message?.slice(0, 80)}`); }
+  }
+  if (throwawayGroupId) {
+    try { await callTool("actual_category_groups_delete", { id: throwawayGroupId }); }
+    catch (err) { console.log(`  ⚠ throwaway group cleanup failed (residue sweep will catch): ${err.message?.slice(0, 80)}`); }
   }
 
   // Verify create
