@@ -620,6 +620,8 @@ interface WriteOperation<T> {
   // processWriteQueue has the right context, even though setTimeout strips
   // AsyncLocalStorage. See #158.
   sessionId?: string;
+  // #278: bounds how long this entry may sit UNDISPATCHED. Cleared at dispatch.
+  residencyTimer?: NodeJS.Timeout;
 }
 
 let writeQueue: WriteOperation<any>[] = [];
@@ -630,11 +632,39 @@ let writeSessionTimeout: NodeJS.Timeout | null = null;
 // (skipped the per-op init). Surfaces in getConcurrencyState(). See #158.
 let writeConnectionReuseCount = 0;
 
+// #278: one batch dispatch per processWriteQueue run. Exposed to tests so the debounce
+// COALESCING property (N same-tick writes -> ONE batch, one init/sync cycle) is pinned.
+// A fix that drained on every enqueue would close the deadlock and silently turn one
+// batch into N; nothing else in the suite would notice.
+let writeQueueBatchCount = 0;
+
+/**
+ * #278: the ONLY place a write-queue drain is scheduled.
+ *
+ * The callback nulls `writeSessionTimeout` BEFORE draining. That ordering is the whole
+ * fix. Previously a timer that fired while a drain was in flight hit the early return in
+ * `processWriteQueue` without clearing its own handle, leaving a dead-but-non-null value
+ * behind. The drain's `finally` then skipped its re-drain because it tested
+ * `writeSessionTimeout === null`, so an operation enqueued mid-drain was never dispatched
+ * and its promise never settled. `withOpTimeout` (#270) could not catch it: that bounds
+ * execution, and the operation never started.
+ */
+function scheduleWriteQueueDrain(): void {
+  if (writeSessionTimeout) clearTimeout(writeSessionTimeout);
+  writeSessionTimeout = setTimeout(() => {
+    writeSessionTimeout = null;
+    processWriteQueue();
+  }, WRITE_SESSION_DELAY_MS);
+}
+
 async function processWriteQueue() {
-  // Atomically check and set processing flag to prevent race conditions
+  // Atomically check and set processing flag to prevent race conditions.
+  // Safe to return without touching writeSessionTimeout: a fired timer has already
+  // nulled it (scheduleWriteQueueDrain), and the finally below always reschedules
+  // whenever the queue is non-empty.
   if (isProcessingWrites || writeQueue.length === 0) return;
   isProcessingWrites = true;
-  
+
   // Clear the timeout since we're processing now
   if (writeSessionTimeout) {
     clearTimeout(writeSessionTimeout);
@@ -642,6 +672,17 @@ async function processWriteQueue() {
   }
   
   const batch = writeQueue.splice(0, writeQueue.length); // Take all current items
+
+  // #278: these entries are now DISPATCHED, so their residency bound no longer applies.
+  // Clearing here, before any await, means the timer can never fire on an in-flight op.
+  for (const entry of batch) {
+    if (entry.residencyTimer) {
+      clearTimeout(entry.residencyTimer);
+      entry.residencyTimer = undefined;
+    }
+  }
+  writeQueueBatchCount++;
+
   // Pool-cooperation decision (#158): use the first queued op's captured
   // sessionId as the batch's sessionId. In practice all ops batched together
   // came from the same setTimeout window and same request, so they share
@@ -751,12 +792,12 @@ async function processWriteQueue() {
     });
   } finally {
     isProcessingWrites = false;
-    // Process any new operations that were queued while we were processing
-    if (writeQueue.length > 0 && writeSessionTimeout === null) {
-      writeSessionTimeout = setTimeout(() => {
-        processWriteQueue();
-      }, WRITE_SESSION_DELAY_MS);
-    }
+    // #278: ALWAYS re-drain a non-empty queue. The old `&& writeSessionTimeout === null`
+    // guard was the lost wakeup: a timer that fired mid-drain left a dead handle here,
+    // so operations queued during the drain were stranded until an unrelated later write
+    // happened to schedule a fresh timer. No busy loop: this only fires when work exists,
+    // and the drain splices the entire queue.
+    if (writeQueue.length > 0) scheduleWriteQueueDrain();
   }
 }
 
@@ -770,18 +811,45 @@ function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
   // decision in processWriteQueue would always miss. See #158.
   const sessionId = _resolveSessionId();
   return new Promise((resolve, reject) => {
-    writeQueue.push({ operation, resolve, reject, sessionId });
+    const entry: WriteOperation<T> = { operation, resolve, reject, sessionId };
 
-    // Clear existing timeout
-    if (writeSessionTimeout) {
-      clearTimeout(writeSessionTimeout);
+    // #278: bound queue RESIDENCY, not just execution. #270's withOpTimeout bounds an
+    // operation that is RUNNING; it cannot bound one that never starts. Reuse the same
+    // knob so there is one timeout concept: ACTUAL_OP_TIMEOUT_MS, with <= 0 meaning
+    // disabled (matching withOpTimeout). Worst case for a single call is therefore
+    // residency + execution = 2 * ACTUAL_OP_TIMEOUT_MS; residency is normally under
+    // WRITE_SESSION_DELAY_MS (100ms).
+    const residencyLimitMs = config.ACTUAL_OP_TIMEOUT_MS;
+    if (Number.isFinite(residencyLimitMs) && residencyLimitMs > 0) {
+      entry.residencyTimer = setTimeout(() => {
+        const index = writeQueue.indexOf(entry);
+        if (index === -1) return; // already dispatched; the timer was cleared, this is belt and braces
+        writeQueue.splice(index, 1);
+        logger.error(
+          `[WRITE QUEUE] Operation was not dispatched within ${residencyLimitMs}ms; rejecting it (#278)`,
+        );
+        // Deliberately does NOT contain the substring "timed out". TRANSIENT_ERROR_PATTERNS
+        // in ./retry.ts matches that substring, and _shouldDropPoolOnError delegates to
+        // isRetryableError. An operation that was never dispatched never touched upstream,
+        // so classifying it as an infrastructure failure would tear down a healthy pooled
+        // connection on a false signal. This error is terminal by design.
+        reject(new Error(
+          `Write operation was not dispatched within ${residencyLimitMs}ms ` +
+          '(write-queue stall, ACTUAL_OP_TIMEOUT_MS). The operation never ran and no data was modified.',
+        ));
+      }, residencyLimitMs);
+      // A pending residency timer must never hold the stdio process open at shutdown.
+      entry.residencyTimer.unref?.();
     }
 
-    // Set new timeout to process queue
-    writeSessionTimeout = setTimeout(() => {
-      processWriteQueue();
-    }, WRITE_SESSION_DELAY_MS);
+    writeQueue.push(entry);
+    scheduleWriteQueueDrain();
   });
+}
+
+/** #278 test hook: batches dispatched by processWriteQueue. Pins the coalescing property. */
+export function _getWriteQueueBatchCountForTests(): number {
+  return writeQueueBatchCount;
 }
 
 /**
