@@ -117,11 +117,12 @@ export async function startHttpServer(
       // and some IdPs (e.g. Authentik) do not expose it where those clients look.
       // The document is the IdP's own public discovery doc, fetched ONCE above (so no
       // request-path fetch and no SSRF surface) and re-served verbatim as a BARE JSON
-      // object. It must NOT copy the {jsonrpc,result} info envelope used by the
-      // /.well-known/oauth-protected-resource probe handler below (that shape is not
-      // RFC-compliant and would break client parsing). Unauthenticated by design: a
-      // client reads this before it holds a token, so it is registered here, before
-      // the bearer-auth middleware, and only when AUTH_PROVIDER=oidc (this block).
+      // object. Never emit a {jsonrpc,result} envelope on a well-known metadata path:
+      // that shape is not RFC-compliant and would break client parsing (the server-info
+      // probe was moved off this reserved path to /mcp-info as a bare object in #286).
+      // Unauthenticated by design: a client reads this before it holds a token, so it is
+      // registered here, before the bearer-auth middleware, and only when
+      // AUTH_PROVIDER=oidc (this block).
       app.get('/.well-known/oauth-authorization-server', (_req, res) => {
         res.json(oidcMetadata);
       });
@@ -650,35 +651,26 @@ export async function startHttpServer(
     await transport.handleRequest(req, res);
   });
 
-  // quick GET info endpoints (some clients probe)
+  // Quick GET server-info probe used by our test harness (testMcpClient.ts, the
+  // Playwright E2E) to check the server is up and advertises tools before the full
+  // JSON-RPC handshake. #286: this used to live on /.well-known/oauth-protected-resource
+  // wrapped in a {jsonrpc,result} envelope, which squatted the RFC 9728 reserved OAuth
+  // path with non-metadata (a strict OAuth client probing it got garbage). It now lives
+  // on the non-reserved /mcp-info as a BARE object. The reserved OAuth path is therefore
+  // unregistered in non-OIDC mode (it correctly 404s: a static-bearer server has no
+  // authorization server to advertise), and in OIDC mode mcpAuth.protectedResourceMetadataRouter()
+  // (registered above) still serves the compliant RFC 9728 document.
   const serverIp = process.env.MCP_BRIDGE_PUBLIC_HOST || getLocalIp();
-  app.get('/.well-known/oauth-protected-resource', (_req, res) => {
-    res.json({
-      jsonrpc: '2.0',
-      result: {
-        description: serverDescription || "Actual MCP server",
-        instructions: serverInstructions || "Welcome to the Actual MCP server.",
-        serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
-        capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: toolsList.reduce((a: Record<string, object>, n: string) => ({ ...a, [n]: {} }), {}) },
-        tools: toolsList,
-        advertisedUrl: advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`,
-      },
-    });
+  const mcpInfo = () => ({
+    description: serverDescription || "Actual MCP server",
+    instructions: serverInstructions || "Welcome to the Actual MCP server.",
+    serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
+    capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: toolsList.reduce((a: Record<string, object>, n: string) => ({ ...a, [n]: {} }), {}) },
+    tools: toolsList,
+    advertisedUrl: advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`,
   });
-
-  app.get('/.well-known/oauth-protected-resource/http', (_req, res) => {
-    res.json({
-      jsonrpc: '2.0',
-      result: {
-        description: serverDescription || "Actual MCP server",
-        instructions: serverInstructions || "Welcome to the Actual MCP server.",
-        serverInstructions: { instructions: serverInstructions || "Welcome to the Actual MCP server." },
-        capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: toolsList.reduce((a: Record<string, object>, n: string) => ({ ...a, [n]: {} }), {}) },
-        tools: toolsList,
-        advertisedUrl: advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`,
-      },
-    });
-  });
+  app.get('/mcp-info', (_req, res) => { res.json(mcpInfo()); });
+  app.get('/mcp-info/http', (_req, res) => { res.json(mcpInfo()); });
 
   app.get('/health', (_req, res) => {
     const state = getConnectionState();

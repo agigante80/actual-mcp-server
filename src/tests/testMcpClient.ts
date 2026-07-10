@@ -13,8 +13,10 @@ export async function testMcpClient(advertisedUrl: string, _port: number, httpPa
   const fetchFn: (input: string | URL, init?: RequestInit) => Promise<ResponseLike> = fetchAny as unknown as (input: string | URL, init?: RequestInit) => Promise<ResponseLike>;
 
   const base = new URL(advertisedUrl);
-  // quick probe endpoint
-  const probeUrl = `${base.origin}/.well-known/oauth-protected-resource`;
+  // quick probe endpoint (#286: the server-info probe moved off the reserved
+  // /.well-known/oauth-protected-resource OAuth path to the non-reserved /mcp-info,
+  // now a bare object; the `result ?? raw` unwrap below tolerates both shapes).
+  const probeUrl = `${base.origin}/mcp-info`;
 
   console.info(`MCP client test: probing ${probeUrl}`);
   const probeRes = await fetchFn(probeUrl, { method: 'GET' });
