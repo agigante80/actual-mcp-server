@@ -398,7 +398,13 @@ export async function advancedTests(client, context, opts = {}) {
   // cases above already give positive and negative integration coverage.
   const runtag = `${Date.now()}`;
   const markerValue = `MCP178-AMAZON-${runtag}`;
-  const rowsOf = (r) => r?.result ?? (Array.isArray(r) ? r : []);
+  // #283: actual_query_run returns { data: [...], dependencies: [...] }, NOT { result }.
+  // The old `r?.result ?? ...` extractor therefore read `undefined` for every query and
+  // silently yielded [], so the seed lookup always found 0 rows and this block always
+  // skipped, mislabeled as a "cold-query window". There is no cold window: a freshly
+  // created transaction is queryable immediately. Read `.data` first; keep `.result`
+  // and array fallbacks for actual_accounts_list, which returns a bare array.
+  const rowsOf = (r) => r?.data ?? r?.result ?? (Array.isArray(r) ? r : []);
   let seedTxnId = null;
   try {
     const accts = rowsOf(await callTool("actual_accounts_list", {}));
@@ -416,7 +422,7 @@ export async function advancedTests(client, context, opts = {}) {
     console.log(`  ℹ skipped: could not create seed transaction (${err.message.slice(0, 80)})`);
   }
   if (!seedTxnId) {
-    console.log("  ⏭ imported_payee filtering: skipped, seed not visible to actual_query_run (blocked on #283, cold-query window)");
+    skip("imported_payee filtering: no seed transaction (no usable account, or the write was blocked/rate-limited). This is an environmental skip, not a query-engine issue: actual_query_run finds a freshly created transaction immediately.");
   } else {
     let impPassed = 0, impFailed = 0;
     const check = (cond, ok, bad) => {
