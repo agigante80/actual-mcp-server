@@ -18,7 +18,7 @@ import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
-import { discoverJwksUri, buildTrustedJwksHosts } from '../lib/oidc-discovery.js';
+import { discoverOidcMetadata, buildTrustedJwksHosts } from '../lib/oidc-discovery.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import * as https from 'node:https';
@@ -104,11 +104,27 @@ export async function startHttpServer(
       // #254: opt-in cross-origin JWKS trusted hosts (e.g. Google serves keys from
       // www.googleapis.com). Parsed fail-fast here at the composition root and
       // threaded as a parameter; empty (the default) keeps same-origin-only.
-      const jwksUri = await discoverJwksUri(
+      const { jwksUri, metadata: oidcMetadata } = await discoverOidcMetadata(
         config.OIDC_ISSUER,
         config.OIDC_ALLOW_INSECURE_ISSUER,
         buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS),
       );
+      // #285: serve RFC 8414 OAuth Authorization Server Metadata at this origin so
+      // mcp-remote and Claude.ai's native OAuth connector can discover the IdP's
+      // token_endpoint. We already serve RFC 9728 protected-resource metadata (whose
+      // authorization_servers points at the IdP), but several clients resolve the
+      // oauth-authorization-server well-known path against the RESOURCE server root,
+      // and some IdPs (e.g. Authentik) do not expose it where those clients look.
+      // The document is the IdP's own public discovery doc, fetched ONCE above (so no
+      // request-path fetch and no SSRF surface) and re-served verbatim as a BARE JSON
+      // object. It must NOT copy the {jsonrpc,result} info envelope used by the
+      // /.well-known/oauth-protected-resource probe handler below (that shape is not
+      // RFC-compliant and would break client parsing). Unauthenticated by design: a
+      // client reads this before it holds a token, so it is registered here, before
+      // the bearer-auth middleware, and only when AUTH_PROVIDER=oidc (this block).
+      app.get('/.well-known/oauth-authorization-server', (_req, res) => {
+        res.json(oidcMetadata);
+      });
       const jwks = createRemoteJWKSet(new URL(jwksUri));
       const customJwtVerify = async (token: string) => {
         // Enforce the audience claim (#160, OWASP A07). Without it, any

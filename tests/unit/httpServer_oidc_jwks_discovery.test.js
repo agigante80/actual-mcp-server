@@ -195,15 +195,44 @@ server.close();
 console.log('\n[oidc-jwks-discovery] real code wiring (source assertions)');
 const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(resolve(here, '../../src/server/httpServer.ts'), 'utf8');
-check('httpServer uses discoverJwksUri + jwksUri (not the hardcoded URL construction)', () => {
-  assert.ok(/discoverJwksUri\(\s*config\.OIDC_ISSUER\b/.test(src), 'expected discoverJwksUri(config.OIDC_ISSUER, ...) call');
+check('httpServer uses discoverOidcMetadata + jwksUri (not the hardcoded URL construction)', () => {
+  // #285: the OIDC block now resolves BOTH the jwks_uri and the raw discovery doc
+  // from a single startup fetch via discoverOidcMetadata.
+  assert.ok(/discoverOidcMetadata\(\s*config\.OIDC_ISSUER\b/.test(src), 'expected discoverOidcMetadata(config.OIDC_ISSUER, ...) call');
   assert.ok(src.includes('createRemoteJWKSet(new URL(jwksUri))'), 'expected createRemoteJWKSet(new URL(jwksUri))');
   // The OLD hardcoded code construction must be gone (a comment mentioning the path is fine).
   assert.ok(!/new URL\(\s*`\$\{config\.OIDC_ISSUER\}\/\.well-known\/jwks`/.test(src), 'the hardcoded JWKS URL construction must be gone');
 });
-check('httpServer threads buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS) into discoverJwksUri (#254)', () => {
+check('httpServer threads buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS) into discoverOidcMetadata (#254)', () => {
   assert.ok(/buildTrustedJwksHosts\(config\.OIDC_JWKS_TRUSTED_HOSTS\)/.test(src), 'expected the parsed allowlist threaded at the composition root');
-  assert.ok(/discoverJwksUri\(\s*config\.OIDC_ISSUER[\s\S]{0,220}buildTrustedJwksHosts/.test(src), 'expected discoverJwksUri to receive the trusted-hosts array');
+  assert.ok(/discoverOidcMetadata\(\s*config\.OIDC_ISSUER[\s\S]{0,260}buildTrustedJwksHosts/.test(src), 'expected discoverOidcMetadata to receive the trusted-hosts array');
+});
+// #285: RFC 8414 authorization-server metadata route.
+check('httpServer serves /.well-known/oauth-authorization-server as a BARE object (scenario 1)', () => {
+  // The handler must return the fetched discovery doc directly, NOT wrapped in the
+  // {jsonrpc,result} info envelope the protected-resource probe handler uses.
+  const m = src.match(/app\.get\(\s*['"]\/\.well-known\/oauth-authorization-server['"]\s*,\s*\([^)]*\)\s*=>\s*\{([\s\S]{0,200}?)\}\s*\)/);
+  assert.ok(m, 'expected an app.get for /.well-known/oauth-authorization-server');
+  assert.ok(/res\.json\(\s*oidcMetadata\s*\)/.test(m[1]), 'handler must res.json(oidcMetadata) (bare object)');
+  assert.ok(!/jsonrpc/.test(m[1]), 'the oauth-authorization-server handler must not emit a jsonrpc/result envelope');
+});
+check('the oauth-authorization-server route is registered ONLY inside the AUTH_PROVIDER===oidc block (scenario 4, static bound)', () => {
+  // Route-absence guard (static half). Bound the single registration to the TRUE
+  // OIDC-block interior, using anchors that are unique to and inside the block:
+  //   lower = `mcpAuth = createMcpAuth()` (the block's first statement),
+  //   upper = `mcpAuth.bearerAuth(`      (the block's last statement).
+  // A route moved out of the block (unconditional, reachable in AUTH_PROVIDER=none)
+  // lands outside [lower, upper] and fails this check. The runtime 404 test in
+  // httpServer_oauth_metadata_route.test.js is the empirical companion.
+  const lower = src.indexOf('mcpAuth = createMcpAuth()');
+  const upper = src.indexOf('mcpAuth.bearerAuth(');
+  const routeIdx = src.indexOf("app.get('/.well-known/oauth-authorization-server'");
+  assert.ok(lower >= 0, 'expected the createMcpAuth() block-open anchor');
+  assert.ok(upper > lower, 'expected the bearerAuth() block-close anchor after block open');
+  assert.ok(routeIdx >= 0, 'expected the oauth-authorization-server route registration');
+  assert.ok(routeIdx > lower && routeIdx < upper, 'the route must sit inside the OIDC block (between createMcpAuth and bearerAuth)');
+  // Exactly one registration, so no accidental un-gated duplicate exists.
+  assert.strictEqual(src.split("app.get('/.well-known/oauth-authorization-server'").length - 1, 1, 'expected exactly one oauth-authorization-server registration');
 });
 check('httpServer maps verify failures to MCPAuthTokenVerificationError', () => {
   assert.ok(/catch\s*\(err\)[\s\S]{0,160}MCPAuthTokenVerificationError\('invalid_token'/.test(src), 'expected 401 mapping in customJwtVerify');

@@ -87,6 +87,18 @@ throws instead of sitting inert), and every allowlist acceptance is logged with 
 and JWKS host for an audit trail. Empty (default) means the same-origin-only behaviour is
 byte-identical to before.
 
+**OAuth discovery metadata endpoints (#285)**: in OIDC mode the server publishes two unauthenticated
+discovery documents so OAuth clients (mcp-remote, Claude.ai) can bootstrap a login. `/.well-known/oauth-protected-resource`
+(RFC 9728) identifies this resource server, and `/.well-known/oauth-authorization-server` (RFC 8414) is the
+authorization server metadata, re-served from the IdP's own OpenID discovery document because several clients
+resolve that path against the resource-server origin and some IdPs (Authentik) do not expose it there. Security
+posture: the document is fetched ONCE at startup (the same hardened fetch used for JWKS discovery: https-only issuer,
+no redirects, timeout), so no client request ever triggers an outbound fetch and there is no request-path SSRF
+surface. It is served verbatim and exposes only the endpoints the IdP already publishes publicly (no tokens,
+secrets, or internal hosts), and it is intentionally unauthenticated because a client must read it before it holds
+a token. If the startup fetch fails, the server does not start in OIDC mode (fail closed), so the route is never
+registered with a partial document, and it is absent entirely when `AUTH_PROVIDER` is not `oidc`.
+
 **Configuration**:
 ```bash
 AUTH_PROVIDER=oidc
