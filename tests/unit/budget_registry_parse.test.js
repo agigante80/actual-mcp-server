@@ -20,11 +20,15 @@ const DEFAULTS = { serverUrl: 'https://actual.example.com', password: 'defpass',
 class ExitSignal extends Error { constructor(code) { super(`exit ${code}`); this.code = code; } }
 function withExitSpy(fn) {
   const orig = process.exit;
+  // Silence the expected `[CONFIG] ...` diagnostics the exit paths print, so a reader
+  // scanning CI logs does not see red-looking stderr next to passing cases.
+  const origErr = console.error;
   let exitedCode = null;
   process.exit = (code) => { exitedCode = code ?? 0; throw new ExitSignal(exitedCode); };
+  console.error = () => {};
   try { const value = fn(); return { value, exitedCode }; }
   catch (e) { if (e instanceof ExitSignal) return { value: undefined, exitedCode }; throw e; }
-  finally { process.exit = orig; }
+  finally { process.exit = orig; console.error = origErr; }
 }
 
 let passed = 0, failed = 0;
