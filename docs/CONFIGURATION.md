@@ -96,6 +96,12 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 `src/lib/budget-registry.ts`, not declared individually. `.env.example` documents
 example members; the README env table uses the `BUDGET_N_*` notation.
 
+**Number budgets consecutively from 1, with no gaps.** Enumeration stops at the first
+missing `BUDGET_n_NAME`, so a gap (for example `BUDGET_1_*` and `BUDGET_3_*` with no
+`BUDGET_2_*`) means `BUDGET_3` and every later budget are ignored. The server logs a
+`[CONFIG] ... IGNORED` warning at startup naming the skipped and ignored indices (#289),
+but does not fail; renumber consecutively to load them.
+
 | Variable | Type | Default | Required | Secret | Source | Notes |
 |----------|------|---------|----------|--------|--------|-------|
 | `BUDGET_DEFAULT_NAME` | string | `Default` | No | no | dynamic | Friendly name for the default budget |

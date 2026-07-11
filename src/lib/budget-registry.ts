@@ -39,6 +39,14 @@ export interface BudgetConfig {
  * Always includes the default budget from the provided defaults (ACTUAL_* vars).
  * Additional budgets are read from sequential BUDGET_n_* groups.
  */
+/**
+ * #289: hard ceiling for the post-loop numbering-gap scan. The BUDGET_N loop stops at the
+ * first missing index; we then scan a BOUNDED range beyond it for orphaned budgets so a gap
+ * warns instead of silently dropping them. Fixed and independent of the configured indices,
+ * so a sparse or huge index can never cause unbounded work.
+ */
+export const MAX_BUDGET_SCAN = 100;
+
 export function parseBudgetRegistry(
   env: NodeJS.ProcessEnv,
   defaults: { serverUrl: string; password: string; syncId: string; encryptionPassword?: string },
@@ -86,6 +94,28 @@ export function parseBudgetRegistry(
       encryptionPassword,
     });
     i++;
+  }
+
+  // #289: the loop above stops at the first missing BUDGET_${i}_NAME, so a gap in the
+  // numbering silently drops every later budget (BUDGET_1 + BUDGET_3 with no BUDGET_2 loses
+  // BUDGET_3). Scan a bounded range beyond the stop for any orphaned budget and warn once.
+  // This does NOT change which budgets load; it only surfaces the misconfiguration. Only
+  // index/name tokens are logged (never a password or encryption password). console.warn is
+  // hijacked to winston in this process, consistent with the console.error fatal paths above.
+  const orphaned: number[] = [];
+  for (let k = i + 1; k <= MAX_BUDGET_SCAN; k++) {
+    if (env[`BUDGET_${k}_NAME`]) orphaned.push(k);
+  }
+  if (orphaned.length > 0) {
+    // When the gap is at BUDGET_1 (user started extra budgets at BUDGET_2), i stays 1, so
+    // "stops at BUDGET_0" would be nonsensical: phrase that case as a start-at-1 rule.
+    const stop = i === 1
+      ? 'BUDGET_1_NAME is missing, so no extra budgets load (extra-budget numbering must start at BUDGET_1)'
+      : `BUDGET_${i}_NAME is missing, so BUDGET numbering stops at BUDGET_${i - 1}`;
+    console.warn(
+      `[CONFIG] ${stop} and these later budgets are IGNORED: ${orphaned.map((k) => `BUDGET_${k}`).join(', ')}. ` +
+      `Number budgets consecutively from 1 (no gaps).`,
+    );
   }
 
   return registry;

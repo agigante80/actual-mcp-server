@@ -12,7 +12,7 @@
 // Run: node tests/unit/budget_registry_parse.test.js
 
 import assert from 'node:assert';
-import { parseBudgetRegistry } from '../../dist/src/lib/budget-registry.js';
+import { parseBudgetRegistry, MAX_BUDGET_SCAN } from '../../dist/src/lib/budget-registry.js';
 
 const DEFAULTS = { serverUrl: 'https://actual.example.com', password: 'defpass', syncId: 'default-sync', encryptionPassword: undefined };
 
@@ -20,15 +20,19 @@ const DEFAULTS = { serverUrl: 'https://actual.example.com', password: 'defpass',
 class ExitSignal extends Error { constructor(code) { super(`exit ${code}`); this.code = code; } }
 function withExitSpy(fn) {
   const orig = process.exit;
-  // Silence the expected `[CONFIG] ...` diagnostics the exit paths print, so a reader
-  // scanning CI logs does not see red-looking stderr next to passing cases.
+  // Silence the expected `[CONFIG] ...` error diagnostics the exit paths print, so a reader
+  // scanning CI logs does not see red-looking stderr next to passing cases. Capture
+  // console.warn (#289 numbering-gap warning) so its content can be asserted.
   const origErr = console.error;
+  const origWarn = console.warn;
   let exitedCode = null;
+  const warns = [];
   process.exit = (code) => { exitedCode = code ?? 0; throw new ExitSignal(exitedCode); };
   console.error = () => {};
-  try { const value = fn(); return { value, exitedCode }; }
-  catch (e) { if (e instanceof ExitSignal) return { value: undefined, exitedCode }; throw e; }
-  finally { process.exit = orig; console.error = origErr; }
+  console.warn = (...a) => { warns.push(a.join(' ')); };
+  try { const value = fn(); return { value, exitedCode, warns }; }
+  catch (e) { if (e instanceof ExitSignal) return { value: undefined, exitedCode, warns }; throw e; }
+  finally { process.exit = orig; console.error = origErr; console.warn = origWarn; }
 }
 
 let passed = 0, failed = 0;
@@ -85,15 +89,68 @@ check('multiple sequential extra budgets are all registered', () => {
   assert.ok(reg.has('one') && reg.has('two'));
 });
 
-check('a gap in the numbering stops iteration: BUDGET_1 set, BUDGET_2 missing, BUDGET_3 is silently unreachable', () => {
+check('a gap in the numbering still drops later budgets (load UNCHANGED) but now WARNS about it (#289)', () => {
   const env = {
     BUDGET_1_NAME: 'First', BUDGET_1_SYNC_ID: 's1',
     // BUDGET_2_* deliberately absent
-    BUDGET_3_NAME: 'Third', BUDGET_3_SYNC_ID: 's3',
+    BUDGET_3_NAME: 'Third', BUDGET_3_SYNC_ID: 's3', BUDGET_3_PASSWORD: 'topsecret', BUDGET_3_ENCRYPTION_PASSWORD: 'enc-secret',
   };
-  const { value: reg } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  const { value: reg, warns } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  // Load behaviour is unchanged (backward compatible).
   assert.strictEqual(reg.size, 2, 'default + First only; Third is never reached');
   assert.ok(reg.has('first') && !reg.has('third'), 'Third dropped by the numbering gap');
+  // #289: exactly one warning naming the missing index, the ignored index, and IGNORED.
+  assert.strictEqual(warns.length, 1, 'exactly one warning');
+  const w = warns[0];
+  assert.ok(w.includes('BUDGET_2'), 'names the missing index');
+  assert.ok(w.includes('BUDGET_3'), 'names the ignored index');
+  assert.ok(w.includes('IGNORED'), 'says IGNORED');
+  // Must not leak any secret value in the diagnostic.
+  assert.ok(!w.includes('topsecret') && !w.includes('enc-secret'), 'no password/encryption value in the warning');
+});
+
+check('a gap at BUDGET_1 (extras start at BUDGET_2) warns without a nonsensical "BUDGET_0"', () => {
+  const env = { BUDGET_2_NAME: 'Two', BUDGET_2_SYNC_ID: 's2' }; // no BUDGET_1
+  const { value: reg, warns } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  assert.strictEqual(reg.size, 1, 'only the default loads; BUDGET_2 is orphaned by the missing BUDGET_1');
+  assert.strictEqual(warns.length, 1);
+  assert.ok(warns[0].includes('BUDGET_1') && warns[0].includes('BUDGET_2') && warns[0].includes('IGNORED'));
+  assert.ok(!warns[0].includes('BUDGET_0'), 'no nonsensical BUDGET_0 in the message');
+});
+
+check('consecutive budgets emit NO gap warning (no false positive)', () => {
+  const env = { BUDGET_1_NAME: 'One', BUDGET_1_SYNC_ID: 's1', BUDGET_2_NAME: 'Two', BUDGET_2_SYNC_ID: 's2' };
+  const { value: reg, warns } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  assert.strictEqual(reg.size, 3, 'default + two loaded');
+  assert.strictEqual(warns.length, 0, 'no warning when the numbering is contiguous');
+});
+
+check('multiple orphaned indices are listed in a SINGLE warning', () => {
+  const env = {
+    BUDGET_1_NAME: 'One', BUDGET_1_SYNC_ID: 's1',
+    // BUDGET_2 absent
+    BUDGET_3_NAME: 'Three', BUDGET_3_SYNC_ID: 's3',
+    BUDGET_7_NAME: 'Seven', BUDGET_7_SYNC_ID: 's7',
+  };
+  const { warns } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  assert.strictEqual(warns.length, 1, 'one warning, not one per gap');
+  assert.ok(warns[0].includes('BUDGET_3') && warns[0].includes('BUDGET_7'), 'lists both orphaned indices');
+});
+
+check('the gap scan is bounded by MAX_BUDGET_SCAN: an orphan at the ceiling warns, one just beyond does not', () => {
+  const atCeiling = {
+    BUDGET_1_NAME: 'One', BUDGET_1_SYNC_ID: 's1',
+    [`BUDGET_${MAX_BUDGET_SCAN}_NAME`]: 'Edge', [`BUDGET_${MAX_BUDGET_SCAN}_SYNC_ID`]: 'se',
+  };
+  const { warns: inRange } = withExitSpy(() => parseBudgetRegistry(atCeiling, DEFAULTS));
+  assert.strictEqual(inRange.length, 1, `an orphan at BUDGET_${MAX_BUDGET_SCAN} is detected`);
+
+  const beyond = {
+    BUDGET_1_NAME: 'One', BUDGET_1_SYNC_ID: 's1',
+    [`BUDGET_${MAX_BUDGET_SCAN + 1}_NAME`]: 'Over', [`BUDGET_${MAX_BUDGET_SCAN + 1}_SYNC_ID`]: 'so',
+  };
+  const { warns: outOfRange } = withExitSpy(() => parseBudgetRegistry(beyond, DEFAULTS));
+  assert.strictEqual(outOfRange.length, 0, `the scan does not iterate past BUDGET_${MAX_BUDGET_SCAN} (bounded)`);
 });
 
 check('a BUDGET_N_NAME with no BUDGET_N_SYNC_ID exits(1)', () => {
