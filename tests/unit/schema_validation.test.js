@@ -260,6 +260,21 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(budgets_switch_tool,
     { budgetName: 'office' },
     'lowercase partial name accepted')) fail();
+  // #293: the character policy moved from .regex() to .refine() so the published
+  // JSON Schema carries no \p{...} pattern. These assert the parse-layer policy
+  // is unchanged: Unicode names still accepted, #156 bounds still enforced.
+  if (!expectParseOk(budgets_switch_tool,
+    { budgetName: 'Ménage 2026' },
+    'unicode letters/digits accepted (no ASCII-only regression)')) fail();
+  if (!expectParseError(budgets_switch_tool,
+    { budgetName: 'a'.repeat(121) },
+    'over-120-char budgetName rejected (max bound intact)')) fail();
+  if (!expectParseError(budgets_switch_tool,
+    { budgetName: 'bad\nname' },
+    'newline in budgetName rejected (char policy intact)')) fail();
+  if (!expectParseError(budgets_switch_tool,
+    { budgetName: '../etc/passwd' },
+    'path-traversal chars in budgetName rejected')) fail();
 
   // ── actual_payees_update — category field (regression: must not be rejected by schema) ──
   console.log('\n[actual_payees_update — category field]');

@@ -45,7 +45,8 @@ tests/
 ├── unit/                    # Unit tests (fast, isolated, offline)
 │   ├── transactions_create.test.js        # Zod schema validation (transactions_create)
 │   ├── generated_tools.smoke.test.js      # All 71 tools: stub adapter + correctness assertions
-│   └── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
+│   ├── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
+│   └── schema_json_openai_compat.test.js  # Published schemas OpenAI/ECMA-262 regex-compatible (#293)
 ├── e2e/                     # End-to-end tests
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
 │   ├── docker.e2e.spec.ts                 # Docker smoke integration (full stack)
@@ -213,6 +214,7 @@ GitHub Actions automatically runs:
 | `transactions_create.test.js` | Zod schema: valid input accepted, empty input rejected |
 | `generated_tools.smoke.test.js` | All 71 tools: stub adapter, call succeeds, response shape correct |
 | `schema_validation.test.js` | Negative-path schemas: `rules_create`, `budget_updates_batch`, `budgets_transfer`, `budgets_setAmount` |
+| `schema_json_openai_compat.test.js` | Every published tool schema is OpenAI/ECMA-262 regex-compatible: no `\p{...}` escape, each `pattern` compiles without the `u` flag (#293) |
 
 **Run**:
 ```bash
@@ -687,6 +689,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `transactions_create.test.js` | Zod schema for `transactions_create`: valid input accepted, empty rejected | 2 |
 | `generated_tools.smoke.test.js` | All 71 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 71 + shape checks |
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
+| `schema_json_openai_compat.test.js` | Walks all 71 published `z.toJSONSchema()` outputs; asserts no `\p{...}` escape and every `pattern` compiles without the `u` flag, so no tool schema is rejected by OpenAI's Responses validator (#293) | 71 schemas |
 | `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
 | `rejection-allowlist-purity.test.js` | Static analysis of `src/lib/rejection-allowlist.ts`: sentinel marker present; no static, dynamic, or CommonJS imports of non-node modules; no top-level side-effecting statements (#159) | 5 categories |
 | `httpServer_bearer_auth.test.js` | Hardened bearer auth path: `timingSafeEqual` comparison with length-equality short-circuit; forbids re-introduction of token-content debug log lines (#157) | 12 |

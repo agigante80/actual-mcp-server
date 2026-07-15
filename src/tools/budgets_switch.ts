@@ -6,13 +6,26 @@ import adapter from '../lib/actual-adapter.js';
 // Previously z.string().min(1) accepted arbitrarily long inputs with any
 // characters, which is exactly the kind of unbounded surface a prompt-injection
 // attack would target.
+//
+// The character policy is enforced with .refine() rather than .regex() (#293).
+// A .regex() with the Unicode-property class below serializes, via
+// z.toJSONSchema(), to a JSON Schema `pattern` of "^[\p{L}\p{N} ._\-]+$". That
+// pattern depends on the `u` flag, which a JSON Schema `pattern` string cannot
+// carry, and OpenAI's Responses function-schema validator rejects `\p{...}`
+// escapes outright ("... is not a 'regex'"). Because a client like LibreChat
+// forwards every tool in one request, that single rejected schema disabled the
+// entire Actual tool surface. A .refine() applies the identical check at parse
+// time but emits NO `pattern`, so the published schema stays OpenAI-compatible
+// while server-side validation (and Unicode budget-name support) is unchanged.
+const BUDGET_NAME_CHARS = /^[\p{L}\p{N} ._\-]+$/u;
+
 const InputSchema = z.object({
   budgetName: z
     .string()
     .min(1, 'budgetName must not be empty')
     .max(120, 'budgetName must be at most 120 characters')
-    .regex(
-      /^[\p{L}\p{N} ._\-]+$/u,
+    .refine(
+      (value) => BUDGET_NAME_CHARS.test(value),
       'budgetName must contain only letters, digits, spaces, dots, underscores, and hyphens',
     )
     .describe(

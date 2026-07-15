@@ -81,5 +81,51 @@ export async function sanityTests(client) {
     console.log("✓ Invalid SQL field correctly rejected");
   }
 
+  // 9. Published tool schemas must be OpenAI/ECMA-262 regex-compatible (#293).
+  //    This runs over whichever transport the suite is using, so the dual-transport
+  //    gate (MCP_TEST_TRANSPORT=http and =stdio) exercises it on both. A tool
+  //    schema whose `pattern` uses a \p{...} escape (needs the u flag, which a
+  //    JSON Schema pattern cannot carry) is rejected by OpenAI's Responses
+  //    function-schema validator and disables the entire tool set for that client.
+  console.log("\nChecking published tool schemas are OpenAI-compatible...");
+  const collectPatterns = (node, path, out) => {
+    if (node === null || typeof node !== 'object') return;
+    if (Array.isArray(node)) {
+      node.forEach((child, i) => collectPatterns(child, `${path}[${i}]`, out));
+      return;
+    }
+    for (const [key, value] of Object.entries(node)) {
+      if (key === 'pattern' && typeof value === 'string') out.push({ path: `${path}.pattern`, pattern: value });
+      collectPatterns(value, `${path}.${key}`, out);
+    }
+  };
+  let patternsChecked = 0;
+  let sawBudgetsSwitch = false;
+  for (const t of tools) {
+    if (t.name === 'actual_budgets_switch') sawBudgetsSwitch = true;
+    const found = [];
+    collectPatterns(t.inputSchema, t.name, found);
+    for (const { path, pattern } of found) {
+      patternsChecked++;
+      // Reject u-flag-only escapes (\p{...}/\P{...} or \u{...}): they need the u
+      // flag a JSON Schema pattern cannot carry, and a non-u regex silently
+      // misreads them rather than throwing, so the compile check below misses them.
+      if (/\\[pP]\{|\\u\{/.test(pattern)) {
+        throw new Error(`Published schema ${path} uses a u-flag-only escape OpenAI rejects: ${JSON.stringify(pattern)}`);
+      }
+      try {
+        // Must compile as a plain (non-u) ECMA-262 regex, the way a client that
+        // only receives the pattern string (no flags) reads it.
+        new RegExp(pattern);
+      } catch (err) {
+        throw new Error(`Published schema ${path} is not a valid non-u regex: ${JSON.stringify(pattern)} (${err.message})`);
+      }
+    }
+  }
+  if (!sawBudgetsSwitch) {
+    throw new Error("actual_budgets_switch not present in tools/list; #293 regression check could not run");
+  }
+  console.log(`✓ Published schemas OpenAI-compatible: ${patternsChecked} pattern(s) across ${tools.length} tools`);
+
   console.log("\n✓ All sanity checks passed");
 }
