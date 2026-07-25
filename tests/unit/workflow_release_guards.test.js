@@ -185,19 +185,9 @@ function reverifiesBumpedTree(text) {
     reverifyIdx > bumpIdx && reverifyIdx < tagIdx;
 }
 
-// (j) #298: the automated lane runs `npm audit --audit-level=high` as a BLOCKING
-// step. The command must not be suppressed with `|| true` / `|| echo` (which is
-// how the advisory ci-cd.yml audit is written); here the failure must be able to
-// stop the release before publish.
-function hasBlockingAudit(text) {
-  const auditStep = stepBlocks(text).find((b) => /npm audit --audit-level=high/.test(b));
-  if (!auditStep) return false;
-  // A `continue-on-error: true` step still "runs" but never fails the job, which
-  // defeats the gate exactly like `|| true` does.
-  if (/continue-on-error:\s*true/i.test(auditStep)) return false;
-  // The audit command line itself must carry no `||` suppression.
-  return !/npm audit --audit-level=high[^\n]*\|\|/.test(auditStep);
-}
+// (#298 reverted by maintainer decision: the @actual-app/api update lane is
+// deliberately NOT gated on npm audit, so there is no blocking-audit invariant.
+// Updating the API is independent of the rest of the dependency tree.)
 
 // (k) #299: the fallback sync-PR `gh pr create` authenticates with the APP token,
 // command-scoped via `GH_TOKEN="$APP_TOKEN"`, NOT the step-level github.token, so
@@ -282,11 +272,6 @@ check('(h) the retired auto-release-on-dependency lane stays retired', () => {
 check('(i) the bumped tree is re-verified (build + tool-count + unit suite) after bump and before merge/tag', () => {
   assert.ok(reverifiesBumpedTree(wf),
     'a re-verify step running npm run build + npm run tool-count + npm run test:unit-js must sit after the version:bump step and before the git tag -a step, or the tagged commit is never validated (#297)');
-});
-
-check('(j) the automated lane runs a BLOCKING npm audit --audit-level=high', () => {
-  assert.ok(hasBlockingAudit(wf),
-    'the automated dependency lane must run npm audit --audit-level=high with no || true / || echo suppression, so a new HIGH/CRITICAL transitive fails closed before publish (#298)');
 });
 
 check('(k) the sync-PR gh pr create uses the command-scoped App token, not github.token', () => {
@@ -375,19 +360,6 @@ check('NEGATIVE (i): re-verify missing, or placed after the tag step, is detecte
   assert.strictEqual(reverifiesBumpedTree(bump + '\n' + partial + '\n' + tag), false, 'a re-verify missing tool-count must fail');
   const neutered = '      - name: Re-verify\n        continue-on-error: true\n        run: npm run build && npm run tool-count && npm run test:unit-js';
   assert.strictEqual(reverifiesBumpedTree(bump + '\n' + neutered + '\n' + tag), false, 'a continue-on-error re-verify step must fail (it never blocks the tag)');
-});
-
-check('NEGATIVE (j): a suppressed audit, or no audit, is detected', () => {
-  const blocking = '      - name: Audit\n        run: npm audit --audit-level=high';
-  assert.strictEqual(hasBlockingAudit(blocking), true, 'the blocking audit must pass');
-  const suppressedTrue = '      - name: Audit\n        run: npm audit --audit-level=high || true';
-  assert.strictEqual(hasBlockingAudit(suppressedTrue), false, '|| true suppression must fail');
-  const suppressedEcho = '      - name: Audit\n        run: |\n          npm audit --audit-level=high || echo "continuing"';
-  assert.strictEqual(hasBlockingAudit(suppressedEcho), false, '|| echo suppression must fail');
-  const none = '      - name: Build\n        run: npm run build';
-  assert.strictEqual(hasBlockingAudit(none), false, 'no audit step must fail');
-  const neutered = '      - name: Audit\n        continue-on-error: true\n        run: npm audit --audit-level=high';
-  assert.strictEqual(hasBlockingAudit(neutered), false, 'a continue-on-error audit step must fail (it never blocks the release)');
 });
 
 check('NEGATIVE (k): a sync-PR create on github.token, or without the APP_TOKEN env, is detected', () => {
