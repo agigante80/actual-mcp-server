@@ -633,7 +633,7 @@ npm audit --audit-level=moderate
 npm audit fix
 ```
 
-**Automated dependency lane fails closed on HIGH/CRITICAL (#298):** the unattended `@actual-app/api` release train (`.github/workflows/dependency-update.yml`) runs a BLOCKING `npm audit --audit-level=high` on the upgraded tree before it can merge, tag or publish. Any HIGH or CRITICAL in the resulting tree (whether newly pulled by the upgrade or already present) stops the release rather than shipping silently. Human-driven CI (`ci-cd.yml`) runs the same `high` threshold but ADVISORY (`npm audit --audit-level=high || echo ...`, it never fails the build); the automated lane makes the identical check blocking. The axis between the two lanes is blocking versus advisory, not the threshold. When a blocking CVE has no upstream fix yet, the escape hatch is a scoped `npm overrides` entry (see the "last resort for security CVEs only" rule in `CLAUDE.md`), documented in `package.json`'s `comments.security-overrides`.
+**The automated `@actual-app/api` update lane is independent of dependency security state (#298, maintainer decision):** the unattended release train (`.github/workflows/dependency-update.yml`) deliberately does NOT gate the API upgrade on `npm audit`. A pre-existing or unrelated CVE elsewhere in the tree must never hold back an `@actual-app/api` update. Dependency vulnerabilities are handled out of band by Dependabot and `/dep-auditor`, not by this release train. Human-driven CI (`ci-cd.yml`) still runs an advisory `npm audit --audit-level=high` (log-only, `|| echo`) and Trivy scans the built image, so vulnerability visibility is preserved without coupling it to the API update.
 
 ### Vulnerability Response SLA
 

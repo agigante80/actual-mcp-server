@@ -121,22 +121,13 @@ jobs:
           echo "✅ Working branch '$BRANCH' created and committed"
 
       # -----------------------------------------------------------------------
-      # 3b. Security gate: block a vulnerable upgrade before it can reach main.
-      #     Automated-lane-only (#298): human-driven ci-cd.yml runs the same
-      #     `high` threshold but ADVISORY (`|| echo`, never fails the build). This
-      #     unattended lane merges, tags and publishes with no human in the loop
-      #     and includes majors, so it makes the audit BLOCKING instead. Note
-      #     `npm audit` reports EVERY high/critical in the resulting tree, not only
-      #     ones this upgrade introduced, so a pre-existing high blocks the release
-      #     just as hard: that is the intended fail-closed behaviour. The `npm
-      #     overrides` mechanism (CLAUDE.md, "last resort for security CVEs only")
-      #     is the escape hatch when a blocking CVE has no upstream fix yet. No
-      #     `|| true` / `|| echo`: the failure must be able to stop the release.
-      #     Pinned by tests/unit/workflow_release_guards.test.js invariant (j).
+      # NOTE (#298, reverted by maintainer decision 2026-07-25): this lane does
+      # NOT gate the @actual-app/api upgrade on `npm audit`. Updating the API is
+      # deliberately INDEPENDENT of the rest of the dependency tree: a pre-existing
+      # or unrelated CVE elsewhere must never hold back an API update. Dependency
+      # security is handled separately (Dependabot / /dep-auditor), out of band
+      # from this release train. See closed issue #298.
       # -----------------------------------------------------------------------
-      - name: 🔐 Block on high/critical CVEs
-        if: steps.versions.outputs.update_needed == 'true'
-        run: npm audit --audit-level=high
 
       # -----------------------------------------------------------------------
       # 4. Lint: TypeScript compilation
