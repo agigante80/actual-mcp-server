@@ -167,6 +167,66 @@ function workflowsUsingWorkflowRun(root) {
     .filter((f) => /(^|\n)\s*workflow_run\s*:/.test(readFileSync(join(dir, f), 'utf8')));
 }
 
+// (i) #297: the BUMPED tree is re-verified (build + tool-count drift guard +
+// unit suite) AFTER the bump step and BEFORE the merge/tag step, so the commit
+// that reaches main and gets the immutable tag is not the one commit CI skipped.
+// The merge/tag step is anchored on `git tag -a` (unique to it; the sync step
+// also runs `git merge --ff-only`, so merge alone is ambiguous).
+function reverifiesBumpedTree(text) {
+  const blocks = stepBlocks(text);
+  const bumpIdx = blocks.findIndex((b) => b.includes('npm run version:bump'));
+  const tagIdx = blocks.findIndex((b) => b.includes('git tag -a'));
+  const reverifyIdx = blocks.findIndex((b) =>
+    b.includes('npm run build') &&
+    b.includes('npm run tool-count') &&
+    b.includes('npm run test:unit-js') &&
+    !/continue-on-error:\s*true/i.test(b));  // a neutered step must not satisfy it
+  return bumpIdx !== -1 && tagIdx !== -1 && reverifyIdx !== -1 &&
+    reverifyIdx > bumpIdx && reverifyIdx < tagIdx;
+}
+
+// (j) #298: the automated lane runs `npm audit --audit-level=high` as a BLOCKING
+// step. The command must not be suppressed with `|| true` / `|| echo` (which is
+// how the advisory ci-cd.yml audit is written); here the failure must be able to
+// stop the release before publish.
+function hasBlockingAudit(text) {
+  const auditStep = stepBlocks(text).find((b) => /npm audit --audit-level=high/.test(b));
+  if (!auditStep) return false;
+  // A `continue-on-error: true` step still "runs" but never fails the job, which
+  // defeats the gate exactly like `|| true` does.
+  if (/continue-on-error:\s*true/i.test(auditStep)) return false;
+  // The audit command line itself must carry no `||` suppression.
+  return !/npm audit --audit-level=high[^\n]*\|\|/.test(auditStep);
+}
+
+// (k) #299: the fallback sync-PR `gh pr create` authenticates with the APP token,
+// command-scoped via `GH_TOKEN="$APP_TOKEN"`, NOT the step-level github.token, so
+// the sync PR actually triggers CI. Scoped to the create step (the block that
+// contains `gh pr create --base develop`); the read-only github.token watcher and
+// the deliberate github.token develop push must not be required to change.
+function syncPrCreateUsesAppToken(text) {
+  const syncStep = stepBlocks(text).find((b) =>
+    b.includes('gh pr create') && b.includes('--base develop'));
+  if (!syncStep) return false;
+  return /GH_TOKEN="\$APP_TOKEN"\s+gh pr create/.test(syncStep) &&
+    /APP_TOKEN:\s*\$\{\{\s*steps\.token\.outputs\.token\s*\}\}/.test(syncStep);
+}
+
+// (l) #300: the version check resolves the upstream target via the `latest`
+// dist-tag (`npm show <pkg> version`), never the plural `versions` list form from
+// which a nightly could be selected. This is what keeps prereleases out of the
+// automated train.
+function usesDistTagVersionCheck(text) {
+  const raw = stepBlocks(text).find((b) => b.includes('npm show @actual-app/api'));
+  if (!raw) return false;
+  // Strip comment lines first: the workflow's own comment names the banned
+  // plural `versions` form as the counter-example, and must not trip the
+  // detector (mirrors the withoutComments guard used by invariant (a)).
+  const step = withoutComments(raw);
+  return /npm show @actual-app\/api version\b/.test(step) &&
+    !/npm show @actual-app\/api versions\b/.test(step);
+}
+
 console.log('\n[workflow-release-guards]');
 
 const wf = readFileSync(WORKFLOW, 'utf8');
@@ -217,6 +277,26 @@ check('(h) the retired auto-release-on-dependency lane stays retired', () => {
   const listeners = workflowsUsingWorkflowRun(ROOT);
   assert.strictEqual(listeners.length, 0,
     `workflow_run listeners found (${listeners.join(', ')}): the retired release lane's mechanism must not return under any filename (#266)`);
+});
+
+check('(i) the bumped tree is re-verified (build + tool-count + unit suite) after bump and before merge/tag', () => {
+  assert.ok(reverifiesBumpedTree(wf),
+    'a re-verify step running npm run build + npm run tool-count + npm run test:unit-js must sit after the version:bump step and before the git tag -a step, or the tagged commit is never validated (#297)');
+});
+
+check('(j) the automated lane runs a BLOCKING npm audit --audit-level=high', () => {
+  assert.ok(hasBlockingAudit(wf),
+    'the automated dependency lane must run npm audit --audit-level=high with no || true / || echo suppression, so a new HIGH/CRITICAL transitive fails closed before publish (#298)');
+});
+
+check('(k) the sync-PR gh pr create uses the command-scoped App token, not github.token', () => {
+  assert.ok(syncPrCreateUsesAppToken(wf),
+    'the fallback sync PR must be created with GH_TOKEN="$APP_TOKEN" gh pr create (APP_TOKEN from steps.token.outputs.token), or the PR opened by github.token gets no CI (#299)');
+});
+
+check('(l) the version check resolves via the latest dist-tag, not the plural versions list', () => {
+  assert.ok(usesDistTagVersionCheck(wf),
+    'the version check must use npm show @actual-app/api version (dist-tag), never npm show ... versions (plural), or the train could auto-ship nightlies (#300)');
 });
 
 // NEGATIVE fixtures: each detector must catch its regression when reintroduced.
@@ -282,6 +362,54 @@ check('NEGATIVE (h): resurrected identifiers and workflow_run listeners are dete
   const wfFixture = 'on:\n  workflow_run:\n    workflows: ["CI/CD Pipeline"]\n    types: [completed]';
   assert.strictEqual(/(^|\n)\s*workflow_run\s*:/.test(wfFixture), true, 'a workflow_run trigger fixture must be detected');
   assert.strictEqual(/(^|\n)\s*workflow_run\s*:/.test('on:\n  push:\n    branches: [main]'), false);
+});
+
+check('NEGATIVE (i): re-verify missing, or placed after the tag step, is detected', () => {
+  const bump = '      - name: Bump\n        run: |\n          npm run version:bump -- patch\n          npm install --package-lock-only\n          git commit -m x';
+  const reverify = '      - name: Re-verify\n        run: npm run build && npm run tool-count && npm run test:unit-js';
+  const tag = '      - name: Merge and tag\n        run: |\n          git merge --ff-only "$BRANCH"\n          git tag -a "v1"';
+  assert.strictEqual(reverifiesBumpedTree(bump + '\n' + reverify + '\n' + tag), true, 'the compliant order must pass');
+  assert.strictEqual(reverifiesBumpedTree(bump + '\n' + tag), false, 'no re-verify step must fail');
+  assert.strictEqual(reverifiesBumpedTree(bump + '\n' + tag + '\n' + reverify), false, 're-verify after the tag step must fail');
+  const partial = '      - name: Re-verify\n        run: npm run build && npm run test:unit-js';
+  assert.strictEqual(reverifiesBumpedTree(bump + '\n' + partial + '\n' + tag), false, 'a re-verify missing tool-count must fail');
+  const neutered = '      - name: Re-verify\n        continue-on-error: true\n        run: npm run build && npm run tool-count && npm run test:unit-js';
+  assert.strictEqual(reverifiesBumpedTree(bump + '\n' + neutered + '\n' + tag), false, 'a continue-on-error re-verify step must fail (it never blocks the tag)');
+});
+
+check('NEGATIVE (j): a suppressed audit, or no audit, is detected', () => {
+  const blocking = '      - name: Audit\n        run: npm audit --audit-level=high';
+  assert.strictEqual(hasBlockingAudit(blocking), true, 'the blocking audit must pass');
+  const suppressedTrue = '      - name: Audit\n        run: npm audit --audit-level=high || true';
+  assert.strictEqual(hasBlockingAudit(suppressedTrue), false, '|| true suppression must fail');
+  const suppressedEcho = '      - name: Audit\n        run: |\n          npm audit --audit-level=high || echo "continuing"';
+  assert.strictEqual(hasBlockingAudit(suppressedEcho), false, '|| echo suppression must fail');
+  const none = '      - name: Build\n        run: npm run build';
+  assert.strictEqual(hasBlockingAudit(none), false, 'no audit step must fail');
+  const neutered = '      - name: Audit\n        continue-on-error: true\n        run: npm audit --audit-level=high';
+  assert.strictEqual(hasBlockingAudit(neutered), false, 'a continue-on-error audit step must fail (it never blocks the release)');
+});
+
+check('NEGATIVE (k): a sync-PR create on github.token, or without the APP_TOKEN env, is detected', () => {
+  const appTokenEnv = '        env:\n          GH_TOKEN: ${{ github.token }}\n          APP_TOKEN: ${{ steps.token.outputs.token }}\n';
+  const ok = '      - name: Sync\n' + appTokenEnv + '        run: |\n          elif GH_TOKEN="$APP_TOKEN" gh pr create --base develop --head main \\\n            --title t; then';
+  assert.strictEqual(syncPrCreateUsesAppToken(ok), true, 'the compliant command-scoped App token must pass');
+  const plain = '      - name: Sync\n' + appTokenEnv + '        run: |\n          elif gh pr create --base develop --head main \\\n            --title t; then';
+  assert.strictEqual(syncPrCreateUsesAppToken(plain), false, 'an unscoped gh pr create (github.token) must fail');
+  const noEnv = '      - name: Sync\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          elif GH_TOKEN="$APP_TOKEN" gh pr create --base develop --head main; then';
+  assert.strictEqual(syncPrCreateUsesAppToken(noEnv), false, 'a create referencing $APP_TOKEN without the APP_TOKEN env mapping must fail');
+  // Non-interference: a read-only github.token watcher block must not affect the result.
+  const watcher = '      - name: Watch\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: gh run watch "$RUN_ID" --exit-status';
+  assert.strictEqual(syncPrCreateUsesAppToken(watcher + '\n' + ok), true, 'a github.token watcher elsewhere must not trip the sync-PR detector');
+});
+
+check('NEGATIVE (l): a plural `versions` list lookup is detected', () => {
+  const distTag = '      - name: Check\n        run: LATEST=$(npm show @actual-app/api version)';
+  assert.strictEqual(usesDistTagVersionCheck(distTag), true, 'the dist-tag form must pass');
+  const plural = '      - name: Check\n        run: LATEST=$(npm show @actual-app/api versions --json | jq -r last)';
+  assert.strictEqual(usesDistTagVersionCheck(plural), false, 'the plural versions list form must fail');
+  const none = '      - name: Build\n        run: npm run build';
+  assert.strictEqual(usesDistTagVersionCheck(none), false, 'no version check step must fail');
 });
 
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);
