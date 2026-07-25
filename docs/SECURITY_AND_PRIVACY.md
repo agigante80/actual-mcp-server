@@ -633,6 +633,8 @@ npm audit --audit-level=moderate
 npm audit fix
 ```
 
+**Automated dependency lane fails closed on HIGH/CRITICAL (#298):** the unattended `@actual-app/api` release train (`.github/workflows/dependency-update.yml`) runs a BLOCKING `npm audit --audit-level=high` on the upgraded tree before it can merge, tag or publish. Any HIGH or CRITICAL in the resulting tree (whether newly pulled by the upgrade or already present) stops the release rather than shipping silently. Human-driven CI (`ci-cd.yml`) runs the same `high` threshold but ADVISORY (`npm audit --audit-level=high || echo ...`, it never fails the build); the automated lane makes the identical check blocking. The axis between the two lanes is blocking versus advisory, not the threshold. When a blocking CVE has no upstream fix yet, the escape hatch is a scoped `npm overrides` entry (see the "last resort for security CVEs only" rule in `CLAUDE.md`), documented in `package.json`'s `comments.security-overrides`.
+
 ### Vulnerability Response SLA
 
 | Severity | CVSS Score | Response Time | Action |

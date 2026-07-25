@@ -75,6 +75,14 @@ jobs:
         id: versions
         run: |
           CURRENT=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
+          # #300: `npm show <pkg> version` resolves the `latest` DIST-TAG, NOT the
+          # highest published version. This is precisely what keeps prerelease and
+          # nightly builds (for example 26.8.0-nightly.*) out of the automated
+          # release train: they are published, but not on the `latest` dist-tag.
+          # Do NOT switch this to a highest-published-version lookup (for example
+          # `npm show @actual-app/api versions`, the plural list form), or the
+          # train would auto-ship nightlies. Pinned by
+          # tests/unit/workflow_release_guards.test.js invariant (l).
           LATEST=$(npm show @actual-app/api version)
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
           echo "latest=$LATEST"   >> $GITHUB_OUTPUT
@@ -111,6 +119,24 @@ jobs:
           git add -A
           git commit -m "chore(deps): upgrade @actual-app/api to ${LATEST}"
           echo "✅ Working branch '$BRANCH' created and committed"
+
+      # -----------------------------------------------------------------------
+      # 3b. Security gate: block a vulnerable upgrade before it can reach main.
+      #     Automated-lane-only (#298): human-driven ci-cd.yml runs the same
+      #     `high` threshold but ADVISORY (`|| echo`, never fails the build). This
+      #     unattended lane merges, tags and publishes with no human in the loop
+      #     and includes majors, so it makes the audit BLOCKING instead. Note
+      #     `npm audit` reports EVERY high/critical in the resulting tree, not only
+      #     ones this upgrade introduced, so a pre-existing high blocks the release
+      #     just as hard: that is the intended fail-closed behaviour. The `npm
+      #     overrides` mechanism (CLAUDE.md, "last resort for security CVEs only")
+      #     is the escape hatch when a blocking CVE has no upstream fix yet. No
+      #     `|| true` / `|| echo`: the failure must be able to stop the release.
+      #     Pinned by tests/unit/workflow_release_guards.test.js invariant (j).
+      # -----------------------------------------------------------------------
+      - name: 🔐 Block on high/critical CVEs
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npm audit --audit-level=high
 
       # -----------------------------------------------------------------------
       # 4. Lint: TypeScript compilation
@@ -174,6 +200,25 @@ jobs:
           git add -A
           git commit -m "chore(release): bump version to ${NEW}"
           echo "✅ Version bumped to ${NEW} (lockfile resynced; ${TOOL_COUNT} tools)"
+
+      # -----------------------------------------------------------------------
+      # 8b. Re-verify the BUMPED tree (#297). Every check above ran on the
+      #     pre-bump commit. version-bump.js then rewrote the doc markers and the
+      #     lockfile was resynced, so the commit that actually reaches main and
+      #     gets the immutable tag is the one commit CI never saw. Re-run the fast
+      #     checks (build, tool-count drift guard, unit + schema suite) on the
+      #     bump commit, so a bad marker or lockfile rewrite fails HERE, before the
+      #     merge and tag, not on the tag's ci-cd run where the tag is already
+      #     immutable. `tool-count` (no --fix) is the same drift check ci-cd runs.
+      #     Pinned by tests/unit/workflow_release_guards.test.js invariant (i).
+      # -----------------------------------------------------------------------
+      - name: 🔁 Re-verify bumped tree
+        if: steps.versions.outputs.update_needed == 'true'
+        env:
+          ACTUAL_SERVER_URL: http://localhost:5006
+          ACTUAL_PASSWORD: dummy-password-for-tests
+          ACTUAL_BUDGET_SYNC_ID: 00000000-0000-0000-0000-000000000000
+        run: npm run build && npm run tool-count && npm run test:unit-js
 
       # -----------------------------------------------------------------------
       # 9. Merge working branch → main, tag, push, clean up branch
@@ -302,7 +347,17 @@ jobs:
       - name: 🔄 Sync develop with released main
         if: steps.versions.outputs.update_needed == 'true'
         env:
+          # The persisted App credential from the Checkout step (http.extraheader,
+          # persist-credentials: true) authenticates EVERY `git push` in this job,
+          # develop included; GH_TOKEN / APP_TOKEN are read only by the `gh` CLI,
+          # never by `git push`. github.token here authenticates the read-only
+          # `gh pr list`. The App token is provided separately so it can be
+          # command-scoped to `gh pr create` below (#299): a PR opened by
+          # github.token gets no CI runs. Scoping to the create keeps the
+          # read-only gh call least-privilege; it could equally be step-level, but
+          # scoping is the minimal change.
           GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.token.outputs.token }}
           NEW_VERSION: ${{ steps.bump.outputs.new_version }}
         run: |
           git fetch origin develop:develop
@@ -316,7 +371,10 @@ jobs:
             OPEN_SYNC_PRS=$(gh pr list --base develop --head main --state open --json number --jq 'length')
             if [ "$OPEN_SYNC_PRS" != "0" ]; then
               echo "⚠ Develop has diverged; a main to develop sync PR is already open, nothing to do"
-            elif gh pr create --base develop --head main \
+            # #299: command-scope the App token to THIS create only. A PR opened
+            # with github.token gets no CI runs (the trap that shipped v0.7.12,
+            # #261, one layer down); the App token makes the sync PR trigger CI.
+            elif GH_TOKEN="$APP_TOKEN" gh pr create --base develop --head main \
               --title "chore: sync develop with auto-release main (v${NEW_VERSION})" \
               --body "Automated PR from dependency-update.yml. Develop has diverged from main; merge could not be fast-forward. Resolve any conflicts and merge to keep develop in sync."; then
               echo "⚠ Develop has diverged; opened a sync PR"
