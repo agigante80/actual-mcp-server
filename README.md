@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2Fagigante80%2Factual-mcp-server.svg)](https://mcptoplist.com/server/glama%2Fagigante80%2Factual-mcp-server)
+
 <p align="center">
   <img src="unraid/actual-mcp-icon.png" alt="Actual MCP Server icon" width="128" height="128">
 </p>
