@@ -37,6 +37,8 @@ Common slip patterns to watch for (described abstractly to avoid the literal cha
 - `main` is only updated with explicit user permission (e.g. "push to main" or "release")
 - When the user says "push to github" without specifying a branch → push to `develop`
 
+**The `main` rule is enforced mechanically, not just by convention.** A `PreToolUse(Bash)` hook, `.claude/hooks/require_green_develop_before_main.py` (registered in `.claude/settings.local.json`), inspects every Bash command and BLOCKS any git merge, push, or release-tag push that targets `main` unless `origin/develop` is both version-bumped past the latest published `vX.Y.Z` tag and green in GitHub Actions at its HEAD sha. It fails CLOSED: if it cannot verify (no network, `gh` missing or unauthenticated, no CI run found), it blocks. Do not attempt to route around it; fix the underlying condition (bump the version, get CI green) or ask the user.
+
 **A promotion to `main` REQUIRES a passing full integration run over BOTH transports (`MCP_TEST_TRANSPORT=http` and `MCP_TEST_TRANSPORT=stdio`) with a green zero-residue assertion.** Run `bash scripts/deploy-and-test.sh full`; it writes `.release/dual-transport-report.json`, which the `release` skill verifies against the develop HEAD sha. HTTP-only evidence is not sufficient: stdio is the transport half our Claude Desktop users run on, and it had no write-path coverage until #280.
 
 **Incoming tickets are hypotheses, not ground truth.** For a `bug` or any
@@ -71,7 +73,19 @@ node tests/unit/transactions_create.test.js   # Single unit test file
 npx playwright test --grep "initialize -> tools/list"  # Single E2E test
 npm run test:e2e                # Full Playwright E2E (requires no live server)
 npm run test:integration:smoke  # Live server integration (levels: sanity < smoke < normal < extended < full < cleanup)
+npm run test:integration:full:stdio  # Same suite over stdio (also :normal:stdio, :extended:stdio); equivalent to MCP_TEST_TRANSPORT=stdio
+npm run test:e2e:docker:smoke   # Playwright E2E inside the docker-compose.test.yaml stack (also :docker, :docker:full)
 npm run test:all                # Convenience: adapter + unit + docker:smoke (no live server needed)
+
+# Drift guards (all CI-gated; run after touching the thing they guard)
+npm run config-drift            # config.ts schema + RAW_ENV_ALLOWLIST vs .env.example vs README env table
+npm run node-version-drift      # Node version pinned consistently across Dockerfile, workflows, package.json engines
+npm run tool-count              # Total-tool-count literals across docs/tests/constants
+npm run version:check           # VERSION vs package.json vs published tags
+
+# Deploy (Docker required; see also /local-env)
+npm run deploy:smoke            # scripts/deploy-and-test.sh smoke
+npm run deploy:full             # Full dual-transport run; writes .release/dual-transport-report.json (release gate evidence)
 
 # Tools
 npm run verify-tools            # Verify tool count + registration
@@ -109,9 +123,13 @@ Five **project-specific** subagents live in `.claude/agents/`. Delegate to them 
 | `actual-api` | Questions about `@actual-app/api` behaviour, field names, quirks, `withActualApi` lifecycle |
 | `ticket-gate` | Readiness gate for GitHub issues (forge-kit ticket-gate v1). Runs 6 core specialist agents (tool-author, qa, release-manager, actual-api, security-auditor, architect-review) to score a ticket before implementation (all must score 10/10; an agent whose domain the ticket does not touch auto-scores 10 N/A) |
 
-Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `security-auditor`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `code-health-auditor`, `health-check`). Use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain. (`dep-auditor` owns dependency health; `code-health-auditor` (#234) owns source dead code and doc-to-code drift.)
+Additional generic agents from forge-kit governance also live alongside them (`architect-review`, `code-reviewer`, `code-simplifier`, `coding-standards-auditor`, `security-auditor`, `backend-security-coder`, `api-security-tester`, `performance-engineer`, `test-automator`, `tdd-orchestrator`, `dep-auditor`, `code-health-auditor`, `health-check`). Use these for cross-cutting reviews; prefer the project-specific agents above whenever the task is in their domain. (`dep-auditor` owns dependency health; `code-health-auditor` (#234) owns source dead code and doc-to-code drift; `api-security-tester` runs read-only security probes against a LOCAL instance only.)
 
 Project-local slash commands in `.claude/commands/`:
+
+- `/implement-ticket <issue-number>`: the end-to-end pipeline for a GitHub issue (gate to 10/10, implement, validate, code review, commit + patch bump + push to `develop`). Stops at `develop` by design.
+- `/merge-pr <pr-number>`: never merges a PR directly. Files a gate-ready ticket to reimplement the change on `develop`, runs it through `/implement-ticket`, then closes the PR as superseded.
+- `/release`: the ONLY sanctioned path to `main`. Fast-forwards `main` to `develop`, tags, verifies the publish pipeline, and closes the tickets the release ships.
 
 - `/dep-auditor [--full]`: DEPENDENCY health audit. Runs Knip (unused deps), npm registry health, `npm audit`, and version drift checks, then opens GitHub issues for findings (cache-first; `--full` re-audits everything).
 - `/code-health-auditor [--full] [--dry-run]`: SOURCE code-health audit (#234). Runs the committed Knip config (dead files/exports/types) plus the doc-to-code drift guards, triages against the documented allowlist, and opens gate-ready tickets for genuine findings (cache-first via `docs/audit/deadcode-audit-cache.json`). Run MANUALLY; no scheduling. Complements `/dep-auditor` (it owns deps, this owns source).
@@ -121,9 +139,22 @@ Project-local slash commands in `.claude/commands/`:
 - `/full-review [target]`: orchestrates a multi-dimensional code review (architecture, security, performance, testing, best practices).
 - `/pr-enhance [PR# or description]`: enhances an existing pull request (description, labels, follow-ups).
 
+Project-local skills in `.claude/skills/` (invoked via the Skill tool, or automatically when their trigger phrases appear):
+
+| Skill | Purpose |
+|-------|---------|
+| `implement-ticket`, `merge-pr`, `release` | The workflow bodies behind the same-named slash commands above |
+| `api-design-principles` | Consistency rules for the 71-tool MCP surface; read before adding or revising a tool schema |
+| `owasp-api-security` | Security test patterns for the MCP transport (pairs with the `api-security-tester` agent) |
+| `fork-analysis` | Harvests feature ideas from forks/branches into gate-ready tickets; caches results in `docs/audit/FORK_ANALYSIS.md` |
+| `release-automation` | Governs the CI release gate (no main promotion without a version bump) and the auto-release lanes |
+| `working-overnight` | Governed unattended work: branch plus PR only, never merges, writes a morning report |
+
 ## Issue Labels
 
 Every issue carries at least one **area** label (`backend`, `infrastructure`, `security`, `actual-api`, `documentation`; the gate enforces this) and one **priority** label: `P0` (Critical), `P1` (High), `P2` (Medium), `P3` (Low). Speculative, not-yet-committed ideas also get `icebox`. Apply the priority label on triage so the backlog is filterable: `gh issue list --label P1`. The feature and infrastructure issue templates have a Priority dropdown whose selection should be mirrored to the matching label.
+
+**Canonical ready-ticket standard: `docs/guides/ticket-standards.md`.** That doc is the single source of truth for what a ready work ticket must contain; the four work issue templates (`bug`, `feature_request`, `infrastructure`, `security`) collect it, the `ticket-gate` agent scores against it, and `scripts/check-template-lockstep.sh` (CI: `.github/workflows/template-lockstep.yml`) keeps the templates and that doc on one shared `<!-- template-version: N -->` marker so they cannot silently drift.
 
 ## Architecture
 
