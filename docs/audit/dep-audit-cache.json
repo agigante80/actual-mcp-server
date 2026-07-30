@@ -152,7 +152,9 @@
         "hono": "filed #138 - npm update hono to 4.12.18"
       },
       "versionDrift": "All <1 major behind (info-only). dotenv/jose/zod/typescript drifts covered by closed-issue #128 / open PR #126.",
-      "ticketsCreated": ["#138"]
+      "ticketsCreated": [
+        "#138"
+      ]
     },
     "2026-07-11": {
       "type": "full re-audit (30-day window expired; last audit 2026-05-07)",
@@ -163,9 +165,47 @@
       "vulnerabilities": "0 (npm audit clean across all severities; prior ip-address/express-rate-limit/hono findings from #137/#138 no longer reported)",
       "unmaintained": "none deprecated/archived/<1K dl. Feature-complete-but-healthy monitors: winston-daily-rotate-file (29mo, 1.6M/wk), tsconfig-paths (3yr, 84M/wk), node-fetch (3yr, 153M/wk, dev-only), prom-client (2yr, 7.5M/wk). No tickets.",
       "versionDrift": "typescript 6.0.3 -> 7.0.2 (1 major, below 2+ threshold, info-only); knip 6.25.0 -> 6.26.0 (patch). No tickets.",
-      "newLibraries": ["fuse.js (^7.4.2, maintained)", "knip (^6.16.1, maintained)"],
+      "newLibraries": [
+        "fuse.js (^7.4.2, maintained)",
+        "knip (^6.16.1, maintained)"
+      ],
       "result": "CLEAN",
       "ticketsCreated": []
+    }
+  },
+  "lastVulnerabilityScan": "2026-07-30",
+  "knownVulnerabilities": {
+    "fast-uri": {
+      "severity": "high",
+      "advisories": [
+        "GHSA-v2hh-gcrm-f6hx",
+        "GHSA-4c8g-83qw-93j6"
+      ],
+      "issue": 309,
+      "fixVerified": "lockfile bump to 3.1.4"
+    },
+    "@hono/node-server": {
+      "severity": "moderate",
+      "advisories": [
+        "GHSA-frvp-7c67-39w9"
+      ],
+      "issue": 310,
+      "fix": "upgrade @modelcontextprotocol/sdk to 1.30.0"
+    },
+    "adm-zip": {
+      "severity": "high",
+      "advisories": [
+        "GHSA-xcpc-8h2w-3j85"
+      ],
+      "issue": 311,
+      "fix": "blocked upstream: @actual-app/api already latest"
+    }
+  },
+  "versionDrift": {
+    "typescript": {
+      "current": "6.0.3",
+      "latest": "7.0.2",
+      "issue": 312
     }
   }
 }
