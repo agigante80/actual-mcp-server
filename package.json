@@ -86,7 +86,7 @@
     "knip": "^6.16.1",
     "node-fetch": "^3.3.2",
     "tsconfig-paths": "^4.2.0",
-    "typescript": "^6.0.3"
+    "typescript": "^7.0.2"
   },
   "license": "MIT",
   "keywords": [
