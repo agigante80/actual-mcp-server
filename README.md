@@ -449,7 +449,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 |----------|---------|----------|-------------|
 | **Actual Budget Connection** ||||
 | `ACTUAL_SERVER_URL` | _(none)_ | Yes | URL of your Actual Budget server. Use the same URL you type in your browser: `http://localhost:5006` (local), `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), or `http://actual:5006` (container name if on the same Docker network) |
-| `ACTUAL_PASSWORD` | _(none)_ | Yes | Password for Actual Budget server |
+| `ACTUAL_PASSWORD` | _(none)_ | Yes | Login password for your Actual Budget **server**, the one you type on its own login screen. Not the same as `ACTUAL_BUDGET_PASSWORD` (which decrypts an E2E-encrypted budget) and unrelated to `AUTH_PROVIDER=oidc` (which controls how MCP *clients* authenticate to this server, not how this server authenticates to Actual). This server always signs in to Actual with a password, so upstream password login must stay enabled |
 | `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
 | `ALLOW_INSECURE_UPSTREAM` | `false` | No | Allow an `http://` upstream even when `ACTUAL_BUDGET_PASSWORD` is set (#161). Off by default so a plaintext upstream plus an encryption password is refused |
