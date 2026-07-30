@@ -200,6 +200,23 @@ export async function transactionTests(client, context) {
         else console.log(`  ⚠ update rejected but message unexpected: ${(err.message || '').slice(0, 120)}`);
       }
     }
+
+    // Delete the split we created. Without this the parent's -3000 stays on the
+    // books, the account teardown below fails with "balance is non-zero:
+    // transferAccountId is required", the account survives as OPEN residue, and
+    // the zero-residue assertion exits 3 before the stdio half of the gate ever
+    // runs. Deleting the parent removes its children with it.
+    const leftover = await readParent();
+    if (leftover) {
+      try {
+        await callTool("actual_transactions_delete", { id: leftover.id });
+        const gone = await readParent();
+        if (gone) fail("Split teardown: parent still present after delete (account balance will not return to zero)");
+        else console.log("  ✓ Split teardown: parent and children deleted, balance back to zero");
+      } catch (err) {
+        fail(`Split teardown: could not delete split parent: ${(err.message || '').slice(0, 120)}`);
+      }
+    }
   }
 
   // Get transactions by date range (actual_transactions_get)
