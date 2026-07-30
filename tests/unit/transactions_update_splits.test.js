@@ -37,14 +37,24 @@ const ID = '00000000-0000-0000-0000-000000000abc';
   apiDefault.sync = async () => {};
   let queryRows = [];          // what the existence/pre-flight query "finds"
   let rawUpdateCalls = [];     // ids passed to rawUpdateTransaction (the raw write)
-  apiDefault.runQuery = async (_query) => ({ data: queryRows });
+  // Capture every serialized transactions query. Setup C asserts on these; the stub
+  // MUST be installed here, before the adapter import, because the adapter binds its
+  // raw primitives at module load and a later reassignment would never be seen.
+  let capturedQueries = [];
+  apiDefault.runQuery = async (query) => {
+    const s = typeof query?.serialize === 'function' ? query.serialize() : query;
+    if (s?.table === 'transactions') capturedQueries.push(s);
+    return { data: queryRows };
+  };
   apiDefault.updateTransaction = async (id, _fields) => { rawUpdateCalls.push(id); };
+  let rawDeleteCalls = [];
+  apiDefault.deleteTransaction = async (id) => { rawDeleteCalls.push(id); };
 
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
   const adapter = adapterMod.default;
   adapterMod._setSkipApiInitForTests(true);
 
-  const reset = (rows) => { queryRows = rows; rawUpdateCalls = []; };
+  const reset = (rows) => { queryRows = rows; rawUpdateCalls = []; rawDeleteCalls = []; capturedQueries = []; };
   const subs = (...amts) => amts.map((amount) => ({ amount }));
 
   console.log('\n[#305][A] edit existing split, children only amount, sum == stored amount -> raw write happens');
@@ -107,6 +117,43 @@ const ID = '00000000-0000-0000-0000-000000000abc';
     check(!parseSub([{ amount: 1.5 }]).success, 'non-integer child amount rejected');
     check(!parseSub(Array.from({ length: 101 }, () => ({ amount: -1 }))).success, 'array over .max(100) rejected');
     check(!parseSub([]).success, 'empty subtransactions array rejected (.min(1))');
+  }
+
+  // ---- Setup C: every transactions pre-flight must see split PARENT rows ----
+  //
+  // The default ActualQL transactions query EXCLUDES split parents. Any pre-flight
+  // existence check that omits `.options({ splits: 'all' })` therefore reports a
+  // real split parent as "not found" and throws before its raw write. The update
+  // path was fixed when splits landed; delete and batch-update were not, which made
+  // a split creatable through the tools but never deletable through them (caught by
+  // the integration suite's zero-residue assertion, not by a unit test: hence this).
+  //
+  // Asserts on the serialized query (`tableOptions`) rather than on behaviour, so it
+  // pins the CAUSE and fails loudly if anyone drops the option again.
+  console.log('\n[#305][C] every transactions pre-flight queries with splits: "all"');
+  {
+    const optionsOf = (s) => s?.tableOptions?.splits;
+    const allUseSplitsAll = () =>
+      capturedQueries.length > 0 && capturedQueries.every((s) => optionsOf(s) === 'all');
+    const seen = () => JSON.stringify(capturedQueries.map(optionsOf));
+
+    reset([{ id: ID, is_parent: true, amount: -3000 }]);
+    await adapter.updateTransaction(ID, { subtransactions: subs(-2000, -1000) });
+    check(allUseSplitsAll(), 'updateTransaction pre-flight uses splits: all', seen());
+
+    reset([{ id: ID, is_parent: true, amount: -3000 }]);
+    let delThrew = null;
+    try { await adapter.deleteTransaction(ID); } catch (e) { delThrew = e; }
+    check(delThrew === null, 'deleting a split PARENT does not throw "not found"', delThrew && delThrew.message);
+    check(rawDeleteCalls.length === 1, 'the raw delete is actually reached for a split parent');
+    check(allUseSplitsAll(), 'deleteTransaction pre-flight uses splits: all', seen());
+
+    reset([{ id: ID, is_parent: true, amount: -3000 }]);
+    const batch = await adapter.updateTransactionBatch([{ id: ID, fields: { notes: 'x' } }]);
+    check(batch.failed.length === 0,
+      'batch-updating a split PARENT does not route it to failed[] as not-found',
+      JSON.stringify(batch.failed));
+    check(allUseSplitsAll(), 'updateTransactionBatch pre-flight uses splits: all', seen());
   }
 
   // Give any (unexpected) detached rejection a tick to surface before asserting.

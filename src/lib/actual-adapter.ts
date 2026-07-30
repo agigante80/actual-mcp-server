@@ -1335,7 +1335,13 @@ export async function updateTransactionBatch(
     const { q } = (await import('@actual-app/api')) as any;
     const existing = await withConcurrency(() =>
       retry(async () => {
-        const res = (await rawRunQuery(q('transactions').filter({ id: { $oneof: ids } }).select(['id']))) as { data?: Array<{ id: string }> };
+        // `.options({ splits: 'all' })` for the same reason as the single-update and
+        // delete pre-flights (#305): the default query omits split PARENT rows, so a
+        // batch touching a split parent would route a perfectly valid id to failed[]
+        // as "not found". Splits themselves stay unsupported in batch (FieldsSchema
+        // strips `subtransactions`); this only ensures a split parent's OTHER fields
+        // are updatable here.
+        const res = (await rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: ids } }).select(['id']))) as { data?: Array<{ id: string }> };
         return new Set(Array.isArray(res?.data) ? res.data.map((r) => r.id) : []);
       }, { retries: 2, backoffMs: 200 })
     );
@@ -1370,7 +1376,12 @@ export async function deleteTransaction(id: string): Promise<void> {
     const { q } = (await import('@actual-app/api')) as any;
     const found = await withConcurrency(() =>
       retry(async () => {
-        const res = (await rawRunQuery(q('transactions').filter({ id }).select(['id']))) as { data?: unknown[] };
+        // `.options({ splits: 'all' })` is REQUIRED, same as the update pre-flight
+        // above (#305): the default transactions query excludes split PARENT rows,
+        // so without it a split parent reads as non-existent and this check throws
+        // "not found" before the raw delete is ever reached. The effect was that a
+        // split could be created through the tools but never deleted through them.
+        const res = (await rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ id }).select(['id']))) as { data?: unknown[] };
         return Array.isArray(res?.data) && res.data.length > 0;
       }, { retries: 2, backoffMs: 200 })
     );
