@@ -247,6 +247,30 @@ Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
   Input: accountId set, txs = empty array []
   Expect: a validation error stating txs must be at least 1 item (an empty import is rejected, not a silent no-op)
 
+Split transactions (#305). These reuse the two tools already counted above, so the
+tool count for this phase is unchanged; they add capability scenarios, not new tools.
+
+- actual_transactions_create (split, positive)
+  Input: { account: "{txn_acct_id}", amount: -3000, date: today YYYY-MM-DD, notes: "MCP-Txn-Split-{TS}", subtransactions: [ { amount: -1800 }, { amount: -1200 } ] }
+  Expect: created with id; the children sum to the parent amount
+  Save as `{split_id}`
+
+- actual_transactions_create (split, negative: sum mismatch)
+  Input: same as above but subtransactions = [ { amount: -1800 }, { amount: -1000 } ]
+  Expect: rejected before any write, error naming expected -3000 vs actual -2800
+
+- actual_transactions_create (split, negative: parent category)
+  Input: a split whose parent also sets a category
+  Expect: rejected, stating a split parent carries no category of its own (categories go on the children)
+
+- actual_transactions_update (edit an existing split, positive)
+  Input: { id: "{split_id}", fields: { subtransactions: [ { amount: -2500 }, { amount: -500 } ] } }
+  Expect: success; re-fetch shows the two children replaced and still summing to -3000
+
+- actual_transactions_update (split, negative: target is not a split)
+  Input: { id: "{txn2_id}", fields: { subtransactions: [ { amount: 6000 }, { amount: 4000 } ] } }
+  Expect: rejected, pointing to the create tool; converting a plain transaction into a split is not supported
+
 Note: actual_transactions_delete will be handled in Phase 12 cleanup.
 
 ---

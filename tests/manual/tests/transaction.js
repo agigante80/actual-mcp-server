@@ -148,6 +148,60 @@ export async function transactionTests(client, context) {
     console.log("\n  ⚠ Skipping update/verify (transaction not found by notes filter)");
   }
 
+  // #305: split-transaction create + edit-existing-split + negatives.
+  console.log("\n[#305] Split transactions...");
+  {
+    const today = new Date().toISOString().split('T')[0];
+    const splitNotes = `MCP-Split-${timestamp}`;
+    const readParent = async () => {
+      const got = await callTool("actual_transactions_get", { accountId: txAccountId, startDate: today, endDate: today });
+      const rows = got.transactions || got.result || (Array.isArray(got) ? got : []);
+      return rows.find(t => t.is_parent === true && (t.notes || '').includes(splitNotes));
+    };
+
+    await callTool("actual_transactions_create", {
+      account: txAccountId, date: today, amount: -3000, notes: splitNotes,
+      subtransactions: [{ amount: -2000 }, { amount: -1000 }],
+    });
+    const parent = await readParent();
+    if (!parent) {
+      fail("Verify split create: is_parent transaction not found");
+    } else {
+      const subs = parent.subtransactions || [];
+      const sum = subs.reduce((a, s) => a + s.amount, 0);
+      if (subs.length === 2 && sum === -3000) console.log(`  ✓ Split created: 2 children summing to ${sum}`);
+      else fail(`Verify split create: expected 2 children summing to -3000, got ${subs.length} summing to ${sum}`);
+
+      // Edit the existing split's children (only amount needed; account/date derived).
+      await callTool("actual_transactions_update", { id: parent.id, fields: { subtransactions: [{ amount: -2500 }, { amount: -500 }] } });
+      const edited = await readParent();
+      const editedSubs = (edited && edited.subtransactions) || [];
+      const editedSum = editedSubs.reduce((a, s) => a + s.amount, 0);
+      if (editedSubs.length === 2 && editedSum === -3000) console.log(`  ✓ Split edited: children now [${editedSubs.map(s => s.amount).join(', ')}]`);
+      else fail(`Verify split edit: expected 2 children summing to -3000, got ${editedSubs.length} summing to ${editedSum}`);
+    }
+
+    // NEGATIVE: children do not sum to the parent amount (rejected before the write).
+    try {
+      await callTool("actual_transactions_create", { account: txAccountId, date: today, amount: -3000, notes: `${splitNotes}-bad`, subtransactions: [{ amount: -2000 }, { amount: -500 }] });
+      console.log("  ⚠ Expected a sum-mismatch rejection on create but it succeeded");
+    } catch (err) {
+      if (/sum to the parent amount/i.test(err.message || '')) console.log("  ✓ NEGATIVE: mismatched split sum rejected on create");
+      else console.log(`  ⚠ create rejected but message unexpected: ${(err.message || '').slice(0, 120)}`);
+    }
+
+    // NEGATIVE: subtransactions on a plain (non-split) target is rejected (no plain-to-split conversion).
+    if (context.transactionId) {
+      try {
+        await callTool("actual_transactions_update", { id: context.transactionId, fields: { subtransactions: [{ amount: -3750 }, { amount: -3750 }] } });
+        console.log("  ⚠ Expected a non-split rejection but update succeeded");
+      } catch (err) {
+        if (/not a split/i.test(err.message || '')) console.log("  ✓ NEGATIVE: subtransactions on a plain transaction rejected");
+        else console.log(`  ⚠ update rejected but message unexpected: ${(err.message || '').slice(0, 120)}`);
+      }
+    }
+  }
+
   // Get transactions by date range (actual_transactions_get)
   console.log("\nGetting transactions by date range (actual_transactions_get)...");
   {

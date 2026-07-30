@@ -87,7 +87,10 @@ console.log('Running generated tools smoke tests');
     deleteTransaction: null,
     updateTransaction: null,
     updateTransactionBatch: { succeeded: [{ id: '00000000-0000-0000-0000-000000000001' }], failed: [] },
-    runQuery: [{ id: 'result1', value: 100 }],
+    // #305: is_parent + amount let the transactions_update split example pass the
+    // adapter pre-flight (an existing split of -300). Extra fields are harmless to
+    // actual_query_run and the #212 existence checks (they only read row count).
+    runQuery: [{ id: 'result1', value: 100, is_parent: true, amount: -300 }],
     runBankSync: null,
     getBudgets: [{ name: 'My Budget', cloudFileId: '00000000-0000-0000-0000-000000000001', hasKey: false, state: 'remote' }],
     switchBudget: { name: 'My Budget', syncId: '00000000-0000-0000-0000-000000000001', serverUrl: 'http://localhost:5006' },
@@ -135,11 +138,12 @@ console.log('Running generated tools smoke tests');
   if (mod && mod.default) mod = mod.default;
       const inputExample = {};
       // Provide minimal examples for known tools (use UUIDs where schemas require them)
-  if (name.includes('transactions_create')) inputExample.account = '00000000-0000-0000-0000-000000000001', inputExample.date = '2025-11-24', inputExample.amount = -1234;
+  if (name.includes('transactions_create')) inputExample.account = '00000000-0000-0000-0000-000000000001', inputExample.date = '2025-11-24', inputExample.amount = -1234, inputExample.subtransactions = [{ amount: -1000 }, { amount: -234 }]; // #305: split, children sum to amount
+
   if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.txs = [{ date: '2024-01-15', amount: 100 }];
   if (name.includes('transactions_get')) inputExample.accountId = 'a1'; // matches getAccounts stub { id: 'a1' } — nil-UUID would hit not-found path and return { error } without result
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
-  if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test' };
+  if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test', subtransactions: [{ amount: -200 }, { amount: -100 }] }; // #305: edit an existing split (-300 per runQuery stub)
   if (name.includes('transactions_update_batch')) inputExample.updates = [{ id: '00000000-0000-0000-0000-000000000001', fields: { notes: 'batch-test' } }];
   if (name.includes('entities_search')) inputExample.type = 'payees', inputExample.query = 'kroger'; // matches getPayees stub { name: 'Kroger' }
   if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';

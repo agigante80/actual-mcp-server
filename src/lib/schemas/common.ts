@@ -193,6 +193,46 @@ export const offBudgetSchema = z
   .describe('Whether the account is off-budget');
 
 // ============================================================================
+// SPLIT (SUBTRANSACTION) SCHEMAS (#305)
+// ============================================================================
+
+/**
+ * A single split child. Only `amount` is required; `category` and `notes` are
+ * optional. Child `account`/`date`/`cleared`/`reconciled` are ALWAYS derived
+ * from the parent by @actual-app/api's `makeChild` (26.7.0), and `payee_name`
+ * is not resolved on children, so extra fields are rejected here (`.strict()`)
+ * to keep the contract honest rather than silently ignored.
+ */
+export const subtransactionSchema = z
+  .object({
+    amount: amountCentsSchema,
+    category: categoryIdSchema.optional(),
+    notes: notesSchema,
+  })
+  .strict();
+
+/**
+ * The `subtransactions` array on a split. Bounded per the project convention of
+ * bounding every array input (cf. transactions_update_batch, entities_search
+ * `.max(100)`, transactions_uncategorized `.max(1000)`).
+ */
+export const subtransactionsArraySchema = z
+  .array(subtransactionSchema)
+  .min(1, 'A split needs at least one subtransaction')
+  .max(100, 'A split cannot exceed 100 subtransactions')
+  .describe('Split children; each amount is integer cents and they must sum to the parent amount');
+
+/**
+ * Pure sum helper: the single source of CALCULATION for the split amount
+ * invariant (#305). Enforced at two sites (create tool at the Zod layer where
+ * the parent amount is in the input; update adapter against
+ * `fields.amount ?? dbAmount`) so the arithmetic cannot drift between them.
+ */
+export function subtransactionsSum(subs: ReadonlyArray<{ amount: number }>): number {
+  return subs.reduce((total, s) => total + s.amount, 0);
+}
+
+// ============================================================================
 // COMPOSITE SCHEMAS
 // ============================================================================
 
@@ -227,6 +267,10 @@ export const CommonSchemas = {
   reconciled: reconciledSchema,
   closed: closedSchema,
   offBudget: offBudgetSchema,
+
+  // Splits (#305)
+  subtransaction: subtransactionSchema,
+  subtransactions: subtransactionsArraySchema,
 } as const;
 
 // ============================================================================

@@ -326,10 +326,12 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 |------|-------------|
 | `actual_transactions_get` | Get transactions for an account |
 | `actual_transactions_filter` | Filter with advanced criteria |
-| `actual_transactions_create` | Create new transaction(s) |
+| `actual_transactions_create` | Create new transaction(s), including splits (pass a `subtransactions` array) |
 | `actual_transactions_import` | Import and reconcile transactions |
-| `actual_transactions_update` | Update a transaction |
+| `actual_transactions_update` | Update a transaction, or edit the children of an existing split via `subtransactions` |
 | `actual_transactions_delete` | Delete a transaction |
+
+> **Split transactions:** pass a `subtransactions` array (each child needs an `amount` in integer cents; `category` and `notes` are optional). The child amounts must sum to the parent `amount` (the server does not enforce this, so the tool does). A split parent carries no category of its own: put categories on the children. `actual_transactions_update` can edit the children of a transaction that is ALREADY a split; converting a plain transaction into a split via update is not supported (create it as a split instead). Note: `actual_transactions_import` forwards a `subtransactions` array to the API but does NOT apply the sum check, so use `actual_transactions_create` for guaranteed-balanced splits.
 
 **Utility (1)**
 

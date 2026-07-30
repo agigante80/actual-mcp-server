@@ -53,7 +53,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 4 | Prompt 2 | 5 | Payee CRUD + rules + merge |
 | 5 | Prompt 2 | 4 | Rules CRUD |
 | 5b | Prompt 2 | 3 | Batch update, uncategorized, rules upsert |
-| 6 | Prompt 2 | 11 | Transaction CRUD + search |
+| 6 | Prompt 2 | 11 | Transaction CRUD + search + splits (#305) |
 | 6b | Prompt 2 | 4 | Schedule CRUD |
 | 7 | Prompt 3 | 2 | Transaction summaries |
 | 8 | Prompt 3 | 11 | Budget management |

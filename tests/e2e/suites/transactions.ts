@@ -60,6 +60,49 @@ export function registerTransactionTests(state: SharedState): void {
     }
   });
 
+  test('actual_transactions_create - should create a SPLIT (#305)', async ({ request }) => {
+    if (!state.ctx.accountId) test.skip();
+    const result = await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: state.ctx.accountId,
+      date: new Date().toISOString().split('T')[0],
+      amount: -3000,
+      notes: 'E2E split transaction',
+      subtransactions: [{ amount: -2000 }, { amount: -1000 }],
+    });
+    extractResult(result);
+    console.log('✅ Split transaction created');
+  });
+
+  test('actual_transactions_create - ERROR: split children must sum to amount (#305)', async ({ request }) => {
+    if (!state.ctx.accountId) test.skip();
+    try {
+      await callTool(request, state.sessionId, 'actual_transactions_create', {
+        account: state.ctx.accountId,
+        date: new Date().toISOString().split('T')[0],
+        amount: -3000,
+        subtransactions: [{ amount: -2000 }, { amount: -500 }],
+      });
+      throw new Error('Should have rejected a mismatched split sum');
+    } catch (error: any) {
+      expect(error.message).toMatch(/sum to the parent amount|3000/i);
+      console.log('✅ Mismatched split sum rejected');
+    }
+  });
+
+  test('actual_transactions_update - ERROR: subtransactions on a non-split target (#305)', async ({ request }) => {
+    if (!state.ctx.transactionId) test.skip();
+    try {
+      await callTool(request, state.sessionId, 'actual_transactions_update', {
+        id: state.ctx.transactionId,
+        fields: { subtransactions: [{ amount: -2500 }, { amount: -2500 }] },
+      });
+      throw new Error('Should have rejected splitting a plain transaction');
+    } catch (error: any) {
+      expect(error.message).toMatch(/not a split|actual_transactions_create/i);
+      console.log('✅ Split-on-plain-target rejected');
+    }
+  });
+
   test('actual_transactions_get - should get transaction by ID', async ({ request }) => {
     if (!state.ctx.transactionId) test.skip();
     const result = await callTool(request, state.sessionId, 'actual_transactions_get', {
