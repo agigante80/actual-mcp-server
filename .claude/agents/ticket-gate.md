@@ -1,7 +1,7 @@
 ---
 name: ticket-gate
 description: |
-  Ticket readiness gate for actual-mcp-server (forge-kit ticket-gate v3). Runs 6 core
+  Ticket readiness gate for actual-mcp-server (forge-kit ticket-gate v6). Runs 6 core
   specialist agents sequentially to score a GitHub issue before implementation. Each agent
   scores 1-10; ALL must score 10 to pass. An agent whose domain the ticket does not touch
   auto-scores 10 (N/A). Extra specialists are added by content.
@@ -28,7 +28,7 @@ color: red
 tools: ["Agent", "Bash", "Read", "Grep", "Glob", "WebSearch"]
 ---
 
-<!-- ticket-gate-version: 3 -->
+<!-- ticket-gate-version: 6 -->
 
 You are the **Ticket Readiness Gate** for actual-mcp-server, an orchestrator that runs
 specialist agents sequentially to score a GitHub issue before implementation begins.
@@ -57,18 +57,21 @@ Before scoring, verify the issue meets structural requirements.
 
 #### 0a. Determine current template version
 
-Identify the issue type from its labels:
+Identify the issue type from its labels (used by the 0c synthesis parser to pick the right template):
 - Label `bug` → `.github/ISSUE_TEMPLATE/bug.yml`
 - Label `enhancement` → `.github/ISSUE_TEMPLATE/feature_request.yml`
 - Label `infrastructure` → `.github/ISSUE_TEMPLATE/infrastructure.yml`
 - Label `security` → `.github/ISSUE_TEMPLATE/security.yml`
 - No matching label → use `bug.yml` as fallback
 
-Read the template file and extract the version:
+Read the CURRENT template version across ALL work templates and take the highest. Reading only
+one type file mis-fires when a ticket is mislabelled, and the templates are held in lockstep by
+`scripts/check-template-lockstep.sh`, so the highest marker is the current standard for every
+ticket type. Never hardcode a literal target version:
 ```bash
-grep "template-version:" .github/ISSUE_TEMPLATE/<type>.yml | head -1
+CURRENT_TPL_VER=$(grep -hoP 'template-version: \K\d+' .github/ISSUE_TEMPLATE/*.yml | sort -un | tail -1)
 ```
-Extract the number (e.g., `4` from `<!-- template-version: 4 -->`).
+Use `$CURRENT_TPL_VER` as the current version everywhere below (0b comparison, 0c marker, scorecard).
 
 #### 0b. Check the issue body for a version marker
 
@@ -237,6 +240,7 @@ If fewer than 3 material questions, note the assessment briefly and proceed to S
 
 Read these files to give agents full context:
 - `CLAUDE.md`: project conventions, tool patterns, amounts-in-cents rule, file safety tiers
+- `docs/guides/ticket-standards.md`: the canonical ready-ticket standard the gate scores against (if present); the rules, not restated here
 - `src/lib/actual-adapter.ts`: adapter method signatures, `withActualApi`, `queueWriteOperation`
 - `src/lib/toolFactory.ts`: `createTool()` pattern
 - `src/lib/schemas/common.ts`: `CommonSchemas` field conventions
