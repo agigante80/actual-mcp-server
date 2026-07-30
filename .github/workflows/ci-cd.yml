@@ -399,9 +399,12 @@ jobs:
       - name: 📋 Docker E2E summary
         if: always()
         run: |
+          # Tool count comes from scripts/tool-count.mjs (#193), never a literal:
+          # this line used to read "all 62 tools" and had silently drifted (#301).
+          TOOL_COUNT=$(node -e "import('./scripts/tool-count.mjs').then(m => console.log(m.getCanonicalCount()))")
           echo "### 🐳 Docker E2E Test Results (Full Suite)" >> $GITHUB_STEP_SUMMARY
           echo "- **Status**: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Tests**: 63 (all 62 tools + error scenarios)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Tests**: all ${TOOL_COUNT} tools + error scenarios" >> $GITHUB_STEP_SUMMARY
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
@@ -907,6 +910,28 @@ jobs:
         with:
           fetch-depth: 0
 
+      # #301: this job is the SINGLE owner of the GitHub Release for a v* tag.
+      # Node is needed only to read two facts out of the tagged tree below; the
+      # helper it calls uses node:fs alone, so no npm ci is required here.
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # #301: facts that used to live only in dependency-update.yml's competing
+      # Release body. They are derived from the tagged tree, so EVERY release
+      # carries them, not just the ones the automated dependency lane produced.
+      - name: 🔢 Collect release facts
+        id: facts
+        run: |
+          # Canonical tool count via scripts/tool-count.mjs (#193): never a
+          # literal, which is how the old "62 MCP tools" body drifted (#261 fix 4).
+          TOOL_COUNT=$(node -e "import('./scripts/tool-count.mjs').then(m => console.log(m.getCanonicalCount()))")
+          API_VERSION=$(node -p "require('./package.json').dependencies['@actual-app/api'].replace(/^[^0-9]*/, '')")
+          echo "tool_count=$TOOL_COUNT" >> $GITHUB_OUTPUT
+          echo "api_version=$API_VERSION" >> $GITHUB_OUTPUT
+          echo "Release facts: ${TOOL_COUNT} tools, @actual-app/api ${API_VERSION}"
+
       - name: 📝 Generate changelog
         id: changelog
         run: |
@@ -946,11 +971,16 @@ jobs:
             ```
             
             ### 📝 Changelog
-            
+
             ${{ steps.changelog.outputs.changelog }}
-            
+
+            ### 📊 What this release ships
+
+            - `@actual-app/api` pinned at `${{ steps.facts.outputs.api_version }}`
+            - All ${{ steps.facts.outputs.tool_count }} MCP tools registered and validated on this tag
+
             ### 🔒 Security
-            
+
             This release has been scanned for vulnerabilities. Check the Security tab for details.
           draft: false
           prerelease: false

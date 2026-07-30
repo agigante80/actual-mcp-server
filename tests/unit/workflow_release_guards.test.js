@@ -18,9 +18,16 @@
 //   (c) the bump step resyncs package-lock.json after version:bump and before
 //       the commit that snapshots the release
 //   (d) no `} || {` compound guard anywhere (explicit if control flow required)
-//   (e) the Release action runs only AFTER the ci-cd watch guard (anchored on
-//       the `gh run watch` behavior, not on display names)
-//   (f) the release body computes the tool count; no hardcoded count literal
+//   (e) #301: EXACTLY ONE workflow creates the GitHub Release for a v* tag, and
+//       it is ci-cd.yml, whose release job is tag-gated and needs: every
+//       verification job. dependency-update.yml must still watch the publish
+//       pipeline with `--exit-status` so a red release train fails that lane.
+//       (Supersedes the older "release must follow the watch step" ordering
+//       rule, which only worked while the dependency lane published its own
+//       Release; two writers on one tag left the surviving body up to write
+//       order, since the action upserts by tag.)
+//   (f) the release body computes the tool count AND the pinned @actual-app/api
+//       version; no hardcoded count literal in EITHER workflow
 //   (g) behavioral: package-lock.json root version fields agree with
 //       package.json (catches a stale-lock bump from ANY path, including the
 //       manual release lane, via the mandatory pre-commit test run)
@@ -45,6 +52,7 @@ import { dirname, join } from 'path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const WORKFLOW = join(ROOT, '.github', 'workflows', 'dependency-update.yml');
+const CICD_WORKFLOW = join(ROOT, '.github', 'workflows', 'ci-cd.yml');
 
 let passed = 0;
 let failed = 0;
@@ -105,22 +113,58 @@ function hasCompoundGuardPattern(text) {
   return /\}\s*\|\|\s*\{/.test(text);
 }
 
-// (e) The Release action must come after the guard that watches the ci-cd run
-// on the new tag. Anchored on behavior-bearing text (`gh run watch` and the
-// release action's `uses:` line), not on renameable step display names.
-function releaseGatedByGuard(text) {
-  const watchIdx = text.indexOf('gh run watch');
-  const releaseIdx = text.indexOf('uses: softprops/action-gh-release');
-  return watchIdx !== -1 && releaseIdx !== -1 && watchIdx < releaseIdx;
+// (e) #301: EXACTLY ONE workflow may create the GitHub Release for a v* tag, and
+// it must be ci-cd.yml.
+//
+// History: this invariant used to require the release action to sit AFTER
+// `gh run watch` inside dependency-update.yml, because that lane created its own
+// Release and the watch step was what stopped it publishing ahead of CI. Two
+// workflows calling softprops/action-gh-release on one tag meant the surviving
+// BODY was decided by write order (the action upserts by tag), which is
+// ordering-dependent rather than designed.
+//
+// The ownership rule that replaces it is strictly stronger. ci-cd.yml's release
+// job is tag-gated and `needs:` every verification job, so it structurally cannot
+// publish for a tag whose pipeline is not green: sequencing is enforced by the
+// job graph rather than by step order inside one lane. Anchored on the action's
+// `uses:` line, so renaming steps or jobs cannot evade it.
+const RELEASE_ACTION = 'uses: softprops/action-gh-release';
+const RELEASE_OWNER = 'ci-cd.yml';
+function workflowsCreatingRelease(root) {
+  const dir = join(root, '.github', 'workflows');
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+    .filter((f) => withoutComments(readFileSync(join(dir, f), 'utf8')).includes(RELEASE_ACTION));
+}
+// The dependency lane keeps watching the publish pipeline even though it no
+// longer publishes: `--exit-status` is what makes a failed release train fail
+// this job loudly instead of passing silently.
+function watchesPublishPipeline(text) {
+  return /gh run watch\b[^\n]*--exit-status/.test(text);
 }
 
-// (f) A hardcoded tool count (the "62 MCP tools" drift) is banned; the body must
-// interpolate the computed count.
+// (f) A hardcoded tool count (the "62 MCP tools" drift) is banned, and the file
+// that OWNS the release body must interpolate a computed count.
+//
+// #301 moved this from dependency-update.yml to ci-cd.yml along with the body
+// itself, and widened the literal ban to BOTH files. That widening immediately
+// caught a real stale literal in ci-cd.yml's Docker E2E summary, which had read
+// "all 62 tools" since well before the count reached 71: the original invariant
+// only ever looked at the other file.
+// Comment lines are stripped before matching, mirroring invariants (a) and (l):
+// both workflows now carry comments that quote the banned literal ("all 62
+// tools") as the counter-example being guarded against, and prose ABOUT the rule
+// must neither satisfy nor trip the detector.
 function hardcodedToolCount(text) {
-  return /\b\d+\s+(MCP\s+)?tools\b/i.test(text);
+  return /\b\d+\s+(MCP\s+)?tools\b/i.test(withoutComments(text));
 }
 function computesToolCount(text) {
-  return text.includes('steps.bump.outputs.tool_count');
+  return text.includes('steps.facts.outputs.tool_count');
+}
+// The migrated companion fact: the release body names the pinned upstream API
+// version, derived from the tagged tree rather than passed between workflows.
+function computesApiVersion(text) {
+  return text.includes('steps.facts.outputs.api_version');
 }
 
 // (g) Behavioral lock agreement: catches a stale-lock version bump from ANY
@@ -220,6 +264,9 @@ function usesDistTagVersionCheck(text) {
 console.log('\n[workflow-release-guards]');
 
 const wf = readFileSync(WORKFLOW, 'utf8');
+// #301: ci-cd.yml is now the single owner of the GitHub Release, so invariants
+// (e) and (f) have to read it too.
+const cicd = readFileSync(CICD_WORKFLOW, 'utf8');
 
 check('(a) App-token step precedes checkout; every checkout authenticates with it and keeps credential persistence explicitly on', () => {
   assert.ok(appTokenAuthenticatesEveryCheckout(wf),
@@ -241,16 +288,26 @@ check('(d) no `} || {` compound guard anywhere (explicit if control flow)', () =
     'the `} || {` compound guard swallows failures under errexit and skips the sync PR (#261 fix 3)');
 });
 
-check('(e) Release action runs only after the ci-cd watch guard', () => {
-  assert.ok(releaseGatedByGuard(wf),
-    'gh run watch (the publish guard) must appear before uses: softprops/action-gh-release (#261 fix 5)');
+check('(e) exactly one workflow creates the GitHub Release, and it is ci-cd.yml', () => {
+  const writers = workflowsCreatingRelease(ROOT);
+  assert.deepStrictEqual(writers, [RELEASE_OWNER],
+    `expected ${RELEASE_OWNER} to be the only workflow calling ${RELEASE_ACTION}, found: ${writers.join(', ') || 'none'}. Two writers on one tag make the surviving release body depend on write order (#301); the owner is ci-cd.yml because its release job is tag-gated and needs: every verification job`);
+  assert.ok(watchesPublishPipeline(wf),
+    'dependency-update.yml must still watch the ci-cd run with gh run watch --exit-status: it no longer publishes the Release, but a failed publish pipeline must still fail this lane loudly (#261 fix 5, #301)');
+  assert.ok(/needs\.docker-publish\.result == 'success'/.test(cicd) &&
+    /startsWith\(github\.ref, 'refs\/tags\/v'\)/.test(cicd),
+    "ci-cd.yml's release job must stay tag-gated and gated on the verification jobs: that job graph is what replaced the old watch-then-release step ordering (#301)");
 });
 
-check('(f) release body computes the tool count; no hardcoded count literal', () => {
+check('(f) the release body computes the tool count and api version; no hardcoded count literal in either workflow', () => {
   assert.ok(!hardcodedToolCount(wf),
-    'hardcoded tool-count literal found; interpolate the computed count instead (#261 fix 4)');
-  assert.ok(computesToolCount(wf),
-    'release body must interpolate steps.bump.outputs.tool_count (#261 fix 4)');
+    'hardcoded tool-count literal found in dependency-update.yml; interpolate the computed count instead (#261 fix 4)');
+  assert.ok(!hardcodedToolCount(cicd),
+    'hardcoded tool-count literal found in ci-cd.yml; interpolate the computed count instead. ci-cd.yml owns the release body since #301, so the ban covers it too (this is how the stale "all 62 tools" summary line was found)');
+  assert.ok(computesToolCount(cicd),
+    'the release body must interpolate steps.facts.outputs.tool_count (#261 fix 4, moved to ci-cd.yml by #301)');
+  assert.ok(computesApiVersion(cicd),
+    'the release body must interpolate steps.facts.outputs.api_version: the @actual-app/api version was a fact only the old dependency-lane body carried, and #301 requires it be derived from the tagged tree instead');
 });
 
 check('(g) package-lock.json root version fields agree with package.json', () => {
@@ -326,15 +383,46 @@ check('NEGATIVE (d): a reintroduced `} || {` compound guard is detected', () => 
   assert.strictEqual(hasCompoundGuardPattern('if ! git merge --ff-only main; then\n  echo fallback\nfi'), false);
 });
 
-check('NEGATIVE (e): a Release action reordered before the watch guard is detected', () => {
-  const fixture = 'uses: softprops/action-gh-release@v3\n...\ngh run watch "$RUN_ID" --exit-status';
-  assert.strictEqual(releaseGatedByGuard(fixture), false);
+check('NEGATIVE (e): a second release writer, a neutered watch, and a commented-out action are handled', () => {
+  // A resurrected writer in the dependency lane is the exact #301 regression.
+  assert.strictEqual(
+    withoutComments('      - name: Release\n        uses: softprops/action-gh-release@v3').includes(RELEASE_ACTION),
+    true, 'a real second writer must be seen by the scanner');
+  // Prose ABOUT the removal must NOT count as a writer, or the explanatory
+  // comment left in dependency-update.yml would itself fail the invariant.
+  assert.strictEqual(
+    withoutComments('      # this lane no longer has uses: softprops/action-gh-release').includes(RELEASE_ACTION),
+    false, 'a comment mentioning the action must not register as a writer');
+  // The watch guard must be load-bearing: without --exit-status it observes the
+  // run but never fails the job, which is how a red publish could pass silently.
+  assert.strictEqual(watchesPublishPipeline('gh run watch "$RUN_ID" --interval 30'), false,
+    'a watch without --exit-status must fail: it cannot fail the lane');
+  assert.strictEqual(watchesPublishPipeline('gh run watch "$RUN_ID" --exit-status --interval 30'), true,
+    'the compliant watch must pass');
+  assert.strictEqual(watchesPublishPipeline('echo no watch here'), false,
+    'a lane that stopped watching entirely must fail');
 });
 
-check('NEGATIVE (f): a reintroduced hardcoded count literal is detected', () => {
+check('NEGATIVE (f): hardcoded counts are detected; computed interpolations are not', () => {
   assert.strictEqual(hardcodedToolCount('All 62 MCP tools validated'), true);
   assert.strictEqual(hardcodedToolCount('all 71 tools registered'), true);
-  assert.strictEqual(hardcodedToolCount('All ${{ steps.bump.outputs.tool_count }} MCP tools validated'), false);
+  // The literal that actually shipped in ci-cd.yml until #301 widened the ban.
+  assert.strictEqual(hardcodedToolCount('- **Tests**: 63 (all 62 tools + error scenarios)'), true,
+    'the stale ci-cd.yml Docker E2E summary literal must be caught');
+  assert.strictEqual(hardcodedToolCount('All ${{ steps.facts.outputs.tool_count }} MCP tools validated'), false);
+  assert.strictEqual(hardcodedToolCount('- **Tests**: all ${TOOL_COUNT} tools + error scenarios'), false,
+    'a shell-interpolated count must not trip the literal ban');
+  assert.strictEqual(hardcodedToolCount('          # this line used to read "all 62 tools" and had silently drifted'), false,
+    'a comment QUOTING the banned literal as a counter-example must not trip the detector (mirrors invariants (a) and (l))');
+  assert.strictEqual(hardcodedToolCount('          echo "all 62 tools"'), true,
+    'stripping comments must not blind the detector to a real literal on a live line');
+  // The owner-file detectors must key on the new step id, not the retired one.
+  assert.strictEqual(computesToolCount('${{ steps.bump.outputs.tool_count }}'), false,
+    'the retired dependency-lane output must no longer satisfy the invariant');
+  assert.strictEqual(computesToolCount('${{ steps.facts.outputs.tool_count }}'), true);
+  assert.strictEqual(computesApiVersion('${{ steps.facts.outputs.api_version }}'), true);
+  assert.strictEqual(computesApiVersion('${{ steps.versions.outputs.latest }}'), false,
+    'the old cross-workflow value must not satisfy the invariant');
 });
 
 check('NEGATIVE (h): resurrected identifiers and workflow_run listeners are detected; the Lane B concept phrase is not', () => {
