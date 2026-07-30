@@ -142,7 +142,15 @@ The lanes are installed; maintenance means keeping them wired to reality:
    do-not-modify tier of `CLAUDE.md`).
 2. If `.github/workflows/ci-cd.yml` is renamed (the FILE, not just the display name), update
    the publish guard in `dependency-update.yml` (`gh run list --workflow ci-cd.yml`), or the
-   guard reports "never triggered" on every release and blocks the GitHub Release step.
+   guard reports "never triggered" on every release and fails the dependency lane.
+2b. **`ci-cd.yml` is the single owner of the GitHub Release for a `v*` tag (#301).** It used to
+   be created by both workflows; the action upserts by tag, so which BODY survived depended on
+   write order. `ci-cd.yml` owns it because its release job is tag-gated and `needs:` every
+   verification job, so it structurally cannot publish for a tag whose pipeline is not green.
+   The dependency lane still watches that run with `--exit-status` so a red release train fails
+   it loudly. Invariant (e) in `tests/unit/workflow_release_guards.test.js` enforces the single
+   owner; invariant (f) bans hardcoded tool-count literals in BOTH workflows and requires the
+   release body to interpolate the computed count and the pinned `@actual-app/api` version.
 3. If the dependency lane's scope ever widens beyond `@actual-app/api`, keep the diff-based
    detection (never a commit-message grep) and keep the release strictly behind a green full
    test run.

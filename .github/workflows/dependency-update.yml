@@ -187,7 +187,9 @@ jobs:
           TOOL_COUNT=$(node -e "import('./scripts/tool-count.mjs').then(m => console.log(m.getCanonicalCount()))")
           echo "old_version=$OLD" >> $GITHUB_OUTPUT
           echo "new_version=$NEW" >> $GITHUB_OUTPUT
-          echo "tool_count=$TOOL_COUNT" >> $GITHUB_OUTPUT
+          # No tool_count output since #301: this lane no longer writes a Release
+          # body. ci-cd.yml derives the count itself. The value is still logged
+          # below because it is a useful signal in this job's log.
           git add -A
           git commit -m "chore(release): bump version to ${NEW}"
           echo "✅ Version bumped to ${NEW} (lockfile resynced; ${TOOL_COUNT} tools)"
@@ -246,11 +248,12 @@ jobs:
 
       # -----------------------------------------------------------------------
       # 10. Verify the tag push actually triggered the publish pipeline (#261)
-      #     ci-cd.yml on the tag is what builds and publishes the Docker image.
-      #     If it never fires (the v0.7.12 failure mode) or fails, this job must
-      #     fail loudly and the GitHub Release below must NOT be created. The
-      #     tag itself is already pushed and immutable; on guard failure the
-      #     remediation is manual (rerun ci-cd or cut the next patch).
+      #     ci-cd.yml on the tag is what builds and publishes the Docker image,
+      #     and (since #301) the GitHub Release too. If it never fires (the
+      #     v0.7.12 failure mode) or fails, this job must fail loudly rather than
+      #     report a successful automated release. The tag itself is already
+      #     pushed and immutable; on guard failure the remediation is manual
+      #     (rerun ci-cd or cut the next patch).
       # -----------------------------------------------------------------------
       - name: 🔎 Verify ci-cd pipeline triggered and succeeded
         if: steps.versions.outputs.update_needed == 'true'
@@ -272,61 +275,37 @@ jobs:
             sleep 15
           done
           if [ -z "$RUN_ID" ]; then
-            echo "::error::ci-cd.yml never triggered on tag v${NEW_VERSION}. The push likely authenticated as GITHUB_TOKEN instead of the App (see #261); failing before the GitHub Release is created."
+            echo "::error::ci-cd.yml never triggered on tag v${NEW_VERSION}. The push likely authenticated as GITHUB_TOKEN instead of the App (see #261); nothing was published for this tag, including the GitHub Release that ci-cd.yml owns (#301)."
             exit 1
           fi
           echo "Found ci-cd run ${RUN_ID}; watching it to completion..."
           gh run watch "$RUN_ID" --exit-status --interval 30
-          echo "✅ Publish pipeline succeeded; safe to create the GitHub Release."
+          echo "✅ Publish pipeline succeeded; ci-cd.yml has published the GitHub Release for this tag."
 
       # -----------------------------------------------------------------------
-      # 11. Create GitHub Release (only reached after the publish guard passed)
+      # 11. (Removed by #301.) This lane no longer creates the GitHub Release.
+      #
+      # Both this workflow and ci-cd.yml used to call softprops/action-gh-release
+      # on the same tag. The action upserts by tag, so there was only ever one
+      # Release, but which BODY survived depended on which workflow wrote last:
+      # this lane won only because the watch step above made it finish second.
+      # That is ordering-dependent, not designed.
+      #
+      # ci-cd.yml's release job is now the single owner. It is the stronger place
+      # for it: that job is tag-gated AND `needs:` every verification job
+      # (docker-publish, npm-publish, security-scan, deployment-test), so it
+      # structurally cannot publish a Release for a tag whose pipeline is not
+      # green. The watch step above is retained as this lane's own verification:
+      # `--exit-status` fails this job loudly if the publish pipeline fails.
+      #
+      # The two facts that used to justify this lane's richer body (the
+      # @actual-app/api version and the canonical tool count) are now derived
+      # from the tagged tree by ci-cd.yml's "Collect release facts" step, so
+      # EVERY release carries them, not just automated dependency ones.
+      #
+      # Guarded by invariant (e) in tests/unit/workflow_release_guards.test.js:
+      # exactly one workflow may call the release action, and it must be ci-cd.yml.
       # -----------------------------------------------------------------------
-      - name: 📦 Create GitHub Release
-        if: steps.versions.outputs.update_needed == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ steps.bump.outputs.new_version }}
-          name: v${{ steps.bump.outputs.new_version }}
-          body: |
-            ## 🤖 Automated Dependency Update Release
-
-            This release was automatically created after all CI checks passed on
-            a temporary working branch: lint, unit tests, and Docker E2E tests
-            (full suite) were green before anything was merged to `main`.
-
-            ### Changes
-            - ⬆️ Upgraded `@actual-app/api` to version `${{ steps.versions.outputs.latest }}`
-            - 🔢 Version bumped from `${{ steps.bump.outputs.old_version }}` to `${{ steps.bump.outputs.new_version }}`
-
-            ### What's Updated
-            - Actual Budget API integration updated to latest version
-            - All ${{ steps.bump.outputs.tool_count }} MCP tools validated with the new API version
-            - Docker images rebuilt and published by the tag pipeline (verified before this release was created)
-
-            ### CI Checks Passed ✅
-            - TypeScript compilation (no type errors)
-            - Tool coverage check (all ${{ steps.bump.outputs.tool_count }} tools registered)
-            - Unit + schema tests
-            - Docker E2E full suite
-            - Publish pipeline (ci-cd.yml) confirmed triggered and green on the tag
-
-            ---
-
-            **🚀 Docker Images Published**
-            - `agigante80/actual-mcp-server:${{ steps.bump.outputs.new_version }}`
-            - `agigante80/actual-mcp-server:latest`
-
-            **📦 npm Package**
-            - [@actual-app/api@${{ steps.versions.outputs.latest }}](https://www.npmjs.com/package/@actual-app/api/v/${{ steps.versions.outputs.latest }})
-
-            ---
-            🤖 Automated release: no manual intervention required
-          draft: false
-          prerelease: false
-          generate_release_notes: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       # -----------------------------------------------------------------------
       # 12. Keep develop in sync with the auto-released main (#145)
