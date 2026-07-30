@@ -196,6 +196,13 @@ sudo certbot certonly --standalone -d actual-mcp.yourdomain.com
 
 ## OIDC Authentication (Multi-User)
 
+> **This is inbound auth only.** `AUTH_PROVIDER=oidc` controls how MCP **clients** authenticate
+> **to this server**. It does not change how this server authenticates **to Actual Budget**, which
+> is always `ACTUAL_PASSWORD`. The two are independent: you can run OIDC here with a
+> password-authenticated Actual upstream, and enabling OIDC on your Actual Budget server does not
+> remove this server's need for `ACTUAL_PASSWORD`. A third credential,
+> `ACTUAL_BUDGET_PASSWORD`, is unrelated to both: it decrypts an E2E-encrypted budget file.
+
 For multi-user deployments with an OIDC provider (Casdoor, Keycloak, Auth0, etc.):
 
 ```bash
