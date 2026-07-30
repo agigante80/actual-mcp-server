@@ -1,0 +1,35 @@
+name: Template lockstep
+
+# Assert every work issue-template and the canonical ticket-standards doc share one
+# template-version marker, so the ready-ticket standard cannot drift apart from the forms
+# that collect it or the gate that enforces it. See docs/guides/ticket-standards.md.
+
+on:
+  push:
+    paths:
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'docs/guides/ticket-standards.md'
+      - 'scripts/check-template-lockstep.sh'
+      - 'scripts/test-template-lockstep.sh'
+      - '.github/workflows/template-lockstep.yml'
+  pull_request:
+    paths:
+      - '.github/ISSUE_TEMPLATE/**'
+      - 'docs/guides/ticket-standards.md'
+      - 'scripts/check-template-lockstep.sh'
+      - 'scripts/test-template-lockstep.sh'
+      - '.github/workflows/template-lockstep.yml'
+  workflow_dispatch:
+
+jobs:
+  lockstep:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Templates and standards doc share one template-version
+        run: bash scripts/check-template-lockstep.sh
+
+      - name: Guard self-test (drift is detected, matched versions pass)
+        run: bash scripts/test-template-lockstep.sh
