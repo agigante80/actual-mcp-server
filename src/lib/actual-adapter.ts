@@ -1,4 +1,5 @@
 import type { components } from '../../generated/actual-client/types.js';
+import { subtransactionsSum } from './schemas/common.js';
 
 import api from '@actual-app/api';
 
@@ -1263,18 +1264,55 @@ export async function updateTransaction(id: string, fields: Partial<components['
   return queueWriteOperation(async () => {
     // Pre-flight existence check (#212): the raw API silently no-ops on a missing id,
     // so an update that changed nothing would otherwise be reported as success. A
-    // targeted ActualQL query by id keeps this cheap (indexed lookup).
+    // targeted ActualQL query by id keeps this cheap (indexed lookup). #305 extends
+    // the select to is_parent + amount so the split guards below can run off the
+    // same read (single source; no second out-of-queue read).
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { q } = (await import('@actual-app/api')) as any;
-    const found = await withConcurrency(() =>
+    const rows = await withConcurrency(() =>
       retry(async () => {
-        const res = (await rawRunQuery(q('transactions').filter({ id }).select(['id']))) as { data?: unknown[] };
-        return Array.isArray(res?.data) && res.data.length > 0;
+        // #305: `.options({ splits: 'all' })` is REQUIRED. The default transactions
+        // query excludes split PARENT rows, so a plain filter(id) returns 0 rows for
+        // a split parent and this pre-flight would wrongly report it "not found"
+        // (which is exactly what broke editing a split). `splits: 'all'` returns
+        // regular transactions, split parents, and split children as flat rows, so
+        // the existence + is_parent + amount read is correct for every kind.
+        const res = (await rawRunQuery(
+          q('transactions').options({ splits: 'all' }).filter({ id }).select(['id', 'is_parent', 'amount'])
+        )) as { data?: Array<{ id: string; is_parent?: boolean; amount?: number }> };
+        return Array.isArray(res?.data) ? res.data : [];
       }, { retries: 2, backoffMs: 200 })
     );
-    if (!found) {
+    if (rows.length === 0) {
       throw new Error(`Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
     }
+
+    // #305: split-edit guards, BEFORE the raw write. Two rules:
+    //   (a) subtransactions may only edit a transaction that is ALREADY a split;
+    //       converting a plain transaction into a split via updateTransaction is
+    //       broken in @actual-app/api 26.7.0 (it strands orphan children), so it
+    //       is rejected here rather than silently corrupting data.
+    //   (b) child amounts must sum to the effective parent amount. The API does
+    //       not enforce this; the ground truth is the caller's new `amount` if
+    //       supplied, else the stored amount read above.
+    const subs = (fields as { subtransactions?: ReadonlyArray<{ amount: number }> })?.subtransactions;
+    if (subs) {
+      const row = rows[0];
+      if (row.is_parent !== true) {
+        throw new Error(
+          `Transaction "${id}" is not a split. Converting a plain transaction into a split is not supported here; create the split with actual_transactions_create instead.`
+        );
+      }
+      const providedAmount = (fields as { amount?: number | null }).amount;
+      const parentAmount = providedAmount != null ? providedAmount : row.amount;
+      const sum = subtransactionsSum(subs);
+      if (sum !== parentAmount) {
+        throw new Error(
+          `Subtransactions must sum to the parent amount. Expected ${parentAmount}, got ${sum}.`
+        );
+      }
+    }
+
     await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }

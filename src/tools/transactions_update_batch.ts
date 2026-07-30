@@ -49,7 +49,7 @@ type BatchResult = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_update_batch',
-  description: `Update multiple transactions in a single call. Accepts up to 50 {id, fields} pairs. Each update is applied independently: partial failures are reported per-item so you know exactly which succeeded and which failed.
+  description: `Update multiple transactions in a single call. Accepts up to 50 {id, fields} pairs. Each update is applied independently: partial failures are reported per-item so you know exactly which succeeded and which failed. Splits are not supported here: a subtransactions field is ignored in batch. Use actual_transactions_update to edit an existing split's children.
 
 Returns: { succeeded: [{id}], failed: [{id, error}], total, successCount, failureCount }
 
