@@ -309,6 +309,38 @@ The rule is scoped to enumeration. Importing the package to monkeypatch it for m
 
 ---
 
+### The API surface drift lane (#321)
+
+The live `@actual-app/api` surface moves without a commit. That signal used to live inside a unit test, which is why an upstream release could turn the suite red with nobody touching the repo. The signal is real; it is not a unit test. It lives in `.github/workflows/api-surface-drift.yml`, on `schedule` plus `workflow_dispatch` only.
+
+**Non-blocking is structural, not conventional.** Nothing in `ci-cd.yml` or `dependency-update.yml` declares `needs:` on either job, and there is no `pull_request` trigger, so a red run cannot gate a merge or the release train. Invariant (d6) enforces it.
+
+| Job | Permissions | Does |
+|---|---|---|
+| `detect` | `contents: read` | `npm ci`, reads the live surface, classifies against the baseline, emits JSON as a job output. Holds no tracker-write token. |
+| `report` | `issues: write`, `contents: read` | Consumes that JSON and files or dedupes issues. Runs no `npm ci` and never imports `@actual-app/api`. |
+
+The split is mandatory for the same reason as #325's, with more force: reading the surface means `await import('@actual-app/api')`, which **executes upstream top-level module code in-process**. That must never share a process with a tracker-write token.
+
+**Four conditions, not one:**
+
+| # | Condition | Result |
+|---|---|---|
+| 1 | New uncovered method, not in `accepted` | Red, files one issue |
+| 2 | Stale baseline entry: now covered, or no longer exported | Red, no filing |
+| 3 | **Removed covered method**: `API_TO_TOOL` maps a method the surface no longer exports | Red, files a P1 |
+| 4 | `accepted` larger than `maxAccepted` | Red, no filing |
+
+Condition 3 is the dangerous direction and the one the original design missed. Additions are benign (a feature we lack); a removal means a shipped MCP tool calls a method that does not exist, failing at runtime in a user's budget. `mappingErrors` does not catch it: that only checks the mapped TOOL exists in `IMPLEMENTED_TOOLS`, never that the mapped METHOD still exists upstream.
+
+**Redness and re-filing are separate mechanisms.** `docs/audit/api-coverage-baseline.json` is a committed file, so CI cannot write it; a baseline entry therefore suppresses REDNESS only. Re-filing is suppressed by a tracker query on the `api-coverage-gap` label for a `<!-- api-gap:METHOD -->` body sentinel, with `state=all` rather than `state=open`, because a maintainer closing a gap as wontfix has made a permanent decision. That query paginates to exhaustion; a single page would silently stop suppressing once 100 such issues exist.
+
+Auto-committing the baseline from CI is rejected: an auto-written entry would carry an empty reason and no owning issue, letting the machine grant its own acceptance, and it would need `contents: write` on a job that must stay low-privilege.
+
+Gap names come from `Object.keys()` over a third-party module namespace, so they are validated against a strict identifier pattern before reaching an issue title or body, and per-run filing volume is capped at 5 with the overflow reported.
+
+---
+
 ### Release-train failure notification (#325)
 
 The `@actual-app/api` auto-release train publishes unattended, so **the notification is its only human interface.** It was silently dead for two consecutive nights before anyone noticed by eye, which is what this contract exists to prevent.

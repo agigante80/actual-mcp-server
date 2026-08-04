@@ -1,0 +1,99 @@
+name: API Surface Drift
+
+# #321: the live @actual-app/api surface moves without a commit. That signal used
+# to sit inside a unit test, so an upstream release could turn the suite red with
+# nobody touching the repo, which killed the auto-release train for two nights and
+# blocked a security PR. The signal is real; it is not a unit test. It lives here.
+#
+# NON-BLOCKING IS STRUCTURAL. No job in ci-cd.yml or dependency-update.yml declares
+# `needs:` on either job below, and there is deliberately NO `pull_request` trigger,
+# so a red run here cannot gate a merge or the release train.
+#
+# Why `pull_request` is absent, specifically: on a fork PR the GITHUB_TOKEN is
+# forced read-only and filing would silently no-op; on a same-repo branch PR the
+# branch's own lockfile would decide what `npm ci` resolves while the job held a
+# writable token. A surface that only moves when npm resolves a new version does
+# not belong on a per-push trigger at all.
+
+on:
+  schedule:
+    - cron: '30 2 * * *'   # after the 01:00Z release train, so it sees any upgrade the train landed
+  workflow_dispatch:
+
+# No workflow-level permissions block on purpose: each job spells out exactly what
+# it needs. Job-level `permissions:` REPLACE rather than merge, so nothing here is
+# inherited by accident.
+
+concurrency:
+  group: api-surface-drift
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # detect: holds the @actual-app/api import, holds NO tracker-write token.
+  #
+  # Reading the surface means `await import('@actual-app/api')`, which EXECUTES
+  # upstream top-level module code in-process. That is strictly worse than the
+  # `npm install` postinstall case #325 split for, so the same split applies with
+  # more force: this job can run third-party code but cannot write to the tracker.
+  # ---------------------------------------------------------------------------
+  detect:
+    name: Detect surface drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      result: ${{ steps.drift.outputs.result }}
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 🏗️ Build
+        run: npm run build
+
+      - name: 🔍 Classify drift
+        id: drift
+        run: node scripts/api-surface-drift.mjs
+
+  # ---------------------------------------------------------------------------
+  # report: holds `issues: write`, and NEVER imports @actual-app/api or runs
+  # `npm ci`. It consumes detect's JSON payload and nothing else.
+  # ---------------------------------------------------------------------------
+  report:
+    name: Report surface drift
+    needs: detect
+    if: ${{ always() && needs.detect.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: 📥 Checkout (sha-pinned, no persisted credential)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: 📣 File or dedupe gap issues
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRIFT_RESULT: ${{ needs.detect.outputs.result }}
+        run: node scripts/api-surface-drift-report.mjs

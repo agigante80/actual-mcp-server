@@ -740,5 +740,98 @@ check('NEGATIVE (a-scope): scoping by behaviour is NARROWING, not a weakening', 
     'the real update-test-release job must satisfy invariant (a) unchanged');
 });
 
+// ---------------------------------------------------------------------------
+// (d) #321: the API surface drift lane. Non-blocking must be STRUCTURAL, and the
+// job holding `issues: write` must never be the job that imports
+// @actual-app/api, because reading the surface means `await import(...)`, which
+// executes upstream top-level module code in-process.
+// ---------------------------------------------------------------------------
+
+const DRIFT_WF = join(ROOT, '.github', 'workflows', 'api-surface-drift.yml');
+const drift = existsSync(DRIFT_WF) ? readFileSync(DRIFT_WF, 'utf8') : '';
+
+function driftJob(text, name) { return jobSection(text, name); }
+function driftHasNoPullRequestTrigger(text) {
+  const head = text.slice(0, text.indexOf('\njobs:'));
+  return !/^\s*pull_request:/m.test(withoutComments(head));
+}
+function driftDetectPermissions(text) {
+  const j = withoutComments(driftJob(text, 'detect'));
+  return /permissions:\s*\n\s*contents:\s*read/.test(j)
+    && !/issues:\s*write/.test(j) && !/contents:\s*write/.test(j);
+}
+function driftReportPermissions(text) {
+  const j = withoutComments(driftJob(text, 'report'));
+  return /issues:\s*write/.test(j) && /contents:\s*read/.test(j) && !/contents:\s*write/.test(j);
+}
+function driftReportHasNoApiImport(text) {
+  const j = withoutComments(driftJob(text, 'report'));
+  return !/@actual-app\/api/.test(j) && !/npm ci/.test(j);
+}
+function driftReportCheckoutIsSafe(text) {
+  const j = withoutComments(driftJob(text, 'report'));
+  return /persist-credentials:\s*false/.test(j)
+    && /ref:\s*\$\{\{\s*github\.sha\s*\}\}/.test(j)
+    && !/create-github-app-token/.test(j)
+    && !/steps\.token\.outputs\.token/.test(j)
+    && !/secrets\.APP_PRIVATE_KEY/.test(j);
+}
+function nothingNeedsTheDriftLane() {
+  for (const f of ['ci-cd.yml', 'dependency-update.yml']) {
+    const t = withoutComments(readFileSync(join(ROOT, '.github', 'workflows', f), 'utf8'));
+    if (/needs:.*\b(detect|report)\b/.test(t) || /api-surface-drift/.test(t)) return false;
+  }
+  return true;
+}
+
+check('(d1) the drift workflow declares no pull_request trigger', () => {
+  assert.ok(drift, 'api-surface-drift.yml must exist');
+  assert.ok(driftHasNoPullRequestTrigger(drift),
+    'a fork PR forces GITHUB_TOKEN read-only (filing silently no-ops) and a branch PR lets the branch lockfile decide what npm ci resolves while the job holds a writable token');
+});
+
+check('(d2) the detect job holds only contents: read', () => {
+  assert.ok(driftDetectPermissions(drift),
+    'detect runs the @actual-app/api import and must hold no tracker-write token');
+});
+
+check('(d3) the report job holds issues: write plus contents: read', () => {
+  assert.ok(driftReportPermissions(drift));
+});
+
+check('(d4) the report job never imports @actual-app/api and runs no npm ci', () => {
+  assert.ok(driftReportHasNoApiImport(drift),
+    'the tracker-write job must never become the import site');
+});
+
+check('(d5) the report checkout is sha-pinned, unpersisted, and App-token free', () => {
+  assert.ok(driftReportCheckoutIsSafe(drift));
+});
+
+check('(d6) non-blocking is structural: nothing needs the drift lane', () => {
+  assert.ok(nothingNeedsTheDriftLane(),
+    'if ci-cd.yml or dependency-update.yml ever needs: this lane, a red drift run gates a merge or the release train');
+});
+
+check('NEGATIVE (d): each drift invariant fails on its counter-fixture', () => {
+  const withPr = drift.replace('  schedule:', '  pull_request:\n    branches: [main]\n  schedule:');
+  assert.strictEqual(driftHasNoPullRequestTrigger(withPr), false, 'a pull_request trigger must fail (d1)');
+
+  const detectElevated = drift.replace('    permissions:\n      contents: read\n    outputs:', '    permissions:\n      contents: read\n      issues: write\n    outputs:');
+  assert.strictEqual(driftDetectPermissions(detectElevated), false, 'giving detect issues: write must fail (d2)');
+
+  const reportNarrowed = drift.replace('      issues: write\n      contents: read', '      contents: read');
+  assert.strictEqual(driftReportPermissions(reportNarrowed), false, 'removing issues: write must fail (d3)');
+
+  const reportImports = drift.replace('        run: node scripts/api-surface-drift-report.mjs', '        run: |\n          npm ci\n          node -e "import(\'@actual-app/api\')"');
+  assert.strictEqual(driftReportHasNoApiImport(reportImports), false, 'an import in the report job must fail (d4)');
+
+  const reportUnpinned = drift.replace('          ref: ${{ github.sha }}', '          ref: main');
+  assert.strictEqual(driftReportCheckoutIsSafe(reportUnpinned), false, 'an unpinned report checkout must fail (d5)');
+
+  const reportAppToken = drift.replace('          GH_TOKEN: ${{ github.token }}', '          GH_TOKEN: ${{ steps.token.outputs.token }}');
+  assert.strictEqual(driftReportCheckoutIsSafe(reportAppToken), false, 'an App token in the report job must fail (d5)');
+});
+
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
