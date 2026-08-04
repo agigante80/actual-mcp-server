@@ -448,4 +448,7 @@ jobs:
           # from `needs`, never by scanning the run: a cancelled SIBLING job
           # would otherwise be attributed to the train.
           TRAIN_JOB_RESULT: ${{ needs.update-test-release.result }}
+          # Allowlist for step corroboration. Must equal the `name:` of the
+          # update-test-release job; pinned by workflow_release_guards (m8).
+          TRAIN_JOB_NAME: Update • Lint • Test • Release
         run: node scripts/report-train-failure.mjs

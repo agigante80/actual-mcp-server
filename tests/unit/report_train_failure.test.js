@@ -128,6 +128,42 @@ check('REGRESSION: a cancelled SIBLING job must not be attributed to the train',
     'and the open issue must still be closed');
 });
 
+check('REGRESSION: a sibling job with a FAILED STEP must not be attributed to the train', () => {
+  // The denylist half-fix (skip only the reporter) left this door open: any
+  // OTHER sibling with a failed step still inverted a green train through
+  // corroboration_override instead of cancelled_unattributed. Now an allowlist.
+  const jobs = [
+    job('Update • Lint • Test • Release', [step('Publish', 'success')], 'success'),
+    job('Notify Slack', [step('Post', 'failure')], 'failure'),
+  ];
+  const r = classifyOutcome({
+    trainOutcome: 'success', jobs, jobConclusion: 'success',
+    trainJobName: 'Update • Lint • Test • Release',
+  });
+  assert.strictEqual(r.action, 'success', 'a failed sibling step must not redden a green train');
+  assert.strictEqual(decideTransition({ outcome: r, openIssues: [{ number: 42, body: '' }] }).kind, 'close',
+    'and the open issue must still close');
+});
+
+check('REGRESSION: an unknown train job name yields NO corroboration, not WRONG corroboration', () => {
+  const jobs = [job('Some Other Job', [step('X', 'failure')], 'failure')];
+  const r = classifyOutcome({
+    trainOutcome: 'success', jobs, jobConclusion: 'success', trainJobName: 'Renamed Job',
+  });
+  assert.strictEqual(r.action, 'success',
+    'a stale TRAIN_JOB_NAME must fall back to the enum rather than attributing a stranger\'s failure');
+});
+
+check('REGRESSION: the train job\'s OWN failed step still corroborates', () => {
+  const jobs = [job('Update • Lint • Test • Release', [step('Unit tests', 'failure')], 'failure')];
+  const r = classifyOutcome({
+    trainOutcome: 'success', jobs, jobConclusion: 'failure',
+    trainJobName: 'Update • Lint • Test • Release',
+  });
+  assert.strictEqual(r.action, 'failure', 'the allowlist must not disable corroboration for the train itself');
+  assert.strictEqual(r.disagreement, true);
+});
+
 check('REGRESSION: the reporter must not corroborate against its own job', () => {
   const jobs = [
     job('Report train failure', [step('Report', 'failure')], 'failure'),
@@ -340,10 +376,55 @@ check('REGRESSION: recurrence records the CURRENT version and failing step', () 
   });
   body = updateCounterBlock(body, {
     consecutive: 2, firstRunUrl: 'run/1', latestRunUrl: 'run/2',
-    version: '26.9.0', failingStep: 'Docker E2E tests',
+    version: '26.9.0', failingStepName: 'Docker E2E tests',
   });
   assert.ok(body.includes('**Latest version:** 26.9.0'), 'the current version must be recorded');
   assert.ok(body.includes('**Latest failing step:** Docker E2E tests'), 'the current failing step must be recorded');
+});
+
+check('REGRESSION: an unreadable version must not ERASE a known-good one', () => {
+  // TRAIN_VERSION is empty on any run dying before the version-check step. The
+  // recurrence path used to write the placeholder over a good value; freezing
+  // was the old bug, erasing would be worse.
+  let body = buildIssueBody({
+    workflow: 'w', runUrl: 'run/1', failingStep: { step: 'Unit tests' }, version: '26.8.0',
+    outcome: F, consecutive: 1, firstRunUrl: 'run/1', latestRunUrl: 'run/1',
+  });
+  const prev = readCounterBlock(body);
+  assert.strictEqual(prev.version, '26.8.0', 'the version must round-trip out of the block');
+  const invalid = validateVersion('');
+  assert.strictEqual(invalid.valid, false);
+  body = updateCounterBlock(body, {
+    consecutive: 2, firstRunUrl: prev.firstRunUrl, latestRunUrl: 'run/2',
+    version: invalid.valid ? invalid.value : prev.version, failingStepName: null,
+  });
+  assert.ok(body.includes('**Latest version:** 26.8.0'),
+    'the last known-good version must survive a run that could not read one');
+  assert.ok(!body.includes(VERSION_PLACEHOLDER), 'the placeholder must not overwrite it');
+});
+
+check('failingStepName is a STRING, not the {job,step} object', () => {
+  // classifyOutcome returns failingStep as an object; the counter block takes a
+  // string. Passing the object rendered "[object Object]". Names now differ.
+  const body = updateCounterBlock('x', {
+    consecutive: 1, firstRunUrl: 'r', latestRunUrl: 'r', version: '1.0.0',
+    failingStepName: 'Unit tests',
+  });
+  assert.ok(body.includes('**Latest failing step:** Unit tests'));
+  assert.ok(!body.includes('[object Object]'));
+});
+
+check('the counter block has ONE schema writer', () => {
+  // A fresh issue and a recurrence must produce the same field set, or the two
+  // writers drift, which they already had.
+  const fresh = buildIssueBody({
+    workflow: 'w', runUrl: 'run/1', failingStep: { step: 'S' }, version: '1.0.0',
+    outcome: F, consecutive: 1, firstRunUrl: 'run/1', latestRunUrl: 'run/1',
+  });
+  for (const field of ['**Consecutive failures:**', '**First:**', '**Latest:**', '**Latest version:**', '**Latest failing step:**']) {
+    assert.ok(fresh.includes(field), `a freshly opened issue must already carry ${field}`);
+  }
+  assert.ok(fresh.includes('**Latest failing step:** S'), 'and it must be the step NAME, not an object');
 });
 
 // ---------------------------------------------------------------------------
