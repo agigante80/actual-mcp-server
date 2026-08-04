@@ -697,7 +697,12 @@ check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () =
   const wfLevelElevated = wf.replace('  contents: write\n  pull-requests: write', '  contents: write\n  issues: write\n  pull-requests: write');
   assert.strictEqual(mainJobDidNotGainIssuesWrite(wfLevelElevated), false,
     'adding issues: write to the WORKFLOW-level permissions block must fail: every job inherits it');
-  const jobLevelElevated = wf.replace('    timeout-minutes: 60\n', '    timeout-minutes: 60\n    permissions:\n      issues: write\n');
+  // Anchored on the CURRENT job budget. It was 60 until #326 raised it to 75 to
+  // sit above the sum of its step caps, at which point this fixture silently
+  // patched nothing and proved nothing. The assertion below caught that.
+  const jobBudget = /^    timeout-minutes: (\d+)$/m.exec(jobSection(wf, 'update-test-release'))[1];
+  const jobLevelElevated = wf.replace(`    timeout-minutes: ${jobBudget}\n`, `    timeout-minutes: ${jobBudget}\n    permissions:\n      issues: write\n`);
+  assert.notStrictEqual(jobLevelElevated, wf, 'the fixture must actually change the workflow');
   assert.strictEqual(mainJobDidNotGainIssuesWrite(jobLevelElevated), false,
     'adding a job-level issues: write to update-test-release must fail');
 
@@ -1019,6 +1024,93 @@ check('NEGATIVE (p9): dropping the post-install assertion is detected', () => {
   const without = wf.replace(/          INSTALLED=\$\(node -p[\s\S]*?          fi\n/, '');
   const j = withoutComments(jobSection(without, 'update-test-release'));
   assert.strictEqual(/INSTALLED=\$\(node -p/.test(j), false, 'removing the assertion must be visible');
+});
+
+// ---------------------------------------------------------------------------
+// (v) #326: published-artifact verification. The step this replaces was NAMED as
+// an assertion and asserted nothing, which is the fourth instance of this
+// chain's recurring defect. Every invariant here has a counter-fixture.
+// ---------------------------------------------------------------------------
+
+// `cicd` is already bound above (line 313); reuse it rather than shadowing.
+
+function manifestStepActuallyAsserts(text) {
+  const b = stepBlocks(text).find((x) => /Inspect published manifest/.test(x));
+  if (!b) return false;
+  const c = withoutComments(b);
+  // It must compare against an expected set and be able to fail. Inspecting and
+  // printing is not asserting.
+  return /linux\/amd64,linux\/arm64/.test(c) && /exit 1/.test(c)
+    && /select\(\.os != "unknown"/.test(c);
+}
+function manifestStepCoversBothRegistries(text) {
+  const b = withoutComments(stepBlocks(text).find((x) => /Inspect published manifest/.test(x)) ?? '');
+  // The ENV BINDINGS specifically. Matching any mention of GHCR_TAGS was wrong:
+  // the loop body names both variables, so deleting the binding left the
+  // detector green and the counter-fixture proved nothing.
+  return /HUB_TAGS:\s*\$\{\{/.test(b) && /GHCR_TAGS:\s*\$\{\{/.test(b);
+}
+function verifyJobIsReadOnlyAndCredentialFree(text) {
+  const j = withoutComments(jobSection(text, 'verify-published-artifacts'));
+  if (!j) return false;
+  return /permissions:\s*\n\s*contents:\s*read/.test(j)
+    && !/contents:\s*write/.test(j)
+    && !/secrets\./.test(j)
+    && !/NPM_TOKEN/.test(j)
+    && /persist-credentials:\s*false/.test(j);
+}
+function releaseNeedsVerification(text) {
+  const j = jobSection(text, 'release');
+  return /needs:.*verify-published-artifacts/.test(j);
+}
+function verifierNeverMutatesPublishTopology() {
+  const src = readFileSync(join(ROOT, 'scripts', 'verify-published-artifacts.mjs'), 'utf8')
+    .split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+  return !/dist-tag/.test(src) && !/npm publish/.test(src) && !/NPM_TOKEN/.test(src);
+}
+
+check('(v1) the manifest step genuinely asserts, on both registries', () => {
+  assert.ok(manifestStepActuallyAsserts(cicd),
+    'it inspected the first Docker Hub tag and stopped: exit 0 on a single-arch manifest');
+  assert.ok(manifestStepCoversBothRegistries(cicd), 'ghcr.io was never inspected');
+});
+
+check('(v2) the verify job is read-only and credential-free', () => {
+  assert.ok(verifyJobIsReadOnlyAndCredentialFree(cicd),
+    'npm and ghcr.io reads need no auth; this job must never hold a publish credential');
+});
+
+check('(v3) the release is gated on verification', () => {
+  assert.ok(releaseNeedsVerification(cicd),
+    'a half-shipped release must not be announced');
+});
+
+check('(v4) the verifier never touches publish topology', () => {
+  // Part 2 is settled: accept npm irreversibility. `npm dist-tag add` is
+  // unsupported by Trusted Publishers (npm/cli#8547), so staging would force a
+  // long-lived NPM_TOKEN back into the unattended lane.
+  assert.ok(verifierNeverMutatesPublishTopology());
+});
+
+check('NEGATIVE (v): each verification invariant fails on its counter-fixture', () => {
+  const theatre = cicd.replace(/            got=\$\(docker manifest inspect[\s\S]*?          done/,
+    '            docker manifest inspect "${first_tag}"\n          done');
+  assert.strictEqual(manifestStepActuallyAsserts(theatre), false,
+    'reverting to inspect-and-print must fail (v1): that is the defect');
+
+  const hubOnly = cicd.replace('          GHCR_TAGS: ${{ steps.meta.outputs.ghcr_tags }}\n', '');
+  assert.notStrictEqual(hubOnly, cicd, 'the fixture must actually change the workflow');
+  assert.strictEqual(manifestStepCoversBothRegistries(hubOnly), false,
+    'dropping ghcr.io must fail (v1)');
+
+  const elevated = cicd.replace('    needs: [version, docker-publish, npm-publish]\n    if: startsWith(github.ref, \'refs/tags/v\')\n    permissions:\n      contents: read',
+    '    needs: [version, docker-publish, npm-publish]\n    if: startsWith(github.ref, \'refs/tags/v\')\n    permissions:\n      contents: write');
+  assert.strictEqual(verifyJobIsReadOnlyAndCredentialFree(elevated), false,
+    'giving the verifier write access must fail (v2)');
+
+  const ungated = cicd.replace(', verify-published-artifacts]', ']');
+  assert.strictEqual(releaseNeedsVerification(ungated), false,
+    'removing the release gate must fail (v3)');
 });
 
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);

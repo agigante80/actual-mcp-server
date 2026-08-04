@@ -295,7 +295,36 @@ Replace `your_secret_token` with whatever you set in `MCP_SSE_AUTHORIZATION`.
 
 ### Reverting our own bad release
 
-npm publishes cannot be undone after 72 hours, and even inside that window unpublishing is disruptive. The remedy is `npm deprecate` plus shipping a corrected version, not an unpublish. Docker is more forgiving: retag and move `latest`.
+**npm publishes cannot be undone, and that is accepted rather than engineered around (#326).**
+
+The obvious mitigation is a staged publish: ship to a `next` dist-tag, verify, then promote `latest`. It is rejected, and the reason is worth recording so nobody re-derives it:
+
+- `npm dist-tag add` is **not supported by npm Trusted Publishers** (npm/cli#8547). This repo publishes with `npm publish --provenance --access public` over OIDC and holds **no** `NPM_TOKEN` at all.
+- Implementing the promotion would therefore mean reintroducing a long-lived npm credential into a pipeline that runs unattended every night. That trades a small, rare risk (a bad auto-published version) for a large, permanent one (a standing publish credential).
+- Staging would **not** make a publish reversible anyway. The version is immutable and public the instant it lands, `next` or not. It only keeps `latest` clean.
+
+**Revisit if npm/cli#8547 ships.** If `dist-tag` becomes OIDC-authenticated, staged publishing becomes genuinely cheap and this decision should be reopened.
+
+#### The actual remedy: deprecate and out-version
+
+```bash
+# 1. Mark the bad version, with a reason users will see on install.
+npm deprecate actual-mcp-server@0.9.4 \
+  "Broken stdio framing; use 0.9.5 or later. See https://github.com/agigante80/actual-mcp-server/issues/NNN"
+
+# 2. Confirm it took.
+npm view actual-mcp-server@0.9.4 deprecated
+
+# 3. Ship the fix as a NEW version. Never try to reuse the bad one.
+#    (Within 72 hours `npm unpublish actual-mcp-server@0.9.4` is possible, but it
+#    breaks anyone who already installed it and is not the preferred path.)
+```
+
+Docker is more forgiving: retag and move `latest`, no deprecation needed.
+
+#### Verification runs automatically
+
+`verify-published-artifacts` in `ci-cd.yml` reads back npm, Docker Hub and ghcr.io after every tagged release, and the `release` job needs it, so a half-shipped release is not announced. It distinguishes three states: `confirmed_present`, `confirmed_absent` (a definite negative after the full retry budget) and `inconclusive` (we could not ask). Only the second is a genuine missing-artifact incident; both are red, but they are named differently because a network blip and a missing package are different problems.
 
 ## Kubernetes
 
