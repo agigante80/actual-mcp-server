@@ -190,6 +190,35 @@ jobs:
       # workflow. Do not reinstate a coverage gate here.
       # -----------------------------------------------------------------------
       # -----------------------------------------------------------------------
+      # 5b. Parity checks with ci-cd's Lint job (#322)
+      # -----------------------------------------------------------------------
+      # The train could tag what CI would reject. ci-cd's Lint job runs knip and
+      # the repo runs node-version-drift, and NEITHER ran here, so a dependency
+      # bump that introduced dead code or an inconsistent Node pin would publish
+      # while an ordinary PR carrying the same change would be blocked.
+      #
+      # Parity is asserted by invariant (q1), not by anyone remembering to keep
+      # these lists aligned.
+      #
+      # actionlint is DELIBERATELY EXCLUDED, see (q2). It is fetched by curl from
+      # a MUTABLE git tag with no checksum verification. Putting that on the
+      # pre-tag release path trades a supply-chain regression for catching a
+      # malformed workflow, and workflow shape is already covered here by
+      # workflow_release_guards, including the (p8) bash-syntax invariant. Pin the
+      # installer by commit sha with `sha256sum -c` first, then add it.
+      #
+      # check:coverage is also excluded, permanently: #321 removed it from this
+      # lane because it enumerates the LIVE @actual-app/api surface, which is the
+      # exact thing that killed the train. Do not reinstate a coverage gate here.
+      - name: 🪦 Check for dead code (Knip)
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npm run knip
+
+      - name: 🔢 Node version pin consistency
+        if: steps.versions.outputs.update_needed == 'true'
+        run: npm run node-version-drift
+
+      # -----------------------------------------------------------------------
       # 6. Unit tests
       # -----------------------------------------------------------------------
       - name: 🧪 Run unit tests
