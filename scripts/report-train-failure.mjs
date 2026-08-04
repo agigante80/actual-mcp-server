@@ -80,13 +80,22 @@ export function validateVersion(raw) {
  *  it runs, and reading its own state would make the reporter self-referential. */
 export const REPORTER_JOB_NAME = 'Report train failure';
 
-/** Every step whose conclusion is a failure, across every job EXCEPT the
- *  reporter's own. Scoping matters: without it, any cancelled or failed sibling
- *  job in the run is attributed to the train. */
-function collectFailedSteps(jobs) {
+/** Every failed step belonging to the TRAIN job, by allowlist.
+ *
+ *  An allowlist, not a denylist. Skipping only the reporter's own job left the
+ *  original inversion reachable through a different door: any OTHER sibling job
+ *  with a failed step was still attributed to the train, so a green publish was
+ *  reported as a failure and the open issue was not closed. Latent with two
+ *  jobs, live on the third.
+ *
+ *  Failure direction is deliberate: an unknown or stale `trainJobName` yields NO
+ *  corroboration rather than WRONG corroboration, falling back to TRAIN_OUTCOME,
+ *  which `if: success()` already makes fail-closed. */
+function collectFailedSteps(jobs, trainJobName) {
   const out = [];
   for (const job of Array.isArray(jobs) ? jobs : []) {
     if (job?.name === REPORTER_JOB_NAME) continue;
+    if (trainJobName && job?.name !== trainJobName) continue;
     for (const step of Array.isArray(job?.steps) ? job.steps : []) {
       if (step?.conclusion === 'failure') {
         out.push({ job: job.name ?? null, step: step.name ?? null });
@@ -109,8 +118,8 @@ function collectFailedSteps(jobs) {
  *             failingStep: {job: string|null, step: string|null}|null,
  *             disagreement: boolean }}
  */
-export function classifyOutcome({ trainOutcome, jobs = [], jobConclusion } = {}) {
-  const failed = collectFailedSteps(jobs);
+export function classifyOutcome({ trainOutcome, jobs = [], jobConclusion, trainJobName } = {}) {
+  const failed = collectFailedSteps(jobs, trainJobName);
   const failingStep = failed.length > 0 ? failed[0] : null;
 
   // `jobConclusion` is the result of the ONE job this reporter needs, taken from
@@ -239,11 +248,13 @@ export function buildIssueBody({
 
   lines.push(
     '',
-    COUNTER_START,
-    `**Consecutive failures:** ${consecutive}`,
-    `**First:** ${firstRunUrl ?? runUrl ?? '(unknown)'}`,
-    `**Latest:** ${latestRunUrl ?? runUrl ?? '(unknown)'}`,
-    COUNTER_END,
+    counterBlock({
+      consecutive,
+      firstRunUrl: firstRunUrl ?? runUrl,
+      latestRunUrl: latestRunUrl ?? runUrl,
+      version,
+      failingStepName: failingStep?.step ?? null,
+    }),
     '',
     'Recurrences update the counter above in place rather than adding a comment per',
     'night, so this stays readable on night thirty. A later successful run closes',
@@ -259,18 +270,26 @@ export function buildIssueBody({
  *  the string form expands `$&`, `$'` and `` $` `` in the replacement, and
  *  firstRunUrl is round-tripped out of a human-editable issue body, so a `$`
  *  pattern there would corrupt the block and then reparse as garbage. */
-export function updateCounterBlock(body, { consecutive, firstRunUrl, latestRunUrl, version, failingStep }) {
-  const block = [
+export function updateCounterBlock(body, fields) {
+  const block = counterBlock(fields);
+  const re = new RegExp(`${COUNTER_START}[\\s\\S]*?${COUNTER_END}`);
+  return re.test(body) ? body.replace(re, () => block) : `${body}\n\n${block}`;
+}
+
+/** THE single definition of the counter block's schema. Both writers go through
+ *  it: buildIssueBody for a new issue and updateCounterBlock for a recurrence.
+ *  They used to format it independently and had already drifted (a fresh issue
+ *  lacked the two "Latest" lines until its first recurrence). */
+export function counterBlock({ consecutive, firstRunUrl, latestRunUrl, version, failingStepName }) {
+  return [
     COUNTER_START,
     `**Consecutive failures:** ${consecutive}`,
     `**First:** ${firstRunUrl ?? '(unknown)'}`,
     `**Latest:** ${latestRunUrl ?? '(unknown)'}`,
     `**Latest version:** ${version ?? '(unknown)'}`,
-    `**Latest failing step:** ${failingStep ?? '(none reported)'}`,
+    `**Latest failing step:** ${failingStepName ?? '(none reported)'}`,
     COUNTER_END,
   ].join('\n');
-  const re = new RegExp(`${COUNTER_START}[\\s\\S]*?${COUNTER_END}`);
-  return re.test(body) ? body.replace(re, () => block) : `${body}\n\n${block}`;
 }
 
 /** Extract only the machine-owned counter block, so a human's triage note in the
@@ -290,9 +309,13 @@ export function readCounterBlock(body) {
   const section = counterSection(body);
   const m = /\*\*Consecutive failures:\*\*\s*(\d+)/.exec(section);
   const first = /\*\*First:\*\*\s*(\S+)/.exec(section);
+  const ver = /\*\*Latest version:\*\*\s*(.+)/.exec(section);
   return {
     consecutive: m ? Number.parseInt(m[1], 10) : 0,
     firstRunUrl: first ? first[1] : null,
+    // Round-tripped so a later run with an unreadable version preserves the last
+    // known-good one instead of erasing it.
+    version: ver ? ver[1].trim() : null,
   };
 }
 
@@ -360,7 +383,12 @@ async function main() {
     process.exit(1);
   }
 
-  const { value: version } = validateVersion(process.env.TRAIN_VERSION);
+  // `valid` is load bearing, not decoration: TRAIN_VERSION is empty on any run
+  // that dies before the version-check step (checkout, setup-node, a registry
+  // blip), and an unconditional write would then overwrite a known-good version
+  // in the title and body with the placeholder. Freezing was the old bug;
+  // ERASING would be a worse one.
+  const { valid: versionValid, value: version } = validateVersion(process.env.TRAIN_VERSION);
 
   // Which step failed, from the jobs API. Never by scraping logs: that is what
   // makes "no raw log capture" structural rather than conventional.
@@ -383,7 +411,9 @@ async function main() {
   // Authoritative, and NOT derived by scanning the run: see classifyOutcome.
   const jobConclusion = process.env.TRAIN_JOB_RESULT || undefined;
 
-  const outcome = classifyOutcome({ trainOutcome, jobs, jobConclusion });
+  const outcome = classifyOutcome({
+    trainOutcome, jobs, jobConclusion, trainJobName: process.env.TRAIN_JOB_NAME,
+  });
   const isFailure = outcome.action === 'failure';
 
   try {
@@ -428,13 +458,13 @@ async function main() {
       await gh(token, `/repos/${repo}/issues/${issue.number}`, {
         method: 'PATCH',
         body: JSON.stringify({
-          title: `Release train failed: @actual-app/api ${version}`,
+          ...(versionValid ? { title: `Release train failed: @actual-app/api ${version}` } : {}),
           body: updateCounterBlock(issue.body ?? '', {
             consecutive,
             firstRunUrl: prev.firstRunUrl ?? runUrl,
             latestRunUrl: runUrl,
-            version,
-            failingStep: outcome.failingStep?.step ?? null,
+            version: versionValid ? version : prev.version,
+            failingStepName: outcome.failingStep?.step ?? null,
           }),
         }),
       });
@@ -485,5 +515,4 @@ if (invokedDirectly) {
     annotate('error', `report-train-failure: unhandled: ${err.message}`);
     process.exit(1);
   });
-
 }

@@ -93,6 +93,10 @@ function withoutComments(block) {
 // invariant (a) genuinely protects (the persisted App credential authenticates
 // the pushes), so it selects update-test-release today and would pick up any
 // future pushing job without anyone remembering to update a name list.
+//
+// A name-based narrowing would have silently exempted such a job, which is the
+// cost the #325 reporter split would otherwise have imposed. The heuristic is
+// the literal `git push origin`; a job pushing by some other spelling escapes it.
 function pushingJobs(text) {
   const names = [...text.matchAll(/^  ([A-Za-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
   return names.map((nm) => jobSection(text, nm)).filter((j) => /git push origin/.test(withoutComments(j)));
@@ -308,6 +312,12 @@ check('(a) App-token step precedes checkout; every checkout in update-test-relea
       'every job that runs `git push origin` must satisfy invariant (a)');
   }
   assert.ok(pushingJobs(wf).length >= 1, 'at least one pushing job must exist, or this guard is vacuous');
+  // The payoff of behaviour-keying, otherwise untested: a NEW pushing job is
+  // covered with nobody remembering to add it to a list.
+  const rogue = `${wf}\n  rogue-publisher:\n    steps:\n      - name: Checkout\n        uses: actions/checkout@v7\n      - name: Push\n        run: git push origin main\n`;
+  assert.strictEqual(pushingJobs(rogue).length, 2, 'a new pushing job must be selected');
+  assert.strictEqual(pushingJobs(rogue).every(appTokenAuthenticatesEveryCheckout), false,
+    'a NEW pushing job that skips the App token must fail (a); this is what behaviour-keying buys over a name list');
   assert.ok(appTokenAuthenticatesEveryCheckout(jobSection(wf, 'update-test-release')),
     'create-github-app-token must run before any actions/checkout, every checkout must pass token: ${{ steps.token.outputs.token }} AND an explicit persist-credentials: true (no false in any spelling), or pushes authenticate as GITHUB_TOKEN / lose the credential and never trigger ci-cd.yml (#261 fix 2, #262)');
 });
@@ -627,6 +637,28 @@ check('NEGATIVE (m7): dropping the success() gate is detected', () => {
     'removing the gate must fail: TRAIN_OUTCOME would then be written on a failed run');
 });
 
+check('(m8) the reporter job-name literals agree with the workflow', () => {
+  // Two literals cross into report-train-failure.mjs, and TRAIN_JOB_NAME became
+  // load bearing when step corroboration went allowlist: a stale value silently
+  // DISABLES corroboration rather than failing loudly. Pinned the way
+  // port_alignment and dockerfile_data_dir_alignment pin their pairs.
+  const src = readFileSync(join(ROOT, 'scripts', 'report-train-failure.mjs'), 'utf8');
+
+  const reporterName = /export const REPORTER_JOB_NAME = '([^']+)'/.exec(src);
+  assert.ok(reporterName, 'REPORTER_JOB_NAME must be exported from the script');
+  const reporterYamlName = /^  report-train-failure:\n(?:.*\n)*?    name: (.+)$/m.exec(wf);
+  assert.ok(reporterYamlName, 'the reporter job must declare a name:');
+  assert.strictEqual(reporterName[1], reporterYamlName[1].trim(),
+    'REPORTER_JOB_NAME must equal the reporter job name: in the workflow');
+
+  const trainEnv = /TRAIN_JOB_NAME: (.+)/.exec(wf);
+  assert.ok(trainEnv, 'TRAIN_JOB_NAME must be passed to the reporter');
+  const trainYamlName = /^  update-test-release:\n(?:.*\n)*?    name: (.+)$/m.exec(wf);
+  assert.ok(trainYamlName, 'the train job must declare a name:');
+  assert.strictEqual(trainEnv[1].trim(), trainYamlName[1].trim(),
+    'TRAIN_JOB_NAME must equal the train job name:, or step corroboration silently stops working');
+});
+
 check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () => {
   // Anchored on the reporter's own env block: the workflow has three
   // `GH_TOKEN: ${{ github.token }}` lines and a bare replace would patch the
@@ -684,7 +716,7 @@ check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () =
     'a reporter minting its own App token must fail, even under different secret names');
 });
 
-check('NEGATIVE (a-rescope): the rescope is NARROWING, not a weakening', () => {
+check('NEGATIVE (a-scope): scoping by behaviour is NARROWING, not a weakening', () => {
   // The whole point: inside update-test-release every original requirement still
   // bites. If this ever passes, the rescope has been turned into a hole.
   const persistOff = mainJob.replace('persist-credentials: true', 'persist-credentials: false');
