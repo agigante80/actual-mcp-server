@@ -266,6 +266,37 @@ Replace `your_secret_token` with whatever you set in `MCP_SSE_AUTHORIZATION`.
 
 ---
 
+
+## Release rollback runbook (#324)
+
+**Deliberately NOT automated.** A system that both publishes and unpublishes can thrash, and a revert loop is a worse failure than a bad release sitting still. This is a human procedure.
+
+### If a bad `@actual-app/api` version shipped
+
+**Do the denylist entry FIRST, before reverting.** This ordering is the whole point:
+
+1. **Add the version to `.github/actual-api-denylist.txt` ON `main`.**
+
+   ```
+   26.8.0  # broke stdio framing, see #NNN, 2026-08-04
+   ```
+
+   The train checks out `ref: main` and never reads `develop`, so **only the copy on `main` has any effect.** A denylist entry sitting on `develop` protects nothing.
+
+2. **Then revert the dependency**, pinning EXACTLY, with no caret or tilde. A caret defeats a pin: `^26.7.0` resolves to 26.8.0 while 26.8.0 is published.
+
+3. Confirm the next nightly run reports `noop_denied` in its step summary.
+
+**Why this order.** Reverting without a denylist entry lasts exactly one run. `CURRENT` becomes the old version, `LATEST` is still the bad one upstream, and that is a strict forward move, so the direction check is satisfied and the train re-upgrades the same night. The failure signature is the expensive part: "I fixed it, it worked, it came back on its own" sends the next person to re-audit a fix that was correct all along.
+
+### Consequence to expect while denied or soaking
+
+`classifyOutcome` maps every `noop_*` to `ignore`, and `decideTransition` closes an open issue only on `success`. So once the train enters a persistent denied state, it **cannot auto-close an already-open `train-failure` issue.** That issue will sit with a frozen counter until someone closes it by hand. This is accepted, not a bug; closing it manually is safe, because a manually closed issue is never reopened and the next genuine failure files a fresh one.
+
+### Reverting our own bad release
+
+npm publishes cannot be undone after 72 hours, and even inside that window unpublishing is disruptive. The remedy is `npm deprecate` plus shipping a corrected version, not an unpublish. Docker is more forgiving: retag and move `latest`.
+
 ## Kubernetes
 
 A Kubernetes deployment requires at minimum:

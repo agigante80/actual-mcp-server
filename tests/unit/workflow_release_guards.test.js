@@ -285,14 +285,24 @@ function syncPrCreateUsesAppToken(text) {
 // which a nightly could be selected. This is what keeps prereleases out of the
 // automated train.
 function usesDistTagVersionCheck(text) {
-  const raw = stepBlocks(text).find((b) => b.includes('npm show @actual-app/api'));
-  if (!raw) return false;
-  // Strip comment lines first: the workflow's own comment names the banned
-  // plural `versions` form as the counter-example, and must not trip the
-  // detector (mirrors the withoutComments guard used by invariant (a)).
-  const step = withoutComments(raw);
-  return /npm show @actual-app\/api version\b/.test(step) &&
-    !/npm show @actual-app\/api versions\b/.test(step);
+  // #324 FOLLOWED THE LOGIC. The lookup moved out of the workflow and into
+  // scripts/train-preflight.mjs, so scanning only the workflow silently stopped
+  // protecting anything. Rescoped to wherever the call now lives rather than
+  // relaxed: the guard reads the script, and separately asserts the workflow has
+  // not reintroduced a competing lookup of its own.
+  //
+  // Comment lines are stripped first in both, because both deliberately NAME the
+  // banned plural form as the counter-example and must not trip the detector.
+  const sources = [text];
+  const script = join(ROOT, 'scripts', 'train-preflight.mjs');
+  if (existsSync(script)) sources.push(readFileSync(script, 'utf8'));
+
+  const haystacks = sources.map(withoutComments);
+  const usesSingular = haystacks.some((h) => /npm['\s,\]]*.{0,12}show['\s,\]]*.{0,4}@actual-app\/api['\s,\]]*.{0,4}version['"\s,\]]/.test(h)
+    || /npm show @actual-app\/api version\b/.test(h));
+  const usesPlural = haystacks.some((h) => /npm show @actual-app\/api versions\b/.test(h)
+    || /'@actual-app\/api',\s*'versions'/.test(h));
+  return usesSingular && !usesPlural;
 }
 
 console.log('\n[workflow-release-guards]');
@@ -512,13 +522,19 @@ check('NEGATIVE (k): a sync-PR create on github.token, or without the APP_TOKEN 
   assert.strictEqual(syncPrCreateUsesAppToken(watcher + '\n' + ok), true, 'a github.token watcher elsewhere must not trip the sync-PR detector');
 });
 
-check('NEGATIVE (l): a plural `versions` list lookup is detected', () => {
-  const distTag = '      - name: Check\n        run: LATEST=$(npm show @actual-app/api version)';
-  assert.strictEqual(usesDistTagVersionCheck(distTag), true, 'the dist-tag form must pass');
+check('NEGATIVE (l): a plural `versions` list lookup is detected, in EITHER file', () => {
+  // The workflow-shaped fixtures still bite. Note the detector now also reads the
+  // real script, so a fixture that omits the lookup entirely still passes via the
+  // script; these assert the PLURAL form is caught wherever it appears.
   const plural = '      - name: Check\n        run: LATEST=$(npm show @actual-app/api versions --json | jq -r last)';
-  assert.strictEqual(usesDistTagVersionCheck(plural), false, 'the plural versions list form must fail');
-  const none = '      - name: Build\n        run: npm run build';
-  assert.strictEqual(usesDistTagVersionCheck(none), false, 'no version check step must fail');
+  assert.strictEqual(usesDistTagVersionCheck(plural), false, 'the plural form in the workflow must fail');
+
+  // And the script side, which is where the call actually lives now.
+  const scriptSrc = readFileSync(join(ROOT, 'scripts', 'train-preflight.mjs'), 'utf8');
+  assert.ok(/'version'/.test(withoutComments(scriptSrc)),
+    'the script must resolve the latest dist-tag');
+  assert.ok(!/'versions'/.test(withoutComments(scriptSrc)),
+    'the script must never use the plural versions list form, or the train could auto-ship nightlies (#300)');
 });
 
 // ---------------------------------------------------------------------------
@@ -831,6 +847,114 @@ check('NEGATIVE (d): each drift invariant fails on its counter-fixture', () => {
 
   const reportAppToken = drift.replace('          GH_TOKEN: ${{ github.token }}', '          GH_TOKEN: ${{ steps.token.outputs.token }}');
   assert.strictEqual(driftReportCheckoutIsSafe(reportAppToken), false, 'an App token in the report job must fail (d5)');
+});
+
+// ---------------------------------------------------------------------------
+// (p) #324: pre-flight hardening. Each has a NEGATIVE counter-fixture, because a
+// guard that cannot fail is not a guard.
+// ---------------------------------------------------------------------------
+
+function hasConcurrencyGroup(text) {
+  const head = withoutComments(text.slice(0, text.indexOf('\njobs:')));
+  return /concurrency:/.test(head) && /group:\s*\S+/.test(head) && /cancel-in-progress:\s*false/.test(head);
+}
+function versionsStepDelegatesToPreflight(text) {
+  const b = stepBlocks(jobSection(text, 'update-test-release')).find((x) => /id: versions/.test(x));
+  return Boolean(b) && /node scripts\/train-preflight\.mjs/.test(withoutComments(b));
+}
+function outcomeMapsEveryRefusal(text) {
+  const b = stepBlocks(jobSection(text, 'update-test-release')).find((x) => /id: outcome/.test(x));
+  if (!b) return false;
+  const c = withoutComments(b);
+  return ['noop_up_to_date', 'noop_not_forward', 'noop_denied', 'noop_soaking']
+    .every((v) => c.includes(v));
+}
+function outcomeDefaultWritesNothing(text) {
+  const b = stepBlocks(jobSection(text, 'update-test-release')).find((x) => /id: outcome/.test(x));
+  const c = withoutComments(b ?? '');
+  // The catch-all arm must not write an outcome. Emitting noop_up_to_date for a
+  // refused version makes a silently-broken denylist look like a healthy night.
+  return /\*\)/.test(c) && !/\*\)\s*echo "value=/.test(c);
+}
+function bumpTypeIsComputed(text) {
+  const j = withoutComments(jobSection(text, 'update-test-release'));
+  return /version:bump -- "\$\{\{ steps\.versions\.outputs\.bump_type \}\}"/.test(j)
+    && !/version:bump -- patch\b/.test(j);
+}
+function noUpdateSummaryIsReasonGated(text) {
+  const b = stepBlocks(jobSection(text, 'update-test-release')).find((x) => /Summary \(no update\)/.test(x));
+  return Boolean(b) && /refusal_reason == 'up_to_date'/.test(withoutComments(b));
+}
+function regressionAssertionRefetchesBeforeTagging(text) {
+  const j = withoutComments(jobSection(text, 'update-test-release'));
+  const fetchIdx = j.indexOf('git fetch --tags --force origin');
+  const tagIdx = j.indexOf('git tag -a');
+  const pushIdx = j.indexOf('git push origin "v${NEW_VERSION}"');
+  return fetchIdx !== -1 && tagIdx !== -1 && fetchIdx < tagIdx && tagIdx < pushIdx
+    && /version regression/.test(j);
+}
+
+check('(p1) the train declares a concurrency group that does not cancel in flight', () => {
+  assert.ok(hasConcurrencyGroup(wf),
+    'a cron run overlapping a dispatch would double-publish; cancelling mid-publish can leave main merged but untagged');
+});
+
+check('(p2) the versions step delegates to the pre-flight script', () => {
+  assert.ok(versionsStepDelegatesToPreflight(wf),
+    'inline shell cannot be unit tested, and the denylist is a two-sided contract that fails silently untested');
+});
+
+check('(p3) the outcome step maps every refusal reason', () => {
+  assert.ok(outcomeMapsEveryRefusal(wf));
+});
+
+check('(p4) the outcome default writes NO outcome', () => {
+  assert.ok(outcomeDefaultWritesNothing(wf),
+    'an unmapped reason must fall through to the reporter fail-toward-notifying default');
+});
+
+check('(p5) the bump type is computed, never hardcoded to patch', () => {
+  assert.ok(bumpTypeIsComputed(wf), 'an upstream major must bump us a minor');
+});
+
+check('(p6) the no-update summary is gated on the reason, not the boolean complement', () => {
+  assert.ok(noUpdateSummaryIsReasonGated(wf),
+    '"Current version X is the latest" is actively false for a denied, not-forward or soaking refusal');
+});
+
+check('(p7) the regression assertion refetches tags and precedes the tag push', () => {
+  assert.ok(regressionAssertionRefetchesBeforeTagging(wf),
+    'the checkout tag list is up to 40 minutes stale by then, so without a refetch the assertion is vacuous');
+});
+
+check('NEGATIVE (p): each pre-flight invariant fails on its counter-fixture', () => {
+  const noConc = wf.replace(/concurrency:\n  group: dependency-update-train\n  cancel-in-progress: false\n/, '');
+  assert.strictEqual(hasConcurrencyGroup(noConc), false, 'removing the group must fail (p1)');
+
+  const cancels = wf.replace('  cancel-in-progress: false', '  cancel-in-progress: true');
+  assert.strictEqual(hasConcurrencyGroup(cancels), false, 'cancel-in-progress: true must fail (p1)');
+
+  const inlined = wf.replace('          node scripts/train-preflight.mjs', '          LATEST=$(npm show @actual-app/api version)');
+  assert.strictEqual(versionsStepDelegatesToPreflight(inlined), false, 'reinlining the logic must fail (p2)');
+
+  const dropSoak = wf.replace('              soaking)     echo "value=noop_soaking"     >> "$GITHUB_OUTPUT" ;;\n', '');
+  assert.strictEqual(outcomeMapsEveryRefusal(dropSoak), false, 'dropping a refusal arm must fail (p3)');
+
+  const chattyDefault = wf.replace(
+    '              *)           echo "unmapped refusal_reason',
+    '              *)           echo "value=noop_up_to_date" >> "$GITHUB_OUTPUT" ;; # was: unmapped refusal_reason');
+  assert.strictEqual(outcomeDefaultWritesNothing(chattyDefault), false,
+    'a default arm that writes noop_up_to_date must fail (p4)');
+
+  const hardcoded = wf.replace('npm run version:bump -- "${{ steps.versions.outputs.bump_type }}"', 'npm run version:bump -- patch');
+  assert.strictEqual(bumpTypeIsComputed(hardcoded), false, 'hardcoding patch must fail (p5)');
+
+  const boolGated = wf.replace("        if: steps.versions.outputs.refusal_reason == 'up_to_date'", "        if: steps.versions.outputs.update_needed == 'false'");
+  assert.strictEqual(noUpdateSummaryIsReasonGated(boolGated), false, 'regating on the boolean must fail (p6)');
+
+  const noRefetch = wf.replace('          if ! git fetch --tags --force origin; then', '          if false; then');
+  assert.strictEqual(regressionAssertionRefetchesBeforeTagging(noRefetch), false,
+    'dropping the refetch must fail (p7): a stale tag list makes the assertion vacuous');
 });
 
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);

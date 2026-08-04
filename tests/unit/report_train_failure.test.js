@@ -300,6 +300,18 @@ check('transition: noop_up_to_date leaves an open issue open', () => {
   assert.strictEqual(decideTransition({ outcome: I, openIssues: [iss(1)] }).kind, 'noop');
 });
 
+check('#324: noop_soaking is a KNOWN outcome, not an unrecognised one', () => {
+  // Load bearing. classifyOutcome sends any unrecognised value to action:
+  // 'failure', so writing noop_soaking without extending KNOWN_OUTCOMES would
+  // file a P1 "Release train failed" issue EVERY NIGHT for the whole 48 hour
+  // soak window, which is the exact opposite of what the soak is for.
+  const r = classifyOutcome({ trainOutcome: 'noop_soaking', jobs: [] });
+  assert.strictEqual(r.action, 'ignore', 'a healthy proactive wait must not be reported as a failure');
+  assert.strictEqual(decideTransition({ outcome: r, openIssues: [] }).kind, 'noop');
+  assert.strictEqual(decideTransition({ outcome: r, openIssues: [iss(1)] }).kind, 'noop',
+    'and it must not close an open issue either: a soak is not evidence of recovery');
+});
+
 check('transition: noop_denied opens nothing', () => {
   assert.strictEqual(decideTransition({ outcome: I, openIssues: [] }).kind, 'noop');
 });
