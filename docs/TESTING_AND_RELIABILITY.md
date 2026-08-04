@@ -307,7 +307,7 @@ The `@actual-app/api` auto-release train publishes unattended, so **the notifica
 |---|---|
 | `success` | Close any open failure issue |
 | `noop_up_to_date` | Nothing. Not a success, not a failure |
-| `noop_denied`, `noop_not_forward` | Nothing. Working as intended (added by #324 and #321) |
+| `noop_denied`, `noop_not_forward` | Nothing. Working as intended (both added by #324, whose pre-flight work owns the denylist and the `sort -V` direction check) |
 | `failure` | Open or update the failure issue |
 | unset or unrecognised | Treated as `failure` |
 
