@@ -61,7 +61,8 @@
     "tool-count": "node scripts/tool-count.mjs",
     "config-drift": "npm run build && node scripts/config-drift.mjs",
     "node-version-drift": "node scripts/node-version-drift.mjs",
-    "knip": "knip"
+    "knip": "knip",
+    "actionlint": "bash scripts/install-actionlint.sh && ./actionlint -shellcheck= -color"
   },
   "dependencies": {
     "@actual-app/api": "^26.7.0",

@@ -132,8 +132,18 @@ function hasTokenInUrlAuth(text) {
 }
 
 // (c) The bump step must resync the lockfile after bumping and before committing.
+//
+// Comment-stripped before matching. Without it, `.find()` returns the FIRST step
+// block whose text mentions `npm run version:bump`, and any earlier step whose
+// COMMENT names the command hijacks the search: the detector then inspects a
+// step with no lockfile resync and reports a violation that does not exist.
+// That happened for real when #328's exclusion comment explained which files the
+// bump writes. Prose about a command must never misdirect a guard that looks for
+// the command.
 function bumpResyncsLockfile(text) {
-  const bumpStep = stepBlocks(text).find((b) => b.includes('npm run version:bump'));
+  const bumpStep = stepBlocks(text)
+    .map(withoutComments)
+    .find((b) => b.includes('npm run version:bump'));
   if (!bumpStep) return false;
   const bump = bumpStep.indexOf('npm run version:bump');
   const resync = bumpStep.indexOf('npm install --package-lock-only');
@@ -426,6 +436,16 @@ check('NEGATIVE (a): checkout before token step, missing token:, a second unauth
 check('NEGATIVE (b): a reintroduced x-access-token URL is detected', () => {
   assert.strictEqual(hasTokenInUrlAuth('git remote set-url origin "https://x-access-token:${T}@github.com/o/r.git"'), true);
   assert.strictEqual(hasTokenInUrlAuth('git push origin main'), false);
+});
+
+check('NEGATIVE (c-comment): prose naming the bump command cannot misdirect the detector', () => {
+  // The exact shape that broke this: an EARLIER step whose comment names the
+  // command, so an unstripped .find() inspects the wrong block.
+  const decoy = wf.replace('      - name: 🪦 Check for dead code (Knip)',
+    '      - name: Decoy\n        # this comment mentions npm run version:bump on purpose\n        run: echo hi\n\n      - name: 🪦 Check for dead code (Knip)');
+  assert.notStrictEqual(decoy, wf, 'the fixture must actually change the workflow');
+  assert.strictEqual(bumpResyncsLockfile(decoy), true,
+    'a decoy comment must not make the real bump step invisible');
 });
 
 check('NEGATIVE (c): a resync outside the bump step, or after the commit, is detected', () => {
@@ -1166,15 +1186,86 @@ check('(q1) every parity check is genuinely a real npm script', () => {
   }
 });
 
-check('(q2) actionlint stays OFF the train, with its reason recorded', () => {
-  // Not an oversight. Adding it puts a curl-fetched binary from a mutable tag on
-  // the pre-tag release path. If the installer is ever pinned by sha with
-  // checksum verification, revisit this and move it into PARITY_CHECKS.
+check('(q2) actionlint stays OFF the train, PERMANENTLY, on reachability grounds', () => {
+  // The original reason recorded here ("until the installer is sha-pinned") was
+  // WRONG, and #328 pinned the installer without changing this. The real reason
+  // is reachability: verified, the train's only file mutations are `sed -i` on
+  // README.md and `npm run version:bump`, which writes README.md, docs/*.md and
+  // .github/copilot-instructions.md. NOTHING under .github/workflows/ changes,
+  // so actionlint's entire input surface is outside the train's mutation set.
+  //
+  // #322's rationale was "the train could TAG what CI would REJECT", which is a
+  // REACHABILITY test, not a completeness checklist. knip, build and test:unit-js
+  // earn their place because the dependency bump changes what they inspect.
+  // actionlint does not. It is also already covered on the published tree:
+  // ci-cd.yml triggers on tags with no ref filter on its lint job, and the train
+  // watches that run with `gh run watch --exit-status`.
   const train = jobSection(wf, 'update-test-release');
   assert.ok(!/actionlint/.test(withoutComments(train)),
-    'actionlint must not run in the train until its installer is sha-pinned and checksum-verified');
+    'actionlint must not run in the train: its input surface is outside the train mutation set');
   assert.ok(/actionlint is DELIBERATELY EXCLUDED/.test(train),
     'the exclusion must carry its reason in-file, or it reads as an omission');
+});
+
+check('NEGATIVE (q2): a commented-out actionlint step does not satisfy the guard', () => {
+  // The specific way this guard would rot into a no-op: the exclusion comment
+  // itself contains the word actionlint several times, so a naive
+  // /actionlint/.test(train) would stay GREEN after a real step were deleted,
+  // and RED while a commented step sat there looking present. Mirrors the
+  // existing commentedOnly fixture used for knip.
+  const withRealStep = wf.replace('      - name: 🪦 Check for dead code (Knip)',
+    '      - name: actionlint\n        run: ./actionlint\n\n      - name: 🪦 Check for dead code (Knip)');
+  assert.notStrictEqual(withRealStep, wf, 'the fixture must actually change the workflow');
+  assert.ok(/actionlint/.test(withoutComments(jobSection(withRealStep, 'update-test-release'))),
+    'a REAL actionlint step must be visible to the detector');
+});
+
+check('(q4) no workflow pipes a downloaded artifact into a shell', () => {
+  // #328. The class, not the instance: `curl ... | bash` executes bytes nobody
+  // verified. The upstream actionlint installer was the only occurrence, and it
+  // performed zero verification of its own while piping a release tarball
+  // straight into tar.
+  const dir = join(ROOT, '.github', 'workflows');
+  const offenders = [];
+  for (const f of readdirSync(dir).filter((x) => /\.ya?ml$/.test(x))) {
+    const body = withoutComments(readFileSync(join(dir, f), 'utf8'));
+    if (/curl[^|\n]*\|\s*(bash|sh)\b/.test(body)) offenders.push(f);
+  }
+  assert.deepStrictEqual(offenders, [], `piped a download into a shell: ${offenders.join(', ')}`);
+});
+
+check('NEGATIVE (q4): a reintroduced curl-pipe-bash is detected', () => {
+  const bad = '      - name: X\n        run: curl -fsSL https://example.com/i.sh | bash -s 1.0.0\n';
+  assert.ok(/curl[^|\n]*\|\s*(bash|sh)\b/.test(withoutComments(bad)),
+    'the detector must catch the exact shape #328 removed');
+});
+
+check('(q5) the actionlint version and digest are pinned as ONE declared set', () => {
+  // A bump that edits the version without the digest would silently trust
+  // whatever the new URL serves.
+  const src = readFileSync(join(ROOT, 'scripts', 'install-actionlint.sh'), 'utf8');
+  const ver = /^VERSION="([^"]+)"/m.exec(src);
+  const sha = /^SHA256="([a-f0-9]{64})"/m.exec(src);
+  assert.ok(ver, 'VERSION must be a single declared literal');
+  assert.ok(sha, 'SHA256 must be a single 64-hex-char literal');
+  // Derived, not duplicated. The script builds the asset name from ${VERSION},
+  // so there is no second copy of the version to drift. Asserting the literal
+  // would have FORCED the weaker duplicated form; this asserts the stronger one.
+  assert.ok(/ASSET="actionlint_\$\{VERSION\}_linux_amd64\.tar\.gz"/.test(src),
+    'the asset name must be DERIVED from VERSION, so the two cannot drift');
+  assert.ok(/URL=".*\$\{VERSION\}.*\$\{ASSET\}"/.test(src),
+    'the URL must be derived too, for the same reason');
+  assert.ok(/sha256sum -c/.test(src), 'the digest must actually be checked');
+  const shaIdx = src.indexOf('sha256sum -c');
+  const tarIdx = src.indexOf('tar xzf');
+  assert.ok(shaIdx !== -1 && tarIdx !== -1 && shaIdx < tarIdx,
+    'verification must happen BEFORE extraction, or untrusted bytes have already reached a parser');
+});
+
+check('(q6) the expected digest is never fetched at run time', () => {
+  const src = withoutComments(readFileSync(join(ROOT, 'scripts', 'install-actionlint.sh'), 'utf8'));
+  assert.ok(!/checksums\.txt/.test(src),
+    'fetching the expected checksum from the same origin as the artifact verifies nothing');
 });
 
 check('(q3) check:coverage stays OFF the train (#321)', () => {
