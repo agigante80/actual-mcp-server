@@ -651,7 +651,7 @@ check('(m8) the reporter job-name literals agree with the workflow', () => {
   assert.strictEqual(reporterName[1], reporterYamlName[1].trim(),
     'REPORTER_JOB_NAME must equal the reporter job name: in the workflow');
 
-  const trainEnv = /TRAIN_JOB_NAME: (.+)/.exec(wf);
+  const trainEnv = /TRAIN_JOB_NAME: (.+)/.exec(withoutComments(wf));
   assert.ok(trainEnv, 'TRAIN_JOB_NAME must be passed to the reporter');
   const trainYamlName = /^  update-test-release:\n(?:.*\n)*?    name: (.+)$/m.exec(wf);
   assert.ok(trainYamlName, 'the train job must declare a name:');
@@ -709,6 +709,13 @@ check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () =
   const noFirstTimeout = wf.replace(/        timeout-minutes: 15.*\n/, '');
   assert.strictEqual(longStepsCarryStepTimeouts(noFirstTimeout), false,
     'removing the Playwright timeout must fail too, not just the E2E one');
+
+  // (m8) symmetry: the only m-invariant that lacked a counter-fixture.
+  const staleTrainName = wf.replace('TRAIN_JOB_NAME: Update • Lint • Test • Release', 'TRAIN_JOB_NAME: Stale');
+  const staleEnv = /TRAIN_JOB_NAME: (.+)/.exec(withoutComments(staleTrainName));
+  const trainYaml = /^  update-test-release:\n(?:.*\n)*?    name: (.+)$/m.exec(staleTrainName);
+  assert.notStrictEqual(staleEnv[1].trim(), trainYaml[1].trim(),
+    'a drifted TRAIN_JOB_NAME must be detectable: it silently disables step corroboration');
 
   const ownAppToken = wf.replace('      - name: 🔧 Setup Node.js\n        uses: actions/setup-node@v7',
     '      - name: Mint\n        uses: actions/create-github-app-token@v3\n      - name: 🔧 Setup Node.js\n        uses: actions/setup-node@v7');
