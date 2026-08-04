@@ -78,6 +78,27 @@ function stepBlocks(text) {
 function withoutComments(block) {
   return block.split('\n').filter((l) => !/^\s*#/.test(l)).join('\n');
 }
+
+// #325: invariant (a) is scoped to ONE job, not the whole file.
+//
+// The reporter job (report-train-failure) checks out deliberately WITHOUT the
+// App token and with persist-credentials: false, because it holds issues: write
+// and must never have the installation credential on disk. Evaluating (a) over
+// the whole file would turn it red and push an implementer toward the one repair
+// the design forbids: handing the reporter the App token. The rescope is
+// NARROWING ONLY. Inside update-test-release every original requirement (the
+// token, the explicit pin, the rejection of `false` in all five spellings, #262)
+// still applies, and NEGATIVE (a) proves it.
+function jobSection(text, jobName) {
+  const lines = text.split('\n');
+  const start = lines.findIndex((l) => new RegExp(`^  ${jobName}:\\s*$`).test(l));
+  if (start === -1) return '';
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^  [A-Za-z0-9_-]+:\s*$/.test(lines[i])) { end = i; break; }
+  }
+  return lines.slice(start, end).join('\n');
+}
 function appTokenAuthenticatesEveryCheckout(text) {
   const blocks = stepBlocks(text);
   const tokenIdx = blocks.findIndex((b) => b.includes('create-github-app-token'));
@@ -268,8 +289,10 @@ const wf = readFileSync(WORKFLOW, 'utf8');
 // (e) and (f) have to read it too.
 const cicd = readFileSync(CICD_WORKFLOW, 'utf8');
 
-check('(a) App-token step precedes checkout; every checkout authenticates with it and keeps credential persistence explicitly on', () => {
-  assert.ok(appTokenAuthenticatesEveryCheckout(wf),
+check('(a) App-token step precedes checkout; every checkout in update-test-release authenticates with it and keeps credential persistence explicitly on', () => {
+  // Scoped to update-test-release (#325): the reporter job is deliberately the
+  // inverse. See jobSection() above for why this must not be widened back.
+  assert.ok(appTokenAuthenticatesEveryCheckout(jobSection(wf, 'update-test-release')),
     'create-github-app-token must run before any actions/checkout, every checkout must pass token: ${{ steps.token.outputs.token }} AND an explicit persist-credentials: true (no false in any spelling), or pushes authenticate as GITHUB_TOKEN / lose the credential and never trigger ci-cd.yml (#261 fix 2, #262)');
 });
 
@@ -470,6 +493,153 @@ check('NEGATIVE (l): a plural `versions` list lookup is detected', () => {
   assert.strictEqual(usesDistTagVersionCheck(plural), false, 'the plural versions list form must fail');
   const none = '      - name: Build\n        run: npm run build';
   assert.strictEqual(usesDistTagVersionCheck(none), false, 'no version check step must fail');
+});
+
+// ---------------------------------------------------------------------------
+// (m) #325: the failure reporter. Each invariant has a negative fixture, because
+// a guard that cannot fail is not a guard: the first draft of these checks was
+// keyed on the literal `app-token`, a string that occurs ONLY inside the action
+// name `actions/create-github-app-token@v3`. Every real reference is
+// `steps.token.outputs.token`, so that check would have passed against a reporter
+// wired with the App token, which is the precise hazard it exists to catch.
+// ---------------------------------------------------------------------------
+
+const REPORTER = 'report-train-failure';
+const reporterJob = jobSection(wf, REPORTER);
+const mainJob = jobSection(wf, 'update-test-release');
+
+function reporterIsAlwaysGuarded(text) {
+  const j = jobSection(text, REPORTER);
+  return /if:\s*\$\{\{\s*always\(\)\s*\}\}/.test(j);
+}
+function reporterAvoidsAppToken(text) {
+  const j = withoutComments(jobSection(text, REPORTER));
+  if (!j) return false;
+  return !/steps\.token\.outputs\.token/.test(j)
+    && !/secrets\.APP_PRIVATE_KEY/.test(j)
+    && !/secrets\.APP_ID/.test(j)
+    && !/^\s*APP_TOKEN:/m.test(j);
+}
+function reporterPermissionsAreMinimal(text) {
+  const j = jobSection(text, REPORTER);
+  return /permissions:/.test(j)
+    && /issues:\s*write/.test(j)
+    && /actions:\s*read/.test(j)
+    && !/contents:\s*write/.test(j)
+    && !/pull-requests:\s*write/.test(j);
+}
+function workflowLevelPermissions(text) {
+  const idx = text.indexOf('\njobs:');
+  return idx === -1 ? text : text.slice(0, idx);
+}
+function mainJobDidNotGainIssuesWrite(text) {
+  // Checks BOTH scopes. The repo grants permissions at the WORKFLOW level
+  // (contents/pull-requests/actions, above `jobs:`), which every job inherits
+  // unless it overrides, so that block is where the scope would realistically be
+  // added and a job-only check would miss it entirely.
+  //
+  // withoutComments is load bearing in both: jobSection slices up to the next job
+  // HEADER, so the comment block documenting the reporter lands inside the main
+  // job's slice, and that prose contains the literal `issues: write`. Without the
+  // strip, this guard matches its own documentation and fails on a correct file.
+  const head = withoutComments(workflowLevelPermissions(text));
+  const job = withoutComments(jobSection(text, 'update-test-release'));
+  return !/issues:\s*write/.test(head) && !/issues:\s*write/.test(job);
+}
+function longStepsCarryStepTimeouts(text) {
+  const j = jobSection(text, 'update-test-release');
+  const blocks = stepBlocks(j);
+  const long = blocks.filter((b) => /playwright install|test:e2e:docker:full/.test(b));
+  return long.length >= 2 && long.every((b) => /timeout-minutes:\s*\d+/.test(b));
+}
+function reporterCheckoutIsPinnedAndUnpersisted(text) {
+  const j = withoutComments(jobSection(text, REPORTER));
+  return /uses: actions\/checkout@/.test(j)
+    && /persist-credentials:\s*false/.test(j)
+    && /ref:\s*\$\{\{\s*github\.sha\s*\}\}/.test(j);
+}
+
+check('(m1) the reporter job exists and is always()-guarded', () => {
+  assert.ok(reporterJob, 'the report-train-failure job must exist');
+  assert.ok(reporterIsAlwaysGuarded(wf),
+    'the reporter must run under always(): a job that exceeds timeout-minutes is CANCELLED, not failed, so !cancelled() would go silent on a hung E2E run (#325)');
+});
+
+check('(m2) the reporter job never touches the App token', () => {
+  assert.ok(reporterAvoidsAppToken(wf),
+    'the reporter holds issues: write; the App installation token must never be in that job (#325)');
+});
+
+check('(m3) the reporter job permissions are minimal', () => {
+  assert.ok(reporterPermissionsAreMinimal(wf),
+    'the reporter needs exactly issues: write plus actions: read');
+});
+
+check('(m4) the main job did NOT gain issues: write', () => {
+  assert.ok(mainJobDidNotGainIssuesWrite(wf),
+    'update-test-release runs npm install (registry postinstall code); granting it issues: write defeats the job split (#325)');
+});
+
+check('(m5) the long steps carry step-level timeouts', () => {
+  assert.ok(longStepsCarryStepTimeouts(wf),
+    'Playwright install and Docker E2E need step timeouts so exhaustion is a step FAILURE, not an unattributable job cancel (#325)');
+});
+
+check('(m6) the reporter checkout is unpersisted and sha-pinned', () => {
+  assert.ok(reporterCheckoutIsPinnedAndUnpersisted(wf),
+    'the reporter must check out with persist-credentials: false and ref: github.sha (the main job pushes during the same run) (#325)');
+});
+
+check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () => {
+  // Anchored on the reporter's own env block: the workflow has three
+  // `GH_TOKEN: ${{ github.token }}` lines and a bare replace would patch the
+  // first one, leaving the reporter untouched and the fixture vacuous.
+  const reporterEnvAnchor = '          GH_TOKEN: ${{ github.token }}\n          TRAIN_OUTCOME:';
+  assert.ok(wf.includes(reporterEnvAnchor), 'the reporter env anchor must exist, or this fixture proves nothing');
+  const withAppToken = wf.replace(reporterEnvAnchor, '          GH_TOKEN: ${{ steps.token.outputs.token }}\n          TRAIN_OUTCOME:');
+  assert.strictEqual(reporterAvoidsAppToken(withAppToken), false,
+    'a reporter carrying GH_TOKEN: ${{ steps.token.outputs.token }} MUST fail: this is the exact repair the design forbids');
+
+  const notAlways = wf.replace('    if: ${{ always() }}', '    if: ${{ !cancelled() }}');
+  assert.strictEqual(reporterIsAlwaysGuarded(notAlways), false,
+    'a !cancelled() guard must fail: it suppresses the reporter on a job timeout');
+
+  const broadPerms = wf.replace('      issues: write\n      actions: read', '      issues: write\n      actions: read\n      contents: write');
+  assert.strictEqual(reporterPermissionsAreMinimal(broadPerms), false,
+    'widening the reporter permissions must fail');
+
+  // Both scopes, because either would hand the npm-install job a tracker token.
+  const wfLevelElevated = wf.replace('  contents: write\n  pull-requests: write', '  contents: write\n  issues: write\n  pull-requests: write');
+  assert.strictEqual(mainJobDidNotGainIssuesWrite(wfLevelElevated), false,
+    'adding issues: write to the WORKFLOW-level permissions block must fail: every job inherits it');
+  const jobLevelElevated = wf.replace('    timeout-minutes: 60\n', '    timeout-minutes: 60\n    permissions:\n      issues: write\n');
+  assert.strictEqual(mainJobDidNotGainIssuesWrite(jobLevelElevated), false,
+    'adding a job-level issues: write to update-test-release must fail');
+
+  const noTimeout = wf.replace(/        timeout-minutes: 25.*\n/, '');
+  assert.strictEqual(longStepsCarryStepTimeouts(noTimeout), false,
+    'removing a long-step timeout must fail');
+
+  const unpinned = wf.replace('          ref: ${{ github.sha }}', '          ref: main');
+  assert.strictEqual(reporterCheckoutIsPinnedAndUnpersisted(unpinned), false,
+    'an unpinned reporter checkout must fail');
+});
+
+check('NEGATIVE (a-rescope): the rescope is NARROWING, not a weakening', () => {
+  // The whole point: inside update-test-release every original requirement still
+  // bites. If this ever passes, the rescope has been turned into a hole.
+  const persistOff = mainJob.replace('persist-credentials: true', 'persist-credentials: false');
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(persistOff), false,
+    'a checkout inside update-test-release setting persist-credentials: false must STILL fail invariant (a) (#262)');
+
+  const tokenGone = mainJob.replace('          token: ${{ steps.token.outputs.token }}\n', '');
+  assert.strictEqual(appTokenAuthenticatesEveryCheckout(tokenGone), false,
+    'a checkout inside update-test-release omitting token: must STILL fail invariant (a) (#261 fix 2)');
+
+  // And the reporter's own checkout passes only because it is out of scope, not
+  // because the guard was relaxed.
+  assert.ok(appTokenAuthenticatesEveryCheckout(mainJob),
+    'the real update-test-release job must satisfy invariant (a) unchanged');
 });
 
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);

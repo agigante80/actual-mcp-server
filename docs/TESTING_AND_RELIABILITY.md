@@ -295,6 +295,35 @@ npm run test:unit-js
 
 ---
 
+### Release-train failure notification (#325)
+
+The `@actual-app/api` auto-release train publishes unattended, so **the notification is its only human interface.** It was silently dead for two consecutive nights before anyone noticed by eye, which is what this contract exists to prevent.
+
+**Governing principle: when in doubt, notify.** Every control fails toward reporting, never toward silence. A control that fails quiet reproduces the original defect. Two drafts of the design got this backwards (a strict semver check that refused to file, and a `!cancelled()` guard blind to job timeouts) before review caught it.
+
+`dependency-update.yml` publishes a closed `TRAIN_OUTCOME` enum as a job output; the separate `report-train-failure` job switches on it:
+
+| `TRAIN_OUTCOME` | Reporter action |
+|---|---|
+| `success` | Close any open failure issue |
+| `noop_up_to_date` | Nothing. Not a success, not a failure |
+| `noop_denied`, `noop_not_forward` | Nothing. Working as intended (added by #324 and #321) |
+| `failure` | Open or update the failure issue |
+| unset or unrecognised | Treated as `failure` |
+
+Four properties are load bearing:
+
+1. **The enum is corroborated, not trusted.** It is single-sourced and written mid-job, so if it reports any non-`failure` value while a step concluded `failure`, the observed conclusion wins and the disagreement is stated in the issue.
+2. **The reporter is a separate job.** The main job runs `npm install @actual-app/api@^$LATEST`, executing registry postinstall code, and holds the App installation token that `actions/checkout` persists into `.git/config`. Granting it `issues: write` would put a tracker-write token in that process. The reporter instead holds only `issues: write` plus `actions: read` and checks out with `persist-credentials: false` and `ref: github.sha`.
+3. **No log scraping, ever.** The failing step name comes from the Actions jobs API, which makes "no credential material in the issue body" structural rather than conventional. `::add-mask::` redacts logs, not an API payload.
+4. **Errors are asymmetric.** A reporting error on a real failure leaves the run red. A reporting error on a healthy run degrades to a warning annotation, so a tracker blip cannot manufacture a phantom train failure.
+
+Dedupe is on the `train-failure` marker label rather than the version, because `@actual-app/api` has shipped same-day double bumps; a version-scoped issue would be orphaned when the train fails on one and recovers on the next. Recurrences update a counter block in the issue body in place, so an unattended nightly stays readable on night thirty.
+
+There is deliberately **no `concurrency:` group** on the reporter: `cancel-in-progress: false` still evicts a queued run, so a success/failure/success overlap would drop the failure report. Converging duplicate issues onto the oldest is noisy but never silent.
+
+---
+
 ## 🛡️ Security Testing
 
 ### Dependency Auditing
@@ -335,6 +364,7 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,
   `dockerfile_data_dir_alignment`, `compose_profile_sync`,
   `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement),
+  `report_train_failure` (#325: the release-train failure notifier),
   `bot_target_branch` (#265: dependabot blocks and the inert renovate config target develop), and
   `node_version_drift` (#275: `engines.node` is canonical; the Dockerfile `FROM node:` tags,
   every workflow's Node pin, and the README must agree with it. Run standalone with
@@ -695,7 +725,8 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `httpServer_bearer_auth.test.js` | Hardened bearer auth path: `timingSafeEqual` comparison with length-equality short-circuit; forbids re-introduction of token-content debug log lines (#157) | 12 |
 | `adapter_write_pool_cooperation.test.js` | Write path uses the pool branch when a pooled session is in context: `writeConnectionReuses` increments; legacy branch otherwise; `api.sync()` runs in both branches (#158) | 7 |
 | `budget_acl_enforcement.test.js` | Per-session active budget + ACL: stdio short-circuit; OIDC defence-in-depth refusal on missing allowedBudgets; allow on ACL match; warn-level structured denial log; `switchBudget` requires session, exact match only, releases pool entry before mutating session map (#156) | 15 |
-| `workflow_release_guards.test.js` | Structural invariants of `dependency-update.yml` (#261): App-token-authenticated checkouts with credential persistence explicitly pinned on (#262: any `persist-credentials: false` spelling, or reliance on the upstream default, fails), no token-in-URL auth, lockfile resync inside the bump step, explicit sync control flow, Release gated behind the ci-cd watch guard, computed tool count; the behavioral lock-agreement check (package-lock.json version fields match package.json) that catches a stale-lock bump from any lane; and the #266 absence guard keeping the retired second auto-release lane retired (file gone, no tracked reference to its identifier under .claude/ or .github/, and no workflow_run trigger in any workflow) | 8 + 7 negative |
+| `workflow_release_guards.test.js` | Structural invariants of `dependency-update.yml` (#261): App-token-authenticated checkouts with credential persistence explicitly pinned on (#262: any `persist-credentials: false` spelling, or reliance on the upstream default, fails), no token-in-URL auth, lockfile resync inside the bump step, explicit sync control flow, Release gated behind the ci-cd watch guard, computed tool count; the behavioral lock-agreement check (package-lock.json version fields match package.json) that catches a stale-lock bump from any lane; and the #266 absence guard keeping the retired second auto-release lane retired (file gone, no tracked reference to its identifier under .claude/ or .github/, and no workflow_run trigger in any workflow) | 14 + 9 negative |
+| `report_train_failure.test.js` | #325: the release-train failure notifier. Exercises the four pure decision functions of `scripts/report-train-failure.mjs` without network: outcome classification (the `TRAIN_OUTCOME` enum corroborated against the jobs API, unset and unrecognised failing toward notifying, an unattributed job cancel treated as a failure), full-semver validation gating the issue body sink rather than the notification, body construction from named fields only, and the total tracker state machine (open / update counter / converge duplicates / close / never reopen). Plus source-level invariants for the I/O layer: on-demand label creation, label-scoped close, no log endpoint is ever fetched, and the asymmetric error policy | 31 |
 | `bot_target_branch.test.js` | #265: every dependabot update block carries target-branch develop and the inert renovate config's baseBranches includes develop with the activation warning; a bot PR against fast-forward-only main is structurally unmergeable | 2 + 2 negative |
 
 **Coverage:**
