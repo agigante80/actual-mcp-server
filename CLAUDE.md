@@ -107,6 +107,8 @@ docker compose --profile production up  # Production: MCP server on :3600
 
 **Pre-commit mandatory**: `npm run build && npm run test:adapter && npm run test:unit-js && npm audit --audit-level=moderate`
 
+**There is no `npm run lint`.** Do not go looking for one. CI's `Lint Code` job is `npm run build` (type check) plus `npm run check:coverage`, `npm run knip`, and `actionlint` (pinned to 1.7.12, run as `./actionlint -shellcheck= -color`; the shellcheck integration is disabled deliberately per #180 because its findings vary with the runner's shellcheck version). The `Run Tests` job adds `npm run tool-count` and `npm audit` ahead of `test:unit-js`, and `Docker E2E Tests` runs `npm run test:e2e:docker:full`, not the smoke variant. Ignore the "63 tests" in that CI step's name and in `tests/e2e/run-docker-e2e.sh`: it is a stale label, and the same line names a tool total 20 short of the current one. `docker-all-tools.e2e.spec.ts` currently collects 94 tests, some of which skip themselves at runtime when a fixture is missing. `npm run tool-count` does not police these numbers.
+
 **Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker). `test:integration:cleanup` deletes test data created by `full`. Only run it after `full` against a test budget.
 
 **Integration test modules** (`tests/manual/tests/`): `sanity` (read-only protocol), `smoke` (balances/categories), `account`, `category-group`, `category`, `payee`, `transaction`, `budget`, `rules`, `schedule`, `batch_uncategorized_rules_upsert`, `advanced` (bank sync, raw SQL).
@@ -192,6 +194,15 @@ await withActualApi(async () => { return await rawAddTransactions(data); });
 await rawAddTransactions(data);
 ```
 
+**Never nest one session inside another: it deadlocks.** Both modes run the operation inside `withApiLock`, a strict FIFO chained-promise mutex that is NOT reentrant (`_apiSessionLock` in `actual-adapter.ts`). An inner session takes the outer call's own release promise as the lock it waits on, and that release cannot fire until the outer callback resolves, so the inner call never settles on its own. **What you actually observe is a ~30s stall followed by `Actual API operation timed out after 30000ms (ACTUAL_OP_TIMEOUT_MS)`**, because #270 wraps each operation body in `withOpTimeout` INSIDE the lock, and that race is what breaks the deadlock. Read that timeout as a probable nesting bug, not as a slow upstream server. One caveat: setting `ACTUAL_OP_TIMEOUT_MS` to exactly `0` makes `withOpTimeout` a pass-through (`opTimeout.ts`), which restores the hangs-forever behaviour. The Zod transform in `config.ts` sanitises most bad input first: a negative value or one with no leading digit falls back to 30000, and 1 to 249 is clamped up to 250. It is `parseInt`-based though, so it truncates rather than rejects: `0.5` becomes `0` and disables the bound, while `30s` becomes 250 rather than 30000. If you are chasing a hang, read the configured value as `parseInt` sees it. Note also that the protection is per-call-site rather than structural: every `withApiLock` body currently wraps its operation in `withOpTimeout`, but nothing enforces that, so a future acquisition site added without one would deadlock silently (compare #278's lost wakeup, where the absence of an error was the only tell).
+
+So a tool must never wrap an `adapter.*` call in a session of its own, and code already inside a session callback must reach the API through the raw functions, not back through `adapter.*`. Exactly five tool files therefore statically import `@actual-app/api`, for two different sanctioned reasons:
+
+- `rules_delete.ts`, `rules_create_or_update.ts`, `schedules_delete.ts`, `category_groups_delete.ts`: `raw*` calls inside one `adapter.withWriteSession(...)`. This is the sanctioned way to combine a read and a write in a single cycle (#142).
+- `budget_updates_batch.ts`: `raw*` calls inside `adapter.batchBudgetUpdates(...)`. Not a read plus write; it is a batch of pure writes, and it predates #142 as the original fix for exactly the nesting hazard above. Its in-code comment says so ("Use raw API calls directly to avoid nested queueing/deadlock").
+
+`transactions_summary_by_payee.ts` and `transactions_summary_by_category.ts` are NOT this pattern and will not show up in a `from '@actual-app/api'` grep: they `await import('@actual-app/api')` inside the handler purely to get the `q()` ActualQL query builder, then hand the built query to `adapter.runQuery()`, which opens the one session.
+
 The pool branch only releases its session connection on **infrastructure-level errors** (`Authentication failed`, `ECONNRESET`, `ECONNREFUSED`, `socket hang up`, `ETIMEDOUT`, `ENOMEM`). User-input / domain errors (Zod failures, "field does not exist", "not found") leave the pool entry intact so the next call can reuse it. See `_shouldDropPoolOnError` in `actual-adapter.ts`.
 
 ### Tool Structure Pattern
@@ -255,7 +266,10 @@ export default tool;
 |------|------|
 | `src/index.ts` | Entry point, CLI flags, server startup |
 | `src/actualToolsManager.ts` | `IMPLEMENTED_TOOLS` registry, Zod dispatch |
-| `src/lib/actual-adapter.ts` | **CRITICAL**: `withActualApi` (pool-cooperation since #134), `withActualApiWrite`, retry, concurrency, auth-rate-limit retry |
+| `src/lib/actual-adapter.ts` | **CRITICAL**: `withActualApi` (pool-cooperation since #134), `withActualApiWrite`, retry, plus every `adapter.*` method the tools call |
+| `src/lib/actual-adapter/` | Modules split out of `actual-adapter.ts` in #166 and re-exported from it (importers and the public surface are unchanged): `concurrency.ts` (the limiter, and the ONLY owner of `MAX_CONCURRENCY`/running/queue state), `auth-retry.ts` (`withAuthRetry` around `api.init()`, and the ONLY owner of the two auth-retry counters), `normalize.ts` (pure coercion of the varied raw `@actual-app/api` response shapes), `query.ts` (`parseWhereClause`, the SQL-to-ActualQL WHERE translation behind `actual_query_run`). Mutable state deliberately never crosses a module boundary: `actual-adapter.ts` reads the counters through `getAuthRetryCounts()` for `getConcurrencyState()` |
+| `src/lib/opTimeout.ts` | #270: bounds a single upstream call (`api.init`, `downloadBudget`, `api.sync`, each tool op) so a stall cannot hold the process-global API mutex forever |
+| `src/lib/authPosture.ts` | #242: decides ONCE at startup whether the HTTP auth posture is safe, making authentication required-by-default so a blank token cannot silently publish the server on the LAN |
 | `src/lib/ActualConnectionPool.ts` | Up to 15 concurrent sessions, idle timeouts; updates the singleton-state flag in `apiState.ts` |
 | `src/lib/apiState.ts` | Shared module-level flag for `@actual-app/api`'s singleton "live" state. Updated by every `init`/`shutdown` path so the adapter can probe whether the pool branch is safe |
 | `src/lib/requestContext.ts` | `AsyncLocalStorage<{ sessionId? }>` carrying the active MCP session across async boundaries. Producer: `httpServer.ts`. Consumer: `actual-adapter.ts` (decides pool reuse) |
@@ -263,6 +277,9 @@ export default tool;
 | `src/server/stdioServer.ts` | stdio transport. Logs to stderr, stdout reserved for JSON-RPC |
 | `src/auth/setup.ts` | OIDC/JWKS factory (`AUTH_PROVIDER=oidc`) |
 | `src/auth/budget-acl.ts` | Per-user budget ACL (email/sub/group principals) |
+| `src/lib/oidc-discovery.ts` | #244: resolves the real `jwks_uri` from the IdP discovery document instead of assuming `${OIDC_ISSUER}/.well-known/jwks` |
+| `src/lib/oidc-audiences.ts` | #245: builds the closed set of accepted `aud` values (`OIDC_RESOURCE` plus `OIDC_ACCEPTED_AUDIENCES`) |
+| `src/lib/budget-preference-store.ts` | #189: remembers a principal's last active budget so a post-restart session restores it instead of silently reverting to the env default |
 | `src/config.ts` | Zod environment validation. All config lives here |
 | `src/lib/schemas/common.ts` | Shared Zod schemas (`CommonSchemas`) |
 | `src/lib/constants.ts` | `UUID_PATTERN`, timeouts, limits |
@@ -277,6 +294,10 @@ export default tool;
 | `src/resources/` | MCP resource definitions (e.g. `accountsSummary`) |
 | `src/lib/actual-schema.ts` | Actual Budget DB schema (tables/fields/join paths); source of truth for SQL validation |
 | `src/lib/query-validator.ts` | Pre-validates SQL queries against `actual-schema` before execution to prevent server crashes |
+| `src/lib/zod-error-format.ts` | #206: turns a ZodError into one consistent actionable string, applied centrally in `actualToolsManager.callTool` so every tool shares the shape |
+| `src/lib/node-version-guard.ts` | #275: fails fast and legibly below the Node engines floor, before the dist module graph loads (npm does not enforce `engines`) |
+| `src/lib/server-version-guard.ts` | #276: advisory warning (once) when the Actual Budget SERVER version is outside the range this build's `@actual-app/api` is known to work with |
+| `src/lib/rejection-allowlist.ts` | Predicate behind the `unhandledRejection` allow-list in `src/index.ts` (log and keep serving), extracted so it is unit-testable without the entrypoint |
 
 ## Key Conventions & Gotchas
 
@@ -357,3 +378,5 @@ When changing code, update these docs:
 - `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools
 - `docker/description/long.md`, `docker/description/short.md`: Docker Hub descriptions; managed by `npm run docs:sync`
 - `.env.example`: all environment variables with inline documentation
+- `.github/instructions/*.instructions.md`: four PATH-SCOPED convention files (Copilot format, but the rules are the project's own). Each has an `applyTo` glob: `src/tools/*.ts` (tool naming, file name must match the tool name, `CommonSchemas` usage, parse-before-logic, and the reminder that `verify-tools` reads `dist/` so you must build first), `tests/unit/*.{js,ts}`, `tests/e2e/*.spec.ts`, `tests/manual/tests/*.js`. Worth reading before editing a file under that glob, but **THIS file wins on conflict**, and each of those files now says so explicitly. `tool-files.instructions.md` used to carry a blanket "never import `@actual-app/api` directly", which was never true: `budget_updates_batch.ts` had imported it since January 2026, two months before that file was written, and the four `withWriteSession` tools joined later under #142. It has been corrected to the five-file rule above. Its companion rule, "do NOT add a second wrapper", was always right and is now stated with the deadlock as its reason. `.github/copilot-instructions.md` is the repo-wide sibling and overlaps heavily with this file, so it drifts the same way
+- `unraid/actual-mcp-server.xml` + `docs/UNRAID_CA_PUBLISHING.md`: the Unraid Community Applications template and its publishing guide. `tests/unit/unraid_template_alignment.test.js` pins the template's port against `MCP_BRIDGE_PORT` in `src/config.ts`, its `Data` mount against `ENV MCP_BRIDGE_DATA_DIR` in the `Dockerfile`, the `<Repository>` literal, `Mask="true"` on the three secret fields, `Required="true"` on `MCP_SSE_AUTHORIZATION`, and that the `<Description>` still warns a blank token disables HTTP auth (six positive checks plus a negative one); `.github/workflows/unraid-xmllint.yml` validates the XML. Note what is NOT guarded: the template's env-var SET is not diffed against `src/config.ts` or `RAW_ENV_ALLOWLIST`, so adding or renaming an env var will pass CI while leaving the template stale. Mirror it by hand
