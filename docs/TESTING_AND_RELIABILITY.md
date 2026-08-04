@@ -295,6 +295,20 @@ npm run test:unit-js
 
 ---
 
+### Hermetic unit suite and chain membership (#321)
+
+Two rules protect every other guard in `tests/unit/`.
+
+**1. No unit test may enumerate the live `@actual-app/api` surface.** A test whose result changes with no commit is not a unit test. `check_coverage.test.js` used to derive its method list from `await import('@actual-app/api')` and assert the genuine-gaps bucket was empty; 26.8.0 added three methods, the test went red, the auto-release train died for two consecutive nights, and security PR #319 was blocked behind the same failure because regenerating its lockfile floated the dependency to 26.8.0.
+
+It now classifies against `FROZEN_API_SURFACE`, a hand-captured fixture that is never regenerated from `node_modules`. The one genuinely external claim, "are there uncovered methods on the live surface", moved out of the unit suite into the `api-surface-drift` lane, where a gap is REPORTED rather than blocking.
+
+The rule is scoped to enumeration. Importing the package to monkeypatch it for mocking is correct and is what 20 unit tests do; an earlier draft of the rule banned the import outright and would have condemned all of them.
+
+**2. Every `tests/unit/*.test.js` must appear in the `test:unit-js` chain.** That chain is a hand-maintained `node A && node B && ...` list with no glob, so an unlisted file never runs in CI or in the mandatory pre-commit sequence while still reading as coverage. `server_info.test.js` and `transfers_create.test.js` were already orphaned this way; both passed and were simply added. `tests/unit/unit_chain_membership.test.js` enforces membership, carries an allowlist that requires a non-empty reason per entry, and ships with that allowlist empty.
+
+---
+
 ### Release-train failure notification (#325)
 
 The `@actual-app/api` auto-release train publishes unattended, so **the notification is its only human interface.** It was silently dead for two consecutive nights before anyone noticed by eye, which is what this contract exists to prevent.

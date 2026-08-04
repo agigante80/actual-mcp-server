@@ -144,12 +144,15 @@ jobs:
         run: npm run build
 
       # -----------------------------------------------------------------------
-      # 5. Lint: Tool coverage check
+      # 5. (removed in #321) The tool-coverage check used to run here.
+      #
+      # It called `npm run check:coverage`, which enumerates the LIVE
+      # @actual-app/api surface. That made an upgrade able to fail the train on a
+      # coverage lint rather than on anything the upgrade broke, which is exactly
+      # what killed it when 26.8.0 added three methods. Coverage drift is now
+      # reported by the separate api-surface-drift lane, which cannot redden this
+      # workflow. Do not reinstate a coverage gate here.
       # -----------------------------------------------------------------------
-      - name: 🔍 Check tool coverage
-        if: steps.versions.outputs.update_needed == 'true'
-        run: npm run check:coverage
-
       # -----------------------------------------------------------------------
       # 6. Unit tests
       # -----------------------------------------------------------------------
