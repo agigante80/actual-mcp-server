@@ -25,6 +25,13 @@ on:
     - cron: '0 1 * * *'
   workflow_dispatch: # Allow manual triggering
 
+# #324: a cron run overlapping a workflow_dispatch or a re-run would otherwise
+# double-publish. cancel-in-progress is FALSE deliberately: cancelling a train
+# mid-publish is worse than queueing, since it can leave main merged but untagged.
+concurrency:
+  group: dependency-update-train
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write
@@ -78,26 +85,38 @@ jobs:
       # -----------------------------------------------------------------------
       # 2. Version check: bail out early if already up to date
       # -----------------------------------------------------------------------
+      - name: Read the pinned @actual-app/api version
+        id: current
+        run: |
+          # A missing key makes `node -p` print the literal string "undefined"
+          # (verified), which the pre-flight validity control then rejects RED
+          # rather than silently comparing garbage.
+          echo "value=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')" >> "$GITHUB_OUTPUT"
+
       - name: Check for new @actual-app/api version
         id: versions
-        run: |
-          CURRENT=$(node -p "require('./package.json').dependencies['@actual-app/api']" | sed 's/[\^~]//g')
+        env:
           # #300: `npm show <pkg> version` resolves the `latest` DIST-TAG, NOT the
-          # highest published version. This is precisely what keeps prerelease and
-          # nightly builds (for example 26.8.0-nightly.*) out of the automated
-          # release train: they are published, but not on the `latest` dist-tag.
-          # Do NOT switch this to a highest-published-version lookup (for example
-          # `npm show @actual-app/api versions`, the plural list form), or the
-          # train would auto-ship nightlies. Pinned by
-          # tests/unit/workflow_release_guards.test.js invariant (l).
-          LATEST=$(npm show @actual-app/api version)
-          echo "current=$CURRENT" >> $GITHUB_OUTPUT
-          echo "latest=$LATEST"   >> $GITHUB_OUTPUT
-          if [ "$CURRENT" = "$LATEST" ]; then
-            echo "update_needed=false" >> $GITHUB_OUTPUT
-            echo "✅ Already on latest: $CURRENT: nothing to do"
-          else
-            echo "update_needed=true" >> $GITHUB_OUTPUT
+          # highest published version. On the SCHEDULED path that is what keeps
+          # nightlies out: they are published but not on the `latest` dist-tag.
+          #
+          # #324 scopes that claim: it is a convention UPSTREAM controls, not a
+          # guarantee. Upstream publishes any v*.*.* tag with no explicit --tag,
+          # which npm defaults to `latest`, and the registry carries non-nightly
+          # prereleases (25.4.0-alpha.0, 25.6.0-edge.23) consistent with exactly
+          # that path. The pre-flight script therefore refuses any non-triple
+          # version outright rather than trusting the dist-tag convention.
+          #
+          # Do NOT switch to the plural `versions` list form, or the train would
+          # auto-ship nightlies. Pinned by invariant (l).
+          TRAIN_CURRENT: ${{ steps.current.outputs.value }}
+          TRAIN_SOAK_HOURS: ${{ vars.TRAIN_SOAK_HOURS }}
+        run: |
+          # #324: all six pre-flight controls live in the script, in a pinned
+          # order, unit-tested in tests/unit/train_preflight.test.js. It emits
+          # `update_needed` with its ORIGINAL name and semantics, so the fourteen
+          # gates that consume it are unchanged.
+          node scripts/train-preflight.mjs
             echo "🔔 Update available: $CURRENT → $LATEST"
           fi
 
@@ -189,7 +208,10 @@ jobs:
         id: bump
         run: |
           OLD=$(node -p "require('./package.json').version")
-          npm run version:bump -- patch
+          # #324: an upstream MAJOR bumps us a MINOR, never a patch. Semver
+          # describes OUR contract (the 71-tool MCP surface), not our dependency
+          # versions, and minor keeps tilde-pinned consumers off it automatically.
+          npm run version:bump -- "${{ steps.versions.outputs.bump_type }}"
           # Resync the lockfile: version-bump.js does not touch package-lock.json,
           # and a stale lock makes npm ci fail at the release commit (#261 fix 1).
           npm install --package-lock-only
@@ -246,6 +268,32 @@ jobs:
           # Fast-forward main to the tip of our working branch
           git checkout main
           git merge --ff-only "${BRANCH}"
+
+          # #324: version-regression assertion, immediately before the tag push.
+          #
+          # Mostly redundant: version-bump.js already exits 1 when local VERSION is
+          # behind the latest origin tag, and the concurrency group covers a raced
+          # train. The ONE residual case is a human /release landing during this
+          # job's up-to-40-minute Docker E2E window, which the group cannot cover
+          # because it is a different workflow.
+          #
+          # The refetch is load bearing: the checkout's fetch-depth 0 tag list is
+          # up to 40 minutes stale by now, so without it this compares against a
+          # stale list and is VACUOUS.
+          if ! git fetch --tags --force origin; then
+            echo "::error::could not refetch tags; refusing to tag against a stale list"
+            exit 1
+          fi
+          HIGHEST_TAG=$(git tag -l 'v[0-9]*' | sed 's/^v//' | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)
+          if [ -z "${HIGHEST_TAG}" ]; then
+            echo "::error::no published version tag found; refusing to tag (fails closed, unlike version-bump.js's soft warn)"
+            exit 1
+          fi
+          if [ "$(printf '%s\n%s\n' "${HIGHEST_TAG}" "${NEW_VERSION}" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1)" != "${NEW_VERSION}" ] \
+             || [ "${HIGHEST_TAG}" = "${NEW_VERSION}" ]; then
+            echo "::error::version regression: about to tag v${NEW_VERSION} but v${HIGHEST_TAG} already exists. A release landed during this run."
+            exit 1
+          fi
 
           # Tag the release commit
           git tag -a "v${NEW_VERSION}" \
@@ -383,11 +431,42 @@ jobs:
           echo "✅ Lint · Unit tests · Docker E2E: all green before merge" >> $GITHUB_STEP_SUMMARY
 
       - name: ⏭️ Summary (no update)
-        if: steps.versions.outputs.update_needed == 'false'
+        # #324: gated on the SPECIFIC reason, not on the boolean complement. This
+        # text says "Current version X is the latest: nothing to do", which is
+        # actively false for a denied, not-forward or soaking refusal, on the one
+        # surface a human reads.
+        if: steps.versions.outputs.refusal_reason == 'up_to_date'
         run: |
           echo "### ✅ Already Up to Date" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Current version \`${{ steps.versions.outputs.current }}\` is the latest: nothing to do." >> $GITHUB_STEP_SUMMARY
+
+      - name: 🚦 Summary (refused by a pre-flight control)
+        # #324: the sibling the no-update summary needs. A refusal is not "nothing
+        # to do"; it names which control fired and what clears it, so an operator
+        # is never left guessing whether to wait or to act.
+        if: steps.versions.outputs.refusal_reason != '' && steps.versions.outputs.refusal_reason != 'up_to_date'
+        env:
+          REFUSAL: ${{ steps.versions.outputs.refusal_reason }}
+          LATEST: ${{ steps.versions.outputs.latest }}
+          SOAK_HOURS: ${{ steps.versions.outputs.soak_hours }}
+        run: |
+          {
+            echo "### 🚦 Train refused by a pre-flight control"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Control | \`${REFUSAL}\` |"
+            echo "| Upstream version | \`${LATEST}\` |"
+            echo "| Soak window in effect | ${SOAK_HOURS}h |"
+            echo ""
+            case "$REFUSAL" in
+              not_forward) echo "Not a strict forward move, or not a release triple. Clears when upstream publishes a higher release version on the \`latest\` dist-tag." ;;
+              denied)      echo "This version is in \`.github/actual-api-denylist.txt\` **on main**. It will NEVER clear on its own: remove the entry on main to allow it." ;;
+              soaking)     echo "Upstream release is younger than the soak window. Clears automatically once it ages past ${SOAK_HOURS}h; no action needed." ;;
+              *)           echo "Unrecognised refusal reason." ;;
+            esac
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # -----------------------------------------------------------------------
       # 14. Record the train outcome (#325)
@@ -399,11 +478,26 @@ jobs:
       - name: 🏷️ Record train outcome
         id: outcome
         if: success()
+        env:
+          REFUSAL: ${{ steps.versions.outputs.refusal_reason }}
         run: |
+          # #324: map the closed refusal enum onto TRAIN_OUTCOME.
+          #
+          # The default arm deliberately writes NOTHING. Emitting noop_up_to_date
+          # for a refused version would be factually wrong and would make a
+          # denylist that has silently stopped matching indistinguishable from a
+          # healthy night. Writing nothing lets the reporter's fail-toward-
+          # notifying default apply.
           if [ "${{ steps.versions.outputs.update_needed }}" = "true" ]; then
             echo "value=success" >> "$GITHUB_OUTPUT"
           else
-            echo "value=noop_up_to_date" >> "$GITHUB_OUTPUT"
+            case "$REFUSAL" in
+              up_to_date)  echo "value=noop_up_to_date"  >> "$GITHUB_OUTPUT" ;;
+              not_forward) echo "value=noop_not_forward" >> "$GITHUB_OUTPUT" ;;
+              denied)      echo "value=noop_denied"      >> "$GITHUB_OUTPUT" ;;
+              soaking)     echo "value=noop_soaking"     >> "$GITHUB_OUTPUT" ;;
+              *)           echo "unmapped refusal_reason '$REFUSAL': writing no outcome so the reporter treats it as a failure" ;;
+            esac
           fi
 
   # ---------------------------------------------------------------------------

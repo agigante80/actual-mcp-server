@@ -42,8 +42,8 @@ export const COUNTER_END = '<!-- train-failure:counter:end -->';
  *  input a notification-suppression oracle. */
 export const VERSION_PLACEHOLDER = '(version failed validation, see run)';
 
-/** The closed TRAIN_OUTCOME enum. Both noop_denied and noop_not_forward are
- *  #324's deliverables (the denylist and the `sort -V` direction check are both
+/** The closed TRAIN_OUTCOME enum. noop_denied, noop_not_forward and noop_soaking
+ *  are all #324's deliverables (the denylist and the `sort -V` direction check are both
  *  its pre-flight safety work), added without this file changing. An earlier
  *  comment credited noop_not_forward to #321; that was wrong, #321's body never
  *  mentions TRAIN_OUTCOME at all. */
@@ -52,6 +52,7 @@ export const KNOWN_OUTCOMES = new Set([
   'noop_up_to_date',
   'noop_denied',
   'noop_not_forward',
+  'noop_soaking',
   'failure',
 ]);
 

@@ -1,0 +1,30 @@
+# @actual-app/api versions the release train must REFUSE.
+#
+# Why this file exists: without it a rollback is silently undone within 24 hours.
+# Revert package.json to the previous version and CURRENT is old while LATEST is
+# still the bad version upstream. That is a strict FORWARD move, the direction
+# check is satisfied, and the train re-upgrades to the broken version the next
+# night. The rollback lasts exactly one run.
+#
+# The failure signature is the real cost: "I fixed it, it worked, it came back on
+# its own" is far more expensive to debug than a straightforward failure, because
+# the obvious hypothesis is that the fix was wrong.
+#
+# FORMAT CONTRACT (pinned by tests/unit/train_preflight.test.js):
+#   - one entry per line
+#   - everything from the first '#' to end of line is a comment and is stripped
+#   - the entry is the FIRST whitespace-delimited token of what remains
+#   - blank lines are ignored
+#   - matching is EXACT string equality on that token, never substring or regex
+#
+# Example (do not uncomment; this is documentation):
+#   26.8.0  # broke stdio framing, see #NNN, 2026-08-04
+#
+# IMPORTANT: the train checks out `ref: main` and never reads develop, so ONLY
+# the copy of this file on main has any effect. A denylist entry that has not
+# reached main does not protect anything. See the rollback runbook in
+# docs/guides/DEPLOYMENT.md.
+#
+# Deleting this file does NOT disable the control: a missing or unreadable
+# denylist fails the run RED, because an absent safety control is a failure and
+# not a no-op.
