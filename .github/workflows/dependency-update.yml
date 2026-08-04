@@ -41,7 +41,11 @@ jobs:
   update-test-release:
     name: Update • Lint • Test • Release
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # #326 review: the step caps already sum to 70 in the pathological case
+    # (Playwright 15 + Docker E2E 25 + the ci-cd watch 30). A job-level cancel is
+    # the unattributable state #325 exists to avoid, so the job budget must sit
+    # above the sum of its parts, not below it.
+    timeout-minutes: 75
 
     # #325: consumed by the report-train-failure job. `train_outcome` is a CLOSED
     # enum; the reporter treats unset or unrecognised as a failure, so a job that

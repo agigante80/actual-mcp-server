@@ -641,12 +641,31 @@ jobs:
           docker buildx imagetools create "${ghcr_targets[@]}" "${ghcr_sources[@]}"
 
       - name: 🔎 Inspect published manifest (assert both arches)
+        # #326: this step was named as an assertion and asserted NOTHING. It ran
+        # `docker buildx imagetools inspect` on the first Docker Hub tag and
+        # stopped: exit 0 on a single-arch manifest, and ghcr.io never inspected.
+        # It now genuinely asserts, on both registries.
+        env:
+          HUB_TAGS: ${{ steps.meta.outputs.hub_tags }}
+          GHCR_TAGS: ${{ steps.meta.outputs.ghcr_tags }}
         run: |
           set -euo pipefail
-          first_tag="${{ steps.meta.outputs.hub_tags }}"
-          first_tag="${first_tag%%,*}"
-          echo "Inspecting ${first_tag}"
-          docker buildx imagetools inspect "${first_tag}"
+          for tags in "${HUB_TAGS}" "${GHCR_TAGS}"; do
+            first_tag="${tags%%,*}"
+            [ -n "${first_tag}" ] || continue
+            echo "Asserting platforms on ${first_tag}"
+            # Set equality, never a count. `--provenance` attaches attestation
+            # manifests reporting os/architecture "unknown", so a real release
+            # shows FOUR entries and an "at least 2" check would pass a
+            # single-arch manifest. Verified live against 0.9.3.
+            got=$(docker manifest inspect "${first_tag}" \
+              | jq -r '[.manifests[].platform | select(.os != "unknown" and .architecture != "unknown") | "\(.os)/\(.architecture)"] | sort | join(",")')
+            if [ "${got}" != "linux/amd64,linux/arm64" ]; then
+              echo "::error::${first_tag} serves [${got}], expected exactly linux/amd64,linux/arm64"
+              exit 1
+            fi
+            echo "  ok: ${got}"
+          done
 
       - name: 📋 Docker publish summary
         run: |
@@ -723,6 +742,48 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Registry**: https://www.npmjs.com/package/actual-mcp-server" >> $GITHUB_STEP_SUMMARY
           echo "- **Provenance**: attached (OIDC, no long-lived token)" >> $GITHUB_STEP_SUMMARY
+
+  # --------------------------------------------------------------------------
+  # Job 7b: Verify the published artifacts actually exist (#326)
+  #
+  # A green pipeline proves the publish JOBS exited 0. It does not prove a
+  # third-party registry now serves what we think it serves. Those are two
+  # different claims and the release path conflated them.
+  #
+  # Placed in ci-cd.yml rather than inside the train, deliberately: this covers
+  # EVERY release including manual promotions via /release, which is how most
+  # releases actually ship. The train still learns about a failure here, because
+  # it watches this run with `gh run watch --exit-status`.
+  #
+  # Read-only and credential-free: npm and ghcr.io reads need no auth. This job
+  # never publishes and never mutates a dist-tag.
+  # --------------------------------------------------------------------------
+  verify-published-artifacts:
+    name: Verify Published Artifacts
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [version, docker-publish, npm-publish]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 🔍 Read back npm and both registries
+        env:
+          VERIFY_VERSION: ${{ needs.version.outputs.version }}
+          VERIFY_NPM_PACKAGE: actual-mcp-server
+          VERIFY_HUB_IMAGE: ${{ env.DOCKER_IMAGE_NAME }}
+          VERIFY_GHCR_IMAGE: ghcr.io/${{ github.repository_owner }}/actual-mcp-server
+        run: node scripts/verify-published-artifacts.mjs
 
   # --------------------------------------------------------------------------
   # Job 8: Security Scanning
@@ -886,7 +947,7 @@ jobs:
     name: Create Release
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, docker-publish, npm-publish, security-scan, docker-hub-description, deployment-test]
+    needs: [version, docker-publish, npm-publish, security-scan, docker-hub-description, deployment-test, verify-published-artifacts]
     # Tag-gated for the same reason as npm-publish (see #153): tag is the
     # canonical release identity. Without this gate, after npm-publish became
     # tag-gated, main-push's npm-publish=skipped would no longer block release,
