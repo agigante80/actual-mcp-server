@@ -204,12 +204,22 @@ jobs:
       # Parity is asserted by invariant (q1), not by anyone remembering to keep
       # these lists aligned.
       #
-      # actionlint is DELIBERATELY EXCLUDED, see (q2). It is fetched by curl from
-      # a MUTABLE git tag with no checksum verification. Putting that on the
-      # pre-tag release path trades a supply-chain regression for catching a
-      # malformed workflow, and workflow shape is already covered here by
-      # workflow_release_guards, including the (p8) bash-syntax invariant. Pin the
-      # installer by commit sha with `sha256sum -c` first, then add it.
+      # actionlint is DELIBERATELY EXCLUDED, see (q2), and PERMANENTLY so.
+      #
+      # The reason first recorded here ("until the installer is sha-pinned") was
+      # wrong, and #328 pinned the installer without changing this. The real
+      # reason is REACHABILITY: this job's only file mutations are `sed -i` on
+      # README.md and `npm run version:bump`, which writes README.md, docs/*.md
+      # and .github/copilot-instructions.md. Nothing under .github/workflows/
+      # changes, so actionlint's entire input surface is outside this job's
+      # mutation set. #322's rationale was "the train could TAG what CI would
+      # REJECT", which is a reachability test, not a completeness checklist: knip,
+      # build and test:unit-js earn their place because the dependency bump
+      # changes what they inspect, and actionlint does not.
+      #
+      # It is also already covered on the published tree: ci-cd.yml triggers on
+      # tags with no ref filter on its lint job, and step 10 below watches that
+      # run with `gh run watch --exit-status`.
       #
       # check:coverage is also excluded, permanently: #321 removed it from this
       # lane because it enumerates the LIVE @actual-app/api surface, which is the

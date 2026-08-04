@@ -323,10 +323,10 @@ The gate's CONTENT is already single-sourced, in `package.json` scripts. What wa
 | `test:unit-js` | yes | yes | likewise |
 | `knip` | yes | yes | added by #322 |
 | `node-version-drift` | yes | yes | added by #322 |
-| `actionlint` | yes | **no** | excluded, see below |
+| `actionlint` | yes | **no** | excluded permanently, see below |
 | `check:coverage` | yes | **no** | excluded permanently by #321 |
 
-**`actionlint` is excluded on purpose.** Its installer is fetched by curl from a **mutable git tag with no checksum verification**. Putting that on the pre-tag release path trades a supply-chain regression for catching a malformed workflow, and workflow shape is already covered by `workflow_release_guards.test.js`, including the `(p8)` invariant that runs `bash -n` over every `run:` block. Pin the installer by commit sha with `sha256sum -c`, then move it into `PARITY_CHECKS`.
+**`actionlint` is excluded on purpose, and permanently (#328).** The reason first recorded here ("pin the installer, then add it") was wrong: #328 pinned the installer and the exclusion still stands. The real reason is **reachability**. The train's only file mutations are `sed -i` on `README.md` and `npm run version:bump`, which writes `README.md`, `docs/*.md` and `.github/copilot-instructions.md`. Nothing under `.github/workflows/` changes, so actionlint's entire input surface is outside the train's mutation set. #322's rationale was "the train could tag what CI would reject", which is a reachability test rather than a completeness checklist: `knip`, `build` and `test:unit-js` earn their place because the dependency bump changes what they inspect, and actionlint does not. It is also already covered on the published tree, since `ci-cd.yml` triggers on tags with no ref filter on its lint job and the train watches that run with `gh run watch --exit-status`.
 
 **`check:coverage` is excluded permanently.** It enumerates the live `@actual-app/api` surface, which is exactly what killed the train (#321).
 

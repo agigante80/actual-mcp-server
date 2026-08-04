@@ -172,9 +172,12 @@ jobs:
 
       - name: 🩺 Lint GitHub Actions workflows (actionlint)
         run: |
-          # Official installer, pinned to a specific actionlint version (avoids a
-          # third-party action and keeps the version reviewable).
-          curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash | bash -s 1.7.12
+          # #328: the upstream installer is NOT used. Verified at v1.7.12: it
+          # performs zero verification of its own and pipes the release tarball
+          # straight into tar, so pinning the SCRIPT would pin nothing about the
+          # BINARY. scripts/install-actionlint.sh fetches the tarball directly
+          # and sha256-verifies it against a COMMITTED digest before extracting.
+          bash scripts/install-actionlint.sh
           # -shellcheck= disables actionlint's shellcheck integration (#180). Its
           # findings depend on the runner's shellcheck VERSION, so an exclusion
           # list passed locally but failed in CI (SC2002 on a different shellcheck).
