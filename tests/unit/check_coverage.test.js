@@ -19,12 +19,12 @@
 //
 // Run: node tests/unit/check_coverage.test.js
 
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const { analyzeCoverage, readImplementedTools, API_TO_TOOL, INTERNAL_METHODS } =
+const { analyzeCoverage, readImplementedTools, API_TO_TOOL } =
   await import('../../scripts/list-actual-api-methods.mjs');
 
 let passed = 0, failed = 0;
@@ -105,6 +105,32 @@ console.log('\n[mapping-integrity check fires]');
   const { mappingErrors } = analyzeCoverage({ apiMethodsOverride: [], implementedToolsOverride: [] });
   assert(mappingErrors.length === Object.keys(API_TO_TOOL).length,
     'with an empty registry, every mapped method is reported as a mapping error');
+}
+
+// #321 defence 2 of 2: PIN THE EXIT CODE.
+//
+// Deleting the coverage step from dependency-update.yml was defence 1, but it is
+// not sufficient on its own: ci-cd.yml's lint job still runs `npm run
+// check:coverage`, docker-build declares `needs: [lint, ...]`, ci-cd.yml triggers
+// on `tags: ['v*']`, and the train watches that very tag run with
+// `gh run watch --exit-status`. So a nonzero exit here still reddens the train,
+// one hop away through ci-cd instead of directly.
+//
+// The ticket predicted the exact failure: an implementer reading "emit
+// machine-readable gap output" and "the drift job is red when a method is
+// uncovered" adds process.exit(1) to that CLI path, and kills the train again.
+console.log('\n[exit-code pin]');
+{
+  const { spawnSync } = await import('node:child_process');
+  const script = resolve(here, '../../scripts/list-actual-api-methods.mjs');
+  const run = spawnSync(process.execPath, [script], { encoding: 'utf8' });
+  assert(run.status === 0,
+    `check:coverage must exit 0 whether or not gaps exist (got ${run.status}); a nonzero exit reddens ci-cd's lint job, which the release train watches with --exit-status`);
+
+  const src = readFileSync(script, 'utf8');
+  const cliBlock = src.slice(src.indexOf('if (isMain)'));
+  assert(!/process\.exit\(\s*[1-9]/.test(cliBlock),
+    'the CLI block must contain no nonzero process.exit: gaps are informational, the drift lane owns the blocking-free signal');
 }
 
 console.log(`\n[check-coverage] Results: ${passed} passed, ${failed} failed`);
