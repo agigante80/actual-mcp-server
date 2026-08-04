@@ -13,9 +13,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
-  parseTriple, isPrerelease, compareTriples, parseDenylist,
+  isPrerelease, compareTriples, parseDenylist, invalidDenylistEntries,
   resolveSoakWindowHours, isSoaked, bumpTypeFor, decidePreflight,
-  REFUSAL_REASONS, SOAK_FLOOR_HOURS,
+  REFUSAL_REASONS, SOAK_FLOOR_HOURS, SOAK_CEILING_HOURS,
 } from '../../scripts/train-preflight.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -190,6 +190,38 @@ check('the soak FAILS CLOSED on unreadable age data', () => {
       `publishedAt ${JSON.stringify(bad)} must refuse, not proceed`);
   }
   assert.strictEqual(isSoaked({ publishedAt: null, now: '2026-08-04T00:00:00Z', windowHours: 48 }), false);
+});
+
+check('REVIEW: the soak window is clamped at the CEILING too', () => {
+  // Clamping only the floor left the one direction that silently disables the
+  // train. A fat-fingered 4800 instead of 48 makes every run report `soaking`,
+  // which maps to `ignore`, so the train is off for six months and NOBODY IS
+  // TOLD. The summary would even say "clears automatically, no action needed".
+  assert.strictEqual(resolveSoakWindowHours('4800'), SOAK_CEILING_HOURS);
+  assert.strictEqual(resolveSoakWindowHours('999999999'), SOAK_CEILING_HOURS);
+  assert.ok(SOAK_CEILING_HOURS >= SOAK_FLOOR_HOURS);
+  assert.strictEqual(resolveSoakWindowHours('72'), 72, 'a sane raise is still honoured');
+});
+
+check('REVIEW: a malformed denylist entry is RED, not a silent no-match', () => {
+  // These all READ as "this version is listed" to a human scanning the file, and
+  // all match nothing. The denylist is the one reactive control, edited
+  // mid-incident under time pressure, so a mis-write must be loud.
+  for (const bad of ['v26.8.0', '^26.8.0', '~26.8.0', '26.8.x', '- 26.8.0', '"26.8.0"', '026.8.0.1']) {
+    assert.ok(invalidDenylistEntries(`${bad}\n`).length > 0, `${bad} must be flagged`);
+    const d = decide({ denylistText: `${bad}\n` });
+    assert.ok(d.error, `${bad} must make the run RED, got ${JSON.stringify(d)}`);
+  }
+  assert.deepStrictEqual(invalidDenylistEntries('26.8.0\n'), [], 'a well-formed entry is fine');
+});
+
+check('REVIEW: an absent denylist is RED from the DECISION function, not just the caller', () => {
+  // Leaving the disposition in the I/O shell meant a future second caller lost
+  // the control silently, the same per-call-site pattern CLAUDE.md flags for
+  // withOpTimeout.
+  assert.ok(decide({ denylistText: null }).error);
+  assert.ok(decide({ denylistText: undefined }).error);
+  assert.ok(!decide({ denylistText: '' }).error, 'an EMPTY denylist is legal: it denies nothing');
 });
 
 check('the soak window is clamped to its floor', () => {

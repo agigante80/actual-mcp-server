@@ -46,7 +46,7 @@
 
 import assert from 'assert';
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import { execFileSync } from 'child_process';
+import { execFileSync, spawnSync } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -955,6 +955,70 @@ check('NEGATIVE (p): each pre-flight invariant fails on its counter-fixture', ()
   const noRefetch = wf.replace('          if ! git fetch --tags --force origin; then', '          if false; then');
   assert.strictEqual(regressionAssertionRefetchesBeforeTagging(noRefetch), false,
     'dropping the refetch must fail (p7): a stale tag list makes the assertion vacuous');
+});
+
+// (p8) #324 review: every `run:` block must be valid bash.
+//
+// This exists because a real syntax error shipped: deleting an if/else left an
+// orphan `echo` and `fi`, which would have made the train exit 2 at step 2 and
+// file a P1 EVERY NIGHT. Nothing caught it. (p2) only asserts a string appears
+// in the step, and `actionlint -shellcheck=` (the exact CI invocation) exits 0.
+// actionlint WITH shellcheck does catch it, but #180 disabled that deliberately
+// because its findings vary with the runner's shellcheck version. `bash -n` is
+// deterministic, so it closes the class without reopening that argument.
+function runBlocksWithSyntaxErrors(text) {
+  const lines = text.split('\n');
+  const bad = [];
+  let i = 0;
+  while (i < lines.length) {
+    const m = /^(\s*)run: \|/.exec(lines[i]);
+    if (!m) { i += 1; continue; }
+    const indent = m[1].length + 2;
+    const body = [];
+    let j = i + 1;
+    while (j < lines.length && (lines[j].trim() === '' || (lines[j].length - lines[j].replace(/^\s*/, '').length) >= indent)) {
+      body.push(lines[j].length >= indent ? lines[j].slice(indent) : '');
+      j += 1;
+    }
+    // Neutralise GitHub expressions so bash sees a placeholder, not `${{ ... }}`.
+    const script = body.join('\n').replace(/\$\{\{[^}]*\}\}/g, 'X');
+    const res = spawnSync('bash', ['-n'], { input: script, encoding: 'utf8' });
+    if (res.status !== 0) bad.push(`line ${i + 1}: ${(res.stderr || '').split('\n')[0]}`);
+    i = j;
+  }
+  return bad;
+}
+
+check('(p8) every run: block in the train is valid bash', () => {
+  const bad = runBlocksWithSyntaxErrors(wf);
+  assert.deepStrictEqual(bad, [], `a step that cannot parse fails the whole job:\n${bad.join('\n')}`);
+});
+
+check('(p8) every run: block in ci-cd.yml is valid bash', () => {
+  const bad = runBlocksWithSyntaxErrors(readFileSync(CICD_WORKFLOW, 'utf8'));
+  assert.deepStrictEqual(bad, [], bad.join('\n'));
+});
+
+check('NEGATIVE (p8): a stray `fi` is detected', () => {
+  // The exact shape that shipped.
+  const broken = '      - name: X\n        run: |\n          node scripts/train-preflight.mjs\n            echo "hi"\n          fi\n';
+  assert.ok(runBlocksWithSyntaxErrors(broken).length > 0,
+    'an orphan fi must be caught; this is the defect that made the guard necessary');
+  const okBlock = '      - name: X\n        run: |\n          node scripts/train-preflight.mjs\n';
+  assert.deepStrictEqual(runBlocksWithSyntaxErrors(okBlock), [], 'a valid block must pass');
+});
+
+check('(p9) the caret install is asserted against the evaluated version', () => {
+  const j = withoutComments(jobSection(wf, 'update-test-release'));
+  assert.ok(/npm install @actual-app\/api@\^\$\{LATEST\}/.test(j));
+  assert.ok(/INSTALLED=\$\(node -p/.test(j) && /caret range resolved/.test(jobSection(wf, 'update-test-release')),
+    'a caret range can resolve a version no control evaluated; the install must be asserted');
+});
+
+check('NEGATIVE (p9): dropping the post-install assertion is detected', () => {
+  const without = wf.replace(/          INSTALLED=\$\(node -p[\s\S]*?          fi\n/, '');
+  const j = withoutComments(jobSection(without, 'update-test-release'));
+  assert.strictEqual(/INSTALLED=\$\(node -p/.test(j), false, 'removing the assertion must be visible');
 });
 
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);

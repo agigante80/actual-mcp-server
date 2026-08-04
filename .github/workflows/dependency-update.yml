@@ -117,8 +117,6 @@ jobs:
           # `update_needed` with its ORIGINAL name and semantics, so the fourteen
           # gates that consume it are unchanged.
           node scripts/train-preflight.mjs
-            echo "🔔 Update available: $CURRENT → $LATEST"
-          fi
 
       # -----------------------------------------------------------------------
       # 3. Create working branch, install new version, commit
@@ -137,6 +135,21 @@ jobs:
 
           # Install new version (updates package.json + package-lock.json + node_modules)
           npm install @actual-app/api@^${LATEST}
+
+          # #324 review: every pre-flight control decided about ${LATEST}, the
+          # `latest` DIST-TAG. This install resolves a CARET RANGE, which npm
+          # matches against all published non-prerelease versions, not the tag.
+          # Whenever a real release sits above the tag, the caret picks it, and
+          # the train installs a version that was never direction-checked, never
+          # denylist-checked and never soak-checked, while labelling the branch,
+          # commit and tag with ${LATEST}. That path is exactly the one the
+          # direction control names: the dist-tag is publisher-controlled and
+          # moves BACKWARDS as the standard remediation for a bad release.
+          INSTALLED=$(node -p "require('./node_modules/@actual-app/api/package.json').version")
+          if [ "$INSTALLED" != "${LATEST}" ]; then
+            echo "::error::caret range resolved ${INSTALLED} but the pre-flight controls evaluated ${LATEST}"
+            exit 1
+          fi
 
           # Update API version string in docs (best-effort, || true avoids failure
           # if a pattern has already been updated or doesn't exist)

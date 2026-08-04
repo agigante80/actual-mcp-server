@@ -31,6 +31,13 @@ export const REFUSAL_REASONS = ['', 'up_to_date', 'not_forward', 'denied', 'soak
  *  disable the control by being unset, empty, or mistyped. */
 export const SOAK_FLOOR_HOURS = 48;
 
+/** And a CEILING. Clamping only the floor left the one direction that silently
+ *  disables the train: a fat-fingered 4800 instead of 48 makes every run report
+ *  `soaking`, which maps to `ignore`, so the train is off for six months and
+ *  NOBODY IS TOLD. The step summary would even say "clears automatically, no
+ *  action needed". A week is far past any real yank window. */
+export const SOAK_CEILING_HOURS = 168;
+
 /** A bare MAJOR.MINOR.PATCH triple. Deliberately NOT full semver: everything
  *  downstream compares release triples only, which is the domain where ordering
  *  is unambiguous. */
@@ -76,6 +83,14 @@ export function compareTriples(a, b) {
  * The exactness matters: a naive `grep -q "$LATEST"` would match a version named
  * inside a comment on an unrelated line and block a perfectly good release.
  */
+/** Entries that are not bare version triples. A denylist is edited by a human
+ *  mid-incident under time pressure, and `- 26.8.0`, `# 26.8.0`, `v26.8.0` or
+ *  `^26.8.0` all READ as "this version is listed" while matching nothing. That
+ *  is the guard-that-reads-as-protection defect one layer down, in the data. */
+export function invalidDenylistEntries(text) {
+  return [...parseDenylist(text)].filter((t) => !TRIPLE.test(t)).sort();
+}
+
 export function parseDenylist(text) {
   const out = new Set();
   for (const rawLine of String(text ?? '').split('\n')) {
@@ -92,7 +107,8 @@ export function parseDenylist(text) {
  *  value falls back to the floor rather than weakening the control. */
 export function resolveSoakWindowHours(raw) {
   const n = Number.parseInt(String(raw ?? '').trim(), 10);
-  return Number.isFinite(n) && n >= SOAK_FLOOR_HOURS ? n : SOAK_FLOOR_HOURS;
+  if (!Number.isFinite(n)) return SOAK_FLOOR_HOURS;
+  return Math.min(Math.max(n, SOAK_FLOOR_HOURS), SOAK_CEILING_HOURS);
 }
 
 /**
@@ -152,17 +168,29 @@ export function decidePreflight({
 } = {}) {
   const no = (refusalReason, warning = null) =>
     ({ updateNeeded: false, refusalReason, bumpType: 'patch', error: null, warning });
+  const red = (error) =>
+    ({ updateNeeded: false, refusalReason: '', bumpType: 'patch', error, warning: null });
+
+  // The absent-denylist disposition lives HERE, not only in the caller. Leaving
+  // it in the I/O shell meant any future second caller of this function silently
+  // lost the control, which is the same per-call-site-rather-than-structural
+  // pattern CLAUDE.md already flags for withOpTimeout.
+  if (denylistText === null || denylistText === undefined) {
+    return red('denylist is missing or unreadable; refusing to run without it');
+  }
+  const malformed = invalidDenylistEntries(denylistText);
+  if (malformed.length > 0) {
+    return red(`denylist has entries that are not bare version triples and would match nothing: ${malformed.join(', ')}`);
+  }
 
   // 1. VALIDITY. Both sides. `node -p "require('./package.json').dependencies[x]"`
   //    prints the literal string "undefined" for a missing key (verified), so an
   //    invalid CURRENT is our own repo state and equally deserves a red run.
   if (!parseTriple(current)) {
-    return { updateNeeded: false, refusalReason: '', bumpType: 'patch', warning: null,
-      error: `CURRENT is not a valid version triple: ${JSON.stringify(current ?? null)}` };
+    return red(`CURRENT is not a valid version triple: ${JSON.stringify(current ?? null)}`);
   }
   if (!parseTriple(latest) && !isPrerelease(latest)) {
-    return { updateNeeded: false, refusalReason: '', bumpType: 'patch', warning: null,
-      error: `LATEST is not a valid version: ${JSON.stringify(latest ?? null)}` };
+    return red(`LATEST is not a valid version: ${JSON.stringify(latest ?? null)}`);
   }
 
   // 2. EQUALITY.
@@ -242,27 +270,41 @@ async function main() {
   emit('current', current);
   emit('latest', latest);
 
+  // Same 3-retry treatment as `npm show`, and its exhaustion is RED.
+  //
+  // It previously swallowed every error into `publishedAt = null`, which the soak
+  // then reported as `soaking`: a green run, an invisible warning, and no issue
+  // filed. "Young" (a legitimate quiet wait) and "we could not read the
+  // timestamp" (an infrastructure fault) shared one disposition, so a persistent
+  // output-shape change would have stopped the train permanently and silently.
   let publishedAt = null;
+  let timeError = null;
   if (latest) {
-    try {
-      const times = JSON.parse(
-        execFileSync('npm', ['view', '@actual-app/api', 'time', '--json'], { encoding: 'utf8' }),
-      );
-      // Indexed by the EXACT resolved version. That map also carries `created`
-      // and `modified`, which are not versions, so any positional read or a
-      // fallback to `modified` would be wrong.
-      publishedAt = times?.[latest] ?? null;
-    } catch { publishedAt = null; }
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        const times = JSON.parse(
+          execFileSync('npm', ['view', '@actual-app/api', 'time', '--json'], { encoding: 'utf8' }),
+        );
+        // Indexed by the EXACT resolved version. That map also carries `created`
+        // and `modified`, which are not versions, so any positional read or a
+        // fallback to `modified` would be wrong.
+        publishedAt = times?.[latest] ?? null;
+        timeError = publishedAt ? null : new Error(`no publish time recorded for ${latest}`);
+        if (publishedAt) break;
+      } catch (err) {
+        timeError = err;
+      }
+      if (attempt < 3) execFileSync('sleep', ['10']);
+    }
   }
 
   let denylistText = null;
   try {
     denylistText = readFileSync(new URL('../.github/actual-api-denylist.txt', import.meta.url), 'utf8');
   } catch {
-    // An absent safety control is a failure, not a no-op. A guard that asserts
-    // only "the workflow consults the file" would stay green after a deletion.
-    process.stdout.write('::error::actual-api-denylist.txt is missing or unreadable; refusing to run the train without its denylist\n');
-    process.exit(1);
+    // Pass null through rather than exiting here: decidePreflight owns the
+    // disposition, so the control cannot be lost by a future second caller.
+    denylistText = null;
   }
 
   const decision = decidePreflight({
@@ -274,11 +316,28 @@ async function main() {
     soakWindowRaw: process.env.TRAIN_SOAK_HOURS,
   });
 
+  // F6: flush what is already known BEFORE any red exit. The comment above
+  // claimed an early refusal still populates the reporter's TRAIN_VERSION, but
+  // the append happened after all three exit sites, so the two RED paths (the
+  // ones that actually page a human) wrote nothing.
+  const flush = async () => {
+    if (!process.env.GITHUB_OUTPUT) return;
+    const { appendFileSync } = await import('node:fs');
+    appendFileSync(process.env.GITHUB_OUTPUT, `${out.join('\n')}\n`);
+  };
+
+  if (timeError && latest) {
+    await flush();
+    process.stdout.write(`::error::could not read the publish time for ${latest} after 3 attempts: ${timeError.message}\n`);
+    process.exit(1);
+  }
   if (lookupError && !latest) {
+    await flush();
     process.stdout.write(`::error::npm show failed after 3 attempts: ${lookupError.message}\n`);
     process.exit(1);
   }
   if (decision.error) {
+    await flush();
     process.stdout.write(`::error::${decision.error}\n`);
     process.exit(1);
   }
