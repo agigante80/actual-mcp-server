@@ -56,8 +56,8 @@ reporter must provide: the issue templates ask reporters only for what they know
 ```bash
 # Build & Run
 npm run build                   # TypeScript compilation (required before running)
-npm run dev -- --http --debug   # Dev mode with HTTP transport + debug logs
-npm run dev -- --stdio --debug  # Dev mode with stdio transport (for Claude Desktop/Code)
+npm run dev -- --http           # Dev mode with HTTP transport (see note below: --debug is already implied)
+npm run dev -- --stdio          # Dev mode with stdio transport (for Claude Desktop/Code)
 npm run start                   # Production HTTP (requires build first)
 node dist/src/index.js --stdio  # Production stdio
 
@@ -105,9 +105,15 @@ docker compose --profile production up  # Production: MCP server on :3600
 # For a stack that also runs Actual Budget, use docker-compose.test.yaml (it + playwright.config.docker.ts back the test:e2e:docker* scripts).
 ```
 
+**`npm run dev` is not a bare runner.** It is `npm run build && node scripts/register-tsconfig-paths.js -- --debug`, so it always recompiles first and always appends `--debug`. Anything you pass after `--` lands AFTER that flag, which is why the transport flag alone is enough. Passing `--debug` yourself is harmless but redundant. There is no watch mode: re-run the command to pick up a source change.
+
+**The build is TypeScript 7 with `noUnusedLocals` and `noUnusedParameters` on.** An unused import, local, or parameter is a hard `npm run build` failure, not a lint warning; prefix a deliberately-unused parameter with `_`. `tsconfig.json` also redirects `@actual-app/core` and `@actual-app/core/*` to the stub at `types/actual-core-stub.d.ts`. That stub is load-bearing: from `@actual-app/api` v26.4.0 the core package is imported directly and ships TypeScript SOURCE rather than compiled declarations, so without the redirect `tsc` compiles it under our `strict` settings and fails on code that needs `typescript-strict-plugin`. If you hit a type error pointing into `@actual-app/core`, the stub is the thing to look at, not the calling code. Note `types/` is in the do-not-modify tier below, so changing it needs explicit permission.
+
 **Pre-commit mandatory**: `npm run build && npm run test:adapter && npm run test:unit-js && npm audit --audit-level=moderate`
 
 **There is no `npm run lint`.** Do not go looking for one. CI's `Lint Code` job is `npm run build` (type check) plus `npm run check:coverage`, `npm run knip`, and `actionlint` (pinned to 1.7.12, run as `./actionlint -shellcheck= -color`; the shellcheck integration is disabled deliberately per #180 because its findings vary with the runner's shellcheck version). The `Run Tests` job adds `npm run tool-count` and `npm audit` ahead of `test:unit-js`, and `Docker E2E Tests` runs `npm run test:e2e:docker:full`, not the smoke variant. Ignore the "63 tests" in that CI step's name and in `tests/e2e/run-docker-e2e.sh`: it is a stale label, and the same line names a tool total 20 short of the current one. `docker-all-tools.e2e.spec.ts` currently collects 94 tests, some of which skip themselves at runtime when a fixture is missing. `npm run tool-count` does not police these numbers.
+
+**The `ci-cd.yml` jobs beyond those three** are `Version Generation` (feeds the others via `needs: version`), `Node Floor Guard (below-floor interpreter)`, `Validate Docker Description`, and the per-platform `Build ... image` matrix. **Read the Node Floor Guard's log carefully before calling it a failure.** It deliberately installs Node 20, which is below the `engines` floor, then asserts that both `bin/actual-mcp-server.js` and `dist/src/index.js` exit 1 with a legible "requires Node" message instead of the raw `ERR_IMPORT_ASSERTION_TYPE_MISSING` crash (#275), and that the dist entry writes nothing to stdout so stdio framing stays clean. A passing run therefore prints a below-floor Node version and a rejection message. That output is the assertion succeeding. The job exists because every other job runs on a supported Node, where the guard is a no-op and could rot unnoticed.
 
 **Do NOT run in ephemeral environments**: `test:e2e`, `test:integration:*`, `dev`/`start` (need real `.env`), `release:*`/`docs:sync` (human responsibility only), `deploy:*` (needs Docker). `test:integration:cleanup` deletes test data created by `full`. Only run it after `full` against a test budget.
 
@@ -151,6 +157,17 @@ Project-local skills in `.claude/skills/` (invoked via the Skill tool, or automa
 | `fork-analysis` | Harvests feature ideas from forks/branches into gate-ready tickets; caches results in `docs/audit/FORK_ANALYSIS.md` |
 | `release-automation` | Governs the CI release gate (no main promotion without a version bump) and the auto-release lanes |
 | `working-overnight` | Governed unattended work: branch plus PR only, never merges, writes a morning report |
+
+### Registered hooks
+
+All four live in `.claude/hooks/` and are registered in `.claude/settings.local.json`. Two are described in detail elsewhere in this file; the other two are easy to be surprised by:
+
+| Hook | Event | Notes |
+|------|-------|-------|
+| `block-dashes.py` | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | Enforces the no-dashes output convention above |
+| `require_green_develop_before_main.py` | `PreToolUse` on `Bash` | Blocks any merge, push, or release tag aimed at `main`; fails closed |
+| `overnight-guard.py` | `PreToolUse` on `Bash` | **Inert unless `.claude/overnight/active.md` exists.** Its shell wrapper exits 0 immediately when that file is absent, so it costs nothing in a normal session and only constrains commands during a `working-overnight` run |
+| `overnight-continue.py` | `Stop` | Fires when a turn ENDS, and can continue the session rather than letting it stop. If a session appears to keep going on its own, this is why. Belongs to the same overnight lane |
 
 ## Issue Labels
 
@@ -288,7 +305,7 @@ export default tool;
 | `src/lib/toolFactory.ts` | `createTool()`, the preferred factory for new tools |
 | `src/actualConnection.ts` | Actual Budget connection lifecycle |
 | `src/lib/errors.ts` | `notFoundMsg()`, `constraintErrorMsg()` helpers |
-| `src/observability.ts` | Per-tool call counters (incremented by `createTool`) |
+| `src/observability.ts` | Per-tool call counters (incremented by `createTool`). `prom-client` is an OPTIONAL dependency (`"*"` in `optionalDependencies`), dynamically imported and adapted to at runtime; when it is absent every counter silently no-ops. So missing metrics is a normal install state, not a bug |
 | `src/lib/budget-registry.ts` | Parses `BUDGET_N_*` env vars into budget config list |
 | `src/prompts/` | MCP prompt definitions (e.g. `showLargeTransactions`) |
 | `src/resources/` | MCP resource definitions (e.g. `accountsSummary`) |
@@ -374,6 +391,7 @@ When changing code, update these docs:
 - `docs/audit/deadcode-audit-cache.json`: cache used by `/code-health-auditor` (#234) to avoid re-filing dead-code findings (keyed `kind:path:symbol`); the skill maintains it. The committed `knip.json` is the dead-code config (blocking in CI since #237: `knip` exits nonzero on dead code); `tests/unit/knip_config.test.js` guards its entry points and that `scripts.knip` stays failing-mode (no `--no-exit-code`), and `tests/unit/advertised_tools_sync.test.js` guards that README-advertised tool names exist in `IMPLEMENTED_TOOLS`.
 - `docs/audit/FORK_ANALYSIS.md`: fork-feature analysis maintained by the `fork-analysis` skill (one row per analysed fork branch, both a cache so unchanged branches are skipped next run and a source of implementation ideas). Lives alongside the other skill-maintained audit artifacts; `scripts/tool-count.mjs` scans it for tool-count drift.
 - `docs/guides/DEPLOYMENT.md`: Docker Compose profiles, Kubernetes, upgrade steps
+- `scripts/README.md`: what every script in `scripts/` is for. Most are reachable through an npm script, but a few are direct-invoke diagnostics with no npm wrapper: `stdio-smoke.mjs` (drives the stdio transport end to end via `docker exec` inside the already-healthy bearer container, so no secrets touch the host; override the container with `MCP_STDIO_CONTAINER`), `regression-270-stall.mjs` and `diag-270-http.mjs` (the #270 operation-timeout stall), `import-test-budget.sh`, and `bootstrap-and-init.sh`
 - `docs/SECURITY_AND_PRIVACY.md`: auth models, threat model
 - `tests/manual-prompt/`: three prompt files for LLM-driven end-to-end verification (paste sequentially into an AI chat); update when adding tools
 - `docker/description/long.md`, `docker/description/short.md`: Docker Hub descriptions; managed by `npm run docs:sync`
