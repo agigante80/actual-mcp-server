@@ -334,6 +334,32 @@ Invariant `(q1)` asserts set equality against `PARITY_CHECKS` so the two lanes c
 
 ---
 
+### Train liveness: detecting a train that never RAN (#327)
+
+`report-train-failure.mjs` reports a train that **failed**. It cannot report one that **never ran**, because no run means no reporter job, which lands in the same found-by-eye state #325 was filed to fix.
+
+Two verified causes:
+
+- **GitHub disables scheduled workflows in PUBLIC repositories after 60 days of repository inactivity.** This repo is public, so it applies. Near-daily commits keep resetting the clock, so this is the lower-probability cause today.
+- **Cron dispatches are delayed under load and dropped under sufficiently high load.** GitHub does not guarantee a scheduled run fires. This is the live cause, and it is why the train's cron moved off minute 0, the top-of-hour peak GitHub advises scheduling away from.
+
+**Two signals, because they detect disjoint failures.** The workflow `state` field (`active`, `disabled_manually`, `disabled_inactivity`) is directly observable, immediate and threshold-free, and catches a disabled workflow. Recency of the newest `event=schedule` run catches a workflow that is `active` but not firing anyway. Recency alone was the original proposal and is the worse primary: it is a derived proxy that cannot fire until the threshold has elapsed.
+
+Two query details are load bearing:
+
+- **`event=schedule` is filtered.** `dependency-update.yml` also carries `workflow_dispatch`, and manually dispatching the train is the *first* diagnostic step when it looks dead. An unfiltered query would let that diagnostic reset the liveness clock while the cron stayed dead. Status is deliberately **not** filtered: a scheduled run that failed still proves the cron fired, and reporting that failure is #325's job.
+- **`created_at`, not `run_started_at`.** `created_at` timestamps the dispatch, which is the property under test. `run_started_at` conflates dispatch with runner availability and would report a queued-but-dispatched run as a dead cron.
+
+**Why this is a separate reporter rather than a `stale` member of `TRAIN_OUTCOME`.** Trace `classifyOutcome`'s gate order. Passing `stale` *without* adding it to `KNOWN_OUTCOMES` files a mislabelled "the release train failed" issue pointing at the wrong run. *Adding* it to `KNOWN_OUTCOMES` passes the unknown-value gate, fails the rest, and falls through to `{action:'ignore'}`: exit 0, green, nothing filed. That is the exact defect this ticket exists to eliminate, reproduced inside its own fix.
+
+This is the **inverse** of the `noop_soaking` lesson, where omission from the set caused a false P1 nightly. There the fix was to add the member; here adding it is the silent branch. Two mitigations pulling in opposite directions is why the classifier is separate rather than a judgement call.
+
+**Its own label, for the same reason.** Sharing #325's `train-failure` marker would mean this reporter's healthy path hits `decideTransition`'s `close_all` and closes every open train-failure issue with a comment falsely asserting recovery. Because `ci-cd.yml` runs on every push to `develop`, a genuine unresolved failure would be auto-closed within minutes of the next routine push. The liveness reporter uses `train-stale`, and its healthy steady state performs **zero** tracker writes.
+
+**Accepted limitation:** the check lives in `ci-cd.yml` and so is itself conditional on pushes to `develop`. A genuinely dormant repository silences both it and the cron. That is the same 60-day dormancy that disables the schedule in the first place, so it is recorded as accepted rather than papered over.
+
+---
+
 ### The API surface drift lane (#321)
 
 The live `@actual-app/api` surface moves without a commit. That signal used to live inside a unit test, which is why an upstream release could turn the suite red with nobody touching the repo. The signal is real; it is not a unit test. It lives in `.github/workflows/api-surface-drift.yml`, on `schedule` plus `workflow_dispatch` only.

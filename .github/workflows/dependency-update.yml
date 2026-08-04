@@ -22,7 +22,11 @@ name: Dependency Update & Auto-Release
 on:
   schedule:
     # Run daily at 1:00 AM UTC
-    - cron: '0 1 * * *'
+    # #327: minute 23, not 0. GitHub explicitly advises scheduling away from the
+    # top of the hour, which is the peak window where dispatches are delayed and,
+    # under sufficiently high load, dropped entirely. Still ahead of
+    # api-surface-drift.yml's 02:30 so the drift lane sees any upgrade this landed.
+    - cron: '23 1 * * *'
   workflow_dispatch: # Allow manual triggering
 
 # #324: a cron run overlapping a workflow_dispatch or a re-run would otherwise

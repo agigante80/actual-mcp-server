@@ -1200,5 +1200,133 @@ check('NEGATIVE (q): the parity guard fails when a check is dropped', () => {
     'a commented-out check must not count as present');
 });
 
+// ---------------------------------------------------------------------------
+// (n) #327: train liveness. #325 reports a train that FAILED; this covers one
+// that never RAN. Verified live: the train failed on 2026-08-03 and 2026-08-04,
+// both scheduled runs, and ZERO train-failure issues exist, because the reporter
+// only reached main with v0.9.4 today.
+// ---------------------------------------------------------------------------
+
+const LIVENESS = 'train-liveness';
+
+function livenessJob(text) { return jobSection(text, LIVENESS); }
+function livenessPermissionsExact(text) {
+  const j = withoutComments(livenessJob(text));
+  return /contents:\s*read/.test(j) && /actions:\s*read/.test(j) && /issues:\s*write/.test(j)
+    && !/contents:\s*write/.test(j) && !/packages:\s*write/.test(j);
+}
+function onlyLivenessHoldsIssuesWrite(text) {
+  // Every OTHER job, plus the workflow-level block, must be free of it.
+  const head = withoutComments(text.slice(0, text.indexOf('\njobs:')));
+  if (/issues:\s*write/.test(head)) return false;
+  const names = [...text.matchAll(/^  ([A-Za-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
+  return names.filter((nm) => nm !== LIVENESS)
+    .every((nm) => !/issues:\s*write/.test(withoutComments(jobSection(text, nm))));
+}
+function livenessCheckoutIsSafe(text) {
+  const j = withoutComments(livenessJob(text));
+  return /persist-credentials:\s*false/.test(j)
+    && /ref:\s*\$\{\{\s*github\.sha\s*\}\}/.test(j)
+    && /GH_TOKEN:\s*\$\{\{\s*github\.token\s*\}\}/.test(j)
+    && !/create-github-app-token/.test(j)
+    && !/secrets\./.test(j);
+}
+function livenessRunsNoInstall(text) {
+  return !/npm ci|npm install/.test(withoutComments(livenessJob(text)));
+}
+function livenessIsEventGated(text) {
+  const j = withoutComments(livenessJob(text));
+  return /github\.event_name == 'push'/.test(j)
+    && /github\.ref == 'refs\/heads\/develop'/.test(j)
+    && /github\.repository ==/.test(j);
+}
+function nothingNeedsLiveness(text) {
+  const names = [...text.matchAll(/^  ([A-Za-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
+  return names.filter((nm) => nm !== LIVENESS)
+    .every((nm) => !new RegExp(`needs:[^\\n]*${LIVENESS}`).test(jobSection(text, nm)));
+}
+function watchedSetCoversEveryScheduledWorkflow() {
+  const dir = join(ROOT, '.github', 'workflows');
+  const scheduled = readdirSync(dir).filter((f) => /\.ya?ml$/.test(f))
+    .filter((f) => /^\s*schedule:/m.test(withoutComments(readFileSync(join(dir, f), 'utf8'))));
+  const src = readFileSync(join(ROOT, 'scripts', 'report-train-stale.mjs'), 'utf8');
+  const listed = /WATCHED_WORKFLOWS = \[([\s\S]*?)\]/.exec(src)[1];
+  return scheduled.every((f) => listed.includes(f));
+}
+
+check('(n1) the liveness job declares exactly the three permissions it needs', () => {
+  assert.ok(livenessPermissionsExact(cicd),
+    'job-level permissions REPLACE the workflow block, so omitting contents: read leaves checkout unscoped');
+});
+
+check('(n2) ONLY the liveness job holds issues: write', () => {
+  assert.ok(onlyLivenessHoldsIssuesWrite(cicd),
+    'a top-level grant would hand tracker-write to every job that runs npm ci and Docker builds');
+});
+
+check('(n3) the liveness checkout is sha-pinned, unpersisted and App-token free', () => {
+  assert.ok(livenessCheckoutIsSafe(cicd));
+});
+
+check('(n4) the liveness job runs no npm install', () => {
+  assert.ok(livenessRunsNoInstall(cicd),
+    'it must not execute third-party install scripts while holding issues: write');
+});
+
+check('(n5) the liveness job is gated to push-on-develop in this repo', () => {
+  assert.ok(livenessIsEventGated(cicd),
+    'ci-cd.yml also fires on pull_request: ungated it would 403 on fork PRs and file issues from same-repo PR branches');
+});
+
+check('(n6) nothing needs the liveness job, so it can never gate a merge or publish', () => {
+  assert.ok(nothingNeedsLiveness(cicd));
+});
+
+check('(n7) stale is NOT in the TRAIN_OUTCOME enum', () => {
+  // Adding it is the SILENT branch: classifyOutcome falls through to
+  // {action:'ignore'} and files nothing. The inverse of the noop_soaking lesson.
+  const src = readFileSync(join(ROOT, 'scripts', 'report-train-failure.mjs'), 'utf8');
+  const block = /KNOWN_OUTCOMES = new Set\(\[([\s\S]*?)\]\)/.exec(src)[1];
+  assert.ok(!/['"]stale['"]/.test(block));
+});
+
+check('(n8) every scheduled workflow in the repo is in the watched set', () => {
+  assert.ok(watchedSetCoversEveryScheduledWorkflow(),
+    'a new scheduled workflow must be added to WATCHED_WORKFLOWS or it has no liveness cover');
+});
+
+check('(n9) the train cron does not start at minute 0', () => {
+  const cron = /cron: '([^']+)'/.exec(withoutComments(wf))[1];
+  assert.ok(!/^0 /.test(cron),
+    'GitHub advises scheduling away from the top of the hour, where dispatches are delayed and dropped');
+});
+
+check('NEGATIVE (n): each liveness invariant fails on its counter-fixture', () => {
+  const drop = (re) => { const m = cicd.replace(re, ''); assert.notStrictEqual(m, cicd, 'fixture must change the file'); return m; };
+
+  const noContents = cicd.replace('      contents: read\n      actions: read\n      issues: write', '      actions: read\n      issues: write');
+  assert.notStrictEqual(noContents, cicd, 'fixture must change the file');
+  assert.strictEqual(livenessPermissionsExact(noContents), false, 'dropping contents: read must fail (n1)');
+
+  const topLevel = cicd.replace('  contents: write\n  packages: write', '  contents: write\n  issues: write\n  packages: write');
+  assert.notStrictEqual(topLevel, cicd, 'fixture must change the file');
+  assert.strictEqual(onlyLivenessHoldsIssuesWrite(topLevel), false, 'a top-level grant must fail (n2)');
+
+  const unpinned = cicd.replace('          persist-credentials: false\n          ref: ${{ github.sha }}', '          persist-credentials: true\n          ref: develop');
+  assert.notStrictEqual(unpinned, cicd, 'fixture must change the file');
+  assert.strictEqual(livenessCheckoutIsSafe(unpinned), false, 'an unpinned persisted checkout must fail (n3)');
+
+  const withInstall = cicd.replace('        run: node scripts/report-train-stale.mjs', '        run: |\n          npm ci\n          node scripts/report-train-stale.mjs');
+  assert.notStrictEqual(withInstall, cicd, 'fixture must change the file');
+  assert.strictEqual(livenessRunsNoInstall(withInstall), false, 'adding npm ci must fail (n4)');
+
+  const ungated = drop(/    if: >-\n      github\.event_name == 'push' &&\n      github\.ref == 'refs\/heads\/develop' &&\n      github\.repository == '[^']*'\n/);
+  assert.strictEqual(livenessIsEventGated(ungated), false, 'removing the event gate must fail (n5)');
+
+  const needed = cicd.replace('    needs: [version, docker-publish, npm-publish]', `    needs: [version, docker-publish, npm-publish, ${LIVENESS}]`);
+  assert.notStrictEqual(needed, cicd, 'fixture must change the file');
+  assert.strictEqual(nothingNeedsLiveness(needed), false, 'another job needing liveness must fail (n6)');
+});
+
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
