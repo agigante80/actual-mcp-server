@@ -27,6 +27,7 @@
 // can exercise them without network.
 
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 
 /** Marker label. Dedupe and auto-close are scoped to it so a malformed query
  *  can never touch an unrelated ticket. */
@@ -75,10 +76,17 @@ export function validateVersion(raw) {
   return { valid: false, value: VERSION_PLACEHOLDER };
 }
 
-/** Every step across every job whose conclusion is a failure. */
+/** The reporter's own job. Excluded from corroboration: it is in progress while
+ *  it runs, and reading its own state would make the reporter self-referential. */
+export const REPORTER_JOB_NAME = 'Report train failure';
+
+/** Every step whose conclusion is a failure, across every job EXCEPT the
+ *  reporter's own. Scoping matters: without it, any cancelled or failed sibling
+ *  job in the run is attributed to the train. */
 function collectFailedSteps(jobs) {
   const out = [];
   for (const job of Array.isArray(jobs) ? jobs : []) {
+    if (job?.name === REPORTER_JOB_NAME) continue;
     for (const step of Array.isArray(job?.steps) ? job.steps : []) {
       if (step?.conclusion === 'failure') {
         out.push({ job: job.name ?? null, step: step.name ?? null });
@@ -105,6 +113,13 @@ export function classifyOutcome({ trainOutcome, jobs = [], jobConclusion } = {})
   const failed = collectFailedSteps(jobs);
   const failingStep = failed.length > 0 ? failed[0] : null;
 
+  // `jobConclusion` is the result of the ONE job this reporter needs, taken from
+  // `needs.<job>.result`, not derived by scanning the run. Scanning was wrong: a
+  // cancelled SIBLING job would preempt the success branch below, so a genuinely
+  // successful publish alongside any cancelled job would be reported as a train
+  // failure AND would not close the open issue. Latent with two jobs, live the
+  // moment a third is added, which #321/#324/#326 are heading toward.
+  //
   // A job that exceeds `timeout-minutes` is CANCELLED by GitHub, not failed.
   // The step-level timeouts cover the two long steps; the job-level cap is not
   // attributable from the jobs API, and the only place GitHub states the reason
@@ -238,39 +253,49 @@ export function buildIssueBody({
   return lines.join('\n');
 }
 
-/** Replace the counter block in an existing body, preserving everything else. */
-export function updateCounterBlock(body, { consecutive, firstRunUrl, latestRunUrl }) {
+/** Replace the counter block in an existing body, preserving everything else.
+ *
+ *  The replacement uses the FUNCTION form of String.replace. This is not style:
+ *  the string form expands `$&`, `$'` and `` $` `` in the replacement, and
+ *  firstRunUrl is round-tripped out of a human-editable issue body, so a `$`
+ *  pattern there would corrupt the block and then reparse as garbage. */
+export function updateCounterBlock(body, { consecutive, firstRunUrl, latestRunUrl, version, failingStep }) {
   const block = [
     COUNTER_START,
     `**Consecutive failures:** ${consecutive}`,
     `**First:** ${firstRunUrl ?? '(unknown)'}`,
     `**Latest:** ${latestRunUrl ?? '(unknown)'}`,
+    `**Latest version:** ${version ?? '(unknown)'}`,
+    `**Latest failing step:** ${failingStep ?? '(none reported)'}`,
     COUNTER_END,
   ].join('\n');
   const re = new RegExp(`${COUNTER_START}[\\s\\S]*?${COUNTER_END}`);
-  return re.test(body) ? body.replace(re, block) : `${body}\n\n${block}`;
+  return re.test(body) ? body.replace(re, () => block) : `${body}\n\n${block}`;
 }
 
-/** Read the counter out of an existing body so a recurrence can increment it. */
+/** Extract only the machine-owned counter block, so a human's triage note in the
+ *  body cannot be parsed as state. Returns '' when the block is absent. */
+function counterSection(body) {
+  const text = body ?? '';
+  const a = text.indexOf(COUNTER_START);
+  const b = text.indexOf(COUNTER_END);
+  return a === -1 || b === -1 || b < a ? '' : text.slice(a, b + COUNTER_END.length);
+}
+
+/** Read the counter out of an existing body so a recurrence can increment it.
+ *  Scoped to the sentinels: an unscoped scan took the FIRST match anywhere in
+ *  the body, so a maintainer pasting "**Consecutive failures:** 999" above the
+ *  block would have that value written back into the machine state. */
 export function readCounterBlock(body) {
-  const m = /\*\*Consecutive failures:\*\*\s*(\d+)/.exec(body ?? '');
-  const first = /\*\*First:\*\*\s*(\S+)/.exec(body ?? '');
+  const section = counterSection(body);
+  const m = /\*\*Consecutive failures:\*\*\s*(\d+)/.exec(section);
+  const first = /\*\*First:\*\*\s*(\S+)/.exec(section);
   return {
     consecutive: m ? Number.parseInt(m[1], 10) : 0,
     firstRunUrl: first ? first[1] : null,
   };
 }
 
-export default {
-  MARKER_LABEL,
-  KNOWN_OUTCOMES,
-  validateVersion,
-  classifyOutcome,
-  decideTransition,
-  buildIssueBody,
-  updateCounterBlock,
-  readCounterBlock,
-};
 
 // ---------------------------------------------------------------------------
 // I/O layer. Everything above is pure and unit-tested; everything below talks
@@ -339,10 +364,24 @@ async function main() {
 
   // Which step failed, from the jobs API. Never by scraping logs: that is what
   // makes "no raw log capture" structural rather than conventional.
-  const jobsResp = await gh(token, `/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`);
-  const jobs = jobsResp?.jobs ?? [];
-  const jobConclusion = jobs.find((j) => j.name && j.conclusion === 'cancelled')?.conclusion
-    ?? jobs[0]?.conclusion;
+  //
+  // This call MUST degrade rather than throw. It used to sit outside the try
+  // below, so a transient 500 here propagated to the top-level catch and exited
+  // 1 having written nothing: a real failure produced a red run and no issue,
+  // which is verbatim the defect this script exists to eliminate, and a healthy
+  // nightly no-op was turned red, which is the phantom failure the asymmetric
+  // error policy exists to prevent. Corroboration is a refinement; losing it
+  // must never cost the notification.
+  let jobs = [];
+  try {
+    const jobsResp = await gh(token, `/repos/${repo}/actions/runs/${runId}/jobs?per_page=100`);
+    jobs = jobsResp?.jobs ?? [];
+  } catch (err) {
+    annotate('warning', `report-train-failure: jobs API unavailable, classifying without corroboration: ${err.message}`);
+  }
+
+  // Authoritative, and NOT derived by scanning the run: see classifyOutcome.
+  const jobConclusion = process.env.TRAIN_JOB_RESULT || undefined;
 
   const outcome = classifyOutcome({ trainOutcome, jobs, jobConclusion });
   const isFailure = outcome.action === 'failure';
@@ -381,13 +420,21 @@ async function main() {
       const issue = t.issue;
       const prev = readCounterBlock(issue.body);
       const consecutive = prev.consecutive + 1;
+      // Refresh the title and the volatile fields too. Dedupe is on the label,
+      // not the version, so the upstream version moves underneath a long-running
+      // outage; leaving them frozen at night one makes them actively wrong
+      // rather than merely stale, on the issue that is the train's only human
+      // interface.
       await gh(token, `/repos/${repo}/issues/${issue.number}`, {
         method: 'PATCH',
         body: JSON.stringify({
+          title: `Release train failed: @actual-app/api ${version}`,
           body: updateCounterBlock(issue.body ?? '', {
             consecutive,
             firstRunUrl: prev.firstRunUrl ?? runUrl,
             latestRunUrl: runUrl,
+            version,
+            failingStep: outcome.failingStep?.step ?? null,
           }),
         }),
       });
@@ -429,10 +476,14 @@ async function main() {
   if (isFailure) process.exit(1);
 }
 
-const invokedDirectly = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+// pathToFileURL, not string concatenation: import.meta.url percent-encodes, so a
+// checkout path containing a space or any non-ASCII character made this false,
+// main() never ran, and the job exited 0 having reported nothing.
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (invokedDirectly) {
   main().catch((err) => {
     annotate('error', `report-train-failure: unhandled: ${err.message}`);
     process.exit(1);
   });
+
 }

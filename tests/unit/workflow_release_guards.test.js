@@ -89,6 +89,15 @@ function withoutComments(block) {
 // NARROWING ONLY. Inside update-test-release every original requirement (the
 // token, the explicit pin, the rejection of `false` in all five spellings, #262)
 // still applies, and NEGATIVE (a) proves it.
+// Every job whose body actually pushes. Behaviour, not naming: this is what
+// invariant (a) genuinely protects (the persisted App credential authenticates
+// the pushes), so it selects update-test-release today and would pick up any
+// future pushing job without anyone remembering to update a name list.
+function pushingJobs(text) {
+  const names = [...text.matchAll(/^  ([A-Za-z0-9_-]+):\s*$/gm)].map((m) => m[1]);
+  return names.map((nm) => jobSection(text, nm)).filter((j) => /git push origin/.test(withoutComments(j)));
+}
+
 function jobSection(text, jobName) {
   const lines = text.split('\n');
   const start = lines.findIndex((l) => new RegExp(`^  ${jobName}:\\s*$`).test(l));
@@ -290,8 +299,15 @@ const wf = readFileSync(WORKFLOW, 'utf8');
 const cicd = readFileSync(CICD_WORKFLOW, 'utf8');
 
 check('(a) App-token step precedes checkout; every checkout in update-test-release authenticates with it and keeps credential persistence explicitly on', () => {
-  // Scoped to update-test-release (#325): the reporter job is deliberately the
-  // inverse. See jobSection() above for why this must not be widened back.
+  // Scoped by BEHAVIOUR, not by job name (#325): every job that pushes must
+  // satisfy (a). Keying on the name would silently exempt a future pushing job,
+  // which is the cost a plain narrowing would have carried. The reporter job
+  // pushes nothing, so it is correctly out of scope.
+  for (const j of pushingJobs(wf)) {
+    assert.ok(appTokenAuthenticatesEveryCheckout(j),
+      'every job that runs `git push origin` must satisfy invariant (a)');
+  }
+  assert.ok(pushingJobs(wf).length >= 1, 'at least one pushing job must exist, or this guard is vacuous');
   assert.ok(appTokenAuthenticatesEveryCheckout(jobSection(wf, 'update-test-release')),
     'create-github-app-token must run before any actions/checkout, every checkout must pass token: ${{ steps.token.outputs.token }} AND an explicit persist-credentials: true (no false in any spelling), or pushes authenticate as GITHUB_TOKEN / lose the credential and never trigger ci-cd.yml (#261 fix 2, #262)');
 });
@@ -515,7 +531,11 @@ function reporterIsAlwaysGuarded(text) {
 function reporterAvoidsAppToken(text) {
   const j = withoutComments(jobSection(text, REPORTER));
   if (!j) return false;
-  return !/steps\.token\.outputs\.token/.test(j)
+  // Denies the ACTION as well as the three secret names: a reporter re-wired
+  // with its own `actions/create-github-app-token` step under different secret
+  // names would otherwise pass a name-only denylist.
+  return !/create-github-app-token/.test(j)
+    && !/steps\.token\.outputs\.token/.test(j)
     && !/secrets\.APP_PRIVATE_KEY/.test(j)
     && !/secrets\.APP_ID/.test(j)
     && !/^\s*APP_TOKEN:/m.test(j);
@@ -590,6 +610,23 @@ check('(m6) the reporter checkout is unpersisted and sha-pinned', () => {
     'the reporter must check out with persist-credentials: false and ref: github.sha (the main job pushes during the same run) (#325)');
 });
 
+function outcomeStepIsSuccessGated(text) {
+  const blocks = stepBlocks(jobSection(text, 'update-test-release'));
+  const b = blocks.find((x) => /id: outcome/.test(x));
+  return Boolean(b) && /if:\s*success\(\)/.test(withoutComments(b));
+}
+
+check('(m7) the outcome step is success()-gated', () => {
+  assert.ok(outcomeStepIsSuccessGated(wf),
+    'if: success() is what makes TRAIN_OUTCOME fail-closed: without it the step runs after a failure and can report a non-failure outcome (#325)');
+});
+
+check('NEGATIVE (m7): dropping the success() gate is detected', () => {
+  const ungated = wf.replace('        id: outcome\n        if: success()', '        id: outcome');
+  assert.strictEqual(outcomeStepIsSuccessGated(ungated), false,
+    'removing the gate must fail: TRAIN_OUTCOME would then be written on a failed run');
+});
+
 check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () => {
   // Anchored on the reporter's own env block: the workflow has three
   // `GH_TOKEN: ${{ github.token }}` lines and a bare replace would patch the
@@ -623,6 +660,28 @@ check('NEGATIVE (m): each reporter invariant fails on its counter-fixture', () =
   const unpinned = wf.replace('          ref: ${{ github.sha }}', '          ref: main');
   assert.strictEqual(reporterCheckoutIsPinnedAndUnpersisted(unpinned), false,
     'an unpinned reporter checkout must fail');
+
+  // Completeness: every clause of every reporter detector needs its own fixture,
+  // or a clause can rot untested behind a sibling that still bites.
+  const persistOn = wf.replace('          persist-credentials: false\n          ref:', '          persist-credentials: true\n          ref:');
+  assert.strictEqual(reporterCheckoutIsPinnedAndUnpersisted(persistOn), false,
+    'a reporter checkout persisting credentials must fail');
+
+  const noIssuesWrite = wf.replace('      issues: write\n      actions: read', '      actions: read');
+  assert.strictEqual(reporterPermissionsAreMinimal(noIssuesWrite), false,
+    'removing issues: write must fail');
+  const noActionsRead = wf.replace('      issues: write\n      actions: read', '      issues: write');
+  assert.strictEqual(reporterPermissionsAreMinimal(noActionsRead), false,
+    'removing actions: read must fail');
+
+  const noFirstTimeout = wf.replace(/        timeout-minutes: 15.*\n/, '');
+  assert.strictEqual(longStepsCarryStepTimeouts(noFirstTimeout), false,
+    'removing the Playwright timeout must fail too, not just the E2E one');
+
+  const ownAppToken = wf.replace('      - name: 🔧 Setup Node.js\n        uses: actions/setup-node@v7',
+    '      - name: Mint\n        uses: actions/create-github-app-token@v3\n      - name: 🔧 Setup Node.js\n        uses: actions/setup-node@v7');
+  assert.strictEqual(reporterAvoidsAppToken(ownAppToken), false,
+    'a reporter minting its own App token must fail, even under different secret names');
 });
 
 check('NEGATIVE (a-rescope): the rescope is NARROWING, not a weakening', () => {

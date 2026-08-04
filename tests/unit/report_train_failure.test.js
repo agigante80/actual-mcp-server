@@ -107,6 +107,45 @@ check('outcome: clean noop is ignored', () => {
   assert.strictEqual(classifyOutcome({ trainOutcome: 'noop_up_to_date', jobs }).action, 'ignore');
 });
 
+// --- regressions found in code review of the first implementation ----------
+
+check('REGRESSION: a cancelled SIBLING job must not be attributed to the train', () => {
+  // jobConclusion now comes from `needs.<job>.result`, not from scanning the run.
+  // When it was scanned, the cancelled branch preempted the success branch, so a
+  // genuinely successful publish alongside any cancelled job was reported as a
+  // failure AND left the open issue unclosed. Latent with two jobs; live the
+  // moment a third is added, which the rest of this chain is heading toward.
+  const jobs = [
+    job('Some other job', [], 'cancelled'),
+    job('Update', [step('Publish', 'success')], 'success'),
+  ];
+  const r = classifyOutcome({ trainOutcome: 'success', jobs, jobConclusion: 'success' });
+  assert.strictEqual(r.action, 'success',
+    'a cancelled sibling must not turn a successful train run into a reported failure');
+  // Inline literal, not the iss() helper: that is declared further down and a
+  // const is in its temporal dead zone up here.
+  assert.strictEqual(decideTransition({ outcome: r, openIssues: [{ number: 1, body: '' }] }).kind, 'close',
+    'and the open issue must still be closed');
+});
+
+check('REGRESSION: the reporter must not corroborate against its own job', () => {
+  const jobs = [
+    job('Report train failure', [step('Report', 'failure')], 'failure'),
+    job('Update', [step('Publish', 'success')], 'success'),
+  ];
+  const r = classifyOutcome({ trainOutcome: 'success', jobs, jobConclusion: 'success' });
+  assert.strictEqual(r.action, 'success',
+    'a failure inside the reporter job itself must not be read as a train failure');
+});
+
+check('REGRESSION: classification survives the jobs API being unavailable', () => {
+  // The jobs fetch degrades to [] rather than throwing. Losing corroboration
+  // must never cost the notification.
+  assert.strictEqual(classifyOutcome({ trainOutcome: undefined, jobs: [] }).action, 'failure');
+  assert.strictEqual(classifyOutcome({ trainOutcome: 'noop_up_to_date', jobs: [] }).action, 'ignore');
+  assert.strictEqual(classifyOutcome({ trainOutcome: 'success', jobs: [] }).action, 'success');
+});
+
 // ---------------------------------------------------------------------------
 // validateVersion: gates the body sink, never the notification
 // ---------------------------------------------------------------------------
@@ -265,6 +304,48 @@ check('counter: block increments across 30 failures without 30 comments', () => 
     'the block must be replaced in place, not appended, or night thirty is unreadable');
 });
 
+check('REGRESSION: a human triage note above the block is not parsed as state', () => {
+  // readCounterBlock used to scan the whole body and take the first match, so a
+  // maintainer pasting a number above the machine block had it written back in.
+  let body = buildIssueBody({
+    workflow: 'w', runUrl: 'run/1', failingStep: null, version: '1.0.0',
+    outcome: F, consecutive: 3, firstRunUrl: 'run/1', latestRunUrl: 'run/3',
+  });
+  body = `Triage note: **Consecutive failures:** 999\n**First:** see-my-comment\n\n${body}`;
+  const read = readCounterBlock(body);
+  assert.strictEqual(read.consecutive, 3, 'the machine block wins, not the human prose');
+  assert.strictEqual(read.firstRunUrl, 'run/1');
+});
+
+check('REGRESSION: a $ pattern in a round-tripped value cannot corrupt the block', () => {
+  // String.replace with a string replacement expands $&, $' and backtick-$.
+  // firstRunUrl round-trips out of a human-editable body, so it can carry them.
+  let body = buildIssueBody({
+    workflow: 'w', runUrl: 'run/1', failingStep: null, version: '1.0.0',
+    outcome: F, consecutive: 1, firstRunUrl: 'run/1', latestRunUrl: 'run/1',
+  });
+  const before = body.length;
+  body = updateCounterBlock(body, { consecutive: 2, firstRunUrl: "$'", latestRunUrl: 'run/2' });
+  assert.ok(body.length < before + 200, 'the body must not balloon from $-expansion');
+  assert.strictEqual(readCounterBlock(body).consecutive, 2, 'the counter must survive intact');
+  assert.ok(body.includes("**First:** $'"), 'the literal value must be written verbatim');
+});
+
+check('REGRESSION: recurrence records the CURRENT version and failing step', () => {
+  // Dedupe is on the label, not the version, so the upstream version moves
+  // underneath a long outage. Freezing these at night one makes them wrong.
+  let body = buildIssueBody({
+    workflow: 'w', runUrl: 'run/1', failingStep: { step: 'Unit tests' }, version: '26.8.0',
+    outcome: F, consecutive: 1, firstRunUrl: 'run/1', latestRunUrl: 'run/1',
+  });
+  body = updateCounterBlock(body, {
+    consecutive: 2, firstRunUrl: 'run/1', latestRunUrl: 'run/2',
+    version: '26.9.0', failingStep: 'Docker E2E tests',
+  });
+  assert.ok(body.includes('**Latest version:** 26.9.0'), 'the current version must be recorded');
+  assert.ok(body.includes('**Latest failing step:** Docker E2E tests'), 'the current failing step must be recorded');
+});
+
 // ---------------------------------------------------------------------------
 // Source-level invariants for the I/O layer (not reachable by pure calls)
 // ---------------------------------------------------------------------------
@@ -296,6 +377,22 @@ check('a reporting error on failure keeps the run red; on a green run it does no
     'a reporting error on a real failure must leave the run red');
   assert.ok(/::warning|annotate\('warning'/.test(SRC),
     'a tracker blip on a healthy run must degrade to a warning, not manufacture a phantom failure');
+});
+
+check('the jobs fetch degrades instead of throwing', () => {
+  assert.ok(/jobs API unavailable/.test(SRC),
+    'the jobs call must be wrapped so a transient error cannot cost the notification');
+});
+
+check('direct-invocation check uses a real file URL', () => {
+  assert.ok(/pathToFileURL\(process\.argv\[1\]\)\.href/.test(SRC),
+    'string-concatenated file:// URLs break on a path with a space or non-ASCII char, and main() would silently never run');
+  assert.ok(!/=== `file:\/\/\$\{process\.argv\[1\]\}`/.test(SRC), 'the concatenated form must be gone');
+});
+
+check('the needed job result is used, not a scan of the run', () => {
+  assert.ok(/TRAIN_JOB_RESULT/.test(SRC),
+    'jobConclusion must come from needs.<job>.result so a cancelled sibling is not attributed to the train');
 });
 
 console.log(`\n[report-train-failure] Results: ${passed} passed, ${failed} failed`);

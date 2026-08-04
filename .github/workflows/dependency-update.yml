@@ -444,4 +444,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TRAIN_OUTCOME: ${{ needs.update-test-release.outputs.train_outcome }}
           TRAIN_VERSION: ${{ needs.update-test-release.outputs.latest_version }}
+          # Authoritative conclusion of the ONE job being reported on. Derived
+          # from `needs`, never by scanning the run: a cancelled SIBLING job
+          # would otherwise be attributed to the train.
+          TRAIN_JOB_RESULT: ${{ needs.update-test-release.result }}
         run: node scripts/report-train-failure.mjs
