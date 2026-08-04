@@ -1113,5 +1113,92 @@ check('NEGATIVE (v): each verification invariant fails on its counter-fixture', 
     'removing the release gate must fail (v3)');
 });
 
+// ---------------------------------------------------------------------------
+// (q) #322: gate parity between ci-cd's Lint job and the release train.
+//
+// The train could TAG what CI would REJECT. Verified before this landed: knip,
+// actionlint and node-version-drift ran ZERO times in the train while ci-cd ran
+// them on every PR, so a dependency bump introducing dead code or an
+// inconsistent Node pin would publish, while an ordinary PR carrying the same
+// change would be blocked.
+//
+// Deliberately NOT solved by extracting a reusable workflow. `on: workflow_call`
+// is a job-level construct that runs on its own runner and checkout, but the
+// train gates a commit that exists only in the runner's local git (the branch is
+// pushed AFTER the gate) against an in-job-mutated node_modules. It would gate
+// the PRE-UPGRADE tree and report green: the same defect class #322 was filed to
+// fix. The gate CONTENT is already single-sourced in package.json scripts; what
+// was missing was PRESENCE, and presence is what this invariant pins.
+// ---------------------------------------------------------------------------
+
+/** npm scripts a job actually invokes, excluding comments. */
+function npmScriptsInvoked(text) {
+  return [...withoutComments(text).matchAll(/npm run ([a-z0-9:-]+)/g)]
+    .map((m) => m[1])
+    .filter((v, i, a) => a.indexOf(v) === i)
+    .sort();
+}
+
+// Checks that must run on BOTH lanes. Excluded, each for a stated reason:
+//   check:coverage  #321 removed it from the train; it enumerates the LIVE API
+//                   surface, which is precisely what killed the train.
+//   actionlint      fetched by curl from a MUTABLE git tag with no checksum;
+//                   see (q2). Workflow shape is covered by this file instead.
+const PARITY_CHECKS = ['build', 'knip', 'node-version-drift', 'test:unit-js'];
+
+function parityGaps(trainText) {
+  const train = new Set(npmScriptsInvoked(jobSection(trainText, 'update-test-release')));
+  return PARITY_CHECKS.filter((c) => !train.has(c));
+}
+
+check('(q1) the train runs every parity check ci-cd runs', () => {
+  const gaps = parityGaps(wf);
+  assert.deepStrictEqual(gaps, [],
+    `the train can tag what CI would reject; missing: ${gaps.join(', ')}`);
+});
+
+check('(q1) every parity check is genuinely a real npm script', () => {
+  // Otherwise the list could drift into naming things that do not exist and the
+  // guard would pass while the train ran nothing.
+  const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+  for (const c of PARITY_CHECKS) {
+    assert.ok(pkg.scripts[c], `${c} must exist in package.json scripts`);
+  }
+});
+
+check('(q2) actionlint stays OFF the train, with its reason recorded', () => {
+  // Not an oversight. Adding it puts a curl-fetched binary from a mutable tag on
+  // the pre-tag release path. If the installer is ever pinned by sha with
+  // checksum verification, revisit this and move it into PARITY_CHECKS.
+  const train = jobSection(wf, 'update-test-release');
+  assert.ok(!/actionlint/.test(withoutComments(train)),
+    'actionlint must not run in the train until its installer is sha-pinned and checksum-verified');
+  assert.ok(/actionlint is DELIBERATELY EXCLUDED/.test(train),
+    'the exclusion must carry its reason in-file, or it reads as an omission');
+});
+
+check('(q3) check:coverage stays OFF the train (#321)', () => {
+  const train = withoutComments(jobSection(wf, 'update-test-release'));
+  assert.ok(!/check:coverage/.test(train),
+    'it enumerates the live @actual-app/api surface, which is what killed the train');
+});
+
+check('NEGATIVE (q): the parity guard fails when a check is dropped', () => {
+  for (const c of ['knip', 'node-version-drift', 'test:unit-js', 'build']) {
+    // GLOBAL replace, deliberately. `build` and `test:unit-js` each run TWICE in
+    // the train: once as their own step and again in the #297 post-bump
+    // re-verify. Removing one occurrence leaves the other, and the guard is
+    // RIGHT to still see the check as present, so a single-shot fixture proves
+    // nothing. This caught itself on the first run.
+    const without = wf.replace(new RegExp(`npm run ${c}\\b`, 'g'), 'npm run __removed__');
+    assert.notStrictEqual(without, wf, `the ${c} fixture must actually change the workflow`);
+    assert.ok(parityGaps(without).includes(c), `dropping ${c} must be detected`);
+  }
+  // And a check named in a COMMENT must not satisfy the guard.
+  const commentedOnly = wf.replace(/^ *run: npm run knip$/m, '          # run: npm run knip');
+  assert.ok(parityGaps(commentedOnly).includes('knip'),
+    'a commented-out check must not count as present');
+});
+
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

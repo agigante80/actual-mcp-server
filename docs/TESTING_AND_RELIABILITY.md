@@ -309,6 +309,31 @@ The rule is scoped to enumeration. Importing the package to monkeypatch it for m
 
 ---
 
+### Gate parity between CI and the release train (#322)
+
+The release train could **tag what CI would reject.** ci-cd's Lint job ran `knip`, and the repo runs `node-version-drift`, and neither ran in the train, so a dependency bump introducing dead code or an inconsistent Node pin would publish while an ordinary PR carrying the same change was blocked.
+
+**Deliberately not solved by extracting a reusable workflow.** `on: workflow_call` is a job-level construct: it runs on its own runner with its own checkout. The train gates a commit that exists only in the runner's local git (the working branch is pushed to origin *after* the gate) against a `node_modules` mutated in-job. A reusable workflow would gate the **pre-upgrade tree** and report green, which is the same defect class #322 was filed to fix.
+
+The gate's CONTENT is already single-sourced, in `package.json` scripts. What was missing was PRESENCE. So the fix is two steps in the train plus an invariant, not a new abstraction:
+
+| Check | ci-cd | Train | Note |
+|---|---|---|---|
+| `build` | yes | yes | runs twice in the train (own step plus the #297 re-verify) |
+| `test:unit-js` | yes | yes | likewise |
+| `knip` | yes | yes | added by #322 |
+| `node-version-drift` | yes | yes | added by #322 |
+| `actionlint` | yes | **no** | excluded, see below |
+| `check:coverage` | yes | **no** | excluded permanently by #321 |
+
+**`actionlint` is excluded on purpose.** Its installer is fetched by curl from a **mutable git tag with no checksum verification**. Putting that on the pre-tag release path trades a supply-chain regression for catching a malformed workflow, and workflow shape is already covered by `workflow_release_guards.test.js`, including the `(p8)` invariant that runs `bash -n` over every `run:` block. Pin the installer by commit sha with `sha256sum -c`, then move it into `PARITY_CHECKS`.
+
+**`check:coverage` is excluded permanently.** It enumerates the live `@actual-app/api` surface, which is exactly what killed the train (#321).
+
+Invariant `(q1)` asserts set equality against `PARITY_CHECKS` so the two lanes cannot drift apart again, `(q2)` and `(q3)` pin the two exclusions along with their reasons, and the counter-fixture removes each check globally rather than once, because two of them run twice and a single-shot fixture would have proved nothing.
+
+---
+
 ### The API surface drift lane (#321)
 
 The live `@actual-app/api` surface moves without a commit. That signal used to live inside a unit test, which is why an upstream release could turn the suite red with nobody touching the repo. The signal is real; it is not a unit test. It lives in `.github/workflows/api-surface-drift.yml`, on `schedule` plus `workflow_dispatch` only.
