@@ -49,20 +49,38 @@ export function missingFromChain({ chain, diskFiles, allowlist = {} }) {
 
 /** Allowlist keys whose reason is missing, blank, or not a string. An excuse
  *  without a reason is how an allowlist becomes a dumping ground. */
-export function invalidAllowlistEntries(allowlist = {}) {
+export function invalidAllowlistEntries(allowlist = {}, diskFiles = null) {
   return Object.entries(allowlist)
-    .filter(([, reason]) => typeof reason !== 'string' || reason.trim() === '')
+    .filter(([name, reason]) =>
+      typeof reason !== 'string'
+      || reason.trim() === ''
+      // An excuse for a file that no longer exists lingers silently otherwise.
+      || (Array.isArray(diskFiles) && !diskFiles.includes(name)))
     .map(([k]) => k)
     .sort();
 }
 
 function stripComments(src) {
+  // Block comments are stripped ONLY when the opener starts a line.
+  //
+  // An unanchored /\/\*[\s\S]*?\*\// pairs any `/*` inside a STRING with the next
+  // `*/` anywhere in the file and deletes everything between. A glob literal such
+  // as 'src/tools/*.ts' is enough to trigger it, and residue_pattern.test.js
+  // already loses 85 lines that way. Worse, this file's own check name contains
+  // `tests/unit/*.test.js`, which paired with a `*/` in a fixture below and blanked
+  // two thirds of this file from the scan. That accident, not the line filter, was
+  // the only reason this guard did not flag itself: it was passing by luck.
   return String(src ?? '')
-    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/^\s*\/\*[\s\S]*?\*\//gm, '')
     .split('\n')
     .filter((l) => !/^\s*\/\//.test(l))
     .join('\n');
 }
+
+/** This file necessarily CONTAINS the forbidden shapes, as negative fixtures.
+ *  It is exempted from the real-repo scan explicitly rather than by accident;
+ *  the fixtures still exercise the detector through the `sources` parameter. */
+export const SELF = 'unit_chain_membership.test.js';
 
 /** Files that ENUMERATE the live @actual-app/api module's exported keys.
  *
@@ -78,7 +96,11 @@ export function enumerationSites({ sources = {} } = {}) {
       ...src.matchAll(/import\s+\*\s+as\s+([A-Za-z_$][\w$]*)\s+from\s*['"]@actual-app\/api['"]/g),
       ...src.matchAll(/import\s+([A-Za-z_$][\w$]*)\s+from\s*['"]@actual-app\/api['"]/g),
     ].map((m) => m[1]);
-    if (binds.some((id) => new RegExp(`Object\\.keys\\(\\s*${id}\\s*\\)`).test(src))) out.push(name);
+    // Widened beyond Object.keys: `Object.entries(api).filter(([, v]) => typeof
+    // v === 'function')` is a natural rewrite of the exact line that caused the
+    // outage, and a keys-only rule would not see it. Fix the class, not the case.
+    const SINK = '(?:Object\\.(?:keys|entries|values|getOwnPropertyNames)|Reflect\\.ownKeys)';
+    if (binds.some((id) => new RegExp(`${SINK}\\(\\s*${id}\\s*\\)`).test(src))) out.push(name);
   }
   return out.sort();
 }
@@ -102,8 +124,8 @@ check('every tests/unit/*.test.js is in the test:unit-js chain', () => {
     `orphaned test files never run in CI or pre-commit: ${missing.join(', ')}`);
 });
 
-check('every allowlist entry carries a non-empty reason', () => {
-  assert.deepStrictEqual(invalidAllowlistEntries(KNOWN_UNRUN), []);
+check('every allowlist entry carries a non-empty reason and names a real file', () => {
+  assert.deepStrictEqual(invalidAllowlistEntries(KNOWN_UNRUN, DISK), []);
 });
 
 check('this guard is itself in the chain', () => {
@@ -112,7 +134,9 @@ check('this guard is itself in the chain', () => {
 });
 
 check('no unit test enumerates the live @actual-app/api surface', () => {
-  const sources = Object.fromEntries(DISK.map((f) => [f, readFileSync(join(HERE, f), 'utf8')]));
+  const sources = Object.fromEntries(
+    DISK.filter((f) => f !== SELF).map((f) => [f, readFileSync(join(HERE, f), 'utf8')]),
+  );
   const sites = enumerationSites({ sources });
   assert.deepStrictEqual(sites, [],
     `a unit test whose result changes with no commit is not a unit test: ${sites.join(', ')}`);
@@ -140,6 +164,33 @@ check('NEGATIVE: a substring filename cannot be mistaken for membership', () => 
   assert.deepStrictEqual(
     missingFromChain({ chain: 'node tests/unit/xfoo.test.js', diskFiles: ['foo.test.js'] }),
     ['foo.test.js']);
+});
+
+check('NEGATIVE: this guard would flag ITSELF but for an explicit exemption', () => {
+  // Proves the self-exemption is deliberate. Before this, a stray block-comment
+  // pairing was silently blanking the fixtures out of the scan.
+  const self = readFileSync(join(HERE, SELF), 'utf8');
+  assert.deepStrictEqual(enumerationSites({ sources: { [SELF]: self } }), [SELF],
+    'the guard must still detect the shapes it carries; it is excluded by name, not by accident');
+});
+
+check('NEGATIVE: a glob literal cannot blank out the scan', () => {
+  // The historical accident: `/*` inside a string paired with a later `*/`.
+  const withGlob = [
+    "import * as api from '@actual-app/api';",
+    "const glob = 'src/tools/*.ts';",
+    'const methods = Object.keys(api);',
+    "const other = 'a */ b';",
+  ].join('\n');
+  assert.deepStrictEqual(enumerationSites({ sources: { 'g.js': withGlob } }), ['g.js'],
+    'a glob literal must not hide a real enumeration');
+});
+
+check('NEGATIVE: the wider enumeration sinks are detected', () => {
+  for (const sink of ['Object.entries(api)', 'Object.values(api)', 'Object.getOwnPropertyNames(api)', 'Reflect.ownKeys(api)']) {
+    const src = `import * as api from '@actual-app/api';\nconst m = ${sink};`;
+    assert.deepStrictEqual(enumerationSites({ sources: { 'x.js': src } }), ['x.js'], sink);
+  }
 });
 
 check('NEGATIVE: the enumeration shape is detected in all three binding forms', () => {
