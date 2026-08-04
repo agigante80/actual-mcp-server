@@ -35,6 +35,13 @@ jobs:
     name: Update • Lint • Test • Release
     runs-on: ubuntu-latest
     timeout-minutes: 60
+
+    # #325: consumed by the report-train-failure job. `train_outcome` is a CLOSED
+    # enum; the reporter treats unset or unrecognised as a failure, so a job that
+    # dies before the recording step still gets reported.
+    outputs:
+      train_outcome: ${{ steps.outcome.outputs.value }}
+      latest_version: ${{ steps.versions.outputs.latest }}
     
     steps:
       # -----------------------------------------------------------------------
@@ -159,10 +166,12 @@ jobs:
       # -----------------------------------------------------------------------
       - name: 🎭 Install Playwright browsers
         if: steps.versions.outputs.update_needed == 'true'
+        timeout-minutes: 15   # #325: a step timeout is a step FAILURE; the job-level cap is a CANCEL the jobs API cannot attribute
         run: npx playwright install --with-deps
 
       - name: 🐳 Docker E2E tests (full suite)
         if: steps.versions.outputs.update_needed == 'true'
+        timeout-minutes: 25   # #325: see above; keeps a hung E2E suite reportable
         run: npm run test:e2e:docker:full
 
       - name: 🧹 Cleanup Docker containers
@@ -377,3 +386,62 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Current version \`${{ steps.versions.outputs.current }}\` is the latest: nothing to do." >> $GITHUB_STEP_SUMMARY
 
+      # -----------------------------------------------------------------------
+      # 14. Record the train outcome (#325)
+      # -----------------------------------------------------------------------
+      # `if: success()` is load bearing. If ANY earlier step failed this step is
+      # skipped, the job output stays empty, and the reporter classifies unset as
+      # a failure. That is the fail-toward-notifying default: the outcome can only
+      # ever say "nothing to see here" on a run where nothing went wrong.
+      - name: 🏷️ Record train outcome
+        id: outcome
+        if: success()
+        run: |
+          if [ "${{ steps.versions.outputs.update_needed }}" = "true" ]; then
+            echo "value=success" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=noop_up_to_date" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # #325: failure notification. Ticket zero for unattended publishing.
+  #
+  # A SEPARATE job, deliberately. The main job holds `contents: write` plus the
+  # App installation token and runs `npm install @actual-app/api@^$LATEST`, which
+  # executes registry-controlled postinstall code. Granting `issues: write` there
+  # would put a tracker-write token in the same process as that code. Splitting it
+  # also means this job never checks out with the App token, so the credential
+  # actions/checkout persists into .git/config is never on this runner at all.
+  #
+  # No `concurrency:` group here on purpose: `cancel-in-progress: false` still
+  # evicts a QUEUED run when a newer one arrives, so a success/failure/success
+  # overlap would drop the failure report entirely. Converging duplicates in the
+  # reporter is noisy but never silent, which is the correct direction.
+  # ---------------------------------------------------------------------------
+  report-train-failure:
+    name: Report train failure
+    needs: update-test-release
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - name: 📥 Checkout (no App token, pinned to the triggering sha)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+
+      - name: 📣 Report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TRAIN_OUTCOME: ${{ needs.update-test-release.outputs.train_outcome }}
+          TRAIN_VERSION: ${{ needs.update-test-release.outputs.latest_version }}
+        run: node scripts/report-train-failure.mjs
