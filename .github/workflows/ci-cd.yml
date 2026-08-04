@@ -786,6 +786,62 @@ jobs:
         run: node scripts/verify-published-artifacts.mjs
 
   # --------------------------------------------------------------------------
+  # Job 7c: Train liveness (#327)
+  #
+  # #325 reports a train that FAILED. It cannot report one that never RAN: no
+  # run means no reporter job. Two verified causes: GitHub disables scheduled
+  # workflows in PUBLIC repositories after 60 days of repository inactivity
+  # (this repo is public), and cron dispatches are delayed under load and
+  # DROPPED under sufficiently high load.
+  #
+  # A SEPARATE JOB, not a step: a step cannot carry `permissions:`. The
+  # workflow-level block grants contents/packages/security-events with no
+  # `issues: write`, and every other job inherits it, so a top-level grant would
+  # hand tracker-write to every job that runs `npm ci` and Docker builds. That is
+  # the exact hazard #325's job split was created to avoid.
+  #
+  # All three permissions are required. Job-level `permissions:` REPLACE the
+  # workflow-level block rather than merging, so omitting `contents: read` would
+  # leave actions/checkout with no scope to fetch the script.
+  # --------------------------------------------------------------------------
+  train-liveness:
+    name: Train Liveness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: version
+    # Gated tightly. ci-cd.yml also fires on `pull_request`: on a fork PR the
+    # token is read-only so this would 403 and redden every fork PR for an
+    # unrelated reason, and on a same-repository branch PR it WOULD get the
+    # grant and would file staleness issues from PR branches.
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/develop' &&
+      github.repository == 'agigante80/actual-mcp-server'
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - name: 📥 Checkout (sha-pinned, no persisted credential)
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      # Deliberately no `npm ci`: the script uses only Node builtins and fetch,
+      # so this job never executes third-party install scripts while holding
+      # `issues: write`.
+      - name: 🫀 Check that the scheduled workflows are still running
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/report-train-stale.mjs
+
+  # --------------------------------------------------------------------------
   # Job 8: Security Scanning
   # --------------------------------------------------------------------------
   security-scan:
