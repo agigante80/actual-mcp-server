@@ -1,0 +1,5 @@
+{
+  "_comment": "Accepted uncovered @actual-app/api methods (#321). apiVersion is per entry and records when the gap was first accepted. There is deliberately NO global apiVersion field: a single one would lose provenance at the next upgrade. No value here is ever asserted against the live version, so a version bump alone can never turn the drift job red. This file suppresses REDNESS only; re-filing is suppressed by the tracker sentinel, because a committed file cannot be written by CI. Maintained by deliberate human commit: the drift job never writes it, since an auto-written entry would carry an empty reason and no owning issue, letting the machine grant its own acceptance.",
+  "maxAccepted": 10,
+  "accepted": {}
+}
