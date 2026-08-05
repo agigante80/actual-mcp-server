@@ -60,8 +60,31 @@ check('BOUNDARY: exactly at the threshold reports; one minute short does not', (
     '47h59m must not report');
 });
 
-check('a workflow that has never had a scheduled run is detected', () => {
-  const r = cls({ newestScheduledRunAt: null });
+check('a workflow that has never run AND is old enough to have run is detected', () => {
+  const r = cls({ newestScheduledRunAt: null, workflowCreatedAt: agoHours(100) });
+  assert.strictEqual(r.stale, true);
+  assert.strictEqual(r.reason, 'never_ran');
+});
+
+check('REGRESSION: a NEWLY ADDED workflow is not reported before it could have run', () => {
+  // This shipped broken and reddened develop. api-surface-drift.yml reached the
+  // default branch at 16:40Z with a first fire at 02:30Z, so the next push filed
+  // a false issue. The original test asserted never_ran was stale with no age
+  // input at all, so it ENCODED the bug instead of catching it.
+  const r = cls({ newestScheduledRunAt: null, workflowCreatedAt: agoHours(2.5) });
+  assert.strictEqual(r.stale, false, 'a workflow hours old cannot be evidence of a dead cron');
+  assert.strictEqual(r.reason, 'too_young');
+});
+
+check('BOUNDARY: a never-run workflow becomes reportable exactly at the threshold', () => {
+  assert.strictEqual(cls({ newestScheduledRunAt: null, workflowCreatedAt: agoHours(STALE_THRESHOLD_HOURS) }).stale, true);
+  assert.strictEqual(cls({ newestScheduledRunAt: null, workflowCreatedAt: agoHours(STALE_THRESHOLD_HOURS - 1 / 60) }).stale, false);
+});
+
+check('a never-run workflow with NO age information is still reported', () => {
+  // Fail toward notifying when we cannot establish youth: an unknown-age
+  // workflow that has never run is the original hazard.
+  const r = cls({ newestScheduledRunAt: null, workflowCreatedAt: null });
   assert.strictEqual(r.stale, true);
   assert.strictEqual(r.reason, 'never_ran');
 });
