@@ -334,6 +334,32 @@ Invariant `(q1)` asserts set equality against `PARITY_CHECKS` so the two lanes c
 
 ---
 
+### The stdio framing gate (#323)
+
+The release train runs `test:e2e:docker:full` against a live Actual Budget server, so **HTTP already has real integration coverage with real write paths**. stdio, the transport Claude Desktop users run, had none.
+
+**The risk is narrower than it first appears.** The ticket was written around "a new `@actual-app/api` version that adds a `console.log` would silently break every Claude Desktop user". That is not true: `src/logger.ts` already replaces `console.log/info/warn/error/debug`, and `@actual-app/api` already calls `console.log` at 14 sites today while stdio works fine.
+
+The genuinely uncovered failure mode is a direct **`process.stdout.write`**, which the console hijack does not intercept and which is patched nowhere in `src/`. A raw byte on fd 1 corrupts JSON-RPC framing for every stdio client.
+
+**Tiered, deliberately.**
+
+| Tier | What | Blocking? |
+|---|---|---|
+| 1 | `scripts/stdio-framing-check.mjs`: boots the server over stdio and asserts every stdout byte parses as newline-delimited JSON-RPC | **Yes**, in the train |
+| 2 | The full dual-transport run (`scripts/deploy-and-test.sh`) | No. Remains the local main-promotion gate |
+
+Tier 1 is under a minute and deterministic. The full run is 30 to 35 minutes against a job whose step caps already consume most of its budget, so making it blocking would need a cap near 130 and would materially raise the chance of a **job-level cancel**, the unattributable state #325 exists to prevent. It would also put the flakiest suite in the repo on the critical path of an unattended publisher.
+
+It does **not** use the SDK's `StdioClientTransport`. That transport consumes stdout to parse frames, so it structurally cannot report a raw byte that never formed a frame, and that byte is the entire subject of the check.
+
+**Two CI mechanics that are easy to get wrong, both encoded as tests:**
+
+1. **The sync id does not cross the `docker exec` boundary.** `docker-compose.test.yaml` does not carry `ACTUAL_BUDGET_SYNC_ID` in its `environment:` block. The service entrypoint reads `/tmp/actual-sync-id.txt` and `export`s it, so it lives in PID 1's runtime environment, and `docker exec` builds a new process's environment from container **config**, not from PID 1. It arrives empty. The framing check reads the same file the entrypoint reads.
+2. **The stdio data dir must be writable and must be neither `/tmp` nor `/app/data`.** `/tmp` is mounted `bootstrap-data:/tmp:ro`, so a `mkdir` there fails, and it fails inside a bare `catch {}` that resurfaces later as an ENOENT during adapter init. `/app/data` is the HTTP server's own directory, and #280 established that two `@actual-app/api` instances must never share one budget cache.
+
+---
+
 ### Train liveness: detecting a train that never RAN (#327)
 
 `report-train-failure.mjs` reports a train that **failed**. It cannot report one that **never ran**, because no run means no reporter job, which lands in the same found-by-eye state #325 was filed to fix.
