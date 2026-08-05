@@ -1,7 +1,7 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.0.0"
@@ -65,7 +65,7 @@
     "actionlint": "bash scripts/install-actionlint.sh && ./actionlint -shellcheck= -color"
   },
   "dependencies": {
-    "@actual-app/api": "^26.7.0",
+    "@actual-app/api": "^26.8.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "debug": "^4.4.3",
     "dotenv": "^17.4.2",
