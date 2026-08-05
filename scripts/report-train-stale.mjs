@@ -58,10 +58,11 @@ export const WATCHED_WORKFLOWS = ['dependency-update.yml', 'api-surface-drift.ym
  * @param {string} a.file
  * @param {string} a.state              active | disabled_manually | disabled_inactivity
  * @param {string|null} a.newestScheduledRunAt  `created_at` of the newest event=schedule run
+ * @param {string|null} a.workflowCreatedAt      the workflow's own `created_at`
  * @param {string} a.now                injectable clock, so the boundary is testable
  * @param {number} a.thresholdHours
  */
-export function classifyLiveness({ file, state, newestScheduledRunAt, now, thresholdHours = STALE_THRESHOLD_HOURS } = {}) {
+export function classifyLiveness({ file, state, newestScheduledRunAt, workflowCreatedAt, now, thresholdHours = STALE_THRESHOLD_HOURS } = {}) {
   // `state` is primary and threshold-free: a disabled workflow is reportable
   // immediately, without waiting out the recency window.
   if (state && state !== 'active') {
@@ -76,6 +77,17 @@ export function classifyLiveness({ file, state, newestScheduledRunAt, now, thres
     return { file, stale: false, reason: 'inconclusive', state, ageHours: null };
   }
   if (!Number.isFinite(t)) {
+    // COLD START. A workflow that has never had a scheduled run is not evidence
+    // of a dead cron until it has existed long enough to have plausibly fired.
+    // This shipped broken: api-surface-drift.yml was added and reached the
+    // default branch hours before its first 02:30Z fire, so the first push after
+    // it landed filed a false issue and reddened develop. The original test
+    // asserted never_ran was stale, so it encoded the bug rather than catching
+    // it. Judge a never-run workflow by ITS OWN age instead.
+    const created = Date.parse(workflowCreatedAt ?? '');
+    if (Number.isFinite(created) && (n - created) < thresholdHours * 3600000) {
+      return { file, stale: false, reason: 'too_young', state, ageHours: (n - created) / 3600000 };
+    }
     return { file, stale: true, reason: 'never_ran', state, ageHours: null };
   }
 
@@ -191,10 +203,12 @@ async function main() {
   for (const file of WATCHED_WORKFLOWS) {
     let state = null;
     let newestScheduledRunAt = null;
+    let workflowCreatedAt = null;
     let lastRunId = null;
     try {
       const wf = await gh(token, `/repos/${repo}/actions/workflows/${file}`);
       state = wf?.state ?? null;
+      workflowCreatedAt = wf?.created_at ?? null;
       // event=schedule specifically. dependency-update.yml also carries
       // workflow_dispatch, and manually dispatching the train is the FIRST
       // diagnostic step when it looks dead, so an unfiltered query would let
@@ -213,7 +227,7 @@ async function main() {
       continue;
     }
     const f = classifyLiveness({
-      file, state, newestScheduledRunAt, now: new Date().toISOString(),
+      file, state, newestScheduledRunAt, workflowCreatedAt, now: new Date().toISOString(),
       thresholdHours: Number.parseInt(process.env.STALE_THRESHOLD_HOURS ?? '', 10) || STALE_THRESHOLD_HOURS,
     });
     findings.push({ ...f, lastRunId });
