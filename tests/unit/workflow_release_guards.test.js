@@ -1419,5 +1419,34 @@ check('NEGATIVE (n): each liveness invariant fails on its counter-fixture', () =
   assert.strictEqual(nothingNeedsLiveness(needed), false, 'another job needing liveness must fail (n6)');
 });
 
+check('(p10) the job budget sits strictly above the sum of its step caps', () => {
+  // A job-level cancel is unattributable: GitHub reports `cancelled`, not
+  // `failed`, and the jobs API cannot say which step ate the budget. That is the
+  // state #325 exists to avoid, so the arithmetic must never close.
+  //
+  // It has closed twice already: #326 found the sum at 70 against a cap of 75,
+  // and #323's framing gate then took the sum to exactly 75. Both times it was
+  // found by hand. Now it is a test.
+  const job = jobSection(wf, 'update-test-release');
+  const cap = Number.parseInt(/^    timeout-minutes: (\d+)$/m.exec(job)[1], 10);
+  const steps = [...job.matchAll(/^        timeout-minutes: (\d+)$/gm)].map((m) => Number.parseInt(m[1], 10));
+  const sum = steps.reduce((a, b) => a + b, 0);
+  assert.ok(steps.length > 0, 'there must be step caps to add up');
+  assert.ok(cap > sum,
+    `job cap ${cap} must exceed the sum of step caps ${sum} (${steps.join(' + ')}); equal is not enough`);
+});
+
+check('NEGATIVE (p10): a budget that exactly meets the sum is rejected', () => {
+  const job = jobSection(wf, 'update-test-release');
+  const cap = Number.parseInt(/^    timeout-minutes: (\d+)$/m.exec(job)[1], 10);
+  const steps = [...job.matchAll(/^        timeout-minutes: (\d+)$/gm)].map((m) => Number.parseInt(m[1], 10));
+  const sum = steps.reduce((a, b) => a + b, 0);
+  const shrunk = wf.replace(`    timeout-minutes: ${cap}`, `    timeout-minutes: ${sum}`);
+  assert.notStrictEqual(shrunk, wf, 'the fixture must actually change the workflow');
+  const j2 = jobSection(shrunk, 'update-test-release');
+  const cap2 = Number.parseInt(/^    timeout-minutes: (\d+)$/m.exec(j2)[1], 10);
+  assert.strictEqual(cap2 > sum, false, 'cap == sum must fail: zero headroom is a cancel waiting to happen');
+});
+
 console.log(`\n[workflow-release-guards] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -45,11 +45,21 @@ jobs:
   update-test-release:
     name: Update • Lint • Test • Release
     runs-on: ubuntu-latest
-    # #326 review: the step caps already sum to 70 in the pathological case
-    # (Playwright 15 + Docker E2E 25 + the ci-cd watch 30). A job-level cancel is
-    # the unattributable state #325 exists to avoid, so the job budget must sit
-    # above the sum of its parts, not below it.
-    timeout-minutes: 75
+    # The job budget must sit ABOVE the sum of its step caps. A job-level cancel
+    # is the unattributable state #325 exists to avoid: GitHub reports it as
+    # `cancelled`, not `failed`, and the jobs API cannot say which step ate the
+    # budget.
+    #
+    # Arithmetic, kept explicit because it has now closed twice:
+    #   Playwright install      15  (#325)
+    #   Docker E2E full         25  (#325)
+    #   stdio framing gate       5  (#323)
+    #   ci-cd watch             30
+    #   -------------------------------
+    #   sum                     75
+    #   headroom                10
+    # Pinned by invariant (p10), which fails if the sum ever meets the cap.
+    timeout-minutes: 85
 
     # #325: consumed by the report-train-failure job. `train_outcome` is a CLOSED
     # enum; the reporter treats unset or unrecognised as a failure, so a job that
@@ -255,6 +265,44 @@ jobs:
         if: steps.versions.outputs.update_needed == 'true'
         timeout-minutes: 25   # #325: see above; keeps a hung E2E suite reportable
         run: npm run test:e2e:docker:full
+
+      # -----------------------------------------------------------------------
+      # 7b. stdio framing gate (#323, Tier 1)
+      # -----------------------------------------------------------------------
+      # The Docker E2E suite above exercises real write paths against a live
+      # Actual server over HTTP. It gives stdio NOTHING, and stdio is the
+      # transport Claude Desktop users run.
+      #
+      # This asserts the one property the HTTP suite cannot: every byte the
+      # server writes to stdout under --stdio parses as newline-delimited
+      # JSON-RPC. The console hijack in src/logger.ts already neutralises
+      # console.log (verified: @actual-app/api calls it at 14 sites today and
+      # stdio survives), so the uncovered risk is a direct process.stdout.write,
+      # which is patched nowhere in src/. That is a FRAMING property, and a byte
+      # assertion tests it directly.
+      #
+      # Deliberately NOT the full dual-transport suite. That is 30 to 35 minutes
+      # against a job whose step caps already sum to 70 of its 75, so it would
+      # need roughly 130 and would materially raise the chance of a job-level
+      # CANCEL, the unattributable state #325 exists to prevent. The full run
+      # remains the LOCAL main-promotion gate (scripts/deploy-and-test.sh writes
+      # .release/dual-transport-report.json, which the release skill verifies).
+      - name: 🔌 stdio framing gate
+        if: steps.versions.outputs.update_needed == 'true'
+        timeout-minutes: 5
+        env:
+          MCP_STDIO_CONTAINER: mcp-server-e2e-test
+          MCP_STDIO_DATA_DIR: /app/data/stdio-framing
+        run: |
+          # The Docker E2E step above tears its stack down, so bring the two
+          # services this needs back up. Only the server and its Actual backend,
+          # not the Playwright runner.
+          docker compose -f docker-compose.test.yaml up -d --wait actual-budget-test mcp-server-test
+          node scripts/stdio-framing-check.mjs
+
+      - name: 🧹 Cleanup stdio framing stack
+        if: steps.versions.outputs.update_needed == 'true' && always()
+        run: docker compose -f docker-compose.test.yaml down -v --remove-orphans
 
       - name: 🧹 Cleanup Docker containers
         if: steps.versions.outputs.update_needed == 'true' && always()
