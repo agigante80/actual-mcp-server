@@ -35,6 +35,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `MCP_BRIDGE_PORT` | port string | `3600` | No | no | schema | config; also raw at `index.ts:194` (the listen path) | Canonical port (#230) |
 | `MCP_BRIDGE_BIND_HOST` | string | `0.0.0.0` | No | no | raw | `index.ts` | Bind interface |
 | `MCP_BRIDGE_DATA_DIR` | path string | `./actual-data` (image: `/app/data`) | No | no | schema | config | Local budget cache dir (#228) |
+| `ACTUAL_EXPORT_DIR` | path string | `''`, derived as `<MCP_BRIDGE_DATA_DIR>/exports` | No | no | schema | `tools/budgets_export.ts` | Where `actual_budgets_export` writes zips (#332). Empty derives from the data dir rather than the CWD: the container CWD `/app` is root-owned and the runtime user is unprivileged, so a CWD-relative default would fail with EACCES |
 | `MCP_BRIDGE_PUBLIC_HOST` | string | auto-detected | No | no | raw | `index.ts:269`, `httpServer.ts:581` | Advertised public host |
 | `MCP_BRIDGE_PUBLIC_SCHEME` | string | auto-detected | No | no | raw | `index.ts` | Advertised scheme override |
 | `MCP_BRIDGE_USE_TLS` | bool string | `false` | No | no | raw | `index.ts:277` | Deprecated alias of `MCP_ENABLE_HTTPS`; affects ONLY the advertised scheme |

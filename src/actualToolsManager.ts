@@ -79,6 +79,9 @@ const IMPLEMENTED_TOOLS = [
   'actual_tags_delete',
   'actual_notes_get',
   'actual_notes_update',
+  'actual_budgets_export',
+  'actual_budgets_import',
+  'actual_preferences_get',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names
@@ -123,6 +126,9 @@ const API_TOOL_MAP: Record<string, string> = {
   deleteCategoryGroup: 'actual_category_groups_delete',
   getIDByName: 'actual_get_id_by_name',
   getServerVersion: 'actual_server_get_version',
+  exportBudget: 'actual_budgets_export',
+  importBudget: 'actual_budgets_import',
+  getPreferences: 'actual_preferences_get',
 };
 
 class ActualToolsManager {

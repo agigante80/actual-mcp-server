@@ -33,6 +33,19 @@ export const configSchema = z.object({
   // Off by default so a plaintext upstream + encryption password is refused.
   ALLOW_INSECURE_UPSTREAM: z.string().optional().transform(val => val === 'true'),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
+  // #332: where actual_budgets_export writes budget zips. A budget export is
+  // megabytes of binary, so the tool returns a PATH plus metadata rather than
+  // base64 in the tool result: inlining it would flood the model's context and
+  // can exceed transport payload limits.
+  //
+  // Empty means "derive as <MCP_BRIDGE_DATA_DIR>/exports", resolved at call time
+  // rather than baked in here. A literal default like './actual-data/exports'
+  // would be resolved against the process CWD, which in the container is /app:
+  // that path is root-owned and the runtime drops to the unprivileged `app` user,
+  // so the very first export would fail with EACCES. The data dir is the one
+  // location guaranteed to be both writable and persisted (Dockerfile chowns it
+  // and it is a named volume), so exports belong under it.
+  ACTUAL_EXPORT_DIR: z.string().default(''),
   MCP_BRIDGE_PORT: z.string().default('3600'),
   MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),

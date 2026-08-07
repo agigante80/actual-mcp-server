@@ -18,6 +18,8 @@ export { default as budgets_holdForNextMonth } from './budgets_holdForNextMonth.
 export { default as budgets_resetHold } from './budgets_resetHold.js';
 export { default as budgets_setAmount } from './budgets_setAmount.js';
 export { default as budgets_setCarryover } from './budgets_setCarryover.js';
+export { default as budgets_export } from './budgets_export.js';
+export { default as budgets_import } from './budgets_import.js';
 export { default as budgets_transfer } from './budgets_transfer.js';
 export { default as categories_create } from './categories_create.js';
 export { default as categories_delete } from './categories_delete.js';
@@ -70,3 +72,4 @@ export { default as tags_update } from './tags_update.js';
 export { default as tags_delete } from './tags_delete.js';
 export { default as notes_get } from './notes_get.js';
 export { default as notes_update } from './notes_update.js';
+export { default as preferences_get } from './preferences_get.js';

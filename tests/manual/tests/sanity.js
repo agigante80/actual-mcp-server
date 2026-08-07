@@ -8,10 +8,10 @@
  * Writes to context:   (none)
  *
  * Environment:
- *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 71)
+ *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 74)
  */
 
-const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '71', 10);
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '74', 10);
 
 /**
  * @param {{ listTools: Function, callTool: Function }} client

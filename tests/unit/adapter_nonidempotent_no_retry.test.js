@@ -48,6 +48,10 @@ const NON_IDEMPOTENT = [
   'rawCloseAccount',
   'rawDeleteCategoryGroup',
   'rawMergePayees',
+  // #334: importBudget CREATES a budget file and returns its new id. A retry after
+  // a lost response would create a SECOND budget rather than return the first
+  // one's id, leaving an orphan the caller never learns about.
+  'rawImportBudget',
 ];
 for (const fn of NON_IDEMPOTENT) {
   const m = src.match(new RegExp(`${fn}\\([^;]*?retries:\\s*(\\d)`));

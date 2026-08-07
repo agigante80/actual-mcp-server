@@ -3,6 +3,10 @@
 process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
 process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-unit-test';
+// #332: actual_budgets_export writes a real file. Point it at a throwaway temp
+// directory so the smoke run never creates ./actual-data/exports in the repo.
+process.env.ACTUAL_EXPORT_DIR =
+  process.env.ACTUAL_EXPORT_DIR ?? (await import('node:path')).join((await import('node:os')).tmpdir(), 'amcp-smoke-exports');
 
 console.log('Running generated tools smoke tests');
 
@@ -108,6 +112,11 @@ console.log('Running generated tools smoke tests');
     deleteTag: null,
     getNote: { id: '00000000-0000-0000-0000-0000000000ab', note: 'hi' },
     updateNote: null,
+    // #332/#333/#334: export returns a non-empty zip buffer (the tool rejects an
+    // empty one), import returns the new budget id, preferences a synced-prefs map.
+    exportBudget: new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]),
+    importBudget: { id: '00000000-0000-0000-0000-0000000000ee' },
+    getPreferences: { dateFormat: 'yyyy-MM-dd', numberFormat: 'dot-comma', firstDayOfWeekIdx: '1' },
     // #141: transferBudgetAmount is the new atomic adapter method.
     transferBudgetAmount: {
       transferred: 5000,
@@ -173,6 +182,10 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-12', inputExample.amount = 10000;
   if (name.includes('budgets_resetHold')) inputExample.month = '2025-12'; // no categoryId — tool operates on whole month
   if (name.includes('budgets_setCarryover')) inputExample.month = '2025-12', inputExample.categoryId = 'cat_1', inputExample.flag = true;
+  // #332: a fixed name keeps the smoke run from accumulating timestamped files.
+  if (name.includes('budgets_export')) inputExample.filename = 'smoke-export.zip';
+  // #334: the schema requires exactly one of path/base64; base64 avoids needing a real file.
+  if (name.includes('budgets_import')) inputExample.base64 = 'UEsDBAoAAAAAAA==', inputExample.type = 'actual';
   if (name.includes('budgets_transfer')) inputExample.month = '2025-12', inputExample.fromCategoryId = 'cat_1', inputExample.toCategoryId = 'cat_2', inputExample.amount = 100;
   if (name.includes('query_run')) inputExample.query = 'SELECT * FROM transactions LIMIT 10';
   if (name.includes('bank_sync')) inputExample.accountId = 'acct_1';
