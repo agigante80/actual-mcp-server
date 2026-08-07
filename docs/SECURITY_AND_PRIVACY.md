@@ -164,6 +164,44 @@ ACTUAL_PASSWORD=your_actual_budget_password
 - All authenticated users share the single configured budget
 - Suitable for personal use
 
+#### Known limitation: `actual_budgets_import` creates an un-ACL'd budget (#334)
+
+`actual_budgets_import` wraps `@actual-app/api`'s `importBudget()`, which does not
+merely read a file. Verified against `importActual` in the installed package and
+against a live server: it closes the current budget, restores the archive **under the
+budget id the archive itself carries**, and loads it. Three consequences follow, all
+accepted behaviour rather than defects:
+
+1. **It can OVERWRITE an existing budget.** Because the id comes from the archive
+   rather than being freshly generated, re-importing an export of budget X restores
+   onto budget X and replaces that budget's local data. This is exactly what makes
+   export and import a usable backup-and-restore pair, and it is also why an import
+   against a budget holding real data is destructive. It is only "a new budget" when
+   the archive's id is not already present on the server.
+2. **A budget the import creates is outside the ACL.** `AUTH_BUDGET_ACL` maps
+   principals to budget sync IDs that exist when the ACL is evaluated, so a budget
+   that first appears mid-session has no ACL entry covering it. The ACL is still
+   enforced on the way IN (the write queue uses the same enforcement choke point as
+   every other write, so a caller cannot import while denied the budget they started
+   from), but it cannot constrain a budget that did not exist when the decision was
+   made.
+3. **The `path` input reads the server's filesystem.** The tool accepts a path so an
+   operator can restore an `actual_budgets_export` output. That path is not
+   restricted to the export directory, so any file the runtime user can read may be
+   handed to the importer. The importer rejects anything that is not a valid budget
+   archive, so this is a validity oracle rather than a file-disclosure primitive: it
+   does not return file contents.
+
+**Operational guidance.** In a shared or multi-user HTTP deployment, treat
+`actual_budgets_import` as an administrative operation. If your threat model does not
+allow it, remove it from the advertised surface rather than relying on the ACL to
+contain it. In single-user stdio deployments (Claude Desktop), the caller already has
+the user's own filesystem privileges and this adds no new capability.
+
+`actual_budgets_export` carries none of this: it is read-only, writes only inside
+`ACTUAL_EXPORT_DIR`, and its filename input is restricted to a flat alphanumeric
+charset so it cannot traverse out of that directory.
+
 ---
 
 ## 🔒 Production Branch Protection (#267)

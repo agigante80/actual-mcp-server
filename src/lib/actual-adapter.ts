@@ -61,6 +61,9 @@ const {
   deleteTag: rawDeleteTag,
   getNote: rawGetNote,
   updateNote: rawUpdateNote,
+  exportBudget: rawExportBudget,
+  importBudget: rawImportBudget,
+  getPreferences: rawGetPreferences,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
@@ -2308,6 +2311,78 @@ export async function updateNote(id: string, note: string): Promise<void> {
   });
 }
 
+/**
+ * Export the currently-loaded budget as a zip (#332).
+ *
+ * READ path (`withActualApi`), not the write queue: the upstream call produces a
+ * snapshot and mutates nothing, so it is safe to retry and must not serialise
+ * behind pending writes.
+ *
+ * Returns the raw bytes. Deliberately NOT base64 here: the encoding decision, the
+ * size cap, and the write-to-disk policy belong to the tool layer, so a future
+ * caller that wants to stream the buffer is not forced through a string.
+ */
+export async function exportBudget(): Promise<Uint8Array> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.budgets.export').catch(() => {});
+    return await withConcurrency(() =>
+      retry(() => rawExportBudget() as Promise<Uint8Array>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }),
+    );
+  });
+}
+
+/**
+ * Import a budget from an Actual `.zip` export or a YNAB4/YNAB5 export (#334).
+ *
+ * WRITE path, and NON-IDEMPOTENT: it creates a budget file and returns its new id,
+ * so `retries: 0` is mandatory. A retry after a lost response would create a SECOND
+ * budget rather than returning the first one's id. Guarded by
+ * `tests/unit/adapter_nonidempotent_no_retry.test.js`.
+ *
+ * Side effect worth knowing at every call site: upstream `importBudget` LOADS the
+ * imported budget, so the session's active budget changes to the new file. It is
+ * therefore outside the `BUDGET_N_*` registry and outside whatever budget the ACL
+ * resolved for this request. The write queue still enforces the ACL on entry, so a
+ * caller cannot use this to escape a budget they were already denied, but the
+ * resulting budget is un-ACL'd because it did not exist when the ACL was built.
+ */
+export async function importBudget(
+  input: string | Uint8Array,
+  opts: { type?: string; filename?: string } = {},
+): Promise<{ id: string }> {
+  observability.incrementToolCall('actual.budgets.import').catch(() => {});
+  return queueWriteOperation(async () => {
+    return await withConcurrency(() =>
+      retry(() => rawImportBudget(input, opts) as Promise<{ id: string }>, {
+        retries: 0,
+        backoffMs: 200,
+        isRetryable: isRetryableError,
+      }),
+    );
+  });
+}
+
+/**
+ * Read the budget's synced preferences: number format, date format, currency,
+ * first day of week, and similar display settings (#333).
+ *
+ * READ path. The shape is upstream's `SyncedPrefs`, which our tsconfig resolves to
+ * the `@actual-app/core` stub (`any`), so there is no compile-time contract here.
+ * The tool layer normalises it rather than trusting the shape.
+ */
+export async function getPreferences(): Promise<Record<string, unknown>> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.preferences.get').catch(() => {});
+    return await withConcurrency(() =>
+      retry(() => rawGetPreferences() as Promise<Record<string, unknown>>, {
+        retries: 2,
+        backoffMs: 200,
+        isRetryable: isRetryableError,
+      }),
+    );
+  });
+}
+
 export default {
   getAccounts,
   getAccountsWithBalances,
@@ -2369,5 +2444,8 @@ export default {
   deleteSchedule,
   updateTransactionBatch,
   withWriteSession,
+  exportBudget,
+  importBudget,
+  getPreferences,
   notifications,
 };

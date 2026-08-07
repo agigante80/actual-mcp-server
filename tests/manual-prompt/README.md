@@ -22,7 +22,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 |------|----------|-------------|
 | [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1**: 7 read-only tools | Always run first. Confirms the server is up and connected. |
 | [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2-6b**: ~39 CRUD tools | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules. |
-| [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7-12**: ~16 tools + full cleanup | Paste after Prompt 2 passes. Tests budgets, summaries, query engine, notes, session management, and cleans up everything. |
+| [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7-12**: ~19 tools + full cleanup | Paste after Prompt 2 passes. Tests budgets, summaries, query engine, notes, preferences, the export/import round trip, session management, and cleans up everything. |
 
 ---
 
@@ -59,11 +59,13 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 8 | Prompt 3 | 11 | Budget management |
 | 9 | Prompt 3 | 2 | Advanced query + bank sync |
 | 9b | Prompt 3 | 2 | Notes (get + update) |
+| 9c | Prompt 3 | 1 | Preferences (synced display settings, #333) |
+| 9d | Prompt 3 | 2 | Budget export + import round trip (#332/#334). **Import half needs a disposable budget**: it creates and loads a new budget |
 | 10 | Prompt 3 | 2 | Session management |
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 65 tools across 3 prompts**
+**Total: 68 tools across 3 prompts**
 
 ---
 

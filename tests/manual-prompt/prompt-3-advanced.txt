@@ -19,6 +19,8 @@ WHAT IT TESTS
   Phase 8  — Budgets                 (11 tools)
   Phase 9  — Advanced Query & Sync   (2 tools)
   Phase 9b: Notes                   (2 tools)
+  Phase 9c: Preferences              (1 tool)
+  Phase 9d: Export / Import          (2 tools)
   Phase 10 — Session Management      (2 tools)
   Phase 11 — Concurrency             (optional, skipped by default)
   Phase 12 — Full Cleanup            (non-blocking)
@@ -151,6 +153,48 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 
 ---
 
+**Phase 9c: Preferences (1 tool):**
+
+- actual_preferences_get
+  Input: {}
+  Positive: expect an object with preferences (an object, never an array), keys (an array),
+    and count equal to the number of keys. Report the dateFormat and numberFormat values.
+  Negative: call with an unexpected argument, e.g. { budgetId: "x" }
+    Expect: the call still succeeds OR is rejected cleanly. Either is acceptable;
+    report which happened. Do NOT treat a clean rejection as a failure.
+
+---
+
+**Phase 9d: Export / Import (2 tools):**
+
+WARNING, read before running. actual_budgets_import CREATES a budget on the Actual
+server AND LOADS it, so the active budget for this session changes and the new budget
+is NOT in the configured budget list. Run the import step ONLY against a disposable
+test budget. If this is a real budget, run the export half and report the import half
+as skipped.
+
+- actual_budgets_export
+  Input: { filename: "MCP-Prompt-Export-{TS}.zip" }
+  Positive: expect success=true, a path string, bytes greater than 100, and a
+    sha256 that is exactly 64 lowercase hex characters. Record the path.
+  Negative: call with { filename: "../escape.zip" }
+    Expect: rejected with a validation error naming the filename rules.
+    A filename that is ACCEPTED here is a FAILURE, report it prominently.
+
+- actual_budgets_import  (DISPOSABLE BUDGET ONLY)
+  First call actual_accounts_list and record the account count as N.
+  Input: { path: "<the path recorded above>", type: "actual" }
+  Positive: expect success=true and a budgetId string. The message MUST mention
+    actual_budgets_switch; if it does not, report that as a failure.
+  Then call actual_accounts_list again and expect the SAME count N.
+    This is the round-trip assertion: it proves the export was restorable.
+  Then call actual_budgets_list_available and actual_budgets_switch back to the
+    ORIGINAL budget name before continuing. Confirm the switch returned success=true.
+  Negative: call with {} (no source at all)
+    Expect: rejected, mentioning that exactly one of path or base64 is required.
+
+---
+
 **Phase 10 — Session Management (2 tools):**
 
 - actual_session_list
@@ -219,11 +263,13 @@ PROMPT 3 (Advanced):
   Phase 8  Budgets:                   X / 11
   Phase 9  Query & Sync:              X / 2
   Phase 9b Notes:                      X / 2
+  Phase 9c Preferences:                X / 1
+  Phase 9d Export / Import:            X / 2
   Phase 10 Session Management:        X / 2
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 64
+  Total Tools Tested:   X / 67
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

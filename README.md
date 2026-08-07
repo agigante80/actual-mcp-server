@@ -24,13 +24,13 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 ┌─────────────┐   MCP/HTTP    ┌──────────────────┐   Actual API   ┌──────────────┐
 │  LibreChat  │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  LobeChat   │               │  Server          │               │   Budget     │
-│  (remote)   │               │  (71 tools)      │               │   Server     │
+│  (remote)   │               │  (74 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 
 ┌─────────────┐   MCP/stdio   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  Claude     │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  Desktop    │               │  Server          │               │   Budget     │
-│  (local)    │               │  (71 tools)      │               │   Server     │
+│  (local)    │               │  (74 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 ```
 
@@ -38,14 +38,14 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **71 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers the reachable Actual Budget API with no genuine gaps.
+- **74 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers the reachable Actual Budget API with no genuine gaps.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`.
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 71 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 74 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -178,7 +178,7 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 }
 ```
 
-> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 71 tools are available.
+> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 74 tools are available.
 >
 > **`MCP_BRIDGE_DATA_DIR` should be an absolute path.** Without one, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
 
@@ -304,7 +304,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 ## Available Tools
 
-**71 tools** across all categories. All tools use the `actual_<category>_<action>` naming convention.
+**74 tools** across all categories. All tools use the `actual_<category>_<action>` naming convention.
 
 ### Accounts (7)
 
@@ -390,7 +390,13 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_notes_get` | Get the note for any entity (account/category/category-group/payee UUID, or budget-YYYY-MM) |
 | `actual_notes_update` | Set or clear the note for any entity; validates entity exists or matches budget-YYYY-MM pattern |
 
-### Budgets (10)
+### Preferences (1)
+
+| Tool | Description |
+|------|-------------|
+| `actual_preferences_get` | Read the budget's synced display preferences (number format, date format, currency, first day of week). Display only: all amounts stay integer cents |
+
+### Budgets (12)
 
 | Tool | Description |
 |------|-------------|
@@ -404,6 +410,8 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_budgets_setCarryover` | Enable/disable carryover |
 | `actual_budgets_holdForNextMonth` | Hold funds for next month |
 | `actual_budgets_resetHold` | Reset hold status |
+| `actual_budgets_export` | Export the active budget as a `.zip` into `ACTUAL_EXPORT_DIR`; returns path, byte size and sha256, never the file contents |
+| `actual_budgets_import` | Restore a budget from an Actual `.zip` or a YNAB4/YNAB5 export. **Destructive:** the budget id comes from the archive, so re-importing an export *replaces* that budget's data rather than making a copy. Also loads the imported budget, changing the session's active budget |
 
 ### Rules (4)
 
@@ -458,6 +466,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_BRIDGE_PORT` | `3600` | No | Port for MCP server to listen on |
 | `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
 | `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite). **Required to be a persistent path.** The `@actual-app/api` library downloads a local copy of your budget here to run queries; use a volume mount in Docker to persist it across restarts |
+| `ACTUAL_EXPORT_DIR` | (unset) | No | Directory where `actual_budgets_export` writes budget `.zip` files. Unset means `<MCP_BRIDGE_DATA_DIR>/exports`, which is writable and persisted in the Docker image. Must be writable by the runtime user |
 | `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | No | Public hostname/IP for server (shown in logs) |
 | `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
 | `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
@@ -562,7 +571,7 @@ stdio is the simplest way to connect Claude Desktop directly to Actual Budget. T
 - No auth token. Process ownership is the security boundary.
 - All logs go to stderr so they never corrupt the JSON-RPC framing on stdout
 - The process exits when stdin closes (Claude Desktop shutting down)
-- All 71 tools are available, identical to HTTP mode
+- All 74 tools are available, identical to HTTP mode
 
 **Start manually to verify:**
 
@@ -644,7 +653,7 @@ See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-m
 | Command | What It Tests | Requires Live Server |
 |---------|---------------|---------------------|
 | `npm run build` | TypeScript compilation | No |
-| `npm run test:unit-js` | 71-tool smoke, schema validation, auth ACL | No |
+| `npm run test:unit-js` | 74-tool smoke, schema validation, auth ACL | No |
 | `npm run test:adapter` | Adapter, retry logic, concurrency | No |
 | `npm run test:e2e` | MCP protocol compliance (Playwright) | No |
 | `npm run test:e2e:docker:full` | Full stack integration | Yes (Docker) |

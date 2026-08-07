@@ -23,7 +23,7 @@
  *   MCP_AUTH_TOKEN        Bearer token override
  *   MCP_TEST_LEVEL        Test level override
  *   ACTUAL_SERVER_URL     Actual Budget server URL (shown in cleanup prompt)
- *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 71)
+ *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 74)
  */
 
 import readline from 'node:readline/promises';
@@ -39,6 +39,7 @@ import { smokeTests } from './tests/smoke.js';
 import { accountTests } from './tests/account.js';
 import { notesTests } from './tests/notes.js';
 import { extendedTests, fullTests } from './tests/advanced.js';
+import { roundtripTests } from './tests/roundtrip.js';
 import { cleanupMcpTestAccounts } from './cleanup.js';
 
 // Load .env from project root
@@ -215,6 +216,13 @@ export async function run() {
       guard.setLastCompleted('extendedTests');
       await fullTests(client, context, testOpts);
       guard.setLastCompleted('fullTests');
+      // #332/#334: LAST, and only at `full`. actual_budgets_import LOADS the
+      // imported budget, so anything running after it would silently target the
+      // imported copy. The module switches back before returning, but running it
+      // last is the primary defence and the switch-back is the backstop. Its own
+      // destructive half additionally gates on MCP_TEST_BUDGET_SYNC_ID.
+      await roundtripTests(client, context);
+      guard.setLastCompleted('roundtripTests');
     }
     // level === "normal" falls through here with no extra steps
 

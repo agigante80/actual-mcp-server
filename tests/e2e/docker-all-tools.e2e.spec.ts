@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 71 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 74 TOOLS
  *
  * Tests every tool with success and error scenarios
  * Based on manual integration tests and unit tests
@@ -15,7 +15,7 @@ import {
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 71 TOOLS', () => {
+test.describe('Docker E2E - ALL 74 TOOLS', () => {
   let sessionId: string;
   let testContext: {
     accountId?: string;
@@ -30,6 +30,12 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
     rulesUpsertId?: string;
     scheduleOneOffId?: string;
   } = {};
+
+  // #332/#334: state for the export/import round trip at the end of this file.
+  // Set by the export test, read by the second export and the import test.
+  let exportedPath: string | undefined;
+  let exportedSha: string | undefined;
+  let exportedBytes: number | undefined;
 
   test.beforeAll(async ({ request }) => {
     console.log('🔌 Initializing MCP session...');
@@ -1761,6 +1767,124 @@ test.describe('Docker E2E - ALL 71 TOOLS', () => {
       const data = extractResult(result);
       expect(data?.success).toBeTruthy();
       console.log('Tag deleted');
+    }
+  });
+
+  // ==================== PREFERENCES (1 tool) ====================
+  test('actual_preferences_get - should read synced preferences', async ({ request }) => {
+    const result = await callTool(request, sessionId, 'actual_preferences_get');
+    const data = extractResult(result);
+    expect(data).toBeTruthy();
+    // The normalisation contract: `preferences` is ALWAYS a non-array object and
+    // `count` always matches its key count, whatever upstream returned.
+    expect(typeof data?.preferences).toBe('object');
+    expect(Array.isArray(data?.preferences)).toBe(false);
+    expect(Array.isArray(data?.keys)).toBe(true);
+    expect(data?.count).toBe(Object.keys(data.preferences).length);
+    console.log(`preferences_get: ${data.count} synced preference(s)`);
+  });
+
+  // ==================== EXPORT / IMPORT ROUND TRIP (2 tools) ====================
+  //
+  // Deliberately the LAST tests in this file. actual_budgets_import LOADS the
+  // imported budget, so the session's active budget changes and every test after
+  // it would silently run against the imported copy. The test switches back at the
+  // end, but ordering is the primary defence and the switch-back is the backstop.
+  //
+  // The whole round trip stays server-side: the zip never crosses the transport.
+  // The export tool returns a path inside the container, and the import tool reads
+  // that same path, so this exercises the real file rather than a base64 copy.
+  test('actual_budgets_export - should write a zip and report accurate metadata', async ({ request }) => {
+    const result = await callTool(request, sessionId, 'actual_budgets_export', {
+      filename: 'e2e-roundtrip.zip',
+    });
+    const data = extractResult(result);
+
+    expect(data?.success).toBe(true);
+    expect(data?.filename).toBe('e2e-roundtrip.zip');
+    expect(typeof data?.path).toBe('string');
+    // A real budget export is never a handful of bytes. This catches the failure
+    // mode where the zip is produced but empty or truncated, which a plain
+    // "did it throw" assertion would miss entirely.
+    expect(data?.bytes).toBeGreaterThan(100);
+    expect(data?.sha256).toMatch(/^[0-9a-f]{64}$/);
+
+    exportedPath = data.path;
+    exportedSha = data.sha256;
+    exportedBytes = data.bytes;
+    console.log(`budgets_export: ${data.bytes} bytes at ${data.path} (sha256 ${data.sha256.slice(0, 12)}...)`);
+  });
+
+  test('actual_budgets_export - a second export of unchanged data has the SAME size class', async ({ request }) => {
+    // Not a digest equality assertion: an Actual export embeds per-export metadata
+    // (timestamps, device state), so two exports of identical data legitimately
+    // differ byte for byte. Asserting equal digests here would be a flaky test
+    // that looks rigorous. Size stability is the honest invariant.
+    const result = await callTool(request, sessionId, 'actual_budgets_export', {
+      filename: 'e2e-roundtrip-2.zip',
+    });
+    const data = extractResult(result);
+    expect(data?.success).toBe(true);
+    expect(data?.sha256).toMatch(/^[0-9a-f]{64}$/);
+
+    // Compare against the FIRST export. Skip rather than self-compare if the first
+    // test did not record a size, so this can never silently pass by comparing a
+    // value with itself. Bound to a local so the narrowing is visible to the
+    // compiler: test.skip() does not narrow.
+    const firstBytes = exportedBytes;
+    if (firstBytes === undefined) {
+      test.skip();
+      return;
+    }
+    const drift = Math.abs(data.bytes - firstBytes) / firstBytes;
+    expect(drift).toBeLessThan(0.5);
+    console.log(`budgets_export: second export ${data.bytes} bytes, digest ${data.sha256 === exportedSha ? 'identical' : 'differs (expected)'}`);
+  });
+
+  test('actual_budgets_import - should restore the export and preserve its accounts', async ({ request }) => {
+    if (!exportedPath) test.skip();
+
+    // Capture what the CURRENT budget looks like, and which configured budget we
+    // are on, so we can both assert the restore and get back afterwards.
+    const beforeAccounts = extractResult(await callTool(request, sessionId, 'actual_accounts_list'));
+    const beforeCount = Array.isArray(beforeAccounts) ? beforeAccounts.length : 0;
+
+    const availableBefore = extractResult(await callTool(request, sessionId, 'actual_budgets_list_available'));
+    const originalName =
+      (Array.isArray(availableBefore) ? availableBefore : availableBefore?.budgets)?.[0]?.name;
+
+    const result = await callTool(request, sessionId, 'actual_budgets_import', {
+      path: exportedPath,
+      type: 'actual',
+    });
+    const data = extractResult(result);
+
+    expect(data?.success).toBe(true);
+    expect(typeof data?.budgetId).toBe('string');
+    expect(data?.source).toBe('path');
+    // The side-effect warning is part of the contract, not decoration: an
+    // assistant that misses it operates on the wrong budget for the rest of the
+    // session. Assert it is actually present in the message.
+    expect(String(data?.message)).toMatch(/actual_budgets_switch/);
+    console.log(`budgets_import: restored as ${data.budgetId}`);
+
+    // THE ROUND-TRIP ASSERTION. The imported budget is now loaded, so a plain
+    // accounts_list reads the restored copy. Matching account counts is what
+    // proves the export was actually restorable, rather than merely well-formed.
+    const afterAccounts = extractResult(await callTool(request, sessionId, 'actual_accounts_list'));
+    const afterCount = Array.isArray(afterAccounts) ? afterAccounts.length : 0;
+    expect(afterCount).toBe(beforeCount);
+    console.log(`round trip verified: ${beforeCount} account(s) before, ${afterCount} after restore`);
+
+    // Restore the session to a CONFIGURED budget. The imported budget is not in
+    // the BUDGET_N_* registry, so leaving the session on it would strand any
+    // later test on a budget that cannot be switched back to by name.
+    if (originalName) {
+      const back = extractResult(
+        await callTool(request, sessionId, 'actual_budgets_switch', { budgetName: originalName }),
+      );
+      expect(back?.success).toBe(true);
+      console.log(`switched back to the configured budget "${originalName}"`);
     }
   });
 });
