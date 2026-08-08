@@ -38,7 +38,31 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
 };
 
 const InputSchema = z.object({
-  stage: z.enum(['pre', 'post']).optional().default('pre').describe('When to apply the rule - "pre" (before transactions sync) or "post" (after transactions sync)'),
+  // #342: three stages, and the default one is `null`, not a string.
+  //
+  // Verified against Actual's validator (transaction-rules.ts) and a live server:
+  // it accepts exactly 'pre', 'post' and null, and REJECTS the literal "default"
+  // with `Invalid rule stage: default`. The published API reference says
+  // pre/default/post, which is wrong in both directions (reported upstream as
+  // actualbudget/actual#8682).
+  //
+  // The default here MUST be null and must be SENT. Two traps:
+  //   - Defaulting to 'pre' (what this did until #342) silently puts every
+  //     MCP-created rule ahead of every rule the user made in the UI, because
+  //     Actual runs stages in the order pre, default, post. No error, no warning.
+  //   - Simply making it .optional() and omitting the key does NOT work: on a
+  //     create the validator always runs and rejects `undefined` with
+  //     `Invalid rule stage: undefined`.
+  stage: z
+    .enum(['pre', 'post'])
+    .nullable()
+    .optional()
+    .default(null)
+    .describe(
+      'When to apply the rule. null (the default) is Actual\'s normal stage, the one a rule gets in the UI ' +
+        'when no stage is chosen. "pre" runs before the default stage, "post" after. Leave unset unless you ' +
+        'specifically need the rule to out-rank or defer to the user\'s existing rules.',
+    ),
   conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine multiple conditions'),
   conditions: z.array(ConditionSchema).describe('Array of conditions that must be met for the rule to apply'),
   actions: z.array(ActionSchema).describe('Array of actions to perform when conditions are met'),
@@ -55,10 +79,11 @@ IMPORTANT Field Types:
 - "notes", "description" (string) - for text matching. Supports: contains, matches, doesNotContain, is, isNot
 - "amount", "date" (number/date) - supports: is, gte, lte, gt, lt
 
-Stage options: 'pre' or 'post'.
+Stage: omit it (the normal stage, recommended), or 'pre' to run before the user's own rules, or 'post' to run after.
+Do NOT pass "default" as a string; Actual rejects it. The normal stage is null, which is what omitting gives you.
 Action operators: 'set', 'set-split-amount', 'link-schedule', 'append-notes'.
 
-Example: {stage: "post", conditionsOp: "and", conditions: [{field: "imported_payee", op: "contains", value: "Amazon"}], actions: [{op: "set", field: "category", value: "category-uuid"}]}`,
+Example (no stage, so the rule lands in the normal stage alongside the user's own rules): {conditionsOp: "and", conditions: [{field: "imported_payee", op: "contains", value: "Amazon"}], actions: [{op: "set", field: "category", value: "category-uuid"}]}`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206).

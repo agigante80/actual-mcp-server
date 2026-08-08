@@ -1533,7 +1533,20 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
     const fieldsObj = fields as any;
     const rule: any = {
       id,
-      stage: fieldsObj.stage ?? existingRule.stage,
+      // #342: `??` is WRONG for stage, and only for stage. null is a MEANINGFUL
+      // value here (Actual's normal stage), not an absent one, so
+      // `fieldsObj.stage ?? existingRule.stage` silently discards an explicit
+      // `stage: null` and leaves the rule where it was. That made it impossible
+      // to move a rule OUT of 'pre' or 'post' back to the normal stage, and it
+      // failed silently: the call still returned success.
+      //
+      // Decide on PRESENCE of the key instead. The tool clones its input with
+      // JSON.parse(JSON.stringify(...)), which preserves an explicit null key, so
+      // `in` distinguishes "not supplied" from "supplied as null" correctly.
+      //
+      // The other three fields keep `??` deliberately: none of them treats null
+      // as a distinct legal value, so nullish-coalescing is the right merge there.
+      stage: 'stage' in fieldsObj ? fieldsObj.stage : existingRule.stage,
       conditionsOp: fieldsObj.conditionsOp ?? existingRule.conditionsOp,
       conditions: fieldsObj.conditions ?? existingRule.conditions ?? [],
       actions: fieldsObj.actions ?? existingRule.actions ?? [],
