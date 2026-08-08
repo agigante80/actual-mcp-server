@@ -318,7 +318,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_accounts_reopen` | Reopen closed account |
 | `actual_accounts_get_balance` | Get account balance at a date |
 
-### Transactions (13)
+### Transactions (14)
 
 **Standard (6)**
 
@@ -333,11 +333,12 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 > **Split transactions:** pass a `subtransactions` array (each child needs an `amount` in integer cents; `category` and `notes` are optional). The child amounts must sum to the parent `amount` (the server does not enforce this, so the tool does). A split parent carries no category of its own: put categories on the children. `actual_transactions_update` can edit the children of a transaction that is ALREADY a split; converting a plain transaction into a split via update is not supported (create it as a split instead). Note: `actual_transactions_import` forwards a `subtransactions` array to the API but does NOT apply the sum check, so use `actual_transactions_create` for guaranteed-balanced splits.
 
-**Utility (1)**
+**Utility (2)**
 
 | Tool | Description |
 |------|-------------|
 | `actual_transactions_uncategorized` | Summary of uncategorized transactions (totalCount, totalAmount, per-account breakdown); pass `includeTransactions:true` for paginated rows |
+| `actual_transactions_update_batch` | Apply many transaction updates in ONE call (`updates: [{ id, fields }]`); returns per-item success and failure counts |
 
 **Exclusive ActualQL-powered (6)**, unique to this MCP server
 
@@ -413,9 +414,22 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_budgets_export` | Export the active budget as a `.zip` into `ACTUAL_EXPORT_DIR`; returns path, byte size and sha256, never the file contents |
 | `actual_budgets_import` | Restore a budget from an Actual `.zip` or a YNAB4/YNAB5 export. **Destructive:** the budget id comes from the archive, so re-importing an export *replaces* that budget's data rather than making a copy. Also loads the imported budget, changing the session's active budget |
 
-### Rules (4)
+### Rules (5)
 
 `actual_rules_get` · `actual_rules_create` · `actual_rules_update` · `actual_rules_delete`
+
+| Tool | Description |
+|------|-------------|
+| `actual_rules_create_or_update` | Idempotent upsert: create a rule, or update the existing one that matches the same conditions, in a single call. Use this instead of get-then-create when re-running a categorisation setup, so repeated runs do not pile up duplicate rules |
+
+### Schedules (4)
+
+| Tool | Description |
+|------|-------------|
+| `actual_schedules_get` | List scheduled transactions, with their next occurrence date |
+| `actual_schedules_create` | Create a schedule (one-off or recurring); recurrence is a typed config, see `src/lib/schemas/recur.ts` |
+| `actual_schedules_update` | Update an existing schedule's amount, payee, account, or recurrence |
+| `actual_schedules_delete` | Delete a schedule |
 
 ### Advanced Query & Sync (2)
 
@@ -490,6 +504,8 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `OIDC_JWKS_TRUSTED_HOSTS` | _(none)_ | No | Opt-in cross-origin JWKS hosts, comma-separated `host` or `host:port` (#254). For IdPs whose `jwks_uri` lives on another host, e.g. Google needs `www.googleapis.com`. Exact match, no wildcards; empty default keeps same-origin-only |
 | `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |
 | `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
+| `AUTH_BUDGET_ACL_SOURCE` | `static` | No | `static` uses the `AUTH_BUDGET_ACL` map above. `actual` derives the ACL from the Actual server's own per-file access list, so revoking someone in Actual takes effect here without a config edit. Requires a multi-user (OpenID) Actual server that was password-bootstrapped first |
+| `AUTH_BUDGET_ACL_CLAIM` | `sub` | No | Which OIDC claim is matched against Actual's user identity when the source is `actual`. `sub` matches Actual's `userId` and is strongly preferred; matching a name claim is riskier |
 | `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS. Requires `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` |
 | `MCP_HTTPS_CERT` | _(none)_ | No | Path to PEM certificate file (required when `MCP_ENABLE_HTTPS=true`) |
 | `MCP_HTTPS_KEY` | _(none)_ | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
@@ -643,6 +659,21 @@ OIDC_SCOPES=                    # leave empty for Casdoor
 
 - `GET /.well-known/oauth-protected-resource` (RFC 9728): identifies this server as a protected resource and points at your `OIDC_ISSUER` as the authorization server.
 - `GET /.well-known/oauth-authorization-server` (RFC 8414, #285): the authorization server metadata (its `authorization_endpoint` / `token_endpoint` / `registration_endpoint`), re-served from your IdP's own OpenID discovery document. This is here because several clients look for it on the resource-server origin, and some IdPs (e.g. Authentik) do not expose it where those clients look. It is fetched once at startup and served verbatim, exposes only endpoints your IdP already publishes publicly, and requires no authentication (a client reads it before it has a token). No extra configuration is needed; it is absent when `AUTH_PROVIDER` is not `oidc`.
+
+**Where the per-user budget ACL comes from.** By default the ACL is the `AUTH_BUDGET_ACL` map you maintain by hand. Since v0.10.x it can instead be derived from the Actual server's own per-file access list, so granting or revoking someone in Actual takes effect here without a config edit and a restart:
+
+```bash
+AUTH_BUDGET_ACL_SOURCE=actual   # default: static (the AUTH_BUDGET_ACL map)
+AUTH_BUDGET_ACL_CLAIM=sub       # default: sub, matched against Actual's userId
+```
+
+Three things to know before enabling it:
+
+- **It requires a multi-user Actual server**, meaning one configured with `ACTUAL_OPENID_*`. On a password-only server no named users exist and every principal resolves to nothing.
+- **Your Actual server must have been bootstrapped with a PASSWORD before OpenID was added.** This is a hard prerequisite of this MCP server generally, not just of this feature: `@actual-app/api` authenticates with a password, and an Actual server set up with OpenID from scratch refuses password login, so this server cannot connect to it at all. A password cannot be added afterwards.
+- **Keep `AUTH_BUDGET_ACL_CLAIM=sub` unless you have a specific reason not to.** `sub` is matched against Actual's stable `userId`. Matching a name-like claim instead is riskier: this server's own service account appears in every file's access list as the owner with a blank `userName`, so a principal whose name claim resolves to empty would match it.
+
+It is opt-in and fails closed: if the budget list cannot be read, or the principal matches no file, access is denied rather than granted.
 
 See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format and Casdoor notes.
 

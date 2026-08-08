@@ -95,6 +95,27 @@ export const configSchema = z.object({
   // Example: {"alice@example.com":["budget-1"],"group:admin":["*"]}
   // Leave unset to allow all authenticated users to access all budgets.
   AUTH_BUDGET_ACL: z.string().optional(),
+  // #338: where the budget ACL comes from.
+  //   'static' (default) = AUTH_BUDGET_ACL above, exactly as before.
+  //   'actual'           = derived from the Actual server's own per-file access
+  //                        list (`usersWithAccess` on getBudgets()).
+  // Opt-in on purpose. Two reasons: it moves the authorization source from local
+  // reviewable config to data the UPSTREAM server returns at runtime, and it only
+  // functions when that server runs in multi-user (OpenID) mode. Defaulting to
+  // 'static' means no existing deployment changes posture on upgrade.
+  AUTH_BUDGET_ACL_SOURCE: z.enum(['static', 'actual']).default('static'),
+  // #338: which OIDC claim is matched against Actual's user identity when
+  // AUTH_BUDGET_ACL_SOURCE=actual. Default 'sub', matched against `userId`.
+  //
+  // Do NOT casually change this to a name-like claim. Verified against a live
+  // multi-user server: the MCP server's own service account appears in EVERY
+  // file's usersWithAccess with `owner: true` and a BLANK `userName`. A
+  // name-based match whose claim resolves to empty would match that row and gain
+  // owner access to every file. Matching UUIDs makes that unrepresentable.
+  AUTH_BUDGET_ACL_CLAIM: z
+    .string()
+    .default('sub')
+    .refine((v) => /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v), 'AUTH_BUDGET_ACL_CLAIM must be a simple claim name'),
 })
   // When native TLS is enabled, both the cert and key paths must be provided.
   // MCP_ENABLE_HTTPS is transformed to a boolean above, so this object-level

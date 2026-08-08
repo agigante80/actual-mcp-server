@@ -72,6 +72,8 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `OIDC_JWKS_TRUSTED_HOSTS` | csv string | (none) | No | no | schema | `httpServer.ts` | #254 opt-in cross-origin JWKS hosts (`host` or `host:port`, exact match, no wildcards). For IdPs whose `jwks_uri` lives on another host, e.g. Google: `OIDC_ISSUER=https://accounts.google.com` needs `OIDC_JWKS_TRUSTED_HOSTS=www.googleapis.com`. Empty default keeps same-origin-only |
 | `OIDC_SCOPES` | csv string | (none) | No | no | schema | config | Comma-separated required scopes |
 | `AUTH_BUDGET_ACL` | json string | (none) | No | no | schema | config | Per-user budget ACL map |
+| `AUTH_BUDGET_ACL_SOURCE` | `static` \| `actual` | `static` | No | no | schema | `auth/budget-acl.ts` | Where the ACL comes from (#338). `actual` derives it from the Actual server's own `usersWithAccess`. Requires a multi-user (OpenID) Actual server that was PASSWORD-bootstrapped first |
+| `AUTH_BUDGET_ACL_CLAIM` | claim name | `sub` | No | no | schema | `auth/budget-acl-dynamic.ts` | Claim matched against Actual's identity when source is `actual`. `sub` matches `userId`; any other value matches `userName`, which is riskier (the service account row has a blank `userName`) |
 | `MCP_ENABLE_HTTPS` | bool string | `false` | No | no | schema | config; also raw at `index.ts:277,286` | Native TLS switch (canonical TLS knob) |
 | `MCP_HTTPS_CERT` | path | (none) | No | no | schema | config; also raw at `index.ts:287` | PEM cert path (required when TLS on) |
 | `MCP_HTTPS_KEY` | path | (none) | No | yes | schema | config; also raw at `index.ts:288` | PEM key path (required when TLS on) |
