@@ -56,8 +56,31 @@ interface UserWithAccess {
   owner?: boolean;
 }
 
-/** The subset of a getBudgets() entry this module reads. */
+/**
+ * The subset of a getBudgets() entry this module reads.
+ *
+ * WHICH IDENTIFIER THE ACL SPEAKS IN, and why it is NOT the obvious one.
+ *
+ * A remote file carries both `cloudFileId` and `groupId`, and they are different
+ * UUIDs. The ACL must be expressed in `groupId`, because that is what Actual calls
+ * the "Sync ID": it is the value `ACTUAL_BUDGET_SYNC_ID` holds, the value
+ * `getActiveBudgetConfig().syncId` returns, and therefore the value
+ * `_enforceBudgetAcl` compares against.
+ *
+ * Verified against the API source rather than inferred. `api/download-budget`
+ * resolves the budget with `files.find(f => f.groupId === syncId)`, and a live
+ * check confirms `downloadBudget(cloudFileId)` throws "not found" while
+ * `downloadBudget(groupId)` succeeds.
+ *
+ * Getting this wrong is silent and total: the resolver would return a set of
+ * cloudFileIds, nothing would ever match the active syncId, and EVERY user would
+ * be denied with no indication that the identifiers were simply of different
+ * kinds. That is exactly what the first implementation did.
+ */
 interface BudgetFileEntry {
+  /** Actual's "Sync ID". This is what the ACL is expressed in. */
+  groupId?: string;
+  /** NOT the sync id. Present on the entry but deliberately unused here. */
   cloudFileId?: string;
   usersWithAccess?: UserWithAccess[];
 }
@@ -118,9 +141,11 @@ export function matchAllowedFiles(
 
   for (const entry of files as BudgetFileEntry[]) {
     if (!entry || typeof entry !== 'object') continue;
-    const fileId = entry.cloudFileId;
+    // groupId, NOT cloudFileId. See the BudgetFileEntry note: groupId is the
+    // "Sync ID" that _enforceBudgetAcl compares against.
+    const syncId = entry.groupId;
     const access = entry.usersWithAccess;
-    if (!fileId || !Array.isArray(access)) continue;
+    if (!syncId || !Array.isArray(access)) continue;
 
     for (const u of access) {
       if (!u || typeof u !== 'object') continue;
@@ -132,7 +157,7 @@ export function matchAllowedFiles(
       const trimmed = candidate.trim();
       if (trimmed.length === 0) continue; // never match the blank service-account row
       if (trimmed === principalValue) {
-        allowed.add(fileId);
+        allowed.add(syncId);
         break;
       }
     }
