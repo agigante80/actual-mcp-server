@@ -26,7 +26,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import config from '../config.js';
 import logger from '../logger.js';
-import { extractPrincipalValue, resolveAllowedBudgetsFromActual } from './budget-acl-dynamic.js';
+import { extractPrincipalValue, resolveAllowedBudgetsFromActual, resolvedClaimName } from './budget-acl-dynamic.js';
 
 // ---------------------------------------------------------------------------
 // ACL map (parsed once from env, cached)
@@ -174,7 +174,8 @@ async function resolveDynamicAcl(req: Request, res: Response, next: NextFunction
 
   try {
     const principalValue = extractPrincipalValue(claims, subject, config.AUTH_BUDGET_ACL_CLAIM);
-    const allowed = await resolveAllowedBudgetsFromActual(principalValue);
+    const winningClaim = resolvedClaimName(claims, subject, config.AUTH_BUDGET_ACL_CLAIM);
+    const allowed = await resolveAllowedBudgetsFromActual(principalValue, winningClaim);
 
     if (allowed.length > 0) {
       (req as Request & { allowedBudgets?: string[] }).allowedBudgets = allowed;

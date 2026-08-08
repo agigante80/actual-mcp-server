@@ -505,7 +505,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |
 | `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
 | `AUTH_BUDGET_ACL_SOURCE` | `static` | No | `static` uses the `AUTH_BUDGET_ACL` map above. `actual` derives the ACL from the Actual server's own per-file access list, so revoking someone in Actual takes effect here without a config edit. Requires a multi-user (OpenID) Actual server that was password-bootstrapped first |
-| `AUTH_BUDGET_ACL_CLAIM` | `sub` | No | Which OIDC claim is matched against Actual's user identity when the source is `actual`. `sub` matches Actual's `userId` and is strongly preferred; matching a name claim is riskier |
+| `AUTH_BUDGET_ACL_CLAIM` | `auto` | No | Which token claim identifies the principal when the source is `actual`. `auto` mirrors Actual's own precedence (`preferred_username`, `login`, `email`, `id`, `sub`) and matches the result against Actual's `userName`. Set a single claim name to pin one instead |
 | `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS. Requires `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` |
 | `MCP_HTTPS_CERT` | _(none)_ | No | Path to PEM certificate file (required when `MCP_ENABLE_HTTPS=true`) |
 | `MCP_HTTPS_KEY` | _(none)_ | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
@@ -664,14 +664,16 @@ OIDC_SCOPES=                    # leave empty for Casdoor
 
 ```bash
 AUTH_BUDGET_ACL_SOURCE=actual   # default: static (the AUTH_BUDGET_ACL map)
-AUTH_BUDGET_ACL_CLAIM=sub       # default: sub, matched against Actual's userId
+AUTH_BUDGET_ACL_CLAIM=auto      # default: mirrors Actual's own claim precedence
 ```
+
+**How the match works.** Actual does not store your IdP's `sub`. When a user logs in, Actual resolves their identity as the first non-empty of `preferred_username`, `login`, `email`, `id`, `sub`, saves that string as the user's `userName`, and generates its own unrelated UUID as `userId`. The ACL therefore matches your token against `userName`, using that same precedence. `AUTH_BUDGET_ACL_CLAIM=auto` (the default) does exactly this; set it to a single claim name to pin one instead.
 
 Three things to know before enabling it:
 
 - **It requires a multi-user Actual server**, meaning one configured with `ACTUAL_OPENID_*`. On a password-only server no named users exist and every principal resolves to nothing.
 - **Your Actual server must have been bootstrapped with a PASSWORD before OpenID was added.** This is a hard prerequisite of this MCP server generally, not just of this feature: `@actual-app/api` authenticates with a password, and an Actual server set up with OpenID from scratch refuses password login, so this server cannot connect to it at all. A password cannot be added afterwards.
-- **Keep `AUTH_BUDGET_ACL_CLAIM=sub` unless you have a specific reason not to.** `sub` is matched against Actual's stable `userId`. Matching a name-like claim instead is riskier: this server's own service account appears in every file's access list as the owner with a blank `userName`, so a principal whose name claim resolves to empty would match it.
+- **The identity is only as trustworthy as the claim behind it.** OIDC guarantees that `sub` is unique and never reassigned; `preferred_username` and `email` carry no such guarantee and are often editable by the user. This exposure is inherited from Actual, which keys its own accounts the same way, not introduced here: anyone who can set their `preferred_username` to yours can impersonate you in Actual's login too. If that matters to you, pin `AUTH_BUDGET_ACL_CLAIM` to a claim your IdP does not let users edit, and make sure that is the claim your IdP uses to populate Actual's `user_name`.
 
 It is opt-in and fails closed: if the budget list cannot be read, or the principal matches no file, access is denied rather than granted.
 
@@ -769,4 +771,4 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.11.1 | **Tool Count:** 74 (verified LibreChat-compatible)
+**Version:** 0.11.2 | **Tool Count:** 74 (verified LibreChat-compatible)
