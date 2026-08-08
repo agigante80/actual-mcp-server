@@ -27,23 +27,29 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 const ALICE = '5311397e-769d-4b71-9326-d625a05aacb5';
 const BOB   = '9e27753d-5a87-49c3-a6dd-a9e67aa95ae9';
 const SVC   = 'a6067f04-5f64-4af4-961c-bfea8a2b6f8a'; // the password/service account
-const FILE_A = 'c2966198-d981-440e-835a-14fc72be60ce';
-const FILE_B = 'dd111111-2222-3333-4444-555555555555';
+// cloudFileId vs groupId are DIFFERENT UUIDs on a real server, and only groupId
+// is the "Sync ID" the ACL is compared against. The fixture keeps both, with
+// deliberately distinct values, so a matcher that returned cloudFileId would fail
+// these tests instead of quietly producing identifiers nothing can match.
+const CLOUD_A = 'c2966198-d981-440e-835a-14fc72be60ce';
+const CLOUD_B = 'dd111111-2222-3333-4444-555555555555';
+const FILE_A = '04946a24-bcd5-49ec-a8bb-b06a20082e9c'; // groupId of file A
+const FILE_B = '739d4307-1707-4272-a14f-22aa20d3f6ec'; // groupId of file B
 
 // Captured live payload, plus a second file so cross-user isolation is testable.
 const FILES = [
   // A local (non-remote) entry: no usersWithAccess at all. Present in every real
   // getBudgets() response and must be skipped rather than crash the matcher.
-  { id: 'My-Finances-1-abc', cloudFileId: FILE_A, groupId: 'g1', name: 'Test Budget' },
+  { id: 'My-Finances-1-abc', cloudFileId: CLOUD_A, name: 'Test Budget' },
   {
-    cloudFileId: FILE_A, state: 'remote', name: 'Test Budget', hasKey: false, owner: SVC,
+    cloudFileId: CLOUD_A, groupId: FILE_A, state: 'remote', name: 'Test Budget', hasKey: false, owner: SVC,
     usersWithAccess: [
       { userId: ALICE, displayName: 'Alice', userName: 'alice', owner: false },
       { userId: SVC,   displayName: '',      userName: '',      owner: true  },
     ],
   },
   {
-    cloudFileId: FILE_B, state: 'remote', name: 'Bob Budget', hasKey: false, owner: SVC,
+    cloudFileId: CLOUD_B, groupId: FILE_B, state: 'remote', name: 'Bob Budget', hasKey: false, owner: SVC,
     usersWithAccess: [
       { userId: BOB, displayName: 'Bob', userName: 'bob', owner: false },
       { userId: SVC, displayName: '',    userName: '',    owner: true  },
@@ -102,9 +108,10 @@ const FILES = [
     for (const [payload, why] of [
       [null, 'null'], [undefined, 'undefined'], ['nope', 'a string'], [{}, 'an object'],
       [[], 'an empty array'], [[null, undefined], 'array of nullish'],
-      [[{ cloudFileId: FILE_A }], 'entry with no usersWithAccess'],
-      [[{ cloudFileId: FILE_A, usersWithAccess: 'no' }], 'usersWithAccess not an array'],
-      [[{ usersWithAccess: [{ userId: ALICE }] }], 'entry with no cloudFileId'],
+      [[{ groupId: FILE_A }], 'entry with no usersWithAccess'],
+      [[{ groupId: FILE_A, usersWithAccess: 'no' }], 'usersWithAccess not an array'],
+      [[{ usersWithAccess: [{ userId: ALICE }] }], 'entry with no groupId'],
+      [[{ cloudFileId: CLOUD_A, usersWithAccess: [{ userId: ALICE }] }], 'entry with cloudFileId but NO groupId'],
     ]) {
       check(matchAllowedFiles(payload, ALICE, 'sub').length === 0, `denies on ${why}`);
     }
