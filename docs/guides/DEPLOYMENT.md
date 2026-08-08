@@ -10,6 +10,23 @@ This guide covers all deployment methods for the Actual MCP Server.
 - Your **Budget Sync ID** from Actual: Settings → Show Advanced Settings → Sync ID
 - **Node.js 22+** (for npm method) or **Docker** (for container methods)
 
+> **Your Actual server must have been bootstrapped with a PASSWORD.** This server
+> authenticates through `@actual-app/api`, which supports password login only. If your
+> Actual instance was set up with `ACTUAL_OPENID_*` from the very beginning and never
+> had a password, it rejects password login and **this MCP server cannot connect to it
+> at all**, for any tool. You will see `Authentication failed: Invalid redirect URL`,
+> which does not hint at the real cause.
+>
+> Adding OpenID to a server that was already password-bootstrapped is fully supported
+> and is the topology the multi-user features target: the password method remains
+> accepted alongside OpenID. What is not recoverable is the OpenID-only case, because a
+> password cannot be added afterwards (`POST /account/bootstrap` returns
+> `already-bootstrapped`).
+>
+> This is an upstream capability gap, not a defect of this server: Actual deliberately
+> refuses password login when OpenID is the active method, and offers no service-account
+> path for headless API access.
+
 ---
 
 ## Method 1: npm (Local / Development)

@@ -66,6 +66,54 @@ export async function rulesTests(client, context) {
   const rules = rulesData.rules || rulesData.result || rulesData || [];
   console.log("✓ Rules found:", Array.isArray(rules) ? rules.length : 0);
 
+  // #342: a rule created with NO stage must land in Actual's NORMAL stage (null),
+  // not 'pre'. This ran live because the defect was invisible to the unit layer:
+  // the create succeeded either way, and the only symptom was that MCP-created
+  // rules silently out-ranked the user's own UI rules.
+  console.log("\n#342: Creating rule with NO stage (must persist as null, not 'pre')...");
+  try {
+    const noStage = await callTool("actual_rules_create", {
+      conditionsOp: "and",
+      conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-stage-342" }],
+      actions: [{ op: "set", field: "category", value: context.categoryId }],
+    });
+    const noStageId = noStage.id || noStage.result || noStage;
+    const back = await callTool("actual_rules_get", {});
+    const all = back.rules || back.result || back || [];
+    const created = (Array.isArray(all) ? all : []).find((r) => r && r.id === noStageId);
+    if (!created) {
+      fail(`#342 stage default: could not read back rule ${noStageId}`);
+    } else if (created.stage === null) {
+      console.log("  ok rules_create [omitted stage persists as null, the normal stage]");
+    } else {
+      fail(`#342 stage default: expected stage null, got ${JSON.stringify(created.stage)}. ` +
+"Every MCP-created rule would out-rank the user's UI rules.");
+    }
+    context.ruleStage342Id = noStageId;
+  } catch (err) {
+    fail(["#342 stage default:", err.message].map(String).join(" "));
+  }
+
+  // #342 negative: the literal "default" is rejected by Actual, so our schema must
+  // refuse it up front rather than forwarding it and surfacing a raw upstream error.
+  console.log("\n#342: Creating rule with stage='default' (must be REJECTED)...");
+  try {
+    const res = await callTool("actual_rules_create", {
+      stage: "default",
+      conditionsOp: "and",
+      conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-stage-342-bad" }],
+      actions: [{ op: "set", field: "category", value: context.categoryId }],
+    });
+    const payload = res && typeof res === "object" && "result" in res ? res.result : res;
+    if (res?.error || payload?.error || payload?.isError) {
+      console.log("  ok rules_create [stage='default' rejected]");
+    } else {
+      fail(`#342: stage="default" was ACCEPTED: ${JSON.stringify(payload).slice(0, 160)}`);
+    }
+  } catch (err) {
+    console.log(`  ok rules_create [stage='default' rejected: ${String(err.message).slice(0, 60)}]`);
+  }
+
   // REGRESSION: create rule without 'op' field: should default to 'set'
   console.log("\nREGRESSION: Creating rule without 'op' field (should default to 'set')...");
   const ruleWithoutOp = await callTool("actual_rules_create", {

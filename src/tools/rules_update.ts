@@ -33,7 +33,19 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
 const InputSchema = z.object({
   id: z.string().describe('Rule ID to update'),
   fields: z.object({
-    stage: z.enum(['pre', 'post']).optional().describe('When to apply the rule - "pre" (before transactions sync) or "post" (after transactions sync)'),
+    // #342: null is Actual's DEFAULT stage; the literal "default" is rejected by
+    // its validator. Deliberately NO .default() here: this is a partial update, so
+    // omitting stage must leave the existing one alone. Actual only validates
+    // stage on an update when the key is present, so omitting it is safe (unlike
+    // on a create, where undefined is rejected).
+    stage: z
+      .enum(['pre', 'post'])
+      .nullable()
+      .optional()
+      .describe(
+        'When to apply the rule. null is Actual\'s normal stage (what the UI gives a rule with no stage chosen); ' +
+          '"pre" runs before it, "post" after. Omit to leave the rule\'s current stage unchanged.',
+      ),
     conditionsOp: z.enum(['and', 'or']).optional().describe('How to combine multiple conditions'),
     conditions: z.array(ConditionSchema).optional().describe('New array of conditions'),
     actions: z.array(ActionSchema).optional().describe('New array of actions'),
@@ -51,7 +63,9 @@ IMPORTANT Field Types:
 - "notes", "description" (string) - for text matching. Supports: contains, matches, doesNotContain, is, isNot
 - "amount", "date" (number/date) - supports: is, gte, lte, gt, lt
 
-Stage options: 'pre' or 'post'.
+Stage: omit it to leave the rule where it is. Pass null to move it to the normal stage (where UI-created
+rules live), 'pre' to run before that stage, or 'post' to run after. Do NOT pass "default" as a string;
+Actual rejects it.
 Action operators: 'set', 'set-split-amount', 'link-schedule', 'append-notes'.
 
 Do not include the rule ID in the fields object - it is provided separately.`,

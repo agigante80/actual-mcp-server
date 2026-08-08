@@ -61,7 +61,19 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
 };
 
 const InputSchema = z.object({
-  stage: z.enum(['pre', 'post']).optional().default('pre').describe('When to apply the rule — "pre" or "post"'),
+  // #342: see the long note in rules_create.ts. null is Actual's DEFAULT stage;
+  // the literal "default" is rejected by the validator. No .default() here on
+  // purpose: this tool upserts, so "not supplied" must mean "leave the matched
+  // rule's stage alone", which is decided at the merge below. The create path
+  // supplies null explicitly.
+  stage: z
+    .enum(['pre', 'post'])
+    .nullable()
+    .optional()
+    .describe(
+      'When to apply the rule. null is Actual\'s normal stage (what the UI gives a rule with no stage chosen); ' +
+        '"pre" runs before it, "post" after. On an update, omitting this leaves the existing stage unchanged.',
+    ),
   conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine multiple conditions'),
   conditions: z.array(ConditionSchema).describe('Array of conditions that must be met'),
   actions: z.array(ActionSchema).describe('Array of actions to perform when conditions match'),
@@ -117,7 +129,9 @@ const tool: ToolDefinition = {
 
 Matching logic: a rule is considered a "match" when it has the same set of conditions (field + op + value triples) and the same conditionsOp ("and"/"or"). Condition order is irrelevant.
 
-When a match is found: the rule's actions (and stage) are REPLACED with the new values.
+When a match is found: the rule's actions are REPLACED with the new values. The stage is replaced ONLY if you
+supply one; omit stage to leave the matched rule in whatever stage it is already in. On a newly created rule,
+an omitted stage means the normal stage (null), the same one the UI assigns.
 When no match exists: a new rule is created.
 
 IMPORTANT Field Types:
@@ -202,7 +216,13 @@ Returns: { id, created: boolean } — created=true if new rule was created, fals
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const merged: any = {
           id: matchedRule.id,
-          stage: ruleData.stage ?? (matchedRule as Record<string, unknown>).stage,
+          // #342: `??` is WRONG for stage. null is a MEANINGFUL value here (Actual's
+          // default stage), not an absent one, so `ruleData.stage ?? existing` would
+          // silently discard an explicit `stage: null` and keep the old stage,
+          // making it impossible to move a rule back to the default stage. Decide on
+          // PRESENCE of the key instead. Every other field below is fine with `??`
+          // because none of them treats null as a distinct legal value.
+          stage: 'stage' in ruleData ? ruleData.stage : (matchedRule as Record<string, unknown>).stage,
           conditionsOp: ruleData.conditionsOp ?? (matchedRule as Record<string, unknown>).conditionsOp,
           conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
           actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
@@ -210,7 +230,12 @@ Returns: { id, created: boolean } — created=true if new rule was created, fals
         await rawUpdateRule(merged);
         return { id: matchedRule.id, created: false };
       } else {
-        // CREATE new rule
+        // CREATE new rule.
+        // #342: stage has no Zod default on this tool (see the schema note), so an
+        // omitted stage arrives as undefined. Actual's validator ALWAYS runs on a
+        // create and rejects undefined with `Invalid rule stage: undefined`, so the
+        // key must be present. null is the correct value: Actual's default stage.
+        if (ruleData.stage === undefined) ruleData.stage = null;
         const rawId = await rawCreateRule(ruleData);
         return { id: normalizeToId(rawId), created: true };
       }
