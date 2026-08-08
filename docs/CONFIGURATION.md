@@ -73,7 +73,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `OIDC_SCOPES` | csv string | (none) | No | no | schema | config | Comma-separated required scopes |
 | `AUTH_BUDGET_ACL` | json string | (none) | No | no | schema | config | Per-user budget ACL map |
 | `AUTH_BUDGET_ACL_SOURCE` | `static` \| `actual` | `static` | No | no | schema | `auth/budget-acl.ts` | Where the ACL comes from (#338). `actual` derives it from the Actual server's own `usersWithAccess`. Requires a multi-user (OpenID) Actual server that was PASSWORD-bootstrapped first |
-| `AUTH_BUDGET_ACL_CLAIM` | claim name | `sub` | No | no | schema | `auth/budget-acl-dynamic.ts` | Claim matched against Actual's identity when source is `actual`. `sub` matches `userId`; any other value matches `userName`, which is riskier (the service account row has a blank `userName`) |
+| `AUTH_BUDGET_ACL_CLAIM` | `auto` \| claim name | `auto` | No | no | schema | `auth/budget-acl-dynamic.ts` | Which claim identifies the principal when source is `actual` (#343). `auto` walks Actual's own precedence (`preferred_username`, `login`, `email`, `id`, `sub`) and matches `userName`. Matching `userId` is impossible: Actual mints it itself |
 | `MCP_ENABLE_HTTPS` | bool string | `false` | No | no | schema | config; also raw at `index.ts:277,286` | Native TLS switch (canonical TLS knob) |
 | `MCP_HTTPS_CERT` | path | (none) | No | no | schema | config; also raw at `index.ts:287` | PEM cert path (required when TLS on) |
 | `MCP_HTTPS_KEY` | path | (none) | No | yes | schema | config; also raw at `index.ts:288` | PEM key path (required when TLS on) |

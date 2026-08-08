@@ -1,7 +1,7 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.11.1  
+**Version:** 0.11.2  
 **Purpose:** Define security policies, privacy practices, and incident response  
 **Last Updated:** 2026-06-07
 
@@ -163,6 +163,39 @@ ACTUAL_PASSWORD=your_actual_budget_password
 **Without `AUTH_BUDGET_ACL`**:
 - All authenticated users share the single configured budget
 - Suitable for personal use
+
+#### Identity matching for the dynamic ACL, and what it inherits (#343)
+
+When `AUTH_BUDGET_ACL_SOURCE=actual`, the principal is matched against Actual's
+`userName`, resolved with Actual's own claim precedence: `preferred_username`,
+`login`, `email`, `id`, `sub`.
+
+**This is not the identifier OIDC would recommend, and the reason is worth stating.**
+OIDC Core guarantees only that `sub` is "locally unique and never reassigned";
+`preferred_username` carries no such guarantee and is editable by the user at many
+IdPs. v0.11.0 keyed on `sub` for exactly that reason and the feature did not work at
+all: Actual stores no `sub`. It resolves the precedence above, saves the result as
+`user_name`, and generates an unrelated UUID as `userId`. There is no field a `sub`
+can be compared against, so every principal resolved to zero budgets.
+
+**The exposure is inherited, not introduced.** An IdP that lets a user set
+`preferred_username` (or an unverified `email`) to another user's value allows
+impersonation HERE exactly as it does in Actual's own login, because Actual keys its
+accounts the same way. This server does not widen the surface; it matches it.
+
+**Mitigation for operators who need better.** Pin `AUTH_BUDGET_ACL_CLAIM` to a claim
+your IdP does not let users edit, and ensure that same claim is what populates
+Actual's `user_name`. Note this must be true on BOTH sides: pinning a claim here that
+Actual did not use produces no matches and denies everyone.
+
+**Guards that hold regardless of the claim chosen:**
+- A missing, non-string or blank claim yields a null principal, never `''`.
+- The matcher skips blank `userName` values. This matters because the MCP server's own
+  password/service account appears in every file's access list with `owner: true` and a
+  blank `userName`; without the guard, a principal resolving to empty would inherit
+  owner access to every budget on the server.
+- Every failure path denies. An unreachable server, an unparseable response, or an
+  unmatched principal all return no budgets, never a wildcard.
 
 #### Known limitation: the dynamic ACL resolves via a budget download (#338)
 

@@ -73,3 +73,11 @@ bash scripts/deploy-and-test.sh full
 | `version-check.js` | `npm run version:check` | Asserts `VERSION` file matches `package.json` version. Used in CI. |
 | `version-dev.js` | `npm run version:dev` | Prints a dev version string: `x.y.z-dev-<git-hash>`. |
 
+## ACL end-to-end (#338 / #343)
+
+| Script | Purpose |
+|---|---|
+| `acl-e2e.sh` | Builds a complete multi-user environment from nothing: an Actual server bootstrapped with a PASSWORD, restarted with OpenID against a mock IdP, two users, two budget files, per-user access grants, and a fixture at `.release/acl-e2e-fixture.json`. Direct-invoke, no npm wrapper. `--keep` leaves it running for inspection. The password-first ordering is load bearing: an OpenID-only Actual server refuses password login, which `@actual-app/api` is the only auth path for |
+| `acl-e2e-verify.mjs` | Runs the ACL scenarios (positive and negative) against that environment, including real tokens fetched from the mock IdP. Invoked automatically at the end of `acl-e2e.sh`; can be re-run standalone against an existing fixture |
+
+Why a script rather than compose: Actual mints user UUIDs at creation time, so the IdP cannot be configured with its claim mappings until after the users exist.

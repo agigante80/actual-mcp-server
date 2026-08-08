@@ -104,19 +104,50 @@ export const configSchema = z.object({
   // functions when that server runs in multi-user (OpenID) mode. Defaulting to
   // 'static' means no existing deployment changes posture on upgrade.
   AUTH_BUDGET_ACL_SOURCE: z.enum(['static', 'actual']).default('static'),
-  // #338: which OIDC claim is matched against Actual's user identity when
-  // AUTH_BUDGET_ACL_SOURCE=actual. Default 'sub', matched against `userId`.
+  // #338/#343: which token claim identifies the principal when
+  // AUTH_BUDGET_ACL_SOURCE=actual. Default 'auto' walks Actual's OWN precedence
+  // (preferred_username, login, email, id, sub) and matches the result against
+  // Actual's `userName`.
   //
-  // Do NOT casually change this to a name-like claim. Verified against a live
-  // multi-user server: the MCP server's own service account appears in EVERY
-  // file's usersWithAccess with `owner: true` and a BLANK `userName`. A
-  // name-based match whose claim resolves to empty would match that row and gain
-  // owner access to every file. Matching UUIDs makes that unrepresentable.
+  // 'auto' is the default because it is the only setting that works out of the
+  // box. v0.11.0 defaulted to 'sub', which is the correct identifier by OIDC
+  // (the spec guarantees only `sub` is unique and never reassigned) and which
+  // could nonetheless never match: Actual stores no `sub`, it stores the
+  // precedence result in `user_name` plus a UUID of its own in `id`. See #343.
+  //
+  // Set a specific claim name to pin one trusted claim instead, which is worth
+  // doing if your IdP lets users edit `preferred_username` or does not verify
+  // `email`. Whatever you pin must be the same claim your IdP used to populate
+  // Actual's `user_name`, or nothing will match.
   AUTH_BUDGET_ACL_CLAIM: z
     .string()
-    .default('sub')
-    .refine((v) => /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v), 'AUTH_BUDGET_ACL_CLAIM must be a simple claim name'),
+    .default('auto')
+    .refine((v) => v === 'auto' || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v), 'AUTH_BUDGET_ACL_CLAIM must be "auto" or a simple claim name'),
 })
+  // #343 UPGRADE GUARD. v0.11.0 and v0.11.1 shipped AUTH_BUDGET_ACL_CLAIM=sub as
+  // the default AND the README told operators to keep it. That combination cannot
+  // match anything: Actual stores no `sub`, so every principal resolves to zero
+  // budgets and every user gets a 403 saying only "no budget access configured".
+  //
+  // Anyone who followed that advice has `sub` pinned in their .env, where it would
+  // survive this upgrade and keep them locked out with the new default never
+  // applying. Refusing to start is deliberately louder than a warning: a config
+  // error names the problem and the fix at the moment of the upgrade, whereas the
+  // alternative is a silent, total denial that already survived two releases
+  // undetected. Scoped narrowly to the exact broken pair, so no other deployment
+  // is affected.
+  .refine(
+    (cfg) => !(cfg.AUTH_BUDGET_ACL_SOURCE === 'actual' && cfg.AUTH_BUDGET_ACL_CLAIM === 'sub'),
+    {
+      path: ['AUTH_BUDGET_ACL_CLAIM'],
+      message:
+        'AUTH_BUDGET_ACL_CLAIM=sub cannot work with AUTH_BUDGET_ACL_SOURCE=actual: Actual does not store the ' +
+        'OIDC sub. It derives a user_name from preferred_username/login/email/id/sub and generates its own ' +
+        'unrelated userId, so matching sub denies every user. Use AUTH_BUDGET_ACL_CLAIM=auto (the default, ' +
+        'which mirrors that precedence), or pin a claim that your IdP also used to populate Actual user_name. ' +
+        'See #343.',
+    },
+  )
   // When native TLS is enabled, both the cert and key paths must be provided.
   // MCP_ENABLE_HTTPS is transformed to a boolean above, so this object-level
   // refine sees the parsed value (a field-level refine would see the raw
@@ -139,7 +170,17 @@ export type Config = z.infer<typeof configSchema>;
 function getConfig(): Config {
   const result = configSchema.safeParse(process.env);
   if (!result.success) {
-    const missing = result.error.issues.map(i => `  • ${i.path.join('.')}`).join('\n');
+    // Print the MESSAGE, not just the variable name. Every refine in this file
+    // writes an explanation of what is wrong and how to fix it, and all of them
+    // were being discarded here, so a validation failure read as "this var is
+    // missing" even when it was present and merely invalid. Found while adding
+    // the #343 upgrade guard, whose whole purpose is to explain itself.
+    const missing = result.error.issues
+      .map((i) => {
+        const name = i.path.join('.') || '(config)';
+        return i.message && i.message !== 'Required' ? `  • ${name}: ${i.message}` : `  • ${name}`;
+      })
+      .join('\n');
     console.error(
       `\n❌ Missing or invalid environment variables:\n${missing}\n\n` +
       `Set them in a .env file in the current directory, or export them before running.\n` +

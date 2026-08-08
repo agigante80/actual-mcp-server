@@ -133,14 +133,27 @@ echo "    bob=$BOB_ID"
 # ---------------------------------------------------------------------------
 info "4/6 Restart the IdP so it mints tokens whose sub equals those UUIDs"
 # ---------------------------------------------------------------------------
-# The claims are injected per scope, because the UUIDs are only known now.
-# Discovery is unchanged, so the running Actual is unaffected by this restart.
+# The claims are injected per scope, because the user names are only known now.
+#
+# #343: `sub` is deliberately an OPAQUE value that matches NOTHING on the Actual
+# side. That is the whole point. The first version of this harness set sub to
+# Actual's own userId, which made the join trivially self-consistent and hid a
+# defect where the ACL matched sub against userId: a comparison that can never
+# succeed in reality, because Actual mints userId itself and no IdP ever issues
+# it. Keeping sub opaque forces the join to go through `preferred_username` to
+# `userName`, which is the path a real deployment takes.
+#
+# The extra scopes cover the negative cases: an email-only token (precedence
+# fall-through), an unknown user, and a token whose every identity claim is blank
+# (which must NEVER match the service account's blank userName).
 docker rm -f "$IDP" >/dev/null
 IDP_CONFIG=$(cat <<JSON
 { "tokenCallbacks": [ { "issuerId": "default", "tokenExpiry": 3600, "requestMappings": [
-  { "requestParam": "scope", "match": "user-alice", "claims": { "sub": "$ALICE_ID", "aud": ["$AUDIENCE"] } },
-  { "requestParam": "scope", "match": "user-bob",   "claims": { "sub": "$BOB_ID",   "aud": ["$AUDIENCE"] } },
-  { "requestParam": "scope", "match": "user-ghost", "claims": { "sub": "00000000-0000-0000-0000-00000000dead", "aud": ["$AUDIENCE"] } }
+  { "requestParam": "scope", "match": "user-alice",     "claims": { "sub": "opaque-idp-sub-alice", "preferred_username": "alice", "email": "alice@example.test", "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-bob",       "claims": { "sub": "opaque-idp-sub-bob",   "preferred_username": "bob",   "email": "bob@example.test",   "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-emailonly", "claims": { "sub": "opaque-idp-sub-eo",    "email": "alice@example.test", "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-ghost",     "claims": { "sub": "opaque-idp-sub-ghost", "preferred_username": "nobody", "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-blank",     "claims": { "sub": "", "preferred_username": "", "email": "", "aud": ["$AUDIENCE"] } }
 ] } ] }
 JSON
 )
@@ -165,17 +178,26 @@ const a = await api.importBudget(zip, { type: 'actual' });
 const b = await api.importBudget(zip, { type: 'actual' });
 const files = (await api.getBudgets()).filter(f => f.usersWithAccess);
 console.log('FILES=' + JSON.stringify(files.map(f => f.cloudFileId)));
+console.log('GROUPS=' + JSON.stringify(files.map(f => f.groupId)));
 console.log('IMPORTED=' + JSON.stringify([a.id, b.id]));
 await api.shutdown();
 JS
 DATA_DIR="$(mktemp -d)"
-IMPORT_OUT=$(cd "$ROOT" && node "$IMPORT_JS" "$DATA_DIR" "http://localhost:$ACTUAL_PORT" "$PASSWORD" "$ZIP" 2>/dev/null | grep '^FILES=' || true)
+IMPORT_RAW=$(cd "$ROOT" && node "$IMPORT_JS" "$DATA_DIR" "http://localhost:$ACTUAL_PORT" "$PASSWORD" "$ZIP" 2>/dev/null || true)
+IMPORT_OUT=$(echo "$IMPORT_RAW" | grep '^FILES=' || true)
+GROUP_OUT=$(echo "$IMPORT_RAW" | grep '^GROUPS=' || true)
 rm -f "$IMPORT_JS"; rm -rf "$DATA_DIR"
 [ -n "$IMPORT_OUT" ] || die "budget import produced no files"
+# Same guard as its sibling: without it an absent GROUPS= line makes the jqp call
+# raise a Python traceback under `set -e`, or writes "None" into the fixture and
+# fails the verify step for an unrelated-looking reason.
+[ -n "$GROUP_OUT" ] || die "budget import produced no groupIds (syncIds); cannot build the fixture"
 FILE_A=$(echo "${IMPORT_OUT#FILES=}" | jqp "print(json.load(sys.stdin)[0])")
 FILE_B=$(echo "${IMPORT_OUT#FILES=}" | jqp "print(json.load(sys.stdin)[1])")
-echo "    fileA=$FILE_A"
-echo "    fileB=$FILE_B"
+GROUP_A=$(echo "${GROUP_OUT#GROUPS=}" | jqp "print(json.load(sys.stdin)[0])")
+GROUP_B=$(echo "${GROUP_OUT#GROUPS=}" | jqp "print(json.load(sys.stdin)[1])")
+echo "    fileA=$FILE_A (syncId $GROUP_A)"
+echo "    fileB=$FILE_B (syncId $GROUP_B)"
 
 actual_api POST /admin/access "{\"fileId\":\"$FILE_A\",\"userId\":\"$ALICE_ID\"}" >/dev/null
 actual_api POST /admin/access "{\"fileId\":\"$FILE_B\",\"userId\":\"$BOB_ID\"}"   >/dev/null
@@ -192,10 +214,20 @@ cat > "$OUT" <<JSON
   "audience": "$AUDIENCE",
   "password": "$PASSWORD",
   "users": { "alice": "$ALICE_ID", "bob": "$BOB_ID" },
-  "files": { "alice": "$FILE_A", "bob": "$FILE_B" }
+  "files": { "alice": "$FILE_A", "bob": "$FILE_B" },
+  "syncIds": { "alice": "$GROUP_A", "bob": "$GROUP_B" }
 }
 JSON
 echo "    wrote $OUT"
+
+echo ""
+info "Running the ACL scenarios (positive AND negative)"
+if node "$ROOT/scripts/acl-e2e-verify.mjs" "$OUT"; then
+  echo ""
+  echo "ACL E2E: all scenarios passed."
+else
+  die "ACL scenarios FAILED"
+fi
 
 echo ""
 echo "ACL E2E environment ready."
