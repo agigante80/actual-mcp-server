@@ -100,6 +100,12 @@ The IMPLEMENTATION step reproduces the PR's change on `develop`:
 
 ### Phase 5: Close the PR as superseded
 
+**Read every comment on the PR first** (`gh pr view <n> --json comments`). Same hard
+rule as closing an issue, and for the same reason (see CLAUDE.md): a maintainer or
+the bot may have added context since you last looked, and a review comment on the
+PR may name a case the integration ticket did not cover. Closing unread is how a
+question gets asked and then ignored.
+
 Once the change is on `develop` (green CI), close the original PR with a comment:
 its change has been integrated via `develop` in `<commit>` under the integration
 ticket, and it will reach `main` through the normal release, so the PR is closed

@@ -166,8 +166,29 @@ flake should not recur; if a transient infra failure occurs, `gh run rerun --fai
 
 ### 6. Close the implemented tickets
 
-For each ticket number from step 1 that is still OPEN, close it as completed with
-a release note; skip ones already closed:
+**READ EVERY COMMENT ON EACH TICKET BEFORE CLOSING IT.** Not the body, not the
+comments you remember: the full thread, at the moment of closing. This is a hard
+rule (see CLAUDE.md), and it exists because it was broken here. On #317 a reporter
+answered a direct question four and a half hours before the ticket was closed; the
+answer invalidated the design, the close happened unread, and the released feature
+could not work at all. Print the thread first:
+
+```
+for n in <tickets>; do
+  echo "=== #$n ==="
+  gh issue view "$n" --json comments \
+    --jq '.comments[] | "[\(.author.login)] \(.createdAt)\n\(.body)\n"'
+done
+```
+
+Then, for each ticket, decide deliberately. A comment that postdates your last
+read, ESPECIALLY one answering a question you asked, means stop and re-evaluate:
+the release may still be fine while the ticket is not done. Closing is cheap to
+defer and expensive to get wrong.
+
+For each ticket from step 1 that is still OPEN **and that the thread confirms is
+actually delivered**, close it as completed with a release note; skip ones already
+closed:
 ```
 for n in <tickets>; do
   state=$(gh issue view "$n" --json state --jq .state 2>/dev/null)
@@ -177,8 +198,9 @@ for n in <tickets>; do
   fi
 done
 ```
-This is the step that keeps the tracker honest. Report which tickets were closed
-and which were skipped (already closed).
+This is the step that keeps the tracker honest. Report which tickets were closed,
+which were skipped (already closed), and which were **deliberately left open**
+because their thread showed unfinished business.
 
 ### 7. Return to develop and report
 

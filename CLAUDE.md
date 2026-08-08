@@ -51,6 +51,25 @@ until a check that was red is green. Test rigor (scenarios, unit + E2E tests) is
 the maintainer's responsibility enforced by the gate, NOT something an external
 reporter must provide: the issue templates ask reporters only for what they know.
 
+**NEVER close a ticket without reading EVERY comment on it first.** Not the body,
+not the comments you remember, not the ones you wrote: read the full thread at the
+moment you close it, including anything added since you last looked. This applies
+to closing by hand, closing as part of `/release` step 6, and closing as
+superseded or not-planned.
+
+The reason is specific. On #317 a reporter was asked whether their IdP's `sub`
+matched Actual's `userId`. They answered four and a half hours before the ticket
+was closed, the answer was "no, `userId` is an internally generated UUID", and the
+close happened anyway without anyone reading it. That answer invalidated the whole
+design: the feature shipped in v0.11.0 could never resolve a principal, and the
+documentation actively recommended the broken setting. It cost a release, a
+reopen, and #343. A reporter who answers a direct question and gets closed
+unread will not answer the next one.
+
+Practical form: `gh issue view <n> --json comments --jq '.comments[] | "[\(.author.login)] \(.createdAt)\n\(.body)"'`
+before any `gh issue close`. If a comment postdates your last read, re-evaluate the
+close rather than proceeding. Closing is cheap to defer and expensive to get wrong.
+
 ## Commands
 
 ```bash
