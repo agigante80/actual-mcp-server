@@ -26,6 +26,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import config from '../config.js';
 import logger from '../logger.js';
+import { extractPrincipalValue, resolveAllowedBudgetsFromActual } from './budget-acl-dynamic.js';
 
 // ---------------------------------------------------------------------------
 // ACL map (parsed once from env, cached)
@@ -133,6 +134,13 @@ export function budgetAclMiddleware(req: Request, res: Response, next: NextFunct
     return;
   }
 
+  // #338: dynamic source. Deliberately a separate branch so the static path
+  // below is unreachable-by-default and byte-for-byte what it was before.
+  if (config.AUTH_BUDGET_ACL_SOURCE === 'actual') {
+    void resolveDynamicAcl(req, res, next);
+    return;
+  }
+
   const allowed = getAllowedBudgets(req);
 
   if (allowed.includes('*') || allowed.length > 0) {
@@ -146,6 +154,42 @@ export function budgetAclMiddleware(req: Request, res: Response, next: NextFunct
   const identity = (auth?.subject as string | undefined) ?? 'unknown';
   logger.warn(`[ACL] Access denied for '${identity}': no permitted budgets in ACL`);
   res.status(403).json({ error: 'Forbidden: no budget access configured for this user' });
+}
+
+/**
+ * #338: the async half of the middleware, for AUTH_BUDGET_ACL_SOURCE=actual.
+ *
+ * Split out rather than making budgetAclMiddleware itself async, because an
+ * async Express handler that rejects before Express 5's error plumbing sees it
+ * would hang the request. Here every path either calls next() or sends a
+ * response, and the catch is exhaustive, so a rejection cannot escape.
+ *
+ * The upstream read is cached per principal inside the resolver, so this is not
+ * an Actual API call per request.
+ */
+async function resolveDynamicAcl(req: Request, res: Response, next: NextFunction): Promise<void> {
+  const auth = (req as Request & { auth?: Record<string, unknown> }).auth;
+  const claims = (auth?.claims ?? {}) as Record<string, unknown>;
+  const subject = auth?.subject as string | undefined;
+
+  try {
+    const principalValue = extractPrincipalValue(claims, subject, config.AUTH_BUDGET_ACL_CLAIM);
+    const allowed = await resolveAllowedBudgetsFromActual(principalValue);
+
+    if (allowed.length > 0) {
+      (req as Request & { allowedBudgets?: string[] }).allowedBudgets = allowed;
+      next();
+      return;
+    }
+
+    logger.warn(`[ACL] Access denied for '${subject ?? 'unknown'}': no budget files grant this principal access`);
+    res.status(403).json({ error: 'Forbidden: no budget access configured for this user' });
+  } catch (err) {
+    // Fail closed. A resolver fault must never fall through to the static path
+    // or to an unrestricted context.
+    logger.error('[ACL] Dynamic ACL resolution failed; denying access', err as Error);
+    res.status(403).json({ error: 'Forbidden: budget access could not be determined' });
+  }
 }
 
 /** Reset cached state (test helper). */
