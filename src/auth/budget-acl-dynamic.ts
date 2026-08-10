@@ -52,6 +52,7 @@ import config from '../config.js';
 import adapter from '../lib/actual-adapter.js';
 import { requestContext } from '../lib/requestContext.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
+import { parseIdentityMap, type IdentityMap } from './identity-map.js';
 
 const log = createModuleLogger('ACL');
 
@@ -106,6 +107,35 @@ const _cache = new Map<string, { at: number; allowed: string[] }>();
 /** Clear the resolver cache (test helper, and used when config is re-read). */
 export function _resetDynamicAclCache(): void {
   _cache.clear();
+  _identityMapCache = null;
+}
+
+/**
+ * The parsed identity map, memoised on the raw string it came from.
+ *
+ * Re-parsing per request would be wasteful, but caching on nothing would make the
+ * value untestable, since tests mutate config between cases. Keying the memo on
+ * the raw string gives both: one parse per distinct configuration.
+ *
+ * Parsing cannot throw here in practice, because config.ts validates the same
+ * string at startup. The catch is for the test path, which sets config directly
+ * and bypasses the schema, and it fails CLOSED: an unparseable map yields an
+ * empty map, which removes bindings rather than inventing them.
+ */
+let _identityMapCache: { raw: string; map: IdentityMap } | null = null;
+
+export function getIdentityMap(): IdentityMap {
+  const raw = config.AUTH_BUDGET_ACL_IDENTITY_MAP ?? '';
+  if (_identityMapCache && _identityMapCache.raw === raw) return _identityMapCache.map;
+  let map: IdentityMap;
+  try {
+    map = parseIdentityMap(raw);
+  } catch (err) {
+    log.error('dynamic ACL: AUTH_BUDGET_ACL_IDENTITY_MAP is unparseable; ignoring every binding', err as Error);
+    map = new Map();
+  }
+  _identityMapCache = { raw, map };
+  return map;
 }
 
 /**
@@ -219,6 +249,136 @@ export function resolvedClaimName(
 }
 
 /**
+ * Reported as `resolvedFromClaim` when an explicit binding decided the identity.
+ * Deliberately not a valid claim name, so a log line can never be ambiguous about
+ * whether a claim or the operator's map produced the principal.
+ */
+export const IDENTITY_MAP_SOURCE = 'identity-map';
+
+/** What resolved the principal, and to what. */
+export interface PrincipalResolution {
+  /** The value to match against Actual's `userName`, or null if nothing resolved. */
+  value: string | null;
+  /** `identity-map`, the winning claim name, or null. For logging only. */
+  source: string | null;
+}
+
+/**
+ * Resolve the principal, consulting the explicit identity map first (#345).
+ *
+ * THE MAP IS AUTHORITATIVE, NOT A HINT. If this `sub` has a binding, that binding
+ * decides, and if it matches no file the principal is DENIED. It deliberately does
+ * NOT fall through to the claim precedence.
+ *
+ * That choice is the whole point of the feature. A fall-through would mean a typo
+ * in the map is masked by an accidental claim match: access is granted through a
+ * path the operator did not intend, and they never learn the binding is wrong
+ * because nothing ever fails. In an authorization control, a loud denial beats a
+ * silent divergence. The deny path names `identity-map` as the source precisely so
+ * the typo is diagnosable from the log line.
+ *
+ * `sub` is read the same way `extractPrincipalValue` reads it: from the verified
+ * token subject, falling back to a `sub` claim. A blank subject is treated as
+ * absent, so it can never be used as a map key.
+ */
+export function resolvePrincipal(
+  claims: Record<string, unknown>,
+  subject: string | undefined,
+  claimName: string,
+  identityMap: IdentityMap = getIdentityMap(),
+): PrincipalResolution {
+  if (identityMap.size > 0) {
+    const rawSub = typeof subject === 'string' ? subject : claims['sub'];
+    const sub = typeof rawSub === 'string' && rawSub.trim().length > 0 ? rawSub : null;
+    if (sub !== null) {
+      const bound = identityMap.get(sub);
+      // Config rejects a blank target, so `bound` is non-blank whenever present.
+      if (bound !== undefined) return { value: bound, source: IDENTITY_MAP_SOURCE };
+    }
+  }
+
+  return {
+    value: extractPrincipalValue(claims, subject, claimName),
+    source: resolvedClaimName(claims, subject, claimName),
+  };
+}
+
+/**
+ * The distinct non-blank `userName`s a getBudgets() payload offers.
+ *
+ * Shared by the deny path and the startup preflight so the two can never disagree
+ * about what was on offer, which would make the diagnostic actively misleading.
+ */
+export function collectKnownUserNames(files: unknown): string[] {
+  if (!Array.isArray(files)) return [];
+  return [
+    ...new Set(
+      (files as BudgetFileEntry[])
+        .flatMap((f) => (Array.isArray(f?.usersWithAccess) ? f.usersWithAccess : []))
+        .map((u) => u?.userName)
+        .filter((n): n is string => typeof n === 'string' && n.trim().length > 0),
+    ),
+  ];
+}
+
+/**
+ * #345: one-shot startup diagnostic for AUTH_BUDGET_ACL_SOURCE=actual.
+ *
+ * Before this, the first sign that the join was misconfigured was a 403 during
+ * use, with the operator holding no list of what they were supposed to match.
+ * #343 shipped a TOTAL denial that survived two releases for exactly that reason.
+ * One line at boot naming the `userName`s on offer turns that into a five second
+ * fix.
+ *
+ * NEVER THROWS, AND NEVER BLOCKS STARTUP. The Actual server is a separate process
+ * that may legitimately come up after this one, so a hard dependency here would
+ * turn a transient upstream outage into a boot loop. A failure is a warn and the
+ * server starts anyway.
+ *
+ * It also warms the resolver cache for the first real request, since it performs
+ * the same read.
+ */
+export async function runAclPreflight(): Promise<void> {
+  let files: unknown;
+  try {
+    files = await requestContext.run({ allowedBudgets: ['*'] }, () => adapter.getBudgets());
+  } catch (err) {
+    log.warn('dynamic ACL preflight: could not read the budget list; continuing startup', {
+      error: err instanceof Error ? err.message : String(err),
+      hint: 'The ACL will retry on the first request. If this persists, users will get 403s.',
+    });
+    return;
+  }
+
+  const known = collectKnownUserNames(files);
+  const fileCount = Array.isArray(files) ? files.length : 0;
+  const mapEntries = getIdentityMap().size;
+
+  if (known.length === 0) {
+    // The password-mode case. Actual only populates userName for OpenID users, so
+    // on a password-mode server every row is blank and NOBODY can ever resolve.
+    // Saying so here is the difference between a five second fix and the multi
+    // release investigation that #343 became.
+    log.warn('dynamic ACL preflight: no non-blank userName on any budget file; no principal can resolve', {
+      fileCount,
+      identityMapEntries: mapEntries,
+      hint:
+        'Actual only populates userName for OpenID users. If that server runs in password mode, ' +
+        'AUTH_BUDGET_ACL_SOURCE=actual cannot resolve anyone; use AUTH_BUDGET_ACL_SOURCE=static.',
+    });
+    return;
+  }
+
+  log.info('dynamic ACL preflight: budget access list read', {
+    fileCount,
+    knownUserNames: known,
+    configuredClaim: config.AUTH_BUDGET_ACL_CLAIM,
+    identityMapEntries: mapEntries,
+    hint: 'A principal must resolve to one of the userNames above, or it is denied.',
+  });
+}
+
+/**
  * Map a getBudgets() payload to the sync IDs the given principal may access.
  *
  * Pure, so the matching rules are unit-testable against the captured live
@@ -305,21 +465,24 @@ export async function resolveAllowedBudgetsFromActual(
     // offer, so the next mismatch is diagnosable from one log line instead of a
     // debugging session. The principal itself is not logged at warn level (it is
     // an identity); it is available at debug.
-    const offered = Array.isArray(files)
-      ? [...new Set((files as BudgetFileEntry[])
-          .flatMap((f) => (Array.isArray(f?.usersWithAccess) ? f.usersWithAccess : []))
-          .map((u) => u?.userName)
-          .filter((n): n is string => typeof n === 'string' && n.trim().length > 0))]
-      : [];
+    const offered = collectKnownUserNames(files);
+    const fromMap = lastResolvedClaim === IDENTITY_MAP_SOURCE;
     log.warn('dynamic ACL: principal matched no budget file', {
       configuredClaim: config.AUTH_BUDGET_ACL_CLAIM,
       resolvedFromClaim: lastResolvedClaim ?? '(none)',
       fileCount: Array.isArray(files) ? files.length : 0,
       knownUserNames: offered,
-      hint:
-        'The value from the token did not equal any userName above. Actual derives userName from the ' +
-        'UserInfo response; this server reads the ACCESS TOKEN. If they differ, add a claim mapper at your ' +
-        'IdP or pin AUTH_BUDGET_ACL_CLAIM to a claim present in the access token.',
+      hint: fromMap
+        ? // #345: a bound principal that matches nothing is an operator typo, not an
+          // IdP claim problem, so pointing at claim mappers here would send them to
+          // the wrong place entirely.
+          'AUTH_BUDGET_ACL_IDENTITY_MAP bound this sub to a userName that no budget file offers. ' +
+          'Correct the binding to one of the userNames above. The map is authoritative, so no claim ' +
+          'fallback was attempted.'
+        : 'The value from the token did not equal any userName above. Actual derives userName from the ' +
+          'UserInfo response; this server reads the ACCESS TOKEN. If they differ, add a claim mapper at your ' +
+          'IdP, pin AUTH_BUDGET_ACL_CLAIM to a claim present in the access token, or bind this sub explicitly ' +
+          'with AUTH_BUDGET_ACL_IDENTITY_MAP.',
     });
     log.debug('dynamic ACL: unmatched principal', { principal: principalValue });
   }

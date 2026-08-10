@@ -21,6 +21,7 @@ import { createMcpAuth } from '../auth/setup.js';
 import { discoverOidcMetadata, buildTrustedJwksHosts } from '../lib/oidc-discovery.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
+import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
 
@@ -724,6 +725,13 @@ export async function startHttpServer(
     console.info(`❤️ Health check: ${scheme}://${healthHost}:${port}/health`);
     if (config.AUTH_PROVIDER === 'oidc') {
       logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required; issuer: ${config.OIDC_ISSUER})`);
+      // #345: name the userNames the ACL can match, once, at boot. Deliberately
+      // fire-and-forget INSIDE the listen callback: the server is already
+      // accepting connections, so a slow or unreachable Actual delays nothing,
+      // and runAclPreflight never rejects (it warns and returns).
+      if (config.AUTH_BUDGET_ACL_SOURCE === 'actual') {
+        void runAclPreflight();
+      }
     } else if (config.MCP_SSE_AUTHORIZATION) {
       logger.info(`🔒 HTTP authentication enabled (static Bearer token required)`);
     } else {
