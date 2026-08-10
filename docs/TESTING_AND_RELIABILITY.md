@@ -142,6 +142,46 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 - **docker.e2e.spec.ts**: Basic smoke tests (11 tests)
 - **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (74 tools, 80+ test cases)
 
+### Multi-user ACL E2E (`scripts/acl-e2e.sh`)
+
+Not part of `test:e2e:docker`. It stands up its own stack (an Actual server in
+multi-user OpenID mode plus `navikt/mock-oauth2-server`) because the budget ACL is
+the one behaviour whose correctness depends on an identifier produced by ANOTHER
+system.
+
+```bash
+bash scripts/acl-e2e.sh          # build the environment + fixture, then verify
+bash scripts/acl-e2e.sh --keep   # leave the containers up for debugging
+node scripts/acl-e2e-verify.mjs  # re-run the scenarios against a kept environment
+```
+
+**Why it cannot be a Playwright suite.** It needs a password bootstrap FIRST and
+OpenID enabled second (`@actual-app/api` authenticates with a password, and an
+OpenID-only server rejects it), an IdP that is up before Actual reads discovery at
+startup, and an IdP reconfiguration after the users exist. Compose cannot express
+that ordering.
+
+**The property it exists to protect (#344).** Alice and bob are created by driving
+a REAL authorization-code login, so Actual runs its own precedence over the UserInfo
+response and stores the result. The harness then READS BACK the `user_name` Actual
+derived and writes it to `.release/acl-e2e-fixture.json` as `actualUserNames`; every
+assertion uses that value. It never asserts what the name should be. The login
+supplies `preferred_username` and `email` as deliberately different strings, so the
+stored value also reveals which claim the precedence chose.
+
+This matters because the harness previously created users with `POST /admin/users`
+passing `userName: "alice"` and then configured the IdP to mint
+`preferred_username: "alice"`: both sides of a cross-system join chosen twelve lines
+apart in one file, which is internally consistent by construction and cannot fail
+for the reason that matters. That shape hid #343 for two releases.
+
+**Proving it is still not vacuous.** After a green run, rename the user inside
+Actual so its `user_name` no longer matches the token identity, and re-run the
+verifier. It must go red (3 assertions, verified 2026-08-10). The exact commands are
+in the header of `scripts/acl-e2e.sh`. `tests/unit/acl_e2e_fixture_contract.test.js`
+guards the same properties statically in CI, since a vacuous harness passes and so
+running it proves nothing on its own.
+
 ### Individual Test Commands
 
 ```bash

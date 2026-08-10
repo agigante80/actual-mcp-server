@@ -16,6 +16,27 @@
 # carries the password bootstrap across the container restart that enables
 # OpenID. This is the supported production topology, not a test convenience.
 #
+# PROVING THIS HARNESS IS NOT VACUOUS (#344). Run it, then rename the user INSIDE
+# Actual so its user_name no longer equals the identity the token carries, and
+# re-run the verifier. It MUST go red. If it stays green, the join is not being
+# tested and something has drifted back to comparing values chosen in this file:
+#
+#   bash scripts/acl-e2e.sh --keep
+#   TOKEN=$(curl -sS -X POST http://localhost:5098/account/login \
+#     -H 'Content-Type: application/json' \
+#     -d '{"loginMethod":"password","password":"acl-e2e-pass"}' \
+#     | python3 -c "import sys,json;print(json.load(sys.stdin)['data']['token'])")
+#   AID=$(python3 -c "import json;print(json.load(open('.release/acl-e2e-fixture.json'))['users']['alice'])")
+#   curl -sS -X PATCH http://localhost:5098/admin/users -H "x-actual-token: $TOKEN" \
+#     -H 'Content-Type: application/json' \
+#     -d "{\"id\":\"$AID\",\"userName\":\"renamed-at-idp\",\"displayName\":\"Alice\",\"enabled\":true,\"role\":\"BASIC\"}"
+#   node scripts/acl-e2e-verify.mjs   # expected: 3 scenario(s) FAILED
+#
+# Verified on 2026-08-10: exactly 3 assertions turn red. That rename is also the
+# real-world failure this feature has to survive, because Actual writes user_name
+# once at first login and never updates it, so an IdP-side rename breaks the join
+# permanently until an operator re-binds it (AUTH_BUDGET_ACL_IDENTITY_MAP, #345).
+#
 # Usage: bash scripts/acl-e2e.sh [--keep]
 set -euo pipefail
 
@@ -118,22 +139,112 @@ echo "$STATE" | grep -q '"multiuser":true' || die "server did not enter multi-us
 echo "$STATE" | grep -q '"method":"password"' || die "password login disappeared; the API could not authenticate"
 
 # ---------------------------------------------------------------------------
-info "3/6 Create users and capture their generated UUIDs"
+info "3/6 Create BOTH users through a REAL OIDC login, and read back what Actual derived"
 # ---------------------------------------------------------------------------
-for u in alice bob; do
-  actual_api POST /admin/users "{\"userName\":\"$u\",\"displayName\":\"${u^}\",\"enabled\":true,\"role\":\"BASIC\"}" >/dev/null
-done
+# #344: WHY ALICE MUST NOT BE CREATED THROUGH THE ADMIN API.
+#
+# This harness used to create both users with POST /admin/users passing
+# userName "alice", and then configure the IdP to mint preferred_username
+# "alice". Both sides of the join were literals chosen twelve lines apart in this
+# file, so the assertion was internally consistent by construction and could not
+# fail for the reason that matters. Actual's real identity path never ran:
+#
+#   const userInfo = await client.userinfo(tokenSet.access_token);   // openid.ts
+#   const identity = userInfo.preferred_username ?? userInfo.login ??
+#                    userInfo.email ?? userInfo.id ?? userInfo.sub;
+#   INSERT INTO users (id, user_name, ...) VALUES (uuidv4(), identity, ...)
+#
+# That is the same vacuity that hid #343, surviving on the other side of the same
+# join after the `sub` side was fixed. So alice is now created by driving the real
+# authorization-code flow, and this script NEVER asserts what her user_name is: it
+# READS BACK whatever Actual derived and stored, and every later step uses that.
+#
+# Bob stays on the admin API deliberately. He is the counterpart in the isolation
+# assertions ("alice cannot reach bob's budget"), which needs a second distinct
+# user rather than a second derived identity, and the mock IdP presents one
+# default identity to a non-interactive login. One genuinely derived side is what
+# removes the vacuity; two would not add anything the first does not already prove.
+# The server PASSWORD is required on this call, which is not obvious. When no named
+# user exists yet, loginWithOpenIdSetup treats the first OpenID login as a
+# privileged bootstrap and validates firstTimeLoginPassword against the password
+# method (openid.ts, `countUsersWithUserName === 0` branch); without it the call
+# fails with "invalid-password" rather than anything mentioning OpenID.
+#
+# The response field is data.returnUrl (app-account.js:
+# `res.send({status:'ok', data:{returnUrl: url}})`), which reads like the value we
+# SENT rather than the authorize URL we got back. Echo the raw response on failure:
+# guessing this field name cost a run.
+#
+# THE FLOW STRADDLES TWO NETWORKS, so it is walked one hop at a time rather than
+# with `curl -L`. Actual builds the authorize URL from the discovery document, so
+# its host is the in-network container name (acl-e2e-idp:8080) which the HOST
+# cannot resolve; but the redirect_uri comes from ACTUAL_OPENID_SERVER_HOSTNAME, so
+# the callback is http://localhost:PORT. Blind-following fails on the first hop with
+# "Could not resolve host", and running the whole thing inside a container instead
+# would fail on the second, where localhost would be that container. Two explicit
+# hops also make a failure legible: you can see which leg broke.
+#
+# WHAT WE SUPPLY VERSUS WHAT WE ASSERT. We hand the IdP a subject and a claims
+# blob, so the INPUT is ours. What we never do is assert the resulting user_name.
+# Actual runs its own precedence over the UserInfo response and stores the winner;
+# this script READS THAT BACK and every later step uses it. That distinction is the
+# whole point: supplying the input still exercises the derivation, whereas asserting
+# the output would re-encode today's precedence as a fixture value and go green even
+# if upstream changed it.
+#
+# preferred_username and email are deliberately DIFFERENT strings, so the value
+# Actual stores identifies which claim its precedence actually chose.
+login_as() {
+  local subject="$1" claims="$2" raw url authz cb status
+  raw=$(curl -sS -X POST "http://localhost:$ACTUAL_PORT/account/login" \
+    -H 'Content-Type: application/json' \
+    -d "{\"loginMethod\":\"openid\",\"returnUrl\":\"http://localhost:$ACTUAL_PORT/\",\"password\":\"$PASSWORD\"}")
+  url=$(echo "$raw" | jqp "print(json.load(sys.stdin).get('data',{}).get('returnUrl') or '')")
+  [ -n "$url" ] || die "Actual returned no OpenID authorize URL. Response was: $raw"
+  authz=${url/http:\/\/$IDP:8080/http://localhost:$IDP_PORT}
+  # The mock IdP serves an interactive login form and POSTs back to the same URL.
+  # `username` becomes the subject; `claims` is merged into the issued token and
+  # into the UserInfo response, which is what Actual reads.
+  cb=$(curl -sS -o /dev/null -D - -X POST "$authz" \
+        --data-urlencode "username=$subject" \
+        --data-urlencode "claims=$claims" \
+      | tr -d '\r' | awk 'tolower($1)=="location:" { print $2; exit }')
+  [ -n "$cb" ] || die "the mock IdP did not redirect after the login form for subject $subject"
+  status=$(curl -sS -o /dev/null -w '%{http_code}' "$cb")
+  echo "    login($subject): callback status $status"
+}
+
+login_as 'opaque-login-sub-alice' '{"preferred_username":"alice-pu","email":"alice-em@example.test","name":"Alice Derived"}'
+
 USERS=$(actual_api GET /admin/users)
-ALICE_ID=$(echo "$USERS" | jqp "print(next(u['id'] for u in json.load(sys.stdin) if u['userName']=='alice'))")
-BOB_ID=$(echo "$USERS"   | jqp "print(next(u['id'] for u in json.load(sys.stdin) if u['userName']=='bob'))")
+ALICE_NAME=$(echo "$USERS" | jqp "
+us=[u for u in json.load(sys.stdin) if (u.get('userName') or '').strip()]
+print(us[0]['userName'] if us else '')")
+[ -n "$ALICE_NAME" ] || die "the OIDC login created no named user; Actual's identity derivation did not run"
+ALICE_ID=$(echo "$USERS" | jqp "print(next(u['id'] for u in json.load(sys.stdin) if u.get('userName')=='$ALICE_NAME'))")
+echo "    alice: Actual DERIVED userName=$ALICE_NAME (id=$ALICE_ID)"
+
+# Bob is a second REAL login, not an admin-API row. Once the login form gives us
+# per-login identity there is no reason to keep the vacuous path for him either,
+# and the isolation assertions are stronger when BOTH sides were derived by Actual.
+login_as 'opaque-login-sub-bob' '{"preferred_username":"bob-pu","email":"bob-em@example.test","name":"Bob Derived"}'
+USERS=$(actual_api GET /admin/users)
+BOB_NAME=$(echo "$USERS" | jqp "
+us=[(u.get('userName') or '').strip() for u in json.load(sys.stdin)]
+us=[u for u in us if u and u != '$ALICE_NAME']
+print(us[0] if us else '')")
+[ -n "$BOB_NAME" ] || die "the second OIDC login created no distinct named user"
+BOB_ID=$(echo "$USERS" | jqp "print(next(u['id'] for u in json.load(sys.stdin) if u.get('userName')=='$BOB_NAME'))")
+echo "    bob:   Actual DERIVED userName=$BOB_NAME (id=$BOB_ID)"
 [ -n "$ALICE_ID" ] && [ -n "$BOB_ID" ] || die "could not resolve user ids"
-echo "    alice=$ALICE_ID"
+[ "$ALICE_NAME" != "$BOB_NAME" ] || die "alice and bob resolved to the same userName; isolation cannot be tested"
 echo "    bob=$BOB_ID"
 
 # ---------------------------------------------------------------------------
-info "4/6 Restart the IdP so it mints tokens whose sub equals those UUIDs"
+info "4/6 Restart the IdP so it mints tokens carrying the DERIVED userNames"
 # ---------------------------------------------------------------------------
-# The claims are injected per scope, because the user names are only known now.
+# The claims are injected per scope, because the derived user names are only known
+# now. The subs stay OPAQUE and match nothing on the Actual side, deliberately.
 #
 # #343: `sub` is deliberately an OPAQUE value that matches NOTHING on the Actual
 # side. That is the whole point. The first version of this harness set sub to
@@ -146,14 +257,24 @@ info "4/6 Restart the IdP so it mints tokens whose sub equals those UUIDs"
 # The extra scopes cover the negative cases: an email-only token (precedence
 # fall-through), an unknown user, and a token whose every identity claim is blank
 # (which must NEVER match the service account's blank userName).
+#
+# #345: `user-subonly` mints a token carrying ONLY an opaque sub, with no
+# preferred_username, login, email or id. That is #317's reporter reproduced
+# exactly: it must be DENIED on the claim path, and must resolve once
+# AUTH_BUDGET_ACL_IDENTITY_MAP binds that sub to a real userName. Red then green,
+# in one run.
+#
+# The preferred_username values below are the ones Actual DERIVED in step 3, read
+# back from the server. They are deliberately not literals: see the note there.
 docker rm -f "$IDP" >/dev/null
 IDP_CONFIG=$(cat <<JSON
 { "tokenCallbacks": [ { "issuerId": "default", "tokenExpiry": 3600, "requestMappings": [
-  { "requestParam": "scope", "match": "user-alice",     "claims": { "sub": "opaque-idp-sub-alice", "preferred_username": "alice", "email": "alice@example.test", "aud": ["$AUDIENCE"] } },
-  { "requestParam": "scope", "match": "user-bob",       "claims": { "sub": "opaque-idp-sub-bob",   "preferred_username": "bob",   "email": "bob@example.test",   "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-alice",     "claims": { "sub": "opaque-idp-sub-alice", "preferred_username": "$ALICE_NAME", "email": "alice@example.test", "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-bob",       "claims": { "sub": "opaque-idp-sub-bob",   "preferred_username": "$BOB_NAME",   "email": "bob@example.test",   "aud": ["$AUDIENCE"] } },
   { "requestParam": "scope", "match": "user-emailonly", "claims": { "sub": "opaque-idp-sub-eo",    "email": "alice@example.test", "aud": ["$AUDIENCE"] } },
   { "requestParam": "scope", "match": "user-ghost",     "claims": { "sub": "opaque-idp-sub-ghost", "preferred_username": "nobody", "aud": ["$AUDIENCE"] } },
-  { "requestParam": "scope", "match": "user-blank",     "claims": { "sub": "", "preferred_username": "", "email": "", "aud": ["$AUDIENCE"] } }
+  { "requestParam": "scope", "match": "user-blank",     "claims": { "sub": "", "preferred_username": "", "email": "", "aud": ["$AUDIENCE"] } },
+  { "requestParam": "scope", "match": "user-subonly",   "claims": { "sub": "opaque-idp-sub-subonly", "aud": ["$AUDIENCE"] } }
 ] } ] }
 JSON
 )
@@ -214,6 +335,8 @@ cat > "$OUT" <<JSON
   "audience": "$AUDIENCE",
   "password": "$PASSWORD",
   "users": { "alice": "$ALICE_ID", "bob": "$BOB_ID" },
+  "actualUserNames": { "alice": "$ALICE_NAME", "bob": "$BOB_NAME" },
+  "subs": { "alice": "opaque-idp-sub-alice", "bob": "opaque-idp-sub-bob", "subonly": "opaque-idp-sub-subonly" },
   "files": { "alice": "$FILE_A", "bob": "$FILE_B" },
   "syncIds": { "alice": "$GROUP_A", "bob": "$GROUP_B" }
 }

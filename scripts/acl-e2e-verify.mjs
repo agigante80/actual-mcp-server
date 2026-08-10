@@ -106,24 +106,76 @@ console.log('\n[acl-e2e] REAL tokens resolve, end to end');
   check(blank.allowed.length === 0, 'a real token with blank identity claims is granted nothing');
 }
 
+// #344: EVERY identity below comes from fx.actualUserNames, which holds what
+// ACTUAL derived and stored during a real OIDC login. Do not reintroduce a string
+// literal here. The previous version of this file compared against 'alice' while
+// acl-e2e.sh created a user named 'alice' and configured the IdP to mint
+// 'alice', so all three agreed by construction and the assertion could not fail
+// for the reason it exists. The fixture also proves WHICH claim won: the login
+// supplied preferred_username and email as different strings.
+const ALICE = fx.actualUserNames?.alice;
+const BOB = fx.actualUserNames?.bob;
+if (!ALICE || !BOB) {
+  console.error('  FAIL: fixture has no actualUserNames; re-run scripts/acl-e2e.sh (#344)');
+  process.exit(2);
+}
+console.log(`\n[acl-e2e] identities DERIVED by Actual: alice=${ALICE} bob=${BOB}`);
+
 console.log('\n[acl-e2e] POSITIVE: each user reaches exactly their own budget');
 {
-  const a = await resolve({ sub: 'opaque-idp-sub-alice', preferred_username: 'alice', email: 'alice@example.test' });
+  const a = await resolve({ sub: 'opaque-idp-sub-alice', preferred_username: ALICE, email: 'alice@example.test' });
   console.log(`    alice principal=${a.principal} allowed=${JSON.stringify(a.allowed)}`);
-  check(a.principal === 'alice', 'alice resolves via preferred_username, not sub');
+  check(a.principal === ALICE, 'alice resolves via preferred_username, not sub');
   check(a.allowed.length === 1 && a.allowed[0] === fx.syncIds.alice, "alice reaches her own budget");
 
-  const b = await resolve({ sub: 'opaque-idp-sub-bob', preferred_username: 'bob', email: 'bob@example.test' });
+  const b = await resolve({ sub: 'opaque-idp-sub-bob', preferred_username: BOB, email: 'bob@example.test' });
   console.log(`    bob   principal=${b.principal} allowed=${JSON.stringify(b.allowed)}`);
   check(b.allowed.length === 1 && b.allowed[0] === fx.syncIds.bob, 'bob reaches his own budget');
 }
 
 console.log('\n[acl-e2e] NEGATIVE: cross-user isolation');
 {
-  const a = await resolve({ sub: 'x', preferred_username: 'alice' });
-  const b = await resolve({ sub: 'x', preferred_username: 'bob' });
+  const a = await resolve({ sub: 'x', preferred_username: ALICE });
+  const b = await resolve({ sub: 'x', preferred_username: BOB });
   check(!a.allowed.includes(fx.syncIds.bob), "alice CANNOT reach bob's budget");
   check(!b.allowed.includes(fx.syncIds.alice), "bob CANNOT reach alice's budget");
+}
+
+console.log('\n[acl-e2e] #345: a sub-only token is denied, then bound by the identity map');
+{
+  // #317's reporter, reproduced against a live server: an access token carrying an
+  // opaque sub and NOTHING the precedence can use. RED first, so the fix is proved
+  // to change something rather than asserted to.
+  const cfg = (await import('../dist/src/config.js')).default;
+  const dyn = await import('../dist/src/auth/budget-acl-dynamic.js');
+  const subOnly = { sub: fx.subs.subonly };
+
+  cfg.AUTH_BUDGET_ACL_IDENTITY_MAP = '';
+  dyn._resetDynamicAclCache();
+  let r = await dyn.resolvePrincipalAsync(subOnly, subOnly.sub, 'token-unused');
+  let allowed = await dyn.resolveAllowedBudgetsFromActual(r.value, r.source);
+  check(allowed.length === 0, 'RED: a sub-only token reaches no budget at all');
+
+  // GREEN: bind that sub to the userName Actual actually stored.
+  cfg.AUTH_BUDGET_ACL_IDENTITY_MAP = `${fx.subs.subonly}=${ALICE}`;
+  dyn._resetDynamicAclCache();
+  r = await dyn.resolvePrincipalAsync(subOnly, subOnly.sub, 'token-unused');
+  check(r.source === 'identity-map', 'the binding is what resolved the principal');
+  allowed = await dyn.resolveAllowedBudgetsFromActual(r.value, r.source);
+  check(allowed.length === 1 && allowed[0] === fx.syncIds.alice,
+    "GREEN: the bound sub now reaches exactly alice's budget");
+  check(!allowed.includes(fx.syncIds.bob), "and still NOT bob's budget");
+
+  // A binding to a userName nobody has must DENY, not fall back to a claim.
+  cfg.AUTH_BUDGET_ACL_IDENTITY_MAP = `${fx.subs.subonly}=nobody-has-this-name`;
+  dyn._resetDynamicAclCache();
+  r = await dyn.resolvePrincipalAsync({ ...subOnly, preferred_username: ALICE }, subOnly.sub, 'token-unused');
+  allowed = await dyn.resolveAllowedBudgetsFromActual(r.value, r.source);
+  check(allowed.length === 0,
+    'a mis-bound sub is DENIED even though its preferred_username would have matched');
+
+  cfg.AUTH_BUDGET_ACL_IDENTITY_MAP = '';
+  dyn._resetDynamicAclCache();
 }
 
 console.log('\n[acl-e2e] REGRESSION #343: the opaque IdP sub must not resolve on its own');
@@ -143,6 +195,8 @@ console.log('\n[acl-e2e] REGRESSION #343: the opaque IdP sub must not resolve on
 console.log('\n[acl-e2e] POSITIVE: precedence falls through to email');
 {
   const e = await resolve({ sub: 'opaque-idp-sub-eo', email: 'alice@example.test' });
+  // NOTE: this email is deliberately NOT the one the login supplied, so it must
+  // not match. It exercises the precedence, not the join.
   console.log(`    email-only principal=${e.principal} allowed=${JSON.stringify(e.allowed)}`);
   check(e.principal === 'alice@example.test', 'resolves to email when preferred_username is absent');
   // Whether this GRANTS depends on how the Actual user was created. If the user's
