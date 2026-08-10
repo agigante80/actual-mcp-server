@@ -178,6 +178,83 @@ console.log('\n[acl-e2e] #345: a sub-only token is denied, then bound by the ide
   dyn._resetDynamicAclCache();
 }
 
+console.log('\n[acl-e2e] #346: resolve the identity from the REAL IdP UserInfo endpoint');
+{
+  // The mock IdP serves a genuine /userinfo, and it is the same endpoint Actual
+  // itself called to derive user_name during the login in step 3. So this leg is
+  // testable end to end with no extra scaffolding: a real token, a real discovery
+  // document, a real UserInfo response, and our resolver reading it.
+  //
+  // What is NOT covered here is the DIVERGENCE case (a claim present in UserInfo
+  // but absent from the access token), because mock-oauth2-server derives the
+  // UserInfo body from the token's own claims, so the two cannot disagree. That
+  // one still needs the shim described in #346, and it is the reason this block
+  // proves the mechanism rather than the motivating bug.
+  const cfg = (await import('../dist/src/config.js')).default;
+  const dyn = await import('../dist/src/auth/budget-acl-dynamic.js');
+
+  const issuer = `${fx.idpUrl}/default`;
+  const prevIssuer = cfg.OIDC_ISSUER;
+  const prevSource = cfg.AUTH_BUDGET_ACL_IDENTITY_SOURCE;
+  const prevInsecure = cfg.OIDC_ALLOW_INSECURE_ISSUER;
+  cfg.OIDC_ISSUER = issuer;
+  // The mock IdP is plaintext on loopback; the resolver requires https unless the
+  // host is loopback or this opt-out is set. Both are true here, and it is scoped
+  // to this block.
+  cfg.OIDC_ALLOW_INSECURE_ISSUER = true;
+  cfg.AUTH_BUDGET_ACL_IDENTITY_SOURCE = 'userinfo';
+  cfg.AUTH_BUDGET_ACL_IDENTITY_MAP = '';
+  dyn._resetDynamicAclCache();
+
+  // A REAL access token from the IdP, not a hand-built claims object.
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials', client_id: 'acl-e2e', client_secret: 'x', scope: 'user-alice',
+  });
+  const tokRes = await fetch(`${fx.idpUrl}/default/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body,
+  });
+  const { access_token: accessToken } = await tokRes.json();
+  const payload = JSON.parse(Buffer.from(accessToken.split('.')[1], 'base64url').toString('utf8'));
+
+  // Deliberately pass NO claims: the identity must come from the UserInfo call
+  // alone, so a regression that quietly reads the token instead cannot pass.
+  const r = await dyn.resolvePrincipalAsync({}, payload.sub, accessToken);
+  console.log(`    userinfo principal=${r.value} source=${r.source}`);
+  check(r.value === ALICE, 'the identity is resolved from the live UserInfo response');
+  check(String(r.source).startsWith('userinfo:'), 'and is tagged as coming from userinfo');
+
+  const allowed = await dyn.resolveAllowedBudgetsFromActual(r.value, r.source);
+  check(allowed.length === 1 && allowed[0] === fx.syncIds.alice,
+    "and it reaches exactly alice's budget end to end");
+  check(!allowed.includes(fx.syncIds.bob), "and NOT bob's budget");
+
+  // An unknown subject must be denied: the UserInfo endpoint is not a bypass.
+  dyn._resetDynamicAclCache();
+  const ghostBody = new URLSearchParams({
+    grant_type: 'client_credentials', client_id: 'acl-e2e', client_secret: 'x', scope: 'user-ghost',
+  });
+  const ghostRes = await fetch(`${fx.idpUrl}/default/token`, {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: ghostBody,
+  });
+  const { access_token: ghostToken } = await ghostRes.json();
+  const ghostPayload = JSON.parse(Buffer.from(ghostToken.split('.')[1], 'base64url').toString('utf8'));
+  const gr = await dyn.resolvePrincipalAsync({}, ghostPayload.sub, ghostToken);
+  const gAllowed = await dyn.resolveAllowedBudgetsFromActual(gr.value, gr.source);
+  check(gAllowed.length === 0, 'an unknown user resolved via UserInfo is still granted nothing');
+
+  // A token the IdP will not accept at UserInfo must DENY, not fall back to claims.
+  dyn._resetDynamicAclCache();
+  const bad = await dyn.resolvePrincipalAsync({ preferred_username: ALICE }, payload.sub, 'not-a-real-token');
+  const badAllowed = await dyn.resolveAllowedBudgetsFromActual(bad.value, bad.source);
+  check(badAllowed.length === 0,
+    'a token the IdP refuses at UserInfo is DENIED, with no fallback to the token claims');
+
+  cfg.OIDC_ISSUER = prevIssuer;
+  cfg.AUTH_BUDGET_ACL_IDENTITY_SOURCE = prevSource;
+  cfg.OIDC_ALLOW_INSECURE_ISSUER = prevInsecure;
+  dyn._resetDynamicAclCache();
+}
+
 console.log('\n[acl-e2e] REGRESSION #343: the opaque IdP sub must not resolve on its own');
 {
   // The v0.11.0 defect. Pin it against the live server, where userId is minted by

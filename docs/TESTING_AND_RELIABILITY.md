@@ -175,6 +175,16 @@ passing `userName: "alice"` and then configured the IdP to mint
 apart in one file, which is internally consistent by construction and cannot fail
 for the reason that matters. That shape hid #343 for two releases.
 
+**What it covers for #346.** The mock IdP serves a genuine `/userinfo`, and it is the
+same endpoint Actual itself calls to derive `user_name`, so the UserInfo identity
+source is exercised end to end against a live IdP: a real token, a real discovery
+document, a real response. That block deliberately passes NO token claims, so an
+implementation that quietly read the access token instead would resolve to null and
+fail. What it does NOT cover is the divergence case (a claim present in UserInfo but
+absent from the access token), because mock-oauth2-server derives the UserInfo body
+from the token's own claims and the two cannot disagree. That case needs the shim
+described in #346, so this proves the mechanism rather than the motivating bug.
+
 **Proving it is still not vacuous.** After a green run, rename the user inside
 Actual so its `user_name` no longer matches the token identity, and re-run the
 verifier. It must go red (3 assertions, verified 2026-08-10). The exact commands are
