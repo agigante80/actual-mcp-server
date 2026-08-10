@@ -25,7 +25,12 @@
 
 import config from '../config.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
-import { discoverOidcMetadata, resolveUserInfoUri } from '../lib/oidc-discovery.js';
+import {
+  discoverOidcMetadata,
+  resolveUserInfoUri,
+  getResolvedOidcMetadata,
+  buildTrustedJwksHosts,
+} from '../lib/oidc-discovery.js';
 
 const log = createModuleLogger('ACL');
 
@@ -58,6 +63,8 @@ export interface UserInfoResult {
  * does not widen the revocation window that already exists.
  */
 const CACHE_TTL_MS = 60_000;
+/** Hard cap on retained identities; see the eviction note at the write site. */
+const MAX_CACHE_ENTRIES = 1000;
 const _cache = new Map<string, { at: number; value: string; claim: string | null }>();
 
 export function _resetUserInfoCache(): void {
@@ -106,10 +113,28 @@ export async function resolveIdentityFromUserInfo(
 
   let endpoint: string;
   try {
-    const { metadata } = await discoverOidcMetadata(
-      config.OIDC_ISSUER,
-      config.OIDC_ALLOW_INSECURE_ISSUER === true,
-    );
+    // PREFER THE DOCUMENT RESOLVED AT STARTUP. Re-fetching discovery here was wrong
+    // twice over. It put an outbound fetch on the authorization path, breaking the
+    // invariant oidc-discovery.ts states explicitly ("no request ever triggers an
+    // outbound fetch, no request-path SSRF surface"), and it did so with an EMPTY
+    // trusted-hosts list while the startup call passes
+    // buildTrustedJwksHosts(OIDC_JWKS_TRUSTED_HOSTS). A deployment with a
+    // legitimately cross-origin jwks_uri (Google: issuer accounts.google.com, keys
+    // on www.googleapis.com, the case docs/CONFIGURATION.md documents) would then
+    // throw inside resolveJwksUri, be caught below, and deny EVERY request while
+    // the log blamed the UserInfo endpoint. That is #343's shape exactly: a total
+    // silent denial with a diagnostic pointing at the wrong subsystem.
+    //
+    // The fallback fetch exists for callers with no HTTP bootstrap, and it now
+    // passes the same trusted hosts, so neither path can drift from the other.
+    let metadata = getResolvedOidcMetadata();
+    if (metadata === null) {
+      ({ metadata } = await discoverOidcMetadata(
+        config.OIDC_ISSUER,
+        config.OIDC_ALLOW_INSECURE_ISSUER === true,
+        buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS),
+      ));
+    }
     endpoint = resolveUserInfoUri(
       metadata as { userinfo_endpoint?: unknown },
       config.OIDC_ISSUER,
@@ -134,17 +159,22 @@ export async function resolveIdentityFromUserInfo(
     // Timeout or transport failure. Deliberately a DIFFERENT disposition from a
     // 401: this one says the IdP is unreachable, which is an availability problem
     // rather than a configuration one, and the two have different fixes.
+    clearTimeout(timer);
     log.warn('dynamic ACL: UserInfo request failed; denying', {
       reason: err instanceof Error ? err.message : String(err),
       timeoutMs: config.AUTH_BUDGET_ACL_USERINFO_TIMEOUT_MS,
       hint: 'The IdP was unreachable or too slow. This is an availability failure, not a claim mismatch.',
     });
     return { value: null, claim: null, failure: 'unavailable' };
-  } finally {
-    clearTimeout(timer);
   }
+  // NOTE: the timer is NOT cleared here. Clearing it as soon as the headers arrive
+  // disarms the AbortController before the body is read, so a slow-loris IdP (or a
+  // proxy that returns 200 headers then trickles the body) would hang the
+  // authorization path indefinitely: exactly the failure this timeout exists to
+  // prevent. It stays armed until the body is fully consumed below.
 
   if (res.status === 401 || res.status === 403) {
+    clearTimeout(timer);
     log.warn('dynamic ACL: the IdP refused the access token at UserInfo; denying', {
       status: res.status,
       hint:
@@ -156,6 +186,7 @@ export async function resolveIdentityFromUserInfo(
   }
 
   if (!res.ok) {
+    clearTimeout(timer);
     log.warn('dynamic ACL: UserInfo returned an unexpected status; denying', { status: res.status });
     return { value: null, claim: null, failure: 'unavailable' };
   }
@@ -180,6 +211,9 @@ export async function resolveIdentityFromUserInfo(
         'trusted unverified. Configure the IdP to return application/json.',
     });
     return { value: null, claim: null, failure: 'unavailable' };
+  } finally {
+    // The body is now either parsed or failed; either way the request is over.
+    clearTimeout(timer);
   }
 
   // OIDC Core 5.3.2: the client MUST verify that the `sub` in the UserInfo response
@@ -204,6 +238,20 @@ export async function resolveIdentityFromUserInfo(
   for (const name of precedence) {
     const value = readClaim(body, name);
     if (value !== null) {
+      // Bound the cache. The key space is one entry per distinct `sub` seen, which
+      // an issuer-trusted caller can grow by minting tokens for many subjects, so
+      // unlike the ACL's operator-sized principal cache this dimension is not
+      // self-limiting. Sweep expired entries first, then cap: cheap, and it keeps
+      // a long-lived process from retaining every identity it has ever resolved.
+      if (_cache.size >= MAX_CACHE_ENTRIES) {
+        const cutoff = Date.now() - CACHE_TTL_MS;
+        for (const [k, v] of _cache) if (v.at < cutoff) _cache.delete(k);
+        while (_cache.size >= MAX_CACHE_ENTRIES) {
+          const oldest = _cache.keys().next();
+          if (oldest.done) break;
+          _cache.delete(oldest.value);
+        }
+      }
       _cache.set(subject, { at: Date.now(), value, claim: name });
       return { value, claim: name, failure: null };
     }

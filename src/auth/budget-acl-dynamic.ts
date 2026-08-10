@@ -53,7 +53,7 @@ import adapter from '../lib/actual-adapter.js';
 import { requestContext } from '../lib/requestContext.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
 import { parseIdentityMap, type IdentityMap } from './identity-map.js';
-import { resolveIdentityFromUserInfo } from './userinfo-identity.js';
+import { resolveIdentityFromUserInfo, _resetUserInfoCache } from './userinfo-identity.js';
 
 const log = createModuleLogger('ACL');
 
@@ -109,6 +109,12 @@ const _cache = new Map<string, { at: number; allowed: string[] }>();
 export function _resetDynamicAclCache(): void {
   _cache.clear();
   _identityMapCache = null;
+  // Chain the UserInfo identity cache. A caller resetting "the resolver caches"
+  // between cases would otherwise leave a 60s success entry keyed on the same
+  // `sub`, so the next case resolves from a stale identity and passes or fails for
+  // the wrong reason. That is the same "the fixture agrees with itself" hazard #344
+  // was written to remove, so it must not be reintroduced through the back door.
+  _resetUserInfoCache();
 }
 
 /**
@@ -352,7 +358,16 @@ export async function resolvePrincipalAsync(
       log.warn('dynamic ACL: userinfo source selected but no subject or access token is available; denying');
       return { value: null, source: USERINFO_SOURCE };
     }
-    const result = await resolveIdentityFromUserInfo(accessToken, sub, ACTUAL_IDENTITY_PRECEDENCE);
+    // HONOUR A PINNED CLAIM HERE TOO. Passing ACTUAL_IDENTITY_PRECEDENCE
+    // unconditionally silently ignored AUTH_BUDGET_ACL_CLAIM on this path. An
+    // operator who pinned `email` precisely BECAUSE their IdP lets users edit
+    // `preferred_username` would have been reverted to `preferred_username` (first
+    // in the precedence) merely by switching identity source, reopening the
+    // impersonation vector the pin was chosen to close, while the deny log kept
+    // reporting `configuredClaim: email`. A security control that a neighbouring
+    // setting can silently disable is not a control.
+    const precedence = claimName === AUTO_CLAIM ? ACTUAL_IDENTITY_PRECEDENCE : [claimName];
+    const result = await resolveIdentityFromUserInfo(accessToken, sub, precedence);
     return {
       value: result.value,
       // Report the winning claim, tagged so a log reader can tell WHERE it was

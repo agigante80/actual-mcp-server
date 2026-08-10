@@ -245,6 +245,70 @@ const jsonResponse = (body, status = 200) => ({
     _resetUserInfoCache(); _resetDynamicAclCache();
   }
 
+  console.log('\n[userinfo] CODE REVIEW REGRESSIONS (#346)');
+  {
+    const disc = await import('../../dist/src/lib/oidc-discovery.js');
+    const dyn = await import('../../dist/src/auth/budget-acl-dynamic.js');
+    cfg.AUTH_BUDGET_ACL_IDENTITY_SOURCE = 'userinfo';
+    cfg.AUTH_BUDGET_ACL_IDENTITY_MAP = '';
+
+    // FINDING 1: a cross-origin jwks_uri must not deny every request. The startup
+    // document is published, so the ACL must not re-run discovery (which, with an
+    // empty trusted-hosts list, would throw on that jwks_uri and deny everyone
+    // while blaming the UserInfo endpoint).
+    disc._resetResolvedOidcMetadata();
+    dyn._resetDynamicAclCache();
+    disc.setResolvedOidcMetadata({
+      issuer: ISSUER,
+      jwks_uri: 'https://keys.elsewhere.test/jwks',   // cross-origin, allowlisted at startup
+      userinfo_endpoint: USERINFO,
+    });
+    let discoveryFetches = 0;
+    globalThis.fetch = async (url, init) => {
+      const target = String(url);
+      if (target.includes('.well-known/openid-configuration')) { discoveryFetches += 1; }
+      lastInit = { target, init };
+      return jsonResponse({ sub: ALICE_SUB, preferred_username: 'alice' });
+    };
+    let r = await resolveIdentityFromUserInfo('tok', ALICE_SUB, PRECEDENCE);
+    check(r.value === 'alice',
+      'a cross-origin jwks_uri does NOT deny the request (the startup document is reused)');
+    check(discoveryFetches === 0,
+      'and discovery is NOT re-fetched on the authorization path (no request-path SSRF surface)');
+
+    // FINDING 3: a pinned claim must not be silently ignored here.
+    disc.setResolvedOidcMetadata({ issuer: ISSUER, jwks_uri: `${ISSUER}/jwks`, userinfo_endpoint: USERINFO });
+    _resetUserInfoCache(); dyn._resetDynamicAclCache();
+    install(() => jsonResponse({ sub: ALICE_SUB, preferred_username: 'editable-by-user', email: 'pinned@example.test' }));
+    cfg.AUTH_BUDGET_ACL_CLAIM = 'email';
+    r = await dyn.resolvePrincipalAsync({}, ALICE_SUB, 'tok');
+    check(r.value === 'pinned@example.test',
+      'REGRESSION GUARD: AUTH_BUDGET_ACL_CLAIM=email is honoured on the userinfo path');
+    check(r.value !== 'editable-by-user',
+      'and specifically does NOT silently revert to preferred_username');
+
+    _resetUserInfoCache(); dyn._resetDynamicAclCache();
+    r = await dyn.resolvePrincipalAsync({}, ALICE_SUB, 'tok');
+    check(r.value === 'pinned@example.test', 'a pinned claim that is absent would deny rather than fall through');
+    cfg.AUTH_BUDGET_ACL_CLAIM = 'auto';
+
+    // FINDING 5: resetting the ACL caches must also clear the identity cache, or a
+    // stale identity survives a config flip between test cases.
+    _resetUserInfoCache(); dyn._resetDynamicAclCache();
+    install(() => jsonResponse({ sub: ALICE_SUB, preferred_username: 'first-identity' }));
+    r = await dyn.resolvePrincipalAsync({}, ALICE_SUB, 'tok');
+    check(r.value === 'first-identity', 'first resolution caches an identity');
+    dyn._resetDynamicAclCache();
+    install(() => jsonResponse({ sub: ALICE_SUB, preferred_username: 'second-identity' }));
+    r = await dyn.resolvePrincipalAsync({}, ALICE_SUB, 'tok');
+    check(r.value === 'second-identity',
+      'REGRESSION GUARD: _resetDynamicAclCache clears the UserInfo identity cache too');
+
+    cfg.AUTH_BUDGET_ACL_IDENTITY_SOURCE = 'token';
+    disc._resetResolvedOidcMetadata();
+    _resetUserInfoCache(); dyn._resetDynamicAclCache();
+  }
+
   console.log('\n[userinfo] config defaults');
   {
     const { configSchema } = await import('../../dist/src/config.js');
