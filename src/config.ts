@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseIdentityMap } from './auth/identity-map.js';
 
 export const configSchema = z.object({
   ACTUAL_SERVER_URL: z.string().url(),
@@ -123,6 +124,33 @@ export const configSchema = z.object({
     .string()
     .default('auto')
     .refine((v) => v === 'auto' || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v), 'AUTH_BUDGET_ACL_CLAIM must be "auto" or a simple claim name'),
+  // #345: explicit `<sub>=<actual userName>` bindings, consulted BEFORE the claim
+  // precedence and authoritative when the sub is present. See src/auth/identity-map.ts
+  // for why it is keyed on `sub` and why a blank target is rejected.
+  //
+  // Validated here (not at first request) so a malformed binding is a startup
+  // error naming the offending entry. The parsed Map is rebuilt on use rather
+  // than stored on the config object, because this schema is also consumed by
+  // drift tooling that expects plain values.
+  AUTH_BUDGET_ACL_IDENTITY_MAP: z
+    .string()
+    .default('')
+    .superRefine((v: string, ctx: z.RefinementCtx) => {
+      try {
+        parseIdentityMap(v);
+      } catch (err) {
+        // Surface the parser's own message. It names the offending entry, which
+        // is the only part the operator can act on.
+        const reason = err instanceof Error ? err.message : String(err);
+        ctx.addIssue({
+          code: 'custom',
+          message:
+            `AUTH_BUDGET_ACL_IDENTITY_MAP is malformed: ${reason}. ` +
+            'Expected "<sub>=<actual userName>" entries separated by commas, for example ' +
+            '"a1b2c3=jdoe,d4e5f6=asmith". See docs/CONFIGURATION.md.',
+        });
+      }
+    }),
 })
   // #343 UPGRADE GUARD. v0.11.0 and v0.11.1 shipped AUTH_BUDGET_ACL_CLAIM=sub as
   // the default AND the README told operators to keep it. That combination cannot

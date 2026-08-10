@@ -188,6 +188,36 @@ your IdP does not let users edit, and ensure that same claim is what populates
 Actual's `user_name`. Note this must be true on BOTH sides: pinning a claim here that
 Actual did not use produces no matches and denies everyone.
 
+**Stronger mitigation: bind the principal explicitly (#345).**
+`AUTH_BUDGET_ACL_IDENTITY_MAP` takes `<sub>=<actual userName>` pairs and is consulted
+before the precedence:
+
+```bash
+AUTH_BUDGET_ACL_IDENTITY_MAP=a1b2c3d4e5f6opaque=jdoe,f7e8d9c0b1a2opaque=asmith
+```
+
+This removes the mutable-claim exposure entirely for the principals it covers, because
+the lookup key is the verified `sub` and nothing a user can edit at the IdP changes it.
+It also answers two failure modes no claim heuristic can:
+
+- **A claim absent from the access token.** Actual derives `user_name` from the
+  UserInfo RESPONSE, while this server reads the verified ACCESS TOKEN. An IdP that
+  returns `preferred_username` from one and not the other denies every principal.
+- **An IdP-side rename.** Actual writes `user_name` once at first login and never
+  updates it, so renaming a user at the IdP breaks the join permanently.
+
+**The map is authoritative.** If a `sub` is bound and its target matches no budget
+file, the principal is DENIED; there is no fallback to the claim precedence. That is
+deliberate: a fallback would let an operator typo be masked by an accidental claim
+match, granting access through a path nobody configured while the mistake stays
+invisible. A blank target is rejected at startup, because it would match the
+service-account row that owns every file.
+
+**Finding the values to bind.** With `AUTH_BUDGET_ACL_SOURCE=actual`, the server logs
+one `dynamic ACL preflight` line at startup naming every `userName` on offer. If that
+line reports none, the Actual server is almost certainly in password mode, where
+`userName` is blank for every row and no principal can ever resolve.
+
 **Guards that hold regardless of the claim chosen:**
 - A missing, non-string or blank claim yields a null principal, never `''`.
 - The matcher skips blank `userName` values. This matters because the MCP server's own
