@@ -65,7 +65,7 @@
     "actionlint": "bash scripts/install-actionlint.sh && ./actionlint -shellcheck= -color"
   },
   "dependencies": {
-    "@actual-app/api": "^26.8.0",
+    "@actual-app/api": "^26.8.1",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "debug": "^4.4.3",
     "dotenv": "^17.4.2",
