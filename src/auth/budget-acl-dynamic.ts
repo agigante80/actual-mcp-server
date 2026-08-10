@@ -53,6 +53,7 @@ import adapter from '../lib/actual-adapter.js';
 import { requestContext } from '../lib/requestContext.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
 import { parseIdentityMap, type IdentityMap } from './identity-map.js';
+import { resolveIdentityFromUserInfo } from './userinfo-identity.js';
 
 const log = createModuleLogger('ACL');
 
@@ -255,6 +256,14 @@ export function resolvedClaimName(
  */
 export const IDENTITY_MAP_SOURCE = 'identity-map';
 
+/**
+ * Reported as the source when the identity came from the UserInfo endpoint (#346).
+ * Suffixed with the winning claim on success (`userinfo:preferred_username`), so a
+ * log line distinguishes a claim read from the token from the same claim read from
+ * UserInfo. When the join fails those are different diagnoses.
+ */
+export const USERINFO_SOURCE = 'userinfo';
+
 /** What resolved the principal, and to what. */
 export interface PrincipalResolution {
   /** The value to match against Actual's `userName`, or null if nothing resolved. */
@@ -301,6 +310,60 @@ export function resolvePrincipal(
     value: extractPrincipalValue(claims, subject, claimName),
     source: resolvedClaimName(claims, subject, claimName),
   };
+}
+
+/**
+ * #346: the async resolution used by the middleware.
+ *
+ * ORDER IS DELIBERATE, and the map coming first is not merely an optimisation:
+ *
+ *   1. AUTH_BUDGET_ACL_IDENTITY_MAP, if this sub is bound. An explicit operator
+ *      binding must not be second-guessed by a network lookup, and it should not
+ *      cost one either. This also keeps #345 usable as the escape hatch WHEN the
+ *      UserInfo path is failing, which is precisely when you need an escape hatch.
+ *   2. The UserInfo endpoint, when AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo.
+ *   3. The verified access-token claims (the default, unchanged).
+ *
+ * A UserInfo failure DENIES rather than falling back to step 3. Falling back would
+ * silently change which identity is resolved at the moment the system is least
+ * healthy, and would mask a permanent misconfiguration as an intermittent one.
+ */
+export async function resolvePrincipalAsync(
+  claims: Record<string, unknown>,
+  subject: string | undefined,
+  accessToken: string | undefined,
+): Promise<PrincipalResolution> {
+  const claimName = config.AUTH_BUDGET_ACL_CLAIM;
+  const map = getIdentityMap();
+
+  // Step 1: an explicit binding wins outright, with no network call.
+  if (map.size > 0) {
+    const bound = resolvePrincipal(claims, subject, claimName, map);
+    if (bound.source === IDENTITY_MAP_SOURCE) return bound;
+  }
+
+  // Step 2: the same document Actual read.
+  if (config.AUTH_BUDGET_ACL_IDENTITY_SOURCE === 'userinfo') {
+    const sub = typeof subject === 'string' && subject.trim().length > 0 ? subject : null;
+    if (sub === null || !accessToken) {
+      // Unreachable in production: httpServer rejects a token without a non-empty
+      // string `sub`, and the token is what got us here. Deny rather than quietly
+      // using the claims, so a future refactor that drops one of them is loud.
+      log.warn('dynamic ACL: userinfo source selected but no subject or access token is available; denying');
+      return { value: null, source: USERINFO_SOURCE };
+    }
+    const result = await resolveIdentityFromUserInfo(accessToken, sub, ACTUAL_IDENTITY_PRECEDENCE);
+    return {
+      value: result.value,
+      // Report the winning claim, tagged so a log reader can tell WHERE it was
+      // read from. `preferred_username` from the token and from UserInfo are very
+      // different diagnoses when the join fails.
+      source: result.value !== null ? `${USERINFO_SOURCE}:${result.claim}` : USERINFO_SOURCE,
+    };
+  }
+
+  // Step 3: unchanged.
+  return resolvePrincipal(claims, subject, claimName, map);
 }
 
 /**

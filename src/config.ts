@@ -124,6 +124,27 @@ export const configSchema = z.object({
     .string()
     .default('auto')
     .refine((v) => v === 'auto' || /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/.test(v), 'AUTH_BUDGET_ACL_CLAIM must be "auto" or a simple claim name'),
+  // #346: WHERE the identity claims are read from when AUTH_BUDGET_ACL_SOURCE=actual.
+  //
+  //   token    (default) the verified access-token payload. No network call.
+  //   userinfo the IdP's UserInfo endpoint, which is the SAME document Actual
+  //            derives user_name from (openid.ts calls client.userinfo()).
+  //
+  // Default stays `token` deliberately. `userinfo` is more likely to match, but it
+  // makes the IdP a hard dependency of authorization: its downtime becomes a total
+  // denial, and it requires the access token to carry the `openid` scope, which
+  // this server does not require. Correctness that costs availability should be an
+  // operator's explicit choice, not a silent upgrade.
+  AUTH_BUDGET_ACL_IDENTITY_SOURCE: z.enum(['token', 'userinfo']).default('token'),
+  // #346: bound on the UserInfo request, so a hanging IdP cannot stall the
+  // authorization path. Same parse-and-clamp shape as ACTUAL_OP_TIMEOUT_MS, but it
+  // has NO disable value: a request on the auth path with no timeout is how a slow
+  // IdP becomes an outage. A non-numeric or out-of-range value falls back to 5000.
+  AUTH_BUDGET_ACL_USERINFO_TIMEOUT_MS: z.string().default('5000').transform((val) => {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n) || n <= 0) return 5000;
+    return Math.min(Math.max(n, 250), 60000);
+  }),
   // #345: explicit `<sub>=<actual userName>` bindings, consulted BEFORE the claim
   // precedence and authoritative when the sub is present. See src/auth/identity-map.ts
   // for why it is keyed on `sub` and why a blank target is rejected.
