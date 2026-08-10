@@ -26,7 +26,7 @@
 import type { Request, Response, NextFunction } from 'express';
 import config from '../config.js';
 import logger from '../logger.js';
-import { resolveAllowedBudgetsFromActual, resolvePrincipal } from './budget-acl-dynamic.js';
+import { resolveAllowedBudgetsFromActual, resolvePrincipalAsync } from './budget-acl-dynamic.js';
 
 // ---------------------------------------------------------------------------
 // ACL map (parsed once from env, cached)
@@ -173,10 +173,12 @@ async function resolveDynamicAcl(req: Request, res: Response, next: NextFunction
   const subject = auth?.subject as string | undefined;
 
   try {
-    // #345: resolvePrincipal consults AUTH_BUDGET_ACL_IDENTITY_MAP first and is
-    // authoritative when this sub is bound. It falls back to the claim precedence
-    // exactly as before when it is not, so an unmapped deployment is unchanged.
-    const { value: principalValue, source } = resolvePrincipal(claims, subject, config.AUTH_BUDGET_ACL_CLAIM);
+    // #345/#346: the map is consulted first and is authoritative when this sub is
+    // bound; otherwise the identity comes from the UserInfo endpoint or the access
+    // token, per AUTH_BUDGET_ACL_IDENTITY_SOURCE. An unmapped deployment on the
+    // default source behaves exactly as it did before both tickets.
+    const token = auth?.token as string | undefined;
+    const { value: principalValue, source } = await resolvePrincipalAsync(claims, subject, token);
     const allowed = await resolveAllowedBudgetsFromActual(principalValue, source);
 
     if (allowed.length > 0) {

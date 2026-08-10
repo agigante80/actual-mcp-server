@@ -254,3 +254,65 @@ export async function discoverJwksUri(
   const { jwksUri } = await discoverOidcMetadata(issuer, allowInsecure, trustedHosts, fetchImpl);
   return jwksUri;
 }
+
+/**
+ * #346: resolve and validate the `userinfo_endpoint` from a parsed discovery
+ * document. Network-free, and fails closed exactly like resolveJwksUri.
+ *
+ * WHY THIS IS STRICTER THAN THE JWKS RULE: SAME ORIGIN, NO ALLOWLIST.
+ *
+ * `resolveJwksUri` has an opt-in cross-origin allowlist (#254) because several
+ * real IdPs serve their key set from a different host (Google uses
+ * www.googleapis.com), and a key set is public data: the worst case of fetching
+ * it from the wrong place is that signature verification fails.
+ *
+ * The UserInfo call is not like that. We send the CALLER'S ACCESS TOKEN in an
+ * Authorization header, so a wrongly-trusted host is a token exfiltration
+ * primitive, and the identity in the response decides which budgets that caller
+ * can read. Those are different enough stakes that inheriting the JWKS allowlist
+ * would be a surprise: an operator who allowlisted a key host for #254 never
+ * agreed to have bearer tokens posted there. So this requires the endpoint to be
+ * same-origin with the issuer, with no escape hatch. If a cross-origin IdP ever
+ * needs support, it should arrive as its own explicitly-named variable, so the
+ * operator is consenting to the thing they are actually consenting to.
+ */
+export function resolveUserInfoUri(
+  discoveryDoc: { userinfo_endpoint?: unknown } | null | undefined,
+  issuer: string | undefined,
+  allowInsecure = false,
+): string {
+  const issuerUrl = assertSecureIssuer(issuer, allowInsecure);
+  if (!discoveryDoc || typeof discoveryDoc !== 'object') {
+    throw new Error('OIDC discovery document is empty or not an object');
+  }
+  const raw = (discoveryDoc as { userinfo_endpoint?: unknown }).userinfo_endpoint;
+  if (typeof raw !== 'string' || raw.length === 0) {
+    throw new Error(
+      'OIDC discovery document has no usable "userinfo_endpoint"; ' +
+        'AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo cannot be used with this issuer',
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`OIDC "userinfo_endpoint" is not a valid URL: ${raw}`);
+  }
+  if (url.protocol !== 'https:' && !isLoopbackHost(url.hostname) && !allowInsecure) {
+    throw new Error(
+      `OIDC "userinfo_endpoint" must use https (got ${url.protocol}); ` +
+        'refusing to send an access token over plaintext',
+    );
+  }
+  if (url.username || url.password) {
+    throw new Error('OIDC "userinfo_endpoint" must not contain embedded credentials (user:pass@host)');
+  }
+  if (url.origin.toLowerCase() !== issuerUrl.origin.toLowerCase()) {
+    throw new Error(
+      `OIDC "userinfo_endpoint" origin (${url.origin}) does not match the issuer origin (${issuerUrl.origin}); ` +
+        'refusing to send the caller access token cross-origin. Unlike jwks_uri there is deliberately no ' +
+        'allowlist here, because this request carries a bearer token rather than fetching public keys (#346).',
+    );
+  }
+  return url.toString();
+}

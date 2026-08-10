@@ -218,6 +218,50 @@ one `dynamic ACL preflight` line at startup naming every `userName` on offer. If
 line reports none, the Actual server is almost certainly in password mode, where
 `userName` is blank for every row and no principal can ever resolve.
 
+#### Reading identity from the UserInfo endpoint (#346)
+
+`AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo` resolves the principal by calling the
+IdP's UserInfo endpoint with the caller's own access token, then applying Actual's
+precedence to that RESPONSE. It is the same document Actual read
+(`client.userinfo(tokenSet.access_token)` in `openid.ts`), so it removes the entire
+class of mismatch where an IdP returns a claim from UserInfo but omits it from the
+access token.
+
+**It is opt-in, and the default remains `token`, because it is a real trade.**
+Enabling it makes the IdP a hard dependency of authorization: while UserInfo is
+unreachable, every principal is denied. It also requires the access token to have been
+issued with the `openid` scope, which this server does not require (`OIDC_SCOPES` is
+optional), so a client that never requested it gets a 401 from UserInfo and is denied.
+
+**Controls on that request:**
+
+- **Same origin only.** The `userinfo_endpoint` must share an origin with
+  `OIDC_ISSUER`. Unlike `jwks_uri` there is deliberately no allowlist: this request
+  carries a bearer token rather than fetching public keys, so a wrongly-trusted host
+  is a token exfiltration primitive. An operator who allowlisted a key host under
+  #254 never agreed to have access tokens posted there.
+- **Subject binding (OIDC Core 5.3.2).** The `sub` in the response must equal the
+  `sub` in the verified access token. Without this check, anything able to answer as
+  that endpoint could return another user's `preferred_username` and be handed that
+  user's budgets. A mismatch is denied outright and is never retried against the
+  token claims, so a detected substitution cannot become a silent downgrade.
+- **Bounded and fail closed.** The request is bounded by
+  `AUTH_BUDGET_ACL_USERINFO_TIMEOUT_MS` (default 5s, no disable value). A timeout, a
+  transport error, a non-JSON body, a signed `application/jwt` body (refused rather
+  than trusted unverified), a 401/403, or a response with no usable claim all deny.
+  None of them fall back to the token claims: a fallback would change which identity
+  resolves at the moment the system is least healthy.
+- **Untrusted values are not coerced.** A `preferred_username` that is an object, or
+  an `email` that is a number, is treated as absent rather than stringified into an
+  identity.
+- **The response body is never logged.** It is user PII by definition.
+- **Caching.** Successful resolutions are cached for 60 seconds keyed on `sub`, so a
+  principal costs at most one UserInfo request per minute. Failures are not cached.
+  This does not widen the revocation window beyond the ACL cache that already exists.
+
+`AUTH_BUDGET_ACL_IDENTITY_MAP` is consulted BEFORE this and short-circuits it, so an
+explicit binding costs no network call and keeps working while the IdP is down.
+
 **Guards that hold regardless of the claim chosen:**
 - A missing, non-string or blank claim yields a null principal, never `''`.
 - The matcher skips blank `userName` values. This matters because the MCP server's own
