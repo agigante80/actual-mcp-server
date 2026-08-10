@@ -316,3 +316,36 @@ export function resolveUserInfoUri(
   }
   return url.toString();
 }
+
+/**
+ * The discovery document resolved ONCE at startup, published for later readers.
+ *
+ * #346 code review: the ACL's UserInfo path originally called
+ * discoverOidcMetadata() itself on every cache miss, which broke two things at
+ * once. It re-fetched `/.well-known/openid-configuration` on the AUTHORIZATION
+ * path, violating this module's stated invariant that no client request triggers
+ * an outbound discovery fetch; and it passed no `trustedHosts`, so a deployment
+ * whose `jwks_uri` is legitimately cross-origin (Google: issuer
+ * accounts.google.com, keys on www.googleapis.com, exactly the case documented in
+ * docs/CONFIGURATION.md) threw inside the ACL and denied EVERY request, while the
+ * log blamed the UserInfo endpoint. That is the #343 failure shape again: a total
+ * silent denial with a misleading diagnostic.
+ *
+ * Publishing the startup result removes both. The store is written once by the
+ * server bootstrap and read thereafter; it is not a cache and is never invalidated,
+ * because the document it holds was validated under the operator's full config.
+ */
+let _resolvedMetadata: Record<string, unknown> | null = null;
+
+export function setResolvedOidcMetadata(metadata: Record<string, unknown>): void {
+  _resolvedMetadata = metadata;
+}
+
+export function getResolvedOidcMetadata(): Record<string, unknown> | null {
+  return _resolvedMetadata;
+}
+
+/** Test helper: forget the published document. */
+export function _resetResolvedOidcMetadata(): void {
+  _resolvedMetadata = null;
+}

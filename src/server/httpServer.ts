@@ -18,7 +18,7 @@ import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
-import { discoverOidcMetadata, buildTrustedJwksHosts } from '../lib/oidc-discovery.js';
+import { discoverOidcMetadata, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
@@ -110,6 +110,10 @@ export async function startHttpServer(
         config.OIDC_ALLOW_INSECURE_ISSUER,
         buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS),
       );
+      // #346: publish the startup-validated document so the ACL's UserInfo path can
+      // reuse it instead of re-fetching discovery on the authorization path with a
+      // different (empty) trusted-hosts list.
+      setResolvedOidcMetadata(oidcMetadata);
       // #285: serve RFC 8414 OAuth Authorization Server Metadata at this origin so
       // mcp-remote and Claude.ai's native OAuth connector can discover the IdP's
       // token_endpoint. We already serve RFC 9728 protected-resource metadata (whose
