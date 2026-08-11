@@ -16,6 +16,27 @@ updates:
       time: "09:00"
       timezone: "UTC"
     open-pull-requests-limit: 3
+
+    # DIRECT DEPENDENCIES ONLY. `direct` means "all explicitly defined
+    # dependencies", i.e. what this repo declares in package.json (prod AND dev),
+    # and per GitHub's reference the allow option applies to BOTH version updates
+    # and security updates.
+    #
+    # This is the direct-only dependency policy expressed in config instead of by
+    # hand: transitive security PRs (the `npm_and_yarn` group ones) were closed
+    # unmerged every time, because the fix belongs in the direct dependency that
+    # pulls the vulnerable package in, not in an override.
+    #
+    # WHAT THIS DOES NOT DO, deliberately:
+    #   - It does not hide transitive vulnerabilities. `npm audit
+    #     --audit-level=moderate` still runs in the pre-commit sequence and in CI,
+    #     so a reachable transitive advisory is still visible; it just no longer
+    #     arrives as a PR nobody intends to merge.
+    #   - It does not silence Dependabot ALERTS for transitive packages. Those come
+    #     from the alert system rather than this file; auto-triage rules in repo
+    #     settings are the lever for that.
+    allow:
+      - dependency-type: "direct"
     
     # Group updates for cleaner PR management (single group for all dependencies)
     groups:
