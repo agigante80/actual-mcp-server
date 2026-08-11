@@ -15,7 +15,7 @@
  * modules printed before, so logs read identically; the only new behaviour is the exit code.
  *
  * A SKIP is neither pass nor fail. It uses a distinct glyph (⏭) so a legitimate skip
- * (bank sync opt-in, budgets_switch over stdio) can never be mistaken for a pass and can
+ * (bank sync opt-in, for example) can never be mistaken for a pass and can
  * never make the run exit 1.
  */
 

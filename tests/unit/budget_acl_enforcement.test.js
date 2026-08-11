@@ -175,10 +175,13 @@ async function setupLoggerCapture() {
     } catch (e) {
       caught = e;
     }
+    // The behaviour under test is unchanged: a caller with NO requestContext
+    // session is refused. Since #348 that is no longer "stdio" (stdio has a
+    // synthetic session); it is a CLI script or an internal startup path.
     if (caught && /requires an MCP session/.test(caught.message)) {
-      pass('switchBudget refused stdio caller with clear error');
+      pass('switchBudget refused a session-less caller with a clear error');
     } else {
-      bad('expected stdio refusal', caught ? caught.message : 'no error thrown');
+      bad('expected a session-less refusal', caught ? caught.message : 'no error thrown');
     }
   }
 
