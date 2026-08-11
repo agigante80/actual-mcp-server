@@ -210,6 +210,29 @@ class ActualConnectionPool {
    * downloadBudget(newSyncId) call. switchBudget's fast path uses this so
    * subsequent comparisons reflect the loaded budget. See #172.
    */
+  /**
+   * #349 (review follow-up): invalidate the tracked syncId on EVERY entry.
+   *
+   * `@actual-app/api` is a process-global singleton with ONE loaded budget, while
+   * this pool tracks up to MAX_CONCURRENT_SESSIONS entries that each carry their
+   * own `syncId`. An import performed by session A therefore changes the loaded
+   * budget for sessions B..N as well, but only A knows it happened. Invalidating
+   * A alone leaves B's next switchBudget matching the #172 fast path against a
+   * record that is no longer true, returning success while B operates on A's
+   * imported budget: the same failure #349 fixed, arriving from a direction the
+   * user cannot see.
+   *
+   * Returns the number of entries invalidated, for logging.
+   */
+  invalidateAllLoadedSyncIds(sentinel: string): number {
+    let n = 0;
+    for (const entry of this.connections.values()) {
+      entry.syncId = sentinel;
+      n += 1;
+    }
+    return n;
+  }
+
   updateLoadedSyncId(sessionId: string, newSyncId: string): void {
     const entry = this.connections.get(sessionId);
     if (entry) {
