@@ -106,12 +106,18 @@ export async function budgetTests(client, context) {
     fail(["actual_budgets_list_available threw:", err.message].map(String).join(" "));
   }
 
-  // #280: actual_budgets_switch REQUIRES an MCP session. src/lib/actual-adapter.ts:1961
-  // refuses it for stdio/local callers BY DESIGN, telling them to configure
-  // ACTUAL_BUDGET_SYNC_ID instead. That is a documented transport difference, not a
-  // defect, so the switch assertions are skipped over stdio rather than asserting a
-  // behaviour the server explicitly declines to provide.
-  const SKIP_SWITCH = (process.env.MCP_TEST_TRANSPORT || 'http').toLowerCase() === 'stdio';
+  // #348: stdio CAN now switch budgets, so these assertions run on both transports.
+  //
+  // Until #348 the stdio process never entered a requestContext scope, so it had no
+  // sessionId, no slot in the per-session budget map, and actual_budgets_switch
+  // refused outright (#280 skipped these assertions for that reason). stdioServer.ts
+  // now mints a synthetic per-process session id, which gives stdio its own slot
+  // without reintroducing the process-global that #156 removed.
+  //
+  // The SKIP_SWITCH flag is GONE rather than set to false. A constant-false flag
+  // leaves both branches dead while reading as though one is still live: the
+  // sessionless branch below could never run, so a transport that genuinely lacked
+  // sessions would fall through to fail() instead of the message that flag implied.
 
   // ── 2. actual_budgets_switch (positive) ──────────────────────────────────
   // Prefer a SAME-SERVER alternate budget so the test exercises the #172
@@ -126,9 +132,7 @@ export async function budgetTests(client, context) {
   const alternateBudget = sameServerAlternate
     || (availableBudgets.length > 1 ? availableBudgets[1] : availableBudgets[0]);
   let switchedToAlternate = false;
-  if (SKIP_SWITCH) {
-    skip("actual_budgets_switch (positive): skipped over stdio (requires an MCP session)");
-  } else if (alternateBudget) {
+  if (alternateBudget) {
     try {
       const switchRes = await callTool("actual_budgets_switch", { budgetName: alternateBudget.name });
       if (switchRes?.success === true && switchRes?.budgetName && switchRes?.budgetId && switchRes?.serverUrl) {
@@ -174,10 +178,11 @@ export async function budgetTests(client, context) {
       fail(["actual_budgets_switch [negative]: no useful error for unknown name:", text.slice(0, 200)].map(String).join(" "));
     }
   } catch (err) {
-    if (SKIP_SWITCH && err.message.includes("requires an MCP session")) {
-      // #280: over stdio the adapter refuses the switch outright, before it can even
-      // look the name up. That IS the correct, documented behaviour for this transport.
-      console.log("  ✓ actual_budgets_switch [negative, stdio]: correctly refused (requires an MCP session)");
+    if (err.message.includes("requires an MCP session")) {
+      // Reachable only from a genuinely sessionless caller. Since #348 both
+      // transports have a session, so this is a real failure rather than the
+      // documented stdio behaviour it used to be.
+      fail("actual_budgets_switch: the caller had no MCP session; since #348 both transports should have one");
     } else if (err.message.includes("not found") || err.message.includes("No budget") || err.message.includes("available")) {
       console.log("  ✓ actual_budgets_switch [negative]: threw with useful message");
     } else {

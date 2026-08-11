@@ -2048,8 +2048,10 @@ export async function getBudgets(): Promise<unknown[]> {
  *
  * Issue #156:
  *   * Per-session: writes to the per-session map keyed by current sessionId.
- *     Stdio / non-session callers fall back to the env-default budget and
- *     cannot switch (returns an error).
+ *     Since #348 stdio HAS a session (a synthetic per-process id minted in
+ *     stdioServer.ts), so it can switch. Genuinely session-less callers (CLI
+ *     scripts, startup health checks) still fall back to the env-default budget
+ *     and cannot switch (returns an error).
  *   * ACL: refuses when the target budget's syncId is not in this session's
  *     allowedBudgets.
  *   * Exact match only (substring matching removed: it was a sharp edge that
@@ -2069,8 +2071,10 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   // switch would have no effect. Refuse explicitly rather than silently no-op.
   if (!sessionId) {
     throw new Error(
-      'Budget switch requires an MCP session. Stdio/local callers operate on the env-default budget; ' +
-        'configure ACTUAL_BUDGET_SYNC_ID (or the BUDGET_n_* variants) to select a different default.',
+      'Budget switch requires an MCP session. This caller has none, which means a CLI script or an ' +
+        'internal startup path rather than a client: both HTTP and stdio clients get a session (#348). ' +
+        'Such callers operate on the env-default budget; configure ACTUAL_BUDGET_SYNC_ID (or the ' +
+        'BUDGET_n_* variants) to select a different default.',
     );
   }
 
@@ -2197,7 +2201,23 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   // next withActualApi call would find no pool entry and fall back to the
   // legacy init+shutdown path. Failure here is logged but not fatal: the
   // legacy fallback still works, just less efficiently.
-  if (_skipApiInitForTests) {
+  //
+  // #348 EXCEPTION: never for a stdio session. stdio gained a synthetic session
+  // id so it could switch budgets at all, but it must stay on the legacy
+  // init/shutdown cycle. A pooled entry for stdio would be created here and then
+  // NEVER refreshed, because connectionPool.touch() is called only from
+  // httpServer.ts; it would expire after SESSION_IDLE_TIMEOUT_MINUTES and
+  // cleanupIdleConnections would api.shutdown() it WITHOUT holding withApiLock,
+  // which can tear the singleton down underneath an in-flight operation. The
+  // legacy path re-reads getActiveBudgetConfig() on every call, so the switch
+  // still takes effect; it just costs an init per operation, which is what stdio
+  // already did before this ticket.
+  if (store?.transport === 'stdio') {
+    logger.debug(
+      `[ADAPTER] switchBudget: session ${sessionId} is stdio; skipping pool materialisation ` +
+        '(stdio stays on the legacy init/shutdown path by design, #348).',
+    );
+  } else if (_skipApiInitForTests) {
     setApiInitialized(true);
   } else {
     try {

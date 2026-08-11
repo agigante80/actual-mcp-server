@@ -35,4 +35,15 @@ export const requestContext = new AsyncLocalStorage<{
   // last active budget after a restart. Undefined when there is no authenticated
   // identity (stdio / auth-disabled), in which case the preference simply no-ops.
   principal?: string;
+  // #348: which transport opened this scope. Only stdio sets it.
+  //
+  // It exists for ONE decision: switchBudget must not materialise a
+  // connection-pool entry for a stdio session. The pool's idle clock is
+  // refreshed by connectionPool.touch(), which is called only from
+  // httpServer.ts, so a stdio entry would never be touched, would expire after
+  // SESSION_IDLE_TIMEOUT_MINUTES, and cleanupIdleConnections would call
+  // api.shutdown() on it WITHOUT holding withApiLock, potentially mid-operation.
+  // Keeping stdio off the pooled branch entirely is simpler and safer than
+  // teaching the pool a second liveness model.
+  transport?: 'http' | 'stdio';
 }>();
