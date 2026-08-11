@@ -159,6 +159,38 @@ fi
 # returns the budget-file LIST with no active marker, so list membership is NOT evidence.
 ACTIVE_SYNC_ID="$(docker exec "$STDIO_CONTAINER" printenv ACTUAL_BUDGET_SYNC_ID 2>/dev/null || true)"
 
+# The disposable-budget designation, which is what permits the pre-run residue
+# sweep to DELETE leftovers from a previously crashed run.
+#
+# Read from the deployment .env when the caller has not exported it, so the
+# designation survives across runs instead of depending on whoever types the
+# command remembering a variable. An explicit export still wins.
+#
+# NEVER DERIVE THIS FROM ACTIVE_SYNC_ID. The guard's entire value is that an
+# operator deliberately named a budget as disposable and that name matches the one
+# the server loaded. Defaulting it to the loaded budget would make the comparison
+# always true, turning a safety interlock into a no-op and pointing a deleting
+# sweep at whatever happens to be mounted, which on this deployment was real
+# financial data until 2026-08-11.
+if [ -z "${MCP_TEST_BUDGET_SYNC_ID:-}" ] && [ -f "$DOCKER_DIR/actual-mcp-server/.env" ]; then
+  MCP_TEST_BUDGET_SYNC_ID="$(grep -E '^MCP_TEST_BUDGET_SYNC_ID=' "$DOCKER_DIR/actual-mcp-server/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d '"' | tr -d "'" || true)"
+  export MCP_TEST_BUDGET_SYNC_ID
+fi
+
+if [ -n "${MCP_TEST_BUDGET_SYNC_ID:-}" ]; then
+  if [ "$MCP_TEST_BUDGET_SYNC_ID" = "$ACTIVE_SYNC_ID" ]; then
+    echo "  Residue sweep ENABLED: the loaded budget is designated disposable ($ACTIVE_SYNC_ID)."
+  else
+    # Not fatal: the runner makes the same comparison and skips the sweep. Saying so
+    # here turns a silently-skipped sweep into a visible one.
+    echo "  Residue sweep DISABLED: MCP_TEST_BUDGET_SYNC_ID does not match the loaded budget."
+    echo "    designated: $MCP_TEST_BUDGET_SYNC_ID"
+    echo "    loaded:     $ACTIVE_SYNC_ID"
+  fi
+else
+  echo "  Residue sweep DISABLED: no budget designated disposable (MCP_TEST_BUDGET_SYNC_ID unset)."
+fi
+
 info "Step 7/9: HTTP integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
 set +e

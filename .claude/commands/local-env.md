@@ -17,6 +17,26 @@ Default test level if no argument given: `smoke`
    - Valid test levels: `sanity` | `smoke` | `normal` | `extended` | `full`
    - Optional flag: `--bank-sync` to include per-account bank sync tests (GoCardless/SimpleFIN)
 
+**Which budget the tests run against (since 2026-08-11).** The bearer instance
+(:3601), which is what this pipeline tests, points at a DISPOSABLE budget via
+`BEARER_BUDGET_SYNC_ID` in `$HOME/docker/librechat-MCP-actual/actual-mcp-server/.env`.
+The OIDC instance (:3600, LibreChat/LobeChat) still serves the REAL budget through
+`ACTUAL_BUDGET_SYNC_ID` and must not be repointed. At `full` the suite creates and
+deletes objects, so running it against real financial data is not acceptable; before
+this split it also meant the post-run zero-residue assertion failed on leftovers from
+earlier runs, making the gate red for reasons unrelated to the change under test.
+
+That same `.env` sets `MCP_TEST_BUDGET_SYNC_ID` to the same id, which designates the
+budget disposable and is what allows the PRE-run residue sweep to delete leftovers
+from a previously crashed run. `scripts/deploy-and-test.sh` reads it from there when
+it is not already exported, and prints whether the sweep is enabled or disabled at
+the start of the test step, so a skipped sweep is visible rather than silent.
+
+**Do not derive `MCP_TEST_BUDGET_SYNC_ID` from the loaded budget.** The guard exists
+because an operator deliberately named a budget as disposable AND that name matches
+what the server loaded. Defaulting it to the loaded budget makes the comparison
+always true and points a deleting sweep at whatever is mounted.
+
 2. Stream all output to the user as it runs. The script will:
    - Sync latest dev code → Docker build folder & rebuild MCP image
    - Pull latest upstream images (Actual Budget, LibreChat, LobeChat)

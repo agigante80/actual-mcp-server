@@ -127,6 +127,26 @@ export async function roundtripTests(client, _context) {
   // --------------------------------------------------------------------------
   // The destructive half. Only against a budget explicitly marked disposable.
   // --------------------------------------------------------------------------
+  // TRANSPORT GUARD. The round trip below imports a budget, which makes the
+  // imported copy the loaded one, and then has to switch BACK via
+  // actual_budgets_switch. The server refuses that for stdio/local callers BY
+  // DESIGN ("Budget switch requires an MCP session ... configure
+  // ACTUAL_BUDGET_SYNC_ID instead"), the same documented transport difference
+  // tests/manual/tests/budget.js skips for. Without this guard the half runs,
+  // fails on the switch-back, and leaves the stdio session pointed at the
+  // imported copy, which then corrupts the cleanup phase.
+  //
+  // This never surfaced before because the half is gated on
+  // MCP_TEST_BUDGET_SYNC_ID, and no deployment had designated a disposable budget
+  // until 2026-08-11. Enabling that designation is what made this reachable.
+  if ((process.env.MCP_TEST_TRANSPORT || 'http').toLowerCase() === 'stdio') {
+    skip(
+      'budgets_import round trip: skipped over stdio. The round trip requires switching back to the ' +
+        'configured budget, and budget switching needs an MCP session, which stdio does not have.',
+    );
+    return;
+  }
+
   const disposable = (process.env.MCP_TEST_BUDGET_SYNC_ID || '').trim();
   if (!disposable) {
     skip(
