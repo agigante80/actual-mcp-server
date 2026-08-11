@@ -2384,7 +2384,7 @@ export async function importBudget(
   opts: { type?: string; filename?: string } = {},
 ): Promise<{ id: string }> {
   observability.incrementToolCall('actual.budgets.import').catch(() => {});
-  return queueWriteOperation(async () => {
+  const result = await queueWriteOperation(async () => {
     return await withConcurrency(() =>
       retry(() => rawImportBudget(input, opts) as Promise<{ id: string }>, {
         retries: 0,
@@ -2393,6 +2393,37 @@ export async function importBudget(
       }),
     );
   });
+
+  // #349: an import CHANGES WHICH BUDGET IS LOADED, so the pool's record of it
+  // must stop naming the old one.
+  //
+  // switchBudget's #172 fast path skips the re-download when
+  // `currentEntry.syncId === found.syncId`, trusting that field as the record of
+  // what is loaded. Every other path that changes the loaded budget keeps it in
+  // sync; this one did not. The result was a switch BACK to the configured budget
+  // returning `{success: true}` while the session stayed on the imported copy, so
+  // subsequent writes and deletes landed in the wrong budget. That is the
+  // reported-success-with-no-effect class of #347, with financial data at the
+  // other end of it.
+  //
+  // The sentinel is deliberate rather than the imported id alone: configured sync
+  // ids are UUIDs, so an `imported:` prefix can never compare equal to one, which
+  // makes the fast path structurally unable to match after an import. An imported
+  // budget frequently has no cloud sync id at all, so there is no true value to
+  // record here; what matters is that the stale one is gone.
+  // EVERY entry, not just this session's. The api singleton is process-global with
+  // one loaded budget, so an import by session A changes what B..N are looking at
+  // too. Invalidating only A would leave the others matching the fast path against
+  // a record that is no longer true.
+  const invalidated = connectionPool.invalidateAllLoadedSyncIds(`imported:${result.id}`);
+  if (invalidated > 0) {
+    logger.debug(
+      `[ADAPTER] importBudget: invalidated the pooled syncId on ${invalidated} session(s) ` +
+        `(now "imported:${result.id}"), so a switch back re-downloads instead of no-opping (#349).`,
+    );
+  }
+
+  return result;
 }
 
 /**
