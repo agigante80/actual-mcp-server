@@ -775,3 +775,9 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 ---
 
 **Version:** 0.11.6 | **Tool Count:** 74 (verified LibreChat-compatible)
+
+## Sponsor
+
+I build and maintain this in my own time. It is free, it stays free, and it gets maintained either way.
+
+If it saved you some time and you feel like saying thanks, you can do that at [github.com/sponsors/agigante80](https://github.com/sponsors/agigante80). Entirely optional, and nothing about the project changes either way.
