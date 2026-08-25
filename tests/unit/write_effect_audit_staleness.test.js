@@ -8,7 +8,9 @@
 // the non-blocking api-surface-drift lane and exits 0 in every path.
 
 import { readAuditedVersion, buildReport } from '../../scripts/check-write-effect-audit.mjs';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, symlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
 let failures = 0;
@@ -58,13 +60,37 @@ console.log('\n[#362] write-effect audit staleness reminder');
 {
   const script = new URL('../../scripts/check-write-effect-audit.mjs', import.meta.url).pathname;
   let code = 0;
+  let out = '';
   try {
-    execFileSync(process.execPath, [script], { stdio: 'pipe' });
+    out = execFileSync(process.execPath, [script], { encoding: 'utf8' });
   } catch (e) {
     code = e.status ?? 1;
+    out = String(e.stdout ?? '');
   }
   check(code === 0,
     'the script exits 0 against the real tree, whether or not the audit is stale');
+  // Exit code alone is not enough: if the entry-point guard stops matching, main() never
+  // runs, nothing is printed, and the exit code is still 0. That is how a reminder becomes
+  // a silent no-op, which is the failure mode this whole file exists to prevent.
+  check(/write-effect audit:/.test(out),
+    'the CLI actually produced a report line (guards against a silent no-op)');
+
+  // And it must behave identically through a symlinked path. Node realpaths
+  // import.meta.url, so a naive argv[1] comparison silently disables the script when the
+  // repo is reached through a symlink, which this one is.
+  const linkDir = mkdtempSync(join(tmpdir(), 'wea-link-'));
+  const link = join(linkDir, 'link');
+  let linkedOut = '';
+  try {
+    symlinkSync(new URL('../../', import.meta.url).pathname, link, 'dir');
+    linkedOut = execFileSync(process.execPath, [join(link, 'scripts', 'check-write-effect-audit.mjs')], { encoding: 'utf8' });
+  } catch (e) {
+    linkedOut = String(e.stdout ?? '');
+  } finally {
+    try { rmSync(linkDir, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+  check(/write-effect audit:/.test(linkedOut),
+    'the CLI still reports when invoked through a symlinked path');
 }
 
 console.log('');

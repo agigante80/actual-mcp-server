@@ -19,7 +19,7 @@
  * Exit code is 0 in every path, including a missing or malformed document. A staleness
  * reminder that can break a pipeline is worse than no reminder.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, realpathSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -103,8 +103,11 @@ function main() {
   return 0;
 }
 
-// Exact entry-point check. A basename comparison would also fire for any unrelated script
-// that happens to share this filename.
-if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+// Exact entry-point check, through realpath. Node's ESM loader realpaths
+// `import.meta.url`, so comparing a non-realpathed `process.argv[1]` makes this script a
+// SILENT no-op when invoked through a symlink, and this repo is reachable through one
+// (`/home/alien/dev-github-personal`). Silent-and-exit-0 is indistinguishable from
+// "current", which is precisely the failure mode #362 exists to remove.
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) {
   process.exit(main());
 }

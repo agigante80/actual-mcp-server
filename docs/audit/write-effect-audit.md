@@ -10,10 +10,21 @@ apart, and neither by a test. The point of a table is that the next one is found
 looking.
 
 **Read the disposition column as a claim about a specific version.** Everything here was
-established against `@actual-app/api` 26.8.0. Upstream can turn a throwing path into a
+established against `@actual-app/api` 26.8.1. Upstream can turn a throwing path into a
 silent one in any release. The staleness reminder in `.github/workflows/api-surface-drift.yml`
 reports when the installed version has moved past the audited one. That lane is
 deliberately non-blocking: see "Why the reminder cannot be a gate" below.
+
+### How this version was verified
+
+The table was first built against 26.8.0 and then re-verified mechanically against 26.8.1
+by matching each load-bearing upstream construct in the CONFIRMED rows against the newer
+source map: both `closeAccount` early returns, the zero-transaction `db.deleteAccount`, the
+`balance is non-zero` throw, the bare `db.update` in `reopenAccount`, the `deleteRule` and
+`holdForNextMonth` boolean returns, both silent payee returns, and the `calcBufferedAmount`
+clamp. All nine still hold. Anyone moving the marker again should do the same and say so
+here, because a marker that moves without a re-check is worse than a stale one: it looks
+verified.
 
 ## How to re-run this audit
 
@@ -46,7 +57,7 @@ The [API reference](https://actualbudget.org/docs/api/reference/) is authoritati
 SIGNATURES and is how the missing `transferAccountId` parameter on `actual_accounts_close`
 was found. It is NOT usable for return values or failure behaviour:
 
-| Method | Documented | Actually returns at 26.8.0 |
+| Method | Documented | Actually returns at 26.8.1 |
 |---|---|---|
 | `deleteRule` | `Promise<null>` | `boolean`, `false` when a schedule owns the rule |
 | `holdBudgetForNextMonth` | `Promise<null>` | `boolean`, `false` when to-budget is not positive |
@@ -101,7 +112,7 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 
 ### CONFIRMED
 
-| Tool | Upstream call | Shape | Evidence at 26.8.0 | Ticket |
+| Tool | Upstream call | Shape | Evidence at 26.8.1 | Ticket |
 |---|---|---|---|---|
 | `actual_accounts_close` | `closeAccount` | B | `accounts/app.ts:613` early return on missing or already-closed; `:620` deletes a zero-transaction account; `transferAccountId` documented but not exposed by our schema | #357 LANDED |
 | `actual_accounts_reopen` | `reopenAccount` | C | `accounts/app.ts:702` bare `db.update`; phantom row is visible in `getAccounts()` | #358 LANDED |

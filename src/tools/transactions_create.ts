@@ -68,7 +68,7 @@ const tool: ToolDefinition = {
       }
 
       // The API sometimes returns a UUID and sometimes "ok" depending on server version.
-      // Both are success — "ok" means created but no ID available from this API version.
+      // Both are success: "ok" means created but no ID available from this API version.
       const maybeId = result[0] && result[0] !== 'ok' && result[0].length > 10
         ? result[0]
         : null;
