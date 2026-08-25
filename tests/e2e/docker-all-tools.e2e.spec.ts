@@ -248,7 +248,39 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     await callTool(request, sessionId, 'actual_accounts_reopen', {
       id: testContext.accountId,
     });
-    console.log('✅ Account reopened');
+    // #358: assert the resulting STATE. This test used to call the tool and log a
+    // checkmark, so it passed whether or not the reopen did anything at all.
+    const listResult = await callTool(request, sessionId, 'actual_accounts_list');
+    const accounts = extractResult(listResult);
+    const reopened = (Array.isArray(accounts) ? accounts : []).find(
+      (a: any) => a?.id === testContext.accountId,
+    );
+    expect(reopened).toBeTruthy();
+    expect(reopened.closed).toBeFalsy();
+    console.log('✅ Account reopened and confirmed open');
+  });
+
+  test('actual_accounts_reopen - unknown id is refused and creates nothing', async ({ request }) => {
+    // #358 regression. Upstream reopenAccount is a bare db.update, and db.update INSERTs
+    // when the row is absent, so an unknown id used to create a nameless account that
+    // appeared in listings and synced to other clients. The second assertion is the one
+    // that matters: nothing was created.
+    console.log('🔓 Testing actual_accounts_reopen with an unknown id...');
+    const ghostId = '00000000-0000-4000-8000-000000000358';
+    let refused = false;
+    try {
+      await callTool(request, sessionId, 'actual_accounts_reopen', { id: ghostId });
+    } catch (error: any) {
+      refused = true;
+      expect(error.message).toMatch(/not found/i);
+    }
+    expect(refused).toBe(true);
+
+    const listResult = await callTool(request, sessionId, 'actual_accounts_list');
+    const accounts = extractResult(listResult);
+    const ids = (Array.isArray(accounts) ? accounts : []).map((a: any) => a?.id);
+    expect(ids).not.toContain(ghostId);
+    console.log('✅ Unknown reopen refused, no phantom account created');
   });
 
   // ==================== CATEGORY GROUPS (4 tools) ====================
@@ -907,12 +939,23 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     
     console.log('💰 Testing actual_budgets_holdForNextMonth...');
     const currentMonth = new Date().toISOString().substring(0, 7);
-    await callTool(request, sessionId, 'actual_budgets_holdForNextMonth', {
-      month: currentMonth,
-      categoryId: testContext.categoryId,
-      amount: 10000,
-    });
-    console.log('✅ Budget held for next month');
+    // #355: the tool now reports the truth instead of always reporting success.
+    // Upstream holds nothing and returns false when the month's To Budget is not
+    // positive, which depends on the fixture budget's state and is therefore not
+    // something this test can assume either way. BOTH outcomes are correct; what is
+    // asserted is that a failure is the documented one and not something else.
+    try {
+      await callTool(request, sessionId, 'actual_budgets_holdForNextMonth', {
+        month: currentMonth,
+        categoryId: testContext.categoryId,
+        amount: 10000,
+      });
+      console.log('✅ Budget held for next month');
+    } catch (error: any) {
+      expect(error.message).toMatch(/nothing was held/i);
+      expect(error.message).toContain(currentMonth);
+      console.log('✅ Hold correctly refused: no positive To Budget in the fixture month');
+    }
   });
 
   test('actual_budgets_resetHold - should reset hold', async ({ request }) => {
