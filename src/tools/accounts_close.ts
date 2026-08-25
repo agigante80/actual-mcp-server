@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import * as observability from '../observability.js';
 import api from '@actual-app/api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { getAccounts: rawGetAccounts, closeAccount: rawCloseAccount } = api as any;
+const { getAccounts: rawGetAccounts, getCategories: rawGetCategories, closeAccount: rawCloseAccount } = api as any;
 
 const InputSchema = z
   .object({
@@ -85,6 +86,10 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
+    // #368: the adapter method that used to own this counter is no longer on the path,
+    // because this tool reads and writes through the raw api inside one session. Counting
+    // here keeps `actual.accounts.close` honest; the retry half of #368 still stands.
+    observability.incrementToolCall('actual.accounts.close').catch(() => {});
 
     return await adapter.withWriteSession(async () => {
       const before = (await rawGetAccounts()) as AccountRow[];
@@ -125,6 +130,26 @@ const tool: ToolDefinition = {
             `Transfer destination account "${destination.name ?? input.transferAccountId}" is ` +
               'CLOSED, so the closing balance would be moved somewhere hidden from most views. ' +
               'Pick an open account, or reopen that one with actual_accounts_reopen first.',
+          );
+        }
+      }
+
+      if (input.transferCategoryId) {
+        // #359's lesson, applied to the only NEW write this change adds. Upstream forwards
+        // this id straight into `transaction-add` without checking it (api.ts's
+        // account-close passes it as `categoryId`, and addTransaction is a bare batch
+        // update), so a bogus value writes a "Closing account" transaction carrying a
+        // category that does not exist, and syncs it to every client. Same dangling
+        // reference the transactions_create guard exists to prevent.
+        const categories = (await rawGetCategories()) as Array<{ id?: string }>;
+        const categoryExists = Array.isArray(categories)
+          ? categories.some((c) => c?.id === input.transferCategoryId)
+          : false;
+        if (!categoryExists) {
+          throw new Error(
+            `Transfer category "${input.transferCategoryId}" not found. Use ` +
+              'actual_categories_get to pick a category for the closing transaction, or omit ' +
+              'transferCategoryId to leave it uncategorised.',
           );
         }
       }

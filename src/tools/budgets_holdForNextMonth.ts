@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import * as observability from '../observability.js';
 import api from '@actual-app/api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -53,6 +54,10 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
+    // #368: the adapter method that used to own this counter is no longer on the path,
+    // because this tool reads and writes through the raw api inside one session. Counting
+    // here keeps `actual.budgets.holdForNextMonth` honest; the retry half of #368 stands.
+    observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
 
     return await adapter.withWriteSession(async () => {
       const before = (await rawGetBudgetMonth(input.month)) as { forNextMonth?: number } | null;

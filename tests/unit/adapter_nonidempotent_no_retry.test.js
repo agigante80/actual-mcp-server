@@ -52,6 +52,15 @@ const NON_IDEMPOTENT = [
   // a lost response would create a SECOND budget rather than return the first
   // one's id, leaving an orphan the caller never learns about.
   'rawImportBudget',
+  // #355: calcBufferedAmount is ADDITIVE (`return buffered + amount`), so a retry after a
+  // committed first attempt adds to the buffer rather than re-setting it, and if the first
+  // consumed the remaining To Budget the second returns false. Pinned here so the
+  // retries: 0 decision cannot be silently reverted.
+  'rawHoldBudgetForNextMonth',
+  // #356: deletePayee tombstones a payee. A retry after a lost response acts on an
+  // already-removed record. This predates the #350 work and is pinned now because the
+  // same review that added the line above noticed it was missing.
+  'rawDeletePayee',
 ];
 for (const fn of NON_IDEMPOTENT) {
   const m = src.match(new RegExp(`${fn}\\([^;]*?retries:\\s*(\\d)`));

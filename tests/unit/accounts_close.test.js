@@ -29,6 +29,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let closeThrows = null;
   apiDefault.getAccounts = async () =>
     accountsQueue.length > 1 ? accountsQueue.shift() : accountsQueue[0];
+  let categories = [{ id: 'cat-9', name: 'Misc' }];
+  apiDefault.getCategories = async () => categories;
   apiDefault.closeAccount = async (id, transferAccountId, transferCategoryId) => {
     closeCalls++;
     lastCloseArgs = [id, transferAccountId, transferCategoryId];
@@ -47,6 +49,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   const OPEN = { id: 'acct-1', name: 'Checking', closed: false };
   const CLOSED = { id: 'acct-1', name: 'Checking', closed: true };
   const DEST = { id: 'acct-2', name: 'Savings', closed: false };
+  const DEST_CLOSED = { id: 'acct-3', name: 'Old Savings', closed: true };
 
   const reset = (queue) => {
     accountsQueue = queue; closeCalls = 0; lastCloseArgs = null; closeThrows = null; sessionCalls = 0;
@@ -130,6 +133,43 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(threw instanceof Error,                                  'throws');
     check(!!threw && /destination/i.test(threw.message),             'error is about the destination');
     check(closeCalls === 0,                                          'raw closeAccount NOT called');
+  }
+
+  console.log('\n[#357] accounts_close: a CLOSED transfer destination is refused');
+  {
+    // The balancing transaction would land somewhere hidden from most views.
+    reset([[OPEN, DEST_CLOSED]]);
+    let threw = null;
+    try { await tool.call({ id: 'acct-1', transferAccountId: 'acct-3' }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                              'throws');
+    check(!!threw && /CLOSED/.test(threw.message),              'says the destination is closed');
+    check(!!threw && threw.message.includes('Old Savings'),     'names the destination');
+    check(closeCalls === 0,                                     'raw closeAccount NOT called');
+  }
+
+  console.log('\n[#357] accounts_close: an unknown transfer CATEGORY is refused');
+  {
+    // Upstream forwards this id into transaction-add unchecked, so a bogus value would
+    // write a closing transaction carrying a category that does not exist (#359's class).
+    reset([[OPEN, DEST]]);
+    categories = [{ id: 'cat-9', name: 'Misc' }];
+    let threw = null;
+    try {
+      await tool.call({ id: 'acct-1', transferAccountId: 'acct-2', transferCategoryId: 'cat-ghost' });
+    } catch (e) { threw = e; }
+    check(threw instanceof Error,                                     'throws');
+    check(!!threw && /category/i.test(threw.message),                  'error is about the category');
+    check(!!threw && threw.message.includes('actual_categories_get'),  'names the listing tool');
+    check(closeCalls === 0,                                            'raw closeAccount NOT called');
+  }
+
+  console.log('\n[#357] accounts_close: a known transfer category is accepted');
+  {
+    reset([[OPEN, DEST], [CLOSED, DEST]]);
+    categories = [{ id: 'cat-9', name: 'Misc' }];
+    const res = await tool.call({ id: 'acct-1', transferAccountId: 'acct-2', transferCategoryId: 'cat-9' });
+    check(res?.success === true,            'succeeds with a valid category');
+    check(lastCloseArgs?.[2] === 'cat-9',   'transferCategoryId still forwarded');
   }
 
   console.log('\n[#357] accounts_close: the write had no effect');

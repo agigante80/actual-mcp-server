@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import * as observability from '../observability.js';
 import api from '@actual-app/api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,8 +46,14 @@ type AccountRow = { id?: string; name?: string; closed?: boolean };
  *
  * The post-verify is kept as well, so the success claim is about observed state
  * rather than about the call having returned. Read, write and re-read all run inside
- * ONE `withWriteSession` cycle (#142), which also closes the read-then-write race a
- * bare pre-check would leave open.
+ * ONE `withWriteSession` cycle (#142), which keeps them in a single api lock cycle
+ * rather than three.
+ *
+ * What that does NOT give, stated precisely because an overstated guarantee gets relied
+ * on: `processWriteQueue` dispatches a batch with `Promise.allSettled`, so operations
+ * queued in the same drain window still interleave at await points. The single cycle
+ * excludes other SESSIONS, not other operations in the same batch. A concurrent
+ * close of the same account can therefore still land between this read and this write.
  *
  * TWO DELIBERATE LIMITS, recorded so they are not mistaken for oversights.
  *
@@ -73,6 +80,10 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
+    // #368: the adapter method that used to own this counter is no longer on the path,
+    // because this tool reads and writes through the raw api inside one session. Counting
+    // here keeps `actual.accounts.reopen` honest; the retry half of #368 still stands.
+    observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
 
     return await adapter.withWriteSession(async () => {
       const before = (await rawGetAccounts()) as AccountRow[];

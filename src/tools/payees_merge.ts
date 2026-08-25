@@ -21,7 +21,9 @@ const tool: ToolDefinition = {
     'the specified payees into the target, retaining the name of the target payee. All transactions ' +
     'from merged payees are reassigned to the target. TRANSFER payees (the payee Actual creates for ' +
     'each account) cannot be merged in either direction: such a merge is refused rather than ' +
-    'silently ignored. The response lists the ids that were actually merged.',
+    'silently ignored. The response lists the de-duplicated ids that were ACCEPTED for merge ' +
+    'after those checks; it is not a post-write read, so verify with actual_payees_get if you ' +
+    'need proof the payees are gone.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

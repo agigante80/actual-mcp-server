@@ -1742,9 +1742,10 @@ function summariseIds(ids: string[], limit = 5): string {
  * is indexed straight off the map, so it surfaces as
  * `TypeError: Cannot read properties of undefined (reading 'transfer_acct')`.
  *
- * One `getPayees()` read inside this same write cycle answers all three. It returns
- * the ids that were actually merged, so the caller is told what happened rather than
- * what was requested.
+ * One `getPayees()` read inside this same write cycle answers all three. It returns the
+ * de-duplicated ids it ACCEPTED for merge, which after those three refusals is the set
+ * upstream will act on. Note what it is not: there is no post-write read here, unlike
+ * close, reopen and hold, so a drop reason nobody has enumerated would still go unnoticed.
  */
 export async function mergePayees(targetId: string, mergeIds: string[]): Promise<string[]> {
   observability.incrementToolCall('actual.payees.merge').catch(() => {});
@@ -1789,10 +1790,14 @@ export async function mergePayees(targetId: string, mergeIds: string[]): Promise
       );
     }
 
+    // De-duplicate before reporting, or `['p','p']` claims two merges for one. The whole
+    // point of returning ids is that the count describes what happened.
+    const unique = [...new Set(mergeIds)];
+
     // Non-idempotent: do not retry (#165). A second merge against an
     // already-removed source payee can corrupt merge state or mislead.
-    await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 0, backoffMs: 200 }));
-    return [...mergeIds];
+    await withConcurrency(() => retry(() => rawMergePayees(targetId, unique) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    return unique;
   });
 }
 /**
