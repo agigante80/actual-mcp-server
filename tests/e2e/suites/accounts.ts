@@ -93,6 +93,17 @@ export function registerAccountTests(state: SharedState): void {
 
   test('actual_accounts_close - should close account', async ({ request }) => {
     if (!state.ctx.accountId) test.skip();
+    // #357: seed a transaction FIRST. Actual tombstones an account with no transactions
+    // when you close it, so without this the account is deleted and the reopen test below
+    // fails with not-found. This file does not execute today (see the header note and
+    // #366), and this seed is here so that whoever wires it up does not inherit a
+    // guaranteed failure. The live spec does the same thing for the same reason.
+    await callTool(request, state.sessionId, 'actual_transactions_create', {
+      account: state.ctx.accountId,
+      date: new Date().toISOString().substring(0, 10),
+      amount: 0,
+      notes: 'E2E fixture: keeps the account closable rather than deletable',
+    });
     await callTool(request, state.sessionId, 'actual_accounts_close', {
       id: state.ctx.accountId,
     });

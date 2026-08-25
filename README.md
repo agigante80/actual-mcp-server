@@ -314,7 +314,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_accounts_create` | Create new account |
 | `actual_accounts_update` | Update account details |
 | `actual_accounts_delete` | Permanently delete account |
-| `actual_accounts_close` | Close account (soft delete) |
+| `actual_accounts_close` | Close account. An account with NO transactions is REMOVED by Actual, not closed |
 | `actual_accounts_reopen` | Reopen closed account |
 | `actual_accounts_get_balance` | Get account balance at a date |
 

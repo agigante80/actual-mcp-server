@@ -30,10 +30,20 @@ const tool: ToolDefinition = {
     // "merged 3 payees" even when Actual had silently dropped every one of them for
     // being a transfer payee. The adapter now refuses that case outright and returns
     // the ids it actually merged.
+    // The adapter returns the ids it merged. If a future change ever made it return
+    // something else, falling back to `input.mergeIds` would silently reinstate exactly
+    // the "report the request, not the result" bug this ticket removed, so fail loudly
+    // instead.
     const merged = await adapter.mergePayees(input.targetId, input.mergeIds);
-    const mergedIds = Array.isArray(merged) ? merged : input.mergeIds;
+    if (!Array.isArray(merged)) {
+      throw new Error(
+        'Internal: adapter.mergePayees did not report which payees were merged. Verify the ' +
+          'merge with actual_payees_get before assuming it happened.',
+      );
+    }
+    const mergedIds = merged;
     // #356: `mergedIds` carries the full list for a caller that wants it; the human
-    // readable message names at most five, because up to 200 ids at 64 characters each
+    // readable message names at most five, because up to 50 ids at 64 characters each
     // is an unbounded echo into the response and the logs.
     const shown = mergedIds.slice(0, 5).join(', ');
     const rest = mergedIds.length - Math.min(mergedIds.length, 5);

@@ -75,7 +75,10 @@ console.log('Running generated tools smoke tests');
     createPayee: 'p-new',
     deletePayee: null,
     updatePayee: null,
-    mergePayees: null,
+    // #356: the adapter reports which ids it merged, so the stub must model that
+    // contract. Returning null here would only prove the tool tolerates a stub that
+    // does not match the code it stands in for.
+    mergePayees: ['p_2', 'p_3'],
     getRules: [{ id: 'rule1', conditions: [] }],
     createRule: 'rule-new',
     deleteRule: null,
