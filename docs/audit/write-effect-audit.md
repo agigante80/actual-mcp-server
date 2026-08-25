@@ -1,6 +1,6 @@
 # Write-effect audit
 
-<!-- audited-api-version: 26.8.0 -->
+<!-- audited-api-version: 26.8.1 -->
 
 Which write tools can report success for an upstream call that completed without doing
 anything? This file is the answer, per tool, with the evidence and the date it was taken.

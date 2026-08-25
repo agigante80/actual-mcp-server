@@ -65,6 +65,10 @@ type AccountRow = { id?: string; name?: string; closed?: boolean };
  * makes "absent afterwards" ambiguous: an account deleted by the close and an id that
  * never existed look identical from a single post-read.
  *
+ * Going through the raw api inside the session means this path no longer gets the
+ * adapter's `retry` or its `actual.accounts.close` counter. That is inherent to the #142
+ * pattern, shared with every tool using it, and tracked in #368.
+ *
  * Already-closed is reported as success rather than as an error, deliberately. The
  * caller's intent ("this account should be closed") is already satisfied, which is the
  * same idempotence argument #347 used for delete. What changes is that the response no
@@ -112,6 +116,15 @@ const tool: ToolDefinition = {
           throw new Error(
             `Transfer destination account "${input.transferAccountId}" not found. Use ` +
               'actual_accounts_list to pick an account to move the remaining balance to.',
+          );
+        }
+        if (destination.closed === true) {
+          // The balancing transaction would land in a closed account, where it is hidden
+          // from most views. Upstream does not stop this; refusing is the kinder answer.
+          throw new Error(
+            `Transfer destination account "${destination.name ?? input.transferAccountId}" is ` +
+              'CLOSED, so the closing balance would be moved somewhere hidden from most views. ' +
+              'Pick an open account, or reopen that one with actual_accounts_reopen first.',
           );
         }
       }

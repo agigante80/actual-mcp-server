@@ -8,7 +8,9 @@ import api from '@actual-app/api';
 const { getRules: rawGetRules, deleteRule: rawDeleteRule } = api as any;
 
 const InputSchema = z.object({
-  id: z.string().describe('Rule ID to delete'),
+  // Bounded for the same reason as the payee ids in #356: this value is echoed into the
+  // not-found message, into the schedule-owned refusal below, and into logger.error.
+  id: z.string().min(1).max(64).describe('Rule ID to delete'),
 });
 
 const tool: ToolDefinition = {

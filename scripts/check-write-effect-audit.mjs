@@ -20,7 +20,7 @@
  * reminder that can break a pipeline is worse than no reminder.
  */
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -103,6 +103,8 @@ function main() {
   return 0;
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/^.*[\\/]/, ''))) {
+// Exact entry-point check. A basename comparison would also fire for any unrelated script
+// that happens to share this filename.
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   process.exit(main());
 }

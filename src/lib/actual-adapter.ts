@@ -1718,7 +1718,7 @@ export async function deleteCategoryGroup(id: string): Promise<void> {
 /**
  * #356: bound what an error message echoes back. The caller supplies these ids, they end
  * up in the tool response AND in `logger.error` via actualToolsManager, and `mergeIds`
- * accepts up to 200 of them at 64 characters each. Naming a handful is enough to act on;
+ * accepts up to 50 of them at 64 characters each. Naming a handful is enough to act on;
  * naming all of them is an unbounded echo of caller-controlled input.
  */
 function summariseIds(ids: string[], limit = 5): string {
