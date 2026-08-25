@@ -10,7 +10,7 @@ const PayeeIdSchema = z.string().min(1).max(64);
 
 const InputSchema = z.object({
   targetId: PayeeIdSchema.describe('ID of the target payee to merge into (this payee will be retained)'),
-  mergeIds: z.array(PayeeIdSchema).min(1).max(200)
+  mergeIds: z.array(PayeeIdSchema).min(1).max(50)
     .describe('Array of payee IDs to merge into the target payee (these will be consolidated)'),
 });
 
@@ -32,10 +32,17 @@ const tool: ToolDefinition = {
     // the ids it actually merged.
     const merged = await adapter.mergePayees(input.targetId, input.mergeIds);
     const mergedIds = Array.isArray(merged) ? merged : input.mergeIds;
+    // #356: `mergedIds` carries the full list for a caller that wants it; the human
+    // readable message names at most five, because up to 200 ids at 64 characters each
+    // is an unbounded echo into the response and the logs.
+    const shown = mergedIds.slice(0, 5).join(', ');
+    const rest = mergedIds.length - Math.min(mergedIds.length, 5);
     return {
       success: true,
       mergedIds,
-      message: `Merged ${mergedIds.length} payee(s) into ${input.targetId}: ${mergedIds.join(', ')}`,
+      message:
+        `Merged ${mergedIds.length} payee(s) into ${input.targetId}: ${shown}` +
+        (rest > 0 ? ` (and ${rest} more)` : ''),
     };
   },
 };

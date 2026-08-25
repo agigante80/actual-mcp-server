@@ -123,6 +123,21 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(mergeCalls === 0,       'raw mergePayees NOT called');
   }
 
+  console.log('\n[#356] payees_merge: the refusal message is BOUNDED');
+  {
+    // The ids are caller-supplied and are echoed into the response and into
+    // logger.error. With 50 ids of up to 64 characters an uncapped join is a multi-kilobyte
+    // echo, so at most five are named.
+    reset([NORMAL_A]);
+    const many = Array.from({ length: 40 }, (_, i) => `p-ghost-${i}`);
+    let threw = null;
+    try { await tool.call({ targetId: 'p-normal-a', mergeIds: many }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                              'throws for unknown ids');
+    check(!!threw && /and 35 more/.test(threw.message),         'names five and summarises the rest');
+    check(!!threw && threw.message.length < 1024,               'message stays under 1KB');
+    check(!!threw && !threw.message.includes('p-ghost-39'),     'does not echo every id');
+  }
+
   console.log('\n[#356] payees_merge: schema bounds');
   {
     reset([NORMAL_A, NORMAL_B]);
@@ -137,8 +152,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
     reset([NORMAL_A, NORMAL_B]);
     threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: new Array(201).fill('p-normal-b') }); } catch (e) { threw = e; }
-    check(threw instanceof Error, 'rejects more than 200 merge sources');
+    try { await tool.call({ targetId: 'p-normal-a', mergeIds: new Array(51).fill('p-normal-b') }); } catch (e) { threw = e; }
+    check(threw instanceof Error, 'rejects more than 50 merge sources');
     check(mergeCalls === 0,       'no write attempted on any Zod failure');
   }
 
