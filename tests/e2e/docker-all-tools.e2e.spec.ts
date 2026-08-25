@@ -787,6 +787,25 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     if (!testContext.accountId) test.skip();
     console.log('🔍 Testing actual_transactions_uncategorized...');
 
+    // The fixture account was set `offbudget: true` by the accounts_update test above,
+    // and this tool DELIBERATELY excludes off-budget and closed accounts (see its
+    // description and the exclusion set it builds). So the transaction created below
+    // would never appear, and the test would be asserting the opposite of the tool's
+    // documented contract.
+    //
+    // This used to pass for the wrong reason: before #357 the close test DELETED the
+    // fixture account (Actual tombstones a zero-transaction account on close), so the
+    // account was absent from the listing, never made it into the exclusion set, and its
+    // orphaned transactions were returned. Fixing the account lifecycle exposed the
+    // faulty precondition here.
+    //
+    // Put the account back on budget for this check, then restore it, so the test proves
+    // what it claims to prove without changing what any later test sees.
+    await callTool(request, sessionId, 'actual_accounts_update', {
+      id: testContext.accountId,
+      fields: { offbudget: false },
+    });
+
     // Create a transaction with no category so we know at least one exists
     const today = new Date().toISOString().split('T')[0];
     const uncatNote = `E2E-Uncat-${Date.now()}`;
@@ -808,6 +827,22 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     const found = txns.find((t: any) => t?.notes === uncatNote);
     expect(found).toBeTruthy();
     console.log(`✅ actual_transactions_uncategorized: found ${txns.length} uncategorized, including our test transaction`);
+
+    // Negative half, and it is the tool's actual contract: an off-budget account's
+    // transactions must NOT appear. Restoring the fixture and re-asserting proves the
+    // exclusion works rather than merely restoring state.
+    await callTool(request, sessionId, 'actual_accounts_update', {
+      id: testContext.accountId,
+      fields: { offbudget: true },
+    });
+    const afterResult = await callTool(request, sessionId, 'actual_transactions_uncategorized', {
+      includeTransactions: true,
+      limit: 1000,
+    });
+    const afterData = extractResult(afterResult);
+    const afterTxns: any[] = afterData?.transactions ?? afterData?.result?.transactions ?? (Array.isArray(afterData) ? afterData : []);
+    expect(afterTxns.find((t: any) => t?.notes === uncatNote)).toBeFalsy();
+    console.log('✅ Off-budget account correctly excluded from uncategorized');
 
     // Edge: far-future date range must return empty summary
     const emptyResult = await callTool(request, sessionId, 'actual_transactions_uncategorized', {
