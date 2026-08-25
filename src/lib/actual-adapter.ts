@@ -1558,10 +1558,21 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
     logger.debug(`[UPDATE RULE] Update completed for rule ${id}`);
   });
 }
-export async function deleteRule(id: string): Promise<void> {
+/**
+ * #355: RETURNS the upstream verdict instead of discarding it, for the same reason
+ * as `holdBudgetForNextMonth` above. Upstream `deleteRule`
+ * (loot-core/src/server/transactions/transaction-rules.ts) returns `false` without
+ * throwing when a schedule owns the rule, because Actual keeps a schedule and its
+ * generated rule in step and will not let the rule be removed on its own.
+ *
+ * `actual_rules_delete` does not route through here (it calls the raw API inside one
+ * `withWriteSession` cycle, per #142), but any future caller that does must be able
+ * to see the verdict rather than rediscovering this the hard way.
+ */
+export async function deleteRule(id: string): Promise<boolean | void> {
   observability.incrementToolCall('actual.rules.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    return await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<boolean | void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function getSchedules(): Promise<unknown[]> {
@@ -1694,10 +1705,23 @@ export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void>
     await withConcurrency(() => retry(() => rawBatchBudgetUpdates(fn) as Promise<void>, { retries: 2, backoffMs: 200 }));
   });
 }
-export async function holdBudgetForNextMonth(month: string, amount: number): Promise<void> {
+/**
+ * #355: RETURNS the upstream verdict instead of discarding it.
+ *
+ * Upstream `holdForNextMonth` (loot-core/src/server/budget/actions.ts) returns a
+ * BOOLEAN: `true` when it buffered the amount, `false` when the month's To Budget
+ * is not positive and it held nothing. It does not throw in the second case. The
+ * published reference documents the method as `Promise<null>`, which is why the
+ * value was being thrown away here and the tool reported success for a hold that
+ * never happened (CWE-252, unchecked return value).
+ *
+ * `undefined` is deliberately NOT treated as a refusal: an older or future build
+ * that returns nothing must keep working. Only an explicit `false` is a verdict.
+ */
+export async function holdBudgetForNextMonth(month: string, amount: number): Promise<boolean | void> {
   observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<void>, { retries: 2, backoffMs: 200 }));
+    return await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<boolean | void>, { retries: 2, backoffMs: 200 }));
   });
 }
 export async function resetBudgetHold(month: string): Promise<void> {
