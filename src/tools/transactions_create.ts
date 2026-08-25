@@ -56,13 +56,13 @@ const tool: ToolDefinition = {
     try {
       // Use addTransactions - it reliably creates transactions.
       // Note: API may return "ok" string instead of a UUID depending on server version.
-      // "ok" is a valid success indicator — the transaction WAS created.
+      // "ok" is a valid success indicator: the transaction WAS created.
       const result = await adapter.addTransactions(payload as any);
 
       if (!result || result.length === 0) {
         return {
           success: false as const,
-          error: 'Failed to create transaction — no result returned from API. Use actual_accounts_list to verify the account ID.',
+          error: 'Failed to create transaction: no result returned from API. Use actual_accounts_list to verify the account ID.',
           id: null,
         };
       }
