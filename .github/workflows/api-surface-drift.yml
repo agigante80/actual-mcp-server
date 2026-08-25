@@ -67,6 +67,20 @@ jobs:
         id: drift
         run: node scripts/api-surface-drift.mjs
 
+      # #362: report when docs/audit/write-effect-audit.md was taken against an older
+      # @actual-app/api than the one installed. Every disposition in that document is a
+      # claim about one version, and the release train bumps that dependency on a
+      # schedule, so it rots without anybody touching the repo.
+      #
+      # It belongs HERE and nowhere else, for the same reason the surface check does.
+      # The script exits 0 in every path and `continue-on-error` is deliberate belt and
+      # braces: a staleness reminder that can break a pipeline recreates #321, where a
+      # check whose result changed with no commit killed the release train for two
+      # nights and blocked a security PR behind a failure nobody had caused.
+      - name: 🗒️ Write-effect audit staleness (report only, never fails)
+        continue-on-error: true
+        run: node scripts/check-write-effect-audit.mjs
+
   # ---------------------------------------------------------------------------
   # report: holds `issues: write`, and NEVER imports @actual-app/api or runs
   # `npm ci`. It consumes detect's JSON payload and nothing else.
