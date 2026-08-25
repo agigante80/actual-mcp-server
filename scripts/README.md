@@ -1,6 +1,6 @@
 # scripts/
 
-Utility and build scripts. All are invoked via `package.json` scripts or from within the Docker stack — none need to be run directly during normal development.
+Utility and build scripts. All are invoked via `package.json` scripts or from within the Docker stack: none need to be run directly during normal development.
 
 ## Deployment & maintenance
 
@@ -64,6 +64,12 @@ bash scripts/deploy-and-test.sh full
 | Script | npm script | Purpose |
 |---|---|---|
 | `direct-sync/bank-sync-direct.mjs` | `npm run direct-sync` | Connect **directly** to Actual Budget (no MCP layer). Lists all accounts then runs bank sync per account. Use `-- --list` to skip sync, `-- --budget <name>` to target a specific budget, `-- --help` for all options. Reads the same `ACTUAL_*` / `BUDGET_n_*` env vars as the server; writes a timestamped JSON log to `logs/direct-sync-*.log`. Useful for diagnosing GoCardless/SimpleFIN issues and validating server connectivity independently of MCP. |
+
+## Audit maintenance
+
+| Script | npm script | Purpose |
+|--------|-----------|---------|
+| `check-write-effect-audit.mjs` | `npm run audit:write-effect` | Reports when `docs/audit/write-effect-audit.md` was taken against an older `@actual-app/api` than the one installed, and names the dispositions that depend on upstream continuing to throw. **Exits 0 in every path, deliberately.** It runs in the NON-BLOCKING `api-surface-drift` lane and must never gate a build: a check whose result changes with no commit is exactly what killed the release train in #321. |
 
 ## Versioning
 
