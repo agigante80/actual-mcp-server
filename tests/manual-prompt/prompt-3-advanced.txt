@@ -94,8 +94,12 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 
 - actual_budgets_holdForNextMonth
   Input: { month: current month, amount: 10000 }
-  Expect: success (holds $100.00 for next month)
-  Verify: toBudget for the month decreased by 10000 cents
+  Expect: EITHER success (holds $100.00 for next month) OR a refusal saying "nothing was
+    held" when that month has no positive To Budget left. Both are correct answers and
+    which one you get depends on the budget's state. A refusal is NOT a failure of this
+    step; reporting success while holding nothing would be (#355).
+  Verify: on success, toBudget for the month decreased by 10000 cents. On refusal,
+    toBudget is unchanged.
 
 - actual_budgets_resetHold
   Input: { month: current month }

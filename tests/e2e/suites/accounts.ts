@@ -1,6 +1,11 @@
 /**
  * tests/e2e/suites/accounts.ts
  *
+ * NOTE (#366): nothing currently executes this file. `registerAccountTests` has no call
+ * site and neither Playwright config matches `suites/*.ts`, so the assertions below do
+ * NOT run. The live equivalents live in `tests/e2e/docker-all-tools.e2e.spec.ts`. Do not
+ * add coverage here expecting it to gate anything until #366 is resolved.
+ *
  * Registration function for account lifecycle tests (7 tools, 9 named tests).
  * Writes state.ctx.accountId and state.ctx.accountName for use by later suites.
  */

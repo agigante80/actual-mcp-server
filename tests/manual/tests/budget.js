@@ -288,16 +288,31 @@ export async function budgetTests(client, context) {
   console.log("\nHolding budget for next month...");
   const beforeHold = await callTool("actual_budgets_getMonth", { month: currentDate });
   const toBudgetBefore = (beforeHold.result || beforeHold)?.toBudget ?? null;
-  await callTool("actual_budgets_holdForNextMonth", {
-    month: currentDate,
-    amount: 10000,
-  });
-  console.log("✓ Held 100.00 for next month");
+  // #355: the tool now reports the truth rather than always reporting success.
+  // Upstream holds nothing and returns false when the month has no positive To Budget
+  // left, which depends on the state of whichever budget this run is pointed at. Both
+  // outcomes are legitimate here; an unexpected error is not, so the refusal is matched
+  // narrowly rather than swallowed.
+  let holdRefused = false;
+  try {
+    await callTool("actual_budgets_holdForNextMonth", {
+      month: currentDate,
+      amount: 10000,
+    });
+    console.log("✓ Held 100.00 for next month");
+  } catch (err) {
+    const msg = err && err.message ? err.message : String(err);
+    if (!/nothing was held/i.test(msg)) throw err;
+    holdRefused = true;
+    console.log("✓ Hold correctly refused: this month has no positive To Budget");
+  }
   {
     const afterHold = await callTool("actual_budgets_getMonth", { month: currentDate });
     const toBudgetAfter = (afterHold.result || afterHold)?.toBudget ?? null;
     // toBudget may not reflect holdForNextMonth (Actual tracks hold internally): log informational only
-    if (toBudgetBefore !== null && toBudgetAfter !== null) {
+    if (holdRefused) {
+      console.log(`  ✓ Verify hold: nothing was held, so no change expected (toBudget=${toBudgetAfter})`);
+    } else if (toBudgetBefore !== null && toBudgetAfter !== null) {
       console.log(`  ✓ Verify hold: toBudget before=${toBudgetBefore}, after=${toBudgetAfter} (delta=${toBudgetAfter - toBudgetBefore})`);
     } else {
       console.log(`  ⚠ Verify hold: toBudget field not available in response (skipped)`);
