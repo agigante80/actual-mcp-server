@@ -18,6 +18,12 @@ console.log('Running generated tools smoke tests');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};
+  // #358: accounts_reopen reads and writes through the RAW api inside one
+  // withWriteSession cycle (the #142 pattern), so it needs raw stubs here, not just
+  // the adapter stubs below. The account is returned already open, which is the
+  // shape the tool's read-verify-read sequence expects for a successful call.
+  apiDefault.getAccounts = async () => [{ id: '00000000-0000-0000-0000-000000000001', name: 'Cash', closed: false }];
+  apiDefault.reopenAccount = async () => {};
   apiDefault.getRules = async () => [{ id: 'rule1', conditions: [] }];
   apiDefault.createRule = async () => 'rule-new';
   apiDefault.updateRule = async () => {};
