@@ -1,7 +1,7 @@
 /**
  * tests/e2e/suites/accounts.ts
  *
- * Registration function for account lifecycle tests (7 tools, 8 named tests).
+ * Registration function for account lifecycle tests (7 tools, 9 named tests).
  * Writes state.ctx.accountId and state.ctx.accountName for use by later suites.
  */
 
@@ -99,6 +99,37 @@ export function registerAccountTests(state: SharedState): void {
     await callTool(request, state.sessionId, 'actual_accounts_reopen', {
       id: state.ctx.accountId,
     });
-    console.log('✅ Account reopened');
+    // #358: assert the resulting STATE, not merely that the call returned. This test
+    // previously logged a checkmark and would have passed even if the reopen had done
+    // nothing at all.
+    const listResult = await callTool(request, state.sessionId, 'actual_accounts_list', {});
+    const data = extractResult(listResult);
+    const accounts = Array.isArray(data) ? data : (data?.result ?? data?.accounts ?? []);
+    const reopened = (accounts as any[]).find((a: any) => a?.id === state.ctx.accountId);
+    expect(reopened).toBeTruthy();
+    expect(reopened.closed).toBeFalsy();
+    console.log('✅ Account reopened and confirmed open');
+  });
+
+  test('actual_accounts_reopen - unknown id is refused and creates nothing', async ({ request }) => {
+    // #358 regression. Upstream reopenAccount is a bare db.update, and db.update INSERTs
+    // when the row is absent, so an unknown id used to create a nameless account that
+    // showed up in listings and synced to other clients. The second assertion is the one
+    // that matters: nothing was created.
+    const ghostId = '00000000-0000-4000-8000-000000000358';
+    let refused = false;
+    try {
+      await callTool(request, state.sessionId, 'actual_accounts_reopen', { id: ghostId });
+    } catch {
+      refused = true;
+    }
+    expect(refused).toBe(true);
+
+    const listResult = await callTool(request, state.sessionId, 'actual_accounts_list', {});
+    const data = extractResult(listResult);
+    const accounts = Array.isArray(data) ? data : (data?.result ?? data?.accounts ?? []);
+    const ids = (accounts as any[]).map((a: any) => a?.id);
+    expect(ids).not.toContain(ghostId);
+    console.log('✅ Unknown reopen refused, no phantom account created');
   });
 }
