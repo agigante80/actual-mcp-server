@@ -18,12 +18,17 @@ console.log('Running generated tools smoke tests');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};
-  // #358: accounts_reopen reads and writes through the RAW api inside one
-  // withWriteSession cycle (the #142 pattern), so it needs raw stubs here, not just
-  // the adapter stubs below. The account is returned already open, which is the
-  // shape the tool's read-verify-read sequence expects for a successful call.
-  apiDefault.getAccounts = async () => [{ id: '00000000-0000-0000-0000-000000000001', name: 'Cash', closed: false }];
-  apiDefault.reopenAccount = async () => {};
+  // #358 and #357: accounts_reopen and accounts_close read and write through the RAW
+  // api inside one withWriteSession cycle (the #142 pattern), so they need raw stubs
+  // here, not just the adapter stubs below. Both verify the resulting state, so the
+  // fake has to be faithful enough to change: closing flips the flag, reopening clears
+  // it. A static stub would make one of the two tools fail its own verification.
+  let smokeAccountClosed = false;
+  apiDefault.getAccounts = async () => [
+    { id: '00000000-0000-0000-0000-000000000001', name: 'Cash', closed: smokeAccountClosed },
+  ];
+  apiDefault.closeAccount = async () => { smokeAccountClosed = true; };
+  apiDefault.reopenAccount = async () => { smokeAccountClosed = false; };
   apiDefault.getRules = async () => [{ id: 'rule1', conditions: [] }];
   apiDefault.createRule = async () => 'rule-new';
   apiDefault.updateRule = async () => {};
