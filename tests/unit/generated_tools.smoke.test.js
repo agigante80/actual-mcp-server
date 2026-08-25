@@ -29,6 +29,12 @@ console.log('Running generated tools smoke tests');
   ];
   apiDefault.closeAccount = async () => { smokeAccountClosed = true; };
   apiDefault.reopenAccount = async () => { smokeAccountClosed = false; };
+  // #355: holdForNextMonth reads forNextMonth before and after its write, so the fake has
+  // to move when the hold succeeds. A static stub would make the tool correctly report
+  // that nothing was held, and the smoke assertion of success would fail.
+  let smokeBuffered = 0;
+  apiDefault.getBudgetMonth = async (month) => ({ month, toBudget: 500000, forNextMonth: smokeBuffered });
+  apiDefault.holdBudgetForNextMonth = async (_month, amount) => { smokeBuffered += amount; return true; };
   apiDefault.getRules = async () => [{ id: 'rule1', conditions: [] }];
   apiDefault.createRule = async () => 'rule-new';
   apiDefault.updateRule = async () => {};

@@ -1713,6 +1713,18 @@ export async function deleteCategoryGroup(id: string): Promise<void> {
   });
 }
 /**
+ * #356: bound what an error message echoes back. The caller supplies these ids, they end
+ * up in the tool response AND in `logger.error` via actualToolsManager, and `mergeIds`
+ * accepts up to 200 of them at 64 characters each. Naming a handful is enough to act on;
+ * naming all of them is an unbounded echo of caller-controlled input.
+ */
+function summariseIds(ids: string[], limit = 5): string {
+  const shown = ids.slice(0, limit).map((id) => (id.length > 64 ? `${id.slice(0, 64)}...` : id));
+  const rest = ids.length - shown.length;
+  return rest > 0 ? `${shown.join(', ')} (and ${rest} more)` : shown.join(', ');
+}
+
+/**
  * #356: merge, with the pre-flight it never had.
  *
  * Upstream `db.mergePayees` fails silently in two ways and throws unhelpfully in a
@@ -1756,14 +1768,14 @@ export async function mergePayees(targetId: string, mergeIds: string[]): Promise
     const missing = mergeIds.filter((id) => !byId.has(id));
     if (missing.length > 0) {
       throw new Error(
-        `Payee(s) not found: ${missing.join(', ')}. Use actual_payees_get to list available payees.`
+        `Payee(s) not found: ${summariseIds(missing)}. Use actual_payees_get to list available payees.`
       );
     }
     const transfers = mergeIds.filter((id) => byId.get(id)?.transfer_acct);
     if (transfers.length > 0) {
-      const names = transfers.map((id) => byId.get(id)?.name ?? id);
+      const names = transfers.map((id) => String(byId.get(id)?.name ?? id));
       throw new Error(
-        `Cannot merge TRANSFER payee(s): ${names.join(', ')}. They belong to accounts of the ` +
+        `Cannot merge TRANSFER payee(s): ${summariseIds(names)}. They belong to accounts of the ` +
           'same name, and Actual silently drops them from a merge rather than merging them. ' +
           'Remove them from mergeIds, or delete the account with actual_accounts_delete.'
       );
