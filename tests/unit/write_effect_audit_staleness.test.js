@@ -9,6 +9,7 @@
 
 import { readAuditedVersion, buildReport } from '../../scripts/check-write-effect-audit.mjs';
 import { readFileSync, mkdtempSync, symlinkSync, rmSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -58,7 +59,10 @@ console.log('\n[#362] write-effect audit staleness reminder');
 
 // ── the guard that matters: the script itself ALWAYS exits 0 ───────────────────
 {
-  const script = new URL('../../scripts/check-write-effect-audit.mjs', import.meta.url).pathname;
+  // fileURLToPath, NOT URL.pathname: pathname is percent-encoded, so a checkout path
+  // containing a space would hand execFileSync a path that does not exist and the failure
+  // would surface as "the CLI produced no output". The script under test gets this right.
+  const script = fileURLToPath(new URL('../../scripts/check-write-effect-audit.mjs', import.meta.url));
   let code = 0;
   let out = '';
   try {
@@ -85,7 +89,10 @@ console.log('\n[#362] write-effect audit staleness reminder');
     // Creating the link is a PRECONDITION, not the assertion. Some environments deny
     // symlink creation (Windows without Developer Mode, hardened runners), and an EPERM
     // there must read as "cannot test this here", not as a broken CLI.
-    symlinkSync(new URL('../../', import.meta.url).pathname, link, 'dir');
+    // Same reason, and worse here: symlinkSync does not validate its target, so a
+    // percent-encoded path would create a link pointing nowhere and the skip branch below
+    // would not engage.
+    symlinkSync(fileURLToPath(new URL('../../', import.meta.url)), link, 'dir');
     linkCreated = true;
   } catch {
     console.log('  ~ skipped: this environment does not allow creating a symlink');
