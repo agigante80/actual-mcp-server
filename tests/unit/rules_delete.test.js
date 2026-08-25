@@ -18,7 +18,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let rulesResponse = [];
   let deleteCalls = 0;
   apiDefault.getRules = async () => rulesResponse;
-  apiDefault.deleteRule = async (_id) => { deleteCalls++; };
+  // #355: the stub must return what upstream actually returns. It used to return
+  // `undefined`, which encoded the same wrong assumption the tool did: that
+  // `deleteRule` has no verdict. It returns `true` when it deleted the rule and
+  // `false` when a schedule owns it.
+  let deleteResult = true;
+  apiDefault.deleteRule = async (_id) => { deleteCalls++; return deleteResult; };
 
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/rules_delete.js').then(m => m.default),
@@ -30,7 +35,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   const orig = adapter.withWriteSession;
   adapter.withWriteSession = async (fn) => { withWriteSessionCalls++; return await fn(); };
 
-  const reset = () => { withWriteSessionCalls = 0; deleteCalls = 0; rulesResponse = []; };
+  const reset = () => { withWriteSessionCalls = 0; deleteCalls = 0; rulesResponse = []; deleteResult = true; };
 
   console.log('\n[#142] rules_delete: positive happy path');
   {
@@ -54,6 +59,33 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(threw?.message?.includes('actual_rules_get'), 'error mentions list tool');
     check(withWriteSessionCalls === 1,                  'exactly one withWriteSession call');
     check(deleteCalls === 0,                            'rawDeleteRule NOT called');
+  }
+
+  console.log('\n[#355] rules_delete: rule is owned by a schedule, upstream refuses');
+  {
+    reset();
+    rulesResponse = [{ id: 'rule-sched' }];
+    deleteResult = false;                 // what upstream returns for a schedule's rule
+    let threw = null;
+    try { await tool.call({ id: 'rule-sched' }); } catch (e) { threw = e; }
+    check(threw instanceof Error,                             'throws instead of reporting success');
+    check(!!threw && /schedule/i.test(threw.message),          'error says the rule belongs to a schedule');
+    check(!!threw && threw.message.includes('actual_schedules_delete'),
+                                                              'error names actual_schedules_delete');
+    check(!!threw && threw.message.includes('rule-sched'),     'error names the rule id');
+    check(deleteCalls === 1,                                   'the delete was still attempted exactly once');
+    check(withWriteSessionCalls === 1,                         'exactly one withWriteSession call (#142)');
+  }
+
+  console.log('\n[#355] rules_delete: back-compat, upstream returned no verdict');
+  {
+    // Only an EXPLICIT false is a refusal. A build that returns undefined must still
+    // succeed, so this stays correct against older and future @actual-app/api versions.
+    reset();
+    rulesResponse = [{ id: 'rule-1' }];
+    deleteResult = undefined;
+    const res = await tool.call({ id: 'rule-1' });
+    check(res?.success === true, 'undefined return is treated as success, not refusal');
   }
 
   console.log('\n[#142] rules_delete: schema rejection');
