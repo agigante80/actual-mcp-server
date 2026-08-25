@@ -1492,10 +1492,30 @@ export async function deletePayee(id: string): Promise<void> {
     const payees = await withConcurrency(() =>
       retry(() => rawGetPayees() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
     );
-    const exists = (payees as any[]).some((p: any) => p.id === id);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const found = (payees as any[]).find((p: any) => p.id === id) as
+      | { id: string; name?: string; transfer_acct?: string | null }
+      | undefined;
+    const exists = Boolean(found);
     if (!exists) {
       throw new Error(
         `Payee "${id}" not found. Use actual_payees_get to list available payees.`
+      );
+    }
+    // #356: the existence check above is not enough. Actual refuses to delete a
+    // TRANSFER payee (the payee it auto-creates for each account) and refuses
+    // SILENTLY: `db.deletePayee` opens with `if (transfer_acct) { return; }`, so the
+    // call returns normally having done nothing and the tool reported success.
+    //
+    // `getPayees()` deliberately INCLUDES transfer payees, which is why they reach
+    // this point at all, and it selects `COALESCE(a.name, p.name) AS name`, so a
+    // transfer payee's own `name` is already the owning account's name. No second
+    // lookup is needed to write a useful message.
+    if (found?.transfer_acct) {
+      throw new Error(
+        `Payee "${found.name ?? id}" is a TRANSFER payee: it belongs to the account of the ` +
+          'same name and Actual will not delete it on its own. Delete the account instead ' +
+          'with actual_accounts_delete, which removes its transfer payee too.'
       );
     }
     await withConcurrency(() =>
@@ -1651,12 +1671,72 @@ export async function deleteCategoryGroup(id: string): Promise<void> {
     await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
-export async function mergePayees(targetId: string, mergeIds: string[]): Promise<void> {
+/**
+ * #356: merge, with the pre-flight it never had.
+ *
+ * Upstream `db.mergePayees` fails silently in two ways and throws unhelpfully in a
+ * third:
+ *
+ *   if (payees[target].transfer_acct != null) { return; }          // silent no-op
+ *   ids = ids.filter(id => payees[id].transfer_acct == null);      // sources dropped
+ *
+ * A transfer-payee target makes the whole call a no-op; transfer-payee sources are
+ * dropped from the list without a word, while the tool still reported "merged N
+ * payee(s)" using the length of its own INPUT. And an id that does not exist at all
+ * is indexed straight off the map, so it surfaces as
+ * `TypeError: Cannot read properties of undefined (reading 'transfer_acct')`.
+ *
+ * One `getPayees()` read inside this same write cycle answers all three. It returns
+ * the ids that were actually merged, so the caller is told what happened rather than
+ * what was requested.
+ */
+export async function mergePayees(targetId: string, mergeIds: string[]): Promise<string[]> {
   observability.incrementToolCall('actual.payees.merge').catch(() => {});
   return queueWriteOperation(async () => {
+    const payees = await withConcurrency(() =>
+      retry(() => rawGetPayees() as Promise<Array<{ id: string; name?: string; transfer_acct?: string | null }>>, { retries: 2, backoffMs: 200 })
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const byId = new Map((payees as any[]).map((p: any) => [p.id, p]));
+
+    const target = byId.get(targetId);
+    if (!target) {
+      throw new Error(
+        `Payee "${targetId}" not found. Use actual_payees_get to list available payees.`
+      );
+    }
+    if (target.transfer_acct) {
+      throw new Error(
+        `Target payee "${target.name ?? targetId}" is a TRANSFER payee and cannot be merged ` +
+          'into. Actual silently ignores such a merge. Pick a normal payee as the target.'
+      );
+    }
+
+    const missing = mergeIds.filter((id) => !byId.has(id));
+    if (missing.length > 0) {
+      throw new Error(
+        `Payee(s) not found: ${missing.join(', ')}. Use actual_payees_get to list available payees.`
+      );
+    }
+    const transfers = mergeIds.filter((id) => byId.get(id)?.transfer_acct);
+    if (transfers.length > 0) {
+      const names = transfers.map((id) => byId.get(id)?.name ?? id);
+      throw new Error(
+        `Cannot merge TRANSFER payee(s): ${names.join(', ')}. They belong to accounts of the ` +
+          'same name, and Actual silently drops them from a merge rather than merging them. ' +
+          'Remove them from mergeIds, or delete the account with actual_accounts_delete.'
+      );
+    }
+    if (mergeIds.includes(targetId)) {
+      throw new Error(
+        `Payee "${targetId}" appears as both the merge target and a merge source.`
+      );
+    }
+
     // Non-idempotent: do not retry (#165). A second merge against an
     // already-removed source payee can corrupt merge state or mislead.
     await withConcurrency(() => retry(() => rawMergePayees(targetId, mergeIds) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    return [...mergeIds];
   });
 }
 /**
