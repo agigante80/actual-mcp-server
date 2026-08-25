@@ -7,7 +7,10 @@ import api from '@actual-app/api';
 const { getAccounts: rawGetAccounts, reopenAccount: rawReopenAccount } = api as any;
 
 const InputSchema = z.object({
-  id: z.string().describe('Account ID to reopen'),
+  // Bounded, because the id is echoed into the error message and into the structured
+  // logs. Not tightened to CommonSchemas.accountId (a UUID) here: several fixtures use
+  // short non-UUID ids, and that sweep is tracked separately alongside #365.
+  id: z.string().min(1).max(64).describe('Account ID to reopen'),
 });
 
 type AccountRow = { id?: string; name?: string; closed?: boolean };
@@ -44,6 +47,20 @@ type AccountRow = { id?: string; name?: string; closed?: boolean };
  * rather than about the call having returned. Read, write and re-read all run inside
  * ONE `withWriteSession` cycle (#142), which also closes the read-then-write race a
  * bare pre-check would leave open.
+ *
+ * TWO DELIBERATE LIMITS, recorded so they are not mistaken for oversights.
+ *
+ * The not-found message covers both reasons an id can be missing (never existed, or
+ * removed by a close while it had no transactions) rather than distinguishing them.
+ * `q().withDead()` would tell them apart by reading tombstoned rows, at the cost of an
+ * extra query on the failure path. Collapsing them was chosen because the message names
+ * both cases and the remedy is the same either way. If that proves confusing in
+ * practice, `withDead()` is the tool to reach for.
+ *
+ * Going through the raw api inside the session means this path no longer gets the
+ * adapter's `retry` or its `actual.accounts.reopen` counter. That is inherent to the
+ * #142 pattern and is shared with every other tool using it (`rules_delete`,
+ * `schedules_delete`, `category_groups_delete`); it is not specific to this change.
  */
 const tool: ToolDefinition = {
   name: 'actual_accounts_reopen',

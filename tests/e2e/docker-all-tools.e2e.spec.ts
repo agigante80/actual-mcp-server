@@ -233,15 +233,34 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
 
   test('actual_accounts_close - should close account', async ({ request }) => {
     if (!testContext.accountId) test.skip();
-    
+
+    // #357/#358 FIXTURE FIX, and it is load bearing for everything after it in this
+    // file. Actual TOMBSTONES an account that has no transactions when you close it
+    // (closeAccount: `if (numTransactions === 0) await db.deleteAccount({ id })`), and
+    // getAccounts filters `tombstone = 0`. The fixture account is created with balance 0
+    // and the first transaction is not created until much later in this spec, so this
+    // close used to DELETE it, and every later test that reused testContext.accountId
+    // was operating on an id that no longer existed. Those tests passed only because the
+    // tools silently accepted the dead id, which is the whole class of bug #350 is about.
+    //
+    // Seeding one transaction first is the same idiom tests/manual/tests/account.js has
+    // used for this exact reason. With it, close means closed, reopen works, and the rest
+    // of the suite runs against a live account.
+    console.log('🌱 Seeding a transaction so the close does not tombstone the account...');
+    await callTool(request, sessionId, 'actual_transactions_create', {
+      account: testContext.accountId,
+      date: new Date().toISOString().substring(0, 10),
+      amount: 0,
+      notes: 'E2E fixture: keeps the account closable rather than deletable',
+    });
+
     console.log('🔒 Testing actual_accounts_close...');
     const result = await callTool(request, sessionId, 'actual_accounts_close', {
       id: testContext.accountId,
     });
-    // #357: assert the resulting STATE. Two outcomes are correct and which one applies
-    // depends on whether the fixture account has any transactions: Actual REMOVES a
-    // zero-transaction account on close rather than closing it. The tool now says which
-    // happened, so the test asserts against that instead of assuming.
+    // #357: assert the resulting STATE. Both outcomes are handled because the tool now
+    // reports which one happened, but with the seed transaction above the closed branch
+    // is the expected one.
     const closeResult = extractResult(result);
     const listResult = await callTool(request, sessionId, 'actual_accounts_list');
     const accounts = extractResult(listResult);

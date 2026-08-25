@@ -958,6 +958,32 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
       throw new Error('Transaction must include account or accountId');
     }
 
+    // #359: upstream never validates the account. `addTransactions`
+    // (loot-core/src/server/accounts/sync.ts) takes acctId, normalises, runs rules and
+    // inserts, and `api/transactions-add` returns the string 'ok' unconditionally. Rule
+    // evaluation does not rescue us either: prepareTransactionForRules resolves the
+    // account with `r._account?.name || ''`. So a bogus account id produced rows with a
+    // dangling `account` column that NO listing tool can return (they all filter by
+    // account), that sync to every other client, and the tool reported success.
+    //
+    // This is the same guard `createTransfer` has performed since it was written, using
+    // the same single accounts read inside the same write cycle. A CLOSED account is
+    // deliberately still allowed: importing history into a closed account is legitimate,
+    // which is why this diverges from createTransfer, where a closed account would be an
+    // odd transfer destination.
+    const accounts = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<Array<{ id: string; name?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const accountExists = (accounts as any[]).some((a: any) => a?.id === accountId);
+    if (!accountExists) {
+      throw new Error(
+        `Account "${accountId}" not found. Use actual_accounts_list to find valid accounts. ` +
+          'No transactions were created: Actual would otherwise have written them against an ' +
+          'account that does not exist, where no tool could retrieve them.'
+      );
+    }
+
     // Remove account/accountId from transaction objects as they're passed separately
     const cleanedTxs = txArray.map(tx => {
       const { account, accountId: _, ...rest } = tx as any;
