@@ -4,7 +4,13 @@ import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format').describe('Budget month in YYYY-MM format'),
-  amount: z.number().int().describe('Amount in cents to hold for next month'),
+  // #355: upstream rejects a non-positive amount with
+  // APIError('Amount to hold needs to be greater than 0') BEFORE it ever reaches
+  // holdForNextMonth, so the schema rejects it here instead: same answer, no wasted
+  // round trip, and the message names the field. No working client can be sending a
+  // value upstream already refuses.
+  amount: z.number().int().positive('amount must be greater than 0 (integer cents)')
+    .describe('Amount in cents to hold for next month. Must be greater than 0.'),
 });
 
 const tool: ToolDefinition = {

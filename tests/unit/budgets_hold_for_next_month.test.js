@@ -86,6 +86,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     try { await tool.call({ month: '2026-01', amount: 12.5 }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'throws on a non-integer amount (cents only)');
     check(holdCalls === 0,        'no write attempted on Zod failure');
+
+    // #355: upstream rejects <= 0 with its own APIError before holdForNextMonth runs.
+    // The schema rejects it first so the caller gets a message naming the field.
+    for (const bad of [0, -1]) {
+      reset();
+      threw = null;
+      try { await tool.call({ month: '2026-01', amount: bad }); } catch (e) { threw = e; }
+      check(threw instanceof Error,   `throws on amount ${bad}`);
+      check(holdCalls === 0,          `no write attempted for amount ${bad}`);
+    }
   }
 
   adapter.holdBudgetForNextMonth = originalHold;
