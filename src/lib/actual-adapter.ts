@@ -1630,11 +1630,26 @@ export async function setBudgetCarryover(month: string, categoryId: string, flag
     await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
-export async function closeAccount(id: string): Promise<void> {
+/**
+ * #357: forwards the two transfer arguments the published API documents.
+ *
+ * `closeAccount(id, transferAccountId?, transferCategoryId?)` is the documented
+ * signature, and upstream throws `balance is non-zero: transferAccountId is required`
+ * when an account with a balance is closed without one. This adapter used to pass the
+ * id alone, so an account with a non-zero balance could not be closed through this
+ * server at all: the caller was told to supply a parameter no tool accepted.
+ *
+ * Both remain OPTIONAL. A zero-balance account still closes with the id alone.
+ */
+export async function closeAccount(
+  id: string,
+  transferAccountId?: string,
+  transferCategoryId?: string,
+): Promise<void> {
   observability.incrementToolCall('actual.accounts.close').catch(() => {});
   return queueWriteOperation(async () => {
     // Non-idempotent: do not retry (#165).
-    await withConcurrency(() => retry(() => rawCloseAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    await withConcurrency(() => retry(() => rawCloseAccount(id, transferAccountId, transferCategoryId) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function reopenAccount(id: string): Promise<void> {

@@ -111,6 +111,13 @@ export async function accountTests(client, context) {
   // Add a dummy transaction (amount=0) so closeAccount sets closed=1 instead of tombstoning.
   // Actual tombstones (hard-deletes) accounts with zero transactions on close, making them
   // invisible to getAccounts and unrecoverable by reopen.
+  //
+  // #357: that behaviour is now ASSERTED rather than only worked around here. This
+  // fixture keeps a closable account for the close/reopen lifecycle below; the
+  // remove-on-close path has its own case in tests/e2e/docker-all-tools.e2e.spec.ts and
+  // in tests/unit/accounts_close.test.js. The workaround stays because the lifecycle
+  // genuinely needs an account that survives being closed, not because the hazard is
+  // undocumented.
   console.log("\nAdding dummy transaction (amount=0) to prevent tombstone-on-close...");
   const today = new Date().toISOString().slice(0, 10);
   await callTool("actual_transactions_create", {

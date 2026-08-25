@@ -235,10 +235,46 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     if (!testContext.accountId) test.skip();
     
     console.log('🔒 Testing actual_accounts_close...');
-    await callTool(request, sessionId, 'actual_accounts_close', {
+    const result = await callTool(request, sessionId, 'actual_accounts_close', {
       id: testContext.accountId,
     });
-    console.log('✅ Account closed');
+    // #357: assert the resulting STATE. Two outcomes are correct and which one applies
+    // depends on whether the fixture account has any transactions: Actual REMOVES a
+    // zero-transaction account on close rather than closing it. The tool now says which
+    // happened, so the test asserts against that instead of assuming.
+    const closeResult = extractResult(result);
+    const listResult = await callTool(request, sessionId, 'actual_accounts_list');
+    const accounts = extractResult(listResult);
+    const found = (Array.isArray(accounts) ? accounts : []).find(
+      (a: any) => a?.id === testContext.accountId,
+    );
+    if (closeResult?.removed) {
+      expect(found).toBeFalsy();
+      console.log('✅ Account had no transactions and was removed, as reported');
+    } else {
+      expect(found).toBeTruthy();
+      expect(found.closed).toBeTruthy();
+      console.log('✅ Account closed and confirmed closed');
+    }
+  });
+
+  test('actual_accounts_close - already closed reports no change', async ({ request }) => {
+    if (!testContext.accountId) test.skip();
+    // #357: a second close must not claim to have closed anything. It is still a
+    // success (the requested state holds) but it says nothing changed. If the first
+    // close removed the account instead, this is a not-found, which is also correct.
+    console.log('🔒 Testing actual_accounts_close on an already-closed account...');
+    try {
+      const result = await callTool(request, sessionId, 'actual_accounts_close', {
+        id: testContext.accountId,
+      });
+      const payload = extractResult(result);
+      expect(payload?.alreadyClosed).toBeTruthy();
+      console.log('✅ Second close reported alreadyClosed');
+    } catch (error: any) {
+      expect(error.message).toMatch(/not found/i);
+      console.log('✅ Account was removed by the first close, so the second is not-found');
+    }
   });
 
   test('actual_accounts_reopen - should reopen account', async ({ request }) => {
