@@ -40,8 +40,9 @@ const InputSchema = z.object({
  * reads and the write share ONE `withWriteSession` cycle (#142).
  *
  * Cost and trade-off, recorded: two extra reads on a low-frequency budget tool, and the
- * raw-call path forgoes the adapter's retry and its observability counter, which is
- * inherent to the #142 pattern and tracked in #368.
+ * raw-call path forgoes the adapter's retry, which is inherent to the #142 pattern and is
+ * the half of #368 that still stands. The per-tool counter is NOT lost: it is incremented
+ * in the handler below.
  */
 const tool: ToolDefinition = {
   name: 'actual_budgets_holdForNextMonth',

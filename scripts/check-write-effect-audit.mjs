@@ -103,11 +103,26 @@ function main() {
   return 0;
 }
 
-// Exact entry-point check, through realpath. Node's ESM loader realpaths
-// `import.meta.url`, so comparing a non-realpathed `process.argv[1]` makes this script a
-// SILENT no-op when invoked through a symlink, and this repo is reachable through one
-// (`/home/alien/dev-github-personal`). Silent-and-exit-0 is indistinguishable from
-// "current", which is precisely the failure mode #362 exists to remove.
-if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) {
+/**
+ * Exact entry-point check, through realpath. Node's ESM loader realpaths
+ * `import.meta.url`, so comparing a non-realpathed `process.argv[1]` makes this script a
+ * SILENT no-op when invoked through a symlink, and this repo is reachable through one
+ * (`/home/alien/dev-github-personal`). Silent-and-exit-0 is indistinguishable from
+ * "current", which is precisely the failure mode #362 exists to remove.
+ *
+ * `realpathSync` THROWS on a path that does not exist, and an uncaught throw here would
+ * give this script a non-zero exit, contradicting the contract at the top of the file. So
+ * a failure degrades to the plain comparison rather than crashing whoever imported us.
+ */
+function isDirectRun() {
+  if (!process.argv[1]) return false;
+  try {
+    return pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url;
+  } catch {
+    return pathToFileURL(process.argv[1]).href === import.meta.url;
+  }
+}
+
+if (isDirectRun()) {
   process.exit(main());
 }

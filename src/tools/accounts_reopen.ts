@@ -65,9 +65,10 @@ type AccountRow = { id?: string; name?: string; closed?: boolean };
  * practice, `withDead()` is the tool to reach for.
  *
  * Going through the raw api inside the session means this path no longer gets the
- * adapter's `retry` or its `actual.accounts.reopen` counter. That is inherent to the
- * #142 pattern and is shared with every other tool using it (`rules_delete`,
- * `schedules_delete`, `category_groups_delete`); it is not specific to this change.
+ * adapter's `retry`. That is inherent to the #142 pattern, shared with every other tool
+ * using it (`rules_delete`, `schedules_delete`, `category_groups_delete`), and it is the
+ * half of #368 that still stands. The per-tool counter is NOT lost: it is incremented in
+ * the handler below.
  */
 const tool: ToolDefinition = {
   name: 'actual_accounts_reopen',
