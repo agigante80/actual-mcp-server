@@ -80,17 +80,28 @@ console.log('\n[#362] write-effect audit staleness reminder');
   // repo is reached through a symlink, which this one is.
   const linkDir = mkdtempSync(join(tmpdir(), 'wea-link-'));
   const link = join(linkDir, 'link');
-  let linkedOut = '';
+  let linkCreated = false;
   try {
+    // Creating the link is a PRECONDITION, not the assertion. Some environments deny
+    // symlink creation (Windows without Developer Mode, hardened runners), and an EPERM
+    // there must read as "cannot test this here", not as a broken CLI.
     symlinkSync(new URL('../../', import.meta.url).pathname, link, 'dir');
-    linkedOut = execFileSync(process.execPath, [join(link, 'scripts', 'check-write-effect-audit.mjs')], { encoding: 'utf8' });
-  } catch (e) {
-    linkedOut = String(e.stdout ?? '');
-  } finally {
-    try { rmSync(linkDir, { recursive: true, force: true }); } catch { /* best effort */ }
+    linkCreated = true;
+  } catch {
+    console.log('  ~ skipped: this environment does not allow creating a symlink');
   }
-  check(/write-effect audit:/.test(linkedOut),
-    'the CLI still reports when invoked through a symlinked path');
+  if (linkCreated) {
+    let linkedOut = '';
+    try {
+      linkedOut = execFileSync(process.execPath, [join(link, 'scripts', 'check-write-effect-audit.mjs')], { encoding: 'utf8' });
+    } catch (e) {
+      linkedOut = String(e.stdout ?? '');
+    }
+    check(/write-effect audit:/.test(linkedOut),
+      'the CLI still reports when invoked through a symlinked path');
+  }
+  // rmSync with recursive does NOT follow the link, so the repo is never at risk.
+  try { rmSync(linkDir, { recursive: true, force: true }); } catch { /* best effort */ }
 }
 
 console.log('');

@@ -123,6 +123,17 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(mergeCalls === 0,       'raw mergePayees NOT called');
   }
 
+  console.log('\n[#356] payees_merge: duplicate ids are merged once and counted once');
+  {
+    // "Report what happened, not what was requested" has to survive a repeated id, or the
+    // count describes the caller's input again.
+    reset([NORMAL_A, NORMAL_B]);
+    const res = await tool.call({ targetId: 'p-normal-a', mergeIds: ['p-normal-b', 'p-normal-b'] });
+    check(res?.mergedIds?.length === 1,             'reports one merged id, not two');
+    check(lastMergeArgs?.[1]?.length === 1,          'the raw call receives one id, not two');
+    check(/Merged 1 payee/.test(res?.message ?? ''), 'the message counts one');
+  }
+
   console.log('\n[#356] payees_merge: the refusal message is BOUNDED');
   {
     // The ids are caller-supplied and are echoed into the response and into

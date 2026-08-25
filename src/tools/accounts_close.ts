@@ -67,8 +67,9 @@ type AccountRow = { id?: string; name?: string; closed?: boolean };
  * never existed look identical from a single post-read.
  *
  * Going through the raw api inside the session means this path no longer gets the
- * adapter's `retry` or its `actual.accounts.close` counter. That is inherent to the #142
- * pattern, shared with every tool using it, and tracked in #368.
+ * adapter's `retry`. That is inherent to the #142 pattern, shared with every tool using
+ * it, and it is the half of #368 that still stands. The per-tool counter is NOT lost:
+ * it is incremented in the handler below.
  *
  * Already-closed is reported as success rather than as an error, deliberately. The
  * caller's intent ("this account should be closed") is already satisfied, which is the
