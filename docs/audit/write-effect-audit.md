@@ -150,16 +150,34 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_notes_update` | the tool validates the entity id against four listings to prevent orphan notes |
 | `actual_session_close` | pool only, not an Actual write |
 
+### Scope: which tools belong in this table at all
+
+Every tool that WRITES. Read-only tools (`*_get`, `*_list`, `*_search_by_*`, `*_summary_*`,
+`actual_entities_search`, `actual_server_info`, `actual_preferences_get`,
+`actual_session_list`, `actual_get_id_by_name`) cannot report success for a write that did
+not happen, so they are out of scope by construction and are deliberately absent.
+
+`actual_query_run` is the one judgement call: it is read-oriented and its SQL is checked by
+`src/lib/query-validator.ts`, but it is the only tool that could in principle reach a write
+path through raw SQL. Listed as UNKNOWN rather than assumed read-only.
+
 ### UNKNOWN
 
 Not traced in the 2026-08-25 pass. Absence from the CONFIRMED table is not evidence of
 safety.
 
-`actual_budgets_switch`, `actual_budgets_export`, `actual_budgets_transfer`,
-`actual_budget_updates_batch`, `actual_categories_create`,
-`actual_category_groups_create`, `actual_rules_create`, `actual_rules_create_or_update`,
-`actual_payees_create`, `actual_tags_create`, `actual_transactions_import`,
-`actual_transactions_update_batch`, `actual_bank_sync`.
+`actual_accounts_create`, `actual_schedules_create`, `actual_budgets_switch`,
+`actual_budgets_export`, `actual_budgets_transfer`, `actual_budget_updates_batch`,
+`actual_categories_create`, `actual_category_groups_create`, `actual_rules_create`,
+`actual_rules_create_or_update`, `actual_payees_create`, `actual_tags_create`,
+`actual_transactions_import`, `actual_transactions_update_batch`, `actual_bank_sync`,
+`actual_query_run`.
+
+`actual_accounts_create` and `actual_schedules_create` were missing from this file entirely
+until the architectural review of PR #367 noticed. That is the failure mode this document
+warns about in its own opening: a table that silently omits a case reads as coverage. A
+membership test that fails CI when an `IMPLEMENTED_TOOLS` entry appears in no row would make
+it structural rather than a matter of care, and is tracked in #370.
 
 `actual_transactions_import` is the one worth doing next: it routes through
 `importTransactions` to `reconcileTransactions`, which takes `acctId` without looking it

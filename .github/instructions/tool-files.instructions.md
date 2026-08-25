@@ -17,7 +17,7 @@ applyTo: "src/tools/*.ts"
 - **Importing `@actual-app/api` directly is correct in one case:** when you are already INSIDE a single adapter session callback and need more than one operation in that one cycle. Then use the raw functions, because calling back through `adapter.*` from in there is the nesting deadlock above. Eight tool files do this today, and they are the pattern to copy (see CLAUDE.md for the list and the three reasons):
   - `rules_delete.ts`, `rules_create_or_update.ts`, `schedules_delete.ts`, `category_groups_delete.ts`: raw calls inside one `adapter.withWriteSession(...)`, which is how a read and a write share one cycle (#142)
   - `budget_updates_batch.ts`: raw calls inside `adapter.batchBudgetUpdates(...)`, a batch of pure writes
-  - `accounts_close.ts`, `accounts_reopen.ts`, `budgets_holdForNextMonth.ts`: read, write and RE-READ in one `adapter.withWriteSession(...)`, so the tool reports the effect it observed rather than trusting the call to have returned (#355, #357, #358). Cost, tracked in #368: this pattern forgoes the adapter's `retry` and its per-tool observability counter
+  - `accounts_close.ts`, `accounts_reopen.ts`, `budgets_holdForNextMonth.ts`: read, write and RE-READ in one `adapter.withWriteSession(...)`, so the tool reports the effect it observed rather than trusting the call to have returned (#355, #357, #358). Cost, tracked in #368: this pattern forgoes the adapter's `retry`. The per-tool observability counter is not lost, because these tools increment it themselves
 - Error messages must be actionable: include entity type, ID, and a suggested next tool
 - After creating a tool file, you MUST:
   1. Export it from `src/tools/index.ts`
