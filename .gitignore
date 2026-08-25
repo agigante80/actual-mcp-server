@@ -88,3 +88,10 @@ playwright-report/
 
 # #280: local release evidence (dual-transport run report). Never committed.
 .release/
+
+# Scratch space for local temporary files. Never committed: create it, use it,
+# delete it. Preferred over /tmp so tooling does not trip over sandbox permissions.
+temp/
+
+# working-overnight run state (local only)
+.claude/overnight/
