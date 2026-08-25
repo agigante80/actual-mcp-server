@@ -1612,8 +1612,11 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
  * generated rule in step and will not let the rule be removed on its own.
  *
  * `actual_rules_delete` does not route through here (it calls the raw API inside one
- * `withWriteSession` cycle, per #142), but any future caller that does must be able
- * to see the verdict rather than rediscovering this the hard way.
+ * `withWriteSession` cycle, per #142), so this method currently has NO caller, and the
+ * same is true of `holdBudgetForNextMonth` below since #355 moved that tool to the same
+ * pattern. Both are kept, and both carry the verdict, so that the next caller inherits
+ * the correct contract instead of rediscovering this the hard way. Neither widening is
+ * exercised by a test today, for the same reason: nothing calls them.
  */
 export async function deleteRule(id: string): Promise<boolean | void> {
   observability.incrementToolCall('actual.rules.delete').catch(() => {});
@@ -1854,7 +1857,13 @@ export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void>
 export async function holdBudgetForNextMonth(month: string, amount: number): Promise<boolean | void> {
   observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
   return queueWriteOperation(async () => {
-    return await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<boolean | void>, { retries: 2, backoffMs: 200 }));
+    // Non-idempotent: do not retry (#165). `calcBufferedAmount` is ADDITIVE
+    // (`return buffered + amount`), so a second attempt after a committed first does not
+    // re-set the buffer, it adds to it. The window is narrow, because the call runs
+    // against local SQLite and no `TRANSIENT_ERROR_PATTERNS` message can arise inside
+    // it, but the operation is non-idempotent by construction and belongs on the same
+    // footing as `deleteRule` and `closeAccount`.
+    return await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<boolean | void>, { retries: 0, backoffMs: 200 }));
   });
 }
 export async function resetBudgetHold(month: string): Promise<void> {
