@@ -206,9 +206,10 @@ export async function startHttpServer(
   // safe fallback if index didn't provide implementedTools
   const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
 
-  // #379: one resolver, one builder, for BOTH tools/list paths below (the SDK handler and
-  // the no-session LobeChat compatibility path). They used to assemble the payload
-  // independently, so anything added to the published surface had to be added twice.
+  // #379: one resolver, one builder, for all THREE tools/list paths below: the SDK handler,
+  // the no-session LobeChat compatibility path, and the expired-session LobeChat discovery
+  // shim. They each assembled the payload independently, so anything added to the published
+  // surface had to be added three times, and the shim was in fact missed on the first pass.
   const resolveToolMeta = (name: string) => ({
     description: actualToolsManager.getTool(name)?.description,
     schema:

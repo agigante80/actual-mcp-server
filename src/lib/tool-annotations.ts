@@ -103,10 +103,17 @@ const READ_ONLY = new Set<string>([
 const DESTRUCTIVE = new Set<string>([
   'actual_accounts_close',
   'actual_accounts_delete',
-  // Upstream `reconcileTransactions` builds an `updates` object for transactions that
-  // ALREADY exist, overwriting imported_id, imported_payee and cleared, and date when the
-  // account's `sync-update-dates-<id>` preference is on. It then propagates cleared and
-  // date onto split children. That is an in-place rewrite of existing rows, not an append.
+  // Upstream `reconcileTransactions` overwrites fields on transactions that ALREADY exist
+  // (imported_id, imported_payee, cleared, raw_synced_data) and propagates cleared and date
+  // onto split children.
+  //
+  // NOTE that `actual_transactions_import` calls the same upstream function and is NOT
+  // marked destructive, which needs a reason rather than an accident. The difference is the
+  // `date` rewrite: bank sync honours the per-account `sync-update-dates-<id>` preference,
+  // so a user who enabled it gets EXISTING transaction dates rewritten by a tool they did
+  // not point at those rows. An explicit import only touches what the caller handed it.
+  // Under the policy above (a field overwrite is additive) that is the line, and it is a
+  // judgement call rather than a derivation.
   'actual_bank_sync',
   'actual_budgets_export',
   'actual_budgets_import',
@@ -124,6 +131,10 @@ const DESTRUCTIVE = new Set<string>([
   // creates six new ones with new ids, breaking any external reference to them. That also
   // makes it non-idempotent, which is why it is absent from IDEMPOTENT below.
   'actual_transactions_update',
+  // Removes a live pooled connection. With no `sessionId` it closes the OLDEST IDLE
+  // session, so a client that auto-approves non-destructive tools could let a model loop it
+  // and drain the pool, reproducing the per-operation re-login burst #134 exists to prevent.
+  'actual_session_close',
 ]);
 
 /**
@@ -171,7 +182,6 @@ const ADDITIVE = new Set<string>([
   'actual_tags_create',
   'actual_tags_update',
   'actual_notes_update',
-  'actual_session_close',
 ]);
 
 /**

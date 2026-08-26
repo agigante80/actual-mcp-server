@@ -121,7 +121,10 @@ console.log('\n[source] tools/list discovery shim is preserved');
 // here next to the shim it belongs to.
 // ----------------------------------------------------------------------------
 {
-  const inline = (source.match(/toolsList\.map\(\(name: string\)/g) || []).length;
+  // Any `.map(` over the tool-name list, not just the exact `(name: string)` form the
+  // original sites happened to use: a fifth site written as `toolsList.map((name) =>`
+  // would otherwise slip through the very check added to prevent a missed site.
+  const inline = (source.match(/toolsList\s*\.\s*map\s*\(/g) || []).length;
   assert(inline === 0,
     'no tools/list payload is assembled inline (use buildToolListEntries so every transport and compat path publishes the same surface)');
   const viaBuilder = (source.match(/buildToolListEntries\(/g) || []).length;
