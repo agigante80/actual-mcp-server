@@ -47,7 +47,7 @@ import { test as base, expect, type APIRequestContext, type APIResponse } from '
 import {
   waitForMCPHealth,
   retryRequest,
-  callToolWithBackoff,
+  callToolPaced,
   extractResult,
   DEFAULT_MCP_SERVER_URL,
   HTTP_PATH,
@@ -186,12 +186,14 @@ async function initSession(request: APIRequestContext): Promise<string> {
 function makeClient(request: APIRequestContext, sessionId: string): McpClient {
   return {
     sessionId,
-    // Both go through the rate-limit backoff (#375 raised this suite's write volume
-    // several-fold, and a busy runner can trip Actual's limiter; see isRateLimitError).
-    // Nothing else is retried: every other tool error is a result the test wants to see.
-    raw: (tool, args = {}) => callToolWithBackoff(request, sessionId, tool, args),
+    // Every call is PACED so the suite stays under Actual's 500 requests/minute ceiling.
+    // #375 raised this suite's request count to 569 per run, which is over that ceiling in
+    // total, so whether it trips depends only on how tightly the run bunches them. See
+    // callToolPaced for the measurements. Nothing is retried: a retried create is not
+    // idempotent.
+    raw: (tool, args = {}) => callToolPaced(request, sessionId, tool, args),
     call: async (tool, args = {}) =>
-      extractResult(await callToolWithBackoff(request, sessionId, tool, args)),
+      extractResult(await callToolPaced(request, sessionId, tool, args)),
     post: (payload) =>
       request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
         data: JSON.stringify(payload),
