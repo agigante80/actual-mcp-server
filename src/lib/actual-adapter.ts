@@ -1496,12 +1496,13 @@ export async function updatePayee(id: string, fields: Partial<components['schema
     // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
     // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
     // than matching nothing. Refuse first, the way updateTag and updateRule already do.
-    // Known edge, and why it is acceptable: `db.getPayees()` excludes a transfer payee
-    // whose linked account has been hard-tombstoned, so such an orphan would be refused
-    // here as not-found. It is unreachable in practice through this server, because the
-    // only way a caller obtains a payee id is actual_payees_get, which runs that same
-    // filtered query. An id that is not in that listing is one the caller could not have
-    // been given.
+    // Known edge, and why it is acceptable: `db.getPayees()` excludes a transfer payee whose
+    // linked account has been hard-tombstoned, so such an orphan is refused here as
+    // not-found. A caller CAN hold such an id (transaction rows carry `payee`, and
+    // actual_entities_search and actual_get_id_by_name surface ids too), so this is not
+    // strictly unreachable. It is accepted because updating an orphaned transfer payee,
+    // whose account no longer exists, is not a real workflow, and because the alternative
+    // is leaving four tools able to create phantom rows.
     const payees = await withConcurrency(() =>
       retry(() => rawGetPayees() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
     );
@@ -1867,6 +1868,20 @@ export async function closeAccount(
  * account not exist") could already be satisfied by an absent row, so refusing on absence
  * would have failed a complete request. Here the intent ("reopen this account") cannot be
  * satisfied by an absent row, and proceeding actively creates one.
+ *
+ * TWO DELIBERATE LIMITS, carried over from the tool-layer version so they are not
+ * rediscovered as oversights.
+ *
+ * One `queueWriteOperation` keeps this read, write and re-read in a single api lock cycle.
+ * It does NOT serialise against other operations in the same batch: `processWriteQueue`
+ * dispatches with `Promise.allSettled`, so operations queued in the same drain window
+ * interleave at await points. The cycle excludes other SESSIONS, not batch siblings.
+ *
+ * The not-found message covers both reasons an id can be missing (never existed, or removed
+ * by a close while it had no transactions) rather than distinguishing them. `q().withDead()`
+ * would tell them apart by reading tombstoned rows, at the cost of an extra query on the
+ * failure path. Collapsing them was chosen because the message names both cases and the
+ * remedy is the same either way.
  */
 export async function reopenAccount(id: string): Promise<void> {
   observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
@@ -2103,8 +2118,14 @@ export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void>
 export async function holdBudgetForNextMonth(month: string, amount: number): Promise<number> {
   observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
   return queueWriteOperation(async () => {
+    // `isRetryable` matters here, unlike most read sites: upstream's `api/budget-month` opens
+    // with `validateMonth` and throws for an out-of-range month. Without a classifier,
+    // retry() retries EVERY rejection (see retry.ts), so a deterministic domain error would
+    // cost three upstream calls and 600ms of sleeping inside the api mutex, against the one
+    // withOpTimeout budget this whole callback shares. #177 doctrine: domain errors are
+    // terminal.
     const before = await withConcurrency(() =>
-      retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200 })
+      retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
     );
     const heldBefore = Number(before?.forNextMonth ?? 0);
 
@@ -2114,7 +2135,7 @@ export async function holdBudgetForNextMonth(month: string, amount: number): Pro
     await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<boolean | void>, { retries: 0, backoffMs: 200 }));
 
     const after = await withConcurrency(() =>
-      retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200 })
+      retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
     );
     return Number(after?.forNextMonth ?? 0) - heldBefore;
   });

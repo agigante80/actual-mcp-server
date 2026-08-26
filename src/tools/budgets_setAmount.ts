@@ -22,10 +22,20 @@ const tool: ToolDefinition = {
       return { result };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      // The pre-flight in adapter.setBudgetAmount throws:
-      //   Category "${categoryId}" not found. Use actual_categories_get to list available categories.
-      // That string always contains BOTH "not found" AND "category", so && is the correct operator.
-      if (msg.toLowerCase().includes('not found') && msg.toLowerCase().includes('category')) {
+      const lower = msg.toLowerCase();
+      // Both PRE-FLIGHT refusals from adapter.setBudgetAmount return the same structured
+      // shape, so a caller can handle "you asked for something that does not exist" once
+      // rather than parsing two forms:
+      //
+      //   Category "<id>" not found. Use actual_categories_get ...            (#89)
+      //   Month "<month>" is not in this budget. It runs from X to Y ...      (#361)
+      //
+      // #361 added the second one, and before this it fell through to the rethrow below,
+      // so one tool answered two identical situations in two different shapes. Anything
+      // else (a genuine upstream or transport failure) still throws.
+      const isCategoryRefusal = lower.includes('not found') && lower.includes('category');
+      const isMonthRefusal = lower.includes('not in this budget');
+      if (isCategoryRefusal || isMonthRefusal) {
         return { success: false as const, error: msg };
       }
       throw new Error(`Failed to set budget amount: ${msg}`);
