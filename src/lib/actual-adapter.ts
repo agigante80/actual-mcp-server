@@ -1248,6 +1248,17 @@ export async function createAccount(account: components['schemas']['Account'] | 
 export async function updateAccount(id: string, fields: Partial<components['schemas']['Account']> | unknown): Promise<void | null> {
   observability.incrementToolCall('actual.accounts.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
+    // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
+    // than matching nothing. Refuse first, the way updateTag and updateRule already do.
+    // A CLOSED account is still updatable: getAccounts filters `tombstone = 0`, not
+    // `closed = 0`, so this refuses only ids that genuinely do not exist.
+    const accounts = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    if (!(Array.isArray(accounts) && accounts.some((a) => a?.id === id))) {
+      throw new Error(notFoundMsg('Account', id, 'actual_accounts_list'));
+    }
     await withConcurrency(() => retry(() => rawUpdateAccount(id, fields) as Promise<void | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return null;
   });
@@ -1426,6 +1437,17 @@ export async function deleteTransaction(id: string): Promise<void> {
 export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.categories.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
+    // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
+    // than matching nothing. Refuse first, the way updateTag and updateRule already do.
+    // Called with no argument, upstream returns every category in every group, hidden
+    // included, so a hidden category is not misreported as missing.
+    const categories = await withConcurrency(() =>
+      retry(() => rawGetCategories() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    if (!(Array.isArray(categories) && categories.some((c) => c?.id === id))) {
+      throw new Error(notFoundMsg('Category', id, 'actual_categories_get'));
+    }
     await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
@@ -1450,6 +1472,22 @@ export async function deleteCategory(id: string): Promise<void> {
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.payees.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
+    // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
+    // than matching nothing. Refuse first, the way updateTag and updateRule already do.
+    // Known edge, and why it is acceptable: `db.getPayees()` excludes a transfer payee
+    // whose linked account has been hard-tombstoned, so such an orphan would be refused
+    // here as not-found. It is unreachable in practice through this server, because the
+    // only way a caller obtains a payee id is actual_payees_get, which runs that same
+    // filtered query. An id that is not in that listing is one the caller could not have
+    // been given.
+    const payees = await withConcurrency(() =>
+      retry(() => rawGetPayees() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    if (!(Array.isArray(payees) && payees.some((p) => p?.id === id))) {
+      throw new Error(notFoundMsg('Payee', id, 'actual_payees_get'));
+    }
+
     const fieldsObj = fields as Record<string, unknown>;
 
     // Extract `category` — it is NOT a direct column on the payees table in Actual Budget.
@@ -1860,6 +1898,18 @@ export async function createCategoryGroup(group: unknown): Promise<string> {
 export async function updateCategoryGroup(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.category_groups.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
+    // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
+    // than matching nothing. Refuse first, the way updateTag and updateRule already do.
+    // Called with no argument, upstream returns all groups including hidden ones, so a
+    // hidden group is not misreported as missing (the same reason category_groups_delete
+    // can rely on this listing).
+    const groups = await withConcurrency(() =>
+      retry(() => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    if (!(Array.isArray(groups) && groups.some((g) => g?.id === id))) {
+      throw new Error(notFoundMsg('Category group', id, 'actual_category_groups_get'));
+    }
     await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
