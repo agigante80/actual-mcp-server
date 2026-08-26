@@ -81,7 +81,17 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       check(rawSetCalls === 0,                                          'no write attempted for an out-of-range month');
     }
 
-    console.log('\n[#361] a month inside the budget still writes');
+    console.log('\n[#361] the TOOL reports a month refusal in the same shape as a category refusal');
+    {
+      // Both are "you asked for something that does not exist"; a caller should not have to
+      // parse two forms. Driven through the tool, not the adapter, because the shape is the
+      // tool's contract.
+      const res = await tool.call({ month: '2019-01', categoryId: 'cat-1', amount: 1000 });
+      check(res?.success === false,                              'month refusal returns success:false, not a throw');
+      check(/not in this budget/i.test(res?.error ?? ''),         'and carries the actionable message');
+    }
+
+  console.log('\n[#361] a month inside the budget still writes');
     {
       rawSetCalls = 0;
       let threw = null;

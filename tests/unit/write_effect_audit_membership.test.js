@@ -28,7 +28,12 @@ const audit = read('../../docs/audit/write-effect-audit.md');
 
 // IMPLEMENTED_TOOLS is the canonical registry. Take the tool names from it rather than from
 // the filesystem, so a tool that exists but is not registered cannot slip through either.
-const tools = [...new Set([...manager.matchAll(/'(actual_[a-z0-9_]+)'/g)].map((m) => m[1]))];
+// [A-Za-z0-9_], NOT [a-z0-9_]. The first version of this test omitted A-Z and therefore
+// could not see a single camelCase tool: actual_budgets_setAmount,
+// actual_budgets_holdForNextMonth, actual_budgets_setCarryover, actual_budgets_resetHold,
+// actual_budgets_getMonth and actual_budgets_getMonths were all invisible, four of them
+// writes. A guard against silent gaps that has a silent gap is worse than none.
+const tools = [...new Set([...manager.matchAll(/'(actual_[A-Za-z0-9_]+)'/g)].map((m) => m[1]))];
 
 /**
  * A PINNED list of the read-only tools, deliberately not a naming heuristic.
@@ -58,10 +63,21 @@ const READ_ONLY = new Set([
 
 console.log('\n[#370] write-effect audit membership');
 
-check(tools.length > 50, `IMPLEMENTED_TOOLS parsed (${tools.length} tools)`);
+// Pinned against the registry itself rather than a loose floor: `> 50` passed happily at 68
+// when the answer was 74, which is exactly how the missing A-Z went unnoticed.
+const declared = (manager.match(/^\s*'actual_[A-Za-z0-9_]+',?\s*$/gm) || []).length;
+check(
+  tools.length === declared && declared > 0,
+  `every IMPLEMENTED_TOOLS entry was parsed (${tools.length} of ${declared})`,
+  tools.length === declared ? '' : 'the tool-name regex is not seeing every declared entry',
+);
 
 const writeTools = tools.filter((t) => !READ_ONLY.has(t));
-const missing = writeTools.filter((t) => !audit.includes(t));
+// Backticked match, not a substring: `actual_rules_create` is a prefix of
+// `actual_rules_create_or_update`, so `includes` would report the shorter one as audited
+// whenever only the longer one is present.
+const auditMentions = new Set([...audit.matchAll(/`(actual_[A-Za-z0-9_]+)`/g)].map((m) => m[1]));
+const missing = writeTools.filter((t) => !auditMentions.has(t));
 check(
   missing.length === 0,
   `every write tool appears in docs/audit/write-effect-audit.md (${writeTools.length} checked)`,
@@ -72,7 +88,7 @@ check(
 
 // The reverse direction: a tool retired from the registry should not linger in the audit as
 // though it were still part of the surface.
-const auditedNames = [...new Set([...audit.matchAll(/`(actual_[a-z0-9_]+)`/g)].map((m) => m[1]))];
+const auditedNames = [...new Set([...audit.matchAll(/`(actual_[A-Za-z0-9_]+)`/g)].map((m) => m[1]))];
 const stale = auditedNames.filter((t) => !tools.includes(t));
 check(
   stale.length === 0,

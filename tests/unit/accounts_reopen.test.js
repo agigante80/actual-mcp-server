@@ -50,11 +50,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       [{ id: 'acct-1', name: 'Savings', closed: true }],   // before
       [{ id: 'acct-1', name: 'Savings', closed: false }],  // after
     ]);
+    const batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
     const res = await tool.call({ id: 'acct-1' });
     check(res?.success === true,   'returns success: true');
     check(reopenCalls === 1,       'raw reopenAccount called exactly once');
     check(getCalls === 2,          'read before and verified after');
-    check(getCalls === 2,          'read before and verified after, in one cycle');
+    // The #142 property, asserted for real. The previous sessionCalls check counted calls to
+    // a pass-through stub, which proved nothing about the lock; this counts batches actually
+    // dispatched by processWriteQueue.
+    check(adapterMod._getWriteQueueBatchCountForTests() - batchesBefore === 1,
+                                   'read, write and re-read shared ONE write-queue cycle');
   }
 
   console.log('\n[#358] accounts_reopen: positive, already open is idempotent and truthful');

@@ -31,7 +31,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   const writes = { account: 0, category: 0, group: 0, payee: 0 };
 
   apiDefault.sync = async () => {};
-  apiDefault.getAccounts = async () => [{ id: KNOWN, name: 'Checking', closed: false }];
+  // Mutable state, NOT a reassigned stub: actual-adapter.ts destructures the api functions
+  // at module load, so `apiDefault.getAccounts = ...` after the import is captured by nobody.
+  // The first version of the closed-account case below did exactly that and was vacuous.
+  let accountsState = [{ id: KNOWN, name: 'Checking', closed: false }];
+  apiDefault.getAccounts = async () => accountsState;
   apiDefault.getCategories = async () => [{ id: KNOWN, name: 'Food' }];
   apiDefault.getCategoryGroups = async () => [{ id: KNOWN, name: 'Expenses' }];
   apiDefault.getPayees = async () => [{ id: KNOWN, name: 'Kroger', transfer_acct: null }];
@@ -78,12 +82,22 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     // getAccounts filters `tombstone = 0`, not `closed = 0`, so the guard must not turn
     // "closed" into "missing". Renaming a closed account is legitimate.
-    apiDefault.getAccounts = async () => [{ id: KNOWN, name: 'Old', closed: true }];
+    accountsState = [{ id: KNOWN, name: 'Old', closed: true }];
     writes.account = 0;
     let threw = null;
     try { await adapter.updateAccount(KNOWN, { name: 'Renamed' }); } catch (e) { threw = e; }
     check(threw === null,        'a closed account is not refused');
     check(writes.account === 1,  'the update still reached the raw call');
+
+    // Prove the stub is actually live, so this case cannot go quietly vacuous again: with
+    // the account absent, the same call MUST be refused.
+    accountsState = [];
+    writes.account = 0;
+    let threw2 = null;
+    try { await adapter.updateAccount(KNOWN, { name: 'Renamed' }); } catch (e) { threw2 = e; }
+    check(threw2 instanceof Error, 'the mutable stub is live (an emptied list refuses)');
+    check(writes.account === 0,    'and no write happened');
+    accountsState = [{ id: KNOWN, name: 'Checking', closed: false }];
   }
 
   console.log('');
