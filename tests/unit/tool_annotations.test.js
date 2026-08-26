@@ -163,6 +163,26 @@ check('the classification sets name only real tools', () => {
   assert.strictEqual(unknown.length, 0, `sets reference non-existent tools: ${unknown.join(', ')}`);
 });
 
+check('a tool whose OWN description claims upsert semantics is marked idempotent', () => {
+  // Caught in review of this very change: `actual_tags_create` upserts on the tag word (its
+  // description says so, and the E2E asserts the same id comes back), but the first draft
+  // excluded every `*_create` from IDEMPOTENT as a rule. The guard cannot derive idempotence
+  // from the call graph, so this reads the tool's own published claim instead: if a tool
+  // TELLS clients it upserts, the annotation must agree with it.
+  const liars = names.filter((n) => {
+    const file = `src/tools/${n.replace(/^actual_/, '')}.ts`;
+    if (!existsSync(join(ROOT, file))) return false;
+    const desc = stripComments(read(file));
+    const claimsUpsert = /\bupsert\b/i.test(desc);
+    return claimsUpsert && !annotationsFor(n).idempotentHint;
+  });
+  assert.strictEqual(
+    liars.length,
+    0,
+    `describe themselves as an upsert but are not marked idempotent: ${liars.join(', ')}`,
+  );
+});
+
 // NEGATIVE fixtures: prove each comparator can fail, rather than passing over an empty set.
 check('NEGATIVE: a read-only claim over a writing adapter path is detected', () => {
   const liars = ['actual_accounts_delete'].filter((n) => adapterCallsOf(n).some((c) => writes.has(c)));
