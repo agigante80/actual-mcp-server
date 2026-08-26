@@ -58,6 +58,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#355] holdForNextMonth: positive, the full amount is held');
   {
     reset(50000);
+    const batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
     const res = await tool.call({ month: '2026-01', amount: 25000 });
     check(res?.success === true,       'returns success: true');
     check(res?.held === 25000,         'reports the amount held');
@@ -65,7 +66,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(holdCalls === 1,             'raw hold called exactly once');
     check(lastArgs?.[0] === '2026-01', 'month forwarded unchanged');
     check(lastArgs?.[1] === 25000,     'amount forwarded unchanged (integer cents)');
-    check(monthReads === 2,            'read before and after, in one cycle');
+    check(monthReads === 2,            'read before and after');
+    // The #142 property asserted for real, not implied by a read count: one call must
+    // dispatch exactly ONE write-queue batch.
+    check(adapterMod._getWriteQueueBatchCountForTests() - batchesBefore === 1,
+                          'read, write and re-read shared ONE write-queue cycle');
   }
 
   console.log('\n[#355] holdForNextMonth: PARTIAL hold is reported, not dressed up as success');

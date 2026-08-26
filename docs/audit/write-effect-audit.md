@@ -125,7 +125,7 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_rules_delete` (schedule-owned) | `deleteRule` | A | `transactions/transaction-rules.ts:236` returns `false`; the tool discarded it | #355 LANDED |
 | `actual_budgets_holdForNextMonth` | `holdBudgetForNextMonth` | A | `budget/actions.ts` returns `false` when to-budget is not positive | #355 LANDED |
 | `actual_transactions_create` | `addTransactions` | D | `accounts/sync.ts:961` never validates `acctId`; `api.ts:552` returns `'ok'` unconditionally | #359 LANDED |
-| `actual_budgets_setAmount` (month) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call, and the tool's schema did not check the format either | #361 LANDED |
+| `actual_budgets_setAmount` (month) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call, and the tool's schema did not check the format either. The guard now refuses any month outside the budget's own bounds, which upstream `getBudgetRange` computes as earliest-transaction-month minus 3 to current-month plus 12. A budget with no transactions yet therefore cannot be back-filled further than 3 months, which is upstream's rule, not ours | #361 LANDED |
 
 ### SAFE
 
@@ -202,9 +202,15 @@ first pass.
 
 ## Where a guard belongs (#371)
 
-Every guard in the CONFIRMED table now lives in `src/lib/actual-adapter.ts`, not in the tool.
-Three of them (`accounts_close`, `accounts_reopen`, `budgets_holdForNextMonth`) were briefly
-in the tool layer and were moved. The single-cycle read-decide-write property never required
+Most guards now live in `src/lib/actual-adapter.ts`, not in the tool. Three of them
+(`accounts_close`, `accounts_reopen`, `budgets_holdForNextMonth`) were briefly in the tool
+layer and were moved.
+
+**Five are still in the tool layer, deliberately not migrated in that pass**, and saying so
+matters because an earlier version of this paragraph claimed the rule was universal when it
+was not: `rules_delete` (itself a CONFIRMED row), `category_groups_delete`,
+`schedules_delete`, `rules_create_or_update` and `notes_update`. They work, and they predate
+the rule. Migrating them is tracked in #376. The single-cycle read-decide-write property never required
 the raw api, and putting it in the adapter keeps `retry` on the reads, keeps one
 observability call site per operation, and leaves no unguarded `adapter.*` method for a
 future caller to reach for. The tool owns the schema and the response wording; the adapter

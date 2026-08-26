@@ -13,7 +13,11 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_setAmount',
-  description: "Set the budgeted amount for a specific category in a given month. Amount in cents (e.g., 50000 = $500). Use this to allocate money to spending categories for budget planning.",
+  description:
+    'Set the budgeted amount for a specific category in a given month. Amount in cents ' +
+    '(e.g., 50000 = $500). Use this to allocate money to spending categories for budget planning. ' +
+    'The month must be one the budget actually has: Actual allows from three months before the ' +
+    'earliest transaction to twelve months ahead. Use actual_budgets_getMonths to see the range.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
