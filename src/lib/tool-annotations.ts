@@ -1,0 +1,181 @@
+/**
+ * MCP tool annotations for the 74-tool surface (#379).
+ *
+ * The Model Context Protocol lets a server describe each tool's NATURE to clients, so a
+ * model or a UI can know which tools mutate a budget BEFORE calling one. This file is the
+ * single source of that classification, and `ActualMCPConnection` attaches it to every
+ * `tools/list` entry.
+ *
+ * THE SPEC'S DEFAULTS ARE ALREADY CONSERVATIVE, which shapes what is worth declaring.
+ * From `schema/2025-06-18/schema.ts`:
+ *
+ *   readOnlyHint     default false   "the tool does not modify its environment"
+ *   destructiveHint  default TRUE    "may perform destructive updates"; only meaningful when readOnlyHint is false
+ *   idempotentHint   default false   "calling repeatedly with the same arguments has no additional effect"
+ *   openWorldHint    default TRUE    "may interact with an open world of external entities"
+ *
+ * So a tool that declares nothing is already treated as write-capable, destructive and
+ * open-world. The value here is therefore NOT warning about the dangerous tools; it is
+ * telling clients which tools are SAFE, and correcting `openWorldHint`, whose default is
+ * wrong for 73 of our 74 tools: this server's domain is one Actual Budget instance, a
+ * CLOSED world. Only `actual_bank_sync` reaches outside it, to GoCardless or SimpleFIN.
+ *
+ * THESE ARE HINTS, NEVER A GUARD. The spec is explicit: "all properties in ToolAnnotations
+ * are hints. They are not guaranteed to provide a faithful description of tool behavior",
+ * and "Clients should never make tool use decisions based on ToolAnnotations received from
+ * untrusted servers." Nothing in `src/` may branch on an annotation. Authorisation stays in
+ * `budget-acl.ts`, and refusal stays in the adapter guards.
+ *
+ * WHY A CENTRAL TABLE rather than a field on each tool. `types/tool.d.ts` is in CLAUDE.md's
+ * do-not-modify tier, and most tools use the legacy `ToolDefinition` shape, so a per-tool
+ * `annotations` field needs that permission first. A table also puts the whole
+ * classification on one screen next to the reasoning, which is what makes it auditable
+ * against `docs/audit/write-effect-audit.md`, and `tests/unit/tool_annotations.test.js`
+ * makes omission impossible. Moving to per-tool declarations later is mechanical.
+ */
+
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
+
+/**
+ * The ONLY tool that reaches outside this Actual instance. Bank sync calls a third-party
+ * aggregator (GoCardless / SimpleFIN), which is the textbook "open world".
+ */
+const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
+
+/**
+ * Tools that provably change NOTHING. Verified mechanically by
+ * `tests/unit/tool_annotations.test.js`, which resolves each tool's `adapter.*` calls and
+ * fails if one of these reaches `queueWriteOperation`.
+ *
+ * Claimed only where it is certain. Three read-path tools are deliberately absent because
+ * "does not modify its environment" is false for them, and a wrong `true` here is worse
+ * than no annotation at all:
+ *
+ *   actual_bank_sync       runs through `withActualApi` (the read path) but IMPORTS
+ *                          transactions, so the call graph says read and reality says
+ *                          write. Reality wins.
+ *   actual_budgets_export  writes a zip into the server's data directory.
+ *   actual_budgets_switch  changes the session's active budget and persists a preference.
+ *   actual_session_close   closes a pooled connection: server state, not budget data.
+ */
+const READ_ONLY = new Set<string>([
+  'actual_accounts_get_balance',
+  'actual_accounts_list',
+  'actual_budgets_get_all',
+  'actual_budgets_getMonth',
+  'actual_budgets_getMonths',
+  'actual_budgets_list_available',
+  'actual_categories_get',
+  'actual_category_groups_get',
+  'actual_entities_search',
+  'actual_get_id_by_name',
+  'actual_notes_get',
+  'actual_payee_rules_get',
+  'actual_payees_common_list',
+  'actual_payees_get',
+  'actual_preferences_get',
+  'actual_query_run',
+  'actual_rules_get',
+  'actual_schedules_get',
+  'actual_server_get_version',
+  'actual_server_info',
+  'actual_session_list',
+  'actual_tags_list',
+  'actual_transactions_filter',
+  'actual_transactions_get',
+  'actual_transactions_search_by_amount',
+  'actual_transactions_search_by_category',
+  'actual_transactions_search_by_month',
+  'actual_transactions_search_by_payee',
+  'actual_transactions_summary_by_category',
+  'actual_transactions_summary_by_payee',
+  'actual_transactions_uncategorized',
+]);
+
+/**
+ * Write tools that REMOVE data or make an irreversible change. Everything else that writes
+ * is additive or an in-place field update, which the spec calls not-destructive.
+ *
+ * `accounts_close` is in this list and it is the interesting one: Actual REMOVES an account
+ * that has no transactions rather than closing it (documented in the tool's own description
+ * and in #357), so a close can be a delete.
+ */
+const DESTRUCTIVE = new Set<string>([
+  'actual_accounts_close',
+  'actual_accounts_delete',
+  'actual_budgets_import',
+  'actual_categories_delete',
+  'actual_category_groups_delete',
+  'actual_payees_delete',
+  'actual_payees_merge',
+  'actual_rules_delete',
+  'actual_schedules_delete',
+  'actual_tags_delete',
+  'actual_transactions_delete',
+]);
+
+/**
+ * Write tools where repeating the SAME call leaves the same state. Derived from the
+ * write-effect audit rather than guessed, because this codebase has already had to answer
+ * the question tool by tool.
+ *
+ * The exclusions are the point:
+ *   every `*_create`            each call makes another entity
+ *   budgets_holdForNextMonth    upstream ADDS to the buffer, so a retry holds twice (#355)
+ *   budgets_transfer            moves money again on each call
+ *   payees_merge                the sources are gone after the first
+ *   bank_sync                   imports whatever is new upstream
+ *   transactions_import         adds rows; de-dup is a bank-sync property, not a promise here
+ */
+const IDEMPOTENT = new Set<string>([
+  'actual_accounts_close',
+  'actual_accounts_delete',
+  'actual_accounts_reopen',
+  'actual_accounts_update',
+  'actual_budget_updates_batch',
+  'actual_budgets_resetHold',
+  'actual_budgets_setAmount',
+  'actual_budgets_setCarryover',
+  'actual_budgets_switch',
+  'actual_categories_delete',
+  'actual_categories_update',
+  'actual_category_groups_delete',
+  'actual_category_groups_update',
+  'actual_notes_update',
+  'actual_payees_delete',
+  'actual_payees_update',
+  'actual_rules_create_or_update',
+  'actual_rules_delete',
+  'actual_rules_update',
+  'actual_schedules_delete',
+  'actual_schedules_update',
+  'actual_session_close',
+  'actual_tags_delete',
+  'actual_tags_update',
+  'actual_transactions_delete',
+  'actual_transactions_update',
+  'actual_transactions_update_batch',
+]);
+
+/** The sets, exported so the guard can check them without re-deriving the rules. */
+export const _ANNOTATION_SETS = { OPEN_WORLD, READ_ONLY, DESTRUCTIVE, IDEMPOTENT } as const;
+
+/**
+ * Annotations for one tool.
+ *
+ * Every field is declared explicitly, including where the value equals the spec default.
+ * Silence and "declared false" are indistinguishable to a client, but they are very
+ * different to the guard: it must be able to tell "this tool was classified as a write"
+ * from "somebody forgot to classify it".
+ */
+export function annotationsFor(toolName: string): ToolAnnotations {
+  const readOnly = READ_ONLY.has(toolName);
+  return {
+    readOnlyHint: readOnly,
+    // Meaningful only when readOnlyHint is false; declared either way so the table round
+    // trips, and a read-only tool is trivially non-destructive.
+    destructiveHint: readOnly ? false : DESTRUCTIVE.has(toolName),
+    idempotentHint: readOnly ? true : IDEMPOTENT.has(toolName),
+    openWorldHint: OPEN_WORLD.has(toolName),
+  };
+}

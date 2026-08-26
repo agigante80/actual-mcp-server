@@ -15,6 +15,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+const { annotationsFor } = await import('../../dist/src/lib/tool-annotations.js');
 
 let failures = 0;
 const pass = (label) => console.log(`  ✓ ${label}`);
@@ -39,27 +40,18 @@ const tools = [...new Set([...manager.matchAll(/'(actual_[A-Za-z0-9_]+)'/g)].map
  * A PINNED list of the read-only tools, deliberately not a naming heuristic.
  *
  * A regex over the tool name would silently misclassify anything named unusually, which is
- * the same failure mode this test exists to prevent. Adding a tool here is a deliberate
- * statement that it cannot write. If a new tool is neither listed here nor present in the
- * audit, this test fails and someone has to make that call explicitly. That is the point:
- * ten seconds of typing, versus a write tool nobody ever audited.
+ * the same failure mode this test exists to prevent.
+ *
+ * #379 RETIRED the hand-maintained READ_ONLY set that used to live here. The classification
+ * now comes from `src/lib/tool-annotations.ts`, which is the same data the server PUBLISHES
+ * to clients as MCP `readOnlyHint`, and which `tests/unit/tool_annotations.test.js` verifies
+ * against the adapter call graph. So the question "can this tool write?" has one answer,
+ * checked mechanically, instead of a private list here that only a human could keep true.
+ *
+ * The property this test guards is unchanged: a tool that can write must appear in the
+ * audit. A new write tool that nobody classified still fails, now without any list to
+ * forget to update.
  */
-const READ_ONLY = new Set([
-  'actual_accounts_list', 'actual_accounts_get_balance',
-  'actual_budgets_get_all', 'actual_budgets_getMonth', 'actual_budgets_getMonths',
-  'actual_budgets_list_available',
-  'actual_categories_get', 'actual_category_groups_get',
-  'actual_payees_get', 'actual_payees_common_list', 'actual_payee_rules_get',
-  'actual_rules_get', 'actual_schedules_get', 'actual_tags_list',
-  'actual_notes_get', 'actual_preferences_get',
-  'actual_transactions_get', 'actual_transactions_filter',
-  'actual_transactions_search_by_amount', 'actual_transactions_search_by_category',
-  'actual_transactions_search_by_month', 'actual_transactions_search_by_payee',
-  'actual_transactions_summary_by_category', 'actual_transactions_summary_by_payee',
-  'actual_transactions_uncategorized',
-  'actual_entities_search', 'actual_get_id_by_name',
-  'actual_server_info', 'actual_server_get_version', 'actual_session_list',
-]);
 
 console.log('\n[#370] write-effect audit membership');
 
@@ -72,7 +64,7 @@ check(
   tools.length === declared ? '' : 'the tool-name regex is not seeing every declared entry',
 );
 
-const writeTools = tools.filter((t) => !READ_ONLY.has(t));
+const writeTools = tools.filter((t) => !annotationsFor(t).readOnlyHint);
 // Backticked match, not a substring: `actual_rules_create` is a prefix of
 // `actual_rules_create_or_update`, so `includes` would report the shorter one as audited
 // whenever only the longer one is present.
@@ -82,7 +74,7 @@ check(
   missing.length === 0,
   `every write tool appears in docs/audit/write-effect-audit.md (${writeTools.length} checked)`,
   missing.length
-    ? `absent from the audit: ${missing.join(', ')}\n      Add a row (CONFIRMED / SAFE / UNKNOWN), or add it to READ_ONLY in this test if it cannot write.`
+    ? `absent from the audit: ${missing.join(', ')}\n      Add a row (CONFIRMED / SAFE / UNKNOWN), or classify it read-only in src/lib/tool-annotations.ts if it cannot write.`
     : '',
 );
 

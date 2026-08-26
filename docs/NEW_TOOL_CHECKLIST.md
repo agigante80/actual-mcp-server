@@ -14,6 +14,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Tool file created: `src/tools/<domain>_<action>.ts`
 - [ ] Exported from `src/tools/index.ts`
 - [ ] Added to `IMPLEMENTED_TOOLS` in `src/actualToolsManager.ts`
+- [ ] **Classified in `src/lib/tool-annotations.ts`** (#379): read-only or not, and if it writes, whether it is destructive and whether it is idempotent. `tests/unit/tool_annotations.test.js` FAILS if you skip this, and it checks the claim against the adapter call graph
 - [ ] Adapter function(s) exist (or created) in `src/lib/actual-adapter.ts`
 - [ ] `npm run build` passes with zero errors
 
@@ -129,6 +130,31 @@ Verify with:
 ```bash
 npm run verify-tools
 ```
+
+---
+
+### Step 2b: Classify the tool for clients (#379)
+
+Add the tool to the right sets in `src/lib/tool-annotations.ts`. This is what the server
+PUBLISHES to clients as MCP annotations, so a model can tell a read from a delete before
+calling it.
+
+- [ ] If it changes nothing at all, add it to `READ_ONLY`. Claim this only when you are
+      certain: a wrong `readOnlyHint: true` is worse than no annotation, because clients
+      use it to decide what needs confirming.
+- [ ] If it writes, decide two things. Is it **destructive** (removes or replaces data:
+      the `*_delete` family, `payees_merge`, `budgets_import`, and `accounts_close`, which
+      REMOVES a zero-transaction account)? Is it **idempotent** (does calling it twice with
+      the same arguments leave the same state)? Creates are not idempotent;
+      `budgets_holdForNextMonth` is not either, because upstream ADDS to the buffer.
+- [ ] `openWorldHint` is handled for you: everything is a closed world except
+      `actual_bank_sync`. Only touch `OPEN_WORLD` if your tool reaches a third-party service.
+- [ ] Run `node tests/unit/tool_annotations.test.js`. It derives read-versus-write from the
+      adapter call graph and will tell you if your classification disagrees with your code.
+
+**Do not make any code in `src/` branch on an annotation.** The MCP spec says clients must
+treat annotations as untrusted, so they can never carry an authorisation or safety decision.
+Keep those in `budget-acl.ts` and the adapter guards.
 
 ---
 
