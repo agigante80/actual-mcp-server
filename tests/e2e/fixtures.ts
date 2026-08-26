@@ -47,7 +47,7 @@ import { test as base, expect, type APIRequestContext, type APIResponse } from '
 import {
   waitForMCPHealth,
   retryRequest,
-  callTool,
+  callToolWithBackoff,
   extractResult,
   DEFAULT_MCP_SERVER_URL,
   HTTP_PATH,
@@ -186,8 +186,12 @@ async function initSession(request: APIRequestContext): Promise<string> {
 function makeClient(request: APIRequestContext, sessionId: string): McpClient {
   return {
     sessionId,
-    raw: (tool, args = {}) => callTool(request, sessionId, tool, args),
-    call: async (tool, args = {}) => extractResult(await callTool(request, sessionId, tool, args)),
+    // Both go through the rate-limit backoff (#375 raised this suite's write volume
+    // several-fold, and a busy runner can trip Actual's limiter; see isRateLimitError).
+    // Nothing else is retried: every other tool error is a result the test wants to see.
+    raw: (tool, args = {}) => callToolWithBackoff(request, sessionId, tool, args),
+    call: async (tool, args = {}) =>
+      extractResult(await callToolWithBackoff(request, sessionId, tool, args)),
     post: (payload) =>
       request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
         data: JSON.stringify(payload),
@@ -293,8 +297,20 @@ export const test = base.extend<Fixtures>({
   },
 
   makeCategory: async ({ mcp, cleanup, makeCategoryGroup }, use) => {
+    // A category needs a group, and most tests that ask for a category never touch the
+    // group at all. Creating a fresh one per category doubled this suite's entity churn
+    // for no test benefit, and #375 already multiplied that churn several-fold, which is
+    // what started tripping Actual's rate limiter in CI.
+    //
+    // So the DEFAULT group is created once per test and reused by every `makeCategory()`
+    // call in it. Sharing it is safe in a way sharing an account is not: no test mutates
+    // the group it did not ask for, and any test that does mutate a group calls
+    // `makeCategoryGroup()` explicitly and gets its own. A test can still pass `group` to
+    // pin a specific one.
+    let defaultGroup: CategoryGroupRef | undefined;
+
     await use(async (opts = {}) => {
-      const group = opts.group ?? (await makeCategoryGroup());
+      const group = opts.group ?? (defaultGroup ??= await makeCategoryGroup());
       const name = opts.name ?? `E2E-Category-${uniqueSuffix()}`;
       const raw = await mcp.call('actual_categories_create', { name, group_id: group.id });
       const id = (typeof raw === 'string' ? raw : raw?.categoryId ?? raw?.id) as string;

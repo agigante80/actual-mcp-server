@@ -122,6 +122,59 @@ export async function callTool(
 }
 
 /**
+ * Is this a transient upstream RATE LIMIT rather than a real tool failure?
+ *
+ * Actual's server answers a burst of writes with `PostError: Too many requests, please try
+ * again later.`, which reaches us as an ordinary JSON-RPC error, so `callTool` cannot tell
+ * it apart from a genuine refusal without this check. It matters since #375: every test
+ * provisions and tears down its own data, so the suite issues several times the writes it
+ * used to, and a busy CI runner can bunch them tightly enough to trip the limiter. When
+ * that happened, every test after it failed for a reason that had nothing to do with what
+ * it was testing.
+ */
+export function isRateLimitError(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return /too many requests|rate ?limit/i.test(msg);
+}
+
+/**
+ * `callTool` with backoff on an upstream rate limit, and ONLY on that.
+ *
+ * Deliberately narrow: a rate limit is transient and retrying is the correct response, while
+ * every other tool error is a result the test wants to see immediately. Retrying more
+ * broadly would turn a real refusal into a slow timeout and hide the failure the test exists
+ * to catch.
+ */
+export async function callToolWithBackoff(
+  request: any,
+  sessionId: string,
+  toolName: string,
+  args: Record<string, unknown> = {},
+  maxRetries = 6,
+): Promise<any> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      return await callTool(request, sessionId, toolName, args);
+    } catch (error) {
+      lastError = error;
+      if (!isRateLimitError(error)) throw error;
+      // 500ms, 1s, 2s, 4s, 8s, capped at 15s: about 30 seconds of patience in total.
+      // Actual's limiter uses a rolling window measured in a minute, so the schedule has to
+      // reach into the seconds to clear it; retrying immediately just extends the window.
+      // The cap keeps a genuinely wedged server from stalling the suite for minutes.
+      const delay = Math.min(500 * 2 ** attempt, 15_000);
+      console.warn(
+        `[rate limit] ${toolName} throttled by the Actual server, waiting ${delay}ms ` +
+          `(attempt ${attempt + 1}/${maxRetries})`,
+      );
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Unwrap the raw MCP tool response envelope into the first meaningful value.
  *
  * MCP tools return:
