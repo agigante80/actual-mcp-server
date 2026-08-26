@@ -409,6 +409,152 @@ export async function transactionTests(client, context) {
     }
   }
 
+  // ── TRANSFERS (#366): actual_transfers_create had NO integration coverage ─────
+  //
+  // It had a unit test and nothing else. The only E2E reference lived in
+  // tests/e2e/suites/transactions.ts, which never executes, and that call passes
+  // `fromAccount`/`toAccount` while the schema requires `from_account`/`to_account`, so it
+  // would have been rejected by Zod on its first run. This block is the real coverage.
+  {
+    console.log("\n-- Transfers --");
+    const destName = `MCP-Tx-Dest-${timestamp}`;
+    const destResult = await callTool("actual_accounts_create", { name: destName, balance: 0 });
+    const destAccountId = destResult?.result ?? destResult?.id ?? destResult;
+
+    if (typeof destAccountId !== "string") {
+      fail(`transfers: could not create a destination account (got ${JSON.stringify(destResult)?.slice(0, 80)})`);
+    } else {
+      try {
+        const transferAmount = 1234;
+        const transferDate = new Date().toISOString().slice(0, 10);
+
+        // The uncategorized count must not move: a transfer is not a spending gap (#119).
+        const uncatBefore = await callTool("actual_transactions_uncategorized", {});
+        const countBefore = uncatBefore?.totalCount ?? 0;
+
+        const created = await callTool("actual_transfers_create", {
+          from_account: txAccountId,
+          to_account: destAccountId,
+          amount: transferAmount,
+          date: transferDate,
+        });
+        const transfer = created?.result ?? created;
+
+        if (transfer?.success !== true) {
+          fail(`transfers: create did not report success (got ${JSON.stringify(transfer)?.slice(0, 120)})`);
+        } else {
+          console.log("  ✓ transfers: create reported success");
+        }
+
+        // Both legs must exist, with opposite signs, on their own accounts.
+        const fromTxns = await callTool("actual_transactions_get", { accountId: txAccountId });
+        const toTxns = await callTool("actual_transactions_get", { accountId: destAccountId });
+        const fromList = fromTxns?.result ?? fromTxns ?? [];
+        const toList = toTxns?.result ?? toTxns ?? [];
+        const debit = (Array.isArray(fromList) ? fromList : []).find(
+          (t) => t?.amount === -transferAmount && t?.date === transferDate,
+        );
+        const credit = (Array.isArray(toList) ? toList : []).find(
+          (t) => t?.amount === transferAmount && t?.date === transferDate,
+        );
+
+        if (!debit) {
+          fail(`transfers: no -${transferAmount} leg on the source account`);
+        } else if (!credit) {
+          fail(`transfers: no +${transferAmount} leg on the destination account`);
+        } else {
+          console.log(`  ✓ transfers: both legs present (-${transferAmount} out, +${transferAmount} in)`);
+          // Paired, not two unrelated transactions. This is what distinguishes a transfer.
+          if (!debit.transfer_id || !credit.transfer_id) {
+            fail("transfers: legs are not linked (transfer_id missing on one or both sides)");
+          } else if (debit.transfer_id !== credit.id || credit.transfer_id !== debit.id) {
+            fail(`transfers: legs are linked to the wrong rows (debit.transfer_id=${debit.transfer_id}, credit.id=${credit.id})`);
+          } else {
+            console.log("  ✓ transfers: the two legs reference each other via transfer_id");
+          }
+        }
+
+        const uncatAfter = await callTool("actual_transactions_uncategorized", {});
+        const countAfter = uncatAfter?.totalCount ?? 0;
+        if (countAfter !== countBefore) {
+          fail(`transfers [#119]: transfer changed the uncategorized count (before=${countBefore}, after=${countAfter})`);
+        } else {
+          console.log(`  ✓ transfers [#119]: uncategorized count unchanged (${countBefore})`);
+        }
+
+        // Negative cases. NOTE THE CONTRACT: adapter.createTransfer returns a structured
+        // { success: false, error } for these; it does NOT throw. That differs from the
+        // #350 tools, which throw on a refusal, and the divergence is tracked in #371.
+        // Asserting a throw here would assert the wrong contract and fail against correct
+        // code, which is exactly what the first version of this block did.
+        const refusal = async (args, label, pattern) => {
+          let res;
+          try {
+            res = await callTool("actual_transfers_create", args);
+          } catch (err) {
+            // A throw is also a refusal; accept it, but only for the right reason.
+            const msg = err?.message ?? String(err);
+            if (!pattern.test(msg)) fail(`transfers: ${label} threw for the wrong reason: ${msg.slice(0, 120)}`);
+            else console.log(`  ✓ transfers: ${label} (thrown)`);
+            return;
+          }
+          const payload = res?.result ?? res;
+          if (payload?.success !== false) {
+            fail(`transfers: ${label} was ACCEPTED (got ${JSON.stringify(payload)?.slice(0, 120)})`);
+          } else if (!pattern.test(String(payload?.error ?? ""))) {
+            fail(`transfers: ${label} refused for the wrong reason: ${String(payload?.error).slice(0, 120)}`);
+          } else {
+            console.log(`  ✓ transfers: ${label}`);
+          }
+        };
+
+        await refusal(
+          { from_account: txAccountId, to_account: txAccountId, amount: 100, date: transferDate },
+          "same-account transfer refused",
+          /different accounts/i,
+        );
+        await refusal(
+          { from_account: txAccountId, to_account: "00000000-0000-0000-0000-000000000000", amount: 100, date: transferDate },
+          "transfer to an unknown account refused",
+          /not found/i,
+        );
+
+        // Negative: a non-positive amount is a schema error, not a zero-value transfer.
+        try {
+          await callTool("actual_transfers_create", {
+            from_account: txAccountId,
+            to_account: destAccountId,
+            amount: 0,
+            date: transferDate,
+          });
+          fail("transfers: a zero amount was accepted");
+        } catch {
+          console.log("  ✓ transfers: zero amount rejected by the schema");
+        }
+      } finally {
+        // Zero residue, and it needs care since v0.12.0. The transfer leaves the SOURCE
+        // account with a non-zero balance, and actual_accounts_close now correctly refuses
+        // to close such an account without a transferAccountId (#357). The module teardown
+        // below is close-then-delete, so leaving the balance behind made the whole run fail
+        // its zero-residue assertion. Remove the debit leg here to put the source account
+        // back at zero, then drop the destination account and its credit leg with it.
+        try {
+          const srcTxns = await callTool("actual_transactions_get", { accountId: txAccountId });
+          const srcList = srcTxns?.result ?? srcTxns ?? [];
+          for (const t of Array.isArray(srcList) ? srcList : []) {
+            if (t?.amount === -1234) {
+              await callTool("actual_transactions_delete", { id: t.id });
+            }
+          }
+          await callTool("actual_accounts_delete", { id: destAccountId });
+          console.log(`  ✓ transfers: cleaned up, source account back to a zero balance`);
+        } catch (err) {
+          console.log(`  ⚠ transfers: could not clean up: ${err.message?.slice(0, 120)}`);
+        }
+      }
+    }
+  }
+
   // Teardown: close then delete the dedicated transaction test account.
   // close() must come first: Actual tombstones (hard-deletes) accounts with zero
   // transactions on close(), making them unrecoverable. We need close() to set

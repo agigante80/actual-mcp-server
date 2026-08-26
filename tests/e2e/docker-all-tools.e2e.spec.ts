@@ -961,6 +961,117 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     console.log('✅ Payee summary retrieved');
   });
 
+  // ==================== TRANSFERS (1 tool) ====================
+  // #366: actual_transfers_create had unit coverage and nothing at integration level.
+  // The only E2E reference lived in tests/e2e/suites/transactions.ts, which never runs,
+  // and it passed `fromAccount`/`toAccount` where the schema requires
+  // `from_account`/`to_account`, so it would have failed on its first execution.
+  test('actual_transfers_create - creates a paired transfer and links both legs', async ({ request }) => {
+    console.log('🔁 Testing actual_transfers_create...');
+    const stamp = Date.now();
+    const mk = async (name: string) => {
+      const r = await callTool(request, sessionId, 'actual_accounts_create', { name, balance: 0 });
+      return extractResult(r) as string;
+    };
+    const srcId = await mk(`E2E-Xfer-Src-${stamp}`);
+    const dstId = await mk(`E2E-Xfer-Dst-${stamp}`);
+    expect(typeof srcId).toBe('string');
+    expect(typeof dstId).toBe('string');
+
+    try {
+      const amount = 1234;
+      const date = new Date().toISOString().substring(0, 10);
+
+      const created = await callTool(request, sessionId, 'actual_transfers_create', {
+        from_account: srcId,
+        to_account: dstId,
+        amount,
+        date,
+      });
+      expect(extractResult(created)?.success).toBeTruthy();
+
+      // Both legs, opposite signs, on their own accounts.
+      const legs = async (acct: string) => {
+        const r = await callTool(request, sessionId, 'actual_transactions_get', { accountId: acct });
+        const d = extractResult(r);
+        return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+      };
+      const debit = (await legs(srcId)).find((t: any) => t?.amount === -amount);
+      const credit = (await legs(dstId)).find((t: any) => t?.amount === amount);
+      expect(debit).toBeTruthy();
+      expect(credit).toBeTruthy();
+
+      // Paired, not two unrelated transactions. This is what makes it a transfer.
+      expect(debit.transfer_id).toBe(credit.id);
+      expect(credit.transfer_id).toBe(debit.id);
+      console.log('✅ Transfer created and both legs linked via transfer_id');
+    } finally {
+      for (const id of [srcId, dstId]) {
+        try {
+          await callTool(request, sessionId, 'actual_accounts_delete', { id });
+        } catch {
+          console.log(`⚠️  Could not clean up transfer test account ${id}`);
+        }
+      }
+    }
+  });
+
+  test('actual_transfers_create - ERROR: refuses same account, unknown account and a non-positive amount', async ({ request }) => {
+    console.log('🔁 Testing actual_transfers_create refusals...');
+    const stamp = Date.now();
+    const r = await callTool(request, sessionId, 'actual_accounts_create', {
+      name: `E2E-Xfer-Neg-${stamp}`,
+      balance: 0,
+    });
+    const acctId = extractResult(r) as string;
+    const date = new Date().toISOString().substring(0, 10);
+    const ghost = '00000000-0000-4000-8000-000000000366';
+
+    try {
+      // NOTE THE CONTRACT: adapter.createTransfer returns a structured
+      // { success: false, error } for these refusals; it does NOT throw, unlike the #350
+      // tools. Accept either, but require an actual refusal. Asserting only a throw would
+      // fail against correct code. The divergence is tracked in #371.
+      const refuses = async (args: Record<string, unknown>, label: string) => {
+        let refused = false;
+        try {
+          const r = await callTool(request, sessionId, 'actual_transfers_create', args);
+          const payload = extractResult(r);
+          refused = payload?.success === false;
+        } catch {
+          refused = true;
+        }
+        expect(refused, label).toBe(true);
+      };
+
+      await refuses(
+        { from_account: acctId, to_account: acctId, amount: 100, date },
+        'same account on both sides must be refused',
+      );
+      await refuses(
+        { from_account: acctId, to_account: ghost, amount: 100, date },
+        'an account that does not exist must be refused',
+      );
+      await refuses(
+        { from_account: acctId, to_account: ghost, amount: 0, date },
+        'a zero amount must be refused by the schema',
+      );
+
+      // Nothing may have been written by any of the three.
+      const after = await callTool(request, sessionId, 'actual_transactions_get', { accountId: acctId });
+      const d = extractResult(after);
+      const txns = (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+      expect(txns.length).toBe(0);
+      console.log('✅ All three refusals held, and nothing was written');
+    } finally {
+      try {
+        await callTool(request, sessionId, 'actual_accounts_delete', { id: acctId });
+      } catch {
+        console.log(`⚠️  Could not clean up ${acctId}`);
+      }
+    }
+  });
+
   // ==================== BUDGETS (9 tools) ====================
   test('actual_budgets_get_all - should get all budgets', async ({ request }) => {
     console.log('💰 Testing actual_budgets_get_all...');
