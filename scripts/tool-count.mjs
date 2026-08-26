@@ -52,6 +52,9 @@ const FILES = [
 export const TOTAL_PATTERNS = [
   // Distinctive TOTAL phrasings (safe in any file; never match a subset "(N tools)" header).
   { re: /\ball (\d{2,3}) tools\b/gi, label: 'all N tools' },
+  // The api-design-principles skill states the total in its frontmatter `description:`,
+  // which the phrasings above do not match, so it drifted silently.
+  { re: /(\d{2,3})-tool set\b/g, label: 'N-tool set' },
   { re: /\*\*(\d{2,3}) tools\*\* across/g, label: '**N tools** across' },
   { re: /\*\*(\d{2,3}) tools\*\* listed/g, label: '**N tools** listed' },
   { re: /E2E \((\d{2,3}) tools\)/g, label: 'E2E (N tools)' },

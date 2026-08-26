@@ -1489,9 +1489,7 @@ export async function deleteCategory(id: string): Promise<void> {
     );
     const exists = (categories as any[]).some((c: any) => c.id === id);
     if (!exists) {
-      throw new Error(
-        `Category "${id}" not found. Use actual_categories_get to list available categories.`
-      );
+      throw new NotFoundRefusal('Category', id, 'actual_categories_get');
     }
     await withConcurrency(() =>
       retry(() => rawDeleteCategory(id) as Promise<void>, { retries: 0, backoffMs: 200 })
@@ -1592,9 +1590,7 @@ export async function deletePayee(id: string): Promise<void> {
       | undefined;
     const exists = Boolean(found);
     if (!exists) {
-      throw new Error(
-        `Payee "${id}" not found. Use actual_payees_get to list available payees.`
-      );
+      throw new NotFoundRefusal('Payee', id, 'actual_payees_get');
     }
     // #356: the existence check above is not enough. Actual refuses to delete a
     // TRANSFER payee (the payee it auto-creates for each account) and refuses

@@ -333,6 +333,23 @@ export async function budgetTests(client, context) {
       Number(afterMonth.forNextMonth ?? 0) - heldBefore === HOLD_AMOUNT,
       `forNextMonth advanced by exactly ${HOLD_AMOUNT}`,
     );
+
+    // resetHold, asserted HERE rather than after the block, because this is where the
+    // seeded income still exists and where the before-values are in scope. Undoing a hold
+    // whose exact size we just established is the only place the reset can be checked
+    // against a known number.
+    console.log("\nResetting hold...");
+    await callTool("actual_budgets_resetHold", { month: currentDate });
+    const afterReset = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const resetMonth = (afterReset.result || afterReset) ?? {};
+    holdCheck(
+      Number(resetMonth.forNextMonth ?? 0) === heldBefore,
+      `resetHold returned forNextMonth to its starting value (${heldBefore})`,
+    );
+    holdCheck(
+      Number(resetMonth.toBudget ?? 0) === toBudgetBefore,
+      `resetHold restored toBudget to ${toBudgetBefore}`,
+    );
   } finally {
     // Undo BOTH effects, whatever happened, so the budget is left as found.
     //
@@ -350,21 +367,6 @@ export async function budgetTests(client, context) {
       await callTool("actual_accounts_delete", { id: holdSeedId });
     } catch (err) {
       console.log(`  ⚠ could not remove the hold seed account ${holdSeedId}: ${err.message}`);
-    }
-  }
-
-  // Reset hold
-  console.log("\nResetting hold...");
-  await callTool("actual_budgets_resetHold", { month: currentDate });
-  console.log("✓ Hold reset");
-  {
-    const afterReset = await callTool("actual_budgets_getMonth", { month: currentDate });
-    const toBudgetAfterReset = (afterReset.result || afterReset)?.toBudget ?? null;
-    if (toBudgetBefore !== null && toBudgetAfterReset !== null) {
-      if (toBudgetAfterReset === toBudgetBefore) console.log(`  ✓ Verify resetHold: toBudget restored to ${toBudgetAfterReset}`);
-      else fail(`Verify resetHold: expected toBudget ${toBudgetBefore}, got ${toBudgetAfterReset}`);
-    } else {
-      console.log(`  ⚠ Verify resetHold: toBudget field not available in response (skipped)`);
     }
   }
 

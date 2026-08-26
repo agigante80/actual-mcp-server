@@ -377,7 +377,8 @@ async function expectCallError(tool, input, label) {
     'valid name accepted')) fail();
 
   // ── actual_payees_merge (P3) ──────────────────────────────────────────────
-  // Schema uses z.string() for targetId (no UUID enforcement) and z.array(z.string()) for mergeIds
+  // #365: targetId and every mergeIds element are CommonSchemas.payeeId (the UUID
+  // pattern), so these fixtures must be real UUIDs or a case fails for the wrong reason.
   console.log('\n[actual_payees_merge — required targetId + mergeIds array]');
   if (!expectParseError(payees_merge_tool,
     {},
