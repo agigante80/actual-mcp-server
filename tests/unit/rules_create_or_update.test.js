@@ -82,7 +82,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     const res = await tool.call(validInput);
     check(res?.id === 'existing-rule-id', 'returns id of existing rule');
     check(res?.created === false,         'created flag is false');
-    check(cycles() === 1,                 'exactly one write-queue cycle for the read and the write');
+    check(witness.sharedOneCycle(),
+      'the read and the update ran in the SAME drain (#376)', witness.describe());
     check(updateCalls === 1,              'rawUpdateRule called inside callback');
     check(createCalls === 0,              'rawCreateRule NOT called');
     check(updatedRule?.id === 'existing-rule-id', 'updated rule has the right id');

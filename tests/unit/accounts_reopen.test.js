@@ -47,7 +47,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   adapterMod._setSkipApiInitForTests(true);
   witness = makeCycleWitness(adapterMod);
 
-  const reset = (queue) => { accountsQueue = queue; getCalls = 0; reopenCalls = 0; };
+  const reset = (queue) => { accountsQueue = queue; getCalls = 0; reopenCalls = 0; witness.reset(); };
 
   console.log('\n[#358] accounts_reopen: positive, a closed account is reopened');
   {
@@ -55,7 +55,6 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       [{ id: 'acct-1', name: 'Savings', closed: true }],   // before
       [{ id: 'acct-1', name: 'Savings', closed: false }],  // after
     ]);
-    const batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
     const res = await tool.call({ id: 'acct-1' });
     check(res?.success === true,   'returns success: true');
     check(reopenCalls === 1,       'raw reopenAccount called exactly once');

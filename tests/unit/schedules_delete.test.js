@@ -87,7 +87,8 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
     check(threw instanceof Error,                       'throws on constraint error');
     check(typeof threw?.message === 'string',           'error is structured string');
     check(!threw?.message?.includes('SQLITE_CONSTRAINT'),'raw SQLite error not surfaced');
-    check(cycles() === 1,                               'still exactly one write-queue cycle');
+    check(witness.sharedOneCycle(),
+      'the read and the attempted delete ran in the SAME drain (#376)', witness.describe());
     check(deleteCalls === 1,                            'rawDeleteSchedule was attempted');
   }
 

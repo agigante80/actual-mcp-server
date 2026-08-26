@@ -58,12 +58,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
   const reset = (budget, startBuffered = 0) => {
     toBudget = budget; buffered = startBuffered; holdCalls = 0; lastArgs = null; monthReads = 0;
+    witness.reset();
   };
 
   console.log('\n[#355] holdForNextMonth: positive, the full amount is held');
   {
     reset(50000);
-    const batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
     const res = await tool.call({ month: '2026-01', amount: 25000 });
     check(res?.success === true,       'returns success: true');
     check(res?.held === 25000,         'reports the amount held');

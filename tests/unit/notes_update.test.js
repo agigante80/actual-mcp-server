@@ -38,9 +38,9 @@ const ORPHAN_ID        = 'not-a-real-entity';
   apiDefault.getNote    = async (id) => ({ id, note: '' });
   apiDefault.sync       = async () => {};
   apiDefault.getAccounts = async () => { witness?.noteRead(); return entityRows; };
-  apiDefault.getCategories     = async () => [];
-  apiDefault.getCategoryGroups = async () => [];
-  apiDefault.getPayees         = async () => [];
+  apiDefault.getCategories    = async () => { witness?.noteRead(); return []; };
+  apiDefault.getCategoryGroups = async () => { witness?.noteRead(); return []; };
+  apiDefault.getPayees        = async () => { witness?.noteRead(); return []; };
 
   const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
