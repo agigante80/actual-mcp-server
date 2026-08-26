@@ -324,7 +324,7 @@ export default tool;
 
 Four tools mutate WITHOUT the write queue, so the call graph says read and reality says write: `bank_sync` (imports transactions through the read path), `budgets_export` (writes a zip), `budgets_switch` (session state plus a stored preference) and `session_close` (a pooled connection). They are excluded from the read-only set and listed with their reasons in the guard.
 
-**`tools/list` is built in ONE place: `buildToolListEntries`.** It used to be assembled independently in three (the HTTP SDK handler, the no-session LobeChat compatibility path, and the stdio handler), so anything added to the published surface reached some clients and not others. #379 found this the hard way: annotations went to HTTP and silently missed stdio, which is what Claude Desktop runs.
+**`tools/list` is built in ONE place: `buildToolListEntries`.** It used to be assembled independently in FOUR (the HTTP SDK handler, the no-session LobeChat compatibility path, the expired-session LobeChat discovery shim, and the stdio handler), so anything added to the published surface reached some clients and not others. #379 found this twice over: the first attempt patched a fifth site that is not `tools/list` at all and shipped nothing, and the second missed the expired-session shim, which would have served stale-session clients 74 tools with no annotations, falling back to the spec's defaults and presenting all 31 read-only tools as destructive open-world writes. `tests/unit/httpServer_session_not_found.test.js` now fails if a payload is assembled inline again.
 
 ### Adding a New Tool
 

@@ -14,7 +14,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Tool file created: `src/tools/<domain>_<action>.ts`
 - [ ] Exported from `src/tools/index.ts`
 - [ ] Added to `IMPLEMENTED_TOOLS` in `src/actualToolsManager.ts`
-- [ ] **Classified in `src/lib/tool-annotations.ts`** (#379): read-only or not, and if it writes, whether it is destructive and whether it is idempotent. `tests/unit/tool_annotations.test.js` FAILS if you skip this, and it checks the claim against the adapter call graph
+- [ ] **Classified in `src/lib/tool-annotations.ts`** (#379): put it in exactly one of `READ_ONLY`, `DESTRUCTIVE` or `ADDITIVE`, and if it writes, decide idempotence. `npm run build && node tests/unit/tool_annotations.test.js` FAILS if you skip this (the guard reads `dist/`, so build first), and it checks the read-only claim against the adapter call graph
 - [ ] Adapter function(s) exist (or created) in `src/lib/actual-adapter.ts`
 - [ ] `npm run build` passes with zero errors
 
@@ -149,8 +149,10 @@ calling it.
       `budgets_holdForNextMonth` is not either, because upstream ADDS to the buffer.
 - [ ] `openWorldHint` is handled for you: everything is a closed world except
       `actual_bank_sync`. Only touch `OPEN_WORLD` if your tool reaches a third-party service.
-- [ ] Run `node tests/unit/tool_annotations.test.js`. It derives read-versus-write from the
-      adapter call graph and will tell you if your classification disagrees with your code.
+- [ ] Run `npm run build && node tests/unit/tool_annotations.test.js`. The guard reads the
+      compiled table from `dist/`, so an unbuilt tree validates the PREVIOUS classification.
+      It derives read-versus-write from the adapter call graph and will tell you if your
+      classification disagrees with your code.
 
 **Do not make any code in `src/` branch on an annotation.** The MCP spec says clients must
 treat annotations as untrusted, so they can never carry an authorisation or safety decision.

@@ -108,5 +108,26 @@ console.log('\n[source] tools/list discovery shim is preserved');
     'tools/list shim still returns result: { tools }');
 }
 
+// ----------------------------------------------------------------------------
+// #379: every tools/list assembly site must go through buildToolListEntries.
+//
+// There were FOUR, not the three the extraction commit claimed: the SDK handler, the
+// no-session LobeChat path, THIS expired-session discovery shim, and stdio. The shim was
+// missed, so a LobeChat client caching a session id across a server restart would have got
+// 74 tools with NO annotations, and every one would fall back to the spec's defaults:
+// readOnlyHint false, destructiveHint true, openWorldHint true. The 31 read-only tools would
+// have been presented to that client as destructive open-world writes. This is the path most
+// likely to be hit in production and least likely to be noticed, which is why it is pinned
+// here next to the shim it belongs to.
+// ----------------------------------------------------------------------------
+{
+  const inline = (source.match(/toolsList\.map\(\(name: string\)/g) || []).length;
+  assert(inline === 0,
+    'no tools/list payload is assembled inline (use buildToolListEntries so every transport and compat path publishes the same surface)');
+  const viaBuilder = (source.match(/buildToolListEntries\(/g) || []).length;
+  assert(viaBuilder >= 3,
+    `buildToolListEntries is used at every tools/list site (found ${viaBuilder}, expected at least 3)`);
+}
+
 console.log(`\n[httpServer-session-not-found] Results: ${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

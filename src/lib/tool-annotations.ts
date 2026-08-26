@@ -103,6 +103,12 @@ const READ_ONLY = new Set<string>([
 const DESTRUCTIVE = new Set<string>([
   'actual_accounts_close',
   'actual_accounts_delete',
+  // Upstream `reconcileTransactions` builds an `updates` object for transactions that
+  // ALREADY exist, overwriting imported_id, imported_payee and cleared, and date when the
+  // account's `sync-update-dates-<id>` preference is on. It then propagates cleared and
+  // date onto split children. That is an in-place rewrite of existing rows, not an append.
+  'actual_bank_sync',
+  'actual_budgets_export',
   'actual_budgets_import',
   'actual_categories_delete',
   'actual_category_groups_delete',
@@ -112,6 +118,60 @@ const DESTRUCTIVE = new Set<string>([
   'actual_schedules_delete',
   'actual_tags_delete',
   'actual_transactions_delete',
+  // THE NON-OBVIOUS ONE. `fields.subtransactions` (CommonSchemas, `.strict()`) has no `id`,
+  // so upstream's `makeChild` mints a fresh UUID for every child and `diffItems` tombstones
+  // every existing one. Editing one amount on a six-way split DELETES all six rows and
+  // creates six new ones with new ids, breaking any external reference to them. That also
+  // makes it non-idempotent, which is why it is absent from IDEMPOTENT below.
+  'actual_transactions_update',
+]);
+
+/**
+ * Write tools that only ADD or set a field in place: not destructive.
+ *
+ * This set exists to make the classification TOTAL. Without it, a tool nobody classified
+ * fell through every set and `annotationsFor` published `destructiveHint: false` and
+ * `openWorldHint: false`, which INVERTS the spec's conservative defaults (both default to
+ * true) into positive safety claims about a tool nobody had looked at. Silence has to be
+ * impossible here, not merely discouraged, and `tests/unit/tool_annotations.test.js`
+ * asserts every registered tool appears in exactly one of READ_ONLY, DESTRUCTIVE or
+ * ADDITIVE.
+ *
+ * THE POLICY, stated so the boundary is a decision rather than an omission: overwriting a
+ * FIELD on an existing row is additive; removing or replacing a ROW is destructive. So
+ * `budgets_setAmount` and `accounts_update` are additive, while `transactions_update` is
+ * not, because on the split path it deletes and recreates child rows.
+ */
+const ADDITIVE = new Set<string>([
+  'actual_accounts_create',
+  'actual_accounts_reopen',
+  'actual_accounts_update',
+  'actual_budgets_switch',
+  'actual_budgets_holdForNextMonth',
+  'actual_budgets_resetHold',
+  'actual_budgets_setAmount',
+  'actual_budgets_setCarryover',
+  'actual_budgets_transfer',
+  'actual_budget_updates_batch',
+  'actual_categories_create',
+  'actual_categories_update',
+  'actual_category_groups_create',
+  'actual_category_groups_update',
+  'actual_payees_create',
+  'actual_payees_update',
+  'actual_rules_create',
+  'actual_rules_create_or_update',
+  'actual_rules_update',
+  'actual_schedules_create',
+  'actual_schedules_update',
+  'actual_transactions_create',
+  'actual_transactions_import',
+  'actual_transactions_update_batch',
+  'actual_transfers_create',
+  'actual_tags_create',
+  'actual_tags_update',
+  'actual_notes_update',
+  'actual_session_close',
 ]);
 
 /**
@@ -144,6 +204,17 @@ const DESTRUCTIVE = new Set<string>([
  * truly refuses every duplicate is not something this file should assume.
  */
 const IDEMPOTENT = new Set<string>([
+  // NOT the same question as #165's "safe to re-issue". `tests/unit/adapter_nonidempotent_no_retry.test.js`
+  // pins several of these as non-idempotent for RETRY purposes, and both are right: the MCP
+  // spec asks whether repeating leaves the same STATE (a second delete writes nothing),
+  // while #165 asks whether re-issuing an in-flight write can corrupt or mislead. A client
+  // reading this flag to decide "auto-retry after a timeout?" should still respect #165, so
+  // the two lists disagreeing on paper is expected and is recorded here rather than left to
+  // be re-litigated.
+  //
+  // `actual_session_close` is deliberately ABSENT: called with no sessionId it closes the
+  // OLDEST IDLE session, so repeating it closes a DIFFERENT session each time until the
+  // pool is empty. That is the literal negation of the flag.
   'actual_accounts_close',
   'actual_accounts_delete',
   'actual_accounts_reopen',
@@ -165,17 +236,15 @@ const IDEMPOTENT = new Set<string>([
   'actual_rules_update',
   'actual_schedules_delete',
   'actual_schedules_update',
-  'actual_session_close',
   'actual_tags_create',
   'actual_tags_delete',
   'actual_tags_update',
   'actual_transactions_delete',
-  'actual_transactions_update',
   'actual_transactions_update_batch',
 ]);
 
 /** The sets, exported so the guard can check them without re-deriving the rules. */
-export const _ANNOTATION_SETS = { OPEN_WORLD, READ_ONLY, DESTRUCTIVE, IDEMPOTENT } as const;
+export const _ANNOTATION_SETS = { OPEN_WORLD, READ_ONLY, DESTRUCTIVE, ADDITIVE, IDEMPOTENT } as const;
 
 /**
  * Annotations for one tool.
@@ -187,6 +256,18 @@ export const _ANNOTATION_SETS = { OPEN_WORLD, READ_ONLY, DESTRUCTIVE, IDEMPOTENT
  */
 export function annotationsFor(toolName: string): ToolAnnotations {
   const readOnly = READ_ONLY.has(toolName);
+  const classified = readOnly || DESTRUCTIVE.has(toolName) || ADDITIVE.has(toolName);
+
+  if (!classified) {
+    // A tool nobody classified. OMIT `destructiveHint` and `openWorldHint` so the spec's
+    // own defaults apply, which are `true` for both: unknown reads as destructive and
+    // open-world, the conservative answer. Returning `false` here would have published a
+    // positive SAFETY claim about code nobody had looked at, which is strictly worse than
+    // saying nothing. The guard fails the build on this case; the shape here is what
+    // protects clients in the window before someone notices.
+    return { readOnlyHint: false, idempotentHint: false };
+  }
+
   return {
     readOnlyHint: readOnly,
     // Meaningful only when readOnlyHint is false; declared either way so the table round

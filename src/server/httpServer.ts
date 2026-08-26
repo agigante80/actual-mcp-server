@@ -548,24 +548,7 @@ export async function startHttpServer(
           // This allows LobeChat's backend to discover available tools even with expired sessions
           if (method === 'tools/list') {
             logger.debug('[LOBECHAT COMPAT] Handling tools/list with expired/invalid session - returning tools for discovery');
-            const tools = toolsList.map((name: string) => {
-              const schemaFromParam = toolSchemas && toolSchemas[name];
-              const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
-              const schema = schemaFromParam || schemaFromManager;
-              
-              const inputSchema = schema && typeof schema === 'object' && Object.keys(schema).length > 0
-                ? schema
-                : { type: 'object', properties: {}, additionalProperties: false };
-              
-              const tool = actualToolsManager.getTool(name);
-              const description = tool?.description || `Tool ${name}`;
-              
-              return {
-                name,
-                description,
-                inputSchema,
-              };
-            });
+            const tools = buildToolListEntries(toolsList, resolveToolMeta);
             
             res.json({
               jsonrpc: '2.0',
