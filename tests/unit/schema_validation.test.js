@@ -386,14 +386,23 @@ async function expectCallError(tool, input, label) {
     { mergeIds: ['p2'] },
     'missing targetId rejected')) fail();
   if (!expectParseError(payees_merge_tool,
-    { targetId: 'p1' },
+    { targetId: '11111111-1111-4111-8111-111111111111' },
     'missing mergeIds rejected')) fail();
   if (!expectParseError(payees_merge_tool,
-    { targetId: 'p1', mergeIds: 'not-an-array' },
+    { targetId: '11111111-1111-4111-8111-111111111111', mergeIds: 'not-an-array' },
     'string instead of array for mergeIds rejected')) fail();
   if (!expectParseOk(payees_merge_tool,
-    { targetId: 'p1', mergeIds: ['p2', 'p3'] },
+    { targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'] },
     'valid targetId + mergeIds array accepted')) fail();
+  // #365: payee ids are the shared UUID schema on both axes now. A non-UUID is rejected
+  // at the boundary rather than travelling to the adapter to come back as "not found",
+  // and the ARRAY element type is checked too, which a bare string type never did.
+  if (!expectParseError(payees_merge_tool,
+    { targetId: 'p1', mergeIds: ['22222222-2222-4222-8222-222222222222'] },
+    'non-UUID targetId rejected')) fail();
+  if (!expectParseError(payees_merge_tool,
+    { targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['22222222-2222-4222-8222-222222222222', 'p3'] },
+    'a non-UUID inside mergeIds is rejected')) fail();
 
   // ── actual_get_id_by_name (Q1) ────────────────────────────────────────────
   console.log('\n[actual_get_id_by_name — required type enum + non-empty name]');

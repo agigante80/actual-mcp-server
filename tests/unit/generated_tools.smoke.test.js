@@ -65,7 +65,7 @@ console.log('Running generated tools smoke tests');
     // #356: the adapter reports which ids it merged, so the stub must model that
     // contract. Returning null here would only prove the tool tolerates a stub that
     // does not match the code it stands in for.
-    mergePayees: ['p_2', 'p_3'],
+    mergePayees: ['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'],
     getRules: [{ id: 'rule1', conditions: [] }],
     createRule: 'rule-new',
     deleteRule: null,
@@ -179,9 +179,10 @@ console.log('Running generated tools smoke tests');
   if (name.includes('category_groups_delete')) inputExample.id = 'grp_1';
   if (name.includes('category_groups_update')) inputExample.id = 'grp_1', inputExample.fields = { name: 'Updated' };
   if (name.includes('payees_create')) inputExample.name = 'Kroger';
-  if (name.includes('payees_delete')) inputExample.id = 'p_1';
+  // #365: payee ids are the shared UUID schema now, so these fixtures are real UUIDs.
+  if (name.includes('payees_delete')) inputExample.id = '11111111-1111-4111-8111-111111111111';
   if (name.includes('payees_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated' };
-  if (name.includes('payees_merge')) inputExample.targetId = 'p_1', inputExample.mergeIds = ['p_2', 'p_3'];
+  if (name.includes('payees_merge')) inputExample.targetId = '11111111-1111-4111-8111-111111111111', inputExample.mergeIds = ['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'];
   if (name.includes('payee_rules_get')) inputExample.payeeId = 'p_1';
   if (name.includes('rules_create') && !name.includes('or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
