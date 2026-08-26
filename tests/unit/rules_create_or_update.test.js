@@ -1,6 +1,11 @@
 // tests/unit/rules_create_or_update.test.js
 // Regression test for #142: actual_rules_create_or_update must do exactly one
-// withWriteSession invocation, branching create vs update inside the same callback.
+// write-queue cycle, branching create vs update inside the same cycle.
+//
+// #376: the read-match-write cycle MOVED from the tool into adapter.upsertRule (identity
+// rules in src/lib/rule-matching.ts). This test moved with it: stubbing
+// adapter.withWriteSession with a pass-through counter would now stub away the thing under
+// test, so api init is disarmed and the RAW api functions are stubbed instead.
 
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
@@ -28,17 +33,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     import('../../dist/src/tools/rules_create_or_update.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
-  const adapter = adapterMod.default;
+  apiDefault.sync = async () => {};
+  adapterMod._setSkipApiInitForTests(true);
 
-  let withWriteSessionCalls = 0;
-  const orig = adapter.withWriteSession;
-  adapter.withWriteSession = async (fn) => { withWriteSessionCalls++; return await fn(); };
-
+  let batchesBefore = 0;
+  const cycles = () => adapterMod._getWriteQueueBatchCountForTests() - batchesBefore;
   const reset = () => {
-    withWriteSessionCalls = 0;
     createCalls = 0; createReturns = 'new-rule-id';
     updateCalls = 0; updatedRule = null;
     rulesResponse = [];
+    batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
   };
 
   const validInput = {
@@ -55,7 +59,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     const res = await tool.call(validInput);
     check(res?.id === 'new-rule-id',      'returns id of created rule');
     check(res?.created === true,          'created flag is true');
-    check(withWriteSessionCalls === 1,    'withWriteSession called exactly once');
+    check(cycles() === 1,                 'exactly one write-queue cycle for the read and the write');
     check(createCalls === 1,              'rawCreateRule called inside callback');
     check(updateCalls === 0,              'rawUpdateRule NOT called');
   }
@@ -73,7 +77,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     const res = await tool.call(validInput);
     check(res?.id === 'existing-rule-id', 'returns id of existing rule');
     check(res?.created === false,         'created flag is false');
-    check(withWriteSessionCalls === 1,    'withWriteSession called exactly once');
+    check(cycles() === 1,                 'exactly one write-queue cycle for the read and the write');
     check(updateCalls === 1,              'rawUpdateRule called inside callback');
     check(createCalls === 0,              'rawCreateRule NOT called');
     check(updatedRule?.id === 'existing-rule-id', 'updated rule has the right id');
@@ -92,7 +96,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     } catch (e) { threw = e; }
     check(threw instanceof Error,                                'throws on invalid operator');
     check((threw?.message || '').includes('Invalid operator "contains" for field "amount"'), 'actionable error');
-    check(withWriteSessionCalls === 0,                           'withWriteSession NOT called');
+    check(cycles() === 0,                                        'the write queue is never reached');
     check(createCalls === 0 && updateCalls === 0,                'no raw write attempted');
   }
 
@@ -108,7 +112,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     } catch (e) { threw = e; }
     check(threw instanceof Error,                                'throws on non-UUID payee value');
     check((threw?.message || '').includes('expects a UUID'),     'actionable error');
-    check(withWriteSessionCalls === 0,                           'withWriteSession NOT called');
+    check(cycles() === 0,                                        'the write queue is never reached');
   }
 
   console.log('\n[#142] rules_create_or_update: schema rejection (missing actions)');
@@ -117,10 +121,9 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     let threw = null;
     try { await tool.call({ stage: 'pre', conditionsOp: 'and', conditions: validInput.conditions }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                'throws on missing actions');
-    check(withWriteSessionCalls === 0,                           'withWriteSession NOT called on Zod fail');
+    check(cycles() === 0,                                        'a Zod failure never reaches the write queue');
   }
 
-  adapter.withWriteSession = orig;
   console.log('');
   if (failures === 0) console.log('[#142] All rules_create_or_update tests passed ✓');
   else { console.error(`[#142] ${failures} test(s) FAILED`); process.exit(2); }

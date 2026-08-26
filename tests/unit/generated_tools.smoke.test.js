@@ -70,6 +70,10 @@ console.log('Running generated tools smoke tests');
     createRule: 'rule-new',
     deleteRule: null,
     updateRule: null,
+    // #376: rules_create_or_update calls adapter.upsertRule now (the read-match-write
+    // cycle moved out of the tool). Its contract is { id, created }, and the tool returns
+    // that object verbatim, so a bare null here would not stand in for the real code.
+    upsertRule: { id: 'rule-upserted', created: true },
     getBudgetMonths: ['2025-12'],
     getBudgetMonth: { 
       month: '2025-12', 

@@ -1,7 +1,11 @@
 // tests/unit/category_groups_delete.test.js
-// Regression test for #142: actual_category_groups_delete must do exactly one
-// withWriteSession invocation (down from 2 separate cycles), and preserve the
-// existing error UX from notFoundMsg().
+// #142: actual_category_groups_delete must do exactly ONE write-queue cycle (down from 2),
+// and preserve the actionable not-found error UX.
+//
+// #376: the existence guard MOVED from the tool into adapter.deleteCategoryGroup. This test
+// moved with it. It used to stub adapter.withWriteSession with a pass-through counter,
+// which stubbed away the very thing under test once the guard was no longer in the tool.
+// It now disarms api init and stubs the RAW api functions, so the real adapter guard runs.
 //
 // Run via: npm run test:unit-js
 // Or:      node tests/unit/category_groups_delete.test.js
@@ -16,80 +20,76 @@ const fail = (label, d = '') => { console.error(`  ✗ FAIL: ${label}${d ? ' (' 
 const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
 (async () => {
-  // Stub the raw @actual-app/api functions BEFORE the tool module captures them.
-  // The tool destructures const { getCategoryGroups, deleteCategoryGroup } = api at module init;
-  // we install proxy functions that delegate to mutable refs so we can swap behaviour per case.
+  // These raw stubs MUST be installed before the adapter module is imported: it
+  // destructures the api functions at module load, so a stub applied afterwards is
+  // captured by nobody and the real function runs.
   const apiMod = await import('@actual-app/api');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const apiDefault = (apiMod.default || apiMod);
 
   let groupsResponse = [];
   let deleteCalls = 0;
   let deleteThrows = null;
+  apiDefault.sync = async () => {};
   apiDefault.getCategoryGroups = async () => groupsResponse;
   apiDefault.deleteCategoryGroup = async (_id) => {
     deleteCalls++;
     if (deleteThrows) throw deleteThrows;
   };
 
-  const [toolMod, adapterMod] = await Promise.all([
+  const [tool, adapterMod, errorsMod] = await Promise.all([
     import('../../dist/src/tools/category_groups_delete.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
+    import('../../dist/src/lib/errors.js'),
   ]);
-  const tool    = toolMod;
-  const adapter = adapterMod.default;
+  const { isPreflightRefusal } = errorsMod;
+  adapterMod._setSkipApiInitForTests(true);
 
-  // Replace withWriteSession with a counter that runs the callback synchronously.
-  let withWriteSessionCalls = 0;
-  const origWithWriteSession = adapter.withWriteSession;
-  adapter.withWriteSession = async (fn) => { withWriteSessionCalls++; return await fn(); };
+  const reset = () => { deleteCalls = 0; deleteThrows = null; groupsResponse = []; };
 
-  const reset = () => {
-    withWriteSessionCalls = 0;
-    deleteCalls = 0;
-    deleteThrows = null;
-    groupsResponse = [];
-  };
-
-  // Positive: one lock cycle, returns success
   console.log('\n[#142] category_groups_delete: positive happy path');
   {
     reset();
     groupsResponse = [{ id: 'cg-1' }];
+    const before = adapterMod._getWriteQueueBatchCountForTests();
     const res = await tool.call({ id: 'cg-1' });
-    check(res?.success === true,         'returns { success: true }');
-    check(withWriteSessionCalls === 1,   'withWriteSession called exactly once', `was ${withWriteSessionCalls}`);
-    check(deleteCalls === 1,             'rawDeleteCategoryGroup called inside callback');
+    check(res?.success === true, 'returns { success: true }');
+    check(deleteCalls === 1,     'rawDeleteCategoryGroup called');
+    // The #142 property, asserted against the real queue rather than a stubbed wrapper:
+    // the read, the decision and the write share ONE api lock cycle.
+    check(adapterMod._getWriteQueueBatchCountForTests() - before === 1,
+      'exactly one write-queue cycle for the read and the write');
   }
 
-  // Negative: read-side not-found now THROWS an actionable error (consistent with the
-  // other delete tools) instead of returning { success: false }.
   console.log('\n[#142] category_groups_delete: read-side not-found throws');
   {
     reset();
     groupsResponse = [];
+    const before = adapterMod._getWriteQueueBatchCountForTests();
     let threw = null;
     try { await tool.call({ id: 'cg-missing' }); } catch (e) { threw = e; }
-    check(threw instanceof Error,                                      'throws on not-found');
-    check(threw?.message?.includes('Category group'),                  'error mentions Category group');
-    check(threw?.message?.includes('cg-missing'),                      'error mentions the id');
-    check(threw?.message?.includes('actual_category_groups_get'),      'error mentions list tool');
-    check(withWriteSessionCalls === 1,                                 'still exactly one withWriteSession call', `was ${withWriteSessionCalls}`);
-    check(deleteCalls === 0,                                           'rawDeleteCategoryGroup NOT called');
+    check(threw instanceof Error,                                 'throws on not-found');
+    // #377: the refusal is typed, so the tool layer never has to read the message to know
+    // what happened. The message content is still asserted because a caller acts on it.
+    check(isPreflightRefusal(threw),                              'and it is a typed pre-flight refusal');
+    check(threw?.message?.includes('Category group'),             'error mentions Category group');
+    check(threw?.message?.includes('cg-missing'),                 'error mentions the id');
+    check(threw?.message?.includes('actual_category_groups_get'), 'error mentions list tool');
+    check(deleteCalls === 0,                                      'rawDeleteCategoryGroup NOT called');
+    check(adapterMod._getWriteQueueBatchCountForTests() - before === 1,
+      'the refusal still costs exactly one cycle, not a second lookup');
   }
 
-  // Negative: schema rejection (missing id)
   console.log('\n[#142] category_groups_delete: schema rejection');
   {
     reset();
+    const before = adapterMod._getWriteQueueBatchCountForTests();
     let threw = null;
     try { await tool.call({}); } catch (e) { threw = e; }
-    check(threw instanceof Error,           'throws on missing id');
-    check(withWriteSessionCalls === 0,      'withWriteSession NOT called on Zod fail', `was ${withWriteSessionCalls}`);
-    check(deleteCalls === 0,                'rawDeleteCategoryGroup NOT called');
+    check(threw instanceof Error, 'throws on missing id');
+    check(deleteCalls === 0,      'rawDeleteCategoryGroup NOT called');
+    check(adapterMod._getWriteQueueBatchCountForTests() - before === 0,
+      'a Zod failure never reaches the write queue at all');
   }
-
-  adapter.withWriteSession = origWithWriteSession;
 
   console.log('');
   if (failures === 0) {

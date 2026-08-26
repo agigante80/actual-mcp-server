@@ -1,8 +1,7 @@
 import { z } from 'zod';
 import { createTool } from '../lib/toolFactory.js';
 import adapter from '../lib/actual-adapter.js';
-
-const BUDGET_MONTH_RE = /^budget-\d{4}-\d{2}$/;
+import { isPreflightRefusal } from '../lib/errors.js';
 
 export default createTool({
   name: 'actual_notes_update',
@@ -24,34 +23,24 @@ export default createTool({
     ),
   }),
   handler: async ({ id, note }) => {
-    // Fast path: budget-YYYY-MM synthetic ids need no entity lookup.
-    if (!BUDGET_MONTH_RE.test(id)) {
-      // Validate that the id resolves to a known entity.
-      // Fetch in parallel to minimise latency.
-      const [accounts, categories, categoryGroups, payees] = await Promise.all([
-        adapter.getAccounts(),
-        adapter.getCategories(),
-        adapter.getCategoryGroups(),
-        adapter.getPayees(),
-      ]);
-
-      const known =
-        (Array.isArray(accounts) && accounts.some((e: any) => e.id === id)) ||
-        (Array.isArray(categories) && categories.some((e: any) => e.id === id)) ||
-        (Array.isArray(categoryGroups) && categoryGroups.some((e: any) => e.id === id)) ||
-        (Array.isArray(payees) && payees.some((e: any) => e.id === id));
-
-      if (!known) {
-        return {
-          error: `Entity "${id}" not found. ` +
-            'The id must be a UUID from actual_accounts_list, actual_categories_get, ' +
-            'actual_category_groups_get, or actual_payees_get, ' +
-            'or a budget month id like "budget-2026-01".',
-        };
+    // #376: the orphan-id guard lives in `adapter.updateNote`, which reads and writes in
+    // ONE write-queue cycle. It used to sit here as four `adapter.get*` calls plus the
+    // write, which was five api lock acquisitions for one operation; `Promise.all` made
+    // that look concurrent, but the api mutex is process-global so they serialised anyway.
+    //
+    // This tool answers a refusal with `{ error }` rather than throwing. That shape is a
+    // documented deviation from the refusal taxonomy (see the api-design-principles skill)
+    // and it is this tool's PUBLISHED contract, so it is preserved here rather than
+    // quietly changed; #377 tracks the decision. What did change is that the shape is
+    // chosen by TYPE now, not by matching the message.
+    try {
+      await adapter.updateNote(id, note);
+    } catch (error) {
+      if (isPreflightRefusal(error)) {
+        return { error: (error as Error).message };
       }
+      throw error;
     }
-
-    await adapter.updateNote(id, note);
 
     return {
       success: true as const,
