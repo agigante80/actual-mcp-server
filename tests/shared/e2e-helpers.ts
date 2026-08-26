@@ -122,56 +122,92 @@ export async function callTool(
 }
 
 /**
- * Is this a transient upstream RATE LIMIT rather than a real tool failure?
+ * A client-side pacer that keeps this suite under Actual's request ceiling BY CONSTRUCTION.
  *
- * Actual's server answers a burst of writes with `PostError: Too many requests, please try
- * again later.`, which reaches us as an ordinary JSON-RPC error, so `callTool` cannot tell
- * it apart from a genuine refusal without this check. It matters since #375: every test
- * provisions and tears down its own data, so the suite issues several times the writes it
- * used to, and a busy CI runner can bunch them tightly enough to trip the limiter. When
- * that happened, every test after it failed for a reason that had nothing to do with what
- * it was testing.
+ * THE NUMBERS, measured rather than guessed. Actual applies
+ * `rateLimit({ windowMs: 60_000, max: 500 })` to every request (in its bundled `app.js`,
+ * guarded by `NODE_ENV !== "development"`). We cannot simply switch the fixture to
+ * development: that makes the server proxy to a React dev server it does not ship, and it
+ * exits at boot with ERR_MODULE_NOT_FOUND on `http-proxy-middleware`.
+ *
+ * A full run of `docker-all-tools.e2e.spec.ts` puts 569 requests on that server, counted
+ * from the Actual container's own log. Since #375 every test provisions and tears down its
+ * own data, which is what pushed it there.
+ *
+ * So the suite is over the ceiling in TOTAL, and whether it trips depends only on how
+ * tightly the requests bunch. Locally the run takes about 66 seconds and no single 60s
+ * window quite reaches 500, so it passes. On a CI runner the same work finishes in 47
+ * seconds, nearly every request lands inside one window, and everything from roughly the
+ * 500th request onward fails with `PostError: Too many requests` for reasons unrelated to
+ * what those tests assert. That is the inverted signal #375 exists to remove.
+ *
+ * WHY NOT RETRY. The first attempt at this backed off and retried the throttled call. That
+ * is wrong for a CREATE, which is not idempotent: the write had already landed, so the retry
+ * came back with `A 'E2E-Group-...' category group already exists.` Pacing has no such
+ * hazard, because no request is ever sent twice.
+ *
+ * The budget is counted in TOOL CALLS, because that is what this layer can see. The measured
+ * ratio is about 1.4 Actual requests per tool call, so 300 calls per window lands near 420
+ * requests, inside 500 with room for the ratio to drift as tools change.
  */
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_CALLS_PER_WINDOW = 300;
+const recentCallTimes: number[] = [];
+
+/** Block until sending one more call keeps us inside the window budget. */
+async function pace(): Promise<void> {
+  for (;;) {
+    const now = Date.now();
+    while (recentCallTimes.length > 0 && now - recentCallTimes[0] >= RATE_WINDOW_MS) {
+      recentCallTimes.shift();
+    }
+    if (recentCallTimes.length < RATE_MAX_CALLS_PER_WINDOW) {
+      recentCallTimes.push(now);
+      return;
+    }
+    // Wait exactly until the oldest call leaves the window, plus a small margin.
+    const waitMs = RATE_WINDOW_MS - (now - recentCallTimes[0]) + 50;
+    console.warn(
+      `[pace] holding ${waitMs}ms: ${recentCallTimes.length} calls in the last 60s, budget ` +
+        `is ${RATE_MAX_CALLS_PER_WINDOW} (Actual rate-limits at 500 requests/min)`,
+    );
+    await new Promise((r) => setTimeout(r, waitMs));
+  }
+}
+
+/** True when a tool error is Actual's rate limiter rather than a real failure. */
 export function isRateLimitError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
   return /too many requests|rate ?limit/i.test(msg);
 }
 
 /**
- * `callTool` with backoff on an upstream rate limit, and ONLY on that.
+ * `callTool`, paced so the suite cannot trip Actual's limiter.
  *
- * Deliberately narrow: a rate limit is transient and retrying is the correct response, while
- * every other tool error is a result the test wants to see immediately. Retrying more
- * broadly would turn a real refusal into a slow timeout and hide the failure the test exists
- * to catch.
+ * Deliberately does NOT retry. If a rate limit is seen despite the pacing then the budget
+ * above is wrong, and the run should say so loudly rather than paper over it with a retry
+ * that can duplicate a create.
  */
-export async function callToolWithBackoff(
+export async function callToolPaced(
   request: any,
   sessionId: string,
   toolName: string,
   args: Record<string, unknown> = {},
-  maxRetries = 6,
 ): Promise<any> {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < maxRetries; attempt++) {
-    try {
-      return await callTool(request, sessionId, toolName, args);
-    } catch (error) {
-      lastError = error;
-      if (!isRateLimitError(error)) throw error;
-      // 500ms, 1s, 2s, 4s, 8s, capped at 15s: about 30 seconds of patience in total.
-      // Actual's limiter uses a rolling window measured in a minute, so the schedule has to
-      // reach into the seconds to clear it; retrying immediately just extends the window.
-      // The cap keeps a genuinely wedged server from stalling the suite for minutes.
-      const delay = Math.min(500 * 2 ** attempt, 15_000);
-      console.warn(
-        `[rate limit] ${toolName} throttled by the Actual server, waiting ${delay}ms ` +
-          `(attempt ${attempt + 1}/${maxRetries})`,
+  await pace();
+  try {
+    return await callTool(request, sessionId, toolName, args);
+  } catch (error) {
+    if (isRateLimitError(error)) {
+      throw new Error(
+        `${(error as Error).message}\n\nThe E2E pacer did not keep this suite under Actual's ` +
+          `500 requests/minute limit. Lower RATE_MAX_CALLS_PER_WINDOW in ` +
+          `tests/shared/e2e-helpers.ts, or reduce how many entities the suite creates. Do NOT ` +
+          `fix this by retrying: a retried create is not idempotent.`,
       );
-      await new Promise((r) => setTimeout(r, delay));
     }
+    throw error;
   }
-  throw lastError;
 }
 
 /**
