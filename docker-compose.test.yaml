@@ -109,9 +109,20 @@ services:
       mcp-server-test:
         condition: service_healthy
     working_dir: /workspace
+    # #381: `npm ci`, NOT `npm install`. The lockfile is bind-mounted from the host, and
+    # `npm install` WRITES to it, so every test run dirtied the working tree. Worse, it
+    # prunes: one run removed the @emnapi optional peer entries, and the next run then
+    # failed inside the image build with "npm ci can only install packages when your
+    # package.json and package-lock.json are in sync", an error that names the Dockerfile
+    # and reads as a dependency problem in whatever change is under test.
+    #
+    # npm's own docs: `npm ci` "will never write to package.json or any of the
+    # package-locks: installs are essentially frozen", and it is "meant to be used in
+    # automated environments such as test platforms". It also turns an out-of-sync lockfile
+    # into a loud failure instead of a silent rewrite, and installs exactly what CI does.
     command: >
       sh -c "
-        npm install &&
+        npm ci &&
         npx playwright test --config=playwright.config.docker.ts --project=$${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
       "
     environment:
@@ -122,8 +133,11 @@ services:
     volumes:
       - ./tests:/workspace/tests
       - ./playwright.config.docker.ts:/workspace/playwright.config.docker.ts
-      - ./package.json:/workspace/package.json
-      - ./package-lock.json:/workspace/package-lock.json
+      # Mounted READ-ONLY (#381). npm ci never writes them, so this costs nothing and
+      # converts a future regression to `npm install` from a silent host-file rewrite into
+      # an immediate, obvious container-side failure.
+      - ./package.json:/workspace/package.json:ro
+      - ./package-lock.json:/workspace/package-lock.json:ro
       - e2e-test-results:/workspace/test-results
     networks:
       - e2e-test-network
