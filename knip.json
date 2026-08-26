@@ -13,13 +13,14 @@
     "scripts/**/*.{js,mjs}",
     "tests/unit/**/*.test.js",
     "tests/e2e/**/*.spec.ts",
-    "tests/e2e/suites/**/*.ts",
     "tests/manual/index.js",
     "tests/manual/tests/**/*.js",
     "tests/manual/*.mjs",
     "playwright.config.ts",
     "playwright.config.docker.ts"
   ],
-  "project": ["src/**/*.ts"],
+  "project": [
+    "src/**/*.ts"
+  ],
   "ignoreExportsUsedInFile": true
 }
