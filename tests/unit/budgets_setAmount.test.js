@@ -31,7 +31,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     import('../../dist/src/lib/actual-adapter.js'),
     import('../../dist/src/lib/errors.js'),
   ]);
-  const { NotFoundRefusal, isPreflightRefusal } = errorsMod;
+  const { isPreflightRefusal } = errorsMod;
   const tool    = toolMod;
   const adapter = adapterMod.default;
 
@@ -44,14 +44,13 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   // left the sibling CATEGORY guard as a bare Error, silently undoing #89's structured
   // response. The cases below run the real guard, so they cannot pass that way again.
 
-  // ── #361: the MONTH, which was entirely unvalidated ──────────────────────────
-  // Exercised against the REAL adapter (raw stubs installed before the adapter import,
-  // session disarmed), because the guard lives there. The pre-existing cases above stub
-  // adapter.setBudgetAmount wholesale and so cannot reach it.
+  // #361: the MONTH, which was entirely unvalidated.
+  //
+  // Everything from here down runs against the REAL adapter (raw stubs installed before the
+  // adapter import, session disarmed), because the guards live there.
   {
     adapterMod._setSkipApiInitForTests(true);
     const realAdapter = adapterMod.default;
-    // Restore the real method: the cases above replaced it with a stub.
     realAdapter.setBudgetAmount = adapterMod.setBudgetAmount;
 
     console.log('\n[#361] month must be one this budget actually has');
@@ -116,7 +115,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       check(isPreflightRefusal(threw),          'the category guard throws a pre-flight refusal');
       check(threw?.refusalKind === 'not-found', 'typed as not-found');
       check(threw?.entity === 'Category',       'carrying the entity');
-      check(/categories/.test(threw?.message ?? ''),
+      // Anchored on the TAIL. `/categories/` alone also matches inside
+      // "actual_categories_get", so it stayed green with the old bare-"s" pluraliser and
+      // could not fail for the reason its label names.
+      check(/list available categories\.$/.test(threw?.message ?? ''),
         'and the message pluralises correctly rather than saying "categorys"');
     }
 

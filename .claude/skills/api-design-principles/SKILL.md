@@ -59,9 +59,9 @@ nothing red to show for it. Three rules, in the order you should apply them:
    invent a refusal for it.
 
    **Deleting an id that does not exist is NOT this case, on this surface.**
-   `rules_delete`, `category_groups_delete`, `schedules_delete`, `payees_delete` and
-   `tags_delete` all THROW a `NotFoundRefusal`, and #376 re-committed to that when it moved
-   those guards into the adapter. The single exception is `actual_accounts_delete`, which
+   `rules_delete`, `category_groups_delete`, `schedules_delete`, `payees_delete`,
+   `categories_delete` and `tags_delete` all THROW a `NotFoundRefusal`, and #376
+   re-committed to that when it moved those guards into the adapter. The single exception is `actual_accounts_delete`, which
    verifies AFTER the write and therefore reports success for an absent id; its own file and
    `docs/audit/write-effect-audit.md` explain why (a close-then-reopen leaves an id that no
    listing returns, so a pre-check would refuse a request whose intent is already satisfied).
