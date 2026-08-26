@@ -32,17 +32,17 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   };
   apiDefault.reopenAccount = async (_id) => { reopenCalls++; };
 
+  // #371 moved the guard into adapter.reopenAccount, so this exercises the REAL adapter
+  // method. The raw api stubs above are installed BEFORE the adapter import on purpose:
+  // actual-adapter.ts destructures them at module load.
+  apiDefault.sync = async () => {};
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/accounts_reopen.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
-  const adapter = adapterMod.default;
+  adapterMod._setSkipApiInitForTests(true);
 
-  const originalSession = adapter.withWriteSession;
-  let sessionCalls = 0;
-  adapter.withWriteSession = async (fn) => { sessionCalls++; return await fn(); };
-
-  const reset = (queue) => { accountsQueue = queue; getCalls = 0; reopenCalls = 0; sessionCalls = 0; };
+  const reset = (queue) => { accountsQueue = queue; getCalls = 0; reopenCalls = 0; };
 
   console.log('\n[#358] accounts_reopen: positive, a closed account is reopened');
   {
@@ -54,7 +54,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(res?.success === true,   'returns success: true');
     check(reopenCalls === 1,       'raw reopenAccount called exactly once');
     check(getCalls === 2,          'read before and verified after');
-    check(sessionCalls === 1,      'exactly one withWriteSession cycle (#142)');
+    check(getCalls === 2,          'read before and verified after, in one cycle');
   }
 
   console.log('\n[#358] accounts_reopen: positive, already open is idempotent and truthful');
@@ -81,7 +81,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
           'error explains the close-removed-it case');
     check(reopenCalls === 0,
           'raw reopenAccount NOT called: this is what prevents the phantom account');
-    check(sessionCalls === 1, 'still exactly one withWriteSession cycle');
+    check(getCalls === 1,     'refused after the pre-read, before any write');
   }
 
   console.log('\n[#358] accounts_reopen: NEGATIVE, the write had no effect');
@@ -103,11 +103,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     let threw = null;
     try { await tool.call({}); } catch (e) { threw = e; }
     check(threw instanceof Error, 'throws on missing id');
-    check(sessionCalls === 0,     'no session opened on Zod failure');
+    check(getCalls === 0,         'the adapter was never reached on a Zod failure');
     check(reopenCalls === 0,      'no write attempted on Zod failure');
   }
 
-  adapter.withWriteSession = originalSession;
   console.log('');
   if (failures === 0) console.log('[#358] All accounts_reopen tests passed ✓');
   else { console.error(`[#358] ${failures} test(s) FAILED`); process.exit(2); }

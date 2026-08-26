@@ -1670,21 +1670,176 @@ export async function setBudgetCarryover(month: string, categoryId: string, flag
  *
  * Both remain OPTIONAL. A zero-balance account still closes with the id alone.
  */
+/** What a close actually did, decided from observed state rather than from the call returning. */
+export type CloseAccountOutcome =
+  | { outcome: 'closed'; name?: string }
+  | { outcome: 'removed'; name?: string }
+  | { outcome: 'already-closed'; name?: string };
+
+/**
+ * #357, at the adapter layer since #371.
+ *
+ * Three upstream behaviours have to be handled together, because any one of them rewrites
+ * this function:
+ *
+ *  (a) `closeAccount` opens with `if (!account || account.closed === 1) return;`, so an
+ *      unknown id or an already-closed account did nothing and reported success.
+ *  (b) `if (numTransactions === 0) await db.deleteAccount({id})`: an account with no
+ *      transactions is TOMBSTONED, not closed, and cannot be reopened.
+ *  (c) a non-zero balance throws `balance is non-zero: transferAccountId is required`, and
+ *      the transfer arguments are documented but were not exposed until #357.
+ *
+ * Read, write and re-read share ONE `queueWriteOperation` cycle. A read-BEFORE is required
+ * (unlike #347's pure verify-after) because (b) makes "absent afterwards" ambiguous: an
+ * account deleted by the close and an id that never existed look identical from a single
+ * post-read.
+ *
+ * WHY THIS LIVES HERE AND NOT IN THE TOOL. It was in the tool until #371. Keeping the read
+ * and the write in one cycle does NOT require the raw api: this is the shape
+ * `mergePayees` already used, and doing it here keeps `retry` on the reads, keeps ONE
+ * observability call site, and leaves no unguarded `adapter.closeAccount` for a future
+ * caller to reach for. The tool maps the outcome below onto its response wording.
+ */
 export async function closeAccount(
   id: string,
   transferAccountId?: string,
   transferCategoryId?: string,
-): Promise<void> {
+): Promise<CloseAccountOutcome> {
   observability.incrementToolCall('actual.accounts.close').catch(() => {});
   return queueWriteOperation(async () => {
-    // Non-idempotent: do not retry (#165).
-    await withConcurrency(() => retry(() => rawCloseAccount(id, transferAccountId, transferCategoryId) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    const before = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>, { retries: 2, backoffMs: 200 })
+    );
+    const list = Array.isArray(before) ? before : [];
+    const target = list.find((a) => a?.id === id);
+
+    if (!target) {
+      throw new Error(
+        `Account "${id}" not found. Use actual_accounts_list to see the accounts that exist. ` +
+          'Note that an account closed while it had no transactions was REMOVED by Actual, ' +
+          'not closed, so it will not appear there.'
+      );
+    }
+
+    if (target.closed === true) {
+      // Idempotent and truthful: the requested state already holds, and the caller is told
+      // that nothing changed rather than being implied a state change happened.
+      return { outcome: 'already-closed' as const, name: target.name };
+    }
+
+    if (transferAccountId) {
+      const destination = list.find((a) => a?.id === transferAccountId);
+      if (!destination) {
+        throw new Error(
+          `Transfer destination account "${transferAccountId}" not found. Use ` +
+            'actual_accounts_list to pick an account to move the remaining balance to.'
+        );
+      }
+      if (destination.closed === true) {
+        throw new Error(
+          `Transfer destination account "${destination.name ?? transferAccountId}" is CLOSED, ` +
+            'so the closing balance would be moved somewhere hidden from most views. Pick an ' +
+            'open account, or reopen that one with actual_accounts_reopen first.'
+        );
+      }
+    }
+
+    if (transferCategoryId) {
+      // #359's lesson applied to the only WRITE this path can add. Upstream forwards this id
+      // straight into `transaction-add` unchecked, so a bogus value writes a "Closing
+      // account" transaction carrying a category that does not exist, and syncs it.
+      const categories = await withConcurrency(() =>
+        retry(() => rawGetCategories() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+      );
+      const known = Array.isArray(categories) && categories.some((c) => c?.id === transferCategoryId);
+      if (!known) {
+        throw new Error(
+          `Transfer category "${transferCategoryId}" not found. Use actual_categories_get to ` +
+            'pick a category for the closing transaction, or omit transferCategoryId to leave ' +
+            'it uncategorised.'
+        );
+      }
+    }
+
+    try {
+      // Non-idempotent: do not retry (#165).
+      await withConcurrency(() => retry(() => rawCloseAccount(id, transferAccountId, transferCategoryId) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (/balance is non-zero/i.test(msg)) {
+        throw new Error(
+          `Account "${target.name ?? id}" has a non-zero balance, so closing it requires ` +
+            'transferAccountId: the id of the account to move the remaining balance to. ' +
+            'Optionally pass transferCategoryId to categorise the balancing transaction. ' +
+            'Use actual_accounts_list to pick a destination.'
+        );
+      }
+      throw err;
+    }
+
+    const after = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>, { retries: 2, backoffMs: 200 })
+    );
+    const survivor = (Array.isArray(after) ? after : []).find((a) => a?.id === id);
+
+    if (!survivor) {
+      // (b): upstream tombstoned a zero-transaction account instead of closing it.
+      return { outcome: 'removed' as const, name: target.name };
+    }
+    if (survivor.closed !== true) {
+      throw new Error(
+        `Account "${survivor.name ?? id}" (${id}) is still open after the close. The call was ` +
+          'accepted but had no effect; check the account state in Actual.'
+      );
+    }
+    return { outcome: 'closed' as const, name: survivor.name };
   });
 }
+/**
+ * #358, at the adapter layer since #371.
+ *
+ * Upstream `reopenAccount` is a bare `db.update('accounts', {id, closed: 0})`. `db.update`
+ * does not run a SQL UPDATE: it sends CRDT messages, and the apply path INSERTs when the
+ * row was absent. The accounts table has no NOT NULL columns and `tombstone` defaults to 0,
+ * while `getAccounts()` filters `tombstone = 0`, so reopening an id that is not an account
+ * CREATES a visible nameless account that syncs to every client.
+ *
+ * A pre-check is right here and was wrong in #347: there, the caller's intent ("make this
+ * account not exist") could already be satisfied by an absent row, so refusing on absence
+ * would have failed a complete request. Here the intent ("reopen this account") cannot be
+ * satisfied by an absent row, and proceeding actively creates one.
+ */
 export async function reopenAccount(id: string): Promise<void> {
   observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
   return queueWriteOperation(async () => {
+    const before = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>, { retries: 2, backoffMs: 200 })
+    );
+    const target = (Array.isArray(before) ? before : []).find((a) => a?.id === id);
+    if (!target) {
+      throw new Error(
+        `Account "${id}" not found, so it cannot be reopened. Use actual_accounts_list to see ` +
+          'the accounts that exist. If this account was closed while it had no transactions, ' +
+          'Actual removed it rather than closing it, and it cannot be reopened: create a new ' +
+          'one with actual_accounts_create.'
+      );
+    }
+
     await withConcurrency(() => retry(() => rawReopenAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
+
+    const after = await withConcurrency(() =>
+      retry(() => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>, { retries: 2, backoffMs: 200 })
+    );
+    const survivor = (Array.isArray(after) ? after : []).find((a) => a?.id === id);
+    if (!survivor) {
+      throw new Error(`Account "${id}" disappeared while being reopened. Check the account state in Actual.`);
+    }
+    if (survivor.closed === true) {
+      throw new Error(
+        `Account "${survivor.name ?? id}" (${id}) is still closed after the reopen. The call ` +
+          'was accepted but had no effect; check the account state in Actual.'
+      );
+    }
   });
 }
 export async function getCategoryGroups(): Promise<unknown[]> {
@@ -1859,16 +2014,38 @@ export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void>
  * `undefined` is deliberately NOT treated as a refusal: an older or future build
  * that returns nothing must keep working. Only an explicit `false` is a verdict.
  */
-export async function holdBudgetForNextMonth(month: string, amount: number): Promise<boolean | void> {
+/**
+ * #355, at the adapter layer since #371.
+ *
+ * Upstream has TWO ways of doing less than asked, and only one of them is a boolean:
+ *
+ *   holdForNextMonth:    if (toBudget > 0) { ...; return true; } return false;
+ *   calcBufferedAmount:  amount = Math.min(Math.max(amount, -buffered), Math.max(toBudget, 0));
+ *
+ * So `false` means nothing was held, and `true` can still mean a PARTIAL hold: ask for
+ * 100.00 with 30.00 left to budget and 30.00 is held, silently. Reading `forNextMonth`
+ * before and after settles both from observed state, which is the #347 principle and is
+ * strictly better than trusting either return value.
+ *
+ * Returns the amount ACTUALLY held. The caller compares it with what it requested.
+ */
+export async function holdBudgetForNextMonth(month: string, amount: number): Promise<number> {
   observability.incrementToolCall('actual.budgets.holdForNextMonth').catch(() => {});
   return queueWriteOperation(async () => {
+    const before = await withConcurrency(() =>
+      retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200 })
+    );
+    const heldBefore = Number(before?.forNextMonth ?? 0);
+
     // Non-idempotent: do not retry (#165). `calcBufferedAmount` is ADDITIVE
     // (`return buffered + amount`), so a second attempt after a committed first does not
-    // re-set the buffer, it adds to it. The window is narrow, because the call runs
-    // against local SQLite and no `TRANSIENT_ERROR_PATTERNS` message can arise inside
-    // it, but the operation is non-idempotent by construction and belongs on the same
-    // footing as `deleteRule` and `closeAccount`.
-    return await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<boolean | void>, { retries: 0, backoffMs: 200 }));
+    // re-set the buffer, it adds to it.
+    await withConcurrency(() => retry(() => rawHoldBudgetForNextMonth(month, amount) as Promise<boolean | void>, { retries: 0, backoffMs: 200 }));
+
+    const after = await withConcurrency(() =>
+      retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200 })
+    );
+    return Number(after?.forNextMonth ?? 0) - heldBefore;
   });
 }
 export async function resetBudgetHold(month: string): Promise<void> {

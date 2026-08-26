@@ -27,7 +27,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let buffered = 0;
   let holdCalls = 0;
   let lastArgs = null;
-  apiDefault.getBudgetMonth = async (month) => ({ month, toBudget, forNextMonth: buffered });
+  let monthReads = 0;
+  apiDefault.getBudgetMonth = async (month) => {
+    monthReads++;
+    return { month, toBudget, forNextMonth: buffered };
+  };
   apiDefault.holdBudgetForNextMonth = async (month, amount) => {
     holdCalls++;
     lastArgs = [month, amount];
@@ -37,17 +41,18 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     return true;
   };
 
+  // #371 moved the before/after read into adapter.holdBudgetForNextMonth, so this exercises
+  // the REAL adapter method. The raw api stubs above are installed BEFORE the adapter import
+  // on purpose: actual-adapter.ts destructures them at module load.
+  apiDefault.sync = async () => {};
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/budgets_holdForNextMonth.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
-  const adapter = adapterMod.default;
-  const originalSession = adapter.withWriteSession;
-  let sessionCalls = 0;
-  adapter.withWriteSession = async (fn) => { sessionCalls++; return await fn(); };
+  adapterMod._setSkipApiInitForTests(true);
 
   const reset = (budget, startBuffered = 0) => {
-    toBudget = budget; buffered = startBuffered; holdCalls = 0; lastArgs = null; sessionCalls = 0;
+    toBudget = budget; buffered = startBuffered; holdCalls = 0; lastArgs = null; monthReads = 0;
   };
 
   console.log('\n[#355] holdForNextMonth: positive, the full amount is held');
@@ -60,7 +65,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(holdCalls === 1,             'raw hold called exactly once');
     check(lastArgs?.[0] === '2026-01', 'month forwarded unchanged');
     check(lastArgs?.[1] === 25000,     'amount forwarded unchanged (integer cents)');
-    check(sessionCalls === 1,          'exactly one withWriteSession cycle (#142)');
+    check(monthReads === 2,            'read before and after, in one cycle');
   }
 
   console.log('\n[#355] holdForNextMonth: PARTIAL hold is reported, not dressed up as success');
@@ -111,11 +116,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       try { await tool.call(bad); } catch (e) { threw = e; }
       check(threw instanceof Error, `rejects ${JSON.stringify(bad)}`);
       check(holdCalls === 0,        'no write attempted on Zod failure');
-      check(sessionCalls === 0,     'no session opened on Zod failure');
+      check(monthReads === 0,       'the adapter was never reached on a Zod failure');
     }
   }
 
-  adapter.withWriteSession = originalSession;
   console.log('');
   if (failures === 0) console.log('[#355] All budgets_holdForNextMonth tests passed ✓');
   else { console.error(`[#355] ${failures} test(s) FAILED`); process.exit(2); }

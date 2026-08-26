@@ -18,23 +18,10 @@ console.log('Running generated tools smoke tests');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};
-  // #358 and #357: accounts_reopen and accounts_close read and write through the RAW
-  // api inside one withWriteSession cycle (the #142 pattern), so they need raw stubs
-  // here, not just the adapter stubs below. Both verify the resulting state, so the
-  // fake has to be faithful enough to change: closing flips the flag, reopening clears
-  // it. A static stub would make one of the two tools fail its own verification.
-  let smokeAccountClosed = false;
-  apiDefault.getAccounts = async () => [
-    { id: '00000000-0000-0000-0000-000000000001', name: 'Cash', closed: smokeAccountClosed },
-  ];
-  apiDefault.closeAccount = async () => { smokeAccountClosed = true; };
-  apiDefault.reopenAccount = async () => { smokeAccountClosed = false; };
-  // #355: holdForNextMonth reads forNextMonth before and after its write, so the fake has
-  // to move when the hold succeeds. A static stub would make the tool correctly report
-  // that nothing was held, and the smoke assertion of success would fail.
-  let smokeBuffered = 0;
-  apiDefault.getBudgetMonth = async (month) => ({ month, toBudget: 500000, forNextMonth: smokeBuffered });
-  apiDefault.holdBudgetForNextMonth = async (_month, amount) => { smokeBuffered += amount; return true; };
+  // #371: accounts_close, accounts_reopen and budgets_holdForNextMonth used to reach the raw
+  // api directly and needed faithful raw fakes here. Their guards now live in the adapter,
+  // which this harness stubs wholesale, so the raw fakes are gone and the adapter stubs
+  // below carry the contract instead. See stubResponses for the shapes they must return.
   apiDefault.getRules = async () => [{ id: 'rule1', conditions: [] }];
   apiDefault.createRule = async () => 'rule-new';
   apiDefault.updateRule = async () => {};
@@ -99,13 +86,17 @@ console.log('Running generated tools smoke tests');
     },
     setBudgetAmount: null,
     setBudgetCarryover: null,
-    holdBudgetForNextMonth: null,
+    // #371: holdBudgetForNextMonth returns the amount ACTUALLY held. The smoke example asks
+    // for 10000, so returning that models a hold that was granted in full.
+    holdBudgetForNextMonth: 10000,
     resetBudgetHold: null,
     batchBudgetUpdates: null,
     createAccount: 'acct-new',
     updateAccount: null,
     deleteAccount: null,
-    closeAccount: null,
+    // #371: closeAccount reports WHICH outcome happened; a bare null would make the tool
+    // dereference `.name` on nothing.
+    closeAccount: { outcome: 'closed', name: 'Cash' },
     reopenAccount: null,
     getAccountBalance: 12345,
     deleteTransaction: null,
