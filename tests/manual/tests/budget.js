@@ -316,6 +316,19 @@ export async function budgetTests(client, context) {
       toBudgetBefore > HOLD_AMOUNT,
       `seeded income leaves more to budget (${toBudgetBefore}) than the hold asks for (${HOLD_AMOUNT})`,
     );
+    // Upstream `resetHold` is `setBuffer(month, 0)`: it ZEROES the buffer, it does not
+    // restore a previous value. So the two reset assertions below are only correct while
+    // the month starts with no hold. Asserting that as a PRECONDITION makes them correct by
+    // construction, and turns the one way this can go wrong into an accurate diagnosis: if
+    // an earlier run died between the hold and its teardown (the runner's wall-clock
+    // kill-switch exits 2), the leftover buffer would otherwise fail the reset checks and
+    // blame a tool that behaved correctly. Month-level budget state is invisible to the
+    // zero-residue sweep, so nothing else would report it.
+    holdCheck(
+      heldBefore === 0,
+      `the month starts with no hold (found ${heldBefore}); a leftover hold is stale fixture ` +
+        'state from an interrupted run, not a tool regression',
+    );
 
     const res = await callTool("actual_budgets_holdForNextMonth", {
       month: currentDate,
