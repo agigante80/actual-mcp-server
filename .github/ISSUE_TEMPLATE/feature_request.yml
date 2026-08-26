@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        <!-- template-version: 4 -->
+        <!-- template-version: 5 -->
         ## Feature Request
         Please fill in all required fields. Clear acceptance criteria and test plans help implementation go smoothly.
 
@@ -154,7 +154,7 @@ body:
     attributes:
       label: E2E tests
       description: |
-        Specific cases for `tests/e2e/suites/`. One positive and one negative per condition.
+        Specific cases for `tests/e2e/docker-all-tools.e2e.spec.ts` (the only E2E file that runs). One positive and one negative per condition.
         Also note if an integration test in `tests/manual/tests/` is needed.
       placeholder: |
         - [ ] Positive: `[suite file]` — [setup] → call tool → assert [field] equals [value]

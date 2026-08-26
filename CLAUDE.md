@@ -150,7 +150,7 @@ docker compose --profile production up  # Production: MCP server on :3600
 
 **Integration test modules** (`tests/manual/tests/`): `sanity` (read-only protocol), `smoke` (balances/categories), `account`, `category-group`, `category`, `payee`, `transaction`, `budget`, `notes`, `rules`, `schedule`, `batch_uncategorized_rules_upsert`, `entrypoint`, `advanced` (bank sync, raw SQL).
 
-**Shared test infrastructure** lives in `tests/shared/`: `mcp-protocol.js` (JSON-RPC framing helpers used by the manual runner) and `e2e-helpers.ts` (used by the Playwright specs). Beyond the two "all tools" specs, `tests/e2e/` also holds `stdio.spec.ts` (stdio transport protocol) and `docker.e2e.spec.ts`, and the per-domain happy-path calls live in `tests/e2e/suites/*.ts` with cross-suite state in `suites/shared-context.ts`.
+**Shared test infrastructure** lives in `tests/shared/`: `mcp-protocol.js` (JSON-RPC framing helpers used by the manual runner) and `e2e-helpers.ts` (used by the Playwright specs). Beyond the two "all tools" specs, `tests/e2e/` also holds `stdio.spec.ts` (stdio transport protocol) and `docker.e2e.spec.ts`, and every executed E2E assertion lives in `docker-all-tools.e2e.spec.ts`. NOTE (#366): `tests/e2e/suites/*.ts` used to be described here as the per-domain home. Nothing ever executed those files (no call site, and no Playwright `testMatch` covers them), so they were removed. Add E2E coverage to the spec, and confirm it is collected with `npx playwright test --list --config playwright.config.docker.ts`.
 
 ## Project-Local Agents & Commands
 
@@ -308,7 +308,7 @@ export default tool;
 3. Add tool name to `IMPLEMENTED_TOOLS` array in `src/actualToolsManager.ts`
 4. Add unit tests in `tests/unit/` (positive + negative cases)
 5. Run `npm run verify-tools` to confirm registration
-6. Bump the `EXPECTED_TOOL_COUNT` default in `tests/manual/tests/sanity.js`, which is the ONLY place that asserts an exact tool count, then run `npm run tool-count -- --fix` for the prose totals. Neither e2e spec carries an `EXPECTED_TOOL_COUNT`: `mcp-client.playwright.spec.ts` only asserts `tools.length > 0`, and the number in `docker-all-tools.e2e.spec.ts` is a cosmetic `describe(...)` label plus a header comment. Add a happy-path call to `tests/e2e/suites/<domain>.ts`
+6. Bump the `EXPECTED_TOOL_COUNT` default in `tests/manual/tests/sanity.js`, which is the ONLY place that asserts an exact tool count, then run `npm run tool-count -- --fix` for the prose totals. Neither e2e spec carries an `EXPECTED_TOOL_COUNT`: `mcp-client.playwright.spec.ts` only asserts `tools.length > 0`, and the number in `docker-all-tools.e2e.spec.ts` is a cosmetic `describe(...)` label plus a header comment. Add a happy-path call to `tests/e2e/docker-all-tools.e2e.spec.ts` (the only E2E file that runs; verify with `npx playwright test --list --config playwright.config.docker.ts`)
 7. See `docs/NEW_TOOL_CHECKLIST.md` for the full 9-step checklist (includes doc sync, integration test entry, manual-prompt update)
 
 ### Key Source Files

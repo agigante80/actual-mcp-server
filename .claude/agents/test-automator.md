@@ -70,6 +70,6 @@ Organize tests by layer:
 
 - **Unit Tests** (`tests/unit/new_tool.test.js`): schema validation + handler smoke; run with `node tests/unit/new_tool.test.js`
 - **Smoke entry** (`tests/unit/generated_tools.smoke.test.js`): one-liner registration check
-- **E2E Tests** (`tests/e2e/suites/new_domain.ts`): happy-path call + error-path call via MCP client
+- **E2E Tests** (`tests/e2e/docker-all-tools.e2e.spec.ts`): happy-path call + error-path call via MCP client
 
 Each test should have a descriptive name, clear assertions, and a `console.log('PASS: ...')` / `throw new Error('FAIL: ...')` pattern matching existing unit tests. Flag any areas where manual integration testing against a live Actual Budget server is recommended.

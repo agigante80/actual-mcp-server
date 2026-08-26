@@ -126,7 +126,7 @@ In ephemeral environments (no `.env`): skip `test:adapter`, run `build` + `test:
 - Entry: `npm run test:e2e` — requires no live server (uses Docker internally)
 - Single test: `npx playwright test --grep "initialize -> tools/list"`
 - When adding a tool: update `EXPECTED_TOOL_COUNT` in both `tests/e2e/mcp-client.playwright.spec.ts` and `tests/e2e/docker-all-tools.e2e.spec.ts`
-- Add the tool's happy-path call to the matching `tests/e2e/suites/<domain>.ts` file
+- Add the tool's happy-path call to `tests/e2e/docker-all-tools.e2e.spec.ts` (#366: `tests/e2e/suites/` never executed and was removed)
 
 ## Key conventions
 

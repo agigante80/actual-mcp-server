@@ -1,4 +1,4 @@
-<!-- template-version: 4 -->
+<!-- template-version: 5 -->
 
 # Ticket standards (canonical)
 
@@ -51,7 +51,7 @@ OpenAI/ECMA-262 compatibility guard (`tests/unit/schema_json_openai_compat.test.
 
 ### 3. E2E test specs
 
-For any behaviour visible over the transports: a specific suite file under `tests/e2e/suites/`,
+For any behaviour visible over the transports: a case in `tests/e2e/docker-all-tools.e2e.spec.ts` (the only E2E file Playwright collects; #366 removed the `tests/e2e/suites/` tree, which never ran),
 setup steps, the action, and the assertion, for both the happy and unhappy paths. A change to a
 tool's write path must be exercised over BOTH transports via the dual-transport gate
 (`MCP_TEST_TRANSPORT=http` and `stdio`). Pure-internal changes with no transport-visible surface
