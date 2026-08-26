@@ -17,19 +17,8 @@ tests/e2e/
 │                                         tools/call → SSE streaming; spawns its own server
 │                                         process (or reuses Docker via USE_DOCKER_MCP_SERVER)
 ├── docker.e2e.spec.ts                 ← Smoke + health checks against Docker stack
-├── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 74 tools (~80 named tests)
-└── suites/                            ← Domain suite files (registration functions)
-    ├── shared-context.ts              ← SharedState / TestContext types + createSharedState()
-    ├── server.ts                      ← server_info, server_get_version, session_*
-    ├── accounts.ts                    ← accounts_* (7 tools)
-    ├── categories.ts                  ← category_groups_* + categories_* (8 tools)
-    ├── payees.ts                      ← payees_* + payee_rules_* (6 tools)
-    ├── transactions.ts                ← transactions_* (13 tools)
-    ├── budgets.ts                     ← budgets_* + budget_updates_batch (11 tools)
-    ├── rules.ts                       ← rules_* (4 tools)
-    ├── schedules.ts                   ← schedules_* (4 tools)
-    ├── advanced.ts                    ← bank_sync, query_run, get_id_by_name
-    └── deletes.ts                     ← all delete operations (ordered by dependency)
+└── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 74 tools; the ONLY
+                                        file that carries E2E assertions (see the #366 note)
 ```
 
 Also see:
@@ -106,8 +95,14 @@ streaming, and session lifecycle.
 - `DELETE OPERATIONS` section: 6 named delete tests that both verify correctness and
   clean up test data
 - `afterAll` is **fallback cleanup only** — it fires only if a delete test was skipped or failed
-- Domain suite files in `suites/` contain the same tests broken into registration functions
-  for incremental adoption; currently the spec runs tests inline for simplicity and proven stability
+- **#366:** `suites/` used to hold the same tests split into per-domain registration
+  functions, extracted in 2026-03 "for incremental adoption". The adoption never happened:
+  nothing ever imported `register*Tests` and no Playwright `testMatch` covered the
+  directory, so none of it ever executed. Meanwhile CLAUDE.md, the tool checklist, the issue
+  templates and two agent definitions all started naming it as the place to add E2E
+  coverage, so tests written there were silently inert. The directory was removed and every
+  pointer now names this spec. Add E2E coverage here, and confirm it is collected with
+  `npx playwright test --list --config playwright.config.docker.ts`.
 
 ---
 
@@ -147,7 +142,7 @@ testContext shape:
   ruleWithoutOpId  ← written by actual_rules_create (no-op variant)
   rulesUpsertId    ← written by actual_rules_create_or_update (idempotency test)
   scheduleOneOffId ← written by actual_schedules_create (one-off variant)
-  scheduleRecurId  ← reserved for recurring schedule (populated in suites/schedules.ts)
+  scheduleRecurId  ← reserved for a recurring schedule test (not yet written)
 ```
 
 ---

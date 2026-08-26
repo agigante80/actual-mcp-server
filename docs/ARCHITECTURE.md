@@ -371,11 +371,8 @@ actual-mcp-server/
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
 │   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 74 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
-│   │   └── suites/                        # Domain suite registration functions (one file per domain)
-│   │       ├── shared-context.ts          # SharedState / TestContext types
-│   │       ├── server.ts / accounts.ts / categories.ts / payees.ts
-│   │       ├── transactions.ts / budgets.ts / rules.ts / schedules.ts
-│   │       └── advanced.ts / deletes.ts
+│   │   └── (#366: the suites/ tree was removed. It never executed, and every doc that
+│   │        named it now points at docker-all-tools.e2e.spec.ts instead)
 │   ├── unit/                     # Unit tests (offline, stub adapter)
 │   │   ├── transactions_create.test.js
 │   │   ├── generated_tools.smoke.test.js
