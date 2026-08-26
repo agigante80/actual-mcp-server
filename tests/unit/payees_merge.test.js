@@ -50,30 +50,30 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   // would make every assertion below vacuous. tests/unit/payees_delete.test.js stubs
   // the adapter method and therefore never exercises its pre-flight at all.
 
-  const NORMAL_A = { id: 'p-normal-a', name: 'Kroger', transfer_acct: null };
-  const NORMAL_B = { id: 'p-normal-b', name: 'Kroger Inc', transfer_acct: null };
-  const TRANSFER = { id: 'p-transfer', name: 'Savings', transfer_acct: 'acct-savings' };
+  const NORMAL_A = { id: '11111111-1111-4111-8111-111111111111', name: 'Kroger', transfer_acct: null };
+  const NORMAL_B = { id: '22222222-2222-4222-8222-222222222222', name: 'Kroger Inc', transfer_acct: null };
+  const TRANSFER = { id: '44444444-4444-4444-8444-444444444444', name: 'Savings', transfer_acct: 'acct-savings' };
 
   const reset = (list) => { payees = list; mergeCalls = 0; lastMergeArgs = null; };
 
   console.log('\n[#356] payees_merge: positive, two normal payees');
   {
     reset([NORMAL_A, NORMAL_B]);
-    const res = await tool.call({ targetId: 'p-normal-a', mergeIds: ['p-normal-b'] });
+    const res = await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['22222222-2222-4222-8222-222222222222'] });
     check(res?.success === true,                          'returns success: true');
     check(Array.isArray(res?.mergedIds),                  'reports mergedIds');
-    check(res?.mergedIds?.[0] === 'p-normal-b',           'mergedIds names the merged payee');
-    check(res?.message?.includes('p-normal-b'),           'message names what was merged');
+    check(res?.mergedIds?.[0] === '22222222-2222-4222-8222-222222222222',           'mergedIds names the merged payee');
+    check(res?.message?.includes('22222222-2222-4222-8222-222222222222'),           'message names what was merged');
     check(mergeCalls === 1,                               'raw mergePayees called exactly once');
-    check(lastMergeArgs?.[0] === 'p-normal-a',            'target forwarded unchanged');
-    check(lastMergeArgs?.[1]?.[0] === 'p-normal-b',       'sources forwarded unchanged');
+    check(lastMergeArgs?.[0] === '11111111-1111-4111-8111-111111111111',            'target forwarded unchanged');
+    check(lastMergeArgs?.[1]?.[0] === '22222222-2222-4222-8222-222222222222',       'sources forwarded unchanged');
   }
 
   console.log('\n[#356] payees_merge: NEGATIVE, target is a transfer payee');
   {
     reset([NORMAL_A, TRANSFER]);
     let threw = null;
-    try { await tool.call({ targetId: 'p-transfer', mergeIds: ['p-normal-a'] }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '44444444-4444-4444-8444-444444444444', mergeIds: ['11111111-1111-4111-8111-111111111111'] }); } catch (e) { threw = e; }
     check(threw instanceof Error,                            'throws instead of reporting success');
     check(!!threw && /transfer/i.test(threw.message),         'error says transfer payee');
     check(!!threw && threw.message.includes('Savings'),       'error names the payee (account name)');
@@ -84,7 +84,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([NORMAL_A, NORMAL_B, TRANSFER]);
     let threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: ['p-normal-b', 'p-transfer'] }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['22222222-2222-4222-8222-222222222222', '44444444-4444-4444-8444-444444444444'] }); } catch (e) { threw = e; }
     check(threw instanceof Error,                             'throws instead of silently dropping it');
     check(!!threw && /transfer/i.test(threw.message),          'error says transfer payee');
     check(!!threw && threw.message.includes('Savings'),        'error names the offending payee');
@@ -95,7 +95,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([NORMAL_A]);
     let threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: ['p-ghost'] }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['66666666-6666-4666-8666-666666666666'] }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                     'throws');
     check(!!threw && /not found/i.test(threw.message),                 'error says not found');
     check(!!threw && threw.message.includes('actual_payees_get'),      'error names the listing tool');
@@ -108,7 +108,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([NORMAL_A]);
     let threw = null;
-    try { await tool.call({ targetId: 'p-ghost', mergeIds: ['p-normal-a'] }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '66666666-6666-4666-8666-666666666666', mergeIds: ['11111111-1111-4111-8111-111111111111'] }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                 'throws');
     check(!!threw && /not found/i.test(threw.message),             'error says not found');
     check(mergeCalls === 0,                                        'raw mergePayees NOT called');
@@ -118,7 +118,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([NORMAL_A, NORMAL_B]);
     let threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: ['p-normal-a'] }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['11111111-1111-4111-8111-111111111111'] }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'throws when target appears in mergeIds');
     check(mergeCalls === 0,       'raw mergePayees NOT called');
   }
@@ -128,7 +128,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // "Report what happened, not what was requested" has to survive a repeated id, or the
     // count describes the caller's input again.
     reset([NORMAL_A, NORMAL_B]);
-    const res = await tool.call({ targetId: 'p-normal-a', mergeIds: ['p-normal-b', 'p-normal-b'] });
+    const res = await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: ['22222222-2222-4222-8222-222222222222', '22222222-2222-4222-8222-222222222222'] });
     check(res?.mergedIds?.length === 1,             'reports one merged id, not two');
     check(lastMergeArgs?.[1]?.length === 1,          'the raw call receives one id, not two');
     check(/Merged 1 payee/.test(res?.message ?? ''), 'the message counts one');
@@ -140,30 +140,37 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // logger.error. With 50 ids of up to 64 characters an uncapped join is a multi-kilobyte
     // echo, so at most five are named.
     reset([NORMAL_A]);
-    const many = Array.from({ length: 40 }, (_, i) => `p-ghost-${i}`);
+    // #365: valid UUIDs that do not exist. They have to parse, or the schema refuses
+    // them first and this stops testing the adapter's echo bound at all.
+    const ghost = (i) => `${String(i).padStart(8, '0')}-0000-4000-8000-000000000000`;
+    const many = Array.from({ length: 40 }, (_, i) => ghost(i));
     let threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: many }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: many }); } catch (e) { threw = e; }
     check(threw instanceof Error,                              'throws for unknown ids');
     check(!!threw && /and 35 more/.test(threw.message),         'names five and summarises the rest');
     check(!!threw && threw.message.length < 1024,               'message stays under 1KB');
-    check(!!threw && !threw.message.includes('p-ghost-39'),     'does not echo every id');
+    check(!!threw && !threw.message.includes(ghost(39)),        'does not echo every id');
   }
 
   console.log('\n[#356] payees_merge: schema bounds');
   {
     reset([NORMAL_A, NORMAL_B]);
     let threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: [] }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: [] }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'rejects an empty mergeIds array');
 
     reset([NORMAL_A, NORMAL_B]);
     threw = null;
-    try { await tool.call({ targetId: 'x'.repeat(65), mergeIds: ['p-normal-b'] }); } catch (e) { threw = e; }
+    // #365: this is now a FORMAT rejection, not a length one. The UUID pattern is
+    // strictly tighter than the .max(64) bound it replaced, so an over-long id is
+    // refused for the more specific reason. Kept as a case because the property that
+    // matters (an unbounded id never reaches the adapter or the logs) is unchanged.
+    try { await tool.call({ targetId: 'x'.repeat(65), mergeIds: ['22222222-2222-4222-8222-222222222222'] }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'rejects an over-long id (unbounded echo guard)');
 
     reset([NORMAL_A, NORMAL_B]);
     threw = null;
-    try { await tool.call({ targetId: 'p-normal-a', mergeIds: new Array(51).fill('p-normal-b') }); } catch (e) { threw = e; }
+    try { await tool.call({ targetId: '11111111-1111-4111-8111-111111111111', mergeIds: new Array(51).fill('22222222-2222-4222-8222-222222222222') }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'rejects more than 50 merge sources');
     check(mergeCalls === 0,       'no write attempted on any Zod failure');
   }

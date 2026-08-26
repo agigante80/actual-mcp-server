@@ -1,10 +1,15 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  // #356: bounded, because the id is echoed into the error message and the logs.
-  id: z.string().min(1).max(64).describe('Payee ID to delete'),
+  // #365: the shared payee-id schema, which is the UUID pattern. #356 bounded this at
+  // .max(64) (the id is echoed into the error message and the logs) but deliberately
+  // stopped short of the regex, because adopting it meant rewriting non-UUID fixtures in
+  // two test files and that was not the transfer-payee bug #356 existed to fix. The
+  // regex is strictly tighter than the bound it replaces, so the echo is still bounded.
+  id: CommonSchemas.payeeId.describe('Payee ID to delete'),
 });
 
 const tool: ToolDefinition = {

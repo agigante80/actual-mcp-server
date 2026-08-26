@@ -1,16 +1,18 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
-// #356: bounded on both axes. The ids are echoed back in error messages and into the
-// structured logs, so an unbounded string or array is an unbounded echo. Actual's ids
-// are UUIDs, so 64 characters is already generous, and no legitimate merge consolidates
-// more than a few hundred payees in one call.
-const PayeeIdSchema = z.string().min(1).max(64);
-
+// #365: the shared payee-id schema (the UUID pattern) on both axes, replacing the
+// #356 length bound. #356 bounded rather than typed these because the regex would have
+// rejected the non-UUID fixtures the existing tests fed these exact tools, and that
+// sweep was not the transfer-payee bug it existed to fix. The array bound is unchanged
+// and is a separate concern: the ids are echoed back in error messages and into the
+// structured logs, and no legitimate merge consolidates more than a few dozen payees in
+// one call.
 const InputSchema = z.object({
-  targetId: PayeeIdSchema.describe('ID of the target payee to merge into (this payee will be retained)'),
-  mergeIds: z.array(PayeeIdSchema).min(1).max(50)
+  targetId: CommonSchemas.payeeId.describe('ID of the target payee to merge into (this payee will be retained)'),
+  mergeIds: z.array(CommonSchemas.payeeId).min(1).max(50)
     .describe('Array of payee IDs to merge into the target payee (these will be consolidated)'),
 });
 
