@@ -1,8 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
-    "src/index.ts",
-    "bin/actual-mcp-server.js",
     "src/tools/index.ts",
     "src/server/httpServer.ts",
     "src/server/stdioServer.ts",
@@ -13,10 +11,8 @@
     "scripts/**/*.{js,mjs}",
     "tests/unit/**/*.test.js",
     "tests/e2e/**/*.spec.ts",
-    "tests/manual/index.js",
     "tests/manual/tests/**/*.js",
     "tests/manual/*.mjs",
-    "playwright.config.ts",
     "playwright.config.docker.ts"
   ],
   "project": [
