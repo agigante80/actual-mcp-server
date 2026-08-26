@@ -1168,6 +1168,27 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
         `Category "${categoryId}" not found. Use actual_categories_get to list available categories.`
       );
     }
+
+    // #361: the MONTH is unvalidated, in format AND range. `api/budget-set-amount` is the
+    // one budget handler that does not call upstream's `validateMonth`, unlike
+    // budget-set-carryover, budget-hold-for-next-month and budget-reset-hold, and the
+    // tool's schema is a bare `z.string().min(1)`, so even 'banana' reaches this point.
+    // Upstream then runs `dbMonth(month)` and INSERTs a row keyed `<month>-<category>`.
+    //
+    // A membership test against the budget's own months covers both halves at once:
+    // upstream's `validateMonth` and `api/budget-months` share the same
+    // `get-budget-bounds()` plus `range()` computation, so this reproduces its range check
+    // exactly, and a malformed string cannot be a member either.
+    const months = await withConcurrency(() =>
+      retry(() => rawGetBudgetMonths() as Promise<string[]>, { retries: 2, backoffMs: 200 })
+    );
+    if (Array.isArray(months) && months.length > 0 && !months.includes(String(month))) {
+      throw new Error(
+        `Month "${month}" is not in this budget. It runs from ${months[0]} to ${months[months.length - 1]}. ` +
+          'Use actual_budgets_getMonths to see the months you can budget to.'
+      );
+    }
+
     const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return result;
   });

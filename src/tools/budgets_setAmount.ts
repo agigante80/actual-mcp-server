@@ -2,7 +2,14 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({ month: z.string().min(1), categoryId: z.string().min(1), amount: z.number() });
+const InputSchema = z.object({
+  // #361: this was a bare z.string().min(1), so 'banana' parsed and reached the API. The
+  // regex matches actual_budgets_holdForNextMonth and the other month-taking tools; the
+  // adapter additionally checks the month is one this budget actually has.
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format'),
+  categoryId: z.string().min(1).max(64),
+  amount: z.number().int('amount must be an integer (cents)'),
+});
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_setAmount',
