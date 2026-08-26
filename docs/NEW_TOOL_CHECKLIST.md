@@ -41,7 +41,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Both a positive scenario and a not-found/negative scenario described in the prompt instructions
 
 ### E2E Tests
-- [ ] Tool's happy-path call added to the appropriate `tests/e2e/suites/<domain>.ts` file
+- [ ] Tool's happy-path call added to `tests/e2e/docker-all-tools.e2e.spec.ts`, and confirmed collected with `npx playwright test --list --config playwright.config.docker.ts` (#366: the old `tests/e2e/suites/` path never executed)
 - [ ] `EXPECTED_TOOL_COUNT` default bumped in `tests/manual/tests/sanity.js` (the only place that asserts an exact tool count)
 - [ ] `describe('Docker E2E - ALL <N> TOOLS', ...)` block-name count updated in `tests/e2e/docker-all-tools.e2e.spec.ts` (cosmetic label only; the spec does not assert a count, and `mcp-client.playwright.spec.ts` only checks `tools.length > 0`)
 - [ ] `npm run test:e2e` passes
@@ -506,7 +506,7 @@ When implementing a new lookup tool, the `call` function should:
 | `src/lib/actual-adapter.ts` | **Add** adapter method if new API call needed |
 | `tests/unit/generated_tools.smoke.test.js` | **Add** stub response to `stubResponses` map (if new adapter method); add input example; add to `resultWrappers[]`, `successTools[]`, or custom `if (n === '...')` shape assertion |
 | `tests/unit/schema_validation.test.js` | **Add** negative schema tests for complex schemas |
-| `tests/e2e/suites/<domain>.ts` | **Add** happy-path call for the new tool |
+| `tests/e2e/docker-all-tools.e2e.spec.ts` | **Add** happy-path call for the new tool (the only E2E file that runs) |
 | `tests/manual/tests/sanity.js` | **Update** `EXPECTED_TOOL_COUNT` default (the only exact-count gate) |
 | `tests/e2e/docker-all-tools.e2e.spec.ts` | **Update** the `describe(...)` block-name count label (cosmetic) |
 | `tests/manual/tests/<module>.js` | **Add** positive + negative test block |

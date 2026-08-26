@@ -98,7 +98,7 @@ body:
     id: e2e_tests
     attributes:
       label: E2E tests
-      description: Specific cases Copilot must implement in `tests/e2e/suites/`.
+      description: Specific cases Copilot must implement in `tests/e2e/docker-all-tools.e2e.spec.ts`.
       placeholder: |
         - [ ] Positive: `[suite file]` — [setup + valid call] → [assertion]
         - [ ] Negative: `[suite file]` — [bad state + call] → error response

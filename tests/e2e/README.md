@@ -200,7 +200,7 @@ These rules apply to everyone adding or modifying tests in this directory.
 
 1. Find or create the correct domain section in `docker-all-tools.e2e.spec.ts` (ordered by
    domain, alphabetical within domain). Add the same test to the corresponding suite file
-   under `tests/e2e/suites/` for future reference.
+   in `tests/e2e/docker-all-tools.e2e.spec.ts`, which is the only E2E file Playwright collects (#366).
 2. Add a named `test(...)` for the happy path, including read-back of the created/updated value.
 3. Add a named `test(...)` for the negative path (sentinel UUID or missing required field).
 4. If the tool creates an entity: store the returned ID in `testContext`, add a corresponding
