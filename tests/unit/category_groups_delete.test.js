@@ -30,12 +30,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let deleteCalls = 0;
   let deleteThrows = null;
   apiDefault.sync = async () => {};
-  apiDefault.getCategoryGroups = async () => groupsResponse;
-  apiDefault.deleteCategoryGroup = async (_id) => {
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.getCategoryGroups = async () => { witness?.noteRead(); return groupsResponse; };
+  apiDefault.deleteCategoryGroup = async (_id) => { witness?.noteWrite();
     deleteCalls++;
     if (deleteThrows) throw deleteThrows;
   };
 
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod, errorsMod] = await Promise.all([
     import('../../dist/src/tools/category_groups_delete.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
@@ -43,6 +47,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   ]);
   const { isPreflightRefusal } = errorsMod;
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
   const reset = () => { deleteCalls = 0; deleteThrows = null; groupsResponse = []; };
 
@@ -50,21 +55,21 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset();
     groupsResponse = [{ id: 'cg-1' }];
-    const before = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
     const res = await tool.call({ id: 'cg-1' });
     check(res?.success === true, 'returns { success: true }');
     check(deleteCalls === 1,     'rawDeleteCategoryGroup called');
     // The #142 property, asserted against the real queue rather than a stubbed wrapper:
     // the read, the decision and the write share ONE api lock cycle.
-    check(adapterMod._getWriteQueueBatchCountForTests() - before === 1,
-      'exactly one write-queue cycle for the read and the write');
+    check(witness.sharedOneCycle(),
+      'the read and the write ran in the SAME drain (#376)', witness.describe());
   }
 
   console.log('\n[#142] category_groups_delete: read-side not-found throws');
   {
     reset();
     groupsResponse = [];
-    const before = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
     let threw = null;
     try { await tool.call({ id: 'cg-missing' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                 'throws on not-found');
@@ -75,20 +80,19 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(threw?.message?.includes('cg-missing'),                 'error mentions the id');
     check(threw?.message?.includes('actual_category_groups_get'), 'error mentions list tool');
     check(deleteCalls === 0,                                      'rawDeleteCategoryGroup NOT called');
-    check(adapterMod._getWriteQueueBatchCountForTests() - before === 1,
-      'the refusal still costs exactly one cycle, not a second lookup');
+    check(witness.readInCycleNoWrite(),
+      'the read ran inside the drain and no write followed', witness.describe());
   }
 
   console.log('\n[#142] category_groups_delete: schema rejection');
   {
     reset();
-    const before = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
     let threw = null;
     try { await tool.call({}); } catch (e) { threw = e; }
     check(threw instanceof Error, 'throws on missing id');
     check(deleteCalls === 0,      'rawDeleteCategoryGroup NOT called');
-    check(adapterMod._getWriteQueueBatchCountForTests() - before === 0,
-      'a Zod failure never reaches the write queue at all');
+    check(witness.cycles() === 0, 'a Zod failure never reaches the write queue at all');
   }
 
   console.log('');

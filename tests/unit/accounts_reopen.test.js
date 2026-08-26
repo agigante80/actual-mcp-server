@@ -26,21 +26,26 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let accountsQueue = [];
   let getCalls = 0;
   let reopenCalls = 0;
-  apiDefault.getAccounts = async () => {
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.getAccounts = async () => { witness?.noteRead();
     getCalls++;
     return accountsQueue.length > 1 ? accountsQueue.shift() : accountsQueue[0];
   };
-  apiDefault.reopenAccount = async (_id) => { reopenCalls++; };
+  apiDefault.reopenAccount = async (_id) => { witness?.noteWrite(); reopenCalls++; };
 
   // #371 moved the guard into adapter.reopenAccount, so this exercises the REAL adapter
   // method. The raw api stubs above are installed BEFORE the adapter import on purpose:
   // actual-adapter.ts destructures them at module load.
   apiDefault.sync = async () => {};
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/accounts_reopen.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
   const reset = (queue) => { accountsQueue = queue; getCalls = 0; reopenCalls = 0; };
 
@@ -58,7 +63,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // The #142 property, asserted for real. The previous sessionCalls check counted calls to
     // a pass-through stub, which proved nothing about the lock; this counts batches actually
     // dispatched by processWriteQueue.
-    check(adapterMod._getWriteQueueBatchCountForTests() - batchesBefore === 1,
+    check(witness.sharedOneCycle(),
                                    'read, write and re-read shared ONE write-queue cycle');
   }
 

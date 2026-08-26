@@ -31,35 +31,39 @@ const ORPHAN_ID        = 'not-a-real-entity';
   // per case, for the same reason.
   let updateNoteCalls = 0;
   let entityRows = [];
-  apiDefault.updateNote = async () => { updateNoteCalls++; };
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.updateNote = async () => { witness?.noteWrite(); updateNoteCalls++; };
   apiDefault.getNote    = async (id) => ({ id, note: '' });
   apiDefault.sync       = async () => {};
-  apiDefault.getAccounts       = async () => entityRows;
+  apiDefault.getAccounts = async () => { witness?.noteRead(); return entityRows; };
   apiDefault.getCategories     = async () => [];
   apiDefault.getCategoryGroups = async () => [];
   apiDefault.getPayees         = async () => [];
 
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/notes_update.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
-  let batchesBefore = 0;
-  const cycles = () => adapterMod._getWriteQueueBatchCountForTests() - batchesBefore;
+  const cycles = () => witness.cycles();
 
   // The entity IS known: the account list contains it.
   const setupKnownEntity = () => {
     updateNoteCalls = 0;
     entityRows = [{ id: KNOWN_ACCOUNT_ID, name: 'Checking' }];
-    batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
   };
 
   // Nothing exists anywhere, so any non-budget id is an orphan.
   const setupEmptyLists = () => {
     updateNoteCalls = 0;
     entityRows = [];
-    batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
   };
 
   // createTool wraps handler return in { result: ... }
@@ -78,7 +82,8 @@ const ORPHAN_ID        = 'not-a-real-entity';
     check(updateNoteCalls === 1, 'the raw note write happened once');
     // #376: the four entity reads and the write share ONE api lock cycle. Before the move
     // this cost five: four adapter.get* calls plus the write.
-    check(cycles() === 1, 'exactly one write-queue cycle for the reads and the write');
+    check(witness.sharedOneCycle(),
+      'the entity reads and the note write ran in the SAME drain (#376)', witness.describe());
   }
 
   console.log('\n[notes_update] positive: empty string note (clear) accepted');
@@ -111,7 +116,8 @@ const ORPHAN_ID        = 'not-a-real-entity';
     check(r?.error?.includes(ORPHAN_ID), 'error contains the bad id');
     check(updateNoteCalls === 0,
       'the raw note write NOT reached: this is what prevents an unreadable orphan note');
-    check(cycles() === 1, 'the refusal still costs exactly one cycle');
+    check(witness.readInCycleNoWrite(),
+      'the reads ran inside the drain and no write followed', witness.describe());
   }
 
   console.log('\n[notes_update] schema: rejects missing id');

@@ -28,11 +28,14 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let holdCalls = 0;
   let lastArgs = null;
   let monthReads = 0;
-  apiDefault.getBudgetMonth = async (month) => {
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.getBudgetMonth = async (month) => { witness?.noteRead();
     monthReads++;
     return { month, toBudget, forNextMonth: buffered };
   };
-  apiDefault.holdBudgetForNextMonth = async (month, amount) => {
+  apiDefault.holdBudgetForNextMonth = async (month, amount) => { witness?.noteWrite();
     holdCalls++;
     lastArgs = [month, amount];
     if (toBudget <= 0) return false;
@@ -45,11 +48,13 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   // the REAL adapter method. The raw api stubs above are installed BEFORE the adapter import
   // on purpose: actual-adapter.ts destructures them at module load.
   apiDefault.sync = async () => {};
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/budgets_holdForNextMonth.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
   const reset = (budget, startBuffered = 0) => {
     toBudget = budget; buffered = startBuffered; holdCalls = 0; lastArgs = null; monthReads = 0;
@@ -69,7 +74,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(monthReads === 2,            'read before and after');
     // The #142 property asserted for real, not implied by a read count: one call must
     // dispatch exactly ONE write-queue batch.
-    check(adapterMod._getWriteQueueBatchCountForTests() - batchesBefore === 1,
+    check(witness.sharedOneCycle(),
                           'read, write and re-read shared ONE write-queue cycle');
   }
 

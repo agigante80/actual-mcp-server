@@ -28,13 +28,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let lastCloseArgs = null;
   let closeThrows = null;
   let getCalls = 0;
-  apiDefault.getAccounts = async () => {
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.getAccounts = async () => { witness?.noteRead();
     getCalls++;
     return accountsQueue.length > 1 ? accountsQueue.shift() : accountsQueue[0];
   };
   let categories = [{ id: 'cat-9', name: 'Misc' }];
-  apiDefault.getCategories = async () => categories;
-  apiDefault.closeAccount = async (id, transferAccountId, transferCategoryId) => {
+  apiDefault.getCategories = async () => { witness?.noteRead(); return categories; };
+  apiDefault.closeAccount = async (id, transferAccountId, transferCategoryId) => { witness?.noteWrite();
     closeCalls++;
     lastCloseArgs = [id, transferAccountId, transferCategoryId];
     if (closeThrows) throw closeThrows;
@@ -45,11 +48,13 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   // would stub away the thing under test. The raw api stubs above are installed BEFORE the
   // adapter import on purpose: actual-adapter.ts destructures them at module load.
   apiDefault.sync = async () => {};
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/accounts_close.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
   const OPEN = { id: 'acct-1', name: 'Checking', closed: false };
   const CLOSED = { id: 'acct-1', name: 'Checking', closed: true };
@@ -72,7 +77,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(getCalls === 2,                    'read before and verified after');
     // The #142 property asserted for real, not implied by a read count: one call must
     // dispatch exactly ONE write-queue batch.
-    check(adapterMod._getWriteQueueBatchCountForTests() - batchesBefore === 1,
+    check(witness.sharedOneCycle(),
                           'read, write and re-read shared ONE write-queue cycle');
   }
 
