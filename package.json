@@ -61,6 +61,7 @@
     "tool-count": "node scripts/tool-count.mjs",
     "config-drift": "npm run build && node scripts/config-drift.mjs",
     "node-version-drift": "node scripts/node-version-drift.mjs",
+    "typecheck:e2e": "tsc --noEmit --project tests/e2e/tsconfig.json",
     "knip": "knip",
     "actionlint": "bash scripts/install-actionlint.sh && ./actionlint -shellcheck= -color",
     "audit:write-effect": "node scripts/check-write-effect-audit.mjs"

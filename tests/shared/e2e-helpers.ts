@@ -98,7 +98,11 @@ export async function callTool(
     params: { name: toolName, arguments: args },
   };
 
-  const res = await retryRequest(() =>
+  // Typed explicitly: `request` is `any` (Playwright's APIRequestContext is not imported
+  // here to keep this file usable from both spec and plain-node callers), so without this
+  // the generic resolves to `unknown` and every use of `res` below is a type error. #375
+  // added `npm run typecheck:e2e`, which is what surfaced it.
+  const res = await retryRequest<{ ok(): boolean; json(): Promise<any> }>(() =>
     request.post(rpcUrl, {
       data: JSON.stringify(payload),
       headers: {

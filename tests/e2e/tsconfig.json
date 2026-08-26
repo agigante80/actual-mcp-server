@@ -1,0 +1,17 @@
+{
+  // #375: the E2E specs and their fixtures were typechecked by NOTHING. The root
+  // tsconfig's `include` is src/types/generated only, and Playwright transpiles specs with
+  // esbuild, which strips types without checking them. So "npm run build is green" said
+  // nothing at all about the 380 lines of fixtures this directory now depends on, and a
+  // type error would surface only as a runtime failure inside a 20-minute Docker run.
+  //
+  // Run via `npm run typecheck:e2e`, which the Lint Code CI job invokes.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    // The specs legitimately poke at untyped MCP response envelopes, so the `any`-heavy
+    // style here is deliberate. Everything else the project enforces still applies.
+    "types": ["node"]
+  },
+  "include": ["./**/*.ts", "../shared/**/*.ts"]
+}

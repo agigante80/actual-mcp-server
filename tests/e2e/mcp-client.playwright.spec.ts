@@ -1,7 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { waitForMCPHealth, retryRequest } from '../shared/e2e-helpers.js';
 
