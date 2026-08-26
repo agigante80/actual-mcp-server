@@ -27,8 +27,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let closeCalls = 0;
   let lastCloseArgs = null;
   let closeThrows = null;
-  apiDefault.getAccounts = async () =>
-    accountsQueue.length > 1 ? accountsQueue.shift() : accountsQueue[0];
+  let getCalls = 0;
+  apiDefault.getAccounts = async () => {
+    getCalls++;
+    return accountsQueue.length > 1 ? accountsQueue.shift() : accountsQueue[0];
+  };
   let categories = [{ id: 'cat-9', name: 'Misc' }];
   apiDefault.getCategories = async () => categories;
   apiDefault.closeAccount = async (id, transferAccountId, transferCategoryId) => {
@@ -37,14 +40,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     if (closeThrows) throw closeThrows;
   };
 
+  // #371 moved the guard into adapter.closeAccount, so this test must exercise the REAL
+  // adapter method. Stubbing adapter.closeAccount (or withWriteSession as a pass-through)
+  // would stub away the thing under test. The raw api stubs above are installed BEFORE the
+  // adapter import on purpose: actual-adapter.ts destructures them at module load.
+  apiDefault.sync = async () => {};
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/accounts_close.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
-  const adapter = adapterMod.default;
-  const originalSession = adapter.withWriteSession;
-  let sessionCalls = 0;
-  adapter.withWriteSession = async (fn) => { sessionCalls++; return await fn(); };
+  adapterMod._setSkipApiInitForTests(true);
 
   const OPEN = { id: 'acct-1', name: 'Checking', closed: false };
   const CLOSED = { id: 'acct-1', name: 'Checking', closed: true };
@@ -52,7 +57,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   const DEST_CLOSED = { id: 'acct-3', name: 'Old Savings', closed: true };
 
   const reset = (queue) => {
-    accountsQueue = queue; closeCalls = 0; lastCloseArgs = null; closeThrows = null; sessionCalls = 0;
+    accountsQueue = queue; closeCalls = 0; lastCloseArgs = null; closeThrows = null; getCalls = 0;
   };
 
   console.log('\n[#357] accounts_close: positive, an account with transactions closes');
@@ -63,7 +68,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(res?.closed === true,              'reports that it is closed');
     check(closeCalls === 1,                  'raw closeAccount called exactly once');
     check(lastCloseArgs?.[1] === undefined,  'no transfer account passed when not supplied');
-    check(sessionCalls === 1,                'exactly one withWriteSession cycle (#142)');
+    check(getCalls === 2,                    'read before and verified after, in one cycle');
   }
 
   console.log('\n[#357] accounts_close: (b) a zero-transaction account is REMOVED, and says so');
@@ -188,7 +193,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     let threw = null;
     try { await tool.call({ id: 'acct-1', transferAccountId: 'acct-1' }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'rejects transferring to the account being closed');
-    check(sessionCalls === 0,     'no session opened on Zod failure');
+    check(getCalls === 0,         'the adapter was never reached on a Zod failure');
 
     reset([[OPEN]]);
     threw = null;
@@ -197,7 +202,6 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(closeCalls === 0,       'no write attempted');
   }
 
-  adapter.withWriteSession = originalSession;
   console.log('');
   if (failures === 0) console.log('[#357] All accounts_close tests passed ✓');
   else { console.error(`[#357] ${failures} test(s) FAILED`); process.exit(2); }
