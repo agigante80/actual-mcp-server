@@ -243,6 +243,14 @@ Two habits, learned from the tickets above:
 - **Check the stub is telling the truth.** `tests/unit/rules_delete.test.js` stubbed
   `deleteRule` as returning `undefined`, encoding the same wrong assumption the tool made.
   A stub that mirrors the bug cannot catch the bug.
+- **A test that accepts BOTH outcomes cannot fail.** The `holdForNextMonth` integration
+  proof passed on success OR on a "nothing was held" refusal, because the fixture's To
+  Budget was unknown, so a regression to always-refusing stayed green in both the E2E and
+  the manual suite. #369 made the fixture deterministic instead: an on-budget account
+  created with a positive starting balance books that balance as INCOME for the month, and
+  To Budget is computed from income minus what is already allocated, so seeding one
+  guarantees the success branch. Verified both ways: the rewritten test passes on a clean
+  build and FAILS against a build whose `holdBudgetForNextMonth` always returns 0.
 - **Stub BELOW the thing under test, not at it.** When #376 moved these guards into the
   adapter, five unit tests kept passing while testing nothing, because they stubbed
   `adapter.withWriteSession` as a pass-through: once the guard lives in the adapter, that

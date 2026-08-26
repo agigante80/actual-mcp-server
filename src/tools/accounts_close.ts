@@ -49,7 +49,10 @@ const tool: ToolDefinition = {
     'IMPORTANT: an account with NO transactions is REMOVED by Actual rather than closed, and cannot ' +
     'be reopened; an account that has transactions keeps them. If the account has a non-zero balance, ' +
     'transferAccountId is required and the remaining balance is moved there as a dated "Closing account" ' +
-    'transaction. Closing an already-closed account reports that rather than claiming a change.',
+    'transaction. Closing an already-closed account reports that rather than claiming a change. ' +
+    'If this call reports an error, re-read the account with actual_accounts_list before retrying: ' +
+    'the state is verified AFTER the write, so a failure of that verification read is reported ' +
+    'even though the close itself may have succeeded.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

@@ -65,6 +65,11 @@ export const CLEANUP_ORDER = {
   /** A note is attached to another entity, so it is cleared before anything is removed. */
   note: 5,
   transaction: 10,
+  /**
+   * Month-level budget state (a hold carried to next month). Runs before entities are
+   * removed, while the income those numbers were computed from still exists.
+   */
+  budgetHold: 8,
   /** Tags are referenced by transaction text, so they go after transactions. */
   tag: 15,
   rule: 20,

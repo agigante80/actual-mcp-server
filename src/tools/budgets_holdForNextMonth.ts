@@ -28,7 +28,11 @@ const tool: ToolDefinition = {
     'Actual can hold LESS than requested: it clamps the hold to the amount still left to budget, ' +
     'and holds nothing at all when that is zero or negative. The response reports the amount ' +
     'actually held and flags a partial hold, rather than reporting plain success.\n\n' +
-    'Note: This operates on the month as a whole, not on a specific category.',
+    'Note: This operates on the month as a whole, not on a specific category.\n\n' +
+    'If this call reports an error, re-read the month with actual_budgets_getMonth before ' +
+    'retrying: the amount held is measured by reading the month AFTER the write, so a failure ' +
+    'of that verification read is reported even though the hold itself may have succeeded. ' +
+    'Retrying blindly would hold the amount twice, because Actual ADDS to the existing buffer.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

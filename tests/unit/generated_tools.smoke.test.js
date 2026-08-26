@@ -101,7 +101,10 @@ console.log('Running generated tools smoke tests');
     // #371: closeAccount reports WHICH outcome happened; a bare null would make the tool
     // dereference `.name` on nothing.
     closeAccount: { outcome: 'closed', name: 'Cash' },
-    reopenAccount: null,
+    // #369 item 5: reopenAccount reports WHICH outcome happened too, now that an
+    // already-open account is a reported non-change rather than a redundant CRDT write.
+    // A bare null would make the tool dereference `.outcome` on nothing.
+    reopenAccount: { outcome: 'reopened', name: 'Cash' },
     getAccountBalance: 12345,
     deleteTransaction: null,
     updateTransaction: null,
