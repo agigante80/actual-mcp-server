@@ -51,8 +51,11 @@ OpenAI/ECMA-262 compatibility guard (`tests/unit/schema_json_openai_compat.test.
 
 ### 3. E2E test specs
 
-For any behaviour visible over the transports: a case in `tests/e2e/docker-all-tools.e2e.spec.ts` (the only E2E file Playwright collects; #366 removed the `tests/e2e/suites/` tree, which never ran),
-setup steps, the action, and the assertion, for both the happy and unhappy paths. A change to a
+For any behaviour visible over the transports: a case in `tests/e2e/docker-all-tools.e2e.spec.ts`
+(the only E2E file Playwright collects; #366 removed the `tests/e2e/suites/` tree, which never ran),
+written against the fixtures in `tests/e2e/fixtures.ts` so it provisions its own data and passes when
+run alone (#375). That case carries its setup steps, the action, and the assertion, for both the happy
+and unhappy paths. A change to a
 tool's write path must be exercised over BOTH transports via the dual-transport gate
 (`MCP_TEST_TRANSPORT=http` and `stdio`). Pure-internal changes with no transport-visible surface
 mark this N/A with justification rather than inventing a flow.

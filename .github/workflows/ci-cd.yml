@@ -167,6 +167,13 @@ jobs:
       # --no-exit-code) exits nonzero on any unused file/export/type, so this step
       # FAILS the Lint Code job on new dead code. NOT continue-on-error by design:
       # the gate must be able to fail. The #234 baseline was cleaned in #237.
+      - name: 🧪 Type check E2E tests and fixtures
+        # #375: the root tsconfig covers src/types/generated only, and Playwright
+        # transpiles specs with esbuild without typechecking them, so `npm run build`
+        # said nothing about tests/e2e. A type error there used to surface only as a
+        # runtime failure inside the 20-minute Docker E2E job.
+        run: npm run typecheck:e2e
+
       - name: 🪦 Check for dead code (Knip)
         run: npm run knip
 
