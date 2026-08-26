@@ -9,9 +9,13 @@
 // WHY THIS ONE IS SAFE TO BLOCK, WHEN THE STALENESS REMINDER IS NOT.
 // scripts/check-write-effect-audit.mjs compares the audited @actual-app/api version with the
 // installed one, so its result changes when UPSTREAM moves and no commit here caused it.
-// That is #321, and it must never gate a build. THIS test only reads two files in this
-// repository, so its result cannot change without a commit here. It belongs in
-// test:unit-js; the staleness reminder does not.
+// That is #321, and it must never gate a build. THIS test reads two files in this repository
+// plus the COMPILED classification in dist/ (#379 replaced the private READ_ONLY list with
+// the annotations the server publishes, so "can this tool write?" has one answer). Its
+// result therefore cannot change without a commit here, but it does require a build: every
+// path that runs it builds first (the documented pre-commit sequence, CI's Run Tests job,
+// and the tool-authoring checklist). It belongs in test:unit-js; the staleness reminder
+// does not.
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

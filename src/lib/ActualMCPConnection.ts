@@ -4,7 +4,7 @@ import * as actual from '@actual-app/api';
 import actualToolsManager from '../actualToolsManager.js';
 import adapter from './actual-adapter.js';
 import { z } from 'zod';
-import { annotationsFor } from './tool-annotations.js';
+import { buildToolListEntries } from './tool-list-entry.js';
 
 
 /**
@@ -35,7 +35,16 @@ export class ActualMCPConnection extends EventEmitter {
     }
   }
 
-  /** Called by the MCP client to fetch current capabilities */
+  /**
+   * Called by the MCP client to fetch current capabilities.
+   *
+   * NOTE (#379): this has NO call sites in src, tests, scripts or bin. It is not the
+   * `tools/list` handler (those live in `httpServer.ts` and `stdioServer.ts` and all go
+   * through `buildToolListEntries`), and nothing this returns reaches a client today. It is
+   * routed through the same builder anyway so it cannot drift into a fifth, differently
+   * shaped tool list. Whether to delete it outright is tracked separately: it is a public
+   * method on an exported class, so removal is a breaking change for any external importer.
+   */
   async fetchCapabilities() {
     // If actualToolsManager is not ready, return demo tools
     let tools;
@@ -48,15 +57,11 @@ export class ActualMCPConnection extends EventEmitter {
         }
         // Add examples if present on the tool
         return {
-          name: tool.name,
+          ...buildToolListEntries([tool.name], () => ({
+            description: tool.description,
+            schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : undefined,
+          }))[0],
           title: tool.name,
-          description: tool.description,
-          inputSchema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : { type: 'object' },
-          // #379: MCP tool annotations. Advisory metadata for clients, never a guard:
-          // the spec says clients must treat them as untrusted, and nothing in src/ may
-          // branch on one. See src/lib/tool-annotations.ts for the classification and why
-          // openWorldHint is the field whose default is wrong for 73 of 74 tools.
-          annotations: annotationsFor(tool.name),
         };
       });
     } catch (e) {

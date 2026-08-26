@@ -161,6 +161,16 @@ not happen, so they are out of scope by construction and are deliberately absent
 `src/lib/query-validator.ts`, but it is the only tool that could in principle reach a write
 path through raw SQL. Listed as UNKNOWN rather than assumed read-only.
 
+**RESOLVED by #379: it is read-only, and that is now a claim this server PUBLISHES.** The
+tool is annotated `readOnlyHint: true`, which means it no longer requires a row here, so the
+determination has to be recorded somewhere or the two documents silently disagree. Two
+independent gates, either sufficient alone. `validateQueryShape`
+(`src/lib/query-validator.ts`) blanks string literals first, rejects stacked statements,
+applies a keyword denylist, and then a terminal ALLOWLIST (`^SELECT\s+` or a bare
+identifier) which makes the denylist non-load-bearing. And the string never becomes SQL at
+all: `adapter.runQuery` parses it into an ActualQL `q()` object, and `parseWhereClause`
+throws on anything it does not recognise rather than dropping it.
+
 ### UNKNOWN
 
 Not traced in the 2026-08-25 pass. Absence from the CONFIRMED table is not evidence of

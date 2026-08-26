@@ -52,10 +52,16 @@ function classifyAdapterMethods() {
   let src = stripComments(read('src/lib/actual-adapter.ts'));
   // Cut the default-export object: it lists every method name, and without this the LAST
   // function's slice swallows it and is misread as writing.
-  const cut = src.indexOf('\nconst adapter = {');
-  if (cut !== -1) src = src.slice(0, cut);
+  // The default-export object lists EVERY method name, so without cutting it off the last
+  // function's slice swallows it and is misread as writing. The first version of this looked
+  // for `const adapter = {`, which does not exist (the file ends `export default {`), so the
+  // cut silently never ran. Asserted, not assumed: a guard whose safety step is a no-op is
+  // the kind of thing this file exists to catch.
+  const cut = src.indexOf('\nexport default {');
+  if (cut === -1) throw new Error('could not find the default-export block to cut; the classifier would misread the last function');
+  src = src.slice(0, cut);
 
-  const fns = [...src.matchAll(/^export async function (\w+)\s*\(/gm)];
+  const fns = [...src.matchAll(/^export (?:async )?function (\w+)\s*\(/gm)];
   const writes = new Set();
   const reads = new Set();
   fns.forEach((m, i) => {
@@ -147,12 +153,49 @@ check('this server is a CLOSED world except for bank sync', () => {
   );
 });
 
-check('destructive is claimed only where something is removed or replaced', () => {
-  const d = [..._ANNOTATION_SETS.DESTRUCTIVE];
-  const odd = d.filter((n) => !/_delete$|_merge$|_close$|_import$/.test(n));
-  assert.strictEqual(odd.length, 0, `unexpected destructive entries: ${odd.join(', ')}`);
-  // accounts_close belongs precisely because Actual REMOVES a zero-transaction account.
-  assert.ok(d.includes('actual_accounts_close'), 'accounts_close can delete the account (#357)');
+check('THE COMPLETENESS CHECK: every tool is classified, so silence is impossible', () => {
+  // Without this, a tool nobody classified fell through every set and published
+  // `destructiveHint: false` plus `openWorldHint: false`, INVERTING the spec's conservative
+  // defaults into positive safety claims about code nobody had looked at. Reproduced in
+  // review by adding a plausible `actual_transactions_purge_all`: both guards stayed green.
+  const { READ_ONLY, DESTRUCTIVE, ADDITIVE } = _ANNOTATION_SETS;
+  const unclassified = names.filter(
+    (n) => !READ_ONLY.has(n) && !DESTRUCTIVE.has(n) && !ADDITIVE.has(n),
+  );
+  assert.strictEqual(
+    unclassified.length,
+    0,
+    `not classified in src/lib/tool-annotations.ts: ${unclassified.join(', ')}.\n` +
+      `      Add each to READ_ONLY, DESTRUCTIVE or ADDITIVE. Leaving one out makes the server\n` +
+      `      publish a safety claim about a tool nobody reviewed.`,
+  );
+});
+
+check('a tool is in exactly ONE of the three classification sets', () => {
+  const { READ_ONLY, DESTRUCTIVE, ADDITIVE } = _ANNOTATION_SETS;
+  const overlapping = names.filter(
+    (n) => [READ_ONLY, DESTRUCTIVE, ADDITIVE].filter((s2) => s2.has(n)).length > 1,
+  );
+  assert.strictEqual(overlapping.length, 0, `in more than one set: ${overlapping.join(', ')}`);
+});
+
+check('every *_delete tool is classified destructive', () => {
+  // The converse of the old check, which asserted only that DESTRUCTIVE entries LOOK like
+  // deletes. That was a naming tautology: it could not detect a MISSING entry, and it
+  // rejected correct non-delete entries such as actual_transactions_update.
+  const missing = names.filter((n) => /_delete$/.test(n) && !_ANNOTATION_SETS.DESTRUCTIVE.has(n));
+  assert.strictEqual(missing.length, 0, `deletes not marked destructive: ${missing.join(', ')}`);
+  // And the non-obvious members are present for reasons recorded at the set.
+  for (const n of ['actual_accounts_close', 'actual_transactions_update', 'actual_payees_merge']) {
+    assert.ok(_ANNOTATION_SETS.DESTRUCTIVE.has(n), `${n} must be marked destructive`);
+  }
+});
+
+check('an unclassified tool publishes NO safety claim', () => {
+  const a = annotationsFor('actual_definitely_not_a_real_tool');
+  assert.strictEqual(a.readOnlyHint, false, 'must never default to read-only');
+  assert.strictEqual(a.destructiveHint, undefined, 'must omit destructiveHint so the spec default (true) applies');
+  assert.strictEqual(a.openWorldHint, undefined, 'must omit openWorldHint so the spec default (true) applies');
 });
 
 check('the classification sets name only real tools', () => {
@@ -189,11 +232,12 @@ check('NEGATIVE: a read-only claim over a writing adapter path is detected', () 
   assert.deepStrictEqual(liars, ['actual_accounts_delete'], 'comparator must flag a writing tool');
 });
 
-check('NEGATIVE: an unclassified tool would be caught by the completeness check', () => {
-  const a = annotationsFor('actual_totally_made_up');
-  // An unknown name falls through every set, so it reads as a destructive, non-idempotent
-  // write: the conservative answer, and the completeness check above pins it to the real list.
-  assert.strictEqual(a.readOnlyHint, false, 'an unknown tool must never default to read-only');
+check('NEGATIVE: the completeness comparator detects an unclassified name', () => {
+  const { READ_ONLY, DESTRUCTIVE, ADDITIVE } = _ANNOTATION_SETS;
+  const probe = ['actual_definitely_not_a_real_tool'].filter(
+    (n) => !READ_ONLY.has(n) && !DESTRUCTIVE.has(n) && !ADDITIVE.has(n),
+  );
+  assert.deepStrictEqual(probe, ['actual_definitely_not_a_real_tool'], 'comparator must flag it');
 });
 
 console.log(`\n[tool-annotations] Results: ${passed} passed, ${failed} failed`);
