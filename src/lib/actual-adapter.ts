@@ -70,7 +70,7 @@ import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import { retry, isRetryableError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
-import { notFoundMsg } from './errors.js';
+import { NotFoundRefusal, OutOfRangeRefusal } from './errors.js';
 import logger from '../logger.js';
 import { checkServerVersionOnce } from './server-version-guard.js';
 import config from '../config.js';
@@ -977,10 +977,12 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const accountExists = (accounts as any[]).some((a: any) => a?.id === accountId);
     if (!accountExists) {
-      throw new Error(
-        `Account "${accountId}" not found. Use actual_accounts_list to find valid accounts. ` +
-          'No transactions were created: Actual would otherwise have written them against an ' +
-          'account that does not exist, where no tool could retrieve them.'
+      throw new NotFoundRefusal(
+        'Account',
+        accountId,
+        'actual_accounts_list',
+        'No transactions were created: Actual would otherwise have written them against an ' +
+          'account that does not exist, where no tool could retrieve them.',
       );
     }
 
@@ -1183,9 +1185,10 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
       retry(() => rawGetBudgetMonths() as Promise<string[]>, { retries: 2, backoffMs: 200 })
     );
     if (Array.isArray(months) && months.length > 0 && !months.includes(String(month))) {
-      throw new Error(
-        `Month "${month}" is not in this budget. It runs from ${months[0]} to ${months[months.length - 1]}. ` +
-          'Use actual_budgets_getMonths to see the months you can budget to.'
+      throw new OutOfRangeRefusal(
+        `Month "${month}" is outside this budget's range, which runs from ${months[0]} to ` +
+          `${months[months.length - 1]}. Use actual_budgets_getMonths to see the months you can budget to.`,
+        String(month),
       );
     }
 
@@ -1278,7 +1281,7 @@ export async function updateAccount(id: string, fields: Partial<components['sche
       retry(() => rawGetAccounts() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(accounts) && accounts.some((a) => a?.id === id))) {
-      throw new Error(notFoundMsg('Account', id, 'actual_accounts_list'));
+      throw new NotFoundRefusal('Account', id, 'actual_accounts_list');
     }
     await withConcurrency(() => retry(() => rawUpdateAccount(id, fields) as Promise<void | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return null;
@@ -1467,7 +1470,7 @@ export async function updateCategory(id: string, fields: Partial<components['sch
       retry(() => rawGetCategories() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(categories) && categories.some((c) => c?.id === id))) {
-      throw new Error(notFoundMsg('Category', id, 'actual_categories_get'));
+      throw new NotFoundRefusal('Category', id, 'actual_categories_get');
     }
     await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
@@ -1507,7 +1510,7 @@ export async function updatePayee(id: string, fields: Partial<components['schema
       retry(() => rawGetPayees() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(payees) && payees.some((p) => p?.id === id))) {
-      throw new Error(notFoundMsg('Payee', id, 'actual_payees_get'));
+      throw new NotFoundRefusal('Payee', id, 'actual_payees_get');
     }
 
     const fieldsObj = fields as Record<string, unknown>;
@@ -1944,7 +1947,7 @@ export async function updateCategoryGroup(id: string, fields: unknown): Promise<
       retry(() => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(groups) && groups.some((g) => g?.id === id))) {
-      throw new Error(notFoundMsg('Category group', id, 'actual_category_groups_get'));
+      throw new NotFoundRefusal('Category group', id, 'actual_category_groups_get');
     }
     await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
@@ -2750,7 +2753,7 @@ export async function updateTag(id: string, fields: { tag?: string; color?: stri
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const exists = (tags as any[]).some((t: any) => t.id === id);
     if (!exists) {
-      throw new Error(notFoundMsg('Tag', id, 'actual_tags_list'));
+      throw new NotFoundRefusal('Tag', id, 'actual_tags_list');
     }
     await withConcurrency(() => retry(() => rawUpdateTag(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
@@ -2764,7 +2767,7 @@ export async function deleteTag(id: string): Promise<void> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const exists = (tags as any[]).some((t: any) => t.id === id);
     if (!exists) {
-      throw new Error(notFoundMsg('Tag', id, 'actual_tags_list'));
+      throw new NotFoundRefusal('Tag', id, 'actual_tags_list');
     }
     await withConcurrency(() => retry(() => rawDeleteTag(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });

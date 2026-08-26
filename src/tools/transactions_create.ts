@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { isPreflightRefusal } from '../lib/errors.js';
 import { CommonSchemas, subtransactionsSum } from '../lib/schemas/common.js';
 
 const InputSchema = z
@@ -76,8 +77,11 @@ const tool: ToolDefinition = {
       return { success: true as const, id: maybeId };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      if (msg.toLowerCase().includes('not found') && msg.toLowerCase().includes('account')) {
-        // Return structured error (not throw) so callers receive { success: false, error }
+      // #377: decided by TYPE, not by substring-matching the adapter's prose. The refusal
+      // this catches is adapter.addTransactions' account-existence guard, which throws a
+      // NotFoundRefusal and writes nothing. Returning it structured (rather than throwing)
+      // is this tool's published contract; a genuine failure still throws.
+      if (isPreflightRefusal(error)) {
         return { success: false as const, error: msg, id: null };
       }
       throw new Error(`Failed to create transaction: ${msg}`);

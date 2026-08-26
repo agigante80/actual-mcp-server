@@ -378,6 +378,8 @@ The rule is scoped to ENUMERATION, deliberately. Importing the package to monkey
 
 #322 closed the CI-to-train gate parity gap without introducing a reusable workflow. Each script has a unit test in the `test:unit-js` chain (`stdio_framing_check`, `verify_published_artifacts`, `report_train_failure`, `report_train_stale`, `train_preflight`).
 
+**Refusals are decided by TYPE, never by matching message prose (#377).** When a tool needs to turn "you asked for something that cannot happen" into a structured response, it asks `isPreflightRefusal(error)` from `src/lib/errors.ts`, never `msg.includes('not found')`. The adapter guards throw `NotFoundRefusal` / `OutOfRangeRefusal`, both `PreflightRefusal`, meaning the operation was not attempted and nothing was written. The full three-rule taxonomy (already-holds is a SUCCESS, does-not-exist THROWS, `{success:false}` only for a genuine multi-outcome contract) plus the known deviations live in `.claude/skills/api-design-principles/SKILL.md`, which is the home both `tool-author` and `ticket-gate` read.
+
 **Amounts are always in integer cents**: `5000 = $50.00`, `-5000 = -$50.00`. Never use decimal dollars.
 
 **`MCP_SSE_AUTHORIZATION` must be the raw token only**, not `"Bearer token123"`. The server extracts the token from the `Authorization: Bearer <token>` header and compares directly.

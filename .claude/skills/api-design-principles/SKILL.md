@@ -42,6 +42,55 @@ as the underlying principles, and apply them through these project rules (from C
   use the shared helpers `notFoundMsg()` / `constraintErrorMsg()` from `src/lib/errors.ts` so a
   "not found" or constraint failure reads consistently across all 71 tools. Domain/validation
   errors must not drop the pooled connection (see `_shouldDropPoolOnError` in `actual-adapter.ts`).
+- **The refusal SHAPE is fixed by the taxonomy below, and decided by TYPE, never by prose.**
+  The bullet above governs the wording; this one governs which response shape carries it.
+
+### The refusal taxonomy (#377)
+
+"You asked for something that cannot happen" had five different shapes across this surface, and
+the two tools using the structured shape picked it by substring-matching the adapter's English.
+A copy-edit to a message in `actual-adapter.ts` could therefore flip a published contract with
+nothing red to show for it. Three rules, in the order you should apply them:
+
+1. **The requested end state ALREADY HOLDS** (closing a closed account, deleting something that
+   is already absent): return **SUCCESS**, with a field naming the non-change
+   (`alreadyClosed: true`, `removed: true`). This is #347's idempotence argument: the caller's
+   intent is satisfied, so reporting failure would be a lie. Do NOT invent a refusal for it.
+2. **The request NAMES SOMETHING THAT DOES NOT EXIST, or upstream will not do it**: **THROW**.
+   It is a caller error, and MCP's error channel is where a model can see it and self-correct.
+   Throw a typed refusal from `src/lib/errors.ts`: `NotFoundRefusal(entity, id, listTool)` or
+   `OutOfRangeRefusal(message, value)`, both of which extend `PreflightRefusal` and mean "the
+   operation was not attempted and nothing was written".
+3. **`{ success: false, error }` earns its place ONLY where a tool genuinely has a
+   partial-success or multi-outcome contract.** Two tools return it without having one
+   (`budgets_setAmount` from #89, `transactions_create` from #359); both are historical, and
+   converting them is a published-contract change that is deliberately NOT bundled with the
+   typed error. If you are writing a NEW tool, rule 2 applies: throw.
+
+**When a tool must map a refusal to a structured shape, ask the type, not the text:**
+
+```ts
+import { isPreflightRefusal } from '../lib/errors.js';
+// ...
+} catch (error) {
+  if (isPreflightRefusal(error)) return { success: false as const, error: msg };
+  throw new Error(`Failed to ...: ${msg}`);   // a genuine failure must NOT be swallowed
+}
+```
+
+Use `isPreflightRefusal()` rather than a bare `instanceof`: it also checks a `Symbol.for` brand,
+so a duplicate module instance cannot silently downgrade a refusal into a generic failure.
+
+**The other half of the rule is that a NON-refusal must never be swallowed into the refusal
+shape.** A transport or upstream error reported to a model as a tidy "category not found" is an
+error it will try to fix by changing the category id, forever. Prose matching had exactly this
+bug in the other direction: any message containing "not found" and "category" was converted,
+including an upstream error that merely mentioned both words.
+
+**Known deviations**, so the list is honest rather than aspirational: `notes_update` returns
+`{ error }` with no `success` field at all, and `adapter.createTransfer` returns
+`{ success: false, error }` from the ADAPTER rather than throwing. Both predate this taxonomy
+and are tracked on #377 for a separate, deliberate contract change.
 - **Versioning is the product version, not a URL prefix.** The tool set evolves under the `VERSION`
   file and `vX.Y.Z` tags; there is no `/v1/` path. A breaking tool-schema change is a considered
   release event, not a silent edit (adding a tool is a minor bump; changing a field contract needs
