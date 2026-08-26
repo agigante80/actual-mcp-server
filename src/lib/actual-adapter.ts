@@ -70,7 +70,8 @@ import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import { retry, isRetryableError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
-import { NotFoundRefusal, OutOfRangeRefusal } from './errors.js';
+import { NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg } from './errors.js';
+import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
 import { checkServerVersionOnce } from './server-version-guard.js';
 import config from '../config.js';
@@ -1681,10 +1682,111 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
  * the correct contract instead of rediscovering this the hard way. Neither widening is
  * exercised by a test today, for the same reason: nothing calls them.
  */
-export async function deleteRule(id: string): Promise<boolean | void> {
+/**
+ * Idempotent rule upsert (#376): update the rule whose conditions match, or create one.
+ *
+ * Moved here from `src/tools/rules_create_or_update.ts`, which ran the read and the write
+ * inside its own `withWriteSession` using raw api calls. Same single-cycle property, but the
+ * read now goes through `retry` and there is one observability call site.
+ *
+ * The caller has already validated the payload; this owns identity and merge only.
+ */
+export async function upsertRule(
+  input: { stage?: string | null; conditionsOp: string; conditions: RuleCondition[]; actions: unknown[] },
+  stageWasSupplied: boolean,
+): Promise<{ id: string; created: boolean }> {
+  observability.incrementToolCall('actual.rules.create_or_update').catch(() => {});
+  return queueWriteOperation(async () => {
+    const existingRules = await withConcurrency(() =>
+      retry(() => rawGetRules() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })
+    );
+    const matchedRule = findMatchingRule(existingRules, input.conditions, input.conditionsOp);
+
+    const ruleData = JSON.parse(JSON.stringify(input)); // deep clone for the API call
+
+    if (matchedRule) {
+      // The Actual Budget API expects the FULL merged rule object as one argument.
+      //
+      // #342: `??` is WRONG for stage. null is a MEANINGFUL value here (Actual's default
+      // stage), not an absent one, so `ruleData.stage ?? existing` would silently discard
+      // an explicit `stage: null` and keep the old stage, making it impossible to move a
+      // rule back to the default. Decide on PRESENCE instead. That presence test used to
+      // be `'stage' in ruleData`, which worked only because the tool passed its parsed
+      // input straight through; it is now an explicit parameter so the meaning survives
+      // the extra call boundary.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const merged: any = {
+        id: matchedRule.id,
+        stage: stageWasSupplied ? ruleData.stage : (matchedRule as Record<string, unknown>).stage,
+        conditionsOp: ruleData.conditionsOp ?? (matchedRule as Record<string, unknown>).conditionsOp,
+        conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
+        actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
+      };
+      // Non-idempotent from upstream's point of view: do not retry the write.
+      await withConcurrency(() => retry(() => rawUpdateRule(merged) as Promise<void>, { retries: 0, backoffMs: 200 }));
+      return { id: matchedRule.id, created: false };
+    }
+
+    // #342: stage has no Zod default on this tool, so an omitted stage arrives as
+    // undefined. Actual's validator ALWAYS runs on a create and rejects undefined with
+    // `Invalid rule stage: undefined`, so the key must be present. null is the correct
+    // value: Actual's default stage.
+    if (ruleData.stage === undefined) ruleData.stage = null;
+    const rawId = await withConcurrency(() => retry(() => rawCreateRule(ruleData) as Promise<unknown>, { retries: 0, backoffMs: 200 }));
+    return { id: normalizeToId(rawId), created: true };
+  });
+}
+
+/**
+ * #376: the existence guard and the schedule-owned refusal moved here from
+ * `src/tools/rules_delete.ts`, which held them inside its own `withWriteSession`.
+ *
+ * WHY THE ADAPTER. Doing it in the tool meant reaching past `adapter.*` for the read, so
+ * the read had no `retry` at all, and it left THIS method reachable and unguarded: calling
+ * it directly silently failed to delete a schedule-owned rule, which is the #355 defect the
+ * tool had already fixed. See "Where a read-then-write guard belongs" in CLAUDE.md.
+ *
+ * Both halves stay inside ONE `queueWriteOperation`, so the read, the decision and the
+ * write share a single api lock cycle (#142). That excludes other SESSIONS; it does not
+ * serialise against other operations in the same drain (see `reopenAccount` for the long
+ * form of that caveat).
+ */
+export async function deleteRule(id: string): Promise<void> {
   observability.incrementToolCall('actual.rules.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    return await withConcurrency(() => retry(() => rawDeleteRule(id) as Promise<boolean | void>, { retries: 0, backoffMs: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const allRules = await withConcurrency(() =>
+      retry(() => rawGetRules() as Promise<any[]>, { retries: 2, backoffMs: 200 })
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!Array.isArray(allRules) || !allRules.some((r: any) => r?.id === id)) {
+      throw new NotFoundRefusal('Rule', id, 'actual_rules_get');
+    }
+
+    // #355: the raw call RETURNS a verdict and it used to be discarded. Upstream
+    // `deleteRule` returns `false`, without throwing, when a schedule owns this rule:
+    // Actual keeps a schedule and its generated rule in step and refuses to remove the
+    // rule on its own. The existence check above cannot catch that case, because the rule
+    // genuinely exists. Reporting success there was a lie (CWE-252).
+    //
+    // Only an EXPLICIT `false` is a refusal. A build that returns `undefined` (the
+    // published reference documents this method as `Promise<null>`) is treated as success,
+    // so this stays correct against older and future versions.
+    //
+    // Not a PreflightRefusal: the write WAS attempted and upstream declined it. A
+    // PreflightRefusal means nothing was tried. See the taxonomy in
+    // .claude/skills/api-design-principles/SKILL.md.
+    const deleted = await withConcurrency(() =>
+      retry(() => rawDeleteRule(id) as Promise<boolean | void>, { retries: 0, backoffMs: 200 })
+    );
+    if (deleted === false) {
+      throw new Error(
+        `Rule "${id}" belongs to a schedule and cannot be deleted on its own. ` +
+          'Actual keeps a schedule and its generated rule in step. Delete the schedule ' +
+          'instead with actual_schedules_delete (find it with actual_schedules_get), ' +
+          'which removes this rule too.',
+      );
+    }
   });
 }
 export async function getSchedules(): Promise<unknown[]> {
@@ -1710,10 +1812,29 @@ export async function updateSchedule(id: string, fields: unknown, resetNextDate?
     await withConcurrency(() => retry(() => rawUpdateSchedule(id, fields as Record<string, unknown>, resetNextDate) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
+/**
+ * #376: the existence guard and the constraint-error translation moved here from
+ * `src/tools/schedules_delete.ts`. The translation stays wrapped tightly around the delete
+ * call so the message cannot regress into the raw SQLite text.
+ */
 export async function deleteSchedule(id: string): Promise<void> {
   observability.incrementToolCall('actual.schedules.delete').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawDeleteSchedule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    const schedules = await withConcurrency(() =>
+      retry(() => rawGetSchedules() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    if (!Array.isArray(schedules) || !schedules.some((sch) => sch?.id === id)) {
+      throw new NotFoundRefusal('Schedule', id, 'actual_schedules_get');
+    }
+    try {
+      await withConcurrency(() => retry(() => rawDeleteSchedule(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('NOT NULL constraint') || msg.includes('messages_crdt')) {
+        throw new Error(constraintErrorMsg('Schedule', id, 'actual_schedules_get'));
+      }
+      throw err;
+    }
   });
 }
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
@@ -1952,9 +2073,20 @@ export async function updateCategoryGroup(id: string, fields: unknown): Promise<
     await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
+/**
+ * #376: the existence guard moved here from `src/tools/category_groups_delete.ts`. Same
+ * reasoning as `deleteRule` above: the tool-layer version forwent `retry` on the read and
+ * left this method reachable with no guard at all.
+ */
 export async function deleteCategoryGroup(id: string): Promise<void> {
   observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
   return queueWriteOperation(async () => {
+    const groups = await withConcurrency(() =>
+      retry(() => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+    );
+    if (!Array.isArray(groups) || !groups.some((g) => g?.id === id)) {
+      throw new NotFoundRefusal('Category group', id, 'actual_category_groups_get');
+    }
     // Non-idempotent: do not retry (#165).
     await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
@@ -2780,9 +2912,52 @@ export async function getNote(id: string): Promise<{ id: string; note: string } 
   });
 }
 
+/** A note id of this shape is a budget MONTH note and resolves to no entity row. */
+const BUDGET_MONTH_NOTE_RE = /^budget-\d{4}-\d{2}$/;
+
+/**
+ * #376: the orphan-id guard moved here from `src/tools/notes_update.ts`.
+ *
+ * WHY THIS ONE MATTERS MOST OF THE FIVE. The tool version issued FOUR `adapter.get*` calls
+ * through `Promise.all`, each opening its own `withActualApi` cycle, and then a fifth cycle
+ * for the write: five api lock acquisitions for one logical operation. `Promise.all` made it
+ * look concurrent, but the api mutex is process-global, so they serialised anyway. Reading
+ * inside one `queueWriteOperation` makes it ONE cycle, and the guard now sees the same
+ * snapshot the write lands on.
+ *
+ * The refusal is a NotFoundRefusal so the tool can recognise it by type (#377). The tool
+ * converts it to its published `{ error }` shape, which is a known deviation from the
+ * refusal taxonomy and is tracked on #377 rather than changed here.
+ */
 export async function updateNote(id: string, note: string): Promise<void> {
   observability.incrementToolCall('actual.notes.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // A budget-YYYY-MM id is synthetic: it names a month, not a row, so there is nothing
+    // to look up and the four reads below would all miss.
+    if (!BUDGET_MONTH_NOTE_RE.test(id)) {
+      const has = (rows: unknown): boolean =>
+        Array.isArray(rows) && rows.some((e) => (e as { id?: string })?.id === id);
+
+      const [accounts, categories, categoryGroups, payees] = await Promise.all([
+        withConcurrency(() => retry(() => rawGetAccounts() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => rawGetCategories() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => rawGetCategoryGroups() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => rawGetPayees() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
+      ]);
+
+      if (!has(accounts) && !has(categories) && !has(categoryGroups) && !has(payees)) {
+        // Guarding matters here for the same reason as #360: upstream's note write is a
+        // CRDT message, and the apply path INSERTs when the row is absent, so an unknown
+        // id creates an orphan note that no tool can ever read back.
+        throw new NotFoundRefusal(
+          'Entity',
+          id,
+          'actual_accounts_list, actual_categories_get, actual_category_groups_get or actual_payees_get',
+          'A budget month note uses an id like "budget-2026-01".',
+        );
+      }
+    }
+
     await withConcurrency(() => retry(() => rawUpdateNote(id, note) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
@@ -2925,6 +3100,7 @@ export default {
   createRule,
   updateRule,
   deleteRule,
+  upsertRule,
   setBudgetCarryover,
   closeAccount,
   reopenAccount,

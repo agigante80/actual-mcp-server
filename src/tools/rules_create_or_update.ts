@@ -14,16 +14,17 @@
  * Credit: ZanzyTHEbar (https://github.com/ZanzyTHEbar)
  *
  * Adapted for this project's conventions:
- * - No wrapToolCall — uses direct call() pattern
- * - Reuses exact same ConditionSchema / ActionSchema / FIELD_OPERATORS as rules_create.ts
+ * - No wrapToolCall: uses the direct call() pattern
+ * - Reuses the exact same ConditionSchema / ActionSchema / FIELD_OPERATORS as rules_create.ts
+ *
+ * #376: the read-match-write cycle lives in `adapter.upsertRule` (identity rules in
+ * `src/lib/rule-matching.ts`). This tool owns the schema, the operator/UUID validation and
+ * the response. It used to run the cycle itself inside `withWriteSession` with raw api
+ * calls, which meant no `retry` on the read and a second observability blind spot.
  */
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
-import adapter, { normalizeToId } from '../lib/actual-adapter.js';
-import api from '@actual-app/api';
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const { getRules: rawGetRules, createRule: rawCreateRule, updateRule: rawUpdateRule } = api as any;
+import adapter from '../lib/actual-adapter.js';
 
 // Mirrors the same schemas used in rules_create.ts
 const ConditionSchema = z.object({
@@ -78,50 +79,6 @@ const InputSchema = z.object({
   conditions: z.array(ConditionSchema).describe('Array of conditions that must be met'),
   actions: z.array(ActionSchema).describe('Array of actions to perform when conditions match'),
 });
-
-/**
- * Normalize a single object for stable JSON comparison by sorting its keys
- * and stripping undefined values.
- */
-function canonicalize(obj: Record<string, unknown>): string {
-  const sorted: Record<string, unknown> = {};
-  for (const key of Object.keys(obj).sort()) {
-    if (obj[key] !== undefined) sorted[key] = obj[key];
-  }
-  return JSON.stringify(sorted);
-}
-
-/**
- * Return true when two rules have semantically equivalent conditions.
- * Matching is set-based on (field, op, value) triples — order is irrelevant.
- */
-function conditionsMatch(
-  existingConditions: unknown[],
-  existingConditionsOp: string | undefined,
-  newConditions: z.infer<typeof ConditionSchema>[],
-  newConditionsOp: string,
-): boolean {
-  if ((existingConditionsOp || 'and') !== newConditionsOp) return false;
-  if (!Array.isArray(existingConditions)) return false;
-  if (existingConditions.length !== newConditions.length) return false;
-
-  const existingSet = new Set(
-    existingConditions.map((c: unknown) => {
-      const cond = c as Record<string, unknown>;
-      return canonicalize({ field: cond.field, op: cond.op, value: cond.value });
-    }),
-  );
-
-  const newSet = new Set(
-    newConditions.map((c) => canonicalize({ field: c.field, op: c.op, value: c.value })),
-  );
-
-  if (existingSet.size !== newSet.size) return false;
-  for (const item of newSet) {
-    if (!existingSet.has(item)) return false;
-  }
-  return true;
-}
 
 const tool: ToolDefinition = {
   name: 'actual_rules_create_or_update',
@@ -187,59 +144,22 @@ Returns: { id, created: boolean } — created=true if new rule was created, fals
       }
     }
 
-    // Fetch existing rules and either update (matched) or create (no match) inside
-    // ONE withWriteSession cycle so the read and the write share a single lock
-    // acquisition (#142).
-    return await adapter.withWriteSession(async () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const existingRules: any[] = await rawGetRules();
-      let matchedRule: (Record<string, unknown> & { id: string }) | null = null;
-
-      for (const rule of existingRules) {
-        const r = rule as Record<string, unknown>;
-        if (!r.id || typeof r.id !== 'string') continue;
-
-        const existingConditions = Array.isArray(r.conditions) ? r.conditions : [];
-        const existingConditionsOp = (r.conditionsOp as string) || 'and';
-
-        if (conditionsMatch(existingConditions, existingConditionsOp, input.conditions, input.conditionsOp)) {
-          matchedRule = r as Record<string, unknown> & { id: string };
-          break;
-        }
-      }
-
-      const ruleData = JSON.parse(JSON.stringify(input)); // deep clone for API call
-
-      if (matchedRule) {
-        // UPDATE existing rule. The Actual Budget API expects the FULL merged rule
-        // object passed as a single argument (matches adapter.updateRule's behaviour).
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const merged: any = {
-          id: matchedRule.id,
-          // #342: `??` is WRONG for stage. null is a MEANINGFUL value here (Actual's
-          // default stage), not an absent one, so `ruleData.stage ?? existing` would
-          // silently discard an explicit `stage: null` and keep the old stage,
-          // making it impossible to move a rule back to the default stage. Decide on
-          // PRESENCE of the key instead. Every other field below is fine with `??`
-          // because none of them treats null as a distinct legal value.
-          stage: 'stage' in ruleData ? ruleData.stage : (matchedRule as Record<string, unknown>).stage,
-          conditionsOp: ruleData.conditionsOp ?? (matchedRule as Record<string, unknown>).conditionsOp,
-          conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
-          actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
-        };
-        await rawUpdateRule(merged);
-        return { id: matchedRule.id, created: false };
-      } else {
-        // CREATE new rule.
-        // #342: stage has no Zod default on this tool (see the schema note), so an
-        // omitted stage arrives as undefined. Actual's validator ALWAYS runs on a
-        // create and rejects undefined with `Invalid rule stage: undefined`, so the
-        // key must be present. null is the correct value: Actual's default stage.
-        if (ruleData.stage === undefined) ruleData.stage = null;
-        const rawId = await rawCreateRule(ruleData);
-        return { id: normalizeToId(rawId), created: true };
-      }
-    });
+    // The read, the match and the write happen in ONE write-queue cycle inside
+    // adapter.upsertRule (#142, relocated in #376).
+    //
+    // `stage` is passed as an explicit presence flag rather than relying on the key being
+    // present on the parsed object: null is a MEANINGFUL stage (Actual's default), so
+    // "omitted" and "explicitly null" must stay distinguishable across the call boundary
+    // (#342).
+    return await adapter.upsertRule(
+      {
+        stage: input.stage,
+        conditionsOp: input.conditionsOp,
+        conditions: input.conditions,
+        actions: input.actions,
+      },
+      Object.prototype.hasOwnProperty.call((args ?? {}) as object, 'stage'),
+    );
   },
 };
 

@@ -200,24 +200,38 @@ no guard in this server catches it. Trace upstream, then trace the adapter metho
 trace the tool. Skipping the middle step produced a 20 percent false-positive rate on the
 first pass.
 
-## Where a guard belongs (#371)
+## Where a guard belongs (#371, #376)
 
-Most READ-THEN-WRITE guards now live in `src/lib/actual-adapter.ts`, not in the tool. Three of them
-(`accounts_close`, `accounts_reopen`, `budgets_holdForNextMonth`) were briefly in the tool
-layer and were moved.
+EVERY read-then-write guard now lives in `src/lib/actual-adapter.ts`, not in the tool. The
+list is closed, and it took two passes to close it, which is why this section exists: an
+earlier version of this paragraph stated the rule as universal while five guards still sat
+in the tool layer, including `rules_delete`, which is a CONFIRMED row in the table above. The
+audit's own headline example was on the wrong side of the rule the audit stated.
 
-**Five read-then-write guards are still in the tool layer, deliberately not migrated in that pass**, and saying so
-matters because an earlier version of this paragraph claimed the rule was universal when it
-was not: `rules_delete` (itself a CONFIRMED row), `category_groups_delete`,
-`schedules_delete`, `rules_create_or_update` and `notes_update`. They work, and they predate
-the rule. Migrating them is tracked in #376.
+- #371 moved `accounts_close`, `accounts_reopen` and `budgets_holdForNextMonth` (from
+  #355/#357/#358).
+- #376 moved the remaining five: `rules_delete`, `category_groups_delete`,
+  `schedules_delete`, `rules_create_or_update` and `notes_update`.
+
+Along the way #376 dropped the direct `@actual-app/api` imports in `src/tools/` from five
+files to one (`budget_updates_batch.ts`, a batch of pure writes, which is a different
+pattern), and cut `notes_update` from FIVE api lock cycles to one: it issued four
+`adapter.get*` calls through `Promise.all` plus a write, and `Promise.all` only made that
+look concurrent, because the api mutex is process-global.
 
 `actual_accounts_delete` is deliberately not in that list: its guard is a verify-AFTER (#347),
-not a read-then-write, and the SAFE table already records it as living in the tool. The single-cycle read-decide-write property never required
-the raw api, and putting it in the adapter keeps `retry` on the reads, keeps one
+not a read-then-write, and the SAFE table already records it as living in the tool.
+
+The single-cycle read-decide-write property never required the raw api. `queueWriteOperation`
+holds the api lock for its whole body, so a read, a decision and a write inside ONE call to
+it are one cycle. Putting it in the adapter keeps `retry` on the reads, keeps one
 observability call site per operation, and leaves no unguarded `adapter.*` method for a
-future caller to reach for. The tool owns the schema and the response wording; the adapter
-owns whether the write is allowed to happen.
+future caller to reach for. That last one is not hypothetical: `adapter.deleteRule` sat
+callerless and unguarded, and calling it directly silently failed to delete a schedule-owned
+rule, which is precisely the #355 defect the TOOL had already fixed.
+
+The tool owns the schema and the response wording; the adapter owns whether the write is
+allowed to happen.
 
 ## The tests this class needs
 
@@ -229,6 +243,12 @@ Two habits, learned from the tickets above:
 - **Check the stub is telling the truth.** `tests/unit/rules_delete.test.js` stubbed
   `deleteRule` as returning `undefined`, encoding the same wrong assumption the tool made.
   A stub that mirrors the bug cannot catch the bug.
+- **Stub BELOW the thing under test, not at it.** When #376 moved these guards into the
+  adapter, five unit tests kept passing while testing nothing, because they stubbed
+  `adapter.withWriteSession` as a pass-through: once the guard lives in the adapter, that
+  stub removes it. The working seam is `_setSkipApiInitForTests(true)` plus RAW api stubs
+  installed BEFORE the adapter import, since `actual-adapter.ts` destructures the api
+  functions at module load and a stub applied afterwards is captured by nobody.
 
 A cheap way to prove a new test is not vacuous: remove the guard from `dist/`, confirm the
 test fails, restore it, confirm the test passes. Every fix in this audit was checked that
