@@ -115,17 +115,33 @@ const DESTRUCTIVE = new Set<string>([
 ]);
 
 /**
- * Write tools where repeating the SAME call leaves the same state. Derived from the
- * write-effect audit rather than guessed, because this codebase has already had to answer
- * the question tool by tool.
+ * Write tools where repeating the SAME call leaves the same STATE.
+ *
+ * THE STANDARD USED, because it is the judgement call in this file. The spec says
+ * idempotent means "calling the tool repeatedly with the same arguments will have no
+ * additional effect on the its environment". That is about STATE, not about the response,
+ * so a tool that refuses the second call while changing nothing still qualifies. This
+ * matters most for the delete family: since #376/#377 they THROW a NotFoundRefusal for an
+ * absent id rather than reporting success, but the second call writes nothing, so the state
+ * after one delete and after five is identical. A client deciding whether a timed-out write
+ * is safe to retry cares about the state, which is exactly what this flag answers.
+ *
+ * Values are taken from `docs/audit/write-effect-audit.md` rather than guessed, so each one
+ * has a history behind it.
  *
  * The exclusions are the point:
- *   every `*_create`            each call makes another entity
+ *   most `*_create`             each call makes ANOTHER entity, so the state differs
  *   budgets_holdForNextMonth    upstream ADDS to the buffer, so a retry holds twice (#355)
  *   budgets_transfer            moves money again on each call
  *   payees_merge                the sources are gone after the first
  *   bank_sync                   imports whatever is new upstream
  *   transactions_import         adds rows; de-dup is a bank-sync property, not a promise here
+ *
+ * `actual_tags_create` is the create that IS idempotent, and it is easy to miss: it upserts
+ * on the tag word, so a repeat updates the existing tag and returns the same id. Its own
+ * description says so and `docker-all-tools.e2e.spec.ts` asserts it. `categories_create` is
+ * deliberately NOT here: it REJECTS a duplicate rather than upserting, and whether upstream
+ * truly refuses every duplicate is not something this file should assume.
  */
 const IDEMPOTENT = new Set<string>([
   'actual_accounts_close',
@@ -150,6 +166,7 @@ const IDEMPOTENT = new Set<string>([
   'actual_schedules_delete',
   'actual_schedules_update',
   'actual_session_close',
+  'actual_tags_create',
   'actual_tags_delete',
   'actual_tags_update',
   'actual_transactions_delete',
