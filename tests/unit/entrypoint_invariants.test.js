@@ -21,8 +21,9 @@
 // Run: node tests/unit/entrypoint_invariants.test.js
 
 import assert from 'assert';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync } from 'fs';
 import { spawn } from 'child_process';
+import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -99,6 +100,14 @@ async function checkAsync(label, fn) {
 }
 
 const ENTRY = join(ROOT, 'dist', 'src', 'index.js');
+
+// These three cases spawn the BUILT entrypoint. `test:unit-js` does not itself build, and
+// while both the documented pre-commit sequence and CI's Run Tests job run `npm run build`
+// first, someone running this file alone against a clean checkout would otherwise get an
+// opaque spawn failure. Say what is actually wrong.
+check('the build these cases spawn is present', () => {
+  assert.ok(existsSync(ENTRY), `${ENTRY} is missing. Run \`npm run build\` first.`);
+});
 // Deliberately unreachable upstream: these cases must not depend on a live Actual server,
 // and must not touch the developer's real data dir.
 const ENTRY_ENV = {
@@ -106,7 +115,10 @@ const ENTRY_ENV = {
   ACTUAL_SERVER_URL: 'http://127.0.0.1:5999',
   ACTUAL_PASSWORD: 'test',
   ACTUAL_BUDGET_SYNC_ID: '00000000-0000-4000-8000-000000000000',
-  ACTUAL_DATA_DIR: join(ROOT, 'test-actual-data'),
+  // A throwaway dir OUTSIDE the repo. The spec file this came from pointed at
+  // `<repo>/test-actual-data`, which is not gitignored, so a future change that made the
+  // entrypoint create its data dir eagerly would have started dirtying the working tree.
+  ACTUAL_DATA_DIR: mkdtempSync(join(tmpdir(), 'mcp-entrypoint-')),
   LOG_LEVEL: 'error',
 };
 

@@ -63,12 +63,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
   const reset = (queue) => {
     accountsQueue = queue; closeCalls = 0; lastCloseArgs = null; closeThrows = null; getCalls = 0;
+    witness.reset();
   };
 
   console.log('\n[#357] accounts_close: positive, an account with transactions closes');
   {
     reset([[OPEN], [CLOSED]]);
-    const batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
     const res = await tool.call({ id: 'acct-1' });
     check(res?.success === true,             'returns success: true');
     check(res?.closed === true,              'reports that it is closed');

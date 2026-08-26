@@ -75,21 +75,28 @@ function testMatchers(configSrc, configName) {
 
 console.log('\n[e2e-spec-collection]');
 
-const specs = readdirSync(SPEC_DIR).filter((f) => f.endsWith('.spec.ts'));
+// RECURSIVE. Playwright's `testDir: './tests/e2e'` recurses, and the defect #366 removed
+// lived at `tests/e2e/suites/*.ts`, one directory down. A top-level-only scan would be
+// blind to exactly the failure class this guard exists for.
+const specs = readdirSync(SPEC_DIR, { recursive: true })
+  .map(String)
+  .filter((f) => f.endsWith('.spec.ts'));
 const configs = CONFIGS.map((c) => ({ name: c, src: readFileSync(join(ROOT, c), 'utf8') }));
 
 check('the spec set and the config set are both real (guards against a vacuous pass)', () => {
-  assert.ok(specs.length >= 3, `expected at least 3 spec files in tests/e2e, found ${specs.length}`);
+  // A floor of 1, not of today's count: the risk being guarded is an empty glob making
+  // every check below pass over nothing. Deleting a spec file is a legitimate change and
+  // must not fail here with a message about an arbitrary minimum.
+  assert.ok(specs.length >= 1, `no *.spec.ts found under tests/e2e; the glob is wrong`);
   assert.strictEqual(configs.length, 2, 'expected exactly two Playwright configs');
 });
 
-const all = configs.flatMap((c) => {
-  const { matchers, unparsed } = testMatchers(c.src, c.name);
-  return matchers.map((re) => ({ re, config: c.name, unparsed }));
-});
+// Parsed ONCE per config: calling the parser twice invited the two results to disagree.
+const parsed = configs.map((c) => ({ name: c.name, ...testMatchers(c.src, c.name) }));
+const all = parsed.flatMap((p) => p.matchers.map((re) => ({ re, config: p.name })));
 
 check('every testMatch in both configs parsed (an unparsed one would hide an orphan)', () => {
-  const unparsed = configs.flatMap((c) => testMatchers(c.src, c.name).unparsed);
+  const unparsed = parsed.flatMap((p) => p.unparsed);
   assert.strictEqual(unparsed.length, 0, `unparsed testMatch entries: ${unparsed.join(', ')}`);
 });
 
