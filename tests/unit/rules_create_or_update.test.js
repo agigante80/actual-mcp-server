@@ -25,24 +25,28 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let createReturns = 'new-rule-id';
   let updateCalls = 0;
   let updatedRule = null;
-  apiDefault.getRules = async () => rulesResponse;
-  apiDefault.createRule = async (_data) => { createCalls++; return createReturns; };
-  apiDefault.updateRule = async (rule) => { updateCalls++; updatedRule = rule; };
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.getRules = async () => { witness?.noteRead(); return rulesResponse; };
+  apiDefault.createRule = async (_data) => { witness?.noteWrite(); createCalls++; return createReturns; };
+  apiDefault.updateRule = async (rule) => { witness?.noteWrite(); updateCalls++; updatedRule = rule; };
 
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/rules_create_or_update.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
   apiDefault.sync = async () => {};
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
-  let batchesBefore = 0;
-  const cycles = () => adapterMod._getWriteQueueBatchCountForTests() - batchesBefore;
+  const cycles = () => witness.cycles();
   const reset = () => {
     createCalls = 0; createReturns = 'new-rule-id';
     updateCalls = 0; updatedRule = null;
     rulesResponse = [];
-    batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
   };
 
   const validInput = {
@@ -59,7 +63,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     const res = await tool.call(validInput);
     check(res?.id === 'new-rule-id',      'returns id of created rule');
     check(res?.created === true,          'created flag is true');
-    check(cycles() === 1,                 'exactly one write-queue cycle for the read and the write');
+    check(witness.sharedOneCycle(),
+      'the read and the write ran in the SAME drain (#376)', witness.describe());
     check(createCalls === 1,              'rawCreateRule called inside callback');
     check(updateCalls === 0,              'rawUpdateRule NOT called');
   }

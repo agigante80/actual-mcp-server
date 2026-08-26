@@ -21,8 +21,11 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
   let schedulesResponse = [];
   let deleteCalls = 0;
   let deleteThrows = null;
-  apiDefault.getSchedules = async () => schedulesResponse;
-  apiDefault.deleteSchedule = async (_id) => {
+  // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
+  // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
+  let witness;
+  apiDefault.getSchedules = async () => { witness?.noteRead(); return schedulesResponse; };
+  apiDefault.deleteSchedule = async (_id) => { witness?.noteWrite();
     deleteCalls++;
     if (deleteThrows) throw deleteThrows;
   };
@@ -31,6 +34,7 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
   // adapter.deleteSchedule. This test moved with them: stubbing adapter.withWriteSession
   // with a pass-through counter would now stub away the thing under test, so api init is
   // disarmed and the RAW api functions are stubbed instead, exercising the real guard.
+  const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod, errorsMod] = await Promise.all([
     import('../../dist/src/tools/schedules_delete.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
@@ -39,12 +43,12 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
   const { isPreflightRefusal } = errorsMod;
   apiDefault.sync = async () => {};
   adapterMod._setSkipApiInitForTests(true);
+  witness = makeCycleWitness(adapterMod);
 
-  let batchesBefore = 0;
-  const cycles = () => adapterMod._getWriteQueueBatchCountForTests() - batchesBefore;
+  const cycles = () => witness.cycles();
   const reset = () => {
     deleteCalls = 0; deleteThrows = null; schedulesResponse = [];
-    batchesBefore = adapterMod._getWriteQueueBatchCountForTests();
+    witness.reset();
   };
 
   console.log('\n[#142] schedules_delete: positive happy path');
@@ -55,7 +59,8 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
     check(res?.success === true, 'returns success: true');
     check(deleteCalls === 1,     'rawDeleteSchedule called');
     // The #142 property, asserted against the real queue rather than a stubbed wrapper.
-    check(cycles() === 1,        'exactly one write-queue cycle for the read and the write');
+    check(witness.sharedOneCycle(),
+      'the read and the write ran in the SAME drain (#376)', witness.describe());
   }
 
   console.log('\n[#142] schedules_delete: read-side not-found throws');
@@ -67,7 +72,8 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
     check(threw instanceof Error,                       'throws on not-found');
     check(threw?.message?.includes('Schedule'),         'error mentions Schedule');
     check(isPreflightRefusal(threw),                    'and it is a typed pre-flight refusal (#377)');
-    check(cycles() === 1,                               'exactly one write-queue cycle');
+    check(witness.readInCycleNoWrite(),
+      'the read ran inside the drain and no write followed', witness.describe());
     check(deleteCalls === 0,                            'rawDeleteSchedule NOT called');
   }
 
