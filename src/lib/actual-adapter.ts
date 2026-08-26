@@ -2007,7 +2007,9 @@ export async function closeAccount(
  * failure path. Collapsing them was chosen because the message names both cases and the
  * remedy is the same either way.
  */
-export async function reopenAccount(id: string): Promise<void> {
+export type ReopenAccountOutcome = { outcome: 'reopened' | 'already-open'; name?: string };
+
+export async function reopenAccount(id: string): Promise<ReopenAccountOutcome> {
   observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
   return queueWriteOperation(async () => {
     const before = await withConcurrency(() =>
@@ -2021,6 +2023,16 @@ export async function reopenAccount(id: string): Promise<void> {
           'Actual removed it rather than closing it, and it cannot be reopened: create a new ' +
           'one with actual_accounts_create.'
       );
+    }
+
+    // #369 item 5: an already-open account needs no write. Upstream `reopenAccount` is a
+    // db.update, which in Actual means a CRDT MESSAGE that syncs to every other client, so
+    // issuing it for a no-op is not free: it is sync traffic and a device-state bump for a
+    // change nobody made. Reporting the non-change is also the taxonomy's rule 1 (the
+    // requested end state already holds, so this is a SUCCESS naming what did not happen),
+    // and it matches what closeAccount already does with `already-closed`.
+    if (target.closed !== true) {
+      return { outcome: 'already-open' as const, name: target.name };
     }
 
     await withConcurrency(() => retry(() => rawReopenAccount(id) as Promise<void>, { retries: 2, backoffMs: 200 }));
@@ -2038,6 +2050,7 @@ export async function reopenAccount(id: string): Promise<void> {
           'was accepted but had no effect; check the account state in Actual.'
       );
     }
+    return { outcome: 'reopened' as const, name: survivor.name };
   });
 }
 export async function getCategoryGroups(): Promise<unknown[]> {

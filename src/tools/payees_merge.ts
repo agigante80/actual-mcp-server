@@ -25,7 +25,8 @@ const tool: ToolDefinition = {
     'each account) cannot be merged in either direction: such a merge is refused rather than ' +
     'silently ignored. The response lists the de-duplicated ids that were ACCEPTED for merge ' +
     'after those checks; it is not a post-write read, so verify with actual_payees_get if you ' +
-    'need proof the payees are gone.',
+    'need proof the payees are gone. mergeIds must contain between 1 and 50 ids: an empty array ' +
+    'is an error rather than a no-op, and a larger consolidation must be split across calls.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

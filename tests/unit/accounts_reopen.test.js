@@ -62,15 +62,25 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
                                    'read, write and re-read shared ONE write-queue cycle');
   }
 
-  console.log('\n[#358] accounts_reopen: positive, already open is idempotent and truthful');
+  console.log('\n[#358] accounts_reopen: positive, already open is a reported non-change');
   {
+    // DELIBERATE REVERSAL, recorded so it is not re-litigated. This case previously
+    // asserted `reopenCalls === 1`, on the reasoning that upstream's reopen is idempotent
+    // so issuing it again is harmless. #369 item 5 established that it is not free:
+    // upstream's reopen is a `db.update`, which in Actual is a CRDT MESSAGE that syncs to
+    // every other client and bumps device state, for a change nobody made.
+    //
+    // Skipping the write is also the refusal taxonomy's rule 1 (the requested end state
+    // already holds, so report SUCCESS naming the non-change) and it matches what
+    // closeAccount has done with `already-closed` since #357.
     reset([
       [{ id: 'acct-1', name: 'Savings', closed: false }],
       [{ id: 'acct-1', name: 'Savings', closed: false }],
     ]);
     const res = await tool.call({ id: 'acct-1' });
-    check(res?.success === true, 'reopening an open account still succeeds');
-    check(reopenCalls === 1,     'the call is still made (idempotent upstream)');
+    check(res?.success === true,      'reopening an open account still succeeds');
+    check(res?.alreadyOpen === true,  'and says so, rather than claiming it reopened anything');
+    check(reopenCalls === 0,          'NO write is issued: a CRDT no-op still syncs to every client');
   }
 
   console.log('\n[#358] accounts_reopen: NEGATIVE, unknown id must not reach the write');

@@ -285,37 +285,61 @@ export async function budgetTests(client, context) {
   }
 
   // Hold for next month
+  //
+  // #369 item 1: this block used to pass on success OR on a /nothing was held/ refusal,
+  // because the run could be pointed at any budget and To Budget was unknown. That made it
+  // a check that CANNOT FAIL: a regression to always-refusing stayed green.
+  //
+  // The fixture is controllable. An on-budget account created with a positive starting
+  // balance books that balance as INCOME for the month, and To Budget is computed from
+  // income minus what is already allocated, so seeding one guarantees the success branch.
   console.log("\nHolding budget for next month...");
-  const beforeHold = await callTool("actual_budgets_getMonth", { month: currentDate });
-  const toBudgetBefore = (beforeHold.result || beforeHold)?.toBudget ?? null;
-  // #355: the tool now reports the truth rather than always reporting success.
-  // Upstream holds nothing and returns false when the month has no positive To Budget
-  // left, which depends on the state of whichever budget this run is pointed at. Both
-  // outcomes are legitimate here; an unexpected error is not, so the refusal is matched
-  // narrowly rather than swallowed.
-  let holdRefused = false;
+  const HOLD_AMOUNT = 10000;
+  const holdSeedAccount = await callTool("actual_accounts_create", {
+    name: `Hold-Seed-${Date.now()}`,
+    balance: 500000,
+  });
+  const holdSeedId = (holdSeedAccount && holdSeedAccount.result) || holdSeedAccount;
+
   try {
-    await callTool("actual_budgets_holdForNextMonth", {
+    const beforeHold = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const beforeMonth = (beforeHold.result || beforeHold) ?? {};
+    const toBudgetBefore = Number(beforeMonth.toBudget ?? 0);
+    const heldBefore = Number(beforeMonth.forNextMonth ?? 0);
+    // Failures route through fail() so they reach the runner's ledger (#281).
+    const holdCheck = (cond, msg) => {
+      if (cond) console.log(`  ✓ ${msg}`);
+      else fail(`actual_budgets_holdForNextMonth: ${msg}`);
+    };
+
+    holdCheck(
+      toBudgetBefore > HOLD_AMOUNT,
+      `seeded income leaves more to budget (${toBudgetBefore}) than the hold asks for (${HOLD_AMOUNT})`,
+    );
+
+    const res = await callTool("actual_budgets_holdForNextMonth", {
       month: currentDate,
-      amount: 10000,
+      amount: HOLD_AMOUNT,
     });
-    console.log("✓ Held 100.00 for next month");
-  } catch (err) {
-    const msg = err && err.message ? err.message : String(err);
-    if (!/nothing was held/i.test(msg)) throw err;
-    holdRefused = true;
-    console.log("✓ Hold correctly refused: this month has no positive To Budget");
-  }
-  {
+    const payload = (res && res.result) || res || {};
+    holdCheck(payload.held === HOLD_AMOUNT, `held exactly the requested ${HOLD_AMOUNT} cents`);
+    holdCheck(!payload.partial, "a hold well inside To Budget is not clamped");
+
+    // And the money actually moved. #355 exists because upstream can hold LESS than asked
+    // (it clamps to what is left) or nothing at all, while reporting plain success.
     const afterHold = await callTool("actual_budgets_getMonth", { month: currentDate });
-    const toBudgetAfter = (afterHold.result || afterHold)?.toBudget ?? null;
-    // toBudget may not reflect holdForNextMonth (Actual tracks hold internally): log informational only
-    if (holdRefused) {
-      console.log(`  ✓ Verify hold: nothing was held, so no change expected (toBudget=${toBudgetAfter})`);
-    } else if (toBudgetBefore !== null && toBudgetAfter !== null) {
-      console.log(`  ✓ Verify hold: toBudget before=${toBudgetBefore}, after=${toBudgetAfter} (delta=${toBudgetAfter - toBudgetBefore})`);
-    } else {
-      console.log(`  ⚠ Verify hold: toBudget field not available in response (skipped)`);
+    const afterMonth = (afterHold.result || afterHold) ?? {};
+    holdCheck(
+      Number(afterMonth.forNextMonth ?? 0) - heldBefore === HOLD_AMOUNT,
+      `forNextMonth advanced by exactly ${HOLD_AMOUNT}`,
+    );
+  } finally {
+    // Remove the seeded income whatever happened, so the budget is left as found and the
+    // zero-residue assertion still holds.
+    try {
+      await callTool("actual_accounts_delete", { id: holdSeedId });
+    } catch (err) {
+      console.log(`  ⚠ could not remove the hold seed account ${holdSeedId}: ${err.message}`);
     }
   }
 

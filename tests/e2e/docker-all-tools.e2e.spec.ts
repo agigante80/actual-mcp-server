@@ -144,13 +144,22 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     const account = await makeAccount({ seedTransaction: true });
     await mcp.call('actual_accounts_close', { id: account.id });
 
-    await mcp.call('actual_accounts_reopen', { id: account.id });
+    const first = await mcp.call('actual_accounts_reopen', { id: account.id });
+    expect(first?.reopened).toBeTruthy();
     // #358: assert the resulting STATE. This test used to call the tool and log a
     // checkmark, so it passed whether or not the reopen did anything at all.
     const accounts = (await mcp.call('actual_accounts_list')) as any[];
     const reopened = accounts.find((a: any) => a?.id === account.id);
     expect(reopened).toBeTruthy();
     expect(reopened.closed).toBeFalsy();
+
+    // #369 item 5: a second reopen must report the non-change rather than claiming it
+    // reopened anything, and must issue NO write. Upstream's reopen is a db.update, which
+    // in Actual is a CRDT message that syncs to every client, so a no-op write is real
+    // sync traffic. This mirrors what accounts_close already does for already-closed.
+    const second = await mcp.call('actual_accounts_reopen', { id: account.id });
+    expect(second?.alreadyOpen).toBeTruthy();
+    expect(second?.reopened).toBeFalsy();
   });
 
   test('actual_accounts_reopen - unknown id is refused and creates nothing', async ({ mcp }) => {
@@ -757,24 +766,44 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     expect(cats.find((c: any) => c?.id === category.id)?.carryover).toBe(true);
   });
 
-  test('actual_budgets_holdForNextMonth - should hold for next month', async ({ mcp, makeCategory }) => {
-    const category = await makeCategory();
-    // #355: the tool reports the truth instead of always reporting success. Upstream
-    // holds nothing and returns false when the month's To Budget is not positive, which
-    // depends on the budget's state and is therefore not something this test can assume
-    // either way. BOTH outcomes are correct; what is asserted is that a failure is the
-    // documented one and not something else. #369 item 1 tracks making the fixture
-    // produce a known positive To Budget so the success branch can be asserted outright.
-    try {
-      await mcp.call('actual_budgets_holdForNextMonth', {
-        month: currentMonth(),
-        categoryId: category.id,
-        amount: 10000,
-      });
-    } catch (error: any) {
-      expect(error.message).toMatch(/nothing was held/i);
-      expect(error.message).toContain(currentMonth());
-    }
+  test('actual_budgets_holdForNextMonth - should hold for next month', async ({ mcp, makeAccount, cleanup }) => {
+    // #369 item 1. This test used to pass on success OR on a /nothing was held/ refusal,
+    // because the fixture's To Budget was unknown. That made it a test that CANNOT FAIL: a
+    // regression to always-refusing stayed green, and the only executing proof of the
+    // success path was a unit fake.
+    //
+    // The fixture is controllable. An on-budget account created with a positive starting
+    // balance books that balance as INCOME for the current month, and To Budget is computed
+    // from income minus what is already allocated. Establishing it here makes the success
+    // branch assertable outright.
+    const month = currentMonth();
+    const requested = 10000;
+
+    // Registered before the write, and before the account exists, so a failed assertion
+    // still clears the hold. It runs ahead of the account delete (CLEANUP_ORDER), while
+    // the income it was computed from is still there.
+    cleanup.add(CLEANUP_ORDER.budgetHold, `reset hold for ${month}`, async () => {
+      await mcp.call('actual_budgets_resetHold', { month });
+    });
+    await makeAccount({ balance: 500_000 });
+
+    const before = await mcp.call('actual_budgets_getMonth', { month });
+    expect(
+      before?.toBudget,
+      'the seeded income must leave more to budget than the hold asks for',
+    ).toBeGreaterThan(requested);
+    const heldBefore = Number(before?.forNextMonth ?? 0);
+
+    const res = await mcp.call('actual_budgets_holdForNextMonth', { month, amount: requested });
+    // Note there is no categoryId: the tool holds against the MONTH as a whole. The old
+    // version passed one, which the schema silently stripped.
+    expect(res?.held).toBe(requested);
+    expect(res?.partial, 'a hold well inside To Budget must not be clamped').toBeFalsy();
+
+    // And the money actually moved. #355 exists because upstream can hold LESS than asked
+    // (it clamps to what is left) or nothing at all, while reporting plain success.
+    const after = await mcp.call('actual_budgets_getMonth', { month });
+    expect(Number(after?.forNextMonth ?? 0) - heldBefore).toBe(requested);
   });
 
   test('actual_budgets_resetHold - should reset hold', async ({ mcp, makeCategory }) => {
