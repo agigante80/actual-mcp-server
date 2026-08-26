@@ -383,7 +383,7 @@ async function expectCallError(tool, input, label) {
     {},
     'missing both fields rejected')) fail();
   if (!expectParseError(payees_merge_tool,
-    { mergeIds: ['p2'] },
+    { mergeIds: ['22222222-2222-4222-8222-222222222222'] },
     'missing targetId rejected')) fail();
   if (!expectParseError(payees_merge_tool,
     { targetId: '11111111-1111-4111-8111-111111111111' },

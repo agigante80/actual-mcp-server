@@ -31,6 +31,15 @@ export function isKnownBenignRejection(reason: unknown): boolean {
   const reasonObj = reason as { type?: unknown } | null | undefined;
 
   return (
+    // #377: a pre-flight refusal is benign by construction (the operation was not
+    // attempted and nothing was written), so recognise it by BRAND rather than by prose.
+    // The brand is read via `Symbol.for`, not by importing `isPreflightRefusal`, because
+    // this file's INVARIANT is that it has no project imports (enforced by
+    // rejection-allowlist-purity.test.js). The prose lines below remain as the fallback
+    // for errors this server does not raise itself.
+    (reason as Record<symbol, unknown> | null | undefined)?.[
+      Symbol.for('actual-mcp-server.PreflightRefusal')
+    ] === true ||
     reasonStr.includes('does not exist in table') ||
     (reasonStr.includes('Field') && reasonStr.includes('does not exist')) ||
     reasonStr.includes('Expression stack') ||

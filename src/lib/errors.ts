@@ -110,7 +110,17 @@ export function isPreflightRefusal(error: unknown): error is PreflightRefusal {
  * @param listTool    MCP tool name the caller should use to get valid IDs
  */
 export function notFoundMsg(entityType: string, id: string, listTool: string): string {
-  return `${entityType} "${id}" not found. Use ${listTool} to list available ${entityType.toLowerCase()}s.`;
+  return `${entityType} "${id}" not found. Use ${listTool} to list available ${pluralize(entityType.toLowerCase())}.`;
+}
+
+/**
+ * Pluralise an entity name for the message above. This used to be a bare `+ 's'`, which
+ * produced "list available categorys" and, once #376 added an `Entity` refusal,
+ * "list available entitys". The consonant-plus-y rule covers every entity name this
+ * codebase uses (account, category, payee, category group, tag, rule, schedule, entity).
+ */
+function pluralize(word: string): string {
+  return /[^aeiou]y$/.test(word) ? `${word.slice(0, -1)}ies` : `${word}s`;
 }
 
 /**

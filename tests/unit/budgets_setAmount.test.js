@@ -35,35 +35,14 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   const tool    = toolMod;
   const adapter = adapterMod.default;
 
-  // ── Negative path 1: nil UUID → { success: false, error }
-  console.log('\n[#89] Negative path 1 — nil UUID returns structured error');
-  {
-    const nilUuid = '00000000-0000-0000-0000-000000000000';
-    // #377: throw the SAME typed refusal the real adapter throws. This used to raise a
-    // bare Error carrying a hand-copied message, which only worked because the tool was
-    // substring-matching that message. Reproducing the prose on both sides meant neither
-    // side proved anything about the other.
-    adapter.setBudgetAmount = async () => {
-      throw new NotFoundRefusal('Category', nilUuid, 'actual_categories_get');
-    };
-    const res = await tool.call({ month: '2026-04', categoryId: nilUuid, amount: 50000 });
-    check(res && res.success === false,                                'success is false for nil UUID');
-    check(typeof res?.error === 'string',                              'error field is a string');
-    check(res?.error?.toLowerCase().includes('not found'),             'error mentions "not found"');
-    check(res?.error?.toLowerCase().includes('actual_categories_get'), 'error mentions actual_categories_get');
-  }
-
-  // ── Negative path 2: non-nil unknown UUID → same result (same code path)
-  console.log('\n[#89] Negative path 2 — non-nil unknown UUID returns structured error');
-  {
-    const unknownUuid = '11111111-1111-1111-1111-111111111111';
-    adapter.setBudgetAmount = async () => {
-      throw new NotFoundRefusal('Category', unknownUuid, 'actual_categories_get');
-    };
-    const res = await tool.call({ month: '2026-04', categoryId: unknownUuid, amount: 50000 });
-    check(res && res.success === false, 'success is false for non-nil unknown UUID');
-    check(typeof res?.error === 'string', 'error field is a string');
-  }
+  // #89 negative paths, driven through the REAL adapter guard.
+  //
+  // These two cases used to stub adapter.setBudgetAmount and throw the refusal themselves.
+  // That is the trap this whole area is about: the test CHOSE the type the tool was
+  // looking for, so it proved nothing about what the adapter actually throws. It let a
+  // real regression ship, where #377 converted the month guard to a typed refusal and
+  // left the sibling CATEGORY guard as a bare Error, silently undoing #89's structured
+  // response. The cases below run the real guard, so they cannot pass that way again.
 
   // ── #361: the MONTH, which was entirely unvalidated ──────────────────────────
   // Exercised against the REAL adapter (raw stubs installed before the adapter import,
@@ -106,6 +85,39 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       check(res?.success === false,                              'month refusal returns success:false, not a throw');
       check(typeof res?.error === 'string' && res.error.length > 0, 'and carries an actionable message');
       check(/actual_budgets_getMonths/.test(res?.error ?? ''),    'that names the tool to call next');
+    }
+
+    console.log('\n[#89] an unknown category returns the structured refusal, not a throw');
+    {
+      // THE REGRESSION CASE. `budgets_setAmount` is one of only two tools whose published
+      // contract is the SHAPE rather than the error channel, so an unknown category must
+      // come back as { success: false, error } and must NOT throw.
+      const nilUuid = '00000000-0000-0000-0000-000000000000';
+      rawSetCalls = 0;
+      let threw = null;
+      let res = null;
+      try { res = await tool.call({ month: '2026-02', categoryId: nilUuid, amount: 50000 }); }
+      catch (e) { threw = e; }
+      check(threw === null,                                 'an unknown category does not throw');
+      check(res?.success === false,                         'success is false');
+      check(typeof res?.error === 'string',                 'error field is a string');
+      check((res?.error ?? '').includes(nilUuid),           'error names the id');
+      check(/actual_categories_get/.test(res?.error ?? ''), 'error names the listing tool');
+      check(rawSetCalls === 0,                              'no write attempted for an unknown category');
+    }
+
+    console.log('\n[#89] the adapter raises that refusal as a TYPED one');
+    {
+      // Asserted against the adapter directly, so the tool's behaviour above is explained
+      // rather than coincidental.
+      let threw = null;
+      try { await realAdapter.setBudgetAmount('2026-02', 'no-such-category', 1000); }
+      catch (e) { threw = e; }
+      check(isPreflightRefusal(threw),          'the category guard throws a pre-flight refusal');
+      check(threw?.refusalKind === 'not-found', 'typed as not-found');
+      check(threw?.entity === 'Category',       'carrying the entity');
+      check(/categories/.test(threw?.message ?? ''),
+        'and the message pluralises correctly rather than saying "categorys"');
     }
 
     console.log('\n[#377] a genuine failure is NOT swallowed into the refusal shape');
@@ -170,8 +182,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     }
   }
 
-  // ── Positive path: valid categoryId → { result }
-  console.log('\n[#89] Positive path — valid categoryId returns { result }');
+  // Positive path: a valid categoryId returns { result }.
+  //
+  // This one legitimately stubs the adapter: the claim is about the TOOL's envelope, not
+  // about the guard, and the guard has its own real-adapter cases above.
+  console.log('\n[#89] Positive path: a valid categoryId returns { result }');
   {
     adapter.setBudgetAmount = async () => ({ budgeted: 50000 });
     const res = await tool.call({ month: '2026-04', categoryId: 'cat_1', amount: 50000 });

@@ -1167,9 +1167,13 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
     );
     const exists = (categories as any[]).some((c: any) => c.id === categoryId);
     if (!exists) {
-      throw new Error(
-        `Category "${categoryId}" not found. Use actual_categories_get to list available categories.`
-      );
+      // #377: MUST be a typed refusal. `budgets_setAmount` is one of the two tools whose
+      // published contract is the SHAPE (#89: an unknown category returns
+      // { success: false, error }, it does not throw), and the tool decides that by type
+      // now. Leaving this as a bare Error silently undid #89, and the unit test did not
+      // catch it because it stubbed the adapter and threw the refusal itself, reproducing
+      // the fixture on both sides. There is a real-adapter case for it now.
+      throw new NotFoundRefusal('Category', String(categoryId), 'actual_categories_get');
     }
 
     // #361: the MONTH is unvalidated, in format AND range. `api/budget-set-amount` is the

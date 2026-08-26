@@ -147,10 +147,16 @@ Returns: { id, created: boolean } — created=true if new rule was created, fals
     // The read, the match and the write happen in ONE write-queue cycle inside
     // adapter.upsertRule (#142, relocated in #376).
     //
-    // `stage` is passed as an explicit presence flag rather than relying on the key being
-    // present on the parsed object: null is a MEANINGFUL stage (Actual's default), so
-    // "omitted" and "explicitly null" must stay distinguishable across the call boundary
-    // (#342).
+    // `stage` is passed as an explicit presence flag, because null is a MEANINGFUL stage
+    // (Actual's default) and "omitted" must stay distinguishable from "explicitly null"
+    // across the call boundary (#342).
+    //
+    // Derived from the PARSED value, not from `hasOwnProperty` on the raw args. The schema
+    // is `.nullable().optional()` with no default, so `undefined` means omitted and `null`
+    // means the default stage; a raw-args key test would call an explicit
+    // `{ stage: undefined }` "supplied" and send `undefined` into the update, which is the
+    // exact value #342 records Actual rejecting with `Invalid rule stage: undefined`.
+    // Unreachable over JSON-RPC (which cannot carry undefined) but reachable in-process.
     return await adapter.upsertRule(
       {
         stage: input.stage,
@@ -158,7 +164,7 @@ Returns: { id, created: boolean } — created=true if new rule was created, fals
         conditions: input.conditions,
         actions: input.actions,
       },
-      Object.prototype.hasOwnProperty.call((args ?? {}) as object, 'stage'),
+      input.stage !== undefined,
     );
   },
 };
