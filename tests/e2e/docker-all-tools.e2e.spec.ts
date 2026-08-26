@@ -26,6 +26,47 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     expect(data).toBeTruthy();
   });
 
+  // ==================== TOOL ANNOTATIONS (#379) ====================
+  test('tools/list - every tool publishes MCP annotations that match its nature', async ({ mcp }) => {
+    // Asserted OVER THE WIRE, not against the in-process table: the point of #379 is that
+    // clients can see this, and a table that never reaches `tools/list` would be useless
+    // while looking complete.
+    const res = await mcp.post({ jsonrpc: '2.0', id: 4242, method: 'tools/list', params: {} });
+    const body = await res.json();
+    const tools: any[] = body?.result?.tools ?? [];
+    expect(tools.length).toBeGreaterThan(70);
+
+    const byName = new Map(tools.map((t: any) => [t.name, t]));
+    const ann = (n: string) => byName.get(n)?.annotations;
+
+    // Every tool carries all four hints. Silence and "declared false" look identical to a
+    // client, but only one of them means somebody classified the tool.
+    const missing = tools.filter(
+      (t: any) =>
+        !t.annotations ||
+        ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'].some(
+          (k) => typeof t.annotations[k] !== 'boolean',
+        ),
+    );
+    expect(missing.map((t: any) => t.name)).toEqual([]);
+
+    // A read-only tool, a destructive one, and the single open-world one.
+    expect(ann('actual_accounts_list')?.readOnlyHint).toBe(true);
+    expect(ann('actual_accounts_delete')?.readOnlyHint).toBe(false);
+    expect(ann('actual_accounts_delete')?.destructiveHint).toBe(true);
+
+    // The default this server corrects 73 times out of 74: the spec defaults openWorldHint
+    // to TRUE, and this server's domain is one Actual instance. Only bank sync reaches a
+    // third party.
+    const open = tools.filter((t: any) => t.annotations?.openWorldHint).map((t: any) => t.name);
+    expect(open).toEqual(['actual_bank_sync']);
+
+    // Idempotence matches what the write-effect audit established, rather than being guessed:
+    // upstream ADDS to the hold buffer, so repeating the call holds twice (#355).
+    expect(ann('actual_budgets_holdForNextMonth')?.idempotentHint).toBe(false);
+    expect(ann('actual_rules_create_or_update')?.idempotentHint).toBe(true);
+  });
+
   // ==================== SESSION MANAGEMENT ====================
   test('actual_session_list - should list active sessions', async ({ mcp }) => {
     const data = await mcp.call('actual_session_list');

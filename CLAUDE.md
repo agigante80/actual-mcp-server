@@ -317,6 +317,15 @@ const tool: ToolDefinition = {
 export default tool;
 ```
 
+**Every tool declares MCP annotations, and they are HINTS, never a guard (#379).** `src/lib/tool-annotations.ts` classifies all 74 tools on the four fields the MCP spec defines, and `src/lib/tool-list-entry.ts` attaches them to every `tools/list` entry. Two things to know before touching this:
+
+- **The spec's defaults are the conservative ones**, so declaring nothing already means write-capable, destructive and open-world. The value is telling clients which tools are SAFE, and correcting `openWorldHint`, whose default (`true`) is wrong for 73 of 74: this server's domain is one Actual instance, a CLOSED world, and only `actual_bank_sync` reaches a third party.
+- **Nothing in `src/` may branch on an annotation.** The spec says clients must treat them as untrusted, so they can never carry an authorisation or safety decision. Authorisation stays in `budget-acl.ts`; refusal stays in the adapter guards. An annotation that lies is worse than none, which is why `tests/unit/tool_annotations.test.js` derives the classification from the adapter call graph and fails if a `readOnlyHint: true` tool reaches `queueWriteOperation`. That guard also replaced #370's hand-maintained `READ_ONLY` list, so "can this tool write?" now has ONE answer.
+
+Four tools mutate WITHOUT the write queue, so the call graph says read and reality says write: `bank_sync` (imports transactions through the read path), `budgets_export` (writes a zip), `budgets_switch` (session state plus a stored preference) and `session_close` (a pooled connection). They are excluded from the read-only set and listed with their reasons in the guard.
+
+**`tools/list` is built in ONE place: `buildToolListEntries`.** It used to be assembled independently in three (the HTTP SDK handler, the no-session LobeChat compatibility path, and the stdio handler), so anything added to the published surface reached some clients and not others. #379 found this the hard way: annotations went to HTTP and silently missed stdio, which is what Claude Desktop runs.
+
 ### Adding a New Tool
 
 1. Create `src/tools/new_tool.ts` using the pattern above

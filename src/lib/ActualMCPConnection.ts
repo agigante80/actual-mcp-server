@@ -4,6 +4,7 @@ import * as actual from '@actual-app/api';
 import actualToolsManager from '../actualToolsManager.js';
 import adapter from './actual-adapter.js';
 import { z } from 'zod';
+import { annotationsFor } from './tool-annotations.js';
 
 
 /**
@@ -51,6 +52,11 @@ export class ActualMCPConnection extends EventEmitter {
           title: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : { type: 'object' },
+          // #379: MCP tool annotations. Advisory metadata for clients, never a guard:
+          // the spec says clients must treat them as untrusted, and nothing in src/ may
+          // branch on one. See src/lib/tool-annotations.ts for the classification and why
+          // openWorldHint is the field whose default is wrong for 73 of 74 tools.
+          annotations: annotationsFor(tool.name),
         };
       });
     } catch (e) {

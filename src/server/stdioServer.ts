@@ -7,6 +7,7 @@ import logger from '../logger.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { requestContext } from '../lib/requestContext.js';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
+import { buildToolListEntries } from '../lib/tool-list-entry.js';
 
 export async function startStdioServer(
   mcp: ActualMCPConnection,
@@ -48,18 +49,15 @@ export async function startStdioServer(
 
   // List tools handler — mirrors createServerInstance() in httpServer.ts
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const tools = toolsList.map((name: string) => {
-      const schemaFromParam = toolSchemas && toolSchemas[name];
-      const schemaFromManager = (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name);
-      const schema = schemaFromParam || schemaFromManager;
-      const inputSchema =
-        schema && typeof schema === 'object' && Object.keys(schema).length > 0
-          ? schema
-          : { type: 'object', properties: {}, additionalProperties: false };
-      const tool = actualToolsManager.getTool(name);
-      const description = tool?.description || `Tool ${name}`;
-      return { name, description, inputSchema };
-    });
+    // #379: the SAME builder the HTTP paths use. stdio is the transport Claude Desktop
+    // runs, and it previously assembled this payload independently, so an addition to the
+    // published surface could reach HTTP clients and silently miss stdio ones.
+    const tools = buildToolListEntries(toolsList, (name: string) => ({
+      description: actualToolsManager.getTool(name)?.description,
+      schema:
+        (toolSchemas && toolSchemas[name]) ||
+        (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name),
+    }));
     logger.debug(`[STDIO] tools/list → ${tools.length} tools`);
     return { tools };
   });

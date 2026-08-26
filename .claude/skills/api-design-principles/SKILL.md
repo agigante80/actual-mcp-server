@@ -45,6 +45,16 @@ as the underlying principles, and apply them through these project rules (from C
 - **The refusal SHAPE is fixed by the taxonomy below, and decided by TYPE, never by prose.**
   The bullet above governs the wording; this one governs which response shape carries it.
 
+- **Annotations describe a tool; they never authorise it (#379).** Every tool publishes MCP
+  `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` from
+  `src/lib/tool-annotations.ts`. The spec is explicit that these are HINTS and that clients
+  must treat them as untrusted, so no code in `src/` may branch on one. They are for the
+  client's benefit, not the server's. Note the defaults are already conservative
+  (`destructiveHint` and `openWorldHint` both default to TRUE), so the useful work is
+  declaring what is SAFE and correcting `openWorldHint`, which is wrong for every tool here
+  except `actual_bank_sync`. An annotation that lies is worse than none, which is why
+  `tests/unit/tool_annotations.test.js` checks each claim against the adapter call graph.
+
 ### The refusal taxonomy (#377)
 
 "You asked for something that cannot happen" had five different shapes across this surface, and
