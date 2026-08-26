@@ -202,15 +202,18 @@ first pass.
 
 ## Where a guard belongs (#371)
 
-Most guards now live in `src/lib/actual-adapter.ts`, not in the tool. Three of them
+Most READ-THEN-WRITE guards now live in `src/lib/actual-adapter.ts`, not in the tool. Three of them
 (`accounts_close`, `accounts_reopen`, `budgets_holdForNextMonth`) were briefly in the tool
 layer and were moved.
 
-**Five are still in the tool layer, deliberately not migrated in that pass**, and saying so
+**Five read-then-write guards are still in the tool layer, deliberately not migrated in that pass**, and saying so
 matters because an earlier version of this paragraph claimed the rule was universal when it
 was not: `rules_delete` (itself a CONFIRMED row), `category_groups_delete`,
 `schedules_delete`, `rules_create_or_update` and `notes_update`. They work, and they predate
-the rule. Migrating them is tracked in #376. The single-cycle read-decide-write property never required
+the rule. Migrating them is tracked in #376.
+
+`actual_accounts_delete` is deliberately not in that list: its guard is a verify-AFTER (#347),
+not a read-then-write, and the SAFE table already records it as living in the tool. The single-cycle read-decide-write property never required
 the raw api, and putting it in the adapter keeps `retry` on the reads, keeps one
 observability call site per operation, and leaves no unguarded `adapter.*` method for a
 future caller to reach for. The tool owns the schema and the response wording; the adapter
