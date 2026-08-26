@@ -334,8 +334,18 @@ export async function budgetTests(client, context) {
       `forNextMonth advanced by exactly ${HOLD_AMOUNT}`,
     );
   } finally {
-    // Remove the seeded income whatever happened, so the budget is left as found and the
-    // zero-residue assertion still holds.
+    // Undo BOTH effects, whatever happened, so the budget is left as found.
+    //
+    // The hold has to be released BEFORE the income is removed, and releasing it is not
+    // optional: `forNextMonth` is month-level budget state, which the zero-residue sweep
+    // does NOT cover (it looks at accounts, payees, categories and the like), so a
+    // leftover hold would silently lower this month's To Budget by HOLD_AMOUNT on every
+    // run and nothing would report it. The E2E twin registers the same reset as teardown.
+    try {
+      await callTool("actual_budgets_resetHold", { month: currentDate });
+    } catch (err) {
+      console.log(`  ⚠ could not reset the hold for ${currentDate}: ${err.message}`);
+    }
     try {
       await callTool("actual_accounts_delete", { id: holdSeedId });
     } catch (err) {

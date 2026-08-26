@@ -1,6 +1,6 @@
 ---
 name: api-design-principles
-description: API design principles for the actual-mcp-server MCP tool surface (and REST/GraphQL in general). Use when adding or revising an MCP tool, reviewing tool schemas for consistency across the 71-tool set, or establishing tool-design standards. The general REST/GraphQL material is the reference; the project section maps it to MCP tools.
+description: API design principles for the actual-mcp-server MCP tool surface (and REST/GraphQL in general). Use when adding or revising an MCP tool, reviewing tool schemas for consistency across the 74-tool set, or establishing tool-design standards. The general REST/GraphQL material is the reference; the project section maps it to MCP tools.
 ---
 
 <!-- api-design-principles-version: 1 -->
@@ -40,7 +40,7 @@ as the underlying principles, and apply them through these project rules (from C
   IDs use `CommonSchemas.accountId` / the shared UUID pattern.
 - **Errors are messages, not status codes.** There is no HTTP status layer at the tool boundary:
   use the shared helpers `notFoundMsg()` / `constraintErrorMsg()` from `src/lib/errors.ts` so a
-  "not found" or constraint failure reads consistently across all 71 tools. Domain/validation
+  "not found" or constraint failure reads consistently across all 74 tools. Domain/validation
   errors must not drop the pooled connection (see `_shouldDropPoolOnError` in `actual-adapter.ts`).
 - **The refusal SHAPE is fixed by the taxonomy below, and decided by TYPE, never by prose.**
   The bullet above governs the wording; this one governs which response shape carries it.
@@ -52,10 +52,20 @@ the two tools using the structured shape picked it by substring-matching the ada
 A copy-edit to a message in `actual-adapter.ts` could therefore flip a published contract with
 nothing red to show for it. Three rules, in the order you should apply them:
 
-1. **The requested end state ALREADY HOLDS** (closing a closed account, deleting something that
-   is already absent): return **SUCCESS**, with a field naming the non-change
-   (`alreadyClosed: true`, `removed: true`). This is #347's idempotence argument: the caller's
-   intent is satisfied, so reporting failure would be a lie. Do NOT invent a refusal for it.
+1. **The requested end state ALREADY HOLDS** (closing an already-closed account, reopening an
+   already-open one): return **SUCCESS**, with a field naming the non-change
+   (`alreadyClosed: true`, `alreadyOpen: true`, `removed: true`). This is #347's idempotence
+   argument: the caller's intent is satisfied, so reporting failure would be a lie. Do NOT
+   invent a refusal for it.
+
+   **Deleting an id that does not exist is NOT this case, on this surface.**
+   `rules_delete`, `category_groups_delete`, `schedules_delete`, `payees_delete` and
+   `tags_delete` all THROW a `NotFoundRefusal`, and #376 re-committed to that when it moved
+   those guards into the adapter. The single exception is `actual_accounts_delete`, which
+   verifies AFTER the write and therefore reports success for an absent id; its own file and
+   `docs/audit/write-effect-audit.md` explain why (a close-then-reopen leaves an id that no
+   listing returns, so a pre-check would refuse a request whose intent is already satisfied).
+   Follow the majority: a delete of an unknown id throws.
 2. **The request NAMES SOMETHING THAT DOES NOT EXIST, or upstream will not do it**: **THROW**.
    It is a caller error, and MCP's error channel is where a model can see it and self-correct.
    Throw a typed refusal from `src/lib/errors.ts`: `NotFoundRefusal(entity, id, listTool)` or

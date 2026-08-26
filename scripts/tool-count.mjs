@@ -36,6 +36,11 @@ const FILES = [
   '.github/CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
   'tests/manual/tests/sanity.js', 'tests/manual/runner.js', 'tests/e2e/README.md', 'tests/manual/README.md',
   'tests/e2e/docker-all-tools.e2e.spec.ts',
+  // The api-design-principles SKILL states the tool total in its opening lines, and both
+  // `tool-author` and `ticket-gate` read it. It sat at "71-tool set" while
+  // IMPLEMENTED_TOOLS was 74, because this scan could not see `.claude/skills/**` (#377
+  // review, L8).
+  '.claude/skills/api-design-principles/SKILL.md',
 ];
 
 /**

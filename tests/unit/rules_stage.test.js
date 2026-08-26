@@ -64,6 +64,10 @@ const baseInput = (extra = {}) => ({
   let sent = null;
   adapter.createRule = async (rule) => { sent = rule; return 'rule-id-1'; };
   adapter.updateRule = async (id, fields) => { sent = { id, ...fields }; return null; };
+  // #376 removed the tool-layer session from rules_create_or_update, so this stub is inert
+  // for the upsert cases below: they drive the REAL adapter.upsertRule through the write
+  // queue. Kept ONLY for the other cases in this file that still call it; do not copy it
+  // into a new test as a way to reach a guard, because it removes the guard.
   adapter.withWriteSession = async (fn) => fn();
   adapter.getRules = async () => ([]);
 
