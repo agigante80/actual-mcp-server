@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { isPreflightRefusal } from '../lib/errors.js';
 
 const InputSchema = z.object({
   // #361: this was a bare z.string().min(1), so 'banana' parsed and reached the API. The
@@ -26,20 +27,19 @@ const tool: ToolDefinition = {
       return { result };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
-      const lower = msg.toLowerCase();
       // Both PRE-FLIGHT refusals from adapter.setBudgetAmount return the same structured
-      // shape, so a caller can handle "you asked for something that does not exist" once
-      // rather than parsing two forms:
+      // shape, so a caller can handle "you asked for something that cannot be acted on"
+      // once rather than parsing two forms:
       //
-      //   Category "<id>" not found. Use actual_categories_get ...            (#89)
-      //   Month "<month>" is not in this budget. It runs from X to Y ...      (#361)
+      //   NotFoundRefusal    the category id does not exist               (#89)
+      //   OutOfRangeRefusal  the month is outside the budget's range      (#361)
       //
-      // #361 added the second one, and before this it fell through to the rethrow below,
-      // so one tool answered two identical situations in two different shapes. Anything
-      // else (a genuine upstream or transport failure) still throws.
-      const isCategoryRefusal = lower.includes('not found') && lower.includes('category');
-      const isMonthRefusal = lower.includes('not in this budget');
-      if (isCategoryRefusal || isMonthRefusal) {
+      // #377: this used to ask `msg.includes('not found') && msg.includes('category')`,
+      // so rewording either message in the adapter silently flipped this tool from a
+      // structured refusal to a thrown error, with nothing to catch it. The decision is
+      // now made by TYPE, and the message is free to change. Anything that is not a
+      // refusal (a genuine upstream or transport failure) still throws.
+      if (isPreflightRefusal(error)) {
         return { success: false as const, error: msg };
       }
       throw new Error(`Failed to set budget amount: ${msg}`);

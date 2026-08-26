@@ -89,8 +89,14 @@ console.log('Running JS smoke tests for transactions_create');
     let threw = null;
     let res = null;
     try { res = await tool.call({ account: ghost, date: '2026-07-27', amount: -1000 }); } catch (e) { threw = e; }
-    const message = threw ? threw.message : (res && res.error) || '';
-    gcheck(Boolean(threw) || res?.success === false, 'does not report success');
+    // #377: this used to accept EITHER a throw OR success:false, so it could not tell
+    // whether the tool still honoured its published shape. The shape IS the contract:
+    // transactions_create answers a pre-flight refusal structurally, and the decision is
+    // made by type (isPreflightRefusal), not by matching the adapter's wording.
+    gcheck(threw === null,             'a refusal is returned structurally, not thrown');
+    gcheck(res?.success === false,     'and success is false');
+    gcheck(res?.id === null,           'and no id is invented');
+    const message = (res && res.error) || '';
     gcheck(/not found/i.test(message),                'says the account was not found');
     gcheck(/actual_accounts_list/.test(message),      'names the listing tool');
     gcheck(addCalls === 0,
