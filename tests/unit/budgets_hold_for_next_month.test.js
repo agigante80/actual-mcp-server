@@ -75,7 +75,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // The #142 property asserted for real, not implied by a read count: one call must
     // dispatch exactly ONE write-queue batch.
     check(witness.sharedOneCycle(),
-                          'read, write and re-read shared ONE write-queue cycle');
+                          'read, write and re-read shared ONE write-queue cycle', witness.describe());
   }
 
   console.log('\n[#355] holdForNextMonth: PARTIAL hold is reported, not dressed up as success');

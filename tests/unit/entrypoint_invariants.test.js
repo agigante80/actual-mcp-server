@@ -21,7 +21,7 @@
 // Run: node tests/unit/entrypoint_invariants.test.js
 
 import assert from 'assert';
-import { readFileSync, existsSync, mkdtempSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync } from 'fs';
 import { spawn } from 'child_process';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
@@ -110,6 +110,10 @@ check('the build these cases spawn is present', () => {
 });
 // Deliberately unreachable upstream: these cases must not depend on a live Actual server,
 // and must not touch the developer's real data dir.
+// Removed on exit rather than leaked once per run. The spawned server may populate it.
+const ENTRY_DATA_DIR = mkdtempSync(join(tmpdir(), 'mcp-entrypoint-'));
+process.on('exit', () => { try { rmSync(ENTRY_DATA_DIR, { recursive: true, force: true }); } catch { /* best effort */ } });
+
 const ENTRY_ENV = {
   ...process.env,
   ACTUAL_SERVER_URL: 'http://127.0.0.1:5999',
@@ -118,7 +122,7 @@ const ENTRY_ENV = {
   // A throwaway dir OUTSIDE the repo. The spec file this came from pointed at
   // `<repo>/test-actual-data`, which is not gitignored, so a future change that made the
   // entrypoint create its data dir eagerly would have started dirtying the working tree.
-  ACTUAL_DATA_DIR: mkdtempSync(join(tmpdir(), 'mcp-entrypoint-')),
+  ACTUAL_DATA_DIR: ENTRY_DATA_DIR,
   LOG_LEVEL: 'error',
 };
 
