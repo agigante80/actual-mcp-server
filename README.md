@@ -312,10 +312,10 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 |------|-------------|
 | `actual_accounts_list` | List all accounts |
 | `actual_accounts_create` | Create new account |
-| `actual_accounts_update` | Update account details |
+| `actual_accounts_update` | Update account details. An id that does not exist is refused rather than creating a partial record |
 | `actual_accounts_delete` | Permanently delete account |
 | `actual_accounts_close` | Close account. An account with NO transactions is REMOVED by Actual, not closed |
-| `actual_accounts_reopen` | Reopen closed account |
+| `actual_accounts_reopen` | Reopen closed account. An id that is not an account is refused rather than creating one |
 | `actual_accounts_get_balance` | Get account balance at a date |
 
 ### Transactions (14)
@@ -406,10 +406,10 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_budgets_get_all` | List available budget files |
 | `actual_budgets_getMonths` | List budget months |
 | `actual_budgets_getMonth` | Get budget for a specific month |
-| `actual_budgets_setAmount` | Set category budget amount |
+| `actual_budgets_setAmount` | Set category budget amount. The month must be one the budget has (see `actual_budgets_getMonths`) |
 | `actual_budgets_transfer` | Transfer amount between categories |
 | `actual_budgets_setCarryover` | Enable/disable carryover |
-| `actual_budgets_holdForNextMonth` | Hold funds for next month |
+| `actual_budgets_holdForNextMonth` | Hold funds for next month. Actual clamps the hold to what is left to budget, so the response reports the amount actually held |
 | `actual_budgets_resetHold` | Reset hold status |
 | `actual_budgets_export` | Export the active budget as a `.zip` into `ACTUAL_EXPORT_DIR`; returns path, byte size and sha256, never the file contents |
 | `actual_budgets_import` | Restore a budget from an Actual `.zip` or a YNAB4/YNAB5 export. **Destructive:** the budget id comes from the archive, so re-importing an export *replaces* that budget's data rather than making a copy. Also loads the imported budget, changing the session's active budget |
