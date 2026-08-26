@@ -116,16 +116,16 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 |---|---|---|---|---|
 | `actual_accounts_close` | `closeAccount` | B | `accounts/app.ts:613` early return on missing or already-closed; `:620` deletes a zero-transaction account; `transferAccountId` documented but not exposed by our schema | #357 LANDED |
 | `actual_accounts_reopen` | `reopenAccount` | C | `accounts/app.ts:702` bare `db.update`; phantom row is visible in `getAccounts()` | #358 LANDED |
-| `actual_accounts_update` | `updateAccount` | C | `db/index.ts` `updateAccount` to `update()`; adapter has no guard | #360 OPEN |
-| `actual_categories_update` | `updateCategory` | C | `budget/app.ts` `updateCategory` to `db.updateCategory`; phantom is INVISIBLE (orphan `cat_group`) | #360 OPEN |
-| `actual_category_groups_update` | `updateCategoryGroup` | C | same shape | #360 OPEN |
-| `actual_payees_update` | `updatePayee` | C | `payees/app.ts` `batchChangePayees` to `db.updatePayee` | #360 OPEN |
+| `actual_accounts_update` | `updateAccount` | C | `db/index.ts` `updateAccount` to `update()` | #360 LANDED |
+| `actual_categories_update` | `updateCategory` | C | `budget/app.ts` `updateCategory` to `db.updateCategory`; phantom is INVISIBLE (orphan `cat_group`) | #360 LANDED |
+| `actual_category_groups_update` | `updateCategoryGroup` | C | same shape | #360 LANDED |
+| `actual_payees_update` | `updatePayee` | C | `payees/app.ts` `batchChangePayees` to `db.updatePayee` | #360 LANDED |
 | `actual_payees_delete` (transfer payee) | `deletePayee` | B | `db/index.ts` `deletePayee`: `if (transfer_acct) return;`. Our adapter checked existence only, and `getPayees()` includes transfer payees | #356 LANDED |
 | `actual_payees_merge` | `mergePayees` | B | `db/index.ts` `mergePayees`: silent return on a transfer target, silent filter of transfer sources, raw TypeError on an unknown id | #356 LANDED |
 | `actual_rules_delete` (schedule-owned) | `deleteRule` | A | `transactions/transaction-rules.ts:236` returns `false`; the tool discarded it | #355 LANDED |
 | `actual_budgets_holdForNextMonth` | `holdBudgetForNextMonth` | A | `budget/actions.ts` returns `false` when to-budget is not positive | #355 LANDED |
 | `actual_transactions_create` | `addTransactions` | D | `accounts/sync.ts:961` never validates `acctId`; `api.ts:552` returns `'ok'` unconditionally | #359 LANDED |
-| `actual_budgets_setAmount` (month range) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call | #361 OPEN |
+| `actual_budgets_setAmount` (month) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call, and the tool's schema did not check the format either | #361 LANDED |
 
 ### SAFE
 
@@ -199,6 +199,16 @@ So a finding is only real when BOTH halves fail: upstream can complete without e
 no guard in this server catches it. Trace upstream, then trace the adapter method, then
 trace the tool. Skipping the middle step produced a 20 percent false-positive rate on the
 first pass.
+
+## Where a guard belongs (#371)
+
+Every guard in the CONFIRMED table now lives in `src/lib/actual-adapter.ts`, not in the tool.
+Three of them (`accounts_close`, `accounts_reopen`, `budgets_holdForNextMonth`) were briefly
+in the tool layer and were moved. The single-cycle read-decide-write property never required
+the raw api, and putting it in the adapter keeps `retry` on the reads, keeps one
+observability call site per operation, and leaves no unguarded `adapter.*` method for a
+future caller to reach for. The tool owns the schema and the response wording; the adapter
+owns whether the write is allowed to happen.
 
 ## The tests this class needs
 
