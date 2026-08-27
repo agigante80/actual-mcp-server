@@ -321,16 +321,25 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(accounts_create_tool,
     { name: 'Savings', balance: 10000 },
     'valid name + integer balance accepted')) fail();
+  // #380: `id` was REMOVED, not tightened, because upstream's api/account-create drops it
+  // and mints its own UUID. Pinned so a future "add an optional id back" reintroduces the
+  // success-lie (caller's id accepted, different id created) and this goes red first.
+  if (!('id' in accounts_create_tool.inputSchema.shape)) {
+    console.log('  \u2713 accounts_create publishes no `id` field (#380)');
+  } else {
+    console.log('  \u2717 accounts_create publishes an `id` upstream ignores (#380)');
+    fail();
+  }
 
   // ── actual_accounts_get_balance (A3) ──────────────────────────────────────
-  // Schema uses z.string().min(1) for id and .strict() — UUID not enforced
+  // #380: id is CommonSchemas.accountId (the UUID pattern) now, plus .strict().
   console.log('\n[actual_accounts_get_balance — required non-empty id, strict schema]');
   if (!expectParseError(accounts_get_balance_tool,
     {},
     'missing id rejected')) fail();
   if (!expectParseError(accounts_get_balance_tool,
     { id: '' },
-    'empty id rejected (min 1)')) fail();
+    'empty id rejected (#380: now by UUID format, not min length)')) fail();
   if (!expectParseError(accounts_get_balance_tool,
     { id: '60000000-0000-4000-8000-000000000001', unknownField: 'bad' },
     'unknown field rejected by strict schema')) fail();
@@ -486,6 +495,27 @@ async function expectCallError(tool, input, label) {
 
   // ── actual_transactions_uncategorized (cases 7–16) ───────────────────────
   console.log('\n[actual_transactions_uncategorized — schema validation]');
+  // actual_transactions_update: the id is REQUIRED (#380).
+  //
+  // This is the regression test for a live success-lie. The id was `.optional()` with the
+  // describe "optional for smoke tests, required for actual usage", and the handler did
+  // `if (!input.id) return { success: true }`, so a call with no id reported SUCCESS and
+  // wrote nothing. A model that omitted the id was told its edit had landed. Reproduced
+  // before the fix: zero raw writes, `{"success":true}`.
+  console.log('\n[actual_transactions_update: #380 required id]');
+  {
+    const txn_update_tool = await import('../../dist/src/tools/transactions_update.js').then(m => m.default);
+    if (!expectParseError(txn_update_tool,
+      { fields: { notes: 'x' } },
+      '#380: missing id rejected (was: reported success and wrote nothing)')) fail();
+    if (!expectParseError(txn_update_tool,
+      { id: 'not-a-uuid', fields: { notes: 'x' } },
+      '#380: non-UUID id rejected at the schema')) fail();
+    if (!expectParseOk(txn_update_tool,
+      { id: '50000000-0000-4000-8000-000000000001', fields: { notes: 'x' } },
+      'valid id + fields accepted')) fail();
+  }
+
   const uncategorized_tool = await import('../../dist/src/tools/transactions_uncategorized.js').then(m => m.default);
 
   // Case 7: invalid startDate format

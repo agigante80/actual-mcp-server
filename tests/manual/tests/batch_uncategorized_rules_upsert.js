@@ -322,14 +322,19 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     // NEGATIVE: batch with a non-existent transaction ID should report partial failure
     console.log("\nNEGATIVE: batch update with __nonexistent_MCP_test_value__ ID...");
     const negBatch = await callTool("actual_transactions_update_batch", {
-      updates: [{ id: "__nonexistent_MCP_test_value__", fields: { notes: "should-fail" } }],
+      updates: [{ id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } }],
     });
     if (negBatch?.failureCount === 1 && negBatch?.successCount === 0) {
       console.log(`  ✓ NEGATIVE: failureCount=1 successCount=0 (non-existent ID correctly failed)`);
     } else if (negBatch?.successCount === 1) {
       console.log(`  ⚠ NEGATIVE: Actual accepted update for unknown ID (adapter may not validate existence)`);
     } else {
-      console.log(`  ⚠ NEGATIVE: unexpected result: ${JSON.stringify(negBatch).slice(0, 120)}`);
+      // #380: FAIL, do not warn. This branch previously swallowed a Zod schema rejection
+      // for two full releases' worth of runs: the id had stopped parsing, so the batch was
+      // refused outright and this case never reached the behaviour it names, while the
+      // suite still reported green. An unexpected result is not a documented alternative
+      // outcome, it is the test failing to run.
+      fail(`batch NEGATIVE: unexpected result: ${JSON.stringify(negBatch).slice(0, 160)}`);
     }
 
     // PARTIAL FAILURE: mixed batch: one valid ID + one bad ID: proves the loop
@@ -339,7 +344,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     const mixedBatch = await callTool("actual_transactions_update_batch", {
       updates: [
         { id: uncatTxnId, fields: { notes: mixedNotes } },
-        { id: "__nonexistent_MCP_test_value__", fields: { notes: "should-fail" } },
+        { id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } },
       ],
     });
     const mixedSucceeded = mixedBatch?.succeeded ?? [];
@@ -350,7 +355,10 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       // Actual does not validate existence on updateTransaction: both silently succeed
       console.log(`  ⚠ PARTIAL FAILURE: both succeeded: Actual accepts updates for non-existent IDs (no error thrown)`);
     } else {
-      console.log(`  ⚠ PARTIAL FAILURE: unexpected result: ${JSON.stringify(mixedBatch).slice(0, 120)}`);
+      // #380: FAIL for the same reason as the NEGATIVE case above. This is the branch that
+      // printed a Zod schema error on BOTH transports while the dual-transport gate reported
+      // green, which is how the tightening silently killed the assertion.
+      fail(`PARTIAL FAILURE: unexpected result: ${JSON.stringify(mixedBatch).slice(0, 160)}`);
     }
     if (mixedSucceeded.some(s => s?.id === uncatTxnId)) {
       console.log(`  ✓ PARTIAL FAILURE: valid transaction id in succeeded[]`);

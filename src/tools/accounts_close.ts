@@ -9,18 +9,15 @@ const InputSchema = z
     // #357: documented by the Actual API reference as required when the account's
     // balance is non-zero, and previously not exposed at all, which made such an
     // account impossible to close through this server.
-    transferAccountId: z
-      .string()
-      .min(1)
-      .max(64)
+    // #380: the same entity type as `id` three lines up, so it gets the same schema. It was
+    // left on a bounded string because the drift guard could not SEE it: its detector
+    // required `z.` on the field's own line, and this declaration breaks after `z`.
+    transferAccountId: CommonSchemas.accountId
       .optional()
       .describe(
         'Account ID to move the remaining balance to. REQUIRED when the account has a non-zero balance.',
       ),
-    transferCategoryId: z
-      .string()
-      .min(1)
-      .max(64)
+    transferCategoryId: CommonSchemas.categoryId
       .optional()
       .describe('Category to assign the balancing transaction to. Optional, used with transferAccountId.'),
   })

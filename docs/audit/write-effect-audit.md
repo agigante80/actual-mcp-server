@@ -125,6 +125,7 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_rules_delete` (schedule-owned) | `deleteRule` | A | `transactions/transaction-rules.ts:236` returns `false`; the tool discarded it | #355 LANDED |
 | `actual_budgets_holdForNextMonth` | `holdBudgetForNextMonth` | A | `budget/actions.ts` returns `false` when to-budget is not positive | #355 LANDED |
 | `actual_transactions_create` | `addTransactions` | D | `accounts/sync.ts:961` never validates `acctId`; `api.ts:552` returns `'ok'` unconditionally | #359 LANDED |
+| `actual_accounts_create` | `api/account-create` | D | `loot-core/src/server/api.ts` destructures ONLY `account.name`, `account.offbudget`, `account.closed` and `initialBalance`, then calls `account-create`, which mints its own id via `insertWithUUID`. Our schema published an optional `id` that upstream discards, so a caller supplying one got `{success:true}` plus an account under a DIFFERENT id, and a not-found from the very next `actual_accounts_get_balance`. Fixed by REMOVING the field: there is no id to honour, so typing it would only have made an unusable field look deliberate | #380 LANDED |
 | `actual_budgets_setAmount` (month) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call, and the tool's schema did not check the format either. The guard now refuses any month outside the budget's own bounds, which upstream `getBudgetRange` computes as earliest-transaction-month minus 3 to current-month plus 12. A budget with no transactions yet therefore cannot be back-filled further than 3 months, which is upstream's rule, not ours | #361 LANDED |
 
 ### SAFE
@@ -176,7 +177,7 @@ throws on anything it does not recognise rather than dropping it.
 Not traced in the 2026-08-25 pass. Absence from the CONFIRMED table is not evidence of
 safety.
 
-`actual_accounts_create`, `actual_schedules_create`, `actual_budgets_switch`,
+`actual_schedules_create`, `actual_budgets_switch`,
 `actual_budgets_export`, `actual_budgets_transfer`, `actual_budget_updates_batch`,
 `actual_categories_create`, `actual_category_groups_create`, `actual_rules_create`,
 `actual_rules_create_or_update`, `actual_payees_create`, `actual_tags_create`,
@@ -184,7 +185,8 @@ safety.
 `actual_query_run`.
 
 `actual_accounts_create` and `actual_schedules_create` were missing from this file entirely
-until the architectural review of PR #367 noticed. That is the failure mode this document
+until the architectural review of PR #367 noticed. `actual_accounts_create` has since been
+traced (#380) and moved to CONFIRMED, which is what an UNKNOWN entry is for. That is the failure mode this document
 warns about in its own opening: a table that silently omits a case reads as coverage. A
 membership test that fails CI when an `IMPLEMENTED_TOOLS` entry appears in no row would make
 it structural rather than a matter of care, and is tracked in #370.

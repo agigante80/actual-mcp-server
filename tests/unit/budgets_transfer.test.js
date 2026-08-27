@@ -61,12 +61,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     let threw = null;
     try { await tool.call({ month: '2026-04', fromCategoryId: '', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 5000 }); } catch (e) { threw = e; }
     // #380: rejected by the shared UUID schema now, not by a per-tool min-length message.
-    check(/category ID format/i.test(threw?.message || ''), 'empty fromCategoryId rejected');
+    check(/fromCategoryId/.test(threw?.message || ''), 'empty fromCategoryId rejected (named in the error path)');
   }
   {
     let threw = null;
     try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '', amount: 5000 }); } catch (e) { threw = e; }
-    check(/category ID format/i.test(threw?.message || ''), 'empty toCategoryId rejected');
+    check(/toCategoryId/.test(threw?.message || ''), 'empty toCategoryId rejected (named in the error path)');
   }
 
   // Schema rejection: amount must be positive integer
