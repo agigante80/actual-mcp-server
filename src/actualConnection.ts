@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import api from '@actual-app/api';
+import { setLoadedBudgetSyncId } from './lib/apiState.js';
 import logger from './logger.js';
 import config from './config.js';
 import { connectionPool } from './lib/ActualConnectionPool.js';
@@ -54,8 +55,12 @@ export async function connectToActual() {
     if (BUDGET_PASSWORD) {
       const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
       await apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD });
+      // #390: record which budget the singleton now holds.
+      setLoadedBudgetSyncId(BUDGET_SYNC_ID);
     } else {
       await api.downloadBudget(BUDGET_SYNC_ID);
+      // #390: record which budget the singleton now holds.
+      setLoadedBudgetSyncId(BUDGET_SYNC_ID);
     }
 
     if (TEST_ACTUAL_CONNECTION) {

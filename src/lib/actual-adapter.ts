@@ -80,7 +80,7 @@ import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
-import { isApiInitialized, setApiInitialized } from './apiState.js';
+import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId } from './apiState.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -156,6 +156,59 @@ function getActiveBudgetConfig(): BudgetConfig {
  * writes via processWriteQueue) must acquire this lock before touching the API.
  */
 let _apiSessionLock: Promise<void> = Promise.resolve();
+
+/**
+ * #390: make the loaded budget a CHECKED PRECONDITION of an operation rather than a side
+ * effect of whoever opened a session last.
+ *
+ * MUST be called inside the api lock. Outside it, another session can change the loaded budget
+ * between this check and the operation, which is the race this closes rather than narrows.
+ *
+ * The bug it fixes: `@actual-app/api` is process-global with ONE loaded budget, and both
+ * re-entry paths skip the download for good reasons of their own (`getConnection` returns
+ * early for an initialised entry; `initActualApiForOperation` returns early when the singleton
+ * is live, which is #134's fix for the #127 auth burst). Together they meant a session operated
+ * on whatever budget was loaded last, by anyone. Reproduced: session A opened on budget A and
+ * wrote to it, session B opened and switched to budget B, and session A's NEXT write landed in
+ * budget B.
+ *
+ * The budget ACL could not see this: `_enforceBudgetAcl` validates the budget the session
+ * BELIEVES it is on, while the operation executes against whatever is loaded, so the check and
+ * the effect were on different budgets.
+ *
+ * Cost in the common case is one string comparison. A single-budget deployment always resolves
+ * the same syncId, so nothing extra is downloaded and no upstream call is added.
+ */
+async function ensureLoadedBudgetMatchesSession(): Promise<void> {
+  if (_skipApiInitForTests) return;
+  if (!isApiInitialized()) return; // nothing loaded; the init path will download correctly
+
+  const wanted = getActiveBudgetConfig();
+  const loaded = getLoadedBudgetSyncId();
+  if (loaded === wanted.syncId) return;
+
+  // Deliberately a WARN: reaching here means two sessions are on different budgets and this
+  // one would otherwise have operated on the other's data. It is the signal that this class of
+  // bug was live, so it should be visible in logs rather than silently repaired.
+  logger.warn('[ADAPTER] loaded budget does not match this session; re-selecting before the operation', {
+    loadedSyncId: loaded ?? null,
+    wantedSyncId: wanted.syncId,
+    budget: wanted.name,
+  });
+
+  if (wanted.encryptionPassword) {
+    const encryptionPassword = wanted.encryptionPassword;
+    const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
+    await withOpTimeout(() => apiWithOptions.downloadBudget(wanted.syncId, { password: encryptionPassword }), 'downloadBudget');
+    // #390: record at the SITE, not after the branch. The guard in
+    // tests/unit/budget_selection_precondition.test.js requires it within a few lines of the
+    // call, and it caught this very block when the setter sat past the if/else.
+    setLoadedBudgetSyncId(wanted.syncId);
+  } else {
+    await withOpTimeout(() => api.downloadBudget(wanted.syncId), 'downloadBudget');
+    setLoadedBudgetSyncId(wanted.syncId);
+  }
+}
 
 function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
   let release!: () => void;
@@ -348,6 +401,9 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
       try {
         connectionReuseCount++;
         logger.debug(`[ADAPTER] Reusing pool connection for session ${sessionId} (reuses=${connectionReuseCount})`);
+        // #390: verify the singleton holds THIS session's budget before the operation runs.
+        // Inside the lock, so no other session can change it in between.
+        await ensureLoadedBudgetMatchesSession();
         return await withOpTimeout(operation);
       } catch (err) {
         // Only drop the pool connection on errors that suggest the api
@@ -401,6 +457,9 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
       try {
         connectionReuseCount++;
         logger.debug(`[ADAPTER] Reusing pool connection for write session ${sessionId} (reuses=${connectionReuseCount})`);
+        // #390: verify the singleton holds THIS session's budget before the operation runs.
+        // Inside the lock, so no other session can change it in between.
+        await ensureLoadedBudgetMatchesSession();
         const result = await withOpTimeout(operation);
         // Propagate the write to the server so other clients (and our next
         // read) see it. Pre-#134 this happened implicitly via api.shutdown().
@@ -558,8 +617,12 @@ async function initActualApiForOperation(): Promise<void> {
       const encryptionPassword = budget.encryptionPassword;
       const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
       await withOpTimeout(() => apiWithOptions.downloadBudget(budget.syncId, { password: encryptionPassword }), 'downloadBudget');
+    // #390: record which budget the singleton now holds.
+    setLoadedBudgetSyncId(budget.syncId);
     } else {
       await withOpTimeout(() => api.downloadBudget(budget.syncId), 'downloadBudget');
+    // #390: record which budget the singleton now holds.
+    setLoadedBudgetSyncId(budget.syncId);
     }
 
     setApiInitialized(true);
@@ -871,6 +934,11 @@ async function processWriteQueue() {
           // api is somehow already live (e.g. another path init'd it).
           await initActualApiForOperation();
         }
+
+        // #390: the batch is about to run against whatever budget the singleton holds. Verify
+        // it is THIS session's before writing a single row. Inside the lock, so no other
+        // session can change it between here and the ops.
+        await ensureLoadedBudgetMatchesSession();
 
         // Process all queued writes in the same session
         // Each operation handles its own success/failure
@@ -3016,8 +3084,12 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
             downloadBudget: (id: string, options?: { password: string }) => Promise<void>;
           };
           await withOpTimeout(() => apiWithOptions.downloadBudget(found.syncId, { password: encryptionPassword }), 'downloadBudget');
+          // #390: record which budget the singleton now holds.
+          setLoadedBudgetSyncId(found.syncId);
         } else {
           await withOpTimeout(() => api.downloadBudget(found.syncId), 'downloadBudget');
+          // #390: record which budget the singleton now holds.
+          setLoadedBudgetSyncId(found.syncId);
         }
       });
     }

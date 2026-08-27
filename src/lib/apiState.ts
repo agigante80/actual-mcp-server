@@ -25,4 +25,39 @@ export function isApiInitialized(): boolean {
 
 export function setApiInitialized(value: boolean): void {
   _apiInitialized = value;
+  // A singleton that is not live holds no budget. Clearing here means a shutdown can never
+  // leave a stale claim behind for the next caller to trust.
+  if (!value) _loadedBudgetSyncId = null;
+}
+
+/**
+ * #390: the syncId of the budget the SINGLETON currently holds, as distinct from the budget
+ * any given session believes it is on.
+ *
+ * WHY THIS HAS TO EXIST. `@actual-app/api` is process-global with ONE loaded budget, while the
+ * pool tracks up to MAX_CONCURRENT_SESSIONS entries that each carry their own syncId. Before
+ * this, nothing recorded which budget was actually loaded, so no code could tell that a
+ * session was about to operate on someone else's. Both re-entry paths skip the download for
+ * good reasons of their own: `getConnection` returns early for an initialised entry, and
+ * `initActualApiForOperation` returns early when the singleton is live (which is #134's fix
+ * for the #127 auth burst). Neither is wrong; together they meant the loaded budget was
+ * whatever the last session to open had asked for.
+ *
+ * Reproduced before the fix: session A opened on budget A and wrote to it, session B opened
+ * and switched to budget B, and session A's NEXT write landed in budget B. The budget ACL
+ * could not see it, because `_enforceBudgetAcl` validates the budget the session believes it
+ * is on while the operation executes against whatever is loaded.
+ *
+ * Written by every path that downloads a budget; read inside the api lock by the adapter's
+ * precondition check. Lives here for the same reason the live flag does: the pool must update
+ * it without importing the adapter.
+ */
+let _loadedBudgetSyncId: string | null = null;
+
+export function getLoadedBudgetSyncId(): string | null {
+  return _loadedBudgetSyncId;
+}
+
+export function setLoadedBudgetSyncId(syncId: string | null): void {
+  _loadedBudgetSyncId = syncId;
 }
