@@ -678,8 +678,10 @@ let writeQueueBatchCount = 0;
  * whole body and is by construction one consistent session, so a listing taken at its start
  * is valid for its duration ONCE writes invalidate it. Anything wider would serve one
  * session's data to another session or another budget, which is a data-disclosure bug, not
- * a staleness bug. The cache is therefore created at the top of a drain and destroyed in the
- * `finally`, including on the fatal path, so it cannot outlive one.
+ * a staleness bug. The cache therefore lives in an AsyncLocalStorage entered by the drain
+ * itself, so it exists only for the duration of that run and there is no assignment for any
+ * path, fatal or otherwise, to leave behind. (This sentence used to describe a module-level
+ * variable cleared in a `finally`; that is what the store replaced.)
  *
  * WHY INVALIDATION IS NOT OPTIONAL. A cache without it converts an occasional race into a
  * guaranteed false not-found: a create early in the drain would be invisible to every later
@@ -724,7 +726,18 @@ const PRESERVES_ALL_ENTITY_LISTINGS = ['accounts', 'categories', 'categoryGroups
  *
  * With the store, the cache exists only inside the drain's own `.run()`. Any other caller
  * gets `undefined` and a straight pass-through, and there is nothing to reach even by
- * mistake. `requestContext` is a separate store carrying the sessionId; this one deliberately
+ * mistake.
+ *
+ * BE PRECISE ABOUT WHAT "STRUCTURAL" BUYS, because the trade is real. A module-level binding
+ * was context-INDEPENDENT; an ALS is not. Every readDrainListing call site is
+ * `withConcurrency(() => retry(() => readDrainListing(...)))`, and `withConcurrency` queues a
+ * plain closure on a module-level array when saturated, invoking it from ANOTHER task's
+ * `.finally()`, so a queued task runs in the releasing task's async context. The store
+ * survives that today by arrangement rather than by construction: the drain holds the api lock
+ * for its whole body, so every limiter task inside it is already a drain-context task. If that
+ * ever stops being true the failure is SILENT and benign (a pass-through: correct but slow,
+ * never a wrong or foreign cache, since readDrainListing has no caller outside a drain op), so
+ * case (11) of the drain-cache test squeezes the limiter to 1 and counts the listings. `requestContext` is a separate store carrying the sessionId; this one deliberately
  * does not ride along in it, because their lifetimes differ (a request spans many drains, a
  * drain can span two sessions' operations).
  */
@@ -753,9 +766,7 @@ async function readDrainListing<T>(kind: DrainListingKind, fetch: () => Promise<
   } catch (error) {
     // A failed listing must not be cached: the next guard in this drain would inherit the
     // failure and refuse a write for a reason that has nothing to do with its own target.
-    if (drainListingStore.getStore()?.get(kind) === (inFlight as Promise<unknown>)) {
-      drainListingStore.getStore()!.delete(kind);
-    }
+    if (drainListingCache.get(kind) === (inFlight as Promise<unknown>)) drainListingCache.delete(kind);
     throw error;
   }
 }
@@ -2467,6 +2478,17 @@ export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
     return filtered;
   });
 }
+/**
+ * #378 CAVEAT ON THIS METHOD'S preservesListings CLAIM. This forwards an arbitrary callback to
+ * rawBatchBudgetUpdates, which upstream is only a batch-budget-start / await func() /
+ * batch-budget-end transaction bracket: it performs no writes of its own, so the annotation is
+ * really a claim about whatever the CALLBACK does. It holds today because
+ * src/tools/budget_updates_batch.ts is the only caller passing a real callback and it calls
+ * only rawSetBudgetAmount and rawSetBudgetCarryover, both verified listing-safe. Nothing in
+ * the signature or upstream constrains that. RE-AUDIT THIS when a second caller appears: a
+ * callback reaching rawCreateCategory or rawDeleteAccount would violate the claim with no
+ * compiler or runtime signal, and the symptom would be a false not-found elsewhere in the drain.
+ */
 export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {
   observability.incrementToolCall('actual.budgets.batchUpdates').catch(() => {});
   return queueWriteOperation(async () => {
