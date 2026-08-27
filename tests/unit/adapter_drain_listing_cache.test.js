@@ -271,7 +271,7 @@ describe('(8) a drain keeps every session in it alive, refreshed PER OP');
 }
 
 // ---------------------------------------------------------------------------
-describe('(9) isolation: separate drains never share cached state, and the store is unreachable outside one');
+describe('(9) isolation: separate drains never share cached state, and no module-level cache binding exists');
 {
   reset();
   const { requestContext } = await import('../../dist/src/lib/requestContext.js');
