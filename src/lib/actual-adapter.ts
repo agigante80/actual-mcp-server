@@ -785,6 +785,9 @@ async function processWriteQueue() {
   // the legacy branch, never that we attribute one session's writes to
   // another's pool entry.
   const batchSessionId = batch[0]?.sessionId;
+  // #378: every distinct session represented in this batch, computed once. See the touch call
+  // in the dispatch loop for why batchSessionId alone is not enough there.
+  const batchSessionIds = [...new Set(batch.map((b) => b.sessionId).filter((x): x is string => !!x))];
   const usePoolBranch = !!batchSessionId && _hasPooledConnection(batchSessionId);
   logger.debug(
     `[WRITE QUEUE] Processing batch of ${batch.length} operations ` +
@@ -865,7 +868,7 @@ async function processWriteQueue() {
               ),
             );
 
-            // #378: keep the session alive for the length of its own drain.
+            // #378: keep every session in this batch alive for the length of the drain.
             //
             // `connectionPool.touch()` is driven by inbound HTTP requests, not by write ops,
             // so `lastActivity` does not advance while a drain runs. That was harmless while
@@ -876,15 +879,22 @@ async function processWriteQueue() {
             // api.shutdown() WITHOUT holding withApiLock, which is the same hazard this file
             // already documents as the reason stdio is kept off the pool: it tears the
             // singleton down underneath an in-flight operation.
-            if (batchSessionId) {
-              try {
-                connectionPool.touch(batchSessionId);
-              } catch (_e) {
-                // Touching is best effort. A pool entry that has already gone is exactly the
-                // case the pool branch tolerates elsewhere, and failing a completed write
-                // because we could not refresh a timestamp would be worse than the staleness.
-              }
-            }
+            //
+            // THIS MUST STAY INSIDE THE LOOP. A single touch at drain start does nothing for
+            // a drain whose wall clock is the SUM of its ops, which is the entire reason the
+            // hazard exists. Hoisting it out as a tidy-up reopens the bug in full, and case
+            // (8) of tests/unit/adapter_drain_listing_cache.test.js samples the pool clock
+            // from inside the raw call specifically so that hoist goes red.
+            //
+            // AND IT MUST COVER EVERY SESSION IN THE BATCH, not just batchSessionId. That is
+            // `batch[0]?.sessionId`, a heuristic that is sound for the pool-branch decision
+            // above (a wrong guess merely falls back to the legacy path) and NOT sound here.
+            // The write queue is process-global, so two HTTP sessions writing inside the same
+            // WRITE_SESSION_DELAY_MS window batch together. Sweeping the untouched one calls
+            // api.shutdown() on the PROCESS-GLOBAL singleton, which kills the other session's
+            // in-flight operation as well. `touch` is a Map lookup that no-ops on an unknown
+            // id and cannot throw, so covering the whole set costs nothing.
+            for (const sid of batchSessionIds) connectionPool.touch(sid);
           }
         }
 
@@ -2182,7 +2192,9 @@ export async function closeAccount(
  * the same account would let this guard's pre-read pass and the write proceed against a row
  * that no longer existed. The batch now dispatches SEQUENTIALLY in enqueue order, so the
  * cycle excludes batch siblings too. Restoring the concurrent dispatch reopens it, and
- * tests/unit/adapter_drain_listing_cache.test.js turns ten assertions red if you do.
+ * tests/unit/adapter_drain_listing_cache.test.js goes red across its create-then-update,
+ * delete-then-update and ordering cases if you do. Not quoting a count on purpose: this
+ * comment and its CLAUDE.md twin both drifted on one within this ticket.
  *
  * The not-found message covers both reasons an id can be missing (never existed, or removed
  * by a close while it had no transactions) rather than distinguishing them. `q().withDead()`
