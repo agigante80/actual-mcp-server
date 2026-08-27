@@ -1,11 +1,10 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { UUID_PATTERN } from '../lib/constants.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  id: z.string().regex(UUID_PATTERN, 'Invalid UUID format')
-    .describe('UUID of the schedule to delete (from actual_schedules_get)'),
+  id: CommonSchemas.scheduleId.describe('UUID of the schedule to delete (from actual_schedules_get)'),
 });
 
 /**

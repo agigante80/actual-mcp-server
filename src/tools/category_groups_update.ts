@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  id: z.string().describe('Category group ID to update'),
+  id: CommonSchemas.categoryGroupId.describe('Category group ID to update'),
   fields: z.object({
     name: z.string().optional().describe('New group name'),
     is_income: z.boolean().optional().describe('Whether this is an income category group'),

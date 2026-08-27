@@ -82,6 +82,19 @@ export const tagIdSchema = z
   .regex(UUID_PATTERN, 'Invalid tag ID format (expected UUID)')
   .describe('Tag UUID');
 
+/**
+ * Schedule UUID validation
+ * Used for: schedule management operations (update, delete)
+ *
+ * #380: added because `schedules_update` and `schedules_delete` were inlining
+ * `UUID_PATTERN` directly, which is the same rule expressed twice and is how a fifth way
+ * of describing an id appears.
+ */
+export const scheduleIdSchema = z
+  .string()
+  .regex(UUID_PATTERN, 'Invalid schedule ID format (expected UUID)')
+  .describe('Schedule UUID');
+
 // ============================================================================
 // DATE SCHEMAS
 // ============================================================================
@@ -249,6 +262,7 @@ export const CommonSchemas = {
   payeeId: payeeIdSchema,
   ruleId: ruleIdSchema,
   tagId: tagIdSchema,
+  scheduleId: scheduleIdSchema,
 
   // Dates
   date: dateSchema,

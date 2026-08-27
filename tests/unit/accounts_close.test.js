@@ -56,8 +56,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   adapterMod._setSkipApiInitForTests(true);
   witness = makeCycleWitness(adapterMod);
 
-  const OPEN = { id: 'acct-1', name: 'Checking', closed: false };
-  const CLOSED = { id: 'acct-1', name: 'Checking', closed: true };
+  const OPEN = { id: '60000000-0000-4000-8000-000000000001', name: 'Checking', closed: false };
+  const CLOSED = { id: '60000000-0000-4000-8000-000000000001', name: 'Checking', closed: true };
   const DEST = { id: 'acct-2', name: 'Savings', closed: false };
   const DEST_CLOSED = { id: 'acct-3', name: 'Old Savings', closed: true };
 
@@ -69,7 +69,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#357] accounts_close: positive, an account with transactions closes');
   {
     reset([[OPEN], [CLOSED]]);
-    const res = await tool.call({ id: 'acct-1' });
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001' });
     check(res?.success === true,             'returns success: true');
     check(res?.closed === true,              'reports that it is closed');
     check(closeCalls === 1,                  'raw closeAccount called exactly once');
@@ -85,7 +85,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     // Upstream tombstones it, so it is simply gone from the post-read.
     reset([[OPEN], []]);
-    const res = await tool.call({ id: 'acct-1' });
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001' });
     check(res?.success === true,                        'still a success: the account is gone');
     check(res?.removed === true,                        'flags that it was removed, not closed');
     check(/REMOVED/i.test(res?.message ?? ''),          'message says removed');
@@ -96,7 +96,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#357] accounts_close: (a) already closed is idempotent and truthful');
   {
     reset([[CLOSED]]);
-    const res = await tool.call({ id: 'acct-1' });
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001' });
     check(res?.success === true,                          'still succeeds: the requested state holds');
     check(res?.alreadyClosed === true,                    'flags that nothing changed');
     check(/already closed/i.test(res?.message ?? ''),      'message says already closed');
@@ -107,7 +107,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([[OPEN]]);
     let threw = null;
-    try { await tool.call({ id: 'ghost' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '99999999-0000-4000-8000-000000000001' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                    'throws');
     check(!!threw && /not found/i.test(threw.message),                'says not found');
     check(!!threw && threw.message.includes('actual_accounts_list'),  'names the listing tool');
@@ -119,7 +119,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([[OPEN, DEST], [CLOSED, DEST]]);
     const res = await tool.call({
-      id: 'acct-1',
+      id: '60000000-0000-4000-8000-000000000001',
       transferAccountId: 'acct-2',
       transferCategoryId: 'cat-9',
     });
@@ -133,7 +133,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     reset([[OPEN], [OPEN]]);
     closeThrows = new Error('balance is non-zero: transferAccountId is required');
     let threw = null;
-    try { await tool.call({ id: 'acct-1' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                       'throws');
     check(!!threw && threw.message.includes('transferAccountId'),        'names the parameter to supply');
     check(!!threw && /non-zero balance/i.test(threw.message),            'explains why it is needed');
@@ -144,7 +144,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([[OPEN]]);
     let threw = null;
-    try { await tool.call({ id: 'acct-1', transferAccountId: 'ghost-dest' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: '99999999-0000-4000-8000-000000000002' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                  'throws');
     check(!!threw && /destination/i.test(threw.message),             'error is about the destination');
     check(closeCalls === 0,                                          'raw closeAccount NOT called');
@@ -155,7 +155,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // The balancing transaction would land somewhere hidden from most views.
     reset([[OPEN, DEST_CLOSED]]);
     let threw = null;
-    try { await tool.call({ id: 'acct-1', transferAccountId: 'acct-3' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: 'acct-3' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                              'throws');
     check(!!threw && /CLOSED/.test(threw.message),              'says the destination is closed');
     check(!!threw && threw.message.includes('Old Savings'),     'names the destination');
@@ -170,7 +170,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     categories = [{ id: 'cat-9', name: 'Misc' }];
     let threw = null;
     try {
-      await tool.call({ id: 'acct-1', transferAccountId: 'acct-2', transferCategoryId: 'cat-ghost' });
+      await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: 'acct-2', transferCategoryId: '99999999-0000-4000-8000-000000000003' });
     } catch (e) { threw = e; }
     check(threw instanceof Error,                                     'throws');
     check(!!threw && /category/i.test(threw.message),                  'error is about the category');
@@ -182,7 +182,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([[OPEN, DEST], [CLOSED, DEST]]);
     categories = [{ id: 'cat-9', name: 'Misc' }];
-    const res = await tool.call({ id: 'acct-1', transferAccountId: 'acct-2', transferCategoryId: 'cat-9' });
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: 'acct-2', transferCategoryId: 'cat-9' });
     check(res?.success === true,            'succeeds with a valid category');
     check(lastCloseArgs?.[2] === 'cat-9',   'transferCategoryId still forwarded');
   }
@@ -191,7 +191,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([[OPEN], [OPEN]]);
     let threw = null;
-    try { await tool.call({ id: 'acct-1' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                        'throws when the account is still open');
     check(!!threw && /still open/i.test(threw.message),   'says it is still open');
     check(closeCalls === 1,                              'the write was attempted');
@@ -201,7 +201,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   {
     reset([[OPEN]]);
     let threw = null;
-    try { await tool.call({ id: 'acct-1', transferAccountId: 'acct-1' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: '60000000-0000-4000-8000-000000000001' }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'rejects transferring to the account being closed');
     check(getCalls === 0,         'the adapter was never reached on a Zod failure');
 

@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import { notFoundMsg } from '../lib/errors.js';
 
 const InputSchema = z.object({
-  payeeId: z.string().describe('ID of the payee to get rules for'),
+  payeeId: CommonSchemas.payeeId.describe('ID of the payee to get rules for'),
 });
 
 const tool: ToolDefinition = {

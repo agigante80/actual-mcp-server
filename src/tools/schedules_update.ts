@@ -1,17 +1,16 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { UUID_PATTERN } from '../lib/constants.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import { RecurConfigSchema } from '../lib/schemas/recur.js';
 
 const InputSchema = z.object({
-  id: z.string().regex(UUID_PATTERN, 'Invalid UUID format')
-    .describe('UUID of the schedule to update (from actual_schedules_get)'),
+  id: CommonSchemas.scheduleId.describe('UUID of the schedule to update (from actual_schedules_get)'),
   name: z.string().optional()
     .describe('New display name for the schedule'),
-  payee: z.string().regex(UUID_PATTERN, 'Invalid UUID format').nullable().optional()
+  payee: CommonSchemas.payeeId.nullable().optional()
     .describe('New payee UUID, or null to clear'),
-  account: z.string().regex(UUID_PATTERN, 'Invalid UUID format').nullable().optional()
+  account: CommonSchemas.accountId.nullable().optional()
     .describe('New account UUID, or null to clear'),
   amount: z.number().int().optional()
     .describe('New amount in cents. Negative = expense, positive = income'),

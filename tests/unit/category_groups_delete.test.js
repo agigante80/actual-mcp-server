@@ -54,9 +54,9 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#142] category_groups_delete: positive happy path');
   {
     reset();
-    groupsResponse = [{ id: 'cg-1' }];
+    groupsResponse = [{ id: '20000000-0000-4000-8000-000000000001' }];
     witness.reset();
-    const res = await tool.call({ id: 'cg-1' });
+    const res = await tool.call({ id: '20000000-0000-4000-8000-000000000001' });
     check(res?.success === true, 'returns { success: true }');
     check(deleteCalls === 1,     'rawDeleteCategoryGroup called');
     // The #142 property, asserted against the real queue rather than a stubbed wrapper:
@@ -71,13 +71,13 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     groupsResponse = [];
     witness.reset();
     let threw = null;
-    try { await tool.call({ id: 'cg-missing' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '20000000-0000-4000-8000-0000000000ff' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                 'throws on not-found');
     // #377: the refusal is typed, so the tool layer never has to read the message to know
     // what happened. The message content is still asserted because a caller acts on it.
     check(isPreflightRefusal(threw),                              'and it is a typed pre-flight refusal');
     check(threw?.message?.includes('Category group'),             'error mentions Category group');
-    check(threw?.message?.includes('cg-missing'),                 'error mentions the id');
+    check(threw?.message?.includes('20000000-0000-4000-8000-0000000000ff'),                 'error mentions the id');
     check(threw?.message?.includes('actual_category_groups_get'), 'error mentions list tool');
     check(deleteCalls === 0,                                      'rawDeleteCategoryGroup NOT called');
     check(witness.readInCycleNoWrite(),

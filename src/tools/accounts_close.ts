@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z
   .object({
-    id: z.string().min(1).max(64).describe('Account ID to close'),
+    id: CommonSchemas.accountId.describe('Account ID to close'),
     // #357: documented by the Actual API reference as required when the account's
     // balance is non-zero, and previously not exposed at all, which made such an
     // account impossible to close through this server.

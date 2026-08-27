@@ -121,15 +121,15 @@ async function expectCallError(tool, input, label) {
 
   if (!expectParseError(batch, {}, 'empty input — missing operations')) fail();
   if (!expectParseError(batch, { operations: 'not-array' }, 'operations must be an array')) fail();
-  if (!expectParseError(batch, { operations: [{ categoryId: 'cat_1', amount: 100 }] },
+  if (!expectParseError(batch, { operations: [{ categoryId: '10000000-0000-4000-8000-000000000001', amount: 100 }] },
     'operation missing required month')) fail();
-  if (!expectParseError(batch, { operations: [{ month: '2025-13', categoryId: 'cat_1' }] },
+  if (!expectParseError(batch, { operations: [{ month: '2025-13', categoryId: '10000000-0000-4000-8000-000000000001' }] },
     'invalid month format (month 13)')) fail();
-  if (!expectParseError(batch, { operations: [{ month: '25-01', categoryId: 'cat_1' }] },
+  if (!expectParseError(batch, { operations: [{ month: '25-01', categoryId: '10000000-0000-4000-8000-000000000001' }] },
     'invalid month format (2-digit year)')) fail();
   // Valid minimal input
   if (!expectParseOk(batch, {
-    operations: [{ month: '2026-03', categoryId: 'cat_1', amount: 10000 }],
+    operations: [{ month: '2026-03', categoryId: '10000000-0000-4000-8000-000000000001', amount: 10000 }],
   }, 'valid batch operation')) fail();
 
   // ── actual_budgets_transfer ─────────────────────────────────────────────
@@ -137,21 +137,23 @@ async function expectCallError(tool, input, label) {
 
   if (!expectParseError(transfer, {}, 'empty input — all fields required')) fail();
   if (!expectParseError(transfer,
-    { month: '2026-03', fromCategoryId: 'cat_1', toCategoryId: 'cat_2' },
+    { month: '2026-03', fromCategoryId: '10000000-0000-4000-8000-000000000001', toCategoryId: '10000000-0000-4000-8000-000000000002' },
     'missing amount')) fail();
   if (!expectParseError(transfer,
-    { month: '2026-03', fromCategoryId: 'cat_1', toCategoryId: 'cat_2', amount: 'fifty' },
+    { month: '2026-03', fromCategoryId: '10000000-0000-4000-8000-000000000001', toCategoryId: '10000000-0000-4000-8000-000000000002', amount: 'fifty' },
     'amount must be number')) fail();
   // Runtime guard: amount must be positive
   if (!await expectCallError(transfer,
-    { month: '2026-03', fromCategoryId: 'cat_1', toCategoryId: 'cat_2', amount: 0 },
+    { month: '2026-03', fromCategoryId: '10000000-0000-4000-8000-000000000001', toCategoryId: '10000000-0000-4000-8000-000000000002', amount: 0 },
     'amount=0 must be rejected at runtime')) fail();
   if (!await expectCallError(transfer,
-    { month: '2026-03', fromCategoryId: 'cat_1', toCategoryId: 'cat_2', amount: -100 },
+    { month: '2026-03', fromCategoryId: '10000000-0000-4000-8000-000000000001', toCategoryId: '10000000-0000-4000-8000-000000000002', amount: -100 },
     'negative amount must be rejected at runtime')) fail();
   // Runtime guard: fromCategoryId !== toCategoryId
   if (!await expectCallError(transfer,
-    { month: '2026-03', fromCategoryId: 'same_id', toCategoryId: 'same_id', amount: 100 },
+    // #380: a VALID uuid on both sides. With a non-UUID this case began failing at the
+    // schema, so the runtime same-category guard it exists to exercise was never reached.
+    { month: '2026-03', fromCategoryId: '10000000-0000-4000-8000-000000000001', toCategoryId: '10000000-0000-4000-8000-000000000001', amount: 100 },
     'same from/to category must be rejected at runtime')) fail();
 
   // ── actual_budgets_setAmount ────────────────────────────────────────────
@@ -159,17 +161,17 @@ async function expectCallError(tool, input, label) {
 
   if (!expectParseError(setAmount, {}, 'empty input — all fields required')) fail();
   if (!expectParseError(setAmount,
-    { month: '', categoryId: 'cat_1', amount: 100 },
+    { month: '', categoryId: '10000000-0000-4000-8000-000000000001', amount: 100 },
     'empty month string rejected (min length 1)')) fail();
   if (!expectParseError(setAmount,
     { month: '2026-03', categoryId: '', amount: 100 },
-    'empty categoryId rejected (min length 1)')) fail();
+    'empty categoryId rejected (#380: now by UUID format, not min length)')) fail();
   if (!expectParseError(setAmount,
-    { month: '2026-03', categoryId: 'cat_1', amount: 'not-a-number' },
+    { month: '2026-03', categoryId: '10000000-0000-4000-8000-000000000001', amount: 'not-a-number' },
     'string amount rejected (must be number)')) fail();
   // Valid minimal input
   if (!expectParseOk(setAmount,
-    { month: '2026-03', categoryId: 'cat_1', amount: 50000 },
+    { month: '2026-03', categoryId: '10000000-0000-4000-8000-000000000001', amount: 50000 },
     'valid setAmount')) fail();
 
   // ── actual_schedules_create ─────────────────────────────────────────────
@@ -330,11 +332,11 @@ async function expectCallError(tool, input, label) {
     { id: '' },
     'empty id rejected (min 1)')) fail();
   if (!expectParseError(accounts_get_balance_tool,
-    { id: 'acc-1', unknownField: 'bad' },
+    { id: '60000000-0000-4000-8000-000000000001', unknownField: 'bad' },
     'unknown field rejected by strict schema')) fail();
   if (!expectParseOk(accounts_get_balance_tool,
-    { id: 'any-non-empty-string' },
-    'valid non-empty id accepted')) fail();
+    { id: '60000000-0000-4000-8000-000000000001' },
+    'valid account UUID accepted (#380: was any non-empty string)')) fail();
 
   // ── actual_categories_create (C2) ─────────────────────────────────────────
   console.log('\n[actual_categories_create — required name + UUID group_id]');
@@ -436,19 +438,19 @@ async function expectCallError(tool, input, label) {
     {},
     'missing both id and fields rejected')) fail();
   if (!expectParseError(rules_update_tool,
-    { id: 'rule_1' },
+    { id: '30000000-0000-4000-8000-000000000001' },
     'missing fields rejected')) fail();
   if (!expectParseError(rules_update_tool,
     { fields: {} },
     'missing id rejected')) fail();
   if (!expectParseError(rules_update_tool,
-    { id: 'rule_1', fields: { stage: 'invalid-stage' } },
+    { id: '30000000-0000-4000-8000-000000000001', fields: { stage: 'invalid-stage' } },
     'invalid stage enum in fields rejected')) fail();
   if (!expectParseOk(rules_update_tool,
-    { id: 'rule_1', fields: {} },
+    { id: '30000000-0000-4000-8000-000000000001', fields: {} },
     'valid id + empty fields object accepted')) fail();
   if (!expectParseOk(rules_update_tool,
-    { id: 'rule_1', fields: { stage: 'pre' } },
+    { id: '30000000-0000-4000-8000-000000000001', fields: { stage: 'pre' } },
     'valid id + stage=pre accepted')) fail();
 
   // ── actual_transactions_create (T1) ───────────────────────────────────────

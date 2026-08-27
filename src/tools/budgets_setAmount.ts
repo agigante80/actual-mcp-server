@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import { isPreflightRefusal } from '../lib/errors.js';
 
 const InputSchema = z.object({
@@ -8,7 +9,7 @@ const InputSchema = z.object({
   // regex matches actual_budgets_holdForNextMonth and the other month-taking tools; the
   // adapter additionally checks the month is one this budget actually has.
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format'),
-  categoryId: z.string().min(1).max(64),
+  categoryId: CommonSchemas.categoryId,
   amount: z.number().int('amount must be an integer (cents)'),
 });
 

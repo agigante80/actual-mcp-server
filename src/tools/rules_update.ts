@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 // Define the schema for rule conditions and actions (same as create)
 const ConditionSchema = z.object({
@@ -31,7 +32,7 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
 };
 
 const InputSchema = z.object({
-  id: z.string().describe('Rule ID to update'),
+  id: CommonSchemas.ruleId.describe('Rule ID to update'),
   fields: z.object({
     // #342: null is Actual's DEFAULT stage; the literal "default" is rejected by
     // its validator. Deliberately NO .default() here: this is a partial update, so

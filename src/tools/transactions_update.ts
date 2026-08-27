@@ -4,7 +4,15 @@ import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  id: z.string().optional().describe('Transaction ID to update (optional for smoke tests, required for actual usage)'),
+  // #380: REQUIRED, and typed. It was `.optional()` with the describe "optional for smoke
+  // tests, required for actual usage": a published contract weakened to suit a test. The
+  // handler then returned `{ success: true }` for a call with no id, writing nothing, which
+  // is the #350 failure this project has spent three releases removing. A model that omitted
+  // the id was told its edit had succeeded.
+  //
+  // The smoke test does supply an id (generated_tools.smoke.test.js), so the escape hatch
+  // was not even load bearing when it was removed.
+  id: CommonSchemas.transactionId.describe('Transaction ID to update'),
   fields: z.object({
     account: z.string().nullable().optional().describe('Account ID'),
     date: z.string().nullable().optional().describe('Transaction date (YYYY-MM-DD)'),
@@ -36,10 +44,6 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    // For smoke tests, return early if no id provided
-    if (!input.id) {
-      return { success: true };
-    }
     await adapter.updateTransaction(input.id, input.fields);
     return { success: true };
   },

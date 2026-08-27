@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   // Bounded, because the id is echoed into the error message and into the structured
   // logs. Not tightened to CommonSchemas.accountId (a UUID) here: several fixtures use
   // short non-UUID ids, and that sweep is tracked separately alongside #365.
-  id: z.string().min(1).max(64).describe('Account ID to reopen'),
+  id: CommonSchemas.accountId.describe('Account ID to reopen'),
 });
 
 /**

@@ -54,8 +54,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#142] rules_delete: positive happy path');
   {
     reset();
-    rulesResponse = [{ id: 'rule-1' }];
-    const res = await tool.call({ id: 'rule-1' });
+    rulesResponse = [{ id: '30000000-0000-4000-8000-000000000001' }];
+    const res = await tool.call({ id: '30000000-0000-4000-8000-000000000001' });
     check(res?.success === true, 'returns success: true');
     check(deleteCalls === 1,     'rawDeleteRule called');
     // The #142 property, asserted so it can actually detect its own reversal (#376). A bare
@@ -71,11 +71,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     reset();
     rulesResponse = [];
     let threw = null;
-    try { await tool.call({ id: 'rule-missing' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '30000000-0000-4000-8000-0000000000ff' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                       'throws on not-found');
     check(isPreflightRefusal(threw),                    'and it is a typed pre-flight refusal (#377)');
     check(threw?.message?.includes('Rule'),             'error mentions Rule');
-    check(threw?.message?.includes('rule-missing'),     'error mentions the id');
+    check(threw?.message?.includes('30000000-0000-4000-8000-0000000000ff'),     'error mentions the id');
     check(threw?.message?.includes('actual_rules_get'), 'error mentions list tool');
     check(deleteCalls === 0,                            'rawDeleteRule NOT called');
     check(witness.readInCycleNoWrite(),
@@ -85,15 +85,15 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#355] rules_delete: rule is owned by a schedule, upstream refuses');
   {
     reset();
-    rulesResponse = [{ id: 'rule-sched' }];
+    rulesResponse = [{ id: '30000000-0000-4000-8000-00000000005c' }];
     deleteResult = false;                 // what upstream returns for a schedule's rule
     let threw = null;
-    try { await tool.call({ id: 'rule-sched' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '30000000-0000-4000-8000-00000000005c' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                             'throws instead of reporting success');
     check(!!threw && /schedule/i.test(threw.message),          'error says the rule belongs to a schedule');
     check(!!threw && threw.message.includes('actual_schedules_delete'),
                                                               'error names actual_schedules_delete');
-    check(!!threw && threw.message.includes('rule-sched'),     'error names the rule id');
+    check(!!threw && threw.message.includes('30000000-0000-4000-8000-00000000005c'),     'error names the rule id');
     check(deleteCalls === 1,                                   'the delete was still attempted exactly once');
     // NOT a pre-flight refusal: the write WAS attempted and upstream declined it. A
     // PreflightRefusal means nothing was tried, which would be the wrong claim here.
@@ -107,9 +107,9 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // Only an EXPLICIT false is a refusal. A build that returns undefined must still
     // succeed, so this stays correct against older and future @actual-app/api versions.
     reset();
-    rulesResponse = [{ id: 'rule-1' }];
+    rulesResponse = [{ id: '30000000-0000-4000-8000-000000000001' }];
     deleteResult = undefined;
-    const res = await tool.call({ id: 'rule-1' });
+    const res = await tool.call({ id: '30000000-0000-4000-8000-000000000001' });
     check(res?.success === true, 'undefined return is treated as success, not refusal');
   }
 

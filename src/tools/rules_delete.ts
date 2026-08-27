@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   // Bounded for the same reason as the payee ids in #356: this value is echoed into the
   // not-found message, into the schedule-owned refusal, and into logger.error.
-  id: z.string().min(1).max(64).describe('Rule ID to delete'),
+  id: CommonSchemas.ruleId.describe('Rule ID to delete'),
 });
 
 /**
