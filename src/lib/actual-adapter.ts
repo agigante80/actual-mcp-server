@@ -1,6 +1,7 @@
 import type { components } from '../../generated/actual-client/types.js';
 import { subtransactionsSum } from './schemas/common.js';
 
+import { AsyncLocalStorage } from 'async_hooks';
 import api from '@actual-app/api';
 
 // @actual-app/api is a CJS package (no "type" field). In NodeNext/ESM context TypeScript
@@ -690,7 +691,44 @@ let writeQueueBatchCount = 0;
  * sequentially, further down. Both are needed and neither substitutes for the other.
  */
 type DrainListingKind = 'accounts' | 'categories' | 'categoryGroups' | 'payees';
-let drainListingCache: Map<DrainListingKind, Promise<unknown>> | null = null;
+
+/**
+ * #378: the four entity listings, for a write that touches NONE of them.
+ *
+ * Only for operations that write to their OWN table and cannot mint or remove an account,
+ * category, category group or payee: notes, the budget-amount family, tags, rules and
+ * schedules. Each was checked against the installed @actual-app/api source map rather than
+ * assumed: `api/schedule-create`, `api/rule-create` and `api/tag-create` all delegate to their
+ * own handler with no payee path, and the budget writes land in reflect_budgets/zero_budgets.
+ *
+ * NOT for anything that mutates an entity, even indirectly. The traps that kept methods off
+ * this list: `deleteAccount` and `closeAccount` can remove an account's TRANSFER PAYEE;
+ * `updateAccount` renaming an account renames its transfer payee, so the payee listing's
+ * CONTENT changes even though its id set does not, and guards read fields as well as ids;
+ * `deleteCategoryGroup` takes its categories with it; and every transaction write can mint a
+ * payee by two routes (see addTransactions). Those all stay on the invalidate-everything
+ * default, which costs a listing and cannot be wrong.
+ */
+const PRESERVES_ALL_ENTITY_LISTINGS = ['accounts', 'categories', 'categoryGroups', 'payees'] as const;
+/**
+ * The drain's cache lives in an AsyncLocalStorage, NOT in a module-level variable.
+ *
+ * This is structural on purpose. The first version of this used `let drainListingCache` at
+ * module scope, and review could show it was unreachable from outside a drain only by
+ * ARGUING it: every call site happens to sit inside a `queueWriteOperation` body, and
+ * `isProcessingWrites` happens to admit one drain at a time. Both are true and both are
+ * conventions that a future edit can break silently, and the failure they would produce is a
+ * cache shared across sessions and budgets, which in a multi-budget deployment means one
+ * user's guard reading another user's entity list. That is an isolation bug, not a staleness
+ * bug, so it should not rest on a convention.
+ *
+ * With the store, the cache exists only inside the drain's own `.run()`. Any other caller
+ * gets `undefined` and a straight pass-through, and there is nothing to reach even by
+ * mistake. `requestContext` is a separate store carrying the sessionId; this one deliberately
+ * does not ride along in it, because their lifetimes differ (a request spans many drains, a
+ * drain can span two sessions' operations).
+ */
+const drainListingStore = new AsyncLocalStorage<Map<DrainListingKind, Promise<unknown>>>();
 
 /**
  * Read one entity listing, memoised for the life of the current drain.
@@ -703,6 +741,7 @@ let drainListingCache: Map<DrainListingKind, Promise<unknown>> | null = null;
  * one drain therefore share a single in-flight listing rather than racing to start two.
  */
 async function readDrainListing<T>(kind: DrainListingKind, fetch: () => Promise<T>): Promise<T> {
+  const drainListingCache = drainListingStore.getStore();
   if (!drainListingCache) return await fetch();
   const cached = drainListingCache.get(kind);
   if (cached) return (await cached) as T;
@@ -714,7 +753,9 @@ async function readDrainListing<T>(kind: DrainListingKind, fetch: () => Promise<
   } catch (error) {
     // A failed listing must not be cached: the next guard in this drain would inherit the
     // failure and refuse a write for a reason that has nothing to do with its own target.
-    if (drainListingCache?.get(kind) === (inFlight as Promise<unknown>)) drainListingCache.delete(kind);
+    if (drainListingStore.getStore()?.get(kind) === (inFlight as Promise<unknown>)) {
+      drainListingStore.getStore()!.delete(kind);
+    }
     throw error;
   }
 }
@@ -727,6 +768,7 @@ async function readDrainListing<T>(kind: DrainListingKind, fetch: () => Promise<
  * is a false not-found, so when in doubt, invalidate.
  */
 function invalidateDrainListing(...kinds: DrainListingKind[]): void {
+  const drainListingCache = drainListingStore.getStore();
   if (!drainListingCache) return;
   for (const kind of kinds) drainListingCache.delete(kind);
 }
@@ -795,11 +837,11 @@ async function processWriteQueue() {
   );
 
   try {
-    // #378 (L7): opened INSIDE the try whose `finally` nulls it. Created earlier it would
-    // survive a throw between creation and the try, which is benign today only because
-    // isProcessingWrites would wedge the queue first and make the stuck cache unreachable.
-    // Not worth depending on that accident.
-    drainListingCache = new Map();
+    // #378: the drain's listing cache exists ONLY for the duration of this run. There is no
+    // assignment to clear and therefore no path, fatal or otherwise, that can leak it: when
+    // the callback returns the store is gone. This replaced a module-level variable plus a
+    // `finally` that nulled it, which worked but rested on that finally being reached.
+    await drainListingStore.run(new Map(), async () => {
     await withApiLock(async () => {
       try {
         if (usePoolBranch) {
@@ -955,10 +997,8 @@ async function processWriteQueue() {
         }
       }
     });
+    });
   } finally {
-    // #378: the cache dies with the drain, on every path including the fatal one. A drain
-    // that threw partway must not hand a partially-invalidated view to the next drain.
-    drainListingCache = null;
     isProcessingWrites = false;
     // #278: ALWAYS re-drain a non-empty queue. The old `&& writeSessionTimeout === null`
     // guard was the lost wakeup: a timer that fired mid-drain left a dead handle here,
@@ -1439,7 +1479,7 @@ export async function transferBudgetAmount(
       fromCategory: { id: fromCategoryId, previousAmount: prevFrom, newAmount: prevFrom - amount },
       toCategory: { id: toCategoryId, previousAmount: prevTo, newAmount: prevTo + amount },
     };
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
 export async function createAccount(account: components['schemas']['Account'] | unknown, initialBalance?: number): Promise<string> {
@@ -1812,7 +1852,7 @@ export async function createRule(rule: unknown): Promise<string> {
     const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 export async function updateRule(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.rules.update').catch(() => {});
@@ -1852,7 +1892,7 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
     
     await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     logger.debug(`[UPDATE RULE] Update completed for rule ${id}`);
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 /**
  * #355: RETURNS the upstream verdict instead of discarding it, for the same reason
@@ -1920,7 +1960,7 @@ export async function upsertRule(
     if (ruleData.stage === undefined) ruleData.stage = null;
     const rawId = await withConcurrency(() => retry(() => rawCreateRule(ruleData) as Promise<unknown>, { retries: 0, backoffMs: 200 }));
     return { id: normalizeToId(rawId), created: true };
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
 /**
@@ -1973,7 +2013,7 @@ export async function deleteRule(id: string): Promise<void> {
           'which removes this rule too.',
       );
     }
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 export async function getSchedules(): Promise<unknown[]> {
   return withActualApi(async () => {
@@ -1990,13 +2030,13 @@ export async function createSchedule(schedule: unknown): Promise<string> {
     const raw = await withConcurrency(() => retry(() => rawCreateSchedule(schedule as Record<string, unknown>) as Promise<string>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 export async function updateSchedule(id: string, fields: unknown, resetNextDate?: boolean): Promise<void> {
   observability.incrementToolCall('actual.schedules.update').catch(() => {});
   return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawUpdateSchedule(id, fields as Record<string, unknown>, resetNextDate) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 /**
  * #376: the existence guard and the constraint-error translation moved here from
@@ -2021,13 +2061,13 @@ export async function deleteSchedule(id: string): Promise<void> {
       }
       throw err;
     }
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
   observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
   return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 /**
  * #357: forwards the two transfer arguments the published API documents.
@@ -2431,7 +2471,7 @@ export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void>
   observability.incrementToolCall('actual.budgets.batchUpdates').catch(() => {});
   return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawBatchBudgetUpdates(fn) as Promise<void>, { retries: 2, backoffMs: 200 }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 /**
  * #355: RETURNS the upstream verdict instead of discarding it.
@@ -2484,13 +2524,13 @@ export async function holdBudgetForNextMonth(month: string, amount: number): Pro
       retry(() => rawGetBudgetMonth(month) as Promise<{ forNextMonth?: number } | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
     );
     return Number(after?.forNextMonth ?? 0) - heldBefore;
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 export async function resetBudgetHold(month: string): Promise<void> {
   observability.incrementToolCall('actual.budgets.resetHold').catch(() => {});
   return queueWriteOperation(async () => {
     await withConcurrency(() => retry(() => rawResetBudgetHold(month) as Promise<void>, { retries: 2, backoffMs: 200 }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 export async function runQuery(queryString: string | any): Promise<unknown> {
   try {
@@ -3085,7 +3125,7 @@ export async function createTag(tag: { tag: string; color?: string; description?
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const raw = await withConcurrency(() => retry(() => rawCreateTag(tag) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return normalizeToId(raw);
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
 export async function updateTag(id: string, fields: { tag?: string; color?: string; description?: string }): Promise<void> {
@@ -3099,7 +3139,7 @@ export async function updateTag(id: string, fields: { tag?: string; color?: stri
       throw new NotFoundRefusal('Tag', id, 'actual_tags_list');
     }
     await withConcurrency(() => retry(() => rawUpdateTag(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
 export async function deleteTag(id: string): Promise<void> {
@@ -3113,7 +3153,7 @@ export async function deleteTag(id: string): Promise<void> {
       throw new NotFoundRefusal('Tag', id, 'actual_tags_list');
     }
     await withConcurrency(() => retry(() => rawDeleteTag(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
 export async function getNote(id: string): Promise<{ id: string; note: string } | null> {
@@ -3170,7 +3210,7 @@ export async function updateNote(id: string, note: string): Promise<void> {
     }
 
     await withConcurrency(() => retry(() => rawUpdateNote(id, note) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
-  });
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
 /**

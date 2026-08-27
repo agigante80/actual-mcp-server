@@ -263,5 +263,37 @@ describe('(8) a drain keeps every session in it alive, refreshed PER OP');
   connectionPool.connections.delete(sessionId);
 }
 
+// ---------------------------------------------------------------------------
+describe('(9) isolation: separate drains never share cached state, and the store is unreachable outside one');
+{
+  reset();
+  const { requestContext } = await import('../../dist/src/lib/requestContext.js');
+  // The scenario #378's re-validation asked for: two sessions, which in a multi-budget
+  // deployment are two budgets. Separate drains must not share a listing, or one principal's
+  // guard would decide against another principal's entity list.
+  await requestContext.run({ sessionId: 'session-A' }, () =>
+    adapter.addTransactions([{ account: ACCOUNT, date: '2026-02-01', amount: -1 }]));
+  const afterA = getAccountsCalls;
+  await requestContext.run({ sessionId: 'session-B' }, () =>
+    adapter.addTransactions([{ account: ACCOUNT, date: '2026-02-02', amount: -1 }]));
+  check(getAccountsCalls === afterA + 1,
+    `session B's drain re-read rather than reusing session A's listing (got ${getAccountsCalls})`);
+
+  // Structural, not conventional: outside a drain there is no store, so a read is a straight
+  // pass-through and there is nothing to reach even by mistake. This is the assertion that
+  // would have to be rewritten if the cache ever moved back to module scope, which is the
+  // point of it.
+  const beforeDirect = getAccountsCalls;
+  await adapter.getAccounts();
+  await adapter.getAccounts();
+  check(getAccountsCalls === beforeDirect + 2,
+    `two reads OUTSIDE any drain both hit the api (got ${getAccountsCalls - beforeDirect})`);
+
+  // WHAT THIS DOES NOT CLAIM. Two sessions writing inside ONE drain window DO share that
+  // drain, and therefore its cache, because the drain picks one connection from batch[0].
+  // That is not a cache defect (they already share the api singleton and its loaded budget)
+  // and it is tracked as #390, which is about the drain itself rather than the cache.
+}
+
 log(`\n[#378] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
