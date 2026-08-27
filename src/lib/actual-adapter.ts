@@ -692,15 +692,6 @@ let writeQueueBatchCount = 0;
 type DrainListingKind = 'accounts' | 'categories' | 'categoryGroups' | 'payees';
 let drainListingCache: Map<DrainListingKind, Promise<unknown>> | null = null;
 
-/** Test hook: how many underlying listings a drain actually paid for. */
-let drainListingFetchCount = 0;
-export function _getDrainListingFetchCountForTests(): number {
-  return drainListingFetchCount;
-}
-export function _resetDrainListingFetchCountForTests(): void {
-  drainListingFetchCount = 0;
-}
-
 /**
  * Read one entity listing, memoised for the life of the current drain.
  *
@@ -712,14 +703,10 @@ export function _resetDrainListingFetchCountForTests(): void {
  * one drain therefore share a single in-flight listing rather than racing to start two.
  */
 async function readDrainListing<T>(kind: DrainListingKind, fetch: () => Promise<T>): Promise<T> {
-  if (!drainListingCache) {
-    drainListingFetchCount++;
-    return await fetch();
-  }
+  if (!drainListingCache) return await fetch();
   const cached = drainListingCache.get(kind);
   if (cached) return (await cached) as T;
 
-  drainListingFetchCount++;
   const inFlight = fetch();
   drainListingCache.set(kind, inFlight as Promise<unknown>);
   try {
@@ -790,9 +777,6 @@ async function processWriteQueue() {
   }
   writeQueueBatchCount++;
 
-  // #378: open this drain's listing cache. Destroyed in the `finally` below, so it can never
-  // outlive the drain, be shared across sessions, or survive a fatal path.
-  drainListingCache = new Map();
 
   // Pool-cooperation decision (#158): use the first queued op's captured
   // sessionId as the batch's sessionId. In practice all ops batched together
@@ -808,6 +792,11 @@ async function processWriteQueue() {
   );
 
   try {
+    // #378 (L7): opened INSIDE the try whose `finally` nulls it. Created earlier it would
+    // survive a throw between creation and the try, which is benign today only because
+    // isProcessingWrites would wedge the queue first and make the stuck cache unreachable.
+    // Not worth depending on that accident.
+    drainListingCache = new Map();
     await withApiLock(async () => {
       try {
         if (usePoolBranch) {
@@ -875,6 +864,27 @@ async function processWriteQueue() {
                 (k) => !preserved.has(k),
               ),
             );
+
+            // #378: keep the session alive for the length of its own drain.
+            //
+            // `connectionPool.touch()` is driven by inbound HTTP requests, not by write ops,
+            // so `lastActivity` does not advance while a drain runs. That was harmless while
+            // the batch ran concurrently and a drain was bounded by roughly one
+            // ACTUAL_OP_TIMEOUT_MS. Sequential dispatch makes a drain's wall clock the SUM of
+            // its ops, so a batch of slow ops can now outlive SESSION_IDLE_TIMEOUT_MINUTES
+            // (default 5) and be swept mid-drain. The sweep's shutdownConnection calls
+            // api.shutdown() WITHOUT holding withApiLock, which is the same hazard this file
+            // already documents as the reason stdio is kept off the pool: it tears the
+            // singleton down underneath an in-flight operation.
+            if (batchSessionId) {
+              try {
+                connectionPool.touch(batchSessionId);
+              } catch (_e) {
+                // Touching is best effort. A pool entry that has already gone is exactly the
+                // case the pool branch tolerates elsewhere, and failing a completed write
+                // because we could not refresh a timestamp would be worse than the staleness.
+              }
+            }
           }
         }
 
@@ -973,9 +983,17 @@ function queueWriteOperation<T>(
     // #278: bound queue RESIDENCY, not just execution. #270's withOpTimeout bounds an
     // operation that is RUNNING; it cannot bound one that never starts. Reuse the same
     // knob so there is one timeout concept: ACTUAL_OP_TIMEOUT_MS, with <= 0 meaning
-    // disabled (matching withOpTimeout). Worst case for a single call is therefore
-    // residency + execution = 2 * ACTUAL_OP_TIMEOUT_MS; residency is normally under
-    // WRITE_SESSION_DELAY_MS (100ms).
+    // disabled (matching withOpTimeout). Residency is normally under WRITE_SESSION_DELAY_MS
+    // (100ms).
+    //
+    // #378 CHANGED THIS BOUND and it used to read "worst case for a single call is therefore
+    // residency + execution = 2 * ACTUAL_OP_TIMEOUT_MS". That was true while the batch ran
+    // concurrently. It now runs sequentially, and residency timers are cleared for EVERY
+    // entry at dispatch while withOpTimeout bounds only the op currently running, so the
+    // honest worst case for the k-th op in a batch is residency + k * ACTUAL_OP_TIMEOUT_MS.
+    // A drain's wall clock went from the MAX of its ops to the SUM. In practice each op is
+    // milliseconds against in-process SQLite, but see the touch() call in processWriteQueue
+    // for the one consequence that had to be closed rather than merely documented.
     const residencyLimitMs = config.ACTUAL_OP_TIMEOUT_MS;
     if (Number.isFinite(residencyLimitMs) && residencyLimitMs > 0) {
       entry.residencyTimer = setTimeout(() => {
@@ -1087,9 +1105,11 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
   // listings, so a bulk import pays ONE accounts listing for its guard instead of one per
   // transaction. `payees` is deliberately NOT claimed: upstream's addTransactions runs
   // normalizeTransactions, which returns `payeesToCreate` and creates a payee from a raw
-  // payee name (verified in loot-core/src/server/accounts/sync.ts via the source map). So a
-  // transaction write CAN change the payee listing, and claiming otherwise would produce a
-  // false not-found for the payee it just created.
+  // payee name (verified in loot-core/src/server/accounts/sync.ts via the source map). There
+  // is a SECOND route too, and it is not gated on the payee_name input at all: runRules fires
+  // unconditionally, and resolvePayeeNameForRules calls insertPayee when a rule action sets
+  // `payee: 'new'`. So a transaction write CAN change the payee listing by two independent
+  // paths, and claiming otherwise would produce a false not-found for a payee it just created.
   return queueWriteOperation(async () => {
     // The Actual API expects addTransactions(accountId, transactions, options)
     // Extract accountId from the first transaction and remove it from transaction objects
@@ -2153,9 +2173,16 @@ export async function closeAccount(
  * rediscovered as oversights.
  *
  * One `queueWriteOperation` keeps this read, write and re-read in a single api lock cycle.
- * It does NOT serialise against other operations in the same batch: `processWriteQueue`
- * dispatches with `Promise.allSettled`, so operations queued in the same drain window
- * interleave at await points. The cycle excludes other SESSIONS, not batch siblings.
+ *
+ * #378 CORRECTED WHAT THAT IS WORTH, and this paragraph used to say the opposite. It read:
+ * "It does NOT serialise against other operations in the same batch: processWriteQueue
+ * dispatches with Promise.allSettled, so operations queued in the same drain window
+ * interleave at await points. The cycle excludes other SESSIONS, not batch siblings."
+ * That was accurate, and it was a live hazard rather than a footnote: a same-drain delete of
+ * the same account would let this guard's pre-read pass and the write proceed against a row
+ * that no longer existed. The batch now dispatches SEQUENTIALLY in enqueue order, so the
+ * cycle excludes batch siblings too. Restoring the concurrent dispatch reopens it, and
+ * tests/unit/adapter_drain_listing_cache.test.js turns ten assertions red if you do.
  *
  * The not-found message covers both reasons an id can be missing (never existed, or removed
  * by a close while it had no transactions) rather than distinguishing them. `q().withDead()`

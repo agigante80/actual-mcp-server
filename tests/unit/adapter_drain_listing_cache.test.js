@@ -44,7 +44,17 @@ let payees, accounts, getPayeesCalls, getAccountsCalls, updatePayeeCalls, create
 
 api.sync = async () => {};
 api.getPayees = async () => { getPayeesCalls++; return payees.map((p) => ({ ...p })); };
-api.getAccounts = async () => { getAccountsCalls++; return accounts.map((a) => ({ ...a })); };
+// Failures are injected through a COUNTER this original stub reads, never by reassigning
+// `api.getAccounts` later. The adapter destructures the raw functions at module load
+// (`const { getAccounts: rawGetAccounts } = api`), so a stub installed after the import is
+// simply never called, and a test built that way passes for no reason. That trap already cost
+// this repo a vacuous case here in review round 1.
+let injectListingFailures = 0;
+api.getAccounts = async () => {
+  getAccountsCalls++;
+  if (injectListingFailures > 0) { injectListingFailures--; throw new Error('transient listing failure'); }
+  return accounts.map((a) => ({ ...a }));
+};
 api.updatePayee = async (id, fields) => {
   updatePayeeCalls.push(id);
   const p = payees.find((p) => p.id === id);
@@ -56,7 +66,24 @@ api.createPayee = async (payee) => {
   return NEW_PAYEE;
 };
 api.deletePayee = async (id) => { payees = payees.filter((p) => p.id !== id); };
-api.addTransactions = async () => 'ok';
+// Entry recording lives in the ORIGINAL stub for the same reason as getAccounts above: a
+// replacement installed after the adapter import is never called. The first draft of case (7)
+// made exactly that mistake and recorded nothing.
+let entryLog = null;
+let slowFirstOpMs = 0;
+api.addTransactions = async (_accountId, txs) => {
+  if (entryLog) {
+    const n = Math.abs(txs[0].amount);
+    // Record ENTRY and EXIT. Entry order alone does not discriminate: under concurrent
+    // dispatch every op still reaches the raw call in array order, because they take the same
+    // number of microtask hops and the delay lands AFTER entry. What only sequential dispatch
+    // can produce is strict NESTING, where op k+1 cannot enter until op k has left.
+    entryLog.push(`in${n}`);
+    if (n === 1 && slowFirstOpMs) await new Promise((r) => setTimeout(r, slowFirstOpMs));
+    entryLog.push(`out${n}`);
+  }
+  return 'ok';
+};
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
 const adapter = adapterMod.default;
@@ -144,36 +171,75 @@ describe('(5) the cache cannot outlive its drain');
 }
 
 // ---------------------------------------------------------------------------
-describe('(6) a failed listing is not cached for the rest of the drain');
+describe('(6) a failed listing is NOT cached, so retry can still re-fetch it');
 {
   reset();
-  let firstCall = true;
-  const good = api.getAccounts;
-  api.getAccounts = async () => {
-    getAccountsCalls++;
-    if (firstCall) { firstCall = false; throw new Error('transient listing failure'); }
-    return accounts.map((a) => ({ ...a }));
-  };
+  injectListingFailures = 1;
+  // WHY THIS BRANCH IS LOAD BEARING. `retry` wraps `readDrainListing`, not the other way
+  // round, so every retry attempt re-enters the cache. If a REJECTED promise stayed cached,
+  // retry would keep receiving the same rejection and burn all its attempts without ever
+  // issuing a second fetch: one transient ECONNRESET would fail the whole drain instead of
+  // recovering. Deleting the error-path `delete` in readDrainListing must turn this red.
   const results = await Promise.allSettled([
     adapter.addTransactions([{ account: ACCOUNT, date: '2026-01-01', amount: -1 }]),
     adapter.addTransactions([{ account: ACCOUNT, date: '2026-01-02', amount: -1 }]),
   ]);
-  api.getAccounts = good;
-  // The retry wrapper may absorb the first failure; what must NOT happen is the second
-  // operation inheriting a cached rejection and being refused for its sibling's reason.
+  check(results[0].status === 'fulfilled',
+    `retry re-fetched rather than inheriting its own cached rejection (got ${results[0].status})`);
   check(results[1].status === 'fulfilled',
-    `the second op did not inherit the first op's listing failure (got ${results[1].status})`);
+    `the sibling did not inherit the failure (got ${results[1].status})`);
+  check(getAccountsCalls === 2,
+    `one failure plus one retry, and the sibling served from cache (got ${getAccountsCalls} raw calls)`);
+  check(injectListingFailures === 0, 'the injected failure was actually consumed by the raw stub');
+}
+
+describe('(7) operations ENTER the api in enqueue order, which is what makes a guard hold');
+{
+  reset();
+  const entered = [];
+  entryLog = entered;
+  slowFirstOpMs = 20;
+  // Record ENTRY into the raw call, not settlement, and make the first op slow so that a
+  // concurrent dispatch would visibly reorder. The previous version watched `.then()` order
+  // across four identical fast ops sharing one cached listing, so it reported enqueue order
+  // under CONCURRENT dispatch too: the assertion whose whole purpose was to pin the ordering
+  // fix could not detect its loss.
+  const mk = (n) => adapter.addTransactions([{ account: ACCOUNT, date: '2026-01-01', amount: -n }]);
+  await Promise.all([mk(1), mk(2), mk(3), mk(4)]);
+  entryLog = null;
+  slowFirstOpMs = 0;
+  check(entered.join(',') === 'in1,out1,in2,out2,in3,out3,in4,out4',
+    `each op completed before the next entered, despite a slow first op (got ${entered.join(',')})`);
 }
 
 // ---------------------------------------------------------------------------
-describe('(7) operations dispatch in ENQUEUE ORDER, which is what makes a guard hold');
+describe('(8) a drain keeps its own session alive while it runs');
 {
   reset();
-  const order = [];
-  const mk = (n) => adapter.addTransactions([{ account: ACCOUNT, date: '2026-01-01', amount: -n }])
-    .then(() => order.push(n));
-  await Promise.all([mk(1), mk(2), mk(3), mk(4)]);
-  check(order.join(',') === '1,2,3,4', `settled in enqueue order (got ${order.join(',')})`);
+  const { connectionPool } = await import('../../dist/src/lib/ActualConnectionPool.js');
+  const { requestContext } = await import('../../dist/src/lib/requestContext.js');
+  const sessionId = 'drain-liveness-session';
+  // A session whose clock is already stale enough for the idle sweep to want it.
+  connectionPool.connections.set(sessionId, {
+    sessionId, initialized: true, lastActivity: Date.now() - 60_000, dataDir: '/tmp/test',
+  });
+  const stale = connectionPool.connections.get(sessionId).lastActivity;
+
+  await requestContext.run({ sessionId }, async () => {
+    await Promise.all(Array.from({ length: 3 }, () =>
+      adapter.addTransactions([{ account: ACCOUNT, date: '2026-01-01', amount: -1 }])));
+  });
+
+  const fresh = connectionPool.connections.get(sessionId)?.lastActivity;
+  // WHY. connectionPool.touch() is driven by inbound HTTP requests, not by write ops, so
+  // lastActivity does not advance during a drain. Sequential dispatch made a drain's wall
+  // clock the SUM of its ops rather than the MAX, so a slow batch can outlive
+  // SESSION_IDLE_TIMEOUT_MINUTES and be swept mid-drain. The sweep's shutdownConnection
+  // calls api.shutdown() WITHOUT holding withApiLock, tearing the singleton down under an
+  // in-flight operation.
+  check(typeof fresh === 'number' && fresh > stale,
+    `the drain refreshed its session's idle clock (stale=${stale}, fresh=${fresh})`);
+  connectionPool.connections.delete(sessionId);
 }
 
 log(`\n[#378] Results: ${passed} passed, ${failed} failed`);
