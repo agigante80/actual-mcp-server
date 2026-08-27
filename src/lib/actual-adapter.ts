@@ -642,6 +642,12 @@ interface WriteOperation<T> {
   sessionId?: string;
   // #278: bounds how long this entry may sit UNDISPATCHED. Cleared at dispatch.
   residencyTimer?: NodeJS.Timeout;
+  // #378: entity listings this operation CANNOT change. Anything not named here is dropped
+  // from the drain cache once the operation completes. The default (undefined) therefore
+  // invalidates everything, which is the fail-safe direction: forgetting to annotate a new
+  // write method costs one extra listing, while wrongly claiming preservation causes a false
+  // not-found. Never invert this default.
+  preservesListings?: readonly DrainListingKind[];
 }
 
 let writeQueue: WriteOperation<any>[] = [];
@@ -657,6 +663,87 @@ let writeConnectionReuseCount = 0;
 // A fix that drained on every enqueue would close the deadlock and silently turn one
 // batch into N; nothing else in the suite would notice.
 let writeQueueBatchCount = 0;
+
+/**
+ * #378: per-drain memoisation of the entity listings the write guards pre-read.
+ *
+ * WHY IT EXISTS. Every guarded write added by #356, #359, #360, #361 and #371 opens with a
+ * full listing to decide whether its target exists. `db.getPayees()` is a LEFT JOIN over
+ * accounts with an ORDER BY and a per-row model map, so a 200-payee bulk rename was paying
+ * 200 of them, inside the api mutex. Measured on develop before this change: two guarded
+ * updates in ONE drain cost TWO listings.
+ *
+ * WHY THE SCOPE IS EXACTLY ONE DRAIN, AND NEVER WIDER. A drain holds the api lock for its
+ * whole body and is by construction one consistent session, so a listing taken at its start
+ * is valid for its duration ONCE writes invalidate it. Anything wider would serve one
+ * session's data to another session or another budget, which is a data-disclosure bug, not
+ * a staleness bug. The cache is therefore created at the top of a drain and destroyed in the
+ * `finally`, including on the fatal path, so it cannot outlive one.
+ *
+ * WHY INVALIDATION IS NOT OPTIONAL. A cache without it converts an occasional race into a
+ * guaranteed false not-found: a create early in the drain would be invisible to every later
+ * guard. `invalidateDrainListing` is called by the write helpers below.
+ *
+ * WHAT THIS DOES NOT FIX, deliberately. Memoisation makes the reads cheap and mutually
+ * consistent. It does NOT order them. The sibling-operation race (a delete and an update of
+ * the same entity in one batch) is an ORDERING problem and is fixed by dispatching the batch
+ * sequentially, further down. Both are needed and neither substitutes for the other.
+ */
+type DrainListingKind = 'accounts' | 'categories' | 'categoryGroups' | 'payees';
+let drainListingCache: Map<DrainListingKind, Promise<unknown>> | null = null;
+
+/** Test hook: how many underlying listings a drain actually paid for. */
+let drainListingFetchCount = 0;
+export function _getDrainListingFetchCountForTests(): number {
+  return drainListingFetchCount;
+}
+export function _resetDrainListingFetchCountForTests(): void {
+  drainListingFetchCount = 0;
+}
+
+/**
+ * Read one entity listing, memoised for the life of the current drain.
+ *
+ * Outside a drain the cache is null and this is a straight pass-through, so non-queued
+ * callers (CLI scripts, startup health checks, the read path) are unaffected and can never
+ * see a cached value.
+ *
+ * The PROMISE is cached, not the resolved value. Two guards that start concurrently inside
+ * one drain therefore share a single in-flight listing rather than racing to start two.
+ */
+async function readDrainListing<T>(kind: DrainListingKind, fetch: () => Promise<T>): Promise<T> {
+  if (!drainListingCache) {
+    drainListingFetchCount++;
+    return await fetch();
+  }
+  const cached = drainListingCache.get(kind);
+  if (cached) return (await cached) as T;
+
+  drainListingFetchCount++;
+  const inFlight = fetch();
+  drainListingCache.set(kind, inFlight as Promise<unknown>);
+  try {
+    return await inFlight;
+  } catch (error) {
+    // A failed listing must not be cached: the next guard in this drain would inherit the
+    // failure and refuse a write for a reason that has nothing to do with its own target.
+    if (drainListingCache?.get(kind) === (inFlight as Promise<unknown>)) drainListingCache.delete(kind);
+    throw error;
+  }
+}
+
+/**
+ * Drop a cached listing after a write that could have changed it.
+ *
+ * Call this AFTER the write commits, never before: dropping early reopens the window this
+ * exists to close. Over-invalidating is safe and merely costs one listing; under-invalidating
+ * is a false not-found, so when in doubt, invalidate.
+ */
+function invalidateDrainListing(...kinds: DrainListingKind[]): void {
+  if (!drainListingCache) return;
+  for (const kind of kinds) drainListingCache.delete(kind);
+}
+
 
 /**
  * #278: the ONLY place a write-queue drain is scheduled.
@@ -703,6 +790,10 @@ async function processWriteQueue() {
   }
   writeQueueBatchCount++;
 
+  // #378: open this drain's listing cache. Destroyed in the `finally` below, so it can never
+  // outlive the drain, be shared across sessions, or survive a fatal path.
+  drainListingCache = new Map();
+
   // Pool-cooperation decision (#158): use the first queued op's captured
   // sessionId as the batch's sessionId. In practice all ops batched together
   // came from the same setTimeout window and same request, so they share
@@ -738,20 +829,54 @@ async function processWriteQueue() {
 
         // Process all queued writes in the same session
         // Each operation handles its own success/failure
-        await Promise.allSettled(
-          batch.map(async ({ operation, resolve, reject }) => {
-            try {
-              // Bound each queued write (#270): a stalled op must reject its own
-              // promise (so withWriteSession callers don't hang) and let the
-              // batch settle so the api mutex releases.
-              const result = await withOpTimeout(operation);
-              resolve(result);
-            } catch (error) {
-              logger.error('[WRITE QUEUE] Operation failed:', error);
-              reject(error);
-            }
-          })
-        );
+        // #378: SEQUENTIAL, in enqueue order. This was `Promise.allSettled(batch.map(...))`,
+        // which dispatched the whole batch concurrently inside the one api lock.
+        //
+        // The api lock makes a drain atomic against OTHER DRAINS. It never made an operation
+        // atomic against its SIBLINGS in the same batch, and every read-then-write guard
+        // moved into this adapter by #371 and #376 assumed it did. Reproduced on develop
+        // before this change: an `actual_payees_delete` and an `actual_payees_update` of the
+        // SAME payee, issued as parallel tool calls, land in one drain; the update's
+        // pre-read sees the payee, the guard passes, and rawUpdatePayee then runs against a
+        // payee the sibling already removed. Per #360 the CRDT apply path INSERTs when the
+        // row is absent, so that is the phantom partial row the guard exists to prevent. It
+        // reproduced at every timing tested, including a zero-delay delete.
+        //
+        // Caching cannot fix that: it is an ORDERING problem, not a staleness problem. A
+        // read that happens before the sibling's write is equally wrong whether it came from
+        // a cache or the database. Ordering the batch is what makes read-decide-write hold.
+        //
+        // The concurrency lost is worth very little. Every op in a batch targets the same
+        // in-process SQLite through one api singleton, so they contend rather than overlap,
+        // and the memoisation above removes the O(n) listing cost that dominated a bulk
+        // batch: 200 guarded payee updates now pay ONE listing instead of 200.
+        //
+        // Each op keeps its own withOpTimeout (#270) and still settles individually, so one
+        // stalled or rejected operation cannot hold the api mutex or fail its siblings.
+        for (const { operation, resolve, reject, preservesListings } of batch) {
+          try {
+            const result = await withOpTimeout(operation);
+            resolve(result);
+          } catch (error) {
+            logger.error('[WRITE QUEUE] Operation failed:', error);
+            reject(error);
+          } finally {
+            // #378: drop everything this operation did not explicitly promise to leave alone,
+            // and do it whether the op resolved OR THREW. A failed op may still have written
+            // before failing, so a rejection is not evidence that nothing changed.
+            //
+            // The default is invalidate-all, so a write method added later without an
+            // annotation is merely slower, never wrong. Only the reverse mistake, claiming a
+            // listing is preserved when it is not, produces a false not-found, and that
+            // requires someone to write the claim down.
+            const preserved = new Set(preservesListings ?? []);
+            invalidateDrainListing(
+              ...(['accounts', 'categories', 'categoryGroups', 'payees'] as const).filter(
+                (k) => !preserved.has(k),
+              ),
+            );
+          }
+        }
 
         // Explicitly sync changes to server before shutdown (legacy) or just
         // before returning (pool). Persistence guarantee in both branches.
@@ -811,6 +936,9 @@ async function processWriteQueue() {
       }
     });
   } finally {
+    // #378: the cache dies with the drain, on every path including the fatal one. A drain
+    // that threw partway must not hand a partially-invalidated view to the next drain.
+    drainListingCache = null;
     isProcessingWrites = false;
     // #278: ALWAYS re-drain a non-empty queue. The old `&& writeSessionTimeout === null`
     // guard was the lost wakeup: a timer that fired mid-drain left a dead handle here,
@@ -821,7 +949,10 @@ async function processWriteQueue() {
   }
 }
 
-function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
+function queueWriteOperation<T>(
+  operation: () => Promise<T>,
+  options?: { preservesListings?: readonly DrainListingKind[] },
+): Promise<T> {
   // ACL enforcement at the write-queue entry (#156). Failing here means the
   // op is never enqueued and no upstream resource is touched.
   _enforceBudgetAcl();
@@ -831,7 +962,13 @@ function queueWriteOperation<T>(operation: () => Promise<T>): Promise<T> {
   // decision in processWriteQueue would always miss. See #158.
   const sessionId = _resolveSessionId();
   return new Promise((resolve, reject) => {
-    const entry: WriteOperation<T> = { operation, resolve, reject, sessionId };
+    const entry: WriteOperation<T> = {
+      operation,
+      resolve,
+      reject,
+      sessionId,
+      preservesListings: options?.preservesListings,
+    };
 
     // #278: bound queue RESIDENCY, not just execution. #270's withOpTimeout bounds an
     // operation that is RUNNING; it cannot bound one that never starts. Reuse the same
@@ -946,6 +1083,13 @@ export async function getAccounts(): Promise<components['schemas']['Account'][]>
 // addTransactions returns various formats: "ok", array of IDs, or Transaction objects
 export async function addTransactions(txs: components['schemas']['TransactionInput'][] | components['schemas']['TransactionInput'], options: { runTransfers?: boolean } = {}) : Promise<string[]> {
   observability.incrementToolCall('actual.transactions.create').catch(() => {});
+  // #378: a transaction write cannot change the account, category or category-group
+  // listings, so a bulk import pays ONE accounts listing for its guard instead of one per
+  // transaction. `payees` is deliberately NOT claimed: upstream's addTransactions runs
+  // normalizeTransactions, which returns `payeesToCreate` and creates a payee from a raw
+  // payee name (verified in loot-core/src/server/accounts/sync.ts via the source map). So a
+  // transaction write CAN change the payee listing, and claiming otherwise would produce a
+  // false not-found for the payee it just created.
   return queueWriteOperation(async () => {
     // The Actual API expects addTransactions(accountId, transactions, options)
     // Extract accountId from the first transaction and remove it from transaction objects
@@ -973,7 +1117,7 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     // which is why this diverges from createTransfer, where a closed account would be an
     // odd transfer destination.
     const accounts = await withConcurrency(() =>
-      retry(() => rawGetAccounts() as Promise<Array<{ id: string; name?: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id: string; name?: string }>>), { retries: 2, backoffMs: 200 })
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const accountExists = (accounts as any[]).some((a: any) => a?.id === accountId);
@@ -1014,7 +1158,7 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     }
     
     return [];
-  });
+  }, { preservesListings: ['accounts', 'categories', 'categoryGroups'] });
 }
 export async function importTransactions(accountId: string | undefined, txs: components['schemas']['TransactionInput'][] | unknown) : Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>{
   observability.incrementToolCall('actual.transactions.import').catch(() => {});
@@ -1040,7 +1184,7 @@ export async function createTransfer(params: {
     }
 
     const accounts = await withConcurrency(() =>
-      retry(() => rawGetAccounts() as Promise<components['schemas']['Account'][]>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<components['schemas']['Account'][]>), { retries: 2, backoffMs: 200 })
     );
     const fromAcc = accounts.find((a: any) => a.id === params.from_account);
     const toAcc   = accounts.find((a: any) => a.id === params.to_account);
@@ -1051,7 +1195,7 @@ export async function createTransfer(params: {
     if ((toAcc as any).closed)   return { success: false as const, error: `Destination account '${(toAcc as any).name}' is closed.` };
 
     const payees = await withConcurrency(() =>
-      retry(() => rawGetPayees() as Promise<Array<{ id: string; transfer_acct?: string; tombstone?: boolean }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id: string; transfer_acct?: string; tombstone?: boolean }>>), { retries: 2, backoffMs: 200 })
     );
     const transferPayee = payees.find((p: any) => p.transfer_acct === params.to_account && !p.tombstone);
     if (!transferPayee) {
@@ -1160,10 +1304,13 @@ export async function getBudgetMonth(month: string | undefined): Promise<compone
 }
 export async function setBudgetAmount(month: string | undefined, categoryId: string | undefined, amount: number | undefined): Promise<components['schemas']['BudgetSetRequest'] | null | void> {
   observability.incrementToolCall('actual.budgets.setAmount').catch(() => {});
+  // #378: a budget amount is written to the zero/reflect budget tables and cannot change any
+  // of the four entity listings, so a month of category budgets pays ONE categories listing
+  // for its guard rather than one per category.
   return queueWriteOperation(async () => {
     // Pre-flight: verify category exists — nil/unknown UUIDs silently no-op in Actual Budget
     const categories = await withConcurrency(() =>
-      retry(() => rawGetCategories() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string }>>), { retries: 2, backoffMs: 200 })
     );
     const exists = (categories as any[]).some((c: any) => c.id === categoryId);
     if (!exists) {
@@ -1199,7 +1346,7 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
 
     const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return result;
-  });
+  }, { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
 }
 
 /**
@@ -1277,13 +1424,16 @@ export async function createAccount(account: components['schemas']['Account'] | 
 export async function updateAccount(id: string, fields: Partial<components['schemas']['Account']> | unknown): Promise<void | null> {
   observability.incrementToolCall('actual.accounts.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #378: this guard's pre-read is safe against a SIBLING operation in the same drain only
+    // because the batch dispatches sequentially. It reads a listing memoised for this drain,
+    // which the previous operation invalidated unless it declared it could not change it.
     // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
     // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
     // than matching nothing. Refuse first, the way updateTag and updateRule already do.
     // A CLOSED account is still updatable: getAccounts filters `tombstone = 0`, not
     // `closed = 0`, so this refuses only ids that genuinely do not exist.
     const accounts = await withConcurrency(() =>
-      retry(() => rawGetAccounts() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(accounts) && accounts.some((a) => a?.id === id))) {
       throw new NotFoundRefusal('Account', id, 'actual_accounts_list');
@@ -1466,13 +1616,16 @@ export async function deleteTransaction(id: string): Promise<void> {
 export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.categories.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #378: this guard's pre-read is safe against a SIBLING operation in the same drain only
+    // because the batch dispatches sequentially. It reads a listing memoised for this drain,
+    // which the previous operation invalidated unless it declared it could not change it.
     // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
     // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
     // than matching nothing. Refuse first, the way updateTag and updateRule already do.
     // Called with no argument, upstream returns every category in every group, hidden
     // included, so a hidden category is not misreported as missing.
     const categories = await withConcurrency(() =>
-      retry(() => rawGetCategories() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(categories) && categories.some((c) => c?.id === id))) {
       throw new NotFoundRefusal('Category', id, 'actual_categories_get');
@@ -1485,7 +1638,7 @@ export async function deleteCategory(id: string): Promise<void> {
   return queueWriteOperation(async () => {
     // Pre-flight: verify category exists to avoid ECONNRESET on missing id (BUG-1)
     const categories = await withConcurrency(() =>
-      retry(() => rawGetCategories() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string }>>), { retries: 2, backoffMs: 200 })
     );
     const exists = (categories as any[]).some((c: any) => c.id === id);
     if (!exists) {
@@ -1499,6 +1652,9 @@ export async function deleteCategory(id: string): Promise<void> {
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.payees.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #378: this guard's pre-read is safe against a SIBLING operation in the same drain only
+    // because the batch dispatches sequentially. It reads a listing memoised for this drain,
+    // which the previous operation invalidated unless it declared it could not change it.
     // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
     // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
     // than matching nothing. Refuse first, the way updateTag and updateRule already do.
@@ -1510,7 +1666,7 @@ export async function updatePayee(id: string, fields: Partial<components['schema
     // whose account no longer exists, is not a real workflow, and because the alternative
     // is leaving four tools able to create phantom rows.
     const payees = await withConcurrency(() =>
-      retry(() => rawGetPayees() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(payees) && payees.some((p) => p?.id === id))) {
       throw new NotFoundRefusal('Payee', id, 'actual_payees_get');
@@ -1582,7 +1738,7 @@ export async function deletePayee(id: string): Promise<void> {
   return queueWriteOperation(async () => {
     // Pre-flight: verify payee exists to avoid ECONNRESET on missing id (BUG-2)
     const payees = await withConcurrency(() =>
-      retry(() => rawGetPayees() as Promise<Array<{ id: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id: string }>>), { retries: 2, backoffMs: 200 })
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const found = (payees as any[]).find((p: any) => p.id === id) as
@@ -1892,7 +2048,7 @@ export async function closeAccount(
   observability.incrementToolCall('actual.accounts.close').catch(() => {});
   return queueWriteOperation(async () => {
     const before = await withConcurrency(() =>
-      retry(() => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>), { retries: 2, backoffMs: 200 })
     );
     const list = Array.isArray(before) ? before : [];
     const target = list.find((a) => a?.id === id);
@@ -1933,7 +2089,7 @@ export async function closeAccount(
       // straight into `transaction-add` unchecked, so a bogus value writes a "Closing
       // account" transaction carrying a category that does not exist, and syncs it.
       const categories = await withConcurrency(() =>
-        retry(() => rawGetCategories() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+        retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
       );
       const known = Array.isArray(categories) && categories.some((c) => c?.id === transferCategoryId);
       if (!known) {
@@ -2013,7 +2169,7 @@ export async function reopenAccount(id: string): Promise<ReopenAccountOutcome> {
   observability.incrementToolCall('actual.accounts.reopen').catch(() => {});
   return queueWriteOperation(async () => {
     const before = await withConcurrency(() =>
-      retry(() => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>), { retries: 2, backoffMs: 200 })
     );
     const target = (Array.isArray(before) ? before : []).find((a) => a?.id === id);
     if (!target) {
@@ -2071,6 +2227,9 @@ export async function createCategoryGroup(group: unknown): Promise<string> {
 export async function updateCategoryGroup(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.category_groups.update').catch(() => {});
   return queueWriteOperation(async () => {
+    // #378: this guard's pre-read is safe against a SIBLING operation in the same drain only
+    // because the batch dispatches sequentially. It reads a listing memoised for this drain,
+    // which the previous operation invalidated unless it declared it could not change it.
     // #360: `db.update` does not run a SQL UPDATE. It sends CRDT messages, and the apply
     // path INSERTs when the row was absent, so an unknown id CREATES a partial row rather
     // than matching nothing. Refuse first, the way updateTag and updateRule already do.
@@ -2078,7 +2237,7 @@ export async function updateCategoryGroup(id: string, fields: unknown): Promise<
     // hidden group is not misreported as missing (the same reason category_groups_delete
     // can rely on this listing).
     const groups = await withConcurrency(() =>
-      retry(() => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
     );
     if (!(Array.isArray(groups) && groups.some((g) => g?.id === id))) {
       throw new NotFoundRefusal('Category group', id, 'actual_category_groups_get');
@@ -2095,7 +2254,7 @@ export async function deleteCategoryGroup(id: string): Promise<void> {
   observability.incrementToolCall('actual.category_groups.delete').catch(() => {});
   return queueWriteOperation(async () => {
     const groups = await withConcurrency(() =>
-      retry(() => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
     );
     if (!Array.isArray(groups) || !groups.some((g) => g?.id === id)) {
       throw new NotFoundRefusal('Category group', id, 'actual_category_groups_get');
@@ -2140,7 +2299,7 @@ export async function mergePayees(targetId: string, mergeIds: string[]): Promise
   observability.incrementToolCall('actual.payees.merge').catch(() => {});
   return queueWriteOperation(async () => {
     const payees = await withConcurrency(() =>
-      retry(() => rawGetPayees() as Promise<Array<{ id: string; name?: string; transfer_acct?: string | null }>>, { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id: string; name?: string; transfer_acct?: string | null }>>), { retries: 2, backoffMs: 200 })
     );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const byId = new Map((payees as any[]).map((p: any) => [p.id, p]));
@@ -2952,10 +3111,10 @@ export async function updateNote(id: string, note: string): Promise<void> {
         Array.isArray(rows) && rows.some((e) => (e as { id?: string })?.id === id);
 
       const [accounts, categories, categoryGroups, payees] = await Promise.all([
-        withConcurrency(() => retry(() => rawGetAccounts() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
-        withConcurrency(() => retry(() => rawGetCategories() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
-        withConcurrency(() => retry(() => rawGetCategoryGroups() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
-        withConcurrency(() => retry(() => rawGetPayees() as Promise<unknown[]>, { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<unknown[]>), { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<unknown[]>), { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<unknown[]>), { retries: 2, backoffMs: 200 })),
+        withConcurrency(() => retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<unknown[]>), { retries: 2, backoffMs: 200 })),
       ]);
 
       if (!has(accounts) && !has(categories) && !has(categoryGroups) && !has(payees)) {
