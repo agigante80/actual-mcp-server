@@ -18,6 +18,7 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 import { isApiInitialized, setApiInitialized, setLoadedBudgetSyncId } from './apiState.js';
+import { withApiLock } from './apiLock.js';
 import { withOpTimeout } from './opTimeout.js';
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
@@ -287,6 +288,20 @@ class ActualConnectionPool {
     }
 
     try {
+      // #390 round 2: hold the api mutex across init + download.
+      //
+      // Recording the loaded budget and checking it inside the lock only NARROWED the race
+      // while this mutator stayed outside it. Reproduced: a pooled read passed the
+      // precondition, parked at an await still holding the lock, a new session opened here on
+      // a different budget, and the first session's raw call then executed against it. The
+      // window is not small: it is the whole duration of an operation, and since #378 made the
+      // drain sequential, the whole duration of a batch, with one check at the start.
+      //
+      // Safe against the non-reentrant mutex: the two callers of getConnection
+      // (actualConnection's session-open helper and switchBudget's slow path) are both OUTSIDE
+      // any withApiLock block. switchBudget's own downloadBudget takes the lock separately and
+      // has already released it before it reaches here.
+      await withApiLock(async () => {
       // Bound the session-open init/download (#270): this is the HTTP exposure.
       // A stalled upstream here would otherwise hang session open unbounded and,
       // because the api singleton is process-global, wedge other sessions too.
@@ -316,6 +331,8 @@ class ActualConnectionPool {
       // adapter's pool-cooperation branch could reuse a connection whose budget
       // never loaded (a stalled/failed download would leak isApiInitialized=true).
       setApiInitialized(true);
+      }); // #390: end of the api-mutex block. Everything after this is pool bookkeeping and
+          // touches no singleton state, so it does not need the lock.
 
       conn = {
         sessionId,
@@ -379,6 +396,9 @@ class ActualConnectionPool {
     }
 
     try {
+      // #390 round 2: same reasoning as getConnection above; this mutates the same
+      // process-global singleton, so it takes the same mutex.
+      await withApiLock(async () => {
       // Bound the session-open init/download (#270), same as getConnection.
       await withOpTimeout(() => api.init({
         dataDir: DATA_DIR,
@@ -402,6 +422,7 @@ class ActualConnectionPool {
       // Mark live only after a successful download (#270): avoids the poisoning
       // window where a stalled/failed download would leak isApiInitialized=true.
       setApiInitialized(true);
+      }); // #390: end of the api-mutex block.
 
       this.sharedConnection = {
         sessionId: 'shared',
