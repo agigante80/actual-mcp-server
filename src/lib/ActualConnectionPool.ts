@@ -17,7 +17,7 @@ import config from '../config.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { isApiInitialized, setApiInitialized } from './apiState.js';
+import { isApiInitialized, setApiInitialized, setLoadedBudgetSyncId } from './apiState.js';
 import { withOpTimeout } from './opTimeout.js';
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
@@ -301,8 +301,14 @@ class ActualConnectionPool {
       if (BUDGET_PASSWORD) {
         const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
         await withOpTimeout(() => apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD }), 'pool downloadBudget');
+        // #390: record which budget the singleton now holds, so the adapter's precondition
+        // check can tell a session it is about to operate on someone else's budget.
+        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
       } else {
         await withOpTimeout(() => api.downloadBudget(BUDGET_SYNC_ID), 'pool downloadBudget');
+        // #390: record which budget the singleton now holds, so the adapter's precondition
+        // check can tell a session it is about to operate on someone else's budget.
+        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
       }
 
       // Mark the singleton as live only AFTER the budget is downloaded (#270):
@@ -383,8 +389,14 @@ class ActualConnectionPool {
       if (BUDGET_PASSWORD) {
         const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
         await withOpTimeout(() => apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD }), 'pool downloadBudget');
+        // #390: record which budget the singleton now holds, so the adapter's precondition
+        // check can tell a session it is about to operate on someone else's budget.
+        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
       } else {
         await withOpTimeout(() => api.downloadBudget(BUDGET_SYNC_ID), 'pool downloadBudget');
+        // #390: record which budget the singleton now holds, so the adapter's precondition
+        // check can tell a session it is about to operate on someone else's budget.
+        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
       }
 
       // Mark live only after a successful download (#270): avoids the poisoning
