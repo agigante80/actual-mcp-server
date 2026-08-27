@@ -36,6 +36,7 @@ const PAYEE = 'pppppppp-0000-4000-8000-000000000001';
 const NEW_PAYEE = 'pppppppp-0000-4000-8000-000000000002';
 const ACCOUNT = 'aaaaaaaa-0000-4000-8000-000000000001';
 
+let poolRef = null;
 const apiMod = await import('@actual-app/api');
 const api = apiMod.default || apiMod;
 
@@ -71,7 +72,18 @@ api.deletePayee = async (id) => { payees = payees.filter((p) => p.id !== id); };
 // made exactly that mistake and recorded nothing.
 let entryLog = null;
 let slowFirstOpMs = 0;
+// Case (8): sample the POOL CLOCK at each op's entry, from inside the raw call. Asserting
+// only that the clock moved by the end of the drain proves a single touch happened SOMEWHERE,
+// which a touch hoisted out of the loop satisfies while leaving the hazard fully open.
+let clockSamples = null;
+let clockSessionId = null;
+let everyOpSlowMs = 0;
 api.addTransactions = async (_accountId, txs) => {
+  if (clockSamples) {
+    const conn = poolRef?.connections.get(clockSessionId);
+    clockSamples.push(conn?.lastActivity);
+    if (everyOpSlowMs) await new Promise((r) => setTimeout(r, everyOpSlowMs));
+  }
   if (entryLog) {
     const n = Math.abs(txs[0].amount);
     // Record ENTRY and EXIT. Entry order alone does not discriminate: under concurrent
@@ -213,32 +225,41 @@ describe('(7) operations ENTER the api in enqueue order, which is what makes a g
 }
 
 // ---------------------------------------------------------------------------
-describe('(8) a drain keeps its own session alive while it runs');
+describe('(8) a drain keeps every session in it alive, refreshed PER OP');
 {
   reset();
   const { connectionPool } = await import('../../dist/src/lib/ActualConnectionPool.js');
   const { requestContext } = await import('../../dist/src/lib/requestContext.js');
+  poolRef = connectionPool;
   const sessionId = 'drain-liveness-session';
-  // A session whose clock is already stale enough for the idle sweep to want it.
+  clockSessionId = sessionId;
+  // A stale clock. Deliberately NOT claiming this is past the sweep threshold: IDLE_TIMEOUT is
+  // SESSION_IDLE_TIMEOUT_MINUTES (default 5) times 60000, so a 60s offset is well inside the
+  // window. What matters here is only that the clock is old enough to see it move.
   connectionPool.connections.set(sessionId, {
     sessionId, initialized: true, lastActivity: Date.now() - 60_000, dataDir: '/tmp/test',
   });
   const stale = connectionPool.connections.get(sessionId).lastActivity;
 
+  const samples = [];
+  clockSamples = samples;
+  // The delay is load bearing: without it three ops can enter within the same millisecond and
+  // a strictly-increasing assertion becomes flaky rather than discriminating.
+  everyOpSlowMs = 15;
   await requestContext.run({ sessionId }, async () => {
     await Promise.all(Array.from({ length: 3 }, () =>
       adapter.addTransactions([{ account: ACCOUNT, date: '2026-01-01', amount: -1 }])));
   });
+  clockSamples = null; clockSessionId = null; everyOpSlowMs = 0; poolRef = null;
 
   const fresh = connectionPool.connections.get(sessionId)?.lastActivity;
-  // WHY. connectionPool.touch() is driven by inbound HTTP requests, not by write ops, so
-  // lastActivity does not advance during a drain. Sequential dispatch made a drain's wall
-  // clock the SUM of its ops rather than the MAX, so a slow batch can outlive
-  // SESSION_IDLE_TIMEOUT_MINUTES and be swept mid-drain. The sweep's shutdownConnection
-  // calls api.shutdown() WITHOUT holding withApiLock, tearing the singleton down under an
-  // in-flight operation.
   check(typeof fresh === 'number' && fresh > stale,
-    `the drain refreshed its session's idle clock (stale=${stale}, fresh=${fresh})`);
+    `the drain refreshed its session's idle clock at all (stale=${stale}, fresh=${fresh})`);
+  // THE ONE THAT PINS THE FIX. Each op must see a clock the PREVIOUS op advanced. A touch
+  // hoisted out of the loop leaves all three samples identical and this goes red, while the
+  // assertion above stays green.
+  const perOp = samples.length === 3 && samples.every((v, i) => i === 0 || v > samples[i - 1]);
+  check(perOp, `the clock advanced between ops, not once per drain (samples=${samples.join(',')})`);
   connectionPool.connections.delete(sessionId);
 }
 
