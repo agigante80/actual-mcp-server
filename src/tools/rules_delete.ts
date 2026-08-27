@@ -4,8 +4,10 @@ import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  // Bounded for the same reason as the payee ids in #356: this value is echoed into the
-  // not-found message, into the schedule-owned refusal, and into logger.error.
+  // #380: the shared rule schema. The reason from #356 still holds and is why it is not
+  // simply a bare string: this value is echoed into the not-found message, into the
+  // schedule-owned refusal, and into logger.error, so it must be bounded. The UUID pattern
+  // bounds it more tightly than the .max(64) it replaced.
   id: CommonSchemas.ruleId.describe('Rule ID to delete'),
 });
 

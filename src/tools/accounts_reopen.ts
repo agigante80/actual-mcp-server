@@ -4,9 +4,11 @@ import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  // Bounded, because the id is echoed into the error message and into the structured
-  // logs. Not tightened to CommonSchemas.accountId (a UUID) here: several fixtures use
-  // short non-UUID ids, and that sweep is tracked separately alongside #365.
+  // #380: tightened to the shared account schema. This comment previously said the
+  // opposite ("not tightened here: several fixtures use short non-UUID ids"), which was
+  // true until that sweep happened and would have read as an invitation to revert. The
+  // echo-into-logs concern it raised is still real and is now served by the UUID pattern,
+  // which is strictly tighter than the length bound it replaced.
   id: CommonSchemas.accountId.describe('Account ID to reopen'),
 });
 

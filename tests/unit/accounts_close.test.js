@@ -35,7 +35,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     getCalls++;
     return accountsQueue.length > 1 ? accountsQueue.shift() : accountsQueue[0];
   };
-  let categories = [{ id: 'cat-9', name: 'Misc' }];
+  let categories = [{ id: '70000000-0000-4000-8000-000000000009', name: 'Misc' }];
   apiDefault.getCategories = async () => { witness?.noteRead(); return categories; };
   apiDefault.closeAccount = async (id, transferAccountId, transferCategoryId) => { witness?.noteWrite();
     closeCalls++;
@@ -58,8 +58,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
   const OPEN = { id: '60000000-0000-4000-8000-000000000001', name: 'Checking', closed: false };
   const CLOSED = { id: '60000000-0000-4000-8000-000000000001', name: 'Checking', closed: true };
-  const DEST = { id: 'acct-2', name: 'Savings', closed: false };
-  const DEST_CLOSED = { id: 'acct-3', name: 'Old Savings', closed: true };
+  const DEST = { id: '60000000-0000-4000-8000-000000000002', name: 'Savings', closed: false };
+  const DEST_CLOSED = { id: '60000000-0000-4000-8000-000000000003', name: 'Old Savings', closed: true };
 
   const reset = (queue) => {
     accountsQueue = queue; closeCalls = 0; lastCloseArgs = null; closeThrows = null; getCalls = 0;
@@ -120,12 +120,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     reset([[OPEN, DEST], [CLOSED, DEST]]);
     const res = await tool.call({
       id: '60000000-0000-4000-8000-000000000001',
-      transferAccountId: 'acct-2',
-      transferCategoryId: 'cat-9',
+      transferAccountId: '60000000-0000-4000-8000-000000000002',
+      transferCategoryId: '70000000-0000-4000-8000-000000000009',
     });
     check(res?.success === true,              'succeeds with a transfer destination');
-    check(lastCloseArgs?.[1] === 'acct-2',    'transferAccountId forwarded as the 2nd argument');
-    check(lastCloseArgs?.[2] === 'cat-9',     'transferCategoryId forwarded as the 3rd argument');
+    check(lastCloseArgs?.[1] === '60000000-0000-4000-8000-000000000002',    'transferAccountId forwarded as the 2nd argument');
+    check(lastCloseArgs?.[2] === '70000000-0000-4000-8000-000000000009',     'transferCategoryId forwarded as the 3rd argument');
   }
 
   console.log('\n[#357] accounts_close: (c) a non-zero balance without a destination is explained');
@@ -155,7 +155,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // The balancing transaction would land somewhere hidden from most views.
     reset([[OPEN, DEST_CLOSED]]);
     let threw = null;
-    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: 'acct-3' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: '60000000-0000-4000-8000-000000000003' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                              'throws');
     check(!!threw && /CLOSED/.test(threw.message),              'says the destination is closed');
     check(!!threw && threw.message.includes('Old Savings'),     'names the destination');
@@ -167,10 +167,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // Upstream forwards this id into transaction-add unchecked, so a bogus value would
     // write a closing transaction carrying a category that does not exist (#359's class).
     reset([[OPEN, DEST]]);
-    categories = [{ id: 'cat-9', name: 'Misc' }];
+    categories = [{ id: '70000000-0000-4000-8000-000000000009', name: 'Misc' }];
     let threw = null;
     try {
-      await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: 'acct-2', transferCategoryId: '99999999-0000-4000-8000-000000000003' });
+      await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: '60000000-0000-4000-8000-000000000002', transferCategoryId: '99999999-0000-4000-8000-000000000003' });
     } catch (e) { threw = e; }
     check(threw instanceof Error,                                     'throws');
     check(!!threw && /category/i.test(threw.message),                  'error is about the category');
@@ -181,10 +181,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#357] accounts_close: a known transfer category is accepted');
   {
     reset([[OPEN, DEST], [CLOSED, DEST]]);
-    categories = [{ id: 'cat-9', name: 'Misc' }];
-    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: 'acct-2', transferCategoryId: 'cat-9' });
+    categories = [{ id: '70000000-0000-4000-8000-000000000009', name: 'Misc' }];
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001', transferAccountId: '60000000-0000-4000-8000-000000000002', transferCategoryId: '70000000-0000-4000-8000-000000000009' });
     check(res?.success === true,            'succeeds with a valid category');
-    check(lastCloseArgs?.[2] === 'cat-9',   'transferCategoryId still forwarded');
+    check(lastCloseArgs?.[2] === '70000000-0000-4000-8000-000000000009',   'transferCategoryId still forwarded');
   }
 
   console.log('\n[#357] accounts_close: the write had no effect');
