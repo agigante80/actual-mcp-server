@@ -185,11 +185,14 @@ safety.
 `actual_query_run`.
 
 `actual_accounts_create` and `actual_schedules_create` were missing from this file entirely
-until the architectural review of PR #367 noticed. `actual_accounts_create` has since been
-traced (#380) and moved to CONFIRMED, which is what an UNKNOWN entry is for. That is the failure mode this document
+until the architectural review of PR #367 noticed. That is the failure mode this document
 warns about in its own opening: a table that silently omits a case reads as coverage. A
 membership test that fails CI when an `IMPLEMENTED_TOOLS` entry appears in no row would make
 it structural rather than a matter of care, and is tracked in #370.
+
+`actual_accounts_create` has since been traced (#380) and moved to CONFIRMED, which is what
+an UNKNOWN entry is for: the list shrinks as tools are worked, and an entry leaving it is the
+normal outcome rather than a correction.
 
 `actual_transactions_import` is the one worth doing next: it routes through
 `importTransactions` to `reconcileTransactions`, which takes `acctId` without looking it
