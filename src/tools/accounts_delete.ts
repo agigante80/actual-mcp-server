@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  id: z.string().describe('Account ID to delete'),
+  id: CommonSchemas.accountId.describe('Account ID to delete'),
 });
 
 /**

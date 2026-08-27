@@ -14,6 +14,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const FieldsSchema = z.object({
   account: z.string().nullable().optional().describe('Account ID'),
@@ -28,7 +29,7 @@ const FieldsSchema = z.object({
 });
 
 const UpdateItemSchema = z.object({
-  id: z.string().describe('Transaction ID to update'),
+  id: CommonSchemas.transactionId.describe('Transaction ID to update'),
   fields: FieldsSchema.describe('Fields to update for this transaction'),
 });
 

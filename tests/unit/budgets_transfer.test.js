@@ -50,7 +50,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#141] Schema rejection: month must be YYYY-MM');
   for (const badMonth of ['', '2026', 'not-a-month']) {
     let threw = null;
-    try { await tool.call({ month: badMonth, fromCategoryId: 'a', toCategoryId: 'b', amount: 5000 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: badMonth, fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 5000 }); } catch (e) { threw = e; }
     check(threw instanceof Error, `month "${badMonth}" rejected`);
     check((threw?.message || '').includes('month must be YYYY-MM'), `error message actionable for month "${badMonth}"`);
   }
@@ -59,35 +59,36 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#141] Schema rejection: empty IDs');
   {
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: '', toCategoryId: 'b', amount: 5000 }); } catch (e) { threw = e; }
-    check((threw?.message || '').includes('fromCategoryId is required'), 'empty fromCategoryId rejected');
+    try { await tool.call({ month: '2026-04', fromCategoryId: '', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 5000 }); } catch (e) { threw = e; }
+    // #380: rejected by the shared UUID schema now, not by a per-tool min-length message.
+    check(/category ID format/i.test(threw?.message || ''), 'empty fromCategoryId rejected');
   }
   {
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: '', amount: 5000 }); } catch (e) { threw = e; }
-    check((threw?.message || '').includes('toCategoryId is required'), 'empty toCategoryId rejected');
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '', amount: 5000 }); } catch (e) { threw = e; }
+    check(/category ID format/i.test(threw?.message || ''), 'empty toCategoryId rejected');
   }
 
   // Schema rejection: amount must be positive integer
   console.log('\n[#141] Schema rejection: amount constraints');
   {
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: 0 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 0 }); } catch (e) { threw = e; }
     check((threw?.message || '').includes('amount must be positive'), 'amount=0 rejected');
   }
   {
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: -100 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: -100 }); } catch (e) { threw = e; }
     check((threw?.message || '').includes('amount must be positive'), 'amount=-100 rejected');
   }
   {
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: 99.5 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 99.5 }); } catch (e) { threw = e; }
     check((threw?.message || '').includes('amount must be an integer'), 'amount=99.5 rejected');
   }
   {
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: '5000' }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: '5000' }); } catch (e) { threw = e; }
     check(threw instanceof Error, 'amount=string rejected (Zod number type)');
   }
 
@@ -97,7 +98,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     let adapterCalled = false;
     adapter.transferBudgetAmount = async () => { adapterCalled = true; throw new Error('adapter should not be called'); };
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'cat_a', toCategoryId: 'cat_a', amount: 5000 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000a', amount: 5000 }); } catch (e) { threw = e; }
     check(threw?.message === 'Source and target categories must be different', 'exact error message');
     check(adapterCalled === false, 'adapter NOT called when same source/target');
     restore();
@@ -113,7 +114,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   ]) {
     adapter.transferBudgetAmount = async () => { throw new Error(errMsg); };
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: 5000 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 5000 }); } catch (e) { threw = e; }
     check(threw?.message === errMsg, `surfaces verbatim: "${errMsg.slice(0, 40)}..."`);
     restore();
   }
@@ -126,7 +127,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       fromCategory: { id: 'a', previousAmount: 10000, newAmount: 5000 },
       toCategory:   { id: 'b', previousAmount: 0,     newAmount: 5000 },
     });
-    const res = await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: 5000 });
+    const res = await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 5000 });
     check(res?.result?.success === true,                          'success === true');
     check(res?.result?.transferred === 5000,                      'transferred === 5000');
     check(res?.result?.fromCategory?.id === 'a',                  'fromCategory.id');
@@ -155,7 +156,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     adapter.setBudgetAmount = async () => { setBudgetAmountCount++; return {}; };
     adapter.getBudgetMonth  = async () => { getBudgetMonthCount++; return { categoryGroups: [] }; };
 
-    const res = await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: 5000 });
+    const res = await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: 5000 });
     check(res?.result?.success === true,    'happy path returns success');
     check(transferCount === 1,              'transferBudgetAmount called exactly once', `was ${transferCount}`);
     check(setBudgetAmountCount === 0,       'OLD setBudgetAmount called zero times',    `was ${setBudgetAmountCount}`);
@@ -189,7 +190,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     adapter.transferBudgetAmount = async () => { transferCount++; return {}; };
 
     let threw = null;
-    try { await tool.call({ month: '2026-04', fromCategoryId: 'a', toCategoryId: 'b', amount: -1 }); } catch (e) { threw = e; }
+    try { await tool.call({ month: '2026-04', fromCategoryId: '10000000-0000-4000-8000-00000000000a', toCategoryId: '10000000-0000-4000-8000-00000000000b', amount: -1 }); } catch (e) { threw = e; }
     check(threw instanceof Error,           'Zod rejects amount=-1');
     check(transferCount === 0,              'transferBudgetAmount not called on Zod fail', `was ${transferCount}`);
     restore();

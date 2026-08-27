@@ -35,7 +35,7 @@ check('the exported predicate is a function', typeof ruleReferencesPayee === 'fu
 // The exact shape actual_payees_update({category}) creates: payee-is condition,
 // set-category action. This is the rule the old filter wrongly dropped.
 const defaultCategoryRule = {
-  id: 'rule-1', stage: 'pre', conditionsOp: 'and',
+  id: '30000000-0000-4000-8000-000000000001', stage: 'pre', conditionsOp: 'and',
   conditions: [{ op: 'is', field: 'payee', value: PAYEE, type: 'id' }],
   actions: [{ op: 'set', field: 'category', value: CAT, type: 'id' }],
 };

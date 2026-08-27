@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import { notFoundMsg } from '../lib/errors.js';
 
 const InputSchema = z.object({ 
-  id: z.string().min(1, 'Account ID is required').describe('The UUID of the account'),
+  id: CommonSchemas.accountId.describe('The UUID of the account'),
   cutoff: z.string().optional().describe('Optional cutoff date (YYYY-MM-DD format)')
 }).strict();
 

@@ -52,10 +52,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#358] accounts_reopen: positive, a closed account is reopened');
   {
     reset([
-      [{ id: 'acct-1', name: 'Savings', closed: true }],   // before
-      [{ id: 'acct-1', name: 'Savings', closed: false }],  // after
+      [{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: true }],   // before
+      [{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: false }],  // after
     ]);
-    const res = await tool.call({ id: 'acct-1' });
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001' });
     check(res?.success === true,   'returns success: true');
     check(reopenCalls === 1,       'raw reopenAccount called exactly once');
     check(getCalls === 2,          'read before and verified after');
@@ -78,10 +78,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     // already holds, so report SUCCESS naming the non-change) and it matches what
     // closeAccount has done with `already-closed` since #357.
     reset([
-      [{ id: 'acct-1', name: 'Savings', closed: false }],
-      [{ id: 'acct-1', name: 'Savings', closed: false }],
+      [{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: false }],
+      [{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: false }],
     ]);
-    const res = await tool.call({ id: 'acct-1' });
+    const res = await tool.call({ id: '60000000-0000-4000-8000-000000000001' });
     check(res?.success === true,      'reopening an open account still succeeds');
     check(res?.alreadyOpen === true,  'and says so, rather than claiming it reopened anything');
     check(reopenCalls === 0,          'NO write is issued: a CRDT no-op still syncs to every client');
@@ -89,13 +89,16 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
   console.log('\n[#358] accounts_reopen: NEGATIVE, unknown id must not reach the write');
   {
-    reset([[{ id: 'acct-1', name: 'Savings', closed: true }]]);
+    reset([[{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: true }]]);
     let threw = null;
-    try { await tool.call({ id: 'not-an-account' }); } catch (e) { threw = e; }
+    // #380: valid in FORMAT, absent in FACT. A non-UUID would now be refused by the schema,
+    // so this case would stop reaching the adapter's not-found guard, which is the whole
+    // thing it exists to test.
+    try { await tool.call({ id: '99999999-0000-4000-8000-000000000001' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                                     'throws instead of reporting success');
     check(!!threw && /not found/i.test(threw.message),                'error says not found');
     check(!!threw && threw.message.includes('actual_accounts_list'),  'error names actual_accounts_list');
-    check(!!threw && threw.message.includes('not-an-account'),        'error names the id');
+    check(!!threw && threw.message.includes('99999999-0000-4000-8000-000000000001'),  'error names the id');
     check(!!threw && /no transactions/i.test(threw.message),
           'error explains the close-removed-it case');
     check(reopenCalls === 0,
@@ -106,11 +109,11 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#358] accounts_reopen: NEGATIVE, the write had no effect');
   {
     reset([
-      [{ id: 'acct-1', name: 'Savings', closed: true }],
-      [{ id: 'acct-1', name: 'Savings', closed: true }],   // still closed afterwards
+      [{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: true }],
+      [{ id: '60000000-0000-4000-8000-000000000001', name: 'Savings', closed: true }],   // still closed afterwards
     ]);
     let threw = null;
-    try { await tool.call({ id: 'acct-1' }); } catch (e) { threw = e; }
+    try { await tool.call({ id: '60000000-0000-4000-8000-000000000001' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                           'throws when the state did not change');
     check(!!threw && /still closed/i.test(threw.message),   'error says it is still closed');
     check(reopenCalls === 1,                                'the write was attempted');

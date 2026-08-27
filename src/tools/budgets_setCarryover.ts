@@ -1,10 +1,11 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   month: z.string().describe('Budget month in YYYY-MM format'),
-  categoryId: z.string().describe('Category ID'),
+  categoryId: CommonSchemas.categoryId.describe('Category ID'),
   flag: z.boolean().describe('Whether to carry over unused budget to next month (true) or not (false)'),
 });
 

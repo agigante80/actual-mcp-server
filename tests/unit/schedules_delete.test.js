@@ -98,7 +98,11 @@ const VALID_UUID = '00000000-0000-0000-0000-000000000099';
     let threw = null;
     try { await tool.call({ id: 'not-a-uuid' }); } catch (e) { threw = e; }
     check(threw instanceof Error,                       'throws on bad UUID');
-    check((threw?.message || '').includes('Invalid UUID format'), 'actionable error');
+    // #380: the message comes from CommonSchemas.scheduleId now, not an inline regex, so
+    // it names the ENTITY as well as the format. Asserted on both halves rather than on
+    // the exact sentence.
+    check(/schedule ID format/i.test(threw?.message || '') && /uuid/i.test(threw?.message || ''),
+      'actionable error naming the entity and the expected format');
     check(cycles() === 0,                               'a Zod failure never reaches the write queue at all');
     check(deleteCalls === 0,                            'rawDeleteSchedule NOT called');
   }

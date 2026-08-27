@@ -1,16 +1,15 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   month: z.string()
     .regex(/^\d{4}-\d{2}$/, 'month must be YYYY-MM')
     .describe('Month in YYYY-MM format'),
-  fromCategoryId: z.string()
-    .min(1, 'fromCategoryId is required')
+  fromCategoryId: CommonSchemas.categoryId
     .describe('Source category ID to transfer from'),
-  toCategoryId: z.string()
-    .min(1, 'toCategoryId is required')
+  toCategoryId: CommonSchemas.categoryId
     .describe('Target category ID to transfer to'),
   amount: z.number()
     .int('amount must be an integer (cents)')

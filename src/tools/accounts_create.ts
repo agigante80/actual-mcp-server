@@ -7,7 +7,11 @@ export default createTool({
   name: 'actual_accounts_create',
   description: 'Create a new account in Actual Budget',
   schema: z.object({ 
-    id: z.string().optional(), 
+    // #380: optional, but a caller-supplied primary key must still be a real id when
+    // present. Actual mints UUIDs, so anything else would create a row no listing tool
+    // could later resolve by the id the caller thinks it has.
+    id: CommonSchemas.accountId.optional(),
+    
     name: CommonSchemas.name, 
     balance: CommonSchemas.optionalAmountCents 
   }),

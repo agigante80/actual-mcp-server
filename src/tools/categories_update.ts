@@ -1,12 +1,13 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  id: z.string().describe('Category ID to update'),
+  id: CommonSchemas.categoryId.describe('Category ID to update'),
   fields: z.object({
     name: z.string().optional().describe('New category name'),
-    group_id: z.string().optional().describe('Category group ID to move this category to'),
+    group_id: CommonSchemas.categoryGroupId.optional().describe('Category group ID to move this category to'),
     is_income: z.boolean().optional().describe('Whether this is an income category'),
     hidden: z.boolean().optional().describe('Whether this category is hidden'),
   }).describe('Fields to update'),

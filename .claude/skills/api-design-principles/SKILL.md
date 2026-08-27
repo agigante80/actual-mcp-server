@@ -37,7 +37,19 @@ as the underlying principles, and apply them through these project rules (from C
   by `tests/unit/schema_json_openai_compat.test.js`), and give every field a `.describe()`.
 - **Types are fixed by convention, not per-tool invention.** Amounts are always integer cents
   (`5000` = $50.00, never decimal dollars). Dates are `YYYY-MM-DD` strings, never `Date.now()`.
-  IDs use `CommonSchemas.accountId` / the shared UUID pattern.
+  IDs use `CommonSchemas.<entity>Id`, and `tests/unit/tool_id_schema_drift.test.js` fails the
+  build if an id-shaped field does not (#380). Note this line USED to be aspirational: when
+  the guard was written, 33 of 41 id fields were on one of three looser forms (a bare
+  `z.string()`, a `.min(1).max(64)` bound, or an inline `UUID_PATTERN` meaning the identical
+  thing), so `accounts_update.id` was published as a UUID while `categories_update.id` was
+  published as any string. A convention four fifths of the surface ignores is not a
+  convention, which is why it is now enforced rather than stated.
+
+  The guard's exception list is the honest part: an MCP `sessionId` and a bank's
+  `imported_id` are not Actual UUIDs and must not be typed as one, and the OPTIONAL FILTER
+  ids (`transactions_filter`, the `search_by_*` family) are deliberately still loose,
+  because tightening them turns "a name returns nothing" into "a name is a schema error",
+  which is a behaviour change needing its own decision.
 - **Errors are messages, not status codes.** There is no HTTP status layer at the tool boundary:
   use the shared helpers `notFoundMsg()` / `constraintErrorMsg()` from `src/lib/errors.ts` so a
   "not found" or constraint failure reads consistently across all 74 tools. Domain/validation

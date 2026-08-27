@@ -45,9 +45,9 @@ console.log('Running transactions_uncategorized unit tests');
   console.log('\n[Case 1] Default call — summary only; no transactions key');
   {
     adapterMod.default.getTransactions = async () => [
-      { id: 'txn-1', amount: -500,  category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: '50000000-0000-4000-8000-000000000001', amount: -500,  category: null, account: ACCT_A, date: '2026-04-01' },
       { id: 'txn-2', amount: -1000, category: null, account: ACCT_B, date: '2026-04-01' },
-      { id: 'txn-3', amount: -200,  category: 'cat-1', account: ACCT_A, date: '2026-04-01' },
+      { id: 'txn-3', amount: -200,  category: '10000000-0000-4000-8000-000000000001', account: ACCT_A, date: '2026-04-01' },
     ];
     adapterMod.default.getAccounts = async () => [
       { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
@@ -77,7 +77,7 @@ console.log('Running transactions_uncategorized unit tests');
   console.log('\n[Case 2] includeTransactions:true — all summary + list fields present');
   {
     adapterMod.default.getTransactions = async () => [
-      { id: 'txn-1', amount: -500, category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: '50000000-0000-4000-8000-000000000001', amount: -500, category: null, account: ACCT_A, date: '2026-04-01' },
       { id: 'txn-2', amount: -300, category: null, account: ACCT_B, date: '2026-04-01' },
     ];
     adapterMod.default.getAccounts = async () => [
@@ -230,7 +230,7 @@ console.log('Running transactions_uncategorized unit tests');
   console.log('\n[Case 8] summary.totalAmount removed — result.summary is undefined');
   {
     adapterMod.default.getTransactions = async () => [
-      { id: 'txn-1', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
+      { id: '50000000-0000-4000-8000-000000000001', amount: -100, category: null, account: ACCT_A, date: '2026-04-01' },
     ];
     adapterMod.default.getAccounts = async () => [
       { id: ACCT_A, name: 'Checking', offbudget: false, closed: false },
@@ -257,7 +257,7 @@ console.log('Running transactions_uncategorized unit tests');
       return [
         { id: 'txn-on',  amount: -500,  category: null, account: ACCT_A,    date: '2026-04-01' },
         { id: 'txn-off', amount: -1500, category: null, account: OFFBUDGET,  date: '2026-04-01' },
-        { id: 'txn-cat', amount: -200,  category: 'cat-1', account: ACCT_A,  date: '2026-04-01' },
+        { id: 'txn-cat', amount: -200,  category: '10000000-0000-4000-8000-000000000001', account: ACCT_A,  date: '2026-04-01' },
       ];
     };
     adapterMod.default.getAccounts = async () => [

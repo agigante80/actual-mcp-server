@@ -1,15 +1,15 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { UUID_PATTERN } from '../lib/constants.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import { RecurConfigSchema } from '../lib/schemas/recur.js';
 
 const InputSchema = z.object({
   name: z.string().optional()
     .describe('Unique display name for the schedule'),
-  payee: z.string().regex(UUID_PATTERN, 'Invalid UUID format').optional()
+  payee: CommonSchemas.payeeId.optional()
     .describe('Payee UUID (from actual_payees_get)'),
-  account: z.string().regex(UUID_PATTERN, 'Invalid UUID format').optional()
+  account: CommonSchemas.accountId.optional()
     .describe('Account UUID (from actual_accounts_list). If omitted the schedule is not tied to an account'),
   amount: z.number().int().optional()
     .describe('Amount in cents. Negative = expense (e.g. -5000 = -$50.00), positive = income'),

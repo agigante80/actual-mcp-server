@@ -22,7 +22,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   let rawSetCalls = 0;
   let budgetMonths = ['2026-01', '2026-02', '2026-03'];
   apiDefault.sync = async () => {};
-  apiDefault.getCategories = async () => [{ id: 'cat-1', name: 'Food' }];
+  apiDefault.getCategories = async () => [{ id: '10000000-0000-4000-8000-000000000001', name: 'Food' }];
   apiDefault.getBudgetMonths = async () => budgetMonths;
   apiDefault.setBudgetAmount = async () => { rawSetCalls++; };
 
@@ -57,7 +57,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     {
       rawSetCalls = 0;
       let threw = null;
-      try { await realAdapter.setBudgetAmount('2019-01', 'cat-1', 1000); } catch (e) { threw = e; }
+      try { await realAdapter.setBudgetAmount('2019-01', '10000000-0000-4000-8000-000000000001', 1000); } catch (e) { threw = e; }
       // #377: the refusal is identified by TYPE. The message is still asserted for the
       // CONTENT a caller needs to act (the range and the listing tool), but no assertion
       // depends on a particular phrasing, so the wording can be reworded freely. It was
@@ -80,7 +80,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       // adapter.setBudgetAmount guard, travels through the real tool, and the tool's
       // decision to return { success: false } is made by type. Neither side reproduces
       // the other's string, so a reword cannot break the contract silently.
-      const res = await tool.call({ month: '2019-01', categoryId: 'cat-1', amount: 1000 });
+      const res = await tool.call({ month: '2019-01', categoryId: '10000000-0000-4000-8000-000000000001', amount: 1000 });
       check(res?.success === false,                              'month refusal returns success:false, not a throw');
       check(typeof res?.error === 'string' && res.error.length > 0, 'and carries an actionable message');
       check(/actual_budgets_getMonths/.test(res?.error ?? ''),    'that names the tool to call next');
@@ -110,7 +110,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       // Asserted against the adapter directly, so the tool's behaviour above is explained
       // rather than coincidental.
       let threw = null;
-      try { await realAdapter.setBudgetAmount('2026-02', 'no-such-category', 1000); }
+      try { await realAdapter.setBudgetAmount('2026-02', '19999999-0000-4000-8000-000000000009', 1000); }
       catch (e) { threw = e; }
       check(isPreflightRefusal(threw),          'the category guard throws a pre-flight refusal');
       check(threw?.refusalKind === 'not-found', 'typed as not-found');
@@ -131,7 +131,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       const saved = realAdapter.setBudgetAmount;
       realAdapter.setBudgetAmount = async () => { throw new Error('ECONNRESET'); };
       let threw = null;
-      try { await tool.call({ month: '2026-02', categoryId: 'cat-1', amount: 1000 }); }
+      try { await tool.call({ month: '2026-02', categoryId: '10000000-0000-4000-8000-000000000001', amount: 1000 }); }
       catch (e) { threw = e; }
       check(threw instanceof Error,                              'a non-refusal still throws');
       check(!isPreflightRefusal(threw),                          'and is not reported as a refusal');
@@ -150,7 +150,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
         throw new Error('upstream error: category index not found in the search catalogue');
       };
       let threw = null;
-      try { await tool.call({ month: '2026-02', categoryId: 'cat-1', amount: 1000 }); }
+      try { await tool.call({ month: '2026-02', categoryId: '10000000-0000-4000-8000-000000000001', amount: 1000 }); }
       catch (e) { threw = e; }
       check(threw instanceof Error, 'prose alone no longer produces a structured refusal');
       realAdapter.setBudgetAmount = saved;
@@ -160,7 +160,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     {
       rawSetCalls = 0;
       let threw = null;
-      try { await realAdapter.setBudgetAmount('2026-02', 'cat-1', 1000); } catch (e) { threw = e; }
+      try { await realAdapter.setBudgetAmount('2026-02', '10000000-0000-4000-8000-000000000001', 1000); } catch (e) { threw = e; }
       check(threw === null,       'an in-range month is accepted');
       check(rawSetCalls === 1,    'the write happened exactly once');
     }
@@ -168,7 +168,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     console.log('\n[#361] amount 0 is a legitimate budget value, not a falsy skip');
     {
       rawSetCalls = 0;
-      await realAdapter.setBudgetAmount('2026-02', 'cat-1', 0);
+      await realAdapter.setBudgetAmount('2026-02', '10000000-0000-4000-8000-000000000001', 0);
       check(rawSetCalls === 1, 'setting a category back to zero reaches the write');
     }
 
@@ -178,7 +178,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       // than the bug being fixed.
       budgetMonths = [];
       rawSetCalls = 0;
-      await realAdapter.setBudgetAmount('2026-02', 'cat-1', 500);
+      await realAdapter.setBudgetAmount('2026-02', '10000000-0000-4000-8000-000000000001', 500);
       check(rawSetCalls === 1, 'an empty months list is treated as unknown, not as a refusal');
       budgetMonths = ['2026-01', '2026-02', '2026-03'];
     }
@@ -191,7 +191,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   console.log('\n[#89] Positive path: a valid categoryId returns { result }');
   {
     adapter.setBudgetAmount = async () => ({ budgeted: 50000 });
-    const res = await tool.call({ month: '2026-04', categoryId: 'cat_1', amount: 50000 });
+    const res = await tool.call({ month: '2026-04', categoryId: '10000000-0000-4000-8000-000000000001', amount: 50000 });
     check(res && 'result' in res,   'response has result key');
     check(res?.success !== false,   'success is not false on happy path');
   }
