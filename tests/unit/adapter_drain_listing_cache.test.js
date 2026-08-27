@@ -36,12 +36,15 @@ const PAYEE = 'pppppppp-0000-4000-8000-000000000001';
 const NEW_PAYEE = 'pppppppp-0000-4000-8000-000000000002';
 const ACCOUNT = 'aaaaaaaa-0000-4000-8000-000000000001';
 
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 let poolRef = null;
 const apiMod = await import('@actual-app/api');
 const api = apiMod.default || apiMod;
 
 // Mutable fixture state, reset per case.
 let payees, accounts, getPayeesCalls, getAccountsCalls, updatePayeeCalls, createDelayMs;
+let getCategoriesCalls = 0, getGroupsCalls = 0;
 
 api.sync = async () => {};
 api.getPayees = async () => { getPayeesCalls++; return payees.map((p) => ({ ...p })); };
@@ -78,6 +81,9 @@ let slowFirstOpMs = 0;
 let clockSamples = null;
 let clockSessionId = null;
 let everyOpSlowMs = 0;
+api.getCategories = async () => { getCategoriesCalls++; return []; };
+api.getCategoryGroups = async () => { getGroupsCalls++; return []; };
+api.updateNote = async () => {};
 api.addTransactions = async (_accountId, txs) => {
   if (clockSamples) {
     const conn = poolRef?.connections.get(clockSessionId);
@@ -105,6 +111,7 @@ function reset() {
   payees = [{ id: PAYEE, name: 'Existing' }];
   accounts = [{ id: ACCOUNT, name: 'Checking' }];
   getPayeesCalls = 0; getAccountsCalls = 0; updatePayeeCalls = []; createDelayMs = 0;
+  getCategoriesCalls = 0; getGroupsCalls = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -271,6 +278,10 @@ describe('(9) isolation: separate drains never share cached state, and the store
   // The scenario #378's re-validation asked for: two sessions, which in a multi-budget
   // deployment are two budgets. Separate drains must not share a listing, or one principal's
   // guard would decide against another principal's entity list.
+  //
+  // Honest about what this proves: it pins that the cache is never-shared-across-drains, which
+  // holds for a module-level cache cleared in a finally as well. It is NOT evidence for the
+  // AsyncLocalStorage scoping specifically; the source check below is.
   await requestContext.run({ sessionId: 'session-A' }, () =>
     adapter.addTransactions([{ account: ACCOUNT, date: '2026-02-01', amount: -1 }]));
   const afterA = getAccountsCalls;
@@ -279,20 +290,76 @@ describe('(9) isolation: separate drains never share cached state, and the store
   check(getAccountsCalls === afterA + 1,
     `session B's drain re-read rather than reusing session A's listing (got ${getAccountsCalls})`);
 
-  // Structural, not conventional: outside a drain there is no store, so a read is a straight
-  // pass-through and there is nothing to reach even by mistake. This is the assertion that
-  // would have to be rewritten if the cache ever moved back to module scope, which is the
-  // point of it.
-  const beforeDirect = getAccountsCalls;
-  await adapter.getAccounts();
-  await adapter.getAccounts();
-  check(getAccountsCalls === beforeDirect + 2,
-    `two reads OUTSIDE any drain both hit the api (got ${getAccountsCalls - beforeDirect})`);
+  // The structural claim, asserted against the SOURCE, because it cannot be observed from
+  // outside. The previous version of this called adapter.getAccounts() twice and asserted two
+  // raw calls, with a comment claiming it would go red if the cache moved back to module
+  // scope. It could not: adapter.getAccounts calls rawGetAccounts directly and is not one of
+  // the readDrainListing call sites, so it is two raw calls under EVERY implementation.
+  // Review proved that by reintroducing a module-level cache and watching the suite stay
+  // fully green.
+  //
+  // A module-level binding is what the regression actually looks like, and that IS checkable.
+  const adapterSource = readFileSync(
+    fileURLToPath(new URL('../../src/lib/actual-adapter.ts', import.meta.url)), 'utf8');
+  const moduleLevelCache = adapterSource
+    .split('\n')
+    .filter((l) => /^(let|var|const)\s+\w*[Dd]rainListing\w*\s*(:|=)/.test(l))
+    .filter((l) => !/AsyncLocalStorage/.test(l));
+  check(moduleLevelCache.length === 0,
+    `the drain cache has no module-level binding (found: ${moduleLevelCache.join(' | ') || 'none'})`);
 
   // WHAT THIS DOES NOT CLAIM. Two sessions writing inside ONE drain window DO share that
   // drain, and therefore its cache, because the drain picks one connection from batch[0].
   // That is not a cache defect (they already share the api singleton and its loaded budget)
   // and it is tracked as #390, which is about the drain itself rather than the cache.
+}
+
+// ---------------------------------------------------------------------------
+describe('(10) ACCEPTANCE (#378): a second note write in one drain pays ZERO listings');
+{
+  reset();
+  // The ticket's own stated worst case: "Given a single actual_notes_update on a
+  // non-budget-month id, Then it performs at most four listing reads, and a SECOND note write
+  // in the same drain performs zero." v0.16.1 shipped WITHOUT this: updateNote carried no
+  // preservesListings annotation, so the fail-safe invalidate-everything default applied and
+  // two note writes paid EIGHT listings. Nothing in the suite noticed, which is why this case
+  // exists: a lost annotation is only a performance regression, so it is invisible unless
+  // something counts.
+  await Promise.all([
+    adapter.updateNote(ACCOUNT, 'first').catch(() => {}),
+    adapter.updateNote(ACCOUNT, 'second').catch(() => {}),
+  ]);
+  const total = getAccountsCalls + getCategoriesCalls + getGroupsCalls + getPayeesCalls;
+  check(total === 4,
+    `two note writes in one drain paid FOUR listings, not eight (got ${total}: ` +
+    `accounts=${getAccountsCalls} categories=${getCategoriesCalls} ` +
+    `groups=${getGroupsCalls} payees=${getPayeesCalls})`);
+}
+
+// ---------------------------------------------------------------------------
+describe('(11) memoisation survives the concurrency limiter, which does not preserve async context');
+{
+  reset();
+  // Every readDrainListing call site is withConcurrency(() => retry(() => readDrainListing())).
+  // withConcurrency queues a PLAIN CLOSURE on a module-level array when saturated and invokes
+  // it from another task's .finally(), so the queued task runs in the RELEASING task's async
+  // context. An AsyncLocalStorage-scoped cache is therefore only reachable through the limiter
+  // by arrangement (the drain holds the api lock, so every limiter task inside it is a
+  // drain-context task), not by construction. Squeeze the limiter to 1 so every read after the
+  // first is queued, and pin that the memoisation still holds. If it ever stops, the failure is
+  // silent (a pass-through: correct but slow), which is exactly the kind that needs a counter.
+  const { setMaxConcurrency, getConcurrencySnapshot } =
+    await import('../../dist/src/lib/actual-adapter/concurrency.js');
+  const previous = getConcurrencySnapshot().maxConcurrency;
+  setMaxConcurrency(1);
+  try {
+    await Promise.all(Array.from({ length: 6 }, () =>
+      adapter.addTransactions([{ account: ACCOUNT, date: '2026-03-01', amount: -1 }])));
+    check(getAccountsCalls === 1,
+      `six guarded writes through a saturated limiter still paid ONE listing (got ${getAccountsCalls})`);
+  } finally {
+    setMaxConcurrency(previous);
+  }
 }
 
 log(`\n[#378] Results: ${passed} passed, ${failed} failed`);
