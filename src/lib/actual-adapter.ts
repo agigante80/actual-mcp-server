@@ -81,6 +81,7 @@ import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferre
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId } from './apiState.js';
+import { withApiLock } from './apiLock.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -155,7 +156,6 @@ function getActiveBudgetConfig(): BudgetConfig {
  * init/shutdown pairs corrupt the session.  All callers (reads via withActualApi,
  * writes via processWriteQueue) must acquire this lock before touching the API.
  */
-let _apiSessionLock: Promise<void> = Promise.resolve();
 
 /**
  * #390: make the loaded budget a CHECKED PRECONDITION of an operation rather than a side
@@ -210,12 +210,7 @@ async function ensureLoadedBudgetMatchesSession(): Promise<void> {
   }
 }
 
-function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
-  let release!: () => void;
-  const prevLock = _apiSessionLock;
-  _apiSessionLock = new Promise<void>(resolve => { release = resolve; });
-  return prevLock.then(() => fn()).finally(() => release());
-}
+
 
 // Per-op timeout (#270) lives in ./opTimeout.ts so ActualConnectionPool can bound
 // its own session-open init/download without a circular import back into this
@@ -587,6 +582,17 @@ async function initActualApiForOperation(): Promise<void> {
   // we just join in.
   if (isApiInitialized()) {
     logger.debug('[ADAPTER] api already initialised; skipping redundant init');
+    // #390 round 2: skipping the init is right (that is #134's fix for the #127 auth burst),
+    // but it also skips the downloadBudget that would have selected THIS session's budget. The
+    // legacy branch therefore leaked in both directions and, unlike the pooled branch, silently:
+    // reproduced as session A receiving session B's account list with no warning at all. It is
+    // reachable in ordinary HTTP operation because httpServer deliberately keeps an MCP session
+    // serving after its pool entry is dropped, and shutdownActualApi's sync-only branch leaves
+    // the singleton live whenever any other session still holds an entry.
+    //
+    // Checking HERE covers every legacy caller in one place: both withActualApi branches,
+    // withActualApiWrite, and the drain's legacy branch.
+    await ensureLoadedBudgetMatchesSession();
     return;
   }
   try {
@@ -706,6 +712,11 @@ interface WriteOperation<T> {
   sessionId?: string;
   // #278: bounds how long this entry may sit UNDISPATCHED. Cleared at dispatch.
   residencyTimer?: NodeJS.Timeout;
+  // #390 round 2: the FULL request context captured at enqueue. sessionId alone is not enough
+  // for the budget precondition, because getActiveBudgetConfig also consults `principal` for
+  // the #189 preference restore and `allowedBudgets` for the ACL. The drain re-enters this
+  // context per operation so each op resolves ITS OWN budget.
+  requestStore?: { sessionId?: string; allowedBudgets?: string[]; principal?: string };
   // #378: entity listings this operation CANNOT change. Anything not named here is dropped
   // from the drain cache once the operation completes. The default (undefined) therefore
   // invalidates everything, which is the fail-safe direction: forgetting to annotate a new
@@ -935,11 +946,6 @@ async function processWriteQueue() {
           await initActualApiForOperation();
         }
 
-        // #390: the batch is about to run against whatever budget the singleton holds. Verify
-        // it is THIS session's before writing a single row. Inside the lock, so no other
-        // session can change it between here and the ops.
-        await ensureLoadedBudgetMatchesSession();
-
         // Process all queued writes in the same session
         // Each operation handles its own success/failure
         // #378: SEQUENTIAL, in enqueue order. This was `Promise.allSettled(batch.map(...))`,
@@ -966,9 +972,26 @@ async function processWriteQueue() {
         //
         // Each op keeps its own withOpTimeout (#270) and still settles individually, so one
         // stalled or rejected operation cannot hold the api mutex or fail its siblings.
-        for (const { operation, resolve, reject, preservesListings } of batch) {
+        for (const { operation, resolve, reject, preservesListings, requestStore } of batch) {
           try {
-            const result = await withOpTimeout(operation);
+            // #390 round 2: run each op in the context it was ENQUEUED in.
+            //
+            // The precondition was originally checked ONCE per drain, against the ambient
+            // context. That was wrong twice over. A batch can span sessions, so one check for
+            // it is not well defined; and the ambient context here is NOT empty. The
+            // long-standing comment on scheduleWriteQueueDrain claims "setTimeout strips the
+            // ALS frame", and that is simply false: ALS propagates through timers, so the
+            // drain inherits the context of whichever session most recently scheduled it,
+            // which is the last enqueuer in the debounce window and is unrelated to this
+            // operation. Reproduced: with A and B on different budgets writing in one window,
+            // A's write landed in B's budget, and in the other ordering the precondition
+            // actively re-pointed the singleton at the wrong session, making a write that had
+            // been correct wrong. Re-entering the captured store makes each op resolve its own
+            // budget, which is what #158 captured a per-entry sessionId for in the first place.
+            const result = await requestContext.run(requestStore ?? {}, async () => {
+              await ensureLoadedBudgetMatchesSession();
+              return await withOpTimeout(operation);
+            });
             resolve(result);
           } catch (error) {
             logger.error('[WRITE QUEUE] Operation failed:', error);
@@ -1097,7 +1120,11 @@ function queueWriteOperation<T>(
   _enforceBudgetAcl();
 
   // Capture sessionId from AsyncLocalStorage at enqueue time. The setTimeout
-  // below strips the ALS frame, so without capturing here the pool-branch
+  // below does NOT strip the ALS frame (that claim was here for a long time and is false:
+  // ALS propagates through timers). What it does is inherit the context of whichever session
+  // most recently SCHEDULED the drain, which is the last enqueuer in the debounce window and
+  // has nothing to do with the op being run. So capturing per entry is still exactly right,
+  // and #390 additionally re-enters the captured store per op. Without capturing, the pool-branch
   // decision in processWriteQueue would always miss. See #158.
   const sessionId = _resolveSessionId();
   return new Promise((resolve, reject) => {
@@ -1106,6 +1133,7 @@ function queueWriteOperation<T>(
       resolve,
       reject,
       sessionId,
+      requestStore: requestContext.getStore(),
       preservesListings: options?.preservesListings,
     };
 
@@ -3348,13 +3376,23 @@ export async function importBudget(
 ): Promise<{ id: string }> {
   observability.incrementToolCall('actual.budgets.import').catch(() => {});
   const result = await queueWriteOperation(async () => {
-    return await withConcurrency(() =>
+    const imported = await withConcurrency(() =>
       retry(() => rawImportBudget(input, opts) as Promise<{ id: string }>, {
         retries: 0,
         backoffMs: 200,
         isRetryable: isRetryableError,
       }),
     );
+    // #390: an import CHANGES the loaded budget (upstream documents importBudget as "loads the
+    // imported budget"), and the singleton's record kept naming the pre-import one. That is the
+    // unsafe direction: the precondition compares against it, passes, and a session then reads
+    // the imported file while believing it is on its own budget. A sentinel rather than a real
+    // syncId, because an imported file is outside the budget registry and outside the ACL, so
+    // no session can ever legitimately match it and every session's next operation re-selects
+    // its own budget. Recorded AT the call site so the guard in
+    // tests/unit/budget_selection_precondition.test.js can see it.
+    setLoadedBudgetSyncId(`imported:${imported.id}`);
+    return imported;
   });
 
   // #349: an import CHANGES WHICH BUDGET IS LOADED, so the pool's record of it
@@ -3379,6 +3417,7 @@ export async function importBudget(
   // too. Invalidating only A would leave the others matching the fast path against
   // a record that is no longer true.
   const invalidated = connectionPool.invalidateAllLoadedSyncIds(`imported:${result.id}`);
+
   if (invalidated > 0) {
     logger.debug(
       `[ADAPTER] importBudget: invalidated the pooled syncId on ${invalidated} session(s) ` +
