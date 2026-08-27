@@ -9,7 +9,7 @@ const InputSchema = z
     // #357: documented by the Actual API reference as required when the account's
     // balance is non-zero, and previously not exposed at all, which made such an
     // account impossible to close through this server.
-    // #380: the same entity type as `id` three lines up, so it gets the same schema. It was
+    // #380: the same entity type as `id` at the top of this object, so it gets the same schema. It was
     // left on a bounded string because the drift guard could not SEE it: its detector
     // required `z.` on the field's own line, and this declaration breaks after `z`.
     transferAccountId: CommonSchemas.accountId

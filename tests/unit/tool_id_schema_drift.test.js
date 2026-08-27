@@ -16,6 +16,7 @@
 // Run: node tests/unit/tool_id_schema_drift.test.js
 
 import assert from 'assert';
+import { readdirSync, readFileSync } from 'fs';
 import { z } from 'zod';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -50,8 +51,14 @@ const EXCEPTIONS = {
   // blind sweep. Tracked as its own decision rather than folded in here.
   'actual_bank_sync:accountId': 'Category B: optional filter, pending the #380 follow-up decision',
   // Found only once the detector walked the published schema rather than the source: the
-  // regex version never saw it. Same Category B reasoning as its siblings.
-  'actual_transactions_get:accountId': 'Category B: optional filter',
+  // regex version never saw it. NOT the same reason as its Category B siblings, though it
+  // was first filed with theirs by copying: their justification is "today a caller passing a
+  // NAME gets an empty result, after tightening a schema error", and that premise is FALSE
+  // here. transactions_get.ts already pre-flights the id and returns notFoundMsg('Account',
+  // ...), so a name gets a clear refusal, not an empty result. It stays an exception on the
+  // narrower ground that the refusal it already gives is BETTER than a ZodError: it names
+  // the entity and the listing tool. Tightening would trade a good message for a worse one.
+  'actual_transactions_get:accountId': 'refusal already better than a ZodError (see note)',
   'actual_transactions_filter:accountId': 'Category B: optional filter',
   'actual_transactions_filter:categoryId': 'Category B: optional filter',
   'actual_transactions_filter:payeeId': 'Category B: optional filter',
@@ -115,8 +122,17 @@ function* walkProps(schema, path = []) {
 function enforcesUuid(sub) {
   if (!sub || typeof sub !== 'object') return false;
   if (typeof sub.pattern === 'string' && sub.pattern.includes(UUID_RE_TEXT)) return true;
-  for (const key of ['anyOf', 'oneOf', 'allOf']) {
-    if ((sub[key] ?? []).some(enforcesUuid)) return true;
+  // allOf: every branch must hold, so ONE enforcing branch enforces the whole.
+  if ((sub.allOf ?? []).some(enforcesUuid)) return true;
+  // anyOf/oneOf: the value satisfies ONE branch, so the field is only enforced when EVERY
+  // non-null branch enforces. `.some()` here was a laundering hole: `z.union([accountId,
+  // z.string().min(1)])` accepts any non-empty string and reported enforced, which is the
+  // cheapest way for a future change to reverse #380 while looking like an addition
+  // ("accept an id or a name"). The null branch is dropped first so the nullable shape
+  // `anyOf: [{pattern: UUID}, {type: 'null'}]` still passes.
+  for (const key of ['anyOf', 'oneOf']) {
+    const branches = (sub[key] ?? []).filter((b) => b?.type !== 'null');
+    if (branches.length && branches.every(enforcesUuid)) return true;
   }
   return false;
 }
@@ -142,17 +158,66 @@ console.log('\n[tool-id-schema-drift]');
 
 // The compiled tools, with their published JSON Schema. Keyed by TOOL NAME so exception
 // keys read as `tool_name:field.path` rather than as a filename.
-const tools = Object.values(toolsIndex)
-  .map((m) => (m && m.default) || m)
+const exported = Object.values(toolsIndex).map((m) => (m && m.default) || m);
+const tools = exported
   .filter((t) => t && typeof t.name === 'string' && t.inputSchema)
   .map((t) => ({ name: t.name, published: z.toJSONSchema(t.inputSchema) }));
 
-check('the tool set is real (an empty set would pass every check below)', () => {
-  assert.ok(tools.length >= 70, `expected ~74 tools with schemas, found ${tools.length}`);
+// The OLD source-walking detector read readdirSync(src/tools), so a tool could not remove
+// itself from the walk by changing shape. This one duck-types, so it can. A `>= 70` floor
+// against 74 live tools would let FOUR tools vanish and still report "7 passed, 0 failed",
+// which is the silent-skip class that already cost this repo #366 and #382. Assert equality
+// and NAME the dropped exports, so a factory that renames `inputSchema` fails loudly here
+// instead of quietly shipping a tool with unchecked ids.
+check('every exported tool is actually walked (a silent skip is the failure mode here)', () => {
+  const dropped = exported.filter((t) => !(t && typeof t.name === 'string' && t.inputSchema));
+  assert.strictEqual(
+    tools.length,
+    exported.length,
+    `exports with no usable inputSchema: ${dropped.map((t) => t?.name ?? '<anonymous>').join(', ')}`,
+  );
+  assert.ok(tools.length > 0, 'an empty set would pass every check below');
 });
 
 check('the UUID pattern was resolved (without it, nothing enforces anything)', () => {
   assert.ok(UUID_PATTERN && UUID_PATTERN.source.includes('[0-9a-f]{8}'), 'UUID_PATTERN did not load');
+});
+
+// IMPORTANT-3 (round 2): the rewrite to a published-schema walk silently RETIRED this
+// check, and nothing replaced it. It guards a different property from everything else in
+// this file: source-level duplication of the rule. `z.string().regex(UUID_PATTERN)` and
+// `CommonSchemas.accountId` publish an IDENTICAL `pattern`, so the JSON Schema walk cannot
+// tell them apart by construction. It has to be a source scan or it cannot exist at all.
+check('no tool inlines UUID_PATTERN instead of using the shared schema', () => {
+  const files = readdirSync(TOOLS_DIR).filter((f) => f.endsWith('.ts') && f !== 'index.ts');
+  const inliners = files.filter((f) => /UUID_PATTERN/.test(strip(readFileSync(join(TOOLS_DIR, f), 'utf8'))));
+  assert.strictEqual(
+    inliners.length,
+    0,
+    `these tools express the UUID rule themselves instead of reusing CommonSchemas: ${inliners.join(', ')}. ` +
+      'The same rule written twice is how a fifth tier of id validation appears.',
+  );
+});
+
+// L5 (round 2): walkProps descends `properties`, `items` and the three combinators. It does
+// NOT resolve `$ref`/`$defs`, nor descend `additionalProperties`/`patternProperties`/
+// `prefixItems`. None are live today (verified: 0 of 74 published schemas emit any of them),
+// but the failure mode if one appears is the bad one: a `$ref` node carries no `type`, so it
+// is skipped SILENTLY rather than flagged. Assert the precondition instead of trusting it.
+check('no published schema uses a node shape the walk cannot follow', () => {
+  const unfollowable = [];
+  for (const { name, published } of tools) {
+    const seen = JSON.stringify(published);
+    for (const key of ['$ref', '$defs', 'prefixItems', 'patternProperties']) {
+      if (seen.includes(`"${key}"`)) unfollowable.push(`${name} (${key})`);
+    }
+  }
+  assert.strictEqual(
+    unfollowable.length,
+    0,
+    `walkProps cannot follow these and would skip their ids in silence: ${unfollowable.join(', ')}. ` +
+      'Teach walkProps the shape before publishing it.',
+  );
 });
 
 check('every id-shaped field enforces the UUID, or is a documented exception', () => {
