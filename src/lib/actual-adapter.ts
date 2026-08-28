@@ -1131,6 +1131,29 @@ async function processWriteQueue() {
       }
     });
     });
+  } catch (lockError) {
+    // #393 review: THE LOCK ITSELF CAN NOW REJECT, before `fn()` ever runs.
+    //
+    // The batch-rejection handler above lives INSIDE the lock callback, which was sound while
+    // withApiLock could only reject from the callback. Once acquiring the lock started settling
+    // an abandoned budget load, a timeout there bypasses that handler entirely, and there was
+    // no outer catch: every queued write then never settled (its residency timer was cleared at
+    // dispatch, so nothing could rescue it, which is the #278 signature), and because
+    // processWriteQueue is invoked unawaited from scheduleWriteQueueDrain the rejection escaped
+    // as an unhandledRejection that the allowlist does not cover, so src/index.ts called
+    // process.exit(1). A stalled upstream download would have taken the whole server down and
+    // every other tenant with it.
+    //
+    // Reject the batch here instead. The operations never ran and nothing was written, so this
+    // is the same contract queueWriteOperation's residency rejection uses.
+    logger.error('[WRITE QUEUE] Could not acquire the api lock for this batch:', lockError);
+    batch.forEach(({ reject }) => {
+      try {
+        reject(lockError);
+      } catch (e) {
+        logger.error('[WRITE QUEUE] Error rejecting operation:', e);
+      }
+    });
   } finally {
     isProcessingWrites = false;
     // #278: ALWAYS re-drain a non-empty queue. The old `&& writeSessionTimeout === null`
