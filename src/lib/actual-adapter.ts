@@ -80,7 +80,7 @@ import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
-import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId, awaitAbandonedBudgetLoad } from './apiState.js';
+import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId } from './apiState.js';
 import { withApiLock } from './apiLock.js';
 import { loadBudgetTracked } from './budgetLoader.js';
 
@@ -201,12 +201,9 @@ function getActiveBudgetConfig(): BudgetConfig {
 async function ensureLoadedBudgetMatchesSession(): Promise<void> {
   if (_skipApiInitForTests) return;
 
-  // FIRST, before reading any state: settle an abandoned load. Deciding against the record
-  // while a download is still in flight is exactly how the previous fix leaked, because the
-  // re-point landed between the check and the raw call.
-  if (await awaitAbandonedBudgetLoad()) {
-    logger.warn('[ADAPTER] waited for an abandoned budget load to settle before proceeding');
-  }
+  // #393: no wait here any more. Settling an abandoned load is part of acquiring the api lock,
+  // and both callers of this function are already inside it. Guarding per call site is what
+  // produced the two P0s in #393; see withApiLock for why it moved.
 
   if (!isApiInitialized()) {
     // "The init path will download correctly" is true for the LEGACY branch and false for the
@@ -616,17 +613,9 @@ async function initActualApiForOperation(): Promise<void> {
     setApiInitialized(true);
     return;
   }
-  // #390 round 3: settle an abandoned load HERE too, not only in the precondition.
-  //
-  // The precondition covers the pooled branches, and the abandonment test showed that is not
-  // enough: a failed session-open poisons the singleton, `_hasPooledConnection` then reports
-  // false because it also checks `isApiInitialized`, so the next operation takes the LEGACY
-  // branch and reaches this function without ever passing the precondition. It initialised,
-  // downloaded its own budget, and the abandoned download then landed mid-operation anyway.
-  // Every path to the api has to settle it, and this is the second of the two entry points.
-  if (await awaitAbandonedBudgetLoad()) {
-    logger.warn('[ADAPTER] waited for an abandoned budget load to settle before initialising');
-  }
+  // #393: the wait that used to be here moved into withApiLock. "Every path to the api has to
+  // settle it" was the right conclusion and the wrong implementation: enumerating paths is what
+  // kept missing one.
   // If the api singleton is already live (e.g. the connection pool initialised
   // it at MCP session open), don't redundantly call api.init() again — that
   // would trigger an extra upstream login and reintroduce the auth-burst

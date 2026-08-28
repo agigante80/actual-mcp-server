@@ -1,3 +1,9 @@
+import { awaitAbandonedBudgetLoad } from './apiState.js';
+import { withOpTimeout } from './opTimeout.js';
+import { createModuleLogger } from './loggerFactory.js';
+
+const logger = createModuleLogger('API LOCK');
+
 /**
  * The process-global @actual-app/api session mutex.
  *
@@ -21,11 +27,37 @@
  */
 let _apiSessionLock: Promise<void> = Promise.resolve();
 
+/**
+ * #393: settling an abandoned budget load is part of ACQUIRING the lock, not something call
+ * sites remember to do.
+ *
+ * Every previous round of #390 guarded per call site and every round missed one. Round 1 missed
+ * the legacy path (a silent cross-tenant read). Round 2 put the wait in the two adapter entry
+ * points and missed the three `loadBudgetTracked` sites that reach the api without passing
+ * through them, so a session opening during the window untracked the abandoned load and the
+ * leak stayed reachable. CLAUDE.md already names this hazard class for `withOpTimeout`: the
+ * protection is per-call-site rather than structural, so a new acquisition site added without
+ * it fails silently.
+ *
+ * Putting it here makes the set of call sites stop mattering. Nothing reaches
+ * `@actual-app/api` without this lock, so nothing reaches it without the wait.
+ *
+ * It is bounded and fails closed (see `awaitAbandonedBudgetLoad`): an unbounded wait here would
+ * wedge every session on one stuck download, which is what made the round-2 version worse than
+ * the bug it fixed.
+ */
 export function withApiLock<T>(fn: () => Promise<T>): Promise<T> {
   let release!: () => void;
   const prevLock = _apiSessionLock;
   _apiSessionLock = new Promise<void>((resolve) => {
     release = resolve;
   });
-  return prevLock.then(() => fn()).finally(() => release());
+  return prevLock
+    .then(async () => {
+      if (await awaitAbandonedBudgetLoad(withOpTimeout)) {
+        logger.warn('[API LOCK] waited for an abandoned budget load before running this operation');
+      }
+      return await fn();
+    })
+    .finally(() => release());
 }
