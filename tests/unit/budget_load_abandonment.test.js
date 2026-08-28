@@ -45,10 +45,12 @@ let downloadDelayMs = 0;
 api.init = async () => {};
 api.shutdown = async () => { loaded = null; };
 api.sync = async () => {};
+let hangForever = false;
 api.downloadBudget = async (id) => {
   // Upstream closes the current budget FIRST, then opens the new one. Modelled, because it is
   // why an abandoned download is not a harmless no-op.
   loaded = null;
+  if (hangForever) await new Promise(() => {});   // never settles, on purpose
   if (downloadDelayMs) await new Promise((r) => setTimeout(r, downloadDelayMs));
   loaded = id;
 };
@@ -94,8 +96,11 @@ describe('(1) a timed-out load leaves the record INDETERMINATE, never stale');
 // ---------------------------------------------------------------------------
 describe('(2) the next operation WAITS for the abandoned load, then re-selects its own budget');
 {
-  check(apiState._hasPendingBudgetLoadForTests(),
-    'the abandoned load is still registered, so the next op cannot race it');
+  // NOT asserting "still registered" any more. That was a proxy for "nothing can race the
+  // landing", true only while the wait lived at two adapter call sites. #393 moved the wait
+  // into withApiLock, so ANY lock acquisition settles an outstanding load and the pool's own
+  // failure-cleanup settles it before this line runs. The proxy now reports the opposite of
+  // what it meant; the property it stood for is asserted directly below.
 
   // TIMING IS THE TEST. B's abandoned download lands at roughly t+600 from its start. A's read
   // is issued now and its raw call is made to take 400ms, so without the wait-for-abandoned
@@ -161,7 +166,68 @@ describe('(4) an abandoned RE-SELECT leaves no stale record, on a path nothing e
   // kept as defence in depth for a future path that does not have that safety net, not because
   // a test here can distinguish it. Recorded rather than dressed up as coverage it is not.
   connectionPool.connections.delete('sess-B2');
-  await apiState.awaitAbandonedBudgetLoad();
+  // awaitAbandonedBudgetLoad now takes the bound it races against (#393), so it cannot be
+  // called unbounded even from a test. Drain through the lock, which is the real path.
+  const { withApiLock } = await import('../../dist/src/lib/apiLock.js');
+  await withApiLock(async () => undefined);
+}
+
+// ---------------------------------------------------------------------------
+describe('(5) #393: a session opening during the window must not untrack the abandoned load');
+{
+  // registerBudgetLoad used to assign to a single slot, so a session opening while an earlier
+  // load was abandoned overwrote its registration; the new load's success then cleared it, the
+  // abandoned promise became untracked, landed later, and re-pointed the singleton. That is the
+  // leak the tracking exists to prevent, reintroduced by the tracking itself. Registrations are
+  // now a set whose entries remove themselves on settle.
+  loaded = 'budget-A';
+  apiState.setApiInitialized(true);
+  apiState.setLoadedBudgetSyncId('budget-A');
+  await connectionPool.getConnection('sess-D');
+
+  downloadDelayMs = 400;                       // abandoned at ~250, lands at ~400
+  await requestContext.run({ sessionId: 'sess-D2' }, () => adapter.switchBudget('beta')).catch(() => {});
+  downloadDelayMs = 0;
+
+  await connectionPool.getConnection('sess-E');   // the clobbering step
+  const seen = await requestContext.run({ sessionId: 'sess-E' }, () => adapter.getAccounts())
+    .catch((e) => [{ name: `ERR:${e?.message ?? ''}` }]);
+  const name = Array.isArray(seen) ? seen[0]?.name : undefined;
+  check(name === 'acct-in-budget-A',
+    `a session opening during the window still saw its own budget (got ${name})`);
+}
+
+// ---------------------------------------------------------------------------
+// RUNS LAST, AND THAT IS NOT COSMETIC. This case leaves a promise that never settles, and the
+// fix deliberately keeps such a registration forever: an operation must not proceed past a load
+// that may still land and re-point the singleton, and the promise cannot be cancelled. So from
+// here on EVERY operation in this process fails closed with a bounded error. That is the
+// intended behaviour, and it means nothing can run after it; putting this earlier made every
+// later case crash on the timeout it causes. The operational consequence is worth stating
+// plainly: a genuinely stuck upstream load degrades the process until it is restarted. That is
+// the accepted trade against a silent cross-tenant leak or a silent wedge.
+describe('(6) #393: a NEVER-settling load must not wedge the process');
+{
+  // The round-2 fix awaited the abandoned load UNBOUNDED, inside the api mutex, so one stuck
+  // download blocked every session forever with no error after the first line and no recovery
+  // short of a process restart: a P0 worse than the leak it closed, and exactly the mode
+  // opTimeout.ts exists to remove.
+  await connectionPool.getConnection('sess-W');
+  hangForever = true;
+  await requestContext.run({ sessionId: 'sess-W2' }, () => adapter.switchBudget('beta')).catch(() => {});
+  hangForever = false;   // upstream healthy again; only the stuck promise remains
+
+  const race = (p) => Promise.race([
+    p.then(() => ({ ok: true })).catch((e) => ({ err: e?.message || String(e) })),
+    new Promise((r) => setTimeout(() => r({ wedged: true }), 3000)),
+  ]);
+  const outcome = await race(requestContext.run({ sessionId: 'sess-W' }, () => adapter.getAccounts()));
+  check(!outcome.wedged,
+    `an operation after a never-settling load returned rather than wedging (got ${JSON.stringify(outcome).slice(0, 70)})`);
+  // Fail CLOSED, not open: proceeding would run against a singleton a landing download may
+  // re-point underneath it, which is the original leak.
+  check(!!outcome.err && /timed out/i.test(outcome.err),
+    `and it failed closed with a legible error (got ${outcome.err?.slice(0, 60) ?? 'no error'})`);
 }
 
 log(`\n[#390-abandon] Results: ${passed} passed, ${failed} failed`);

@@ -41,7 +41,10 @@ export async function loadBudgetTracked(syncId: string, encryptionPassword?: str
   registerBudgetLoad(tracked);
   try {
     await withOpTimeout(() => tracked, label);
-    clearBudgetLoad();
+    // Pass the handle: with chaining, this is usually no longer the registered value, so it
+    // correctly no-ops and leaves the chain for the next lock acquisition to settle. Clearing
+    // unconditionally here is how an abandoned sibling load got forgotten (#393).
+    clearBudgetLoad(tracked);
   } catch (err) {
     // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
     // waits for it inside the lock rather than racing it.
