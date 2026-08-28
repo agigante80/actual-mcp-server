@@ -195,6 +195,14 @@ describe('(5) #393: a session opening during the window must not untrack the aba
   const name = Array.isArray(seen) ? seen[0]?.name : undefined;
   check(name === 'acct-in-budget-A',
     `a session opening during the window still saw its own budget (got ${name})`);
+  // HONEST LIMIT. This case does NOT verify the set. Review reverted apiState to the old
+  // single-slot shape and this stayed green, because moving the wait into withApiLock made the
+  // clobbering unreachable here: the opening session settles the abandoned load at acquisition,
+  // so there is nothing outstanding left to overwrite. Under the current design at most one
+  // registration can be live at a time, which makes the set defence in depth rather than the
+  // load-bearing fix, and saying otherwise would be claiming coverage that does not exist.
+  // What this case does pin is the PROPERTY: a session opening in that window sees its own
+  // budget, and that goes red if the wait is removed from the lock.
 }
 
 // ---------------------------------------------------------------------------
@@ -228,6 +236,24 @@ describe('(6) #393: a NEVER-settling load must not wedge the process');
   // re-point underneath it, which is the original leak.
   check(!!outcome.err && /timed out/i.test(outcome.err),
     `and it failed closed with a legible error (got ${outcome.err?.slice(0, 60) ?? 'no error'})`);
+
+  // A WRITE, and this is the assertion whose absence hid a P0. The first version of this case
+  // exercised only a READ, and the read path was fine. The write path was not: the drain's
+  // batch-rejection handler sat INSIDE the lock callback, which was sound while withApiLock
+  // could only reject from that callback. Once acquiring the lock could itself reject, the
+  // rejection bypassed the handler, every queued write never settled (its residency timer is
+  // cleared at dispatch, so nothing could rescue it: the #278 signature), and because the drain
+  // is invoked unawaited the rejection escaped as an unhandledRejection the allowlist does not
+  // cover, so the process exited. A stalled download would have taken the server down for every
+  // tenant.
+  const writeOutcome = await race(
+    requestContext.run({ sessionId: 'sess-W' }, () =>
+      adapter.addTransactions([{ account: ACC, date: '2026-01-01', amount: -1 }])),
+  );
+  check(!writeOutcome.wedged,
+    `a WRITE after a never-settling load settles rather than stranding its caller (got ${JSON.stringify(writeOutcome).slice(0, 70)})`);
+  check(!!writeOutcome.err,
+    `and it rejects rather than silently succeeding (got ${writeOutcome.err?.slice(0, 60) ?? 'no error'})`);
 }
 
 log(`\n[#390-abandon] Results: ${passed} passed, ${failed} failed`);

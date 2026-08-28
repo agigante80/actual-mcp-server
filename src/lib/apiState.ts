@@ -113,12 +113,6 @@ export function registerBudgetLoad(p: Promise<unknown>): void {
   });
 }
 
-/** Drop a specific registration early. Settling removes it anyway; this is belt and braces. */
-export function clearBudgetLoad(handle?: Promise<unknown>): void {
-  if (handle) _pendingBudgetLoads.delete(handle);
-  else _pendingBudgetLoads.clear();
-}
-
 /**
  * Settle every outstanding load, BOUNDED, and FAIL CLOSED on timeout.
  *

@@ -1,6 +1,6 @@
 import api from '@actual-app/api';
 import { withOpTimeout } from './opTimeout.js';
-import { setApiInitialized, setLoadedBudgetSyncId, registerBudgetLoad, clearBudgetLoad } from './apiState.js';
+import { setApiInitialized, setLoadedBudgetSyncId, registerBudgetLoad } from './apiState.js';
 
 /**
  * #390 round 3: the ONE way this codebase loads a budget.
@@ -41,10 +41,11 @@ export async function loadBudgetTracked(syncId: string, encryptionPassword?: str
   registerBudgetLoad(tracked);
   try {
     await withOpTimeout(() => tracked, label);
-    // Pass the handle: with chaining, this is usually no longer the registered value, so it
-    // correctly no-ops and leaves the chain for the next lock acquisition to settle. Clearing
-    // unconditionally here is how an abandoned sibling load got forgotten (#393).
-    clearBudgetLoad(tracked);
+    // #393 review (P3-4): NOT clearBudgetLoad(tracked). `registerBudgetLoad` registers a
+    // derived promise, not this handle, so that delete could never match and read as a working
+    // belt-and-braces path a later change might lean on. Self-removal on settle is what
+    // actually deregisters a completed load, and it has already happened by the time the
+    // awaited promise resolves here.
   } catch (err) {
     // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
     // waits for it inside the lock rather than racing it.

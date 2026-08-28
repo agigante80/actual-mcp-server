@@ -355,16 +355,20 @@ class ActualConnectionPool {
       // so that operation observed a torn-down api. The lock is re-acquired rather than held
       // across the whole try, because the init block released it on the way out and this
       // function is never called from inside a lock (both callers are outside one).
+      // #393 review: the lock ITSELF can reject now (it settles an abandoned budget load on
+      // acquisition), and this is a CLEANUP path. If that rejection escaped, `setApiInitialized(false)`
+      // and the connections.delete below would be skipped and the caller would receive
+      // "abandoned budget load timed out" instead of the real session-open failure. Cleanup
+      // must not be able to fail louder than the thing it is cleaning up after, so the whole
+      // acquisition is swallowed here, not just the shutdown call.
       await withApiLock(async () => {
-        try {
-          const maybeApi = api as unknown as { shutdown?: Function };
-          if (typeof maybeApi.shutdown === 'function') {
-            await (maybeApi.shutdown as () => Promise<unknown>)();
-            logger.debug(`[ConnectionPool] Cleaned up failed connection for session: ${sessionId}`);
-          }
-        } catch (cleanupErr) {
-          logger.debug(`[ConnectionPool] Error during cleanup (ignoring): ${cleanupErr}`);
+        const maybeApi = api as unknown as { shutdown?: Function };
+        if (typeof maybeApi.shutdown === 'function') {
+          await (maybeApi.shutdown as () => Promise<unknown>)();
+          logger.debug(`[ConnectionPool] Cleaned up failed connection for session: ${sessionId}`);
         }
+      }).catch((cleanupErr) => {
+        logger.debug(`[ConnectionPool] Error during cleanup (ignoring): ${cleanupErr}`);
       });
       // Singleton is back to torn-down state regardless of cleanup outcome.
       setApiInitialized(false);
