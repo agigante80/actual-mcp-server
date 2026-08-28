@@ -215,13 +215,21 @@ describe('(6) the LEGACY (non-pooled) READ path is covered too');
 }
 
 // ---------------------------------------------------------------------------
-describe('(7) GUARD: the pool mutates the singleton under the api mutex');
+describe('(7) GUARD: every pool api.init is opened under the api mutex');
 {
   // Recording and checking inside the lock only NARROWS the race while the MUTATOR stays
   // outside it: ActualConnectionPool.getConnection called api.init + downloadBudget with no
   // lock at all, so a session opening could re-point the singleton while another session's
   // operation was mid-flight holding the lock. The window is the whole duration of an
   // operation, and since #378 made the drain sequential, of a whole batch.
+  //
+  // WHAT THIS CHECKS, EXACTLY: that a `withApiLock(async () => {` opening precedes each pool
+  // `api.init` within 25 lines. It does NOT prove the block is still open at that point, and
+  // it does NOT cover the api.shutdown() sites. I tried to widen it to every singleton
+  // mutation with a backwards brace scan and the scan misreported sites that ARE locked, so
+  // rather than ship a analyser I do not trust, the claim here is narrowed to what it verifies
+  // and the shutdown paths are tracked separately. A guard that overstates its reach is worse
+  // than a narrow one, because the next reader stops looking.
   const poolSrc = readFileSync(
     fileURLToPath(new URL('../../src/lib/ActualConnectionPool.ts', import.meta.url)), 'utf8');
   const lines = poolSrc.split('\n');
@@ -232,7 +240,7 @@ describe('(7) GUARD: the pool mutates the singleton under the api mutex');
     if (!/withApiLock\(async \(\) => \{/.test(preceding)) unguarded.push(i + 1);
   });
   check(unguarded.length === 0,
-    `every pool api.init runs under the api mutex (unguarded at line: ${unguarded.join(', ') || 'none'})`);
+    `every pool api.init is opened under the api mutex (unguarded at line: ${unguarded.join(', ') || 'none'})`);
 }
 
 log(`\n[#390] Results: ${passed} passed, ${failed} failed`);

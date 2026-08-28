@@ -80,8 +80,9 @@ import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
-import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId } from './apiState.js';
+import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId, awaitAbandonedBudgetLoad } from './apiState.js';
 import { withApiLock } from './apiLock.js';
+import { loadBudgetTracked } from './budgetLoader.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -179,35 +180,75 @@ function getActiveBudgetConfig(): BudgetConfig {
  * Cost in the common case is one string comparison. A single-budget deployment always resolves
  * the same syncId, so nothing extra is downloaded and no upstream call is added.
  */
+
+/**
+ * #390: make the loaded budget a CHECKED PRECONDITION of an operation rather than a side
+ * effect of whoever opened a session last.
+ *
+ * MUST be called inside the api lock. Outside it, another session can change the loaded budget
+ * between this check and the operation.
+ *
+ * The bug: `@actual-app/api` is process-global with ONE loaded budget, and both re-entry paths
+ * skip the download for good reasons of their own (`getConnection` returns early for an
+ * initialised entry; `initActualApiForOperation` returns early when the singleton is live,
+ * which is #134's fix for the #127 auth burst). Together they meant a session operated on
+ * whatever budget was loaded last, by anyone. The budget ACL could not see it: it validates the
+ * budget the session BELIEVES it is on while the operation executes against whatever is loaded.
+ *
+ * Cost in the common case is one string comparison; a single-budget deployment always resolves
+ * the same syncId and downloads nothing. The multi-budget cost is real and is tracked as #391.
+ */
 async function ensureLoadedBudgetMatchesSession(): Promise<void> {
   if (_skipApiInitForTests) return;
-  if (!isApiInitialized()) return; // nothing loaded; the init path will download correctly
+
+  // FIRST, before reading any state: settle an abandoned load. Deciding against the record
+  // while a download is still in flight is exactly how the previous fix leaked, because the
+  // re-point landed between the check and the raw call.
+  if (await awaitAbandonedBudgetLoad()) {
+    logger.warn('[ADAPTER] waited for an abandoned budget load to settle before proceeding');
+  }
+
+  if (!isApiInitialized()) {
+    // "The init path will download correctly" is true for the LEGACY branch and false for the
+    // POOLED one, which skips init entirely by design (#134). Returning here let a pooled
+    // operation run against a singleton nobody had loaded for it, which is how the abandoned-
+    // load test caught this: session B's failed session-open poisoned the singleton, A's
+    // precondition returned early on that, and A's raw call then ran while B's abandoned
+    // download landed. Initialise explicitly instead. No recursion: initActualApiForOperation
+    // only calls back into here when the singleton IS live, and it is not.
+    await initActualApiForOperation();
+    return;
+  }
 
   const wanted = getActiveBudgetConfig();
   const loaded = getLoadedBudgetSyncId();
   if (loaded === wanted.syncId) return;
 
   // Deliberately a WARN: reaching here means two sessions are on different budgets and this
-  // one would otherwise have operated on the other's data. It is the signal that this class of
-  // bug was live, so it should be visible in logs rather than silently repaired.
+  // one would otherwise have operated on the other's data.
   logger.warn('[ADAPTER] loaded budget does not match this session; re-selecting before the operation', {
     loadedSyncId: loaded ?? null,
     wantedSyncId: wanted.syncId,
     budget: wanted.name,
   });
 
-  if (wanted.encryptionPassword) {
-    const encryptionPassword = wanted.encryptionPassword;
-    const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-    await withOpTimeout(() => apiWithOptions.downloadBudget(wanted.syncId, { password: encryptionPassword }), 'downloadBudget');
-    // #390: record at the SITE, not after the branch. The guard in
-    // tests/unit/budget_selection_precondition.test.js requires it within a few lines of the
-    // call, and it caught this very block when the setter sat past the if/else.
-    setLoadedBudgetSyncId(wanted.syncId);
-  } else {
-    await withOpTimeout(() => api.downloadBudget(wanted.syncId), 'downloadBudget');
-    setLoadedBudgetSyncId(wanted.syncId);
+  // Push anything pending for the budget we are about to close. Since #390 made re-selection
+  // per operation, a drain can now change budgets MID-BATCH, and the single trailing api.sync()
+  // covers only the last one. Without this, an earlier session's write is applied locally and
+  // silently waits for the next load of that budget to propagate, which an ephemeral data dir
+  // would lose entirely.
+  if (loaded) {
+    try {
+      await withOpTimeout(() => (api as unknown as { sync: () => Promise<unknown> }).sync(), 'sync');
+    } catch (syncErr) {
+      logger.warn('[ADAPTER] could not sync the outgoing budget before re-selecting', {
+        loadedSyncId: loaded,
+        error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+      });
+    }
   }
+
+  await loadBudgetTracked(wanted.syncId, wanted.encryptionPassword);
 }
 
 
@@ -575,6 +616,17 @@ async function initActualApiForOperation(): Promise<void> {
     setApiInitialized(true);
     return;
   }
+  // #390 round 3: settle an abandoned load HERE too, not only in the precondition.
+  //
+  // The precondition covers the pooled branches, and the abandonment test showed that is not
+  // enough: a failed session-open poisons the singleton, `_hasPooledConnection` then reports
+  // false because it also checks `isApiInitialized`, so the next operation takes the LEGACY
+  // branch and reaches this function without ever passing the precondition. It initialised,
+  // downloaded its own budget, and the abandoned download then landed mid-operation anyway.
+  // Every path to the api has to settle it, and this is the second of the two entry points.
+  if (await awaitAbandonedBudgetLoad()) {
+    logger.warn('[ADAPTER] waited for an abandoned budget load to settle before initialising');
+  }
   // If the api singleton is already live (e.g. the connection pool initialised
   // it at MCP session open), don't redundantly call api.init() again — that
   // would trigger an extra upstream login and reintroduce the auth-burst
@@ -619,17 +671,7 @@ async function initActualApiForOperation(): Promise<void> {
     // Bound downloadBudget (#270): the legacy stdio path re-downloads on every
     // op, and a stall here was the production hang. On timeout it rejects and
     // the mutex releases.
-    if (budget.encryptionPassword) {
-      const encryptionPassword = budget.encryptionPassword;
-      const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-      await withOpTimeout(() => apiWithOptions.downloadBudget(budget.syncId, { password: encryptionPassword }), 'downloadBudget');
-    // #390: record which budget the singleton now holds.
-    setLoadedBudgetSyncId(budget.syncId);
-    } else {
-      await withOpTimeout(() => api.downloadBudget(budget.syncId), 'downloadBudget');
-    // #390: record which budget the singleton now holds.
-    setLoadedBudgetSyncId(budget.syncId);
-    }
+    await loadBudgetTracked(budget.syncId, budget.encryptionPassword);
 
     setApiInitialized(true);
     logger.debug('[ADAPTER] Actual API initialized for operation');
@@ -3106,19 +3148,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     } else {
       await withApiLock(async () => {
         // Bound the in-place budget reload too (#270).
-        if (found.encryptionPassword) {
-          const encryptionPassword = found.encryptionPassword;
-          const apiWithOptions = api as typeof api & {
-            downloadBudget: (id: string, options?: { password: string }) => Promise<void>;
-          };
-          await withOpTimeout(() => apiWithOptions.downloadBudget(found.syncId, { password: encryptionPassword }), 'downloadBudget');
-          // #390: record which budget the singleton now holds.
-          setLoadedBudgetSyncId(found.syncId);
-        } else {
-          await withOpTimeout(() => api.downloadBudget(found.syncId), 'downloadBudget');
-          // #390: record which budget the singleton now holds.
-          setLoadedBudgetSyncId(found.syncId);
-        }
+        await loadBudgetTracked(found.syncId, found.encryptionPassword);
       });
     }
     connectionPool.updateLoadedSyncId(sessionId, found.syncId);

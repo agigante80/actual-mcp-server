@@ -17,8 +17,9 @@ import config from '../config.js';
 import path from 'path';
 import os from 'os';
 import fs from 'fs';
-import { isApiInitialized, setApiInitialized, setLoadedBudgetSyncId } from './apiState.js';
+import { isApiInitialized, setApiInitialized } from './apiState.js';
 import { withApiLock } from './apiLock.js';
+import { loadBudgetTracked } from './budgetLoader.js';
 import { withOpTimeout } from './opTimeout.js';
 
 const DEFAULT_DATA_DIR = path.resolve(os.homedir() || '.', '.actual');
@@ -313,18 +314,10 @@ class ActualConnectionPool {
 
       logger.info(`[ConnectionPool] Downloading budget for session: ${sessionId}`);
 
-      if (BUDGET_PASSWORD) {
-        const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-        await withOpTimeout(() => apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD }), 'pool downloadBudget');
-        // #390: record which budget the singleton now holds, so the adapter's precondition
-        // check can tell a session it is about to operate on someone else's budget.
-        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
-      } else {
-        await withOpTimeout(() => api.downloadBudget(BUDGET_SYNC_ID), 'pool downloadBudget');
-        // #390: record which budget the singleton now holds, so the adapter's precondition
-        // check can tell a session it is about to operate on someone else's budget.
-        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
-      }
+      // #390: the shared tracked loader, not a hand-written download. It clears the record
+      // BEFORE starting and keeps an abandoned load registered, so a session-open download that
+      // outruns ACTUAL_OP_TIMEOUT_MS cannot silently re-point the singleton later.
+      await loadBudgetTracked(BUDGET_SYNC_ID, BUDGET_PASSWORD, 'pool downloadBudget');
 
       // Mark the singleton as live only AFTER the budget is downloaded (#270):
       // setting it before downloadBudget left a poisoning window where the
@@ -354,16 +347,25 @@ class ActualConnectionPool {
       logger.error(`[ConnectionPool] Failed to initialize connection for session ${sessionId}:`, err);
 
       // Clean up the failed connection attempt
-      // Try to shutdown the API to leave it in a clean state for the next attempt
-      try {
-        const maybeApi = api as unknown as { shutdown?: Function };
-        if (typeof maybeApi.shutdown === 'function') {
-          await (maybeApi.shutdown as () => Promise<unknown>)();
-          logger.debug(`[ConnectionPool] Cleaned up failed connection for session: ${sessionId}`);
+      // Try to shutdown the API to leave it in a clean state for the next attempt.
+      //
+      // #390 round 3: UNDER THE MUTEX, like the init above it. Locking the mutator and leaving
+      // its compensating mutator unlocked closes nothing: reproduced as this cleanup's
+      // api.shutdown() firing while ANOTHER session's operation was in flight inside the lock,
+      // so that operation observed a torn-down api. The lock is re-acquired rather than held
+      // across the whole try, because the init block released it on the way out and this
+      // function is never called from inside a lock (both callers are outside one).
+      await withApiLock(async () => {
+        try {
+          const maybeApi = api as unknown as { shutdown?: Function };
+          if (typeof maybeApi.shutdown === 'function') {
+            await (maybeApi.shutdown as () => Promise<unknown>)();
+            logger.debug(`[ConnectionPool] Cleaned up failed connection for session: ${sessionId}`);
+          }
+        } catch (cleanupErr) {
+          logger.debug(`[ConnectionPool] Error during cleanup (ignoring): ${cleanupErr}`);
         }
-      } catch (cleanupErr) {
-        logger.debug(`[ConnectionPool] Error during cleanup (ignoring): ${cleanupErr}`);
-      }
+      });
       // Singleton is back to torn-down state regardless of cleanup outcome.
       setApiInitialized(false);
 
@@ -406,18 +408,10 @@ class ActualConnectionPool {
         password: PASSWORD,
       }), 'pool init');
 
-      if (BUDGET_PASSWORD) {
-        const apiWithOptions = api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> };
-        await withOpTimeout(() => apiWithOptions.downloadBudget(BUDGET_SYNC_ID, { password: BUDGET_PASSWORD }), 'pool downloadBudget');
-        // #390: record which budget the singleton now holds, so the adapter's precondition
-        // check can tell a session it is about to operate on someone else's budget.
-        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
-      } else {
-        await withOpTimeout(() => api.downloadBudget(BUDGET_SYNC_ID), 'pool downloadBudget');
-        // #390: record which budget the singleton now holds, so the adapter's precondition
-        // check can tell a session it is about to operate on someone else's budget.
-        setLoadedBudgetSyncId(BUDGET_SYNC_ID);
-      }
+      // #390: the shared tracked loader, not a hand-written download. It clears the record
+      // BEFORE starting and keeps an abandoned load registered, so a session-open download that
+      // outruns ACTUAL_OP_TIMEOUT_MS cannot silently re-point the singleton later.
+      await loadBudgetTracked(BUDGET_SYNC_ID, BUDGET_PASSWORD, 'pool downloadBudget');
 
       // Mark live only after a successful download (#270): avoids the poisoning
       // window where a stalled/failed download would leak isApiInitialized=true.
