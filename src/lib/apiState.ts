@@ -61,3 +61,58 @@ export function getLoadedBudgetSyncId(): string | null {
 export function setLoadedBudgetSyncId(syncId: string | null): void {
   _loadedBudgetSyncId = syncId;
 }
+
+/**
+ * #390 round 3: an ABANDONED budget load.
+ *
+ * `withOpTimeout` races; it does not cancel. When a `downloadBudget` exceeds
+ * ACTUAL_OP_TIMEOUT_MS the underlying call KEEPS RUNNING and eventually re-points the
+ * singleton, outside the mutex, at a moment nobody is waiting for. Upstream makes this worse
+ * than a failed no-op: `handlers['api/download-budget']` begins with `close-budget`, then
+ * `load-budget` and `sync-budget`, so an abandoned download CLOSES whatever budget is loaded
+ * and opens a different one mid-flight, underneath another session's lock.
+ *
+ * Two leaks were reproduced against the previous fix. The record stayed on the old budget
+ * (only set on success), so the next matching session passed the check and read someone else's
+ * data; and even after recording the true outcome, the re-point landed BETWEEN a session's
+ * check and its raw call, so the write still went to the wrong budget. A mutex cannot serialise
+ * a promise its holder has abandoned.
+ *
+ * So the load is tracked rather than merely bounded. The record is cleared BEFORE a download
+ * starts, so an abandonment can only leave it indeterminate (the safe direction, which forces a
+ * re-select), and the abandoned promise stays registered here until it settles. No operation
+ * may proceed past a pending abandoned load: `awaitAbandonedBudgetLoad` is awaited inside the
+ * api lock, so a late landing happens BEFORE the next check rather than between a check and its
+ * use.
+ */
+let _pendingBudgetLoad: Promise<unknown> | null = null;
+
+export function registerBudgetLoad(p: Promise<unknown>): void {
+  // Never let the registration itself raise an unhandled rejection: the caller races this
+  // promise and handles (or abandons) the failure on its own path.
+  _pendingBudgetLoad = p.catch(() => undefined);
+}
+
+export function clearBudgetLoad(): void {
+  _pendingBudgetLoad = null;
+}
+
+/**
+ * Settle any abandoned load. MUST be called inside the api lock, before deciding whether the
+ * loaded budget matches: that ordering is the whole point.
+ *
+ * Returns true when it actually waited, so callers can log it and tests can assert it.
+ */
+export async function awaitAbandonedBudgetLoad(): Promise<boolean> {
+  if (!_pendingBudgetLoad) return false;
+  const pending = _pendingBudgetLoad;
+  await pending;
+  // Only clear if nothing newer replaced it while we waited.
+  if (_pendingBudgetLoad === pending) _pendingBudgetLoad = null;
+  return true;
+}
+
+/** Test hook: is a load currently outstanding? */
+export function _hasPendingBudgetLoadForTests(): boolean {
+  return _pendingBudgetLoad !== null;
+}
