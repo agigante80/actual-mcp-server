@@ -139,7 +139,7 @@
 
 ### Tool Definitions
 
-74 tools organized by category:
+77 tools organized by category:
 
 ```
 src/tools/
@@ -156,7 +156,7 @@ src/tools/
 ├── accounts_close.ts
 ├── accounts_reopen.ts
 ├── accounts_get_balance.ts
-├── transactions_create.ts              # Transactions (13 tools)
+├── transactions_create.ts              # Transactions (17 tools)
 ├── transactions_get.ts
 ├── transactions_update.ts
 ├── transactions_delete.ts
@@ -168,6 +168,9 @@ src/tools/
 ├── transactions_search_by_payee.ts
 ├── transactions_summary_by_category.ts
 ├── transactions_summary_by_payee.ts
+├── transactions_aggregate.ts            # Transfer-safe and split-safe aggregation
+├── account_flow_summary.ts              # Exact selected-account reconciliation
+├── recurring_expenses_summary.ts        # Posted-history recurrence detection
 ├── transfers_create.ts                  # Transfers (1 tool)
 ├── budgets_list_available.ts            # Budgets (13 tools)
 ├── budgets_switch.ts
@@ -338,11 +341,13 @@ actual-mcp-server/
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
-│   ├── tools/                    # MCP tool definitions (74 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (77 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
-│   │   ├── transactions_*.ts     # Transactions (13 tools, incl. search/summary)
+│   │   ├── transactions_*.ts     # Transactions (17 tools, including analysis)
+│   │   ├── account_flow_summary.ts # Selected-account cash-flow reconciliation
+│   │   ├── recurring_expenses_summary.ts # Recurring expense detection
 │   │   ├── budgets_*.ts          # Budgets (11 tools)
 │   │   ├── budget_updates_batch.ts # Batch budget operations
 │   │   ├── categories_*.ts       # Categories (4 tools)
@@ -369,7 +374,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 74 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 77 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── (#366: the suites/ tree was removed. It never executed, and every doc that
 │   │        named it now points at docker-all-tools.e2e.spec.ts instead)
@@ -431,7 +436,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 74 tools with MCP capabilities
+   └─> Registers 77 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

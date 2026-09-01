@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 74 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 77 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 74 TOOLS', () => {
+test.describe('Docker E2E - ALL 77 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -52,10 +52,13 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
 
     // A read-only tool, a destructive one, and the single open-world one.
     expect(ann('actual_accounts_list')?.readOnlyHint).toBe(true);
+    expect(ann('actual_transactions_aggregate')?.readOnlyHint).toBe(true);
+    expect(ann('actual_account_flow_summary')?.readOnlyHint).toBe(true);
+    expect(ann('actual_recurring_expenses_summary')?.readOnlyHint).toBe(true);
     expect(ann('actual_accounts_delete')?.readOnlyHint).toBe(false);
     expect(ann('actual_accounts_delete')?.destructiveHint).toBe(true);
 
-    // The default this server corrects 73 times out of 74: the spec defaults openWorldHint
+    // The default this server corrects 76 times out of 77: the spec defaults openWorldHint
     // to TRUE, and this server's domain is one Actual instance. Only bank sync reaches a
     // third party.
     const open = tools.filter((t: any) => t.annotations?.openWorldHint).map((t: any) => t.name);
@@ -685,6 +688,105 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
   test('actual_transactions_summary_by_payee - should summarize by payee', async ({ mcp }) => {
     const summary = await mcp.call('actual_transactions_summary_by_payee', { month: currentMonth() });
     expect(summary).toBeTruthy();
+  });
+
+  test('actual_transactions_aggregate - transfer funding never inflates spending', async ({
+    mcp, makeAccount, makeCategory, makePayee, makeTransaction,
+  }) => {
+    const personal = await makeAccount({ name: `E2E-Analysis-Personal-${uniqueSuffix()}` });
+    const shared = await makeAccount({ name: `E2E-Analysis-Shared-${uniqueSuffix()}` });
+    const groceries = await makeCategory({ name: `E2E-Analysis-Groceries-${uniqueSuffix()}` });
+    const market = await makePayee({ name: `E2E-Analysis-Market-${uniqueSuffix()}` });
+    const date = today();
+
+    const transfer = await mcp.call('actual_transfers_create', {
+      from_account: personal.id,
+      to_account: shared.id,
+      amount: 100000,
+      date,
+    });
+    expect(transfer?.success).toBe(true);
+    await makeTransaction({
+      account: shared,
+      amount: -20000,
+      date,
+      category: groceries.id,
+      payee: market.id,
+    });
+
+    const call = (accountIds: string[]) => mcp.call('actual_transactions_aggregate', {
+      startDate: date,
+      endDate: date,
+      groupBy: 'account',
+      accountIds,
+    });
+    const combined = await call([personal.id, shared.id]);
+    const personalOnly = await call([personal.id]);
+    const sharedOnly = await call([shared.id]);
+    expect(combined.totals.expenseOutflow).toBe(20000);
+    expect(personalOnly.totals.expenseOutflow).toBe(0);
+    expect(sharedOnly.totals.expenseOutflow).toBe(20000);
+    expect(combined.totals.netExpense).toBe(20000);
+  });
+
+  test('actual_account_flow_summary - reconciles transfer funding separately from expense', async ({
+    mcp, makeAccount, makeCategory, makePayee, makeTransaction,
+  }) => {
+    const personal = await makeAccount({ name: `E2E-Flow-Personal-${uniqueSuffix()}` });
+    const shared = await makeAccount({ name: `E2E-Flow-Shared-${uniqueSuffix()}` });
+    const groceries = await makeCategory({ name: `E2E-Flow-Groceries-${uniqueSuffix()}` });
+    const market = await makePayee({ name: `E2E-Flow-Market-${uniqueSuffix()}` });
+    const date = today();
+
+    await mcp.call('actual_transfers_create', {
+      from_account: personal.id,
+      to_account: shared.id,
+      amount: 100000,
+      date,
+    });
+    await makeTransaction({
+      account: shared,
+      amount: -20000,
+      date,
+      category: groceries.id,
+      payee: market.id,
+    });
+
+    const result = await mcp.call('actual_account_flow_summary', {
+      startDate: date,
+      endDate: date,
+      accountIds: [shared.id],
+    });
+    expect(result.transfers.intoSelection).toBe(100000);
+    expect(result.external.expenseOutflow).toBe(20000);
+    expect(result.balanceChange).toBe(80000);
+    expect(result.reconciliation.calculatedBalanceChange).toBe(80000);
+    expect(result.reconciliation.difference).toBe(0);
+    expect(result.transfersByAccount[0].fromAccountName).toBe(personal.name);
+    expect(result.transfersByAccount[0].toAccountName).toBe(shared.name);
+  });
+
+  test('actual_recurring_expenses_summary - detects a month-end subscription', async ({
+    mcp, makeAccount, makeCategory, makePayee, makeTransaction,
+  }) => {
+    const account = await makeAccount({ name: `E2E-Recur-Account-${uniqueSuffix()}` });
+    const category = await makeCategory({ name: `E2E-Recur-Category-${uniqueSuffix()}` });
+    const payee = await makePayee({ name: `E2E-Recur-Netflix-${uniqueSuffix()}` });
+    for (const date of ['2026-01-31', '2026-02-28', '2026-03-31', '2026-04-30']) {
+      await makeTransaction({ account, amount: -1599, date, category: category.id, payee: payee.id });
+    }
+
+    const result = await mcp.call('actual_recurring_expenses_summary', {
+      startDate: '2026-01-01',
+      endDate: '2026-04-30',
+      accountIds: [account.id],
+    });
+    expect(result.series).toHaveLength(1);
+    expect(result.series[0].frequency).toBe('monthly');
+    expect(result.series[0].occurrenceCount).toBe(4);
+    expect(result.series[0].latestAmount).toBe(1599);
+    expect(result.series[0].annualizedAmount).toBe(19188);
+    expect(result.totalAnnualizedRecurringExpenses).toBe(19188);
   });
 
   // ==================== TRANSFERS (1 tool) ====================

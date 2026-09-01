@@ -48,6 +48,16 @@ console.log('Running generated tools smoke tests');
     addTransactions: ['t1'],
     importTransactions: { added: ['t2'], updated: [], errors: [] },
     getTransactions: [{ id: 't1', amount: 100 }],
+    getFinancialAnalysisSnapshot: {
+      transactions: [],
+      transferCounterparts: [],
+      accounts: [{ id: '00000000-0000-4000-8000-000000000001', name: 'Cash' }],
+      categories: [],
+      categoryGroups: [],
+      payees: [],
+      openingBalances: { '00000000-0000-4000-8000-000000000001': 0 },
+      closingBalances: { '00000000-0000-4000-8000-000000000001': 0 },
+    },
     getCategories: [{ id: 'c1', name: 'Food' }],
     getCategoryGroups: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Expenses' }],
     createCategory: 'c-new',
@@ -166,6 +176,8 @@ console.log('Running generated tools smoke tests');
       const inputExample = {};
       // Provide minimal examples for known tools (use UUIDs where schemas require them)
   if (name.includes('transactions_create')) inputExample.account = '00000000-0000-0000-0000-000000000001', inputExample.date = '2025-11-24', inputExample.amount = -1234, inputExample.subtransactions = [{ amount: -1000 }, { amount: -234 }]; // #305: split, children sum to amount
+  if (name.includes('transactions_aggregate')) inputExample.startDate = '2025-01-01', inputExample.endDate = '2025-12-31', inputExample.groupBy = 'month';
+  if (name.includes('account_flow_summary')) inputExample.startDate = '2025-01-01', inputExample.endDate = '2025-12-31', inputExample.accountIds = ['00000000-0000-4000-8000-000000000001'];
 
   if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.txs = [{ date: '2024-01-15', amount: 100 }];
   if (name.includes('transactions_get')) inputExample.accountId = 'a1'; // matches getAccounts stub { id: 'a1' } — nil-UUID would hit not-found path and return { error } without result
@@ -573,6 +585,40 @@ console.log('Running generated tools smoke tests');
     }
   }
   // ── End regression #79 ───────────────────────────────────────────────────
+
+  // Financial-analysis filters validate well-formed but unknown IDs against the same
+  // snapshot used for the calculation. A syntactically valid UUID must not quietly turn
+  // into an empty report.
+  {
+    console.log('\n[financial-analysis] unknown IDs are refused');
+    const ghost = '99999999-9999-4999-8999-999999999999';
+    const cases = [
+      ['transactions_aggregate', {
+        startDate: '2025-01-01', endDate: '2025-12-31', groupBy: 'month', accountIds: [ghost],
+      }],
+      ['account_flow_summary', {
+        startDate: '2025-01-01', endDate: '2025-12-31', accountIds: [ghost],
+      }],
+      ['recurring_expenses_summary', {
+        startDate: '2025-01-01', endDate: '2025-12-31', accountIds: [ghost],
+      }],
+    ];
+    for (const [name, input] of cases) {
+      let refused = false;
+      try {
+        const mod = toolsIndex[name];
+        await (mod?.default ?? mod).call(input);
+      } catch (error) {
+        refused = /not found/i.test(error?.message ?? '');
+      }
+      if (!refused) {
+        console.error(`[financial-analysis] ${name} accepted an unknown account ID`);
+        failures++;
+      } else {
+        console.log(`OK [financial-analysis] ${name} refused an unknown account ID`);
+      }
+    }
+  }
 
   // restore adapter
   Object.assign(adapterMod.default, originalAdapter);

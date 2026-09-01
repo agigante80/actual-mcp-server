@@ -201,7 +201,7 @@ check('no tool inlines UUID_PATTERN instead of using the shared schema', () => {
 
 // L5 (round 2): walkProps descends `properties`, `items` and the three combinators. It does
 // NOT resolve `$ref`/`$defs`, nor descend `additionalProperties`/`patternProperties`/
-// `prefixItems`. None are live today (verified: 0 of 74 published schemas emit any of them),
+// `prefixItems`. None are live today (verified: 0 of 77 published schemas emit any of them),
 // but the failure mode if one appears is the bad one: a `$ref` node carries no `type`, so it
 // is skipped SILENTLY rather than flagged. Assert the precondition instead of trusting it.
 check('no published schema uses a node shape the walk cannot follow', () => {

@@ -21,7 +21,7 @@ tests/e2e/
 │                                         make* factories that provision and tear down test
 │                                         data. Import `test` from HERE, not @playwright/test
 ├── tsconfig.json                      ← typecheck project for this dir (npm run typecheck:e2e)
-└── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 74 tools; the ONLY
+└── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 77 tools; the ONLY
                                         file that carries E2E assertions (see the #366 note)
 ```
 
@@ -65,7 +65,7 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MCP_SERVER_URL` | `http://mcp-server-test:3600` | MCP server URL |
-| `EXPECTED_TOOL_COUNT` | `74` | Expected tool count (must match `actualToolsManager.ts`) |
+| `EXPECTED_TOOL_COUNT` | `77` | Expected tool count (must match `actualToolsManager.ts`) |
 | `USE_DOCKER_MCP_SERVER` | `true` | Set to `false` to spawn a local server (mcp-client spec only) |
 
 ---
@@ -91,7 +91,7 @@ streaming, and session lifecycle.
 
 ### `docker-all-tools.e2e.spec.ts`
 
-**Purpose:** Comprehensive named tests for all 74 tools — success paths + error/negative paths.
+**Purpose:** Comprehensive named tests for all 77 tools — success paths + error/negative paths.
 
 - Every test is **self-provisioning** (#375): it asks `fixtures.ts` for what it needs, and
   everything it creates is removed in fixture teardown, which runs even when the test fails

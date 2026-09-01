@@ -1,6 +1,6 @@
 ---
 name: api-design-principles
-description: API design principles for the actual-mcp-server MCP tool surface (and REST/GraphQL in general). Use when adding or revising an MCP tool, reviewing tool schemas for consistency across the 74-tool set, or establishing tool-design standards. The general REST/GraphQL material is the reference; the project section maps it to MCP tools.
+description: API design principles for the actual-mcp-server MCP tool surface (and REST/GraphQL in general). Use when adding or revising an MCP tool, reviewing tool schemas for consistency across the 77-tool set, or establishing tool-design standards. The general REST/GraphQL material is the reference; the project section maps it to MCP tools.
 ---
 
 <!-- api-design-principles-version: 1 -->
@@ -52,7 +52,7 @@ as the underlying principles, and apply them through these project rules (from C
   which is a behaviour change needing its own decision.
 - **Errors are messages, not status codes.** There is no HTTP status layer at the tool boundary:
   use the shared helpers `notFoundMsg()` / `constraintErrorMsg()` from `src/lib/errors.ts` so a
-  "not found" or constraint failure reads consistently across all 74 tools. Domain/validation
+  "not found" or constraint failure reads consistently across all 77 tools. Domain/validation
   errors must not drop the pooled connection (see `_shouldDropPoolOnError` in `actual-adapter.ts`).
 - **The refusal SHAPE is fixed by the taxonomy below, and decided by TYPE, never by prose.**
   The bullet above governs the wording; this one governs which response shape carries it.

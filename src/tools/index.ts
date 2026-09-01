@@ -4,6 +4,7 @@ export { default as accounts_close } from './accounts_close.js';
 export { default as accounts_create } from './accounts_create.js';
 export { default as accounts_delete } from './accounts_delete.js';
 export { default as accounts_get_balance } from './accounts_get_balance.js';
+export { default as account_flow_summary } from './account_flow_summary.js';
 export { default as accounts_list } from './accounts_list.js';
 export { default as accounts_reopen } from './accounts_reopen.js';
 export { default as accounts_update } from './accounts_update.js';
@@ -60,6 +61,8 @@ export { default as transactions_search_by_month } from './transactions_search_b
 export { default as transactions_search_by_payee } from './transactions_search_by_payee.js';
 export { default as transactions_summary_by_category } from './transactions_summary_by_category.js';
 export { default as transactions_summary_by_payee } from './transactions_summary_by_payee.js';
+export { default as transactions_aggregate } from './transactions_aggregate.js';
+export { default as recurring_expenses_summary } from './recurring_expenses_summary.js';
 export { default as transactions_uncategorized } from './transactions_uncategorized.js';
 export { default as transactions_update } from './transactions_update.js';
 export { default as transactions_update_batch } from './transactions_update_batch.js';

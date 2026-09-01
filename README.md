@@ -24,13 +24,13 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 ┌─────────────┐   MCP/HTTP    ┌──────────────────┐   Actual API   ┌──────────────┐
 │  LibreChat  │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  LobeChat   │               │  Server          │               │   Budget     │
-│  (remote)   │               │  (74 tools)      │               │   Server     │
+│  (remote)   │               │  (77 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 
 ┌─────────────┐   MCP/stdio   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  Claude     │ ◄───────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │  Desktop    │               │  Server          │               │   Budget     │
-│  (local)    │               │  (74 tools)      │               │   Server     │
+│  (local)    │               │  (77 tools)      │               │   Server     │
 └─────────────┘               └──────────────────┘               └──────────────┘
 ```
 
@@ -38,14 +38,14 @@ Actual MCP Server is a [Model Context Protocol](https://modelcontextprotocol.io/
 
 Most Actual Budget MCP implementations are simple stdio bridges designed for single-user, local use with Claude Desktop. This project goes further:
 
-- **74 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers the reachable Actual Budget API with no genuine gaps.
+- **77 tools, the most comprehensive coverage available.** Accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Covers the reachable Actual Budget API with no genuine gaps.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **6 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`. Works on both transports: HTTP keys the active budget to the MCP session, and stdio (Claude Desktop, Claude Code, Cursor) gets a synthetic per-process session so a switch is scoped to that process rather than shared globally (#348).
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Production-grade reliability.** Connection pooling (up to 15 concurrent sessions), automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
 
-> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 74 tools tested end-to-end. Any MCP-compatible client should work.
+> **Verified working** with [LibreChat](https://www.librechat.ai/), [LobeChat](https://lobehub.com/home), and [Claude Desktop](https://claude.ai/download). All 77 tools tested end-to-end. Any MCP-compatible client should work.
 
 ---
 
@@ -178,7 +178,7 @@ Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs
 }
 ```
 
-> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 74 tools are available.
+> **No token needed.** stdio runs as a local process owned by your user. The transport itself is the security boundary. All 77 tools are available.
 >
 > **`MCP_BRIDGE_DATA_DIR` should be an absolute path.** Without one, the data directory resolves relative to wherever the client spawns the process, which can be unpredictable. The directory is created automatically on first run.
 
@@ -304,7 +304,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 ## Available Tools
 
-**74 tools** across all categories. All tools use the `actual_<category>_<action>` naming convention.
+**77 tools** across all categories. All tools use the `actual_<category>_<action>` naming convention.
 
 ### Accounts (7)
 
@@ -318,7 +318,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_accounts_reopen` | Reopen closed account. An id that is not an account is refused rather than creating one |
 | `actual_accounts_get_balance` | Get account balance at a date |
 
-### Transactions (14)
+### Transactions (17)
 
 **Standard (6)**
 
@@ -350,6 +350,54 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_transactions_search_by_payee` | Find by payee/vendor |
 | `actual_transactions_summary_by_category` | Spending summary grouped by category |
 | `actual_transactions_summary_by_payee` | Top vendors with totals and counts |
+
+**Deterministic financial analysis (3)**
+
+| Tool | Description |
+|------|-------------|
+| `actual_transactions_aggregate` | Group spending by month, category, category group, payee, account, or multiple dimensions. Returns gross expense, credits, net expense, income, unclassified inflows, counts, and exact totals in integer cents |
+| `actual_account_flow_summary` | Reconcile opening and closing balances for selected accounts. Separates external cash flow, transfers into and out of the selection, internal transfer volume, and explicit balance adjustments |
+| `actual_recurring_expenses_summary` | Detect active recurring expenses from posted history, including cadence, current price, price changes, confidence, next expected date, and exact annualized cost |
+
+These tools use `transfer_id` metadata, never payee names, to identify transfers. A transfer cannot contribute to spending or income even when only one account or one side of the transfer date boundary is selected. Monetary aggregation includes normal transactions once and split children once, while excluding split parents. Positive uncategorized inflows are returned separately instead of being guessed as income or refunds.
+
+All date ranges are inclusive. All monetary values are integer cents. `actual_account_flow_summary` defines opening balance as the combined balance immediately before `startDate`, and closing balance as the balance at the end of `endDate`. Its reconciliation reports any difference explicitly. `actual_recurring_expenses_summary` uses posted history as its source of truth and annualizes weekly, biweekly, monthly, quarterly, and yearly series with deterministic integer multipliers.
+
+Input summary:
+
+```text
+actual_transactions_aggregate:
+  startDate, endDate, groupBy
+  accountIds?, categoryIds?, categoryGroupIds?, payeeIds?
+  includeIncome=false, excludeTransfers=true
+
+actual_account_flow_summary:
+  startDate, endDate, accountIds (at least one)
+
+actual_recurring_expenses_summary:
+  startDate? or months?, endDate?, accountIds?
+  minOccurrences=3, includeInactive=false
+```
+
+Output summary:
+
+```text
+actual_transactions_aggregate:
+  { dateRange, groups[], totals }
+  each group and totals include expenseOutflow, credits, netExpense, income,
+  uncategorizedInflows, adjustments, transferInflow, transferOutflow,
+  transactionCount, transferCount
+
+actual_account_flow_summary:
+  { dateRange, accounts[], openingBalance, closingBalance, balanceChange,
+    external, transfers, transfersByAccount[], adjustments, reconciliation }
+
+actual_recurring_expenses_summary:
+  { dateRange, series[], totalAnnualizedRecurringExpenses }
+  each series includes payee/account identity, frequency, occurrenceCount,
+  latestAmount, annualizedAmount, observed dates, expectedNextDate,
+  optional priceChange, confidence, confidenceScore, active
+```
 
 ### Transfers (1)
 
@@ -590,7 +638,7 @@ stdio is the simplest way to connect Claude Desktop directly to Actual Budget. T
 - No auth token. Process ownership is the security boundary.
 - All logs go to stderr so they never corrupt the JSON-RPC framing on stdout
 - The process exits when stdin closes (Claude Desktop shutting down)
-- All 74 tools are available, identical to HTTP mode
+- All 77 tools are available, identical to HTTP mode
 
 **Start manually to verify:**
 
@@ -689,7 +737,7 @@ See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-m
 | Command | What It Tests | Requires Live Server |
 |---------|---------------|---------------------|
 | `npm run build` | TypeScript compilation | No |
-| `npm run test:unit-js` | 74-tool smoke, schema validation, auth ACL | No |
+| `npm run test:unit-js` | 77-tool smoke, schema validation, auth ACL | No |
 | `npm run test:adapter` | Adapter, retry logic, concurrency | No |
 | `npm run test:e2e` | MCP protocol compliance (Playwright) | No |
 | `npm run test:e2e:docker:full` | Full stack integration | Yes (Docker) |
@@ -774,7 +822,7 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.16.4 | **Tool Count:** 74 (verified LibreChat-compatible)
+**Version:** 0.16.4 | **Tool Count:** 77 (verified LibreChat-compatible)
 
 ## Sponsor
 

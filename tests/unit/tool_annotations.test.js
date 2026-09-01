@@ -103,7 +103,7 @@ const { annotationsFor, _ANNOTATION_SETS } = await import('../../dist/src/lib/to
 check('the derivation is real (guards against every check below passing over nothing)', () => {
   assert.ok(writes.size >= 20, `expected many write adapter methods, found ${writes.size}`);
   assert.ok(reads.size >= 10, `expected many read adapter methods, found ${reads.size}`);
-  assert.ok(names.length >= 70, `expected ~74 tools, found ${names.length}`);
+  assert.ok(names.length >= 70, `expected ~77 tools, found ${names.length}`);
 });
 
 check('every tool declares all four annotation fields as booleans', () => {

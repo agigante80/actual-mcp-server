@@ -1,5 +1,13 @@
 import type { components } from '../../generated/actual-client/types.js';
 import { subtransactionsSum } from './schemas/common.js';
+import type {
+  AnalysisAccount,
+  AnalysisCategory,
+  AnalysisCategoryGroup,
+  AnalysisPayee,
+  AnalysisTransaction,
+  FinancialAnalysisSnapshot,
+} from './financial-analysis.js';
 
 import { AsyncLocalStorage } from 'async_hooks';
 import api from '@actual-app/api';
@@ -1475,6 +1483,98 @@ export async function getTransactions(accountId: string | undefined, startDate?:
   return withActualApi(async () => {
     observability.incrementToolCall('actual.transactions.get').catch(() => {});
     return await withConcurrency(() => retry(() => rawGetTransactions(accountId, startDate, endDate) as Promise<components['schemas']['Transaction'][]>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
+/**
+ * Read the complete, internally consistent data snapshot used by the deterministic
+ * financial-analysis tools. All queries run inside one Actual API session so entity
+ * metadata, transactions, transfer counterparts, and optional balance cutoffs cannot
+ * come from different budget revisions.
+ */
+export async function getFinancialAnalysisSnapshot(params: {
+  startDate: string;
+  endDate: string;
+  balanceAccountIds?: string[];
+}): Promise<FinancialAnalysisSnapshot> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.financialAnalysis.snapshot').catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const queryData = async <T>(query: unknown): Promise<T[]> => {
+      const response = await withConcurrency(() =>
+        retry(() => rawRunQuery(query) as Promise<{ data?: T[] } | T[]>, { retries: 2, backoffMs: 200 })
+      );
+      if (Array.isArray(response)) return response;
+      return Array.isArray(response?.data) ? response.data : [];
+    };
+
+    const transactions = await queryData<AnalysisTransaction>(
+      q('transactions')
+        .options({ splits: 'grouped' })
+        .filter({ $and: [{ date: { $gte: params.startDate } }, { date: { $lte: params.endDate } }] })
+        .select('*')
+    );
+    const accounts = await queryData<AnalysisAccount>(
+      q('accounts').select(['id', 'name', 'offbudget', 'closed'])
+    );
+    const categories = await queryData<AnalysisCategory>(
+      q('categories').select(['id', 'name', 'is_income', 'group'])
+    );
+    const categoryGroups = await queryData<AnalysisCategoryGroup>(
+      q('category_groups').options({ categories: 'none' }).select(['id', 'name', 'is_income'])
+    );
+    const payees = await queryData<AnalysisPayee>(
+      q('payees').select(['id', 'name', 'transfer_acct'])
+    );
+
+    const transferIds = [...new Set(
+      transactions.flatMap(transaction => [transaction, ...(transaction.subtransactions ?? [])])
+        .map(transaction => transaction.transfer_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0)
+    )];
+    const transferCounterparts = transferIds.length > 0
+      ? await queryData<AnalysisTransaction>(
+          q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: transferIds } }).select('*')
+        )
+      : [];
+
+    const openingBalances: Record<string, number> = {};
+    const closingBalances: Record<string, number> = {};
+    const balanceAccountIds = params.balanceAccountIds ?? [];
+    if (balanceAccountIds.length > 0) {
+      const openingRows = await queryData<{ account: string; balance: number }>(
+        q('transactions')
+          .options({ splits: 'inline' })
+          .filter({ $and: [{ account: { $oneof: balanceAccountIds } }, { date: { $lt: params.startDate } }] })
+          .groupBy('account')
+          .select(['account', { balance: { $sum: '$amount' } }])
+      );
+      const closingRows = await queryData<{ account: string; balance: number }>(
+        q('transactions')
+          .options({ splits: 'inline' })
+          .filter({ $and: [{ account: { $oneof: balanceAccountIds } }, { date: { $lte: params.endDate } }] })
+          .groupBy('account')
+          .select(['account', { balance: { $sum: '$amount' } }])
+      );
+      for (const accountId of balanceAccountIds) {
+        openingBalances[accountId] = 0;
+        closingBalances[accountId] = 0;
+      }
+      for (const row of openingRows) openingBalances[row.account] = row.balance ?? 0;
+      for (const row of closingRows) closingBalances[row.account] = row.balance ?? 0;
+    }
+
+    return {
+      transactions,
+      transferCounterparts,
+      accounts,
+      categories,
+      categoryGroups,
+      payees,
+      openingBalances,
+      closingBalances,
+    };
   });
 }
 
@@ -3498,6 +3598,7 @@ export default {
   importTransactions,
   createTransfer,
   getTransactions,
+  getFinancialAnalysisSnapshot,
   getCategories,
   createCategory,
   getPayees,

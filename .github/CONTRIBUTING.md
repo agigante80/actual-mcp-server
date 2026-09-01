@@ -103,7 +103,7 @@ actual-mcp-server/
 │   │   ├── actual-adapter.ts # API wrapper with retry logic
 │   │   └── ActualMCPConnection.ts # MCP protocol implementation
 │   ├── server/              # Transport implementations (HTTP)
-│   ├── tools/               # MCP tool definitions (74 tools)
+│   ├── tools/               # MCP tool definitions (77 tools)
 │   └── types/               # TypeScript type definitions
 ├── test/                     # Test suites
 │   ├── e2e/                 # End-to-end tests (Playwright)
