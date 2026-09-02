@@ -639,20 +639,34 @@ class ActualConnectionPool {
       
       // Try to shutdown the API if it was left initialized.
       //
-      // #411: this was the LAST api.shutdown() in the codebase running without the api mutex.
-      // #392 established that there should be none. The exposure was small (this runs at pool
-      // construction, before anything else is live) but "small" is not "absent", and an exception
-      // that exists only because nobody got round to it is indistinguishable from one that exists
-      // for a reason. Swallowed like every other cleanup acquisition: a stuck load must not stop
-      // construction.
-      const maybeApi = api as unknown as { shutdown?: Function };
-      if (typeof maybeApi.shutdown === 'function') {
-        await withApiLock(() => (maybeApi.shutdown as () => Promise<unknown>)()).catch(async (err) => {
-          logger.debug(`[ConnectionPool] Could not take the api lock to close a stale connection: ${err}`);
-          await (maybeApi.shutdown as () => Promise<unknown>)().catch(() => { /* best effort */ });
-        });
-        logger.info('[ConnectionPool] Successfully closed stale API connection');
-      }
+      // #411 put this under the api mutex: it was the last api.shutdown() running without it.
+      // #416 then separated the two failures it was conflating. The body is a raw api.shutdown(),
+      // which can reject on its own, and reporting that as "could not take the api lock" sent the
+      // reader to the wrong subsystem while the retry repeated the call that had just failed.
+      //
+      // So: the guarded shutdown happens INSIDE the lock, matching every other shutdown path
+      // (which check isApiInitialized first, per #164, or a second call surfaces as
+      // "not initialized"). The catch below therefore genuinely means the ACQUISITION failed, and
+      // its fallback runs the same guarded shutdown once, unlocked and best effort.
+      const guardedShutdown = async () => {
+        if (!isApiInitialized()) return;
+        const maybeApi = api as unknown as { shutdown?: Function };
+        if (typeof maybeApi.shutdown !== 'function') return;
+        try {
+          await (maybeApi.shutdown as () => Promise<unknown>)();
+          logger.info('[ConnectionPool] Successfully closed stale API connection');
+        } catch (shutdownErr) {
+          logger.debug(`[ConnectionPool] Stale API connection would not close (ignoring): ${shutdownErr}`);
+        } finally {
+          setApiInitialized(false);
+        }
+      };
+      await withApiLock(guardedShutdown).catch(async (lockErr) => {
+        logger.debug(
+          `[ConnectionPool] Could not take the api lock to close a stale connection: ${lockErr}`,
+        );
+        await guardedShutdown();
+      });
     } catch (err) {
       // Ignore errors - connection may not have been initialized
       logger.debug('[ConnectionPool] No stale connections to close (or already closed)');

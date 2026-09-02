@@ -80,7 +80,7 @@ import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
-import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad } from './apiState.js';
+import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad, hasPendingBudgetLoad } from './apiState.js';
 import { withApiLock } from './apiLock.js';
 import { loadBudgetTracked, importBudgetTracked } from './budgetLoader.js';
 
@@ -297,6 +297,29 @@ function _affinityBudget(): string | undefined {
   } catch {
     return undefined;   // no registry, no hint: FIFO is always correct
   }
+}
+
+/**
+ * #417: the budget every operation in a batch resolves to, or undefined when they differ.
+ *
+ * Exported so the unanimity rule can be tested without driving the lock. NOTE the side effect,
+ * which is bounded and idempotent but worth knowing: `getActiveBudgetConfig()` memoises a restored
+ * preference into `sessionBudgetState` and may read the preference file once per un-memoised
+ * session. The operation would do exactly that anyway a moment later, so this only moves it.
+ */
+export function resolveBatchBudget(
+  entries: Array<{ requestStore?: { sessionId?: string; allowedBudgets?: string[]; principal?: string } }>,
+): string | undefined {
+  const budgets = new Set<string | undefined>(
+    entries.map((e) => {
+      try {
+        return requestContext.run(e.requestStore ?? {}, () => getActiveBudgetConfig().syncId);
+      } catch {
+        return undefined;
+      }
+    }),
+  );
+  return budgets.size === 1 ? [...budgets][0] : undefined;
 }
 
 function _resolveSessionId(): string | undefined {
@@ -778,12 +801,36 @@ interface WriteOperation<T> {
   // write method costs one extra listing, while wrongly claiming preservation causes a false
   // not-found. Never invert this default.
   preservesListings?: readonly DrainListingKind[];
+  /** #389: set when the queue-wait bound rejected this entry before it ever started. */
+  settledEarly?: boolean;
   // #407: an optional per-operation timeout override. Only a budget import sets it: an import is
   // legitimately long rather than stalled, and since #394 it is a TRACKED load that every other
   // session waits on, so abandoning it at the general bound stalls the process without making the
   // import finish any sooner. Undefined means the general ACTUAL_OP_TIMEOUT_MS, which is what
   // every other write gets and must keep getting.
   timeoutMs?: number;
+}
+
+/**
+ * #389: how long an entry may sit DISPATCHED BUT NOT STARTED before it is rejected.
+ *
+ * Armed only when ACTUAL_OP_TIMEOUT_MS is 0, which is the one configuration where a stalled
+ * operation strands the rest of its batch in silence. Deliberately not derived from the op
+ * timeout: that is the knob the operator turned off. Fifteen minutes clears the longest
+ * legitimate single operation (a budget import at ACTUAL_IMPORT_TIMEOUT_MS, default ten minutes)
+ * with room to spare, so a healthy slow batch is never falsely rejected, while an operation that
+ * genuinely never runs gets an error instead of silence.
+ */
+let STRANDED_BATCH_LIMIT_MS = 900000;
+
+/**
+ * Test-only: shrink the stranded bound so the arming behaviour is testable in reasonable time.
+ *
+ * Without a seam the riskiest timer in this file could only be exercised by waiting fifteen
+ * minutes, which means in practice it would never be exercised at all.
+ */
+export function _setStrandedBatchLimitForTests(ms: number): void {
+  STRANDED_BATCH_LIMIT_MS = ms;
 }
 
 let writeQueue: WriteOperation<any>[] = [];
@@ -963,6 +1010,68 @@ async function processWriteQueue() {
       entry.residencyTimer = undefined;
     }
   }
+
+  // #389: "dispatched" stopped meaning "started" when #378 made the batch SEQUENTIAL.
+  //
+  // Before that, a hanging operation left its siblings running. Now operations k+1..N never
+  // start, and because their residency timers were cleared just above (correctly, for the
+  // concurrent model) nothing rejects them: every one of those callers waits forever and NO
+  // ERROR IS EMITTED ANYWHERE. That is #278's signature exactly, and #278 took a "flaky" E2E
+  // test to surface because the only tell was the absence of an error.
+  //
+  // It needs ACTUAL_OP_TIMEOUT_MS=0 to be reachable, which is a documented escape hatch for
+  // debugging against a slow upstream: the one situation where a stall is most likely and an
+  // operator is least likely to suspect the write queue.
+  //
+  // So each entry keeps a bound on the part that is still a QUEUE WAIT. It is cleared the
+  // moment the operation actually starts, so it can never fire on an in-flight op, and it does
+  // NOT bound the operation itself, which is what the escape hatch exists to disable.
+  //
+  // The bound cannot be ACTUAL_OP_TIMEOUT_MS, because that is exactly what the operator disabled
+  // and what makes this reachable. It is a separate, generous constant armed ONLY in that
+  // configuration: setting it to 0 asks for unbounded OPERATIONS, not for unbounded QUEUEING, and
+  // those are different promises. It must also exceed the longest LEGITIMATE batch, or it would
+  // reject work that was about to run, which the ticket names as the way to get this wrong. The
+  // longest legitimate single operation is a budget import at ACTUAL_IMPORT_TIMEOUT_MS (default
+  // 600000), so 15 minutes clears it with room and is still finite.
+  //
+  // RE-ARMED on each start, not pre-armed once (review round 1). Arming all N timers at dispatch
+  // with the same delay makes entry k's allowance "900s minus everything before it", so a batch of
+  // healthy but slow operations rejects its own tail while nothing has stalled. Four budget
+  // re-selections at four minutes each on the slow link that made the operator disable the timeout
+  // in the first place is enough. Re-arming makes the bound mean what it should: no SINGLE
+  // predecessor has been running for 15 minutes.
+  const started = new Set<WriteOperation<any>>();
+  const strandedLimitMs = config.ACTUAL_OP_TIMEOUT_MS === 0 ? STRANDED_BATCH_LIMIT_MS : 0;
+  const armStrandedBound = (entries: WriteOperation<any>[]) => {
+    if (strandedLimitMs <= 0) return;
+    for (const entry of entries) {
+      if (started.has(entry) || entry.settledEarly) continue;
+      if (entry.residencyTimer) clearTimeout(entry.residencyTimer);
+      entry.residencyTimer = setTimeout(() => {
+      if (started.has(entry)) return;
+      logger.error(
+        `[WRITE QUEUE] Operation never started: the operation ahead of it in this batch has not ` +
+          `returned within ${strandedLimitMs}ms. Rejecting rather than stranding the caller (#389).`,
+      );
+      entry.reject(new Error(
+        'This write never started: an earlier operation in the same batch stalled. ' +
+        'The batch runs sequentially (#378), so it was queued behind that operation. Retry it.',
+      ));
+      entry.settledEarly = true;
+      }, strandedLimitMs);
+      if (typeof entry.residencyTimer.unref === 'function') entry.residencyTimer.unref();
+    }
+  };
+  const clearStrandedBounds = () => {
+    for (const entry of batch) {
+      if (entry.residencyTimer) {
+        clearTimeout(entry.residencyTimer);
+        entry.residencyTimer = undefined;
+      }
+    }
+  };
+  armStrandedBound(batch);
   writeQueueBatchCount++;
 
 
@@ -987,6 +1096,19 @@ async function processWriteQueue() {
     // assignment to clear and therefore no path, fatal or otherwise, that can leak it: when
     // the callback returns the store is gone. This replaced a module-level variable plus a
     // `finally` that nulled it, which worked but rested on that finally being reached.
+    // #417: hint the batch's budget, but ONLY when every operation in it resolves to the same one.
+    //
+    // #391 made an unhinted waiter a BARRIER affinity may not cross, which is what stops a drain
+    // being overtaken by reads queued after it. The side effect is that an unhinted drain also
+    // blocks affinity for everything behind it: measured at 5 re-selections for an alternating load
+    // with a drain in every fourth slot, against 2 with no drains.
+    //
+    // Deliberately NOT the `batch[0]` heuristic, which CLAUDE.md already names as a hazard for the
+    // connection choice: one entry's budget says nothing about the rest, and a wrong hint would
+    // reorder a mixed batch. Unanimity or nothing. The hint is only ever an ordering preference;
+    // `ensureLoadedBudgetMatchesSession` inside the lock still decides what is safe.
+    const batchBudget = resolveBatchBudget(batch);
+
     await drainListingStore.run(new Map(), async () => {
     await withApiLock(async () => {
       try {
@@ -1033,7 +1155,46 @@ async function processWriteQueue() {
         //
         // Each op keeps its own withOpTimeout (#270) and still settles individually, so one
         // stalled or rejected operation cannot hold the api mutex or fail its siblings.
-        for (const { operation, resolve, reject, preservesListings, requestStore, timeoutMs } of batch) {
+        let stuckLoadError: Error | null = null;
+        // Counted so the event is logged ONCE with a total. Without this the fail-fast path sits
+        // outside the per-operation try, so it never reaches the '[WRITE QUEUE] Operation failed'
+        // line and N operations fail with no log entry anywhere. Given this whole ticket family
+        // exists because absence-of-error is the failure signature, that would be the wrong silence
+        // to introduce while removing another.
+        let failedFast = 0;
+        for (const entry of batch) {
+          const { operation, resolve, reject, preservesListings, requestStore, timeoutMs } = entry;
+          // #389: this operation is STARTING, so its queue-wait bound no longer applies. Cleared
+          // before any await, so the timer can never fire on an in-flight op.
+          started.add(entry);
+          if (entry.residencyTimer) {
+            clearTimeout(entry.residencyTimer);
+            entry.residencyTimer = undefined;
+          }
+          // Restart the bound for everything still waiting, so it measures THIS operation's
+          // runtime rather than the batch's cumulative one.
+          armStrandedBound(batch);
+          if (entry.settledEarly) continue;   // its residency bound already rejected it
+
+          // #414: fail FAST while a budget load is genuinely stuck, rather than paying the
+          // abandoned-load bound once per remaining operation. A stuck load makes every one of
+          // them fail identically, so N operations would hold the process-global mutex for N
+          // times ACTUAL_OP_TIMEOUT_MS. The condition is RE-CHECKED rather than latched, because
+          // a load can land just after a bound expires and the whole point of keeping the
+          // registration is that a late landing is still waited for.
+          if (stuckLoadError !== null && hasPendingBudgetLoad()) {
+            // A DISTINCT error, not the one the earlier operation's wait produced (review round 1).
+            // Handing this operation that error claims it waited and timed out, which it never did,
+            // and its message matches TRANSIENT_ERROR_PATTERNS while describing something that is
+            // not this operation's failure. `cause` keeps the real origin attached.
+            failedFast++;
+            reject(new Error(
+              'This write was queued behind an operation whose budget load is still outstanding, ' +
+              'so it was failed immediately rather than waiting for the same bound. Retry it.',
+              { cause: stuckLoadError },
+            ));
+            continue;
+          }
           try {
             // #390 round 2: run each op in the context it was ENQUEUED in.
             //
@@ -1069,7 +1230,14 @@ async function processWriteQueue() {
               // A rejection here is caught by this loop's own per-op catch, so a stuck load fails
               // ONE operation rather than the whole batch, which is the behaviour #393 round 4
               // established for the drain.
-              await awaitAbandonedBudgetLoad(withOpTimeout);
+              try {
+                await awaitAbandonedBudgetLoad(withOpTimeout);
+              } catch (waitErr) {
+                // #414: remember it, so the rest of the batch fails fast instead of each paying
+                // the same bound. Still rethrown, so THIS operation fails exactly as before.
+                stuckLoadError = waitErr instanceof Error ? waitErr : new Error(String(waitErr));
+                throw waitErr;
+              }
               await ensureLoadedBudgetMatchesSession();
               // #407: an operation may carry its OWN bound. Only a budget import does today, and
               // it needs one: the import is legitimately long, and bounding it at the general
@@ -1137,6 +1305,13 @@ async function processWriteQueue() {
           }
         }
 
+        if (failedFast > 0) {
+          logger.error(
+            `[WRITE QUEUE] ${failedFast} operation(s) failed fast because a budget load is still ` +
+              `outstanding. They were never attempted; the stalled load is the cause (#414).`,
+          );
+        }
+
         // Explicitly sync changes to server before shutdown (legacy) or just
         // before returning (pool). Persistence guarantee in both branches.
         logger.debug(`[WRITE QUEUE] Syncing ${batch.length} operations to server`);
@@ -1197,9 +1372,18 @@ async function processWriteQueue() {
           await shutdownActualApi();
         }
       }
+    }, { budget: batchBudget });
     });
-    });
+    clearStrandedBounds();
   } catch (lockError) {
+    // #389 review (I2): clear the stranded bounds here too. When the ACQUISITION rejects (which it
+    // can, since #393, on an abandoned-load timeout) the loop is never entered, so without this all
+    // N timers stay armed and each one logs "the operation ahead of it in this batch has not
+    // returned" fifteen minutes later, for a batch that no longer exists and whose failure was a
+    // lock acquisition rather than a stalled sibling. The rejects are harmless no-ops on settled
+    // promises; the false signal is the problem, and it is the same wrong-subsystem misdirection
+    // #416 exists to remove.
+    clearStrandedBounds();
     // #393 review: THE LOCK ITSELF CAN NOW REJECT, before `fn()` ever runs.
     //
     // The batch-rejection handler above lives INSIDE the lock callback, which was sound while

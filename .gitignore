@@ -95,3 +95,7 @@ temp/
 
 # working-overnight run state (local only)
 .claude/overnight/
+
+# Python bytecode from the .claude hooks
+__pycache__/
+*.pyc

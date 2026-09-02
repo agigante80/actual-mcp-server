@@ -78,6 +78,7 @@ bash scripts/deploy-and-test.sh full
 | `version-bump.js` | `npm run release:patch/minor/major` | Bumps the `VERSION` file and syncs `package.json`. |
 | `version-check.js` | `npm run version:check` | Asserts `VERSION` file matches `package.json` version. Used in CI. |
 | `version-dev.js` | `npm run version:dev` | Prints a dev version string: `x.y.z-dev-<git-hash>`. |
+| `verify-release-ticket-states.mjs` | direct invoke (the `release` skill runs it) | #405: after a release, proves no ticket was closed by ACCIDENT. Enumerates every issue reference in the released commit range, separates the ones the release INTENDED to close (a `(#N)` in a commit subject) from the ones merely mentioned in a body, and reports any mentioned-only ticket that GitHub closed by keyword. Fails CLOSED on a reference it cannot verify. The earlier checks used a timestamp window around the push and missed both #414 and #416: clock skew, queued workflows and a multi-minute release all make a window a guess, while a commit range is deterministic. |
 
 ## ACL end-to-end (#338 / #343)
 

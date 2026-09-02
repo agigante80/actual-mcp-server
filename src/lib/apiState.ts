@@ -139,6 +139,21 @@ export async function awaitAbandonedBudgetLoad(
   return true;
 }
 
+/**
+ * Is a budget load currently outstanding?
+ *
+ * Production predicate (#414). The write drain uses it to FAIL FAST rather than pay the abandoned
+ * load bound once per remaining operation: a stuck load makes every one of them fail identically,
+ * so N operations cost N times ACTUAL_OP_TIMEOUT_MS holding the process-global mutex.
+ *
+ * Deliberately re-checked per operation rather than latched: a load can land just after a bound
+ * expires, and the whole point of keeping the registration is that a late landing is still waited
+ * for. Fail fast only while the condition still holds.
+ */
+export function hasPendingBudgetLoad(): boolean {
+  return _pendingBudgetLoads.size > 0;
+}
+
 /** Test hook: is a load currently outstanding? */
 export function _hasPendingBudgetLoadForTests(): boolean {
   return _pendingBudgetLoads.size > 0;

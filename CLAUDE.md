@@ -201,13 +201,14 @@ Project-local skills in `.claude/skills/` (invoked via the Skill tool, or automa
 
 ### Registered hooks
 
-All four live in `.claude/hooks/` and are registered in `.claude/settings.local.json`. Two are described in detail elsewhere in this file; the other two are easy to be surprised by:
+All five live in `.claude/hooks/` and are registered in `.claude/settings.local.json`. Two are described in detail elsewhere in this file; the other three are easy to be surprised by:
 
 | Hook | Event | Notes |
 |------|-------|-------|
 | `block-dashes.py` | `PreToolUse` on `Write`, `Edit`, `MultiEdit`, `NotebookEdit`, `Bash` | Enforces the no-dashes output convention above |
 | `require_green_develop_before_main.py` | `PreToolUse` on `Bash` | Blocks any merge, push, or release tag aimed at `main`; fails closed |
 | `overnight-guard.py` | `PreToolUse` on `Bash` | **Inert unless `.claude/overnight/active.md` exists.** Its shell wrapper exits 0 immediately when that file is absent, so it costs nothing in a normal session and only constrains commands during a `working-overnight` run |
+| `block-closing-keyword.py` | `PreToolUse` on `Bash` | #405: blocks a commit whose message would make GitHub CLOSE a ticket the author is saying they did NOT fix. A closing keyword next to a reference closes it even when the sentence says the opposite, and because keywords are inert off the default branch the close fires during a RELEASE, days later, looking deliberate. It happened three times (#391, #414, #416), twice after being documented. It keys on the NEGATION, so a deliberate `Closes #N` is never blocked, and it fires on an INVOCATION rather than prose mentioning one (it blocked its own documentation and test file before that was fixed). Pair it with `node scripts/verify-release-ticket-states.mjs` after a release: that enumerates the references in the released COMMIT RANGE, because the timestamp-window check used the first two times missed both #414 and #416 |
 | `overnight-continue.py` | `Stop` | Fires when a turn ENDS, and can continue the session rather than letting it stop. If a session appears to keep going on its own, this is why. Belongs to the same overnight lane |
 
 ## Issue Labels
