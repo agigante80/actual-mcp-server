@@ -24,6 +24,13 @@ const tool: ToolDefinition = {
     const input = InputSchema.parse(args || {});
     
     // Convert null to undefined for adapter (LibreChat sends null, adapter expects undefined)
+    // #388: these three filters silently returned an EMPTY result set when given a NAME, which
+    // is the worst of the three answers the surface used to give: a plausible-looking wrong
+    // answer. No listing is read for a well-formed id, so a correct call costs what it did.
+    if (input.accountId) await adapter.resolveFilterId('account', input.accountId);
+    if (input.categoryId) await adapter.resolveFilterId('category', input.categoryId);
+    if (input.payeeId) await adapter.resolveFilterId('payee', input.payeeId);
+
     const accountId = input.accountId ?? undefined;
     const startDate = input.startDate ?? undefined;
     const endDate = input.endDate ?? undefined;

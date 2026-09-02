@@ -23,36 +23,14 @@ const tool: ToolDefinition = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const allAccounts = await adapter.getAccounts();
 
-    // Step 0: Validate accountId exists if provided
+    // #388: ONE answer to a name passed where an id belongs, shared by every Category B field.
+    // This block used to return an empty result set with the error tucked inside it, which reads
+    // to a model as "no transactions match". `verifyExists: true` keeps the existence check this
+    // tool already paid for.
     if (input.accountId) {
-      const accountExists = allAccounts.some((acc: any) => acc.id === input.accountId);
-      
-      if (!accountExists) {
-        // Check if user provided account name instead of UUID
-        const accountByName = allAccounts.find((acc: any) =>
-          acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
-        );
-        
-        if (accountByName) {
-          return {
-            transactions: [],
-            count: 0,
-            totalAmount: 0,
-            categoryName: input.categoryName,
-            error: `Account '${input.accountId}' appears to be a name, not an ID. Use account UUID '${accountByName.id}' instead.`,
-          };
-        }
-        
-        return {
-          transactions: [],
-          count: 0,
-          totalAmount: 0,
-          categoryName: input.categoryName,
-          error: `Account '${input.accountId}' not found. Did you mean to use account UUID instead of name? Use actual_accounts_list to get valid account UUIDs.`,
-        };
-      }
+      await adapter.resolveFilterId('account', input.accountId, { verifyExists: true, rows: allAccounts });
     }
-    
+
     // Step 1: Find category ID by name
     let categoryId: string | undefined;
     if (input.categoryName) {

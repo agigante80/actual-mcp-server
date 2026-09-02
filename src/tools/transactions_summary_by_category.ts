@@ -15,6 +15,11 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
+
+    // #388: this filter silently returned an EMPTY result set when given an account NAME, a
+    // plausible-looking wrong answer. A well-formed id reads no listing, so a correct call is
+    // unchanged.
+    if (input.accountId) await adapter.resolveFilterId('account', input.accountId);
     
     // Default to current month if dates not provided
     const today = new Date();

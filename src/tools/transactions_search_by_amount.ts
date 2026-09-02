@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { isPreflightRefusal } from '../lib/errors.js';
 
 const InputSchema = z.object({
   minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
@@ -30,43 +31,19 @@ const tool: ToolDefinition = {
         );
       }
       
-      // Validate accountId exists if provided
+      // #388: ONE answer to a name passed where an id belongs, shared by every Category B field.
+      // This block used to return an empty result set with the error tucked inside it, which reads
+      // to a model as "no transactions match". `verifyExists: true` keeps the existence check this
+      // tool already paid for.
+      // Fetched HERE rather than at the enrichment step below so the guard can reuse it.
+      // Both need the same listing, and reading it twice on every filtered call is a cost this
+      // change is meant to avoid rather than introduce.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const accounts = await adapter.getAccounts();
       if (input.accountId) {
-        const accounts = await adapter.getAccounts();
-        const accountExists = accounts.some((acc: any) => acc.id === input.accountId);
-        
-        if (!accountExists) {
-          // Check if user provided account name instead of UUID
-          const accountByName = accounts.find((acc: any) => 
-            acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
-          );
-          
-          if (accountByName) {
-            return {
-              transactions: [],
-              count: 0,
-              totalAmount: 0,
-              amountRange: {
-                min: input.minAmount,
-                max: input.maxAmount,
-              },
-              error: `Account '${input.accountId}' appears to be a name, not an ID. Use account UUID '${accountByName.id}' instead.`,
-            };
-          }
-          
-          return {
-            transactions: [],
-            count: 0,
-            totalAmount: 0,
-            amountRange: {
-              min: input.minAmount,
-              max: input.maxAmount,
-            },
-            error: `Account '${input.accountId}' not found. Did you mean to use account UUID instead of name? Use actual_accounts_list to get valid account UUIDs.`,
-          };
-        }
+        await adapter.resolveFilterId('account', input.accountId, { verifyExists: true, rows: accounts });
       }
-      
+
       // Get base transactions (filtered by account and date range if provided)
       const allTransactions = await adapter.getTransactions(
         input.accountId,
@@ -135,8 +112,7 @@ const tool: ToolDefinition = {
       
       const limited = filtered.slice(0, input.limit || 100);
       
-      // Enrich transactions with account names
-      const accounts = await adapter.getAccounts();
+      // Enrich transactions with account names (listing already in hand, see above)
       const accountMap = new Map(accounts.map((acc: any) => [acc.id, acc.name]));
       
       const enrichedTransactions = limited.map((t: any) => ({
@@ -157,6 +133,12 @@ const tool: ToolDefinition = {
       };
     } catch (error: any) {
       const message = error?.message || String(error);
+      // #377/#388: a PREFLIGHT REFUSAL is not a crash and must not be flattened into one.
+      // This guard exists so an unexpected failure does not take the server down. A refusal is
+      // the opposite: a deliberate answer that the request cannot be served, and burying it here
+      // would restore exactly the empty-result-with-an-error shape #388 removed.
+      if (isPreflightRefusal(error)) throw error;
+
       // Don't crash the server — return structured error
       return {
         transactions: [],
