@@ -58,6 +58,9 @@ let readDelayMs = 0;
 // Reads the singleton AFTER its delay, on purpose. The leak being modelled is an abandoned
 // download landing DURING an operation, so a stub that snapshots `loaded` on entry cannot see
 // it: the first version of this file did exactly that and passed with both defences removed.
+// #396: loadBudgetTracked probes after every download. This file models an abandoned download
+// that re-points the singleton, so the probe must read the SAME `loaded` variable.
+api.getBudgetMonths = async () => { if (!loaded) throw { type: 'APIError', message: 'No budget file is open' }; return ['2026-01']; };
 api.getAccounts = async () => {
   if (readDelayMs) await new Promise((r) => setTimeout(r, readDelayMs));
   return [{ id: ACC, name: `acct-in-${loaded}` }];

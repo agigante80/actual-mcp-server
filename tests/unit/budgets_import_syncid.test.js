@@ -39,6 +39,9 @@ const CONFIGURED_SYNC_ID = '22222222-2222-2222-2222-222222222222';
   let downloads = 0;
   api.default.importBudget = async () => ({ id: '_imported-budget' });
   api.default.downloadBudget = async () => { downloads += 1; return { success: true }; };
+  // #396: loadBudgetTracked probes after every download. This file never models an unloaded
+  // singleton, so the probe always succeeds here.
+  api.default.getBudgetMonths = async () => ['2026-01'];
   api.default.sync = async () => {};
 
   const { requestContext } = await import('../../dist/src/lib/requestContext.js');
