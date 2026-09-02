@@ -108,7 +108,7 @@ export async function scheduleTests(client, context) {
       if (foundRecur.next_date) {
         console.log(`  ✓ verify recurring: next_date="${foundRecur.next_date}"`);
       } else {
-        console.log(`  ⚠ verify recurring: next_date not populated (may be server behaviour)`);
+        fail(`verify recurring: next_date is not populated after creating a recurring schedule. "May be server behaviour" is a question this test exists to answer: if it turns out to be legitimate, convert it to noteTolerated WITH the evidence.`);
       }
     } else {
       fail(`verify recurring: schedule ${scheduleRecurId} not found in list`);
@@ -128,7 +128,7 @@ export async function scheduleTests(client, context) {
       if (success === true) {
         console.log(`  ✓ update returned success=true`);
       } else {
-        console.log(`  ⚠ update: unexpected response: ${JSON.stringify(updateResult).slice(0, 120)}`);
+        fail(`update: unexpected response: ${JSON.stringify(updateResult).slice(0, 120)}`);
       }
       // Verify
       const afterUpdate = await callTool('actual_schedules_get', {});
@@ -162,7 +162,7 @@ export async function scheduleTests(client, context) {
       if (success === true) {
         console.log(`  ✓ update with resetNextDate returned success=true`);
       } else {
-        console.log(`  ⚠ update with resetNextDate: unexpected response: ${JSON.stringify(updateRecurResult).slice(0, 120)}`);
+        fail(`update with resetNextDate: unexpected response: ${JSON.stringify(updateRecurResult).slice(0, 120)}`);
       }
     } catch (err) {
       fail(`update recurring + resetNextDate failed: ${err.message}`);
@@ -178,7 +178,7 @@ export async function scheduleTests(client, context) {
       if (success === true) {
         console.log(`  ✓ delete returned success=true`);
       } else {
-        console.log(`  ⚠ delete one-off: unexpected response: ${JSON.stringify(delResult).slice(0, 120)}`);
+        fail(`delete one-off: unexpected response: ${JSON.stringify(delResult).slice(0, 120)}`);
       }
       // Verify gone
       const afterDel = await callTool('actual_schedules_get', {});
@@ -203,7 +203,7 @@ export async function scheduleTests(client, context) {
       if (success === true) {
         console.log(`  ✓ delete recurring returned success=true`);
       } else {
-        console.log(`  ⚠ delete recurring: unexpected response: ${JSON.stringify(delRecurResult).slice(0, 120)}`);
+        fail(`delete recurring: unexpected response: ${JSON.stringify(delRecurResult).slice(0, 120)}`);
       }
     } catch (err) {
       fail(`delete recurring failed: ${err.message}`);
@@ -215,13 +215,13 @@ export async function scheduleTests(client, context) {
   {
     try {
       const nilResult = await callTool('actual_schedules_delete', { id: NON_EXISTENT_UUID });
-      console.log(`  ⚠ Expected a not-found error but tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
+      fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
       if (msg.includes('not found') && msg.includes('actual_schedules_get')) {
         console.log(`  ✓ FIXED(BUG-11): schedules_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
       } else {
-        console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+        fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
       }
     }
   }

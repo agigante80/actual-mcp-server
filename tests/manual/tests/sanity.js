@@ -11,6 +11,8 @@
  *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 74)
  */
 
+import { noteTolerated } from '../assert.js';
+
 const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '74', 10);
 
 /**
@@ -38,8 +40,10 @@ export async function sanityTests(client) {
   if (typeof versionResult?.version === 'string') {
     console.log(`✓ Actual Budget server version: ${versionResult.version}`);
   } else if (typeof versionResult?.error === 'string') {
-    // Non-fatal: version endpoint may not exist in older self-hosted builds
-    console.log(`⚠ actual_server_get_version: server reported error: ${versionResult.error}`);
+    // #387: a genuinely tolerated alternative, and the only one in this suite so far. The version
+    // endpoint does not exist in older self-hosted Actual builds, and this is a read-only sanity
+    // check whose job is to prove the protocol works, not to pin the server's feature set.
+    noteTolerated(`actual_server_get_version reported an error, which older self-hosted builds do without the endpoint: ${versionResult.error}`);
   } else {
     throw new Error(`actual_server_get_version: unexpected response: ${JSON.stringify(versionResult).slice(0, 120)}`);
   }

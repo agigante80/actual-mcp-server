@@ -1,4 +1,4 @@
-import { fail } from '../assert.js';
+import { fail, skip } from '../assert.js';
 /**
  * tests/transaction.js
  *
@@ -17,7 +17,7 @@ export async function transactionTests(client, context) {
   console.log("\n-- Running TRANSACTION TESTS --");
 
   if (!context.accountId) {
-    console.log("⚠ No account ID - skipping transaction tests");
+    skip("No account ID: skipping transaction tests");
     return;
   }
 
@@ -88,7 +88,7 @@ export async function transactionTests(client, context) {
       if (badTxn?.success === false && typeof badTxn?.error === 'string') {
         console.log(`  ✓ T3: error returned for nil-UUID account: ${badTxn.error.slice(0, 120)}`);
       } else {
-        console.log(`  ⚠ T3: unexpected response (API may have accepted nil UUID): ${JSON.stringify(badTxn).slice(0, 120)}`);
+        fail(`T3: unexpected response, the API may have accepted the nil UUID: ${JSON.stringify(badTxn).slice(0, 120)}`);
       }
     } catch (e) {
       console.log(`  ✓ T3: API rejected nil-UUID account (threw): ${String(e).slice(0, 120)}`);
@@ -123,13 +123,13 @@ export async function transactionTests(client, context) {
         id: '00000000-0000-0000-0000-000000000000',
         fields: { notes: 'repro-212' },
       });
-      console.log("  ⚠ Expected a not-found error but tool returned:", JSON.stringify(nilUpd).slice(0, 120));
+      fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilUpd).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
       if (msg.includes('not found') && msg.includes('actual_transactions_get')) {
         console.log(`  ✓ FIXED(#212): transactions_update nil-id throws actionable error: ${msg.slice(0, 120)}`);
       } else {
-        console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+        fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
       }
     }
 
@@ -142,10 +142,10 @@ export async function transactionTests(client, context) {
       const isolated = batch?.successCount === 1 && batch?.failureCount === 1 &&
         (batch.failed || []).some(f => f.id === '00000000-0000-0000-0000-000000000000' && /not found/.test(f.error || ''));
       if (isolated) console.log("  ✓ FIXED(#212): update_batch routes the non-existent id into failed[] with a not-found message");
-      else console.log("  ⚠ update_batch did not isolate the non-existent id:", JSON.stringify(batch).slice(0, 160));
+      else fail(`update_batch did not isolate the non-existent id: ${JSON.stringify(batch).slice(0, 160)}`);
     }
   } else {
-    console.log("\n  ⚠ Skipping update/verify (transaction not found by notes filter)");
+    fail("Skipping update/verify: the transaction this module just created was not found by its own notes filter, so the steps that follow never ran.");
   }
 
   // #305: split-transaction create + edit-existing-split + negatives.
@@ -184,20 +184,20 @@ export async function transactionTests(client, context) {
     // NEGATIVE: children do not sum to the parent amount (rejected before the write).
     try {
       await callTool("actual_transactions_create", { account: txAccountId, date: today, amount: -3000, notes: `${splitNotes}-bad`, subtransactions: [{ amount: -2000 }, { amount: -500 }] });
-      console.log("  ⚠ Expected a sum-mismatch rejection on create but it succeeded");
+      fail("Expected a sum-mismatch rejection on create but it succeeded");
     } catch (err) {
       if (/sum to the parent amount/i.test(err.message || '')) console.log("  ✓ NEGATIVE: mismatched split sum rejected on create");
-      else console.log(`  ⚠ create rejected but message unexpected: ${(err.message || '').slice(0, 120)}`);
+      else fail(`create rejected, but with an unexpected message: ${(err.message || '').slice(0, 120)}`);
     }
 
     // NEGATIVE: subtransactions on a plain (non-split) target is rejected (no plain-to-split conversion).
     if (context.transactionId) {
       try {
         await callTool("actual_transactions_update", { id: context.transactionId, fields: { subtransactions: [{ amount: -3750 }, { amount: -3750 }] } });
-        console.log("  ⚠ Expected a non-split rejection but update succeeded");
+        fail("Expected a non-split rejection but the update succeeded");
       } catch (err) {
         if (/not a split/i.test(err.message || '')) console.log("  ✓ NEGATIVE: subtransactions on a plain transaction rejected");
-        else console.log(`  ⚠ update rejected but message unexpected: ${(err.message || '').slice(0, 120)}`);
+        else fail(`update rejected, but with an unexpected message: ${(err.message || '').slice(0, 120)}`);
       }
     }
 
@@ -234,7 +234,7 @@ export async function transactionTests(client, context) {
     if (getTxnsArr !== null && getTxnsArr.length >= 1) {
       console.log(`  ✓ Verify get: returned ${getTxnsArr.length} transaction(s) for year-to-date`);
     } else if (getTxnsArr !== null && getTxnsArr.length === 0) {
-      console.log(`  ⚠ Verify get: returned 0 transactions YTD (account may be empty before today)`);
+      fail("Verify get: returned 0 transactions year-to-date, but this module created one earlier in the run, so the account cannot legitimately be empty.");
     } else {
       fail(`Verify get: expected array, got ${JSON.stringify(getTxnsResult).slice(0, 120)}`);
     }
@@ -317,7 +317,7 @@ export async function transactionTests(client, context) {
         console.log(`  ✓ Cleaned up imported transaction`);
       } catch (_) { /* best effort */ }
     } else if (afterArr.length >= 1) {
-      console.log(`  ⚠ T6 Verify import read-back: ${afterArr.length} txn(s) found but none matched notes+amount (may be deduplicated)`);
+      fail(`T6 Verify import read-back: ${afterArr.length} transaction(s) found but none matched notes+amount. The notes carry a run timestamp, so deduplication cannot explain it.`);
     } else {
       fail(`T6 Verify import read-back: no transactions found after import`);
     }
@@ -334,13 +334,13 @@ export async function transactionTests(client, context) {
       const nilResult = await callTool("actual_transactions_delete", {
         id: '00000000-0000-0000-0000-000000000000',
       });
-      console.log("  ⚠ Expected a not-found error but tool returned:", JSON.stringify(nilResult).slice(0, 120));
+      fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
       if (msg.includes('not found') && msg.includes('actual_transactions_get')) {
         console.log(`  ✓ FIXED(BUG-8): transactions_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
       } else {
-        console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+        fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
       }
     }
   }
@@ -368,7 +368,7 @@ export async function transactionTests(client, context) {
       fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   } else {
-    console.log("  ⚠ Skipping delete (no transactionId in context)");
+    skip("Skipping delete (no transactionId in context)");
   }
 
   // ── actual_transactions_uncategorized tests ───────────────────────────────
@@ -560,7 +560,7 @@ export async function transactionTests(client, context) {
           await callTool("actual_accounts_delete", { id: destAccountId });
           console.log(`  ✓ transfers: cleaned up, source account back to a zero balance`);
         } catch (err) {
-          console.log(`  ⚠ transfers: could not clean up: ${err.message?.slice(0, 120)}`);
+          fail(`transfers: could not clean up: ${err.message?.slice(0, 120)}. That is residue.`);
         }
       }
     }
@@ -575,6 +575,6 @@ export async function transactionTests(client, context) {
     await callTool("actual_accounts_delete", { id: txAccountId });
     console.log(`\n  ✓ Cleaned up transaction test account (${txAccountId})`);
   } catch (err) {
-    console.log(`\n  ⚠ Teardown: could not clean up transaction test account (${txAccountId}): ${err.message?.slice(0, 120)}`);
+    fail(`Teardown: could not clean up the transaction test account (${txAccountId}): ${err.message?.slice(0, 120)}. That is residue.`);
   }
 }

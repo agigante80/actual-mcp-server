@@ -1,6 +1,18 @@
 // tests/unit/e2e_spec_collection.test.js
 //
 // #382: every `tests/e2e/*.spec.ts` must be collected by at least one Playwright project.
+// #384: and COLLECTED IS NOT RUN, so this file now checks both.
+//
+// The #384 defect in one sentence: a guard that says "collected" gets read as "runs". Had #382
+// been fixed by adding a `stdio-tests` project rather than by moving the assertions into the unit
+// chain, this guard would have gone green while the file still executed nowhere, which is the same
+// defect one level up and with a guard actively certifying it.
+//
+// So the second check partitions every spec into RUNS-IN-CI or DECLARED-MANUAL. The set of
+// projects CI actually runs is read from `tests/e2e/run-docker-e2e.sh`, which is where that truth
+// lives (both workflows invoke `test:e2e:docker:full`, which is that script). Parsing one shell
+// script is deliberate: the ticket weighed parsing workflow YAML and called it brittle, and it
+// would be, because it couples this test to job names. The script is the narrow waist.
 //
 // WHY THIS EXISTS. `tests/e2e/stdio.spec.ts` contained three real tests and was matched by
 // no `testMatch` in either config, so it never executed once from the day it was added. It
@@ -115,6 +127,116 @@ check('every tests/e2e/*.spec.ts is collected by at least one Playwright project
       `      Fix by adding a project with a matching testMatch in playwright.config.ts or\n` +
       `      playwright.config.docker.ts, by moving the assertions somewhere that runs (see\n` +
       `      tests/unit/entrypoint_invariants.test.js), or by deleting the file.`,
+  );
+});
+
+// #384: which project does CI ACTUALLY run?
+//
+// The first version of this got it wrong in a way worth recording, because it is the same mistake
+// the ticket is about. It treated "defined in playwright.config.docker.ts" as "runs in CI", which
+// made `docker.e2e.spec.ts` pass: the `docker-e2e-smoke` project is defined in that config and CI
+// never selects it. A guard that accepts a project nobody invokes is the defect, not the fix.
+//
+// So the chain is followed end to end, through the two files where the truth actually lives:
+//   workflows -> which `test:e2e:docker:<level>` script they run
+//   run-docker-e2e.sh -> which PLAYWRIGHT_PROJECT that level selects
+//   playwright.config.docker.ts -> which testMatch that project carries
+const workflowDir = join(ROOT, '.github', 'workflows');
+const workflowSrc = readdirSync(workflowDir)
+  .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
+  .map((f) => readFileSync(join(workflowDir, f), 'utf8'))
+  .join('\n');
+const ciLevels = [...new Set(
+  [...workflowSrc.matchAll(/test:e2e:docker:([a-z]+)/g)].map((m) => m[1]),
+)];
+
+// The level-to-project mapping, read from the branch that assigns it.
+const runnerSrc = readFileSync(join(ROOT, 'tests', 'e2e', 'run-docker-e2e.sh'), 'utf8');
+const levelToProject = {};
+{
+  const m = runnerSrc.match(
+    /if \[ "\$TEST_LEVEL" = "([a-z]+)" \][\s\S]*?PLAYWRIGHT_PROJECT="([A-Za-z0-9_-]+)"[\s\S]*?else[\s\S]*?PLAYWRIGHT_PROJECT="([A-Za-z0-9_-]+)"/,
+  );
+  if (m) {
+    levelToProject[m[1]] = m[2];
+    levelToProject.__else__ = m[3];
+  }
+}
+const ciProjects = [...new Set(
+  ciLevels.map((lvl) => levelToProject[lvl] ?? levelToProject.__else__).filter(Boolean),
+)];
+
+// project name -> testMatch, from the docker config only (the config the runner uses).
+const dockerCfg = configs.find((c) => c.name === 'playwright.config.docker.ts').src;
+const projectMatchers = new Map();
+for (const m of dockerCfg.matchAll(/name:\s*['"`]([A-Za-z0-9_-]+)['"`],\s*\n\s*testMatch:\s*([^,\n]+)/g)) {
+  const raw = m[2].trim().replace(/,$/, '');
+  const asRegex = raw.match(/^\/(.*)\/([gimsuy]*)$/);
+  if (asRegex) projectMatchers.set(m[1], new RegExp(asRegex[1], asRegex[2]));
+}
+const ciMatchers = ciProjects.map((p) => projectMatchers.get(p)).filter(Boolean);
+
+// Specs that are DELIBERATELY not part of any gate. An entry here is a decision, not an
+// oversight, and it must say what the file is for and where else its coverage lives.
+const DECLARED_MANUAL = {
+  'mcp-client.playwright.spec.ts':
+    '#384: a manual protocol diagnostic, run with `npx playwright test --config playwright.config.ts ' +
+    '--project=mcp-protocol-tests` against a running server. NOT a gate. Its round-trip coverage is ' +
+    'duplicated by docker-all-tools.e2e.spec.ts (initialize plus tools/call across all 74 tools) and ' +
+    'its expired-session shim assertions by tests/unit/httpServer_session_not_found.test.js. The only ' +
+    'thing unique to it is the SSE connect, judged not worth a second Playwright project in the ' +
+    'docker job. Wire it in if that judgement changes.',
+  'docker.e2e.spec.ts':
+    '#384: the SMOKE spec, selected only by `npm run test:e2e:docker:smoke`, which is a local ' +
+    'fast check. CI runs the full level, so this file is NOT a gate. Every assertion it makes is ' +
+    'also made by docker-all-tools.e2e.spec.ts, which is what CI runs.',
+};
+
+check('the CI chain resolved (an empty project set would make the next check vacuous)', () => {
+  assert.ok(ciLevels.length >= 1, 'no test:e2e:docker:<level> invocation found in .github/workflows');
+  assert.ok(ciProjects.length >= 1, `no project resolved for CI levels ${ciLevels.join(', ')}; the runner parse is stale`);
+  assert.ok(ciMatchers.length >= 1, `no testMatch found for CI projects ${ciProjects.join(', ')}; the config parse is stale`);
+});
+
+check('every spec either RUNS in CI or is declared a manual diagnostic', () => {
+  // The distinction #382's guard could not make. A project existing proves nothing: both
+  // `mcp-protocol-tests` and `docker-e2e-smoke` exist and CI selects neither.
+  const undeclared = specs.filter((spec) => {
+    if (Object.hasOwn(DECLARED_MANUAL, spec)) return false;
+    return !ciMatchers.some((re) => re.test(`tests/e2e/${spec}`) || re.test(spec));
+  });
+  assert.deepStrictEqual(
+    undeclared, [],
+    `these specs are collected by SOME project but by none that CI runs (${ciProjects.join(', ')}),\n` +
+      `      and are not declared manual either, so they look like coverage and are not:\n` +
+      `      ${undeclared.join(', ')}.\n` +
+      `      Either put them in a project the runner selects, or add a DECLARED_MANUAL entry in\n` +
+      `      this file saying what the file is for and where its coverage actually lives.`,
+  );
+});
+
+check('every DECLARED_MANUAL entry names a spec that still exists', () => {
+  // Otherwise the list rots into exemptions for files nobody can find.
+  const ghosts = Object.keys(DECLARED_MANUAL).filter((f) => !specs.includes(f));
+  assert.deepStrictEqual(ghosts, [], `declared manual but no such spec: ${ghosts.join(', ')}`);
+});
+
+check('NEGATIVE: a spec collected only by a project CI never runs is flagged', () => {
+  // The exact shape #384 describes, and the shape the first version of this check missed.
+  const pretend = 'not-declared.spec.ts';
+  const undeclared = [pretend].filter(
+    (spec) => !Object.hasOwn(DECLARED_MANUAL, spec)
+      && !ciMatchers.some((re) => re.test(`tests/e2e/${spec}`) || re.test(spec)),
+  );
+  assert.deepStrictEqual(undeclared, [pretend], 'guard must flag a spec that no CI project runs');
+});
+
+check('NEGATIVE: the CI project set really excludes the smoke project', () => {
+  // If this ever includes docker-e2e-smoke, the check above silently stops discriminating,
+  // which is how the first version of it passed while proving nothing.
+  assert.ok(
+    !ciProjects.includes('docker-e2e-smoke'),
+    `CI project set unexpectedly includes the smoke project: ${ciProjects.join(', ')}`,
   );
 });
 

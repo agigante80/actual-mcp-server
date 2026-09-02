@@ -35,6 +35,26 @@ export function skip(message) {
   console.log(`  ⏭ ${message}`);
 }
 
+/**
+ * An outcome the test DELIBERATELY tolerates, with the reason stated.
+ *
+ * #387: the ledger above made a failed assertion run-failing, but it left a second way for a
+ * module to report an unexpected result and still pass: print a warning glyph and return. Before
+ * #380 that let `deploy-and-test.sh full` report GREEN on both transports while printing a
+ * ZodError, which makes the release gate a check that can lie.
+ *
+ * The fix is not to ban tolerance, which would be wrong: a few branches legitimately accept either
+ * of two upstream behaviours. It is to make tolerance say WHY, so the guard has something explicit
+ * to allow and a reader can see the decision was deliberate rather than a branch nobody finished.
+ *
+ * Use `fail()` when the outcome is simply wrong, `skip()` when a precondition is missing, and this
+ * ONLY when both outcomes are genuinely acceptable and the reason says so in one line. "Might
+ * depend on Actual behaviour" is not a reason: that is a question the test should answer.
+ */
+export function noteTolerated(reason) {
+  console.log(`  ~ tolerated: ${reason}`);
+}
+
 /** Number of failures recorded so far this process. runner.js checks this at the end. */
 export function failureCount() {
   return failures.length;

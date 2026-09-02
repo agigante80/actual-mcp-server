@@ -177,12 +177,30 @@ throws on anything it does not recognise rather than dropping it.
 Not traced in the 2026-08-25 pass. Absence from the CONFIRMED table is not evidence of
 safety.
 
-`actual_schedules_create`, `actual_budgets_switch`,
-`actual_budgets_export`, `actual_budgets_transfer`, `actual_budget_updates_batch`,
-`actual_categories_create`, `actual_category_groups_create`, `actual_rules_create`,
-`actual_rules_create_or_update`, `actual_payees_create`, `actual_tags_create`,
-`actual_transactions_import`, `actual_transactions_update_batch`, `actual_bank_sync`,
-`actual_query_run`.
+These are ROWS rather than a prose comma-list, and that is the point of #386 rather than a
+formatting preference. The membership gate matched a backticked name ANYWHERE in this file, so a
+new write tool satisfied it by being appended to a sentence, with no verdict and no evidence, and
+was then invisible forever because nothing counted a prose list or aged it out. The gate now
+requires a table row, which makes the cheapest way to satisfy it also the way that records
+something.
+
+| Tool | Why it is here | Next step |
+|---|---|---|
+| `actual_schedules_create` | not traced in the 2026-08-25 pass | trace `createSchedule` for an unvalidated account or payee id |
+| `actual_budgets_switch` | not traced; changes session state rather than budget data | confirm the preference write cannot silently no-op |
+| `actual_budgets_export` | not traced; writes a zip rather than calling a write API | confirm a failed write surfaces rather than returning a path |
+| `actual_budgets_transfer` | not traced | trace the two-sided amount write for a partial application |
+| `actual_budget_updates_batch` | not traced; the one tool that calls raw api functions directly | trace whether a mid-batch failure leaves earlier writes applied |
+| `actual_categories_create` | not traced | trace for an unvalidated `group_id` (shape D) |
+| `actual_category_groups_create` | not traced | trace for a silent duplicate-name outcome |
+| `actual_rules_create` | not traced | trace for an unvalidated payee or category in conditions and actions |
+| `actual_rules_create_or_update` | not traced | same as `actual_rules_create`, plus the update branch |
+| `actual_payees_create` | not traced | trace for a silent merge into an existing payee |
+| `actual_tags_create` | not traced | trace for a silent no-op on a duplicate tag |
+| `actual_transactions_import` | not traced; **do this one next** | `importTransactions` routes to `reconcileTransactions`, which takes `acctId` without looking it up, so it may share `actual_transactions_create`'s shape D exactly |
+| `actual_transactions_update_batch` | not traced | trace whether a failed entry can leave a partial field write |
+| `actual_bank_sync` | not traced; reaches a THIRD PARTY, so the effect is not ours alone | trace what a provider-side failure returns |
+| `actual_query_run` | not traced; read-only in practice but not by construction | confirm no statement shape reaches a write path |
 
 `actual_accounts_create` and `actual_schedules_create` were missing from this file entirely
 until the architectural review of PR #367 noticed. That is the failure mode this document
@@ -194,9 +212,8 @@ it structural rather than a matter of care, and is tracked in #370.
 an UNKNOWN entry is for: the list shrinks as tools are worked, and an entry leaving it is the
 normal outcome rather than a correction.
 
-`actual_transactions_import` is the one worth doing next: it routes through
-`importTransactions` to `reconcileTransactions`, which takes `acctId` without looking it
-up, so it may share `actual_transactions_create`'s shape D exactly.
+The "do this one next" marker above is deliberate: an UNKNOWN list with no ordering is a list
+nobody starts.
 
 ## Two findings that were WRONG, and why the guard column exists
 

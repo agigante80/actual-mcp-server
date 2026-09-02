@@ -62,7 +62,7 @@ export async function payeeTests(client, context) {
     const fuzzy = await callTool("actual_entities_search", { type: 'payees', query: typo, matchType: 'fuzzy' });
     const fm = fuzzy?.matches || fuzzy?.result?.matches || [];
     if (fm.some(m => m.id === payeeId)) console.log(`  ✓ fuzzy: typo "${typo}" still resolved the payee`);
-    else console.log(`  ⚠ fuzzy: typo did not resolve (matches: ${JSON.stringify(fm).slice(0, 120)})`);
+    else fail(`fuzzy: the typo did not resolve to the payee (matches: ${JSON.stringify(fm).slice(0, 120)})`);
 
     // no-match contract: empty result, no error
     const none = await callTool("actual_entities_search", { type: 'payees', query: 'zzz-nonexistent-zzz' });
@@ -212,8 +212,7 @@ export async function payeeTests(client, context) {
         id: '00000000-0000-0000-0000-000000000000',
         fields: { category: catForPayee },
       });
-      // Actual may silently succeed (rule created for unknown payee: benign)
-      console.log("  ⚠ Non-existent payee update with category did not throw (Actual allows orphan rules)");
+      fail("Non-existent payee update with a category did not throw. The comment here guessed that Actual allows orphan rules; that is a question, and tolerating both answers is what lets this pair of branches pass whichever happens.");
     } catch (err) {
       console.log("  ✓ Non-existent payee UUID correctly produced error:", err.message.slice(0, 80));
     }
@@ -224,11 +223,11 @@ export async function payeeTests(client, context) {
   // Clean up the throwaway category/group if this block created them (#282).
   if (throwawayCatId) {
     try { await callTool("actual_categories_delete", { id: throwawayCatId }); }
-    catch (err) { console.log(`  ⚠ throwaway category cleanup failed (residue sweep will catch): ${err.message?.slice(0, 80)}`); }
+    catch (err) { fail(`throwaway category cleanup failed: ${err.message?.slice(0, 80)}. Deferring to the residue sweep hides WHICH step leaked it.`); }
   }
   if (throwawayGroupId) {
     try { await callTool("actual_category_groups_delete", { id: throwawayGroupId }); }
-    catch (err) { console.log(`  ⚠ throwaway group cleanup failed (residue sweep will catch): ${err.message?.slice(0, 80)}`); }
+    catch (err) { fail(`throwaway group cleanup failed: ${err.message?.slice(0, 80)}. Deferring to the residue sweep hides WHICH step leaked it.`); }
   }
 
   // Verify create
@@ -264,7 +263,7 @@ export async function payeeTests(client, context) {
     if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
       console.log("✓ Strict validation working (invalid field rejected)");
     } else {
-      console.log("⚠ Different error than expected:", err.message);
+      fail(`Strict validation: threw a different error than expected: ${err.message}`);
     }
   }
 
@@ -302,9 +301,9 @@ export async function payeeTests(client, context) {
     if (hasError && badRules.error.includes('not found') && badRules.error.includes('actual_payees_get')) {
       console.log(`  ✓ FIXED(BUG-3): payee_rules_get nil-UUID returns actionable error: ${badRules.error.slice(0, 120)}`);
     } else if (hasError) {
-      console.log(`  ⚠ P6: error returned but message not actionable: ${badRules.error.slice(0, 120)}`);
+      fail(`P6: an error was returned but the message is not actionable: ${badRules.error.slice(0, 120)}`);
     } else {
-      console.log(`  ⚠ P6: unexpected response: ${JSON.stringify(badRules).slice(0, 120)}`);
+      fail(`P6: unexpected response: ${JSON.stringify(badRules).slice(0, 120)}`);
     }
   }
 
@@ -313,13 +312,13 @@ export async function payeeTests(client, context) {
   try {
     const nilRes = await callTool("actual_payees_delete", { id: '00000000-0000-0000-0000-000000000000' });
     // The adapter throws a descriptive error: this catch handles it
-    console.log("  ⚠ Expected an error but tool returned:", JSON.stringify(nilRes).slice(0, 120));
+    fail(`Expected an error but the tool returned: ${JSON.stringify(nilRes).slice(0, 120)}`);
   } catch (err) {
     const msg = err.message || String(err);
     if (msg.includes('not found') && msg.includes('actual_payees_get')) {
       console.log(`  ✓ FIXED(BUG-2): payees_delete nil-UUID returns actionable error: ${msg.slice(0, 120)}`);
     } else {
-      console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+      fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
     }
   }
 
@@ -342,6 +341,6 @@ export async function payeeTests(client, context) {
       fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   } else {
-    console.log("  ⚠ Skipping delete (payeeId not available after merge)");
+    skip("Skipping delete (payeeId not available after merge)");
   }
 }
