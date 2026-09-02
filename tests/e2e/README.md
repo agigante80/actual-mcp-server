@@ -73,13 +73,9 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 
 ## Spec Files
 
-### What CI actually runs (#384, #383)
+### What CI actually runs (#384)
 
-**Only `docker-all-tools.e2e.spec.ts`, and since #383 it runs TWICE**: once over HTTP inside the
-runner container, then once over stdio from the HOST (`run-docker-e2e.sh` step 6b, reaching the
-server by `docker exec`, because the runner container has no route to a stdio server). Four tests
-are HTTP-only, each saying why at the test, so the expected result is 103 passing over HTTP and 99
-passing plus 4 skipped over stdio. Both workflows invoke `npm run test:e2e:docker:full`,
+**Only `docker-all-tools.e2e.spec.ts`.** Both workflows invoke `npm run test:e2e:docker:full`,
 which selects the `docker-e2e-full` project, which collects that one file. Every other spec in this
 directory is a MANUAL diagnostic, and that is a decision rather than an oversight.
 
@@ -93,7 +89,7 @@ table below is enforced, not merely documented.
 
 | Spec | Runs in CI? | Why |
 |---|---|---|
-| `docker-all-tools.e2e.spec.ts` | **yes, TWICE** | the gate, over HTTP (`docker-e2e-full`) and then stdio (`docker-e2e-full-stdio`, #383) |
+| `docker-all-tools.e2e.spec.ts` | **yes** | the gate |
 | `mcp-client.playwright.spec.ts` | no, manual | round trip duplicated by docker-all-tools, session shim covered by `tests/unit/httpServer_session_not_found.test.js`; only the SSE connect is unique |
 | `docker.e2e.spec.ts` | no, manual | the smoke level, for fast local feedback; its assertions are a subset of docker-all-tools |
 

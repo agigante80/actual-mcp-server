@@ -12,7 +12,7 @@
  * green-but-wrong tests that coupling produced.
  */
 
-import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
+import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER } from './fixtures.js';
 
 test.describe('Docker E2E - ALL 74 TOOLS', () => {
   // ==================== SERVER INFO ====================
@@ -28,11 +28,6 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
 
   // ==================== TOOL ANNOTATIONS (#379) ====================
   test('tools/list - every tool publishes MCP annotations that match its nature', async ({ mcp }) => {
-    // #383: HTTP-only. It reads the raw JSON-RPC envelope through `mcp.post`, and stdio has no
-    // envelope to read: the SDK hands back a parsed result. The annotations themselves are not
-    // transport-specific, and tests/unit/tool_annotations.test.js derives them from the adapter
-    // call graph, so nothing is lost by not repeating this over stdio.
-    test.skip(isStdio, 'reads the raw HTTP JSON-RPC envelope via mcp.post');
     // Asserted OVER THE WIRE, not against the in-process table: the point of #379 is that
     // clients can see this, and a table that never reaches `tools/list` would be useless
     // while looking complete.
@@ -74,19 +69,12 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
 
   // ==================== SESSION MANAGEMENT ====================
   test('actual_session_list - should list active sessions', async ({ mcp }) => {
-    // #383: HTTP-only, because the CONCEPT is. stdio has one implicit session for the life of
-    // the process, so there is no session list to return and nothing for a second session to
-    // expire. tests/manual/mcp-client-stdio.js records the same point from the other side
-    // ("MCP_TEST_MAX_SESSION_RETRIES is HTTP-only: stdio has no session to expire").
-    test.skip(isStdio, 'sessions are an HTTP concept; stdio has one implicit session');
     const data = await mcp.call('actual_session_list');
     const sessions = Array.isArray(data) ? data : (data?.sessions || []);
     expect(sessions).toBeTruthy();
   });
 
   test('actual_session_close - should handle close request gracefully', async ({ mcp }) => {
-    // #383: HTTP-only for the same reason as actual_session_list above.
-    test.skip(isStdio, 'sessions are an HTTP concept; stdio has one implicit session');
     // Called with no sessionId: the tool closes the oldest IDLE session other than the
     // current one. In a single-session run both "closed one" and "nothing idle to close"
     // are correct, so what is asserted is that it answers with a structured response
@@ -112,11 +100,6 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
   });
 
   test('actual_accounts_create - ERROR: should fail without name', async ({ mcp }) => {
-    // #383: HTTP-only. This asserts on the raw JSON-RPC ERROR ENVELOPE, and over stdio the SDK
-    // surfaces a tool error as a thrown exception instead, so the assertion needs a different
-    // shape rather than a different transport. The refusal itself is covered on both transports
-    // by the manual suite's negative cases (#280).
-    test.skip(isStdio, 'asserts on the raw HTTP JSON-RPC error envelope');
     const res = await mcp.post({
       jsonrpc: '2.0',
       id: 9999,
