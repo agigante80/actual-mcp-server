@@ -158,11 +158,17 @@ const recentCallTimes: number[] = [];
 /**
  * Exported for #383: the stdio client paces through the SAME window as the HTTP one.
  *
- * That sharing is the point rather than a convenience. Both transports drive the one Actual
- * server behind them, so its 500-requests-per-minute limiter counts their calls together. Two
- * independent pacers, each believing it owned the whole budget, would be a pacer that does not
- * pace. Module scope gives them one window for free, and running the transports sequentially
- * (which the runner does) keeps the wall-clock cost to roughly double rather than a stall.
+ * Both transports drive the one Actual server, so its 500-requests-per-minute limiter counts
+ * their calls together and they must not each believe they own the whole budget.
+ *
+ * READ THIS BEFORE RELYING ON IT: module scope shares this window only WITHIN A PROCESS, and the
+ * two E2E legs are SEPARATE processes (HTTP inside the runner container, stdio on the host). So
+ * the stdio leg starts with its counter at zero while Actual's window is still full from the HTTP
+ * leg. An earlier version of this comment claimed the two legs shared a window; they do not, and
+ * CI proved it: the stdio leg's first login was refused with "Too many requests", Playwright
+ * restarted its worker after the failure, and the restart re-spawned the server and re-logged in,
+ * 39 times. The cool-down in tests/e2e/run-docker-e2e.sh is what actually bridges the two
+ * processes. This pacer covers calls within one leg.
  */
 export async function pace(): Promise<void> {
   for (;;) {

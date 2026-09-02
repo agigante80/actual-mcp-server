@@ -260,10 +260,24 @@ echo ""
 #
 # Sequential, not parallel: both transports drive the ONE Actual server behind them, so its
 # 500-requests-per-minute limiter counts their calls together, and running them at once would
-# either trip it or make the shared pacer stall. Roughly doubles the E2E wall clock.
+# trip it. Sequential is necessary but NOT sufficient, which is what the cool-down below is for.
+# Roughly doubles the E2E wall clock.
 #
 # Only at the full level. The smoke level exists for fast local feedback.
 if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${SKIP_STDIO_E2E:-false}" != "true" ]; then
+  # COOL-DOWN, and it is not optional. The pacer in tests/shared/e2e-helpers.ts is module scoped,
+  # so it shares one window only WITHIN a process, and these two legs are different processes: the
+  # HTTP one runs inside the container, this one on the host. The stdio leg therefore starts with
+  # its own counter at zero while Actual's 60-second window is still full from the HTTP leg.
+  #
+  # Observed before this wait, in CI rather than locally: the stdio leg's first Actual login was
+  # refused with "Too many requests", and because Playwright starts a fresh worker after a failure,
+  # each restart re-spawned the stdio server and re-logged in. 39 server restarts and 377 rate-limit
+  # errors, from one initial refusal. Draining the window first removes the trigger.
+  STDIO_COOLDOWN_S="${STDIO_COOLDOWN_S:-75}"
+  log_info "Cooling down ${STDIO_COOLDOWN_S}s so Actual's rate-limit window drains before the stdio leg..."
+  sleep "$STDIO_COOLDOWN_S"
+
   log_info "Step 6b: Running the same suite over STDIO (host-side, docker exec)..."
   echo ""
   MCP_TEST_TRANSPORT=stdio npx playwright test \
