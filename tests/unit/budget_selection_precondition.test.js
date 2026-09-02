@@ -50,6 +50,9 @@ api.init = async () => {};
 api.shutdown = async () => {};
 api.sync = async () => {};
 api.downloadBudget = async (id) => { downloads++; loaded = id; };
+// #396: loadBudgetTracked now PROBES after every download, because a resolved downloadBudget
+// is not proof a budget is open. Mirrors this file's own `loaded` notion of the singleton.
+api.getBudgetMonths = async () => { if (!loaded) throw { type: 'APIError', message: 'No budget file is open' }; return ['2026-01']; };
 api.getAccounts = async () => [{ id: ACC, name: `acct-in-${loaded}` }];
 api.addTransactions = async (_a, txs) => { writes.push([loaded, txs[0].notes]); return 'ok'; };
 

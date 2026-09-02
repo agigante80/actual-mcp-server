@@ -55,6 +55,10 @@ const baseInput = (extra = {}) => ({
   // runs offline; without these it tries a real login and dies on invalid-password.
   apiDefault.init = async () => {};
   apiDefault.downloadBudget = async () => {};
+  // #396: loadBudgetTracked probes with getBudgetMonths after every download, because a
+  // resolved downloadBudget is not proof a budget is open. This file never models an
+  // unloaded singleton, so the probe always succeeds here.
+  apiDefault.getBudgetMonths = async () => ['2026-01'];
   apiDefault.shutdown = async () => {};
 
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
