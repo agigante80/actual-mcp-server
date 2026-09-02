@@ -79,15 +79,6 @@ services:
       - MCP_ALLOW_UNAUTHENTICATED=true
     volumes:
       - mcp-test-data:/app/data
-      # #383: a SEPARATE writable volume for the stdio pass's budget cache.
-      #
-      # It cannot share /app/data. Two @actual-app/api instances must never share one budget
-      # cache, and the HTTP server owns that directory. It also cannot use /tmp: this image's
-      # root filesystem is read-only, which is how the first attempt failed (every stdio test
-      # errored in ~50ms because the worker fixture could not create its data dir). A named
-      # volume is writable, isolated, and discarded by `docker compose down -v` with the rest
-      # of the stack.
-      - mcp-test-stdio-data:/app/stdio-data
       - bootstrap-data:/tmp:ro
     entrypoint:
       - sh
@@ -152,7 +143,6 @@ services:
       - e2e-test-network
 
 volumes:
-  mcp-test-stdio-data:
   actual-test-data:
     name: actual-e2e-test-data
   mcp-test-data:

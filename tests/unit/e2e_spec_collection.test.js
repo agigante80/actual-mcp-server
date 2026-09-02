@@ -162,13 +162,9 @@ const levelToProject = {};
     levelToProject.__else__ = m[3];
   }
 }
-// #383 added a second project that the runner invokes DIRECTLY with --project rather than
-// through PLAYWRIGHT_PROJECT (it runs host-side, outside the container). Both forms count.
-const directProjects = [...runnerSrc.matchAll(/--project=([A-Za-z0-9_-]+)/g)].map((m) => m[1]);
-const ciProjects = [...new Set([
-  ...ciLevels.map((lvl) => levelToProject[lvl] ?? levelToProject.__else__).filter(Boolean),
-  ...directProjects,
-])];
+const ciProjects = [...new Set(
+  ciLevels.map((lvl) => levelToProject[lvl] ?? levelToProject.__else__).filter(Boolean),
+)];
 
 // project name -> testMatch, from the docker config only (the config the runner uses).
 const dockerCfg = configs.find((c) => c.name === 'playwright.config.docker.ts').src;

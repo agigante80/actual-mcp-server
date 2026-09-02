@@ -52,16 +52,8 @@ import {
   DEFAULT_MCP_SERVER_URL,
   HTTP_PATH,
 } from '../shared/e2e-helpers.js';
-import { openStdioSession, type StdioSession } from './stdio-client.js';
 
 export { expect };
-
-/**
- * #383: which transport this run drives, matching the manual runner's env var so the two suites
- * are selected the same way. `http` stays the default, so nothing changes for an existing run.
- */
-export const TRANSPORT = process.env.MCP_TEST_TRANSPORT === 'stdio' ? 'stdio' : 'http';
-export const isStdio = TRANSPORT === 'stdio';
 
 /**
  * Cleanup priorities. LOWER runs FIRST, and the order is Actual's referential
@@ -117,17 +109,6 @@ export type PayeeRef = { id: string; name: string };
 export type TransactionRef = { id: string; accountId: string; notes: string };
 export type RuleRef = { id: string };
 export type ScheduleRef = { id: string; name: string };
-
-/**
- * #383: WORKER-scoped fixtures live in their own type, because Playwright takes them as a second
- * type parameter to `extend`. Declaring `scope: 'worker'` on a fixture typed here in `Fixtures`
- * is a type error, which is the compiler catching a real distinction rather than a formality:
- * a per-test stdio connection would spawn a process per test.
- */
-export type WorkerFixtures = {
-  /** The stdio connection, opened once per worker. `null` on the HTTP transport. */
-  stdioSession: StdioSession | null;
-};
 
 export type Fixtures = {
   cleanup: CleanupRegistry;
@@ -231,7 +212,7 @@ export function uniqueSuffix(): string {
 export const today = (): string => new Date().toISOString().substring(0, 10);
 export const currentMonth = (): string => new Date().toISOString().substring(0, 7);
 
-export const test = base.extend<Fixtures, WorkerFixtures>({
+export const test = base.extend<Fixtures>({
   cleanup: async ({}, use) => {
     const items: { priority: number; seq: number; label: string; fn: () => Promise<void> }[] = [];
     let seq = 0;
@@ -256,47 +237,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
     }
   },
 
-  // #383: worker-scoped for stdio. A `docker exec` per TEST would pay a process spawn and a full
-  // api init on every one of the 100+ tests, which turns a 1.4 minute suite into one nobody runs.
-  // The HTTP client already effectively shares one session through `cachedSessionId`, so this
-  // matches its lifetime rather than changing it.
-  stdioSession: [
-    async ({}, use) => {
-      if (!isStdio) {
-        await use(null);
-        return;
-      }
-      const session = await openStdioSession();
-      try {
-        await use(session);
-      } finally {
-        // Runs even when a test throws, which is the point: an orphaned child holds the
-        // container's data dir and is this project's documented cause of contention hangs.
-        await session.close();
-      }
-    },
-    { scope: 'worker' },
-  ],
-
-  mcp: async ({ request, stdioSession }, use) => {
-    if (isStdio) {
-      const session = stdioSession as StdioSession;
-      await use({
-        sessionId: 'stdio',
-        raw: session.raw,
-        call: session.call,
-        // stdio has no HTTP envelope to inspect. The two callers of `post` assert on the raw
-        // JSON-RPC error shape, which the SDK surfaces as a thrown exception instead, so they
-        // are scoped to HTTP rather than asserted differently here. Throwing names the reason.
-        post: () => {
-          throw new Error(
-            'mcp.post is HTTP-only (#383): stdio has no response envelope to inspect, and the SDK ' +
-            'surfaces a tool error as an exception. Guard the test with `test.skip(isStdio, ...)`.',
-          );
-        },
-      });
-      return;
-    }
+  mcp: async ({ request }, use) => {
     await use(makeClient(request, await initSession(request)));
   },
 
