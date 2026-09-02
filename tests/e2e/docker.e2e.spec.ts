@@ -1,5 +1,11 @@
 /**
- * Docker-based E2E tests
+ * Docker-based E2E SMOKE tests. NOT a CI gate (#384).
+ *
+ * Selected only by `npm run test:e2e:docker:smoke`, which is a fast local check. CI runs the
+ * FULL level, so nothing here gates a release, and every assertion this file makes is also made
+ * by docker-all-tools.e2e.spec.ts, which is what CI runs. Declared in DECLARED_MANUAL in
+ * tests/unit/e2e_spec_collection.test.js, which fails if this claim stops being true.
+ *
  * 
  * Tests the full stack: Actual Budget server + MCP server (Docker build)
  * This verifies production deployment, real tool execution, and integration

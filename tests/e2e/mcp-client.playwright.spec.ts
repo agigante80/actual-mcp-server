@@ -1,3 +1,21 @@
+/**
+ * MANUAL DIAGNOSTIC. This file does NOT run in CI, and that is a decision (#384), not an oversight.
+ *
+ * Run it deliberately, against a server that is already up:
+ *   npx playwright test --config playwright.config.ts --project=mcp-protocol-tests
+ *
+ * WHY IT IS NOT A GATE. CI runs `test:e2e:docker:full`, which selects the `docker-e2e-full`
+ * project and therefore only `docker-all-tools.e2e.spec.ts`. Wiring this in would mean a second
+ * Playwright project in the docker job, and the coverage that would buy is thin: the
+ * initialize / tools-list / tools-call round trip is exercised by docker-all-tools across all 74
+ * tools, and the expired-session shim assertions are covered by
+ * tests/unit/httpServer_session_not_found.test.js. The genuinely unique part is the SSE connect.
+ *
+ * If that judgement changes, wire it into `tests/e2e/run-docker-e2e.sh` and remove the
+ * DECLARED_MANUAL entry in tests/unit/e2e_spec_collection.test.js, which enforces this decision
+ * rather than merely describing it: a spec that is collected but run by no CI project fails that
+ * guard unless it is declared here.
+ */
 import { test, expect } from '@playwright/test';
 import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
 import path from 'path';

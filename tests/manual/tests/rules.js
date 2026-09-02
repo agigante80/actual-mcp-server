@@ -1,4 +1,4 @@
-import { fail } from '../assert.js';
+import { fail, skip } from '../assert.js';
 /**
  * tests/rules.js
  *
@@ -204,7 +204,7 @@ export async function rulesTests(client, context) {
     if (success === false || nilResult?.error) {
       console.log("  ✓ Negative nil-UUID delete: returned error/false correctly");
     } else {
-      console.log("  ⚠ Negative nil-UUID delete: unexpectedly accepted (result:", JSON.stringify(nilResult).slice(0, 120), ")");
+      fail(`Negative nil-UUID delete was unexpectedly ACCEPTED: ${JSON.stringify(nilResult).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("  ✓ Negative nil-UUID delete: threw as expected:", err.message?.slice(0, 80));
@@ -219,7 +219,7 @@ export async function rulesTests(client, context) {
 
   for (const [label, idKey] of [['ruleId', 'ruleId'], ['ruleWithoutOpId', 'ruleWithoutOpId']]) {
     const id = context[idKey];
-    if (!id) { console.log(`  ⚠ Skipping delete of ${label} (not in context)`); continue; }
+    if (!id) { skip(`Skipping delete of ${label} (not in context)`); continue; }
     console.log(`\nDeleting ${label} (${id})...`);
     try {
       await callTool("actual_rules_delete", { id });
@@ -243,7 +243,7 @@ export async function rulesTests(client, context) {
       context.categoryId = null;
       console.log("  ✓ Cleaned up disposable rules-test category");
     } catch (err) {
-      console.log("  ⚠ Could not clean up disposable rules-test category:", err.message);
+      fail(`Could not clean up the disposable rules-test category: ${err.message}. That is residue.`);
     }
   }
   if (rulesOwnedGroupId) {
@@ -251,7 +251,7 @@ export async function rulesTests(client, context) {
       await callTool("actual_category_groups_delete", { id: rulesOwnedGroupId });
       console.log("  ✓ Cleaned up disposable rules-test category group");
     } catch (err) {
-      console.log("  ⚠ Could not clean up disposable rules-test category group:", err.message);
+      fail(`Could not clean up the disposable rules-test category group: ${err.message}. That is residue.`);
     }
   }
 }

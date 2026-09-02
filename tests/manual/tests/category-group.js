@@ -78,7 +78,7 @@ export async function categoryGroupTests(client, context) {
     if (success === false || nilResult?.error) {
       console.log("  ✓ Negative nil-UUID delete: returned error/false correctly");
     } else {
-      console.log("  ⚠ Negative nil-UUID delete: unexpectedly accepted (result:", JSON.stringify(nilResult).slice(0, 120), ")");
+      fail(`Negative nil-UUID delete was unexpectedly ACCEPTED: ${JSON.stringify(nilResult).slice(0, 120)}`);
     }
   } catch (err) {
     console.log("  ✓ Negative nil-UUID delete: threw as expected:", err.message?.slice(0, 80));

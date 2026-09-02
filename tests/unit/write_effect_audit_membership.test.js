@@ -72,19 +72,36 @@ const writeTools = tools.filter((t) => !annotationsFor(t).readOnlyHint);
 // Backticked match, not a substring: `actual_rules_create` is a prefix of
 // `actual_rules_create_or_update`, so `includes` would report the shorter one as audited
 // whenever only the longer one is present.
-const auditMentions = new Set([...audit.matchAll(/`(actual_[A-Za-z0-9_]+)`/g)].map((m) => m[1]));
+//
+// #386: the name must be in a TABLE ROW, not merely somewhere in the file. This used to scan the
+// whole document, so a new write tool satisfied the gate by being appended to the UNKNOWN prose
+// comma-list: no row, no verdict, no evidence. A tool parked that way was then invisible forever,
+// because nothing ages a prose list out and nothing counts it. Requiring a row makes the cheapest
+// way to satisfy the gate also the way that records a disposition, which is why option 1 was
+// preferred over capping the size of UNKNOWN or dating its entries: those police the symptom,
+// this removes the cheap path. The UNKNOWN prose was converted to a table in the same change.
+//
+// Backticked match, not a substring: `actual_rules_create` is a prefix of
+// `actual_rules_create_or_update`, so `includes` would report the shorter one as audited
+// whenever only the longer one is present.
+const rowLines = audit.split('\n').filter((l) => l.trimStart().startsWith('|'));
+const auditMentions = new Set(
+  rowLines.flatMap((l) => [...l.matchAll(/`(actual_[A-Za-z0-9_]+)`/g)].map((m) => m[1])),
+);
 const missing = writeTools.filter((t) => !auditMentions.has(t));
 check(
   missing.length === 0,
   `every write tool appears in docs/audit/write-effect-audit.md (${writeTools.length} checked)`,
   missing.length
-    ? `absent from the audit: ${missing.join(', ')}\n      Add a row (CONFIRMED / SAFE / UNKNOWN), or classify it read-only in src/lib/tool-annotations.ts if it cannot write.`
+    ? `absent from the audit TABLES: ${missing.join(', ')}\n      Add a ROW (CONFIRMED / SAFE / UNKNOWN). Naming it in prose no longer counts (#386).\n      Or classify it read-only in src/lib/tool-annotations.ts if it cannot write.`
     : '',
 );
 
 // The reverse direction: a tool retired from the registry should not linger in the audit as
 // though it were still part of the surface.
-const auditedNames = [...new Set([...audit.matchAll(/`(actual_[A-Za-z0-9_]+)`/g)].map((m) => m[1]))];
+// Rows only, for the same reason: a retired tool discussed in a narrative paragraph is history,
+// not a claim that it is still part of the surface.
+const auditedNames = [...auditMentions];
 const stale = auditedNames.filter((t) => !tools.includes(t));
 check(
   stale.length === 0,

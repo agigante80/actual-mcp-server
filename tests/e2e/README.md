@@ -13,10 +13,11 @@ tests/e2e/
 ├── README.md                          ← this file
 ├── run-docker-e2e.sh                  ← Docker orchestrator: bootstrap 4-container stack,
 │                                         run Playwright inside Docker network, then tear down
-├── mcp-client.playwright.spec.ts      ← Protocol compliance: initialize → tools/list →
+├── mcp-client.playwright.spec.ts      ← MANUAL (#384, CI does not run it). Protocol:
+│                                         initialize → tools/list →
 │                                         tools/call → SSE streaming; spawns its own server
 │                                         process (or reuses Docker via USE_DOCKER_MCP_SERVER)
-├── docker.e2e.spec.ts                 ← Smoke + health checks against Docker stack
+├── docker.e2e.spec.ts                 ← MANUAL (#384, CI does not run it). Smoke checks
 ├── fixtures.ts                        ← Playwright fixtures: the `mcp` client plus the
 │                                         make* factories that provision and tear down test
 │                                         data. Import `test` from HERE, not @playwright/test
@@ -72,7 +73,27 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 
 ## Spec Files
 
-### `mcp-client.playwright.spec.ts` (343 lines)
+### What CI actually runs (#384)
+
+**Only `docker-all-tools.e2e.spec.ts`.** Both workflows invoke `npm run test:e2e:docker:full`,
+which selects the `docker-e2e-full` project, which collects that one file. Every other spec in this
+directory is a MANUAL diagnostic, and that is a decision rather than an oversight.
+
+That distinction matters because this repository has twice shipped tests that never ran (#366 and
+#382), and the guard added after the second one asserted only that a spec was COLLECTED. Collected
+is not run: `mcp-protocol-tests` and `docker-e2e-smoke` are both real projects that CI never
+selects. `tests/unit/e2e_spec_collection.test.js` now follows the whole chain (workflow, then
+`run-docker-e2e.sh`, then project, then `testMatch`) and fails on a spec that is collected but run
+by no CI project, unless that spec is listed in its `DECLARED_MANUAL` map with a reason. So the
+table below is enforced, not merely documented.
+
+| Spec | Runs in CI? | Why |
+|---|---|---|
+| `docker-all-tools.e2e.spec.ts` | **yes** | the gate |
+| `mcp-client.playwright.spec.ts` | no, manual | round trip duplicated by docker-all-tools, session shim covered by `tests/unit/httpServer_session_not_found.test.js`; only the SSE connect is unique |
+| `docker.e2e.spec.ts` | no, manual | the smoke level, for fast local feedback; its assertions are a subset of docker-all-tools |
+
+### `mcp-client.playwright.spec.ts` (343 lines), MANUAL and not a gate
 
 **Purpose:** MCP protocol compliance — verifying JSON-RPC envelope shapes, SSE
 streaming, and session lifecycle.
@@ -81,7 +102,7 @@ streaming, and session lifecycle.
 - Read-only; no budget mutations
 - Tests: `initialize` handshake, `tools/list` shape, `tools/call` round-trip, streaming
 
-### `docker.e2e.spec.ts` (452 lines)
+### `docker.e2e.spec.ts` (452 lines), MANUAL and not a gate
 
 **Purpose:** Smoke + integration checks against the production Docker stack.
 

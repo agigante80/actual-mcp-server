@@ -10,6 +10,8 @@
  * Writes to context:   (none)
  */
 
+import { fail } from '../assert.js';
+
 /**
  * @param {{ callTool: Function }} client
  * @param {object} context
@@ -30,7 +32,7 @@ export async function notesTests(client, context) {
     if (setOk) {
       console.log(`  ok notes_update [set budget month note]: success`);
     } else {
-      console.log(`  FAIL notes_update [set budget month note]: ${JSON.stringify(setRes).slice(0, 200)}`);
+      fail(`notes_update [set budget month note]: ${JSON.stringify(setRes).slice(0, 200)}`);
     }
 
     const getRes = await callTool('actual_notes_get', { id: TEST_MONTH });
@@ -39,10 +41,10 @@ export async function notesTests(client, context) {
     if (noteText === UNIQUE_NOTE) {
       console.log(`  ok notes_get [read-back budget month note]: "${noteText}"`);
     } else {
-      console.log(`  FAIL notes_get [read-back budget month note]: expected "${UNIQUE_NOTE}", got ${JSON.stringify(data).slice(0, 200)}`);
+      fail(`notes_get [read-back budget month note]: expected "${UNIQUE_NOTE}", got ${JSON.stringify(data).slice(0, 200)}`);
     }
   } catch (err) {
-    console.log(`  FAIL notes round-trip: ${err.message}`);
+    fail(`notes round-trip: ${err.message}`);
   }
 
   // --------------------------------------------------------------------------
@@ -54,7 +56,7 @@ export async function notesTests(client, context) {
     if (clearOk) {
       console.log(`  ok notes_update [clear note]: success`);
     } else {
-      console.log(`  FAIL notes_update [clear note]: ${JSON.stringify(clearRes).slice(0, 200)}`);
+      fail(`notes_update [clear note]: ${JSON.stringify(clearRes).slice(0, 200)}`);
     }
 
     // After clearing, getNote returns { id, note: "" } (not null).
@@ -64,10 +66,10 @@ export async function notesTests(client, context) {
     if (noteText === '' || noteText === null || data?.found === false) {
       console.log(`  ok notes_get [after clear]: empty/cleared state confirmed (note="${noteText}", found=${data?.found})`);
     } else {
-      console.log(`  FAIL notes_get [after clear]: expected empty note, got ${JSON.stringify(data).slice(0, 200)}`);
+      fail(`notes_get [after clear]: expected empty note, got ${JSON.stringify(data).slice(0, 200)}`);
     }
   } catch (err) {
-    console.log(`  FAIL notes clear test: ${err.message}`);
+    fail(`notes clear test: ${err.message}`);
   }
 
   // --------------------------------------------------------------------------
@@ -82,12 +84,12 @@ export async function notesTests(client, context) {
     if (data?.note === TEMPLATE_NOTE) {
       console.log(`  ok notes [template directive round-trip]: "${data.note}"`);
     } else {
-      console.log(`  FAIL notes [template directive]: expected "${TEMPLATE_NOTE}", got ${JSON.stringify(data).slice(0, 200)}`);
+      fail(`notes [template directive]: expected "${TEMPLATE_NOTE}", got ${JSON.stringify(data).slice(0, 200)}`);
     }
     // Cleanup
     await callTool('actual_notes_update', { id: TEMPLATE_MONTH, note: '' });
   } catch (err) {
-    console.log(`  FAIL notes template test: ${err.message}`);
+    fail(`notes template test: ${err.message}`);
   }
 
   // --------------------------------------------------------------------------
@@ -101,20 +103,20 @@ export async function notesTests(client, context) {
       if (setOk) {
         console.log(`  ok notes_update [account note set]: success`);
       } else {
-        console.log(`  FAIL notes_update [account note set]: ${JSON.stringify(setRes).slice(0, 200)}`);
+        fail(`notes_update [account note set]: ${JSON.stringify(setRes).slice(0, 200)}`);
       }
       const getRes = await callTool('actual_notes_get', { id: context.accountId });
       const data = getRes?.result ?? getRes;
       if (data?.note === ACCOUNT_NOTE) {
         console.log(`  ok notes_get [account note read-back]: "${data.note}"`);
       } else {
-        console.log(`  FAIL notes_get [account note read-back]: got ${JSON.stringify(data).slice(0, 200)}`);
+        fail(`notes_get [account note read-back]: got ${JSON.stringify(data).slice(0, 200)}`);
       }
       // Cleanup
       await callTool('actual_notes_update', { id: context.accountId, note: '' });
       console.log(`  ok notes_update [account note cleared]`);
     } catch (err) {
-      console.log(`  FAIL notes account test: ${err.message}`);
+      fail(`notes account test: ${err.message}`);
     }
   } else {
     console.log(`  info notes [account note test]: skipped (no accountId in context)`);
@@ -134,13 +136,13 @@ export async function notesTests(client, context) {
       console.log(`  ok notes_update [orphan id guard]: correctly returned error`);
     } else {
       // GAP(error-messages): actual_notes_update with orphan id silently accepted
-      console.log(`  WARN notes_update [orphan id guard]: did not return expected error: ${text.slice(0, 200)}`);
+      fail(`notes_update [orphan id guard]: did not return the expected error: ${text.slice(0, 200)}`);
     }
   } catch (err) {
     if (err.message.includes('not found') || err.message.includes('Entity')) {
       console.log(`  ok notes_update [orphan id guard]: threw with useful error`);
     } else {
-      console.log(`  FAIL notes_update [orphan id guard]: unexpected error: ${err.message}`);
+      fail(`notes_update [orphan id guard]: unexpected error: ${err.message}`);
     }
   }
 
@@ -158,9 +160,9 @@ export async function notesTests(client, context) {
       // A note actually exists for this month (unlikely but valid).
       console.log(`  info notes_get [no note set]: ${NEVER_HAD_NOTE_ID} has note "${data.note}" (valid)`);
     } else {
-      console.log(`  WARN notes_get [no note set]: unexpected shape: ${text.slice(0, 200)}`);
+      fail(`notes_get [no note set]: unexpected shape: ${text.slice(0, 200)}`);
     }
   } catch (err) {
-    console.log(`  FAIL notes_get [no note set]: ${err.message}`);
+    fail(`notes_get [no note set]: ${err.message}`);
   }
 }

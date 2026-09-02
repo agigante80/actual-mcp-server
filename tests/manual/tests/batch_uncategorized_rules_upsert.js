@@ -1,4 +1,4 @@
-import { fail } from '../assert.js';
+import { fail, skip } from '../assert.js';
 /**
  * tests/batch_uncategorized_rules_upsert.js
  *
@@ -20,7 +20,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   console.log("\n-- Running BATCH / UNCATEGORIZED / RULES-UPSERT TESTS --");
 
   if (!context.accountId) {
-    console.log("⚠ No account ID in context: skipping batch/uncategorized/upsert tests");
+    skip("No account ID in context: skipping batch/uncategorized/upsert tests");
     return;
   }
 
@@ -116,7 +116,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     if (Array.isArray(negTxns) && negTxns.length === 0) {
       console.log("  ✓ NEGATIVE: returned empty list for unknown account (expected)");
     } else {
-      console.log(`  ⚠ NEGATIVE: got ${negTxns.length} transactions for unknown account: may depend on Actual behavior`);
+      fail(`NEGATIVE: got ${negTxns.length} transactions for an unknown account, expected an empty list. "May depend on Actual behavior" is a question this test exists to answer, not a reason to pass.`);
     }
   } catch (err) {
     // Some adapter versions may throw for invalid account IDs: acceptable
@@ -133,7 +133,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   if (Array.isArray(emptyRangeTxns) && emptyRangeTxns.length === 0) {
     console.log(`  ✓ EDGE CASE: transactions=[] for future date range (count=${emptyRangeResult?.count ?? 0})`);
   } else {
-    console.log(`  ⚠ EDGE CASE: expected empty list for 2099, got ${emptyRangeTxns.length} items`);
+    fail(`EDGE CASE: expected an empty list for 2099, got ${emptyRangeTxns.length} items`);
   }
   if (emptyRangeResult?.count === 0) {
     console.log(`  ✓ EDGE CASE: count=0`);
@@ -177,7 +177,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     if (createdAcct?.offbudget === true) {
       console.log(`  ✓ Verified account.offbudget=true`);
     } else {
-      console.log(`  ⚠ account.offbudget not true: got: ${JSON.stringify(createdAcct?.offbudget)}`);
+      fail(`account.offbudget is not true: got ${JSON.stringify(createdAcct?.offbudget)}. The rest of this block tests off-budget behaviour, so it is not testing anything if this is wrong.`);
     }
 
     // 2. Create a transaction in the off-budget account (no category)
@@ -238,7 +238,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
         if (stillPresent) {
           console.log("  ✓ SILENT-WRITE CONFIRMED [#80]: update returned success but category still null (off-budget write is a no-op)");
         } else {
-          console.log("  ⚠ SILENT-WRITE CHECK: transaction left uncategorized list after update (unexpected)");
+          fail("SILENT-WRITE CHECK [#80]: the transaction left the uncategorized list after an off-budget update, so the write was NOT a no-op. That inverts the regression this block pins.");
         }
       }
     }
@@ -259,7 +259,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
         await callTool("actual_accounts_close", { id: offBudgetAccountId });
         console.log(`  ✓ Off-budget test account closed: "${offBudgetAccountName}" (${offBudgetAccountId})`);
       } catch (closeErr) {
-        console.log(`  ⚠ Could not close off-budget test account (${offBudgetAccountId}): ${closeErr.message}`);
+        fail(`Could not close the off-budget test account (${offBudgetAccountId}): ${closeErr.message}. An object this suite created and could not remove is residue, which the dual-transport gate asserts is zero.`);
       }
     }
   }
@@ -271,7 +271,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   console.log("\n=== actual_transactions_update_batch ===");
 
   if (!uncatTxnId) {
-    console.log("⚠ Skipping batch update (no uncategorized transaction ID available)");
+    skip("Skipping batch update (no uncategorized transaction ID available)");
   } else {
     const batchNotes = `MCP-Batch-${timestamp}`;
     console.log(`\nBatch-updating 1 transaction (id=${uncatTxnId})...`);
@@ -316,7 +316,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     if (verifiedTxn?.category === context.categoryId) {
       console.log(`  ✓ Verify batch: category set to "${context.categoryId}"`);
     } else {
-      console.log(`  ⚠ Verify batch: category is "${verifiedTxn?.category}" (expected "${context.categoryId}")`);
+      fail(`Verify batch: category is "${verifiedTxn?.category}", expected "${context.categoryId}"`);
     }
 
     // NEGATIVE: batch with a non-existent transaction ID should report partial failure
@@ -327,7 +327,13 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     if (negBatch?.failureCount === 1 && negBatch?.successCount === 0) {
       console.log(`  ✓ NEGATIVE: failureCount=1 successCount=0 (non-existent ID correctly failed)`);
     } else if (negBatch?.successCount === 1) {
-      console.log(`  ⚠ NEGATIVE: Actual accepted update for unknown ID (adapter may not validate existence)`);
+      // #387: this was a warning while "does the adapter validate existence?" was an open
+      // question. It is not open any more: #212 made the adapter pre-flight the id and route a
+      // non-existent one into failed[] with a not-found message, and that is asserted in
+      // tests/unit/update_tools_not_found.test.js. So a success here is a REGRESSION of #212,
+      // not an alternative upstream behaviour, and tolerating it would let the release gate go
+      // green on the exact defect #212 fixed.
+      fail(`NEGATIVE: the batch reported success for a non-existent ID. #212 requires it to land in failed[] with a not-found message.`);
     } else {
       // #380: FAIL, do not warn. This branch previously swallowed a Zod schema rejection
       // for two full releases' worth of runs: the id had stopped parsing, so the batch was
@@ -352,8 +358,11 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     if (mixedBatch?.total === 2 && mixedBatch?.successCount === 1 && mixedBatch?.failureCount === 1) {
       console.log(`  ✓ PARTIAL FAILURE: total=2 successCount=1 failureCount=1 (failure isolated, loop continued)`);
     } else if (mixedBatch?.successCount === 2) {
-      // Actual does not validate existence on updateTransaction: both silently succeed
-      console.log(`  ⚠ PARTIAL FAILURE: both succeeded: Actual accepts updates for non-existent IDs (no error thrown)`);
+      // Same correction as its sibling above. The comment here asserted the OPPOSITE of what the
+      // code now does ("Actual does not validate existence"), which is how a pair of assertions
+      // ends up unable to distinguish the two behaviours it was written to tell apart: whichever
+      // one happened, the module passed.
+      fail(`PARTIAL FAILURE: both operations succeeded, so the non-existent ID was not isolated into failed[]. #212 requires it to be.`);
     } else {
       // #380: FAIL for the same reason as the NEGATIVE case above. This is the branch that
       // printed a Zod schema error on BOTH transports while the dual-transport gate reported
@@ -449,7 +458,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     if (err.message.includes("operator") || err.message.includes("UUID") || err.message.includes("id")) {
       console.log(`  ✓ NEGATIVE: correctly rejected invalid condition: ${err.message.slice(0, 80)}`);
     } else {
-      console.log(`  ⚠ NEGATIVE: threw but unexpected message: ${err.message.slice(0, 120)}`);
+      fail(`NEGATIVE: threw, but with an unexpected message: ${err.message.slice(0, 120)}`);
     }
   }
 
@@ -459,7 +468,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       await callTool("actual_categories_delete", { id: buruOwnedCatId });
       console.log(`\n✓ Cleaned up disposable batch/upsert test category (${buruOwnedCatId})`);
     } catch (err) {
-      console.log(`\n  ⚠ Could not delete disposable category ${buruOwnedCatId}: ${err.message}`);
+      fail(`Could not delete the disposable category ${buruOwnedCatId}: ${err.message}. That is residue.`);
     }
     context.categoryId = null;
   }
@@ -468,7 +477,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       await callTool("actual_category_groups_delete", { id: buruOwnedGroupId });
       console.log(`✓ Cleaned up disposable batch/upsert test category group (${buruOwnedGroupId})`);
     } catch (err) {
-      console.log(`  ⚠ Could not delete disposable category group ${buruOwnedGroupId}: ${err.message}`);
+      fail(`Could not delete the disposable category group ${buruOwnedGroupId}: ${err.message}. That is residue.`);
     }
   }
 

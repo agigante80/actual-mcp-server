@@ -76,7 +76,7 @@ export async function budgetTests(client, context) {
     budgetXferCatId = xferRes.categoryId || xferRes.id || xferRes.result || xferRes;
     console.log(`  ✓ Created second disposable category for transfer test: ${budgetXferCatId}`);
   } else {
-    console.log("  ⚠ Could not resolve owning group for context.categoryId: transfer test will be skipped");
+    fail("Could not resolve the owning group for context.categoryId, so the transfer test is skipped. A precondition this module builds itself failing is a failure, not a skip.");
   }
 
   const currentDate = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
@@ -164,7 +164,7 @@ export async function budgetTests(client, context) {
       console.log(`    • ${date}  ${amount}  ${payee}`);
     }
   } catch (err) {
-    console.log("  ⚠ Could not fetch transactions after switch:", err.message);
+    fail(`Could not fetch transactions after the budget switch: ${err.message}`);
   }
 
   // ── 4. actual_budgets_switch (negative: non-existent budget name) ────────
@@ -256,7 +256,7 @@ export async function budgetTests(client, context) {
       if (typeof badRes?.error === 'string') {
         console.log(`  ✓ B4: error returned for nil-UUID categoryId: ${badRes.error.slice(0, 120)}`);
       } else {
-        console.log(`  ⚠ B4: unexpected response (API may have accepted nil UUID): ${JSON.stringify(badRes).slice(0, 120)}`);
+        fail(`B4: unexpected response, the API may have accepted the nil UUID: ${JSON.stringify(badRes).slice(0, 120)}`);
       }
     } catch (e) {
       console.log(`  ✓ B4: API rejected nil-UUID categoryId (threw): ${String(e).slice(0, 120)}`);
@@ -279,9 +279,9 @@ export async function budgetTests(client, context) {
     const catEntry = (monthData.categoryGroups || [])
       .flatMap(g => g.categories || [])
       .find(c => c.id === context.categoryId);
-    if (!catEntry) console.log("  ⚠ Verify carryover: category not found in month budget (carryover field check skipped)");
+    if (!catEntry) fail("Verify carryover: the category is not in the month budget, so the carryover check did not run at all.");
     else if (catEntry.carryover === true || catEntry.carryover === 1) console.log(`  ✓ Verify carryover: carryover=${catEntry.carryover} (enabled)`);
-    else console.log(`  ⚠ Verify carryover: carryover=${JSON.stringify(catEntry.carryover)} (API may use different field)`);
+    else fail(`Verify carryover: carryover=${JSON.stringify(catEntry.carryover)} after enabling it. "The API may use a different field" is a question this test exists to answer.`);
   }
 
   // Hold for next month
@@ -374,12 +374,12 @@ export async function budgetTests(client, context) {
     try {
       await callTool("actual_budgets_resetHold", { month: currentDate });
     } catch (err) {
-      console.log(`  ⚠ could not reset the hold for ${currentDate}: ${err.message}`);
+      fail(`could not reset the hold for ${currentDate}: ${err.message}`);
     }
     try {
       await callTool("actual_accounts_delete", { id: holdSeedId });
     } catch (err) {
-      console.log(`  ⚠ could not remove the hold seed account ${holdSeedId}: ${err.message}`);
+      fail(`could not remove the hold seed account ${holdSeedId}: ${err.message}. That is residue.`);
     }
   }
 
@@ -387,7 +387,7 @@ export async function budgetTests(client, context) {
   console.log("\nTesting budget transfer...");
   const targetCategoryId = budgetXferCatId;
   if (!targetCategoryId || targetCategoryId === context.categoryId) {
-    console.log("⚠ Skipping transfer test (could not create second category)");
+    skip("Skipping transfer test (could not create second category)");
   } else {
     const preTransfer = await callTool("actual_budgets_getMonth", { month: currentDate });
     const preData = preTransfer.result || preTransfer;
@@ -455,7 +455,7 @@ export async function budgetTests(client, context) {
       if (msg.includes("Source and target categories must be different")) {
         console.log(`  ✓ Same source and target correctly rejected`);
       } else {
-        console.log(`  ⚠ Same source and target rejected with unexpected message: ${msg}`);
+        fail(`Same source and target rejected, but with an unexpected message: ${msg}`);
       }
     }
   }
@@ -508,7 +508,7 @@ export async function budgetTests(client, context) {
     if (err.message.includes("YYYY-MM") || err.message.includes("invalid-date") || err.message.includes("month")) {
       console.log("✓ Error resilience: invalid-date correctly rejected by schema validation");
     } else {
-      console.log("⚠ Batch rejected but with unexpected error:", err.message);
+      fail(`Batch rejected, but with an unexpected error: ${err.message}`);
     }
   }
 
@@ -518,7 +518,7 @@ export async function budgetTests(client, context) {
       await callTool("actual_categories_delete", { id: budgetXferCatId });
       console.log(`\n✓ Cleaned up budget transfer test category (${budgetXferCatId})`);
     } catch (err) {
-      console.log(`\n  ⚠ Could not delete budget transfer category ${budgetXferCatId}: ${err.message}`);
+      fail(`Could not delete the budget transfer category ${budgetXferCatId}: ${err.message}. That is residue.`);
     }
   }
 
@@ -528,7 +528,7 @@ export async function budgetTests(client, context) {
       await callTool("actual_categories_delete", { id: budgetOwnedCatId });
       console.log(`\n✓ Cleaned up disposable budget-test category (${budgetOwnedCatId})`);
     } catch (err) {
-      console.log(`\n  ⚠ Could not delete disposable category ${budgetOwnedCatId}: ${err.message}`);
+      fail(`Could not delete the disposable category ${budgetOwnedCatId}: ${err.message}. That is residue.`);
     }
     context.categoryId = null;
   }
@@ -537,7 +537,7 @@ export async function budgetTests(client, context) {
       await callTool("actual_category_groups_delete", { id: budgetOwnedGroupId });
       console.log(`✓ Cleaned up disposable budget-test category group (${budgetOwnedGroupId})`);
     } catch (err) {
-      console.log(`  ⚠ Could not delete disposable category group ${budgetOwnedGroupId}: ${err.message}`);
+      fail(`Could not delete the disposable category group ${budgetOwnedGroupId}: ${err.message}. That is residue.`);
     }
   }
 

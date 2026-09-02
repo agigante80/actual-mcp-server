@@ -76,9 +76,9 @@ export async function accountTests(client, context) {
     if (typeof badBalance?.error === 'string' && badBalance.error.includes('not found') && badBalance.error.includes('actual_accounts_list')) {
       console.log(`  ✓ FIXED(BUG-5): accounts_get_balance nil-UUID returns actionable error: ${badBalance.error.slice(0, 120)}`);
     } else if (typeof badBalance?.error === 'string') {
-      console.log(`  ⚠ A4: error returned but message not actionable: ${badBalance.error.slice(0, 120)}`);
+      fail(`A4: an error was returned but the message is not actionable: ${badBalance.error.slice(0, 120)}`);
     } else {
-      console.log(`  ⚠ A4: unexpected response: ${JSON.stringify(badBalance).slice(0, 120)}`);
+      fail(`A4: unexpected response: ${JSON.stringify(badBalance).slice(0, 120)}`);
     }
   }
 
@@ -104,7 +104,7 @@ export async function accountTests(client, context) {
     if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
       console.log("✓ Strict validation working (invalid field rejected)");
     } else {
-      console.log("⚠ Different error than expected:", err.message);
+      fail(`Strict validation: threw a different error than expected: ${err.message}`);
     }
   }
 

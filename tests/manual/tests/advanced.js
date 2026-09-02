@@ -19,7 +19,7 @@ import { budgetTests } from './budget.js';
 import { rulesTests } from './rules.js';
 import { batchUncategorizedRulesUpsertTests } from './batch_uncategorized_rules_upsert.js';
 import { scheduleTests } from './schedule.js';
-import { fail, skip } from '../assert.js';
+import { fail, skip, noteTolerated } from '../assert.js';
 
 /**
  * @param {{ callTool: Function }} client
@@ -51,7 +51,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify session_list: expected totalSessions >= 1, got ${JSON.stringify(sessionList).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ session_list failed:", err.message);
+    fail(`session_list failed: ${err.message}`);
   }
 
   // Session close: no sessionId, closes oldest idle session (or reports none to close)
@@ -67,10 +67,10 @@ export async function advancedTests(client, context, opts = {}) {
     )) {
       console.log(`  ✓ Verify session_close: correctly reported no closable sessions (${message})`);
     } else {
-      console.log(`  ⚠ Verify session_close: unexpected response: ${JSON.stringify(closeResult).slice(0, 120)}`);
+      fail(`Verify session_close: unexpected response: ${JSON.stringify(closeResult).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ session_close failed:", err.message);
+    fail(`session_close failed: ${err.message}`);
   }
 
   // ActualQL search/summary tools
@@ -90,7 +90,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify search_by_month: unexpected response shape: ${JSON.stringify(byMonth).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ search_by_month failed:", err.message);
+    fail(`search_by_month failed: ${err.message}`);
   }
 
   // actual_transactions_search_by_amount
@@ -109,7 +109,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify search_by_amount: expected array, got ${JSON.stringify(byAmount).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ search_by_amount failed:", err.message);
+    fail(`search_by_amount failed: ${err.message}`);
   }
 
   // actual_transactions_search_by_category (no filter: all categories)
@@ -126,7 +126,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify search_by_category: unexpected response: ${JSON.stringify(byCategory).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ search_by_category failed:", err.message);
+    fail(`search_by_category failed: ${err.message}`);
   }
 
   // actual_transactions_search_by_payee (no filter: all payees)
@@ -143,7 +143,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify search_by_payee: unexpected response: ${JSON.stringify(byPayee).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ search_by_payee failed:", err.message);
+    fail(`search_by_payee failed: ${err.message}`);
   }
 
   // actual_transactions_summary_by_category
@@ -160,7 +160,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify summary_by_category: unexpected response: ${JSON.stringify(sumByCat).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ summary_by_category failed:", err.message);
+    fail(`summary_by_category failed: ${err.message}`);
   }
 
   // actual_transactions_summary_by_payee
@@ -177,7 +177,7 @@ export async function advancedTests(client, context, opts = {}) {
       fail(`Verify summary_by_payee: unexpected response: ${JSON.stringify(sumByPayee).slice(0, 120)}`);
     }
   } catch (err) {
-    console.log("⚠ summary_by_payee failed:", err.message);
+    fail(`summary_by_payee failed: ${err.message}`);
   }
 
   // ── actual_get_id_by_name: all 4 supported types ──────────────────────────
@@ -284,9 +284,8 @@ export async function advancedTests(client, context, opts = {}) {
     } catch (err) {
       const msg = err.message || String(err);
       const ok = /not found|not configured|local account/i.test(msg);
-      console.log(ok
-        ? `  ✓ non-existent accountId rejected with actionable error: ${msg.slice(0, 80)}`
-        : `  ⚠ non-existent accountId: error may not be actionable: ${msg.slice(0, 80)}`);
+      if (ok) console.log(`  ✓ non-existent accountId rejected with actionable error: ${msg.slice(0, 80)}`);
+      else fail(`non-existent accountId: the error is not actionable: ${msg.slice(0, 80)}`);
     }
 
     let accounts = [];
@@ -294,7 +293,7 @@ export async function advancedTests(client, context, opts = {}) {
       const acctRaw = await callTool("actual_accounts_list", {});
       accounts = Array.isArray(acctRaw) ? acctRaw : (acctRaw?.accounts ?? acctRaw?.result ?? []);
     } catch (err) {
-      console.log("  ⚠ Could not list accounts for bank sync:", err.message);
+      fail(`Could not list accounts for bank sync: ${err.message}`);
     }
 
     if (accounts.length === 0) {
@@ -321,7 +320,10 @@ export async function advancedTests(client, context, opts = {}) {
           if (/local account|not configured/i.test(msg)) {
             console.log(`  ✓ ${label}: correctly identified as local account`);
           } else {
-            console.log(`  ⚠ ${label}: ${msg}`);
+            // #387: genuinely tolerated. Bank sync is opt-in and reaches a THIRD PARTY, so a
+            // real link can be rate-limited or need re-auth for reasons that are not this
+            // server's behaviour. The summary line below counts these, so they are visible.
+            noteTolerated(`${label}: ${msg}`);
           }
           syncFailed++;
         }

@@ -1,4 +1,4 @@
-import { fail } from '../assert.js';
+import { fail, skip } from '../assert.js';
 /**
  * tests/category.js
  *
@@ -18,7 +18,7 @@ export async function categoryTests(client, context) {
   console.log("\n-- Running CATEGORY TESTS --");
 
   if (!context.categoryGroupId) {
-    console.log("⚠ No MCP category group available - skipping category tests");
+    skip("No MCP category group available: skipping category tests");
     return;
   }
 
@@ -71,13 +71,13 @@ export async function categoryTests(client, context) {
   try {
     const nilRes = await callTool("actual_categories_delete", { id: '00000000-0000-0000-0000-000000000000' });
     // The adapter throws a descriptive error: this catch handles it
-    console.log("  ⚠ Expected an error but tool returned:", JSON.stringify(nilRes).slice(0, 120));
+    fail(`Expected an error for the nil UUID but the tool returned: ${JSON.stringify(nilRes).slice(0, 120)}`);
   } catch (err) {
     const msg = err.message || String(err);
     if (msg.includes('not found') && msg.includes('actual_categories_get')) {
       console.log(`  ✓ FIXED(BUG-1): categories_delete nil-UUID returns actionable error: ${msg.slice(0, 120)}`);
     } else {
-      console.log(`  ⚠ Error thrown but message not actionable: ${msg.slice(0, 120)}`);
+      fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
     }
   }
 
@@ -100,6 +100,6 @@ export async function categoryTests(client, context) {
       fail(["Delete threw unexpectedly:", err.message?.slice(0, 120)].map(String).join(" "));
     }
   } else {
-    console.log("  ⚠ Skipping delete (no categoryId in context)");
+    skip("Skipping delete (no categoryId in context)");
   }
 }
