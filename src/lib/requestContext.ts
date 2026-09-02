@@ -41,8 +41,10 @@ export const requestContext = new AsyncLocalStorage<{
   // connection-pool entry for a stdio session. The pool's idle clock is
   // refreshed by connectionPool.touch(), which is called only from
   // httpServer.ts, so a stdio entry would never be touched, would expire after
-  // SESSION_IDLE_TIMEOUT_MINUTES, and cleanupIdleConnections would call
-  // api.shutdown() on it WITHOUT holding withApiLock, potentially mid-operation.
+  // SESSION_IDLE_TIMEOUT_MINUTES, and cleanupIdleConnections would tear it down. Since #392 that
+  // teardown takes the api mutex and re-checks expiry, so it is no longer a mid-operation hazard,
+  // but an entry that is never refreshed still expires, and that is the reason stdio stays off
+  // the pool.
   // Keeping stdio off the pooled branch entirely is simpler and safer than
   // teaching the pool a second liveness model.
   transport?: 'http' | 'stdio';

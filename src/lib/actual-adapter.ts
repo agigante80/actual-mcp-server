@@ -82,7 +82,7 @@ import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId } from './apiState.js';
 import { withApiLock } from './apiLock.js';
-import { loadBudgetTracked } from './budgetLoader.js';
+import { loadBudgetTracked, importBudgetTracked } from './budgetLoader.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -445,7 +445,8 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
         // re-introduce the auth-burst pattern #134 is fixing.
         if (_shouldDropPoolOnError(err)) {
           logger.warn(`[ADAPTER] Releasing pool connection for session ${sessionId} after infrastructure-level error`);
-          try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+          // #392: Locked variant. We are INSIDE withApiLock here; the wrapping one would deadlock.
+          try { await connectionPool.shutdownConnectionLocked(sessionId); } catch (_e) { /* swallow */ }
         }
         throw err;
       }
@@ -505,7 +506,8 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
           // Sync failure on a write IS infrastructure-level — drop the pool
           // connection so the next call re-inits, then surface the error.
           logger.error(`[ADAPTER] api.sync() failed after write in session ${sessionId}; releasing pool connection`);
-          try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+          // #392: Locked variant. We are INSIDE withApiLock here; the wrapping one would deadlock.
+          try { await connectionPool.shutdownConnectionLocked(sessionId); } catch (_e) { /* swallow */ }
           throw syncErr;
         }
         return result;
@@ -515,7 +517,8 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
         // leave the connection fine.
         if (_shouldDropPoolOnError(err)) {
           logger.warn(`[ADAPTER] Releasing pool connection for write session ${sessionId} after infrastructure-level error`);
-          try { await connectionPool.shutdownConnection(sessionId); } catch (_e) { /* swallow */ }
+          // #392: Locked variant. We are INSIDE withApiLock here; the wrapping one would deadlock.
+          try { await connectionPool.shutdownConnectionLocked(sessionId); } catch (_e) { /* swallow */ }
         }
         throw err;
       }
@@ -1050,10 +1053,12 @@ async function processWriteQueue() {
             // the batch ran concurrently and a drain was bounded by roughly one
             // ACTUAL_OP_TIMEOUT_MS. Sequential dispatch makes a drain's wall clock the SUM of
             // its ops, so a batch of slow ops can now outlive SESSION_IDLE_TIMEOUT_MINUTES
-            // (default 5) and be swept mid-drain. The sweep's shutdownConnection calls
-            // api.shutdown() WITHOUT holding withApiLock, which is the same hazard this file
-            // already documents as the reason stdio is kept off the pool: it tears the
-            // singleton down underneath an in-flight operation.
+            // (default 5) and be swept mid-drain. The sweep would then evict the session and
+            // fire its eviction listeners, closing the transport under a drain that is still
+            // running. Since #392 the sweep takes the api mutex and re-checks expiry, so it can
+            // no longer tear the singleton down mid-operation, but an unrefreshed entry is still
+            // MARKED expired, so the touch below is what keeps an active session out of the
+            // sweep's list at all.
             //
             // THIS MUST STAY INSIDE THE LOOP. A single touch at drain start does nothing for
             // a drain whose wall clock is the SUM of its ops, which is the entire reason the
@@ -1089,7 +1094,9 @@ async function processWriteQueue() {
               `[WRITE QUEUE] Releasing pool connection for session ${batchSessionId} after sync failure`,
             );
             try {
-              await connectionPool.shutdownConnection(batchSessionId!);
+              // #392: Locked variant; the drain holds withApiLock across this whole block, and
+              // the mutex is not reentrant, so the wrapping variant would deadlock here.
+              await connectionPool.shutdownConnectionLocked(batchSessionId!);
             } catch (_e) {
               /* swallow */
             }
@@ -1120,7 +1127,9 @@ async function processWriteQueue() {
         if (usePoolBranch) {
           if (_shouldDropPoolOnError(error)) {
             try {
-              await connectionPool.shutdownConnection(batchSessionId!);
+              // #392: Locked variant; the drain holds withApiLock across this whole block, and
+              // the mutex is not reentrant, so the wrapping variant would deadlock here.
+              await connectionPool.shutdownConnectionLocked(batchSessionId!);
             } catch (_e) {
               /* swallow */
             }
@@ -3197,8 +3206,9 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   // init/shutdown cycle. A pooled entry for stdio would be created here and then
   // NEVER refreshed, because connectionPool.touch() is called only from
   // httpServer.ts; it would expire after SESSION_IDLE_TIMEOUT_MINUTES and
-  // cleanupIdleConnections would api.shutdown() it WITHOUT holding withApiLock,
-  // which can tear the singleton down underneath an in-flight operation. The
+  // cleanupIdleConnections would tear it down. Since #392 that teardown takes the api mutex and
+  // re-checks expiry, so it is no longer a mid-operation hazard, but an entry that is never
+  // refreshed still expires, and that is the reason that matters here. The
   // legacy path re-reads getActiveBudgetConfig() on every call, so the switch
   // still takes effect; it just costs an init per operation, which is what stdio
   // already did before this ticket.
@@ -3418,22 +3428,31 @@ export async function importBudget(
 ): Promise<{ id: string }> {
   observability.incrementToolCall('actual.budgets.import').catch(() => {});
   const result = await queueWriteOperation(async () => {
-    const imported = await withConcurrency(() =>
-      retry(() => rawImportBudget(input, opts) as Promise<{ id: string }>, {
-        retries: 0,
-        backoffMs: 200,
-        isRetryable: isRetryableError,
-      }),
-    );
-    // #390: an import CHANGES the loaded budget (upstream documents importBudget as "loads the
-    // imported budget"), and the singleton's record kept naming the pre-import one. That is the
-    // unsafe direction: the precondition compares against it, passes, and a session then reads
-    // the imported file while believing it is on its own budget. A sentinel rather than a real
-    // syncId, because an imported file is outside the budget registry and outside the ACL, so
-    // no session can ever legitimately match it and every session's next operation re-selects
-    // its own budget. Recorded AT the call site so the guard in
-    // tests/unit/budget_selection_precondition.test.js can see it.
-    setLoadedBudgetSyncId(`imported:${imported.id}`);
+    // #394: an import re-points the process-global singleton exactly as a download does, so it
+    // gets the SAME tracking discipline, through the same helper, rather than a hand-written
+    // approximation of it.
+    //
+    // What was wrong before: nothing cleared the record before the import started, nothing
+    // registered the promise, and the sentinel was written AFTER the await, so a timeout skipped
+    // it entirely. A large YNAB or zip import exceeding ACTUAL_OP_TIMEOUT_MS is the expected case,
+    // not a rare one. The record therefore went on naming the PRE-IMPORT budget while the
+    // singleton moved to an out-of-registry, un-ACL'd imported file, and a victim session passed
+    // the #390 precondition legitimately and had its reads served from the importer's file.
+    //
+    // #390 still holds at this call site: `importBudgetTracked` records the `imported:` sentinel
+    // when the promise settles, whichever way, and the clear below states the same fact at the
+    // call site where the guard in tests/unit/budget_selection_precondition.test.js can see it.
+    const imported = await importBudgetTracked(() => {
+      const started = withConcurrency(() =>
+        retry(() => rawImportBudget(input, opts) as Promise<{ id: string }>, {
+          retries: 0,
+          backoffMs: 200,
+          isRetryable: isRetryableError,
+        }),
+      );
+      setLoadedBudgetSyncId(null);
+      return started;
+    });
     return imported;
   });
 

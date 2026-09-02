@@ -433,5 +433,46 @@ describe('every deterministic diagnosis is memoised, including the ones with not
   check(!again.ok && apiState.getLoadedBudgetSyncId() === null, 'the failure itself is still never cached');
 }
 
+// --- 20. a cached reason does not outlive its condition forever (#404) ----
+// The cache stops diagnose() holding the api mutex for two network calls per failed tool call.
+// But an entry used to be dropped only by a successful load or a restart, so a failure mode that
+// changed with no success in between reported the FIRST reason indefinitely. Bounded by USES,
+// because the cost it avoids is paid per call.
+describe('the cached reason is re-derived after a bounded number of uses');
+{
+  reset();
+  downloadLoads = false;
+  // Call 1 diagnoses and caches. Calls 2 to 21 reuse it. Call 22 exceeds the budget of 20 uses,
+  // drops the entry and diagnoses afresh.
+  for (let i = 0; i < 21; i++) await settle(loadBudgetTracked('budget-A'));
+  check(calls.getBudgets === 1, `21 failures cost ONE diagnosis (got ${calls.getBudgets})`);
+  await settle(loadBudgetTracked('budget-A'));
+  check(calls.getBudgets === 2, `the 22nd re-diagnoses (got ${calls.getBudgets})`);
+
+  // and the DECISION is still never cached: every one of those failed closed.
+  const last = await settle(loadBudgetTracked('budget-A'));
+  check(!last.ok && apiState.getLoadedBudgetSyncId() === null, 'every attempt still fails closed');
+}
+
+// --- 21. a changed failure mode is eventually reported --------------------
+describe('a failure mode that changes with no intervening success is picked up');
+{
+  reset();
+  downloadLoads = false;
+  const first = await settle(loadBudgetTracked('budget-A'));
+  check(!!first.err && /out-of-sync-migrations/.test(first.err.message), 'the first reason is reported');
+
+  const changed = new Error('This budget cannot be loaded.');
+  changed.code = 'opening-budget';
+  loadBudgetThrows = changed;                    // the condition changes, with NO success between
+  let seen = null;
+  for (let i = 0; i < 25; i++) {
+    const r = await settle(loadBudgetTracked('budget-A'));
+    if (r.err && /opening-budget/.test(r.err.message)) { seen = i + 2; break; }
+  }
+  check(seen !== null, `the new reason surfaces without a restart (at failure #${seen})`);
+  check(seen !== null && seen <= 23, `and within the bound, not eventually (was #${seen})`);
+}
+
 log(`\n[#396-postcondition] ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
