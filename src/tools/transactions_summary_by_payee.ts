@@ -16,6 +16,11 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // #388: this filter silently returned an EMPTY result set when given an account NAME, a
+    // plausible-looking wrong answer. A well-formed id reads no listing, so a correct call is
+    // unchanged.
+    if (input.accountId) await adapter.resolveFilterId('account', input.accountId);
+
     // Build ActualQL query with groupBy and aggregation
     const api = await import('@actual-app/api');
     const q = (api as any).q;

@@ -523,10 +523,21 @@ async function expectCallError(tool, input, label) {
     { startDate: '2024/01/01' },
     'invalid startDate format (slash-separated) rejected')) fail();
 
-  // Case 8: invalid accountId format (non-UUID)
-  if (!expectParseError(uncategorized_tool,
+  // Case 8, INVERTED by #388: a non-UUID accountId is now ACCEPTED BY THE SCHEMA on purpose.
+  //
+  // This field is an OPTIONAL FILTER, and #380's sweep gave it `CommonSchemas.accountId` along
+  // with the required lookup ids. Under that schema a caller passing an account NAME got
+  // "Invalid uuid" and no way to learn the id, while the other eleven optional filters resolved
+  // the name and answered with it. Rejecting at the schema is what makes the better answer
+  // impossible: the handler never runs. So the schema is permissive HERE and the refusal happens
+  // in the handler, via adapter.resolveFilterId.
+  //
+  // The refusal itself is pinned by tests/unit/filter_id_tool_wiring.test.js, which calls this
+  // tool with a name and requires a typed refusal naming the id. Do not "restore" the strict
+  // schema without deleting that, or the tool will reject before it can help.
+  if (!expectParseOk(uncategorized_tool,
     { accountId: 'not-a-uuid' },
-    'non-UUID accountId rejected')) fail();
+    '#388: non-UUID accountId accepted by the schema so the handler can resolve it')) fail();
 
   // Case 9: invalid limit type (string instead of number)
   if (!expectParseError(uncategorized_tool,
@@ -563,10 +574,11 @@ async function expectCallError(tool, input, label) {
     { startDate: '01/31/2024' },
     'startDate in MM/DD/YYYY format rejected')) fail();
 
-  // Case 16: accountId non-UUID string (different shape)
-  if (!expectParseError(uncategorized_tool,
+  // Case 16, INVERTED by #388 for the reason at case 8. This shape is the exact one that
+  // motivated it: a caller passing the account's NAME.
+  if (!expectParseOk(uncategorized_tool,
     { accountId: 'my-account-name' },
-    'non-UUID accountId string rejected')) fail();
+    '#388: an account NAME reaches the handler, which refuses it with the id it resolves to')) fail();
 
   // Valid: all fields omitted (uses defaults)
   if (!expectParseOk(uncategorized_tool,

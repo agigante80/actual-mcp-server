@@ -44,30 +44,35 @@ const EXCEPTIONS = {
   'actual_notes_get:id': 'accepts the synthetic budget-YYYY-MM month id as well as an entity UUID',
   'actual_notes_update:id': 'accepts the synthetic budget-YYYY-MM month id as well as an entity UUID',
 
-  // CATEGORY B (#380): optional FILTER fields, not lookups. Tightening these is a real
-  // behaviour change (today a caller passing a NAME gets an empty result; after, a schema
-  // error), and transactions_search_by_amount deliberately DETECTS a name passed where an id
-  // belongs and answers with the correct UUID. That accommodation would be deleted by a
-  // blind sweep. Tracked as its own decision rather than folded in here.
-  'actual_bank_sync:accountId': 'Category B: optional filter, pending the #380 follow-up decision',
-  // Found only once the detector walked the published schema rather than the source: the
-  // regex version never saw it. NOT the same reason as its Category B siblings, though it
-  // was first filed with theirs by copying: their justification is "today a caller passing a
-  // NAME gets an empty result, after tightening a schema error", and that premise is FALSE
-  // here. transactions_get.ts already pre-flights the id and returns notFoundMsg('Account',
-  // ...), so a name gets a clear refusal, not an empty result. It stays an exception on the
-  // narrower ground that the refusal it already gives is BETTER than a ZodError: it names
-  // the entity and the listing tool. Tightening would trade a good message for a worse one.
-  'actual_transactions_get:accountId': 'refusal already better than a ZodError (see note)',
-  'actual_transactions_filter:accountId': 'Category B: optional filter',
-  'actual_transactions_filter:categoryId': 'Category B: optional filter',
-  'actual_transactions_filter:payeeId': 'Category B: optional filter',
-  'actual_transactions_search_by_amount:accountId': 'Category B: optional filter',
-  'actual_transactions_search_by_category:accountId': 'Category B: optional filter',
-  'actual_transactions_search_by_month:accountId': 'Category B: optional filter',
-  'actual_transactions_search_by_payee:accountId': 'Category B: optional filter',
-  'actual_transactions_summary_by_category:accountId': 'Category B: optional filter',
-  'actual_transactions_summary_by_payee:accountId': 'Category B: optional filter',
+  // CATEGORY B, decided by #388 and now closed. These stay bare strings ON PURPOSE, and the
+  // reason is no longer "pending a decision", which is the kind of entry that quietly becomes
+  // permanent.
+  //
+  // #380 left them because tightening them is a contract change rather than a sweep, and a blind
+  // tightening would have DELETED the best message on the surface: `search_by_amount` detected a
+  // name passed where an id belongs and answered with the correct UUID, which a ZodError cannot
+  // do because the schema rejects before the handler runs. The surface answered that same mistake
+  // three ways (resolve it, refuse it, or silently return an empty result), and THAT was the real
+  // defect rather than the schema question that surfaced it.
+  //
+  // So the schema stays permissive and the answer lives in `adapter.resolveFilterId`, which every
+  // one of these now calls: a well-formed id passes through untouched with no listing read, and a
+  // name is resolved to its id inside a NotFoundRefusal. Tightening these to `CommonSchemas` ids
+  // would re-delete the accommodation, so this exception is load bearing, not a deferral.
+  'actual_bank_sync:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_get:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_filter:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_filter:categoryId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_filter:payeeId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_search_by_amount:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_search_by_category:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_search_by_month:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_search_by_payee:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_summary_by_category:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  'actual_transactions_summary_by_payee:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  // Moved here from CommonSchemas by #388: it is an optional filter, not a required lookup, and
+  // under the strict schema a NAME got "Invalid uuid" with no way to learn the id.
+  'actual_transactions_uncategorized:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
 
   // NOT Actual entity UUIDs at all. An MCP session id is minted by this server and looks
   // like `stdio-2f72a857-...`; an imported_id comes from the BANK and its shape is the

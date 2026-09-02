@@ -67,8 +67,17 @@ export class NotFoundRefusal extends PreflightRefusal {
    * @param listTool  MCP tool name the caller should use to get valid ids
    * @param detail    Optional extra sentence, e.g. what was NOT written as a result
    */
-  constructor(entity: string, id: string, listTool: string, detail?: string) {
-    super(notFoundMsg(entity, id, listTool) + (detail ? ` ${detail}` : ''), 'not-found');
+  /**
+   * `overrideMessage` is for the one case where we can say something strictly MORE useful than
+   * "not found, go and list them": we already know the answer. #388 resolves a NAME passed where
+   * an id belongs, so telling the caller to list the accounts buries the id we just found behind
+   * an instruction they no longer need, and a model reading top to bottom will follow the
+   * instruction rather than the answer. The TYPE is unchanged, because the request still names
+   * something that does not exist under that identifier, and #377 is explicit that callers branch
+   * on the type rather than on message prose.
+   */
+  constructor(entity: string, id: string, listTool: string, detail?: string, overrideMessage?: string) {
+    super(overrideMessage ?? (notFoundMsg(entity, id, listTool) + (detail ? ` ${detail}` : '')), 'not-found');
     this.entity = entity;
     this.id = id;
     this.listTool = listTool;

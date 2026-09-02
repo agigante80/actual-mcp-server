@@ -14,6 +14,14 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
+    // #388: the one Category B field where `verifyExists: true` is worth a listing read on the
+    // HAPPY path too. Every other filter id costs at most a wrong-looking local result; this one
+    // reaches a THIRD PARTY, so an id that names nothing spends a provider call (and, with
+    // GoCardless, part of a rate-limited quota) to accomplish nothing. Omitting accountId still
+    // means "sync everything" and is not validated, because there is nothing to validate.
+    if (input.accountId) {
+      await adapter.resolveFilterId('account', input.accountId, { verifyExists: true });
+    }
     try {
       await adapter.runBankSync(input.accountId ?? undefined);
       return { result: 'Bank sync initiated successfully' };

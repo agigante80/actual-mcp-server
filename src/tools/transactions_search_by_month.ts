@@ -19,39 +19,20 @@ const tool: ToolDefinition = {
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
-    // Step 0: Validate accountId exists if provided
+    // Fetched HERE rather than further down so the #388 guard below can reuse it. The guard
+    // needs the listing and so does the off-budget filtering, and without sharing them this
+    // handler read the same listing twice on every filtered call.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const accounts = await adapter.getAccounts();
+
+    // #388: ONE answer to a name passed where an id belongs, shared by every Category B field.
+    // This block used to return { transactions: [], count: 0, ..., error }, an empty result set
+    // with the error tucked inside it, which reads to a model as "no transactions match".
+    // `verifyExists: true` keeps the existence check this tool already paid for.
     if (input.accountId) {
-      const accounts = await adapter.getAccounts();
-      const accountExists = accounts.some((acc: any) => acc.id === input.accountId);
-      
-      if (!accountExists) {
-        // Check if user provided account name instead of UUID
-        const accountByName = accounts.find((acc: any) => 
-          acc.name && acc.name.toLowerCase() === input.accountId!.toLowerCase()
-        );
-        
-        const month = input.month || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
-        
-        if (accountByName) {
-          return {
-            transactions: [],
-            count: 0,
-            totalAmount: 0,
-            month,
-            error: `Account '${input.accountId}' appears to be a name, not an ID. Use account UUID '${accountByName.id}' instead.`,
-          };
-        }
-        
-        return {
-          transactions: [],
-          count: 0,
-          totalAmount: 0,
-          month,
-          error: `Account '${input.accountId}' not found. Did you mean to use account UUID instead of name? Use actual_accounts_list to get valid account UUIDs.`,
-        };
-      }
+      await adapter.resolveFilterId('account', input.accountId, { verifyExists: true, rows: accounts });
     }
-    
+
     // Default to current month if not provided
     const today = new Date();
     const month = input.month || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
@@ -79,10 +60,6 @@ const tool: ToolDefinition = {
         month,
       };
     }
-
-    // Fetch accounts once — used for off-budget filtering (issue #81) and enrichment
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const accounts = await adapter.getAccounts();
 
     // Exclude off-budget accounts (issue #81) — their transactions cannot have
     // categories set; any update is silently discarded by Actual Budget.

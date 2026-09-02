@@ -240,22 +240,33 @@ export async function transactionTests(client, context) {
     }
   }
 
-  // FIXED(BUG-7): transactions_get with non-existent accountId now returns actionable error
+  // FIXED(BUG-7), then changed by #388: transactions_get with a non-existent accountId used to
+  // RETURN `{ error }` and now THROWS a typed refusal, per #377's taxonomy (does-not-exist
+  // throws). The assertion moved with it. Left as-is it would have gone on printing a warning
+  // about an "unexpected response" while the tool worked correctly, and the run would still have
+  // passed, which is #387.
   console.log("\nNEGATIVE T4: transactions_get with non-existent accountId...");
   {
     const today = new Date().toISOString().split('T')[0];
     const yearStart = `${new Date().getFullYear()}-01-01`;
-    const badGet = await callTool("actual_transactions_get", {
-      accountId: '00000000-0000-0000-0000-000000000000',
-      startDate: yearStart,
-      endDate: today,
-    });
-    if (typeof badGet?.error === 'string' && badGet.error.includes('not found') && badGet.error.includes('actual_accounts_list')) {
-      console.log(`  ✓ FIXED(BUG-7): transactions_get nil-UUID returns actionable error: ${badGet.error.slice(0, 120)}`);
-    } else if (typeof badGet?.error === 'string') {
-      console.log(`  ⚠ T4: error returned but message not actionable: ${badGet.error.slice(0, 120)}`);
-    } else {
-      console.log(`  ⚠ T4: unexpected response: ${JSON.stringify(badGet).slice(0, 120)}`);
+    try {
+      const badGet = await callTool("actual_transactions_get", {
+        accountId: '00000000-0000-0000-0000-000000000000',
+        startDate: yearStart,
+        endDate: today,
+      });
+      // #281's ledger, not a warning. Both branches below used to print and move on, so BUG-7
+      // was only ever "observed", never asserted: the tool could have regressed to returning an
+      // empty result and the release gate would still have gone green. That is #387 in miniature,
+      // and it is cheap to close here even though the general fix is not.
+      fail(`T4: expected a not-found refusal but tool returned: ${JSON.stringify(badGet).slice(0, 120)}`);
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes('not found') && msg.includes('actual_accounts_list')) {
+        console.log(`  ✓ FIXED(BUG-7): transactions_get nil-UUID throws an actionable refusal: ${msg.slice(0, 120)}`);
+      } else {
+        fail(`T4: threw but the message is not actionable: ${msg.slice(0, 120)}`);
+      }
     }
   }
 

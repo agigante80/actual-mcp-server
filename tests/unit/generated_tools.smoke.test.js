@@ -155,6 +155,16 @@ console.log('Running generated tools smoke tests');
   // stubs we set up before the tools imported).
   adapterMod.default.withWriteSession = async (fn) => fn();
 
+  // #388: `resolveFilterId` is a PRE-FLIGHT, not a value-returning read, so the flat
+  // stubResponses map above cannot express it: the value it must return depends on its
+  // argument, and returning a fixed one would make the eleven Category B tools validate
+  // against something the caller never sent. It also reaches the api by calling the module's
+  // own `getAccounts`, not the patched `adapter.getAccounts`, so without this it attempts a
+  // real connection and the smoke run fails on an auth error rather than on the tool.
+  // Here it accepts whatever it is given; the refusal behaviour is pinned by
+  // tests/unit/filter_id_tool_wiring.test.js, which calls the real thing.
+  adapterMod.default.resolveFilterId = async (_kind, value) => value;
+
   const toolNames = Object.keys(toolsIndex).filter(n => n !== 'default');
   let failures = 0;
 

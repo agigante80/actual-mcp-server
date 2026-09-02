@@ -16,7 +16,7 @@
  * 12.  Limit truncation with includeTransactions — limit:3 returns 3 of 10 txns
  * 13.  Multiple accounts in byAccount breakdown
  * 14.  Empty transaction list — totalCount:0, byAccount:[]
- * 15.  Invalid accountId (non-UUID) — Zod validation error thrown
+ * 15.  Invalid accountId (non-UUID): refused by the handler since #388, not by Zod
  * 16.  Split parent exclusion — is_parent:true not in totalCount (issue #119)
  * 17.  Opening balance exclusion — starting_balance_flag:true not in totalCount (issue #119)
  *
@@ -30,7 +30,27 @@ process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-
 console.log('Running transactions_uncategorized unit tests');
 
 (async () => {
+  // #388 moved this tool's accountId out of the strict schema, so an invalid one is now refused
+  // by the HANDLER (via adapter.resolveFilterId) rather than by Zod. That refusal reads the
+  // account listing, and it reads it through the adapter module's OWN `getAccounts`, not through
+  // the `adapterMod.default.getAccounts` facade the rest of this file patches. Patching the
+  // facade therefore does not reach it, and Case 15 attempted a real connection and failed on an
+  // auth error rather than on the tool. These raw stubs must be installed BEFORE the adapter
+  // import, which destructures them at module load.
+  const apiMod = await import('@actual-app/api');
+  const api = apiMod.default || apiMod;
+  api.init = async () => {};
+  api.shutdown = async () => {};
+  api.sync = async () => {};
+  api.downloadBudget = async () => {};
+  api.getBudgetMonths = async () => ['2026-01'];
+  api.getAccounts = async () => [{ id: 'aaaaaaaa-0000-0000-0000-000000000001', name: 'Checking' }];
+
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
+  const apiState = await import('../../dist/src/lib/apiState.js');
+  const { isPreflightRefusal } = await import('../../dist/src/lib/errors.js');
+  apiState.setApiInitialized(true);
+  apiState.setLoadedBudgetSyncId(process.env.ACTUAL_BUDGET_SYNC_ID);
   const toolMod = await import('../../dist/src/tools/transactions_uncategorized.js');
   const tool = toolMod.default?.default ?? toolMod.default;
 
@@ -389,20 +409,23 @@ console.log('Running transactions_uncategorized unit tests');
     }
   }
 
-  // ── Case 15: Invalid accountId (non-UUID) — Zod validation error ──────────
-  console.log('\n[Case 15] Invalid accountId (non-UUID string) — Zod validation error thrown');
+  // Case 15: an invalid accountId, refused by the HANDLER since #388.
+  // It used to be a ZodError. The schema was loosened deliberately, because rejecting there makes
+  // the better answer impossible: the handler never runs, so a caller who passed the account's
+  // NAME got "Invalid uuid" and no way to learn the id. What must NOT change is that an invalid
+  // accountId is still refused rather than silently ignored, so that is what this asserts.
+  console.log('\n[Case 15] Invalid accountId (non-UUID string) is refused by the handler');
   {
     adapterMod.default.getTransactions = async () => [];
-    adapterMod.default.getAccounts = async () => [];
 
     try {
       await tool.call({ accountId: 'not-a-uuid' });
-      fail('expected Zod validation error for non-UUID accountId, but call succeeded');
+      fail('expected a refusal for a non-UUID accountId, but the call succeeded');
     } catch (e) {
-      if (e && (e.name === 'ZodError' || (e.message && e.message.includes('Invalid')))) {
-        ok('non-UUID accountId correctly throws Zod validation error');
+      if (isPreflightRefusal(e)) {
+        ok('non-UUID accountId is refused with a typed preflight refusal');
       } else {
-        fail(`expected ZodError, got: ${e && e.constructor && e.constructor.name}: ${e && e.message}`);
+        fail(`expected a preflight refusal, got: ${e && e.constructor && e.constructor.name}: ${e && e.message}`);
       }
     }
   }

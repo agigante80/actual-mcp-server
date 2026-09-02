@@ -1553,6 +1553,8 @@ export const notifications = new EventEmitter();
 // Extracted to ./actual-adapter/normalize.ts (#166). Imported for internal use
 // and re-exported so the public surface and external importers are unchanged.
 import { normalizeToTransactionArray, normalizeToId, normalizeImportResult } from './actual-adapter/normalize.js';
+import { isEntityId, matchByName, resolvedNameDetail, FILTER_ID_ENTITIES } from './actual-adapter/filter-ids.js';
+import type { FilterIdKind, NamedRow } from './actual-adapter/filter-ids.js';
 export { normalizeToTransactionArray, normalizeToId, normalizeImportResult };
 // ---------------------------------------------------------------------------
 
@@ -1761,6 +1763,70 @@ export async function getPayees(): Promise<components['schemas']['Payee'][]> {
     return await withConcurrency(() => retry(() => rawGetPayees() as Promise<components['schemas']['Payee'][]>, { retries: 2, backoffMs: 200 }));
   });
 }
+/**
+ * #388: turn an optional FILTER id that is actually a NAME into a refusal that names the id.
+ *
+ * Every Category B field routes through here, so the surface has ONE answer to the single most
+ * likely caller mistake instead of the three it had (a helpful resolution in one tool, a bare
+ * not-found in another, and a silent empty result set in the other nine).
+ *
+ * COSTS NOTHING ON THE HAPPY PATH. A well-formed id returns immediately, with no listing read,
+ * so a correct call is byte-identical to before. Only a non-id value pays a listing, and only
+ * because the alternative is answering it with an empty result the caller will read as "no
+ * matches".
+ *
+ * It lives in the adapter rather than in the ten tool files for the reason #371 and #376 both
+ * landed on: a check the tools share belongs where the reads keep `retry` and the observability
+ * call site, and where the next caller of the same listing cannot skip it by accident.
+ *
+ * It THROWS rather than returning a result envelope, per #377's taxonomy: does-not-exist throws,
+ * and `{ success: false }` is only for a genuine multi-outcome contract. A filter id that names
+ * nothing is not a multi-outcome contract. That is also why the four tools that already had an
+ * accommodation stop returning `{ transactions: [], count: 0, error }`: an empty result set with
+ * an error tucked inside it is the shape this ticket exists to remove, not a milder version of it.
+ *
+ * `verifyExists` EXISTS SO THIS CHANGE REMOVES NOTHING, and the asymmetry is deliberate rather
+ * than an oversight, so do not "tidy" it into one behaviour without deciding the same question
+ * again. Five tools already read the listing unconditionally and already refuse a well-formed id
+ * that names nothing; they pass `verifyExists: true` and keep exactly that, with a better message.
+ * The rest never paid a listing read, and making them pay one on EVERY call to catch a mistyped
+ * UUID would impose a cost on every correct call to fix a mistake nobody makes. The mistake that
+ * actually happens, and that this ticket is about, is a NAME passed where an id belongs, which is
+ * caught on both paths because a name is never a UUID.
+ */
+export async function resolveFilterId(
+  kind: FilterIdKind,
+  value: string,
+  opts?: { verifyExists?: boolean; rows?: readonly NamedRow[] },
+): Promise<string> {
+  // The free path, and the one every correct call takes.
+  if (!opts?.verifyExists && isEntityId(value)) return value;
+
+  const { entity, listTool } = FILTER_ID_ENTITIES[kind];
+  // `rows` lets a caller that ALREADY holds the listing avoid a second read of it. Without it,
+  // `transactions_search_by_category` (which fetches accounts anyway, for off-budget filtering
+  // and enrichment) would pay two listing calls on every filtered call, which is a cost this
+  // change is supposed to avoid rather than introduce.
+  const rows: readonly NamedRow[] = opts?.rows
+    ?? (kind === 'account' ? await getAccounts()
+      : kind === 'category' ? await getCategories()
+      : await getPayees());
+
+  if (isEntityId(value)) {
+    // Only reachable under verifyExists. A well-formed id that names nothing is a not-found,
+    // not a name to resolve.
+    if (rows.some((r) => r.id === value)) return value;
+    throw new NotFoundRefusal(entity, value, listTool);
+  }
+
+  const hit = matchByName(rows, value);
+  if (hit && typeof hit.id === 'string') {
+    const resolved = resolvedNameDetail(kind, String(hit.name), hit.id);
+    throw new NotFoundRefusal(entity, value, listTool, undefined, resolved);
+  }
+  throw new NotFoundRefusal(entity, value, listTool);
+}
+
 export async function getCommonPayees(): Promise<any[]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.payees.commonList').catch(() => {});
@@ -3774,6 +3840,7 @@ export async function getPreferences(): Promise<Record<string, unknown>> {
 
 export default {
   getAccounts,
+  resolveFilterId,
   getAccountsWithBalances,
   addTransactions,
   importTransactions,

@@ -17,7 +17,12 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 const InputSchema = z.object({
   startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format (default: all-time)'),
   endDate: CommonSchemas.date.optional().describe('End date in YYYY-MM-DD format (default: today)'),
-  accountId: CommonSchemas.accountId.optional().describe('Filter to a specific account ID (optional)'),
+  // #388: an OPTIONAL FILTER, so it belongs with the other twelve rather than with the required
+  // lookup ids #380 tightened. Under `CommonSchemas.accountId` a caller passing an account NAME
+  // got "Invalid uuid" and no way to learn the id, which is the answer this ticket argues is worse
+  // than resolving the name. The schema is bare so the handler runs and can resolve it; the
+  // exception entry in tool_id_schema_drift records that this is deliberate.
+  accountId: z.string().optional().describe('Filter to a specific account ID (optional)'),
   includeTransactions: z.boolean().optional().default(false).describe('When true, include paginated transaction rows in the response (default: false)'),
   limit: z.number().int().min(1).max(1000).optional().default(50).describe('Max transactions per page when includeTransactions is true (default: 50, max: 1000)'),
   offset: z.number().int().min(0).optional().default(0).describe('Pagination start index when includeTransactions is true (default: 0)'),
@@ -53,6 +58,8 @@ const tool: ToolDefinition = {
     const today = new Date();
     const startDate = input.startDate || '2000-01-01';
     const endDate = input.endDate || today.toISOString().split('T')[0];
+    if (input.accountId) await adapter.resolveFilterId('account', input.accountId);
+
     const accountId = input.accountId ?? undefined;
 
     // Full table scan when no accountId — reliably returns newly written transactions

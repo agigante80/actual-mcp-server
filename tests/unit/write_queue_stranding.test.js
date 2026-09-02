@@ -51,6 +51,17 @@ api.getBudgetMonths = async () => {
   return ['2026-01'];
 };
 api.addTransactions = async () => 'ok';
+// #418: these four are the guard pre-reads, and they MUST be stubbed BEFORE the adapter import,
+// which destructures the raw api functions at module load. Without them the real implementations
+// run inside the drain against a server that does not exist, and the operation exceeds the bound.
+// That is the whole of #418: the reduction blamed a preceding stuck batch, but a CLEAN first
+// write with no prior failure fails identically (359ms, same message, same running=1), so the
+// prior failure was never causal. Their absence is also what made the healthy-batch assertion
+// below look impossible.
+api.getAccounts = async () => [{ id: ACC, name: 'acct', offbudget: false, closed: false }];
+api.getCategories = async () => [];
+api.getCategoryGroups = async () => [];
+api.getPayees = async () => [];
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
 const adapter = adapterMod.default;
@@ -68,19 +79,30 @@ for (const sid of ['sA1', 'sA2', 'sA3']) {
 }
 
 // --- what this file does NOT assert, and why ------------------------------
-// Two properties of #414's fail-fast are deliberately unpinned here, both for the same reason.
+// The re-checked-rather-than-latched property is now pinned, but only in ONE of its two forms, and
+// the distinction is worth stating because the first version of this comment got it wrong by
+// calling the whole thing untestable.
 //
-// 1. That the condition is RE-CHECKED rather than latched. Review round 1 correctly noted that
-//    latching it leaves the suite green. The mid-batch landing that distinguishes them is not
-//    reachable: once the first operation's wait times out, the remaining operations reach their
-//    check within microseconds, so a load landing even 70ms later is still pending for all of them,
-//    and making it land sooner means it is never abandoned.
-// 2. That a HEALTHY batch is untouched by the fail-fast. This one cannot be asserted in this
-//    harness at all: a plain three-write batch times out here regardless of the fail-fast, which is
-//    #418 (pre-existing, verified identical on v0.16.8 with this batch stashed).
+// WITHIN a drain it remains unreachable: once the first operation's wait times out, the remaining
+// operations reach their check within microseconds, so a load landing even 70ms later is still
+// pending for all of them, and making it land sooner means it is never abandoned.
 //
-// Both become testable once #418 is resolved, and the assertions belong here when it is. Writing
-// them now would pin the bug rather than the behaviour.
+// ACROSS drains it is covered, by the healthy-batch case below. Mutation-proven in both
+// directions, which is what separates the two halves of the condition. Latching `stuckLoadError`
+// across drains ALONE keeps every case green, and correctly so: `hasPendingBudgetLoad()` is
+// re-read at the check, so a stale error with nothing pending refuses nothing. Latch it AND drop
+// that re-read and the healthy batch goes red with all three operations refused. So the re-read
+// is the load-bearing half, and this file now fails if someone removes it.
+//
+// A SECOND property, that a healthy batch is untouched, was unpinned here for a reason that turned
+// out to be false, and the correction is the more useful lesson so it stays. This comment used to
+// say a plain three-write batch times out here regardless, and filed that as #418. There was no
+// such defect: the timeout was the four guard pre-reads running their REAL implementations against
+// a server that is not there, because they were never stubbed. The reduction blamed the batch that
+// happened to precede it, and the control nobody ran is decisive: with no stuck load and no prior
+// failure at all, ONE clean write fails identically, same message and the same running=1 that
+// looked like a leaked concurrency slot. A symptom seen right after a failure was attributed to
+// that failure on adjacency alone. With the stubs in place the assertion below is cheap.
 
 // --- #414: the cost of a load abandoned mid-batch --------------------------
 describe('#414: a load abandoned mid-batch costs the batch ONE bound, not one per operation');
@@ -115,6 +137,35 @@ describe('#414: a load abandoned mid-batch costs the batch ONE bound, not one pe
 
   await new Promise((r) => setTimeout(r, 1000));   // let the abandoned download land
   apiState._clearPendingBudgetLoadsForTests();
+}
+
+// --- #414: the fail-fast must not touch a HEALTHY batch ---------------------
+// The other half of a fail-fast, and the half that is easy to forget: refusing early is only
+// correct while something is actually stuck. This is the case the stale #418 comment claimed was
+// impossible to write here.
+describe('#414: with no stuck load, every operation in a batch still completes');
+{
+  apiState._clearPendingBudgetLoadsForTests();
+  apiState.setApiInitialized(true);
+  apiState.setLoadedBudgetSyncId('budget-A');
+  loaded = 'budget-A';
+  downloadDelayMs = 0;
+  slowBudget = null;
+
+  // All three on the SAME budget, so nothing re-selects and nothing can be abandoned.
+  const results = await Promise.all([
+    write('sA1', -11).then(() => 'ok', (e) => 'rejected: ' + String(e.message).slice(0, 46)),
+    write('sA2', -12).then(() => 'ok', (e) => 'rejected: ' + String(e.message).slice(0, 46)),
+    write('sA3', -13).then(() => 'ok', (e) => 'rejected: ' + String(e.message).slice(0, 46)),
+  ]);
+  check(
+    results.every((r) => r === 'ok'),
+    `a healthy batch is untouched by the fail-fast (${results.join(' | ')})`,
+  );
+  check(
+    !apiState._hasPendingBudgetLoadForTests(),
+    'and it leaves no pending load registered behind it',
+  );
 }
 
 // --- #417: the unanimity rule ---------------------------------------------

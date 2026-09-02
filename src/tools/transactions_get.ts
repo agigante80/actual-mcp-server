@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { notFoundMsg } from '../lib/errors.js';
 
 const InputSchema = z.object({ accountId: z.string().optional(), startDate: z.string().optional(), endDate: z.string().optional() });
 
@@ -11,13 +10,13 @@ const tool: ToolDefinition = {
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    // Pre-flight: verify account exists when accountId is provided (BUG-7)
+    // Pre-flight: verify the account exists when accountId is provided (BUG-7, then #388).
+    // This tool already refused a well-formed id that names nothing, and `verifyExists: true`
+    // keeps exactly that. What it gains is the third case: a NAME passed where an id belongs
+    // now comes back with the id it resolves to, instead of a refusal that only says not found.
+    // It also stops returning `{ error }` and THROWS, per #377: does-not-exist throws.
     if (input.accountId) {
-      const accounts = await adapter.getAccounts();
-      const accountExists = (accounts as any[]).some((a: any) => a.id === input.accountId);
-      if (!accountExists) {
-        return { error: notFoundMsg('Account', input.accountId, 'actual_accounts_list') };
-      }
+      await adapter.resolveFilterId('account', input.accountId, { verifyExists: true });
     }
     const result = await adapter.getTransactions(input.accountId, input.startDate, input.endDate);
     return { result };
