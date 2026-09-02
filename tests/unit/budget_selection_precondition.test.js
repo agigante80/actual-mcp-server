@@ -105,12 +105,96 @@ describe('(3) a torn-down singleton holds no budget');
 }
 
 // ---------------------------------------------------------------------------
-describe('(4) GUARD: every downloadBudget call site records what it loaded');
+describe('(4) GUARD: every raw budget load is an argument to the tracked loader');
 {
-  // The fix was incomplete on its first pass precisely here: four sites recorded and two did
-  // not (switchBudget's fast path and the startup path), so the recorded value went stale and
-  // the reproduction still failed. A missed site is SILENT, so it needs a guard rather than
-  // care.
+  // The fix was incomplete on its first pass precisely here: sites recorded and others did not,
+  // so the recorded value went stale and the reproduction still failed. A missed site is SILENT,
+  // so it needs a guard rather than care.
+  //
+  // #410 changed what this asserts, because the invariant changed. Every load now funnels through
+  // `trackBudgetMutation` in budgetLoader.ts, which owns the clear-before and the record-on-settle,
+  // so "a setter in the same block" stopped discriminating: both raw sites carried a redundant
+  // clear that existed only to satisfy the scan, and deleting the helper's REAL record left this
+  // green. What matters now is that a raw load is an ARGUMENT to the tracked helper.
+  //
+  // #407 review rebuilt the predicate after mutation testing found two holes: a file-wide
+  // exemption for budgetLoader.ts (which blinded it in the one file most likely to gain a new load
+  // path) and PROXIMITY matching (any raw load within 12 lines after a tracker call was invisible).
+  // Both are gone. The check is structural: walk back to the nearest unclosed `(` and require the
+  // token before it to be a tracker.
+  //
+  // ONE function does the work, used by both the real scan and the teeth check below. The previous
+  // version reimplemented the predicate in its self-check, the two drifted, and the self-check
+  // reported green while the real predicate was neutered.
+  const LOAD_CALL = /(\.|\braw)(downloadBudget|importBudget|loadBudget|DownloadBudget|ImportBudget|LoadBudget)\(/;
+  const TRACKER = /(trackBudgetMutation|importBudgetTracked|loadBudgetTracked)\s*$/;
+
+  function unguardedLoadSites(source) {
+    const lines = source.split('\n');
+    const out = [];
+    lines.forEach((line, i) => {
+      const m = LOAD_CALL.exec(line);
+      if (!m) return;
+      // Only RAW api receivers. `adapter.importBudget(...)` is a caller, not a mutator; the adapter
+      // method it calls is checked on its own line. Without this the guard reports the caller and
+      // sends the next reader to the wrong file.
+      if (/\badapter\s*\./.test(line)) return;
+      if (/^\s*[/*]/.test(line)) return;                       // a comment mentioning it
+
+      // Scope for the fallback record check: the call's OWN block, by brace balance, checked PER
+      // CHARACTER. Per line let `} else {` cancel itself out, so the scan ran into the sibling
+      // branch and found ITS record: deleting one arm's setter still passed.
+      let depth = 0;
+      let end = lines.length;
+      outer: for (let j = i; j < lines.length; j++) {
+        for (const ch of lines[j]) {
+          if (ch === '{') depth++;
+          else if (ch === '}') { depth--; if (depth < 0) { end = j; break outer; } }
+        }
+      }
+      const window = lines.slice(i, end).join('\n');
+
+      // Structural: from the matched call's own paren, walk backwards to the nearest UNCLOSED
+      // paren. Starting from the first paren on the line was the bug in the first attempt: an
+      // `() =>` arrow wrapper made it inspect the arrow's own parens instead of the call's.
+      // ANY enclosing level, not just the nearest. The legitimate shape nests the raw call inside
+      // `withConcurrency(retry(...))` inside the tracker, so requiring the IMMEDIATE enclosing call
+      // to be a tracker reported a correct site. Each time the walk finds an unclosed `(` it tests
+      // that callee and then keeps going outward.
+      const callParen = m.index + m[0].length - 1;
+      let d = 0;
+      let wrapped = false;
+      back: for (let j = i; j >= 0; j--) {
+        const l = lines[j];
+        for (let c = (j === i ? callParen - 1 : l.length - 1); c >= 0; c--) {
+          const ch = l[c];
+          if (ch === ')') d++;
+          else if (ch === '(') {
+            if (d === 0) {
+              if (TRACKER.test(l.slice(0, c))) { wrapped = true; break back; }
+              // not a tracker: keep walking outward to the next enclosing call
+            } else {
+              d--;
+            }
+          }
+        }
+      }
+
+      // The fallback is REGISTRATION, not the setter. Round 2 caught this: `wrapped` was added as
+      // an OR to the old `setLoadedBudgetSyncId` check rather than replacing it, so the guard was
+      // strictly MORE permissive than before, and the escape it left is exactly the shape #410
+      // removed: a redundant clear placed after the call purely to satisfy the scan. Reproduced
+      // with a rogue `const p = api.downloadBudget(id); setLoadedBudgetSyncId(null); await p;`,
+      // which has no `registerBudgetLoad` and so is never waited for: the #390/#393 leak, added
+      // silently and reported green.
+      //
+      // `registerBudgetLoad` is the invariant that actually matters, and it is what the one
+      // legitimate non-tracker site (diagnose's `api.loadBudget`) calls on the very next line.
+      if (!wrapped && !/registerBudgetLoad\(/.test(window)) out.push(i + 1);
+    });
+    return out;
+  }
+
   const SRC = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'src');
   const files = [];
   (function walk(dir) {
@@ -123,57 +207,44 @@ describe('(4) GUARD: every downloadBudget call site records what it loaded');
 
   const offenders = [];
   for (const f of files) {
-    const lines = readFileSync(f, 'utf8').split('\n');
-    lines.forEach((line, i) => {
-      // The invariant is "every path that CHANGES the loaded budget records it", not just
-      // downloadBudget. `importBudget` is such a path (upstream documents it as "loads the
-      // imported budget"), and the first version of this guard could not see it, which is how
-      // the record was left naming the pre-import budget: the one direction that makes the
-      // precondition silently pass.
-      // Matches BOTH shapes this codebase uses to reach the api: the `api.downloadBudget(...)`
-      // property call, and the `rawImportBudget(...)` alias created by destructuring the module
-      // at load. The first version matched only the dotted form and therefore could not see
-      // importBudget at all, which is precisely the path whose record was left stale.
-      if (!/(\.|\braw)(downloadBudget|importBudget|loadBudget|DownloadBudget|ImportBudget|LoadBudget)\(/.test(line)) return;
-      // Only RAW api receivers. A tool calling `adapter.importBudget(...)` is not a path that
-      // changes the loaded budget itself; the adapter method it calls is, and that one is
-      // checked on its own line. Without this the guard reports the caller instead of the
-      // mutator, which sends the next reader to the wrong file.
-      if (/\badapter\s*\./.test(line)) return;
-      if (/^\s*[/*]/.test(line)) return;                       // a comment mentioning it
-      // Scope: the call's OWN BLOCK, found by brace balance.
-      //
-      // This went through three wrong scopes before this one, and each failure is worth
-      // keeping. A 3-line then 8-line window kept reporting legitimately-recorded sites,
-      // because this codebase puts a paragraph of comment between a call and what follows it;
-      // widening the number is a treadmill. Scoping to the enclosing FUNCTION fixed that but
-      // introduced the opposite hole: the pool records in both arms of an if/else, so deleting
-      // ONE arm's record still found the other and the guard stayed green, which is exactly the
-      // per-branch miss that broke the original fix. Brace balance confines the search to the
-      // arm the call actually sits in, so both failures are caught and neither false-positives.
-      // Depth is checked PER CHARACTER, not per line. Checking per line let `} else {`
-      // cancel itself out, so the scan ran straight into the sibling branch and found ITS
-      // record: deleting one arm's setter still passed. That is the per-branch miss this
-      // scope exists to catch, reintroduced by the scan itself.
-      let depth = 0;
-      let end = lines.length;
-      outer: for (let j = i; j < lines.length; j++) {
-        for (const ch of lines[j]) {
-          if (ch === '{') depth++;
-          else if (ch === '}') {
-            depth--;
-            if (depth < 0) { end = j; break outer; }
-          }
-        }
-      }
-      const window = lines.slice(i, end).join('\n');
-      if (!/setLoadedBudgetSyncId\(/.test(window)) {
-        offenders.push(`${f.replace(SRC, 'src')}:${i + 1}`);
-      }
-    });
+    for (const lineNo of unguardedLoadSites(readFileSync(f, 'utf8'))) {
+      offenders.push(`${f.replace(SRC, 'src')}:${lineNo}`);
+    }
   }
   check(offenders.length === 0,
-    `every downloadBudget call site records the loaded budget (unrecorded: ${offenders.join(', ') || 'none'})`);
+    `every raw budget load is an argument to the tracked loader (unguarded: ${offenders.join(', ') || 'none'})`);
+
+  // TEETH, run through the SAME function above, on the shapes mutation testing showed the previous
+  // predicate missed.
+  check(
+    unguardedLoadSites('export async function probeReload(syncId) {\n  await api.downloadBudget(syncId);\n}').length === 1,
+    'it sees an untracked load inside budgetLoader-like code, which the old file-wide exemption hid',
+  );
+  check(
+    unguardedLoadSites('  await loadBudgetTracked(a, b);\n  logger.info("x");\n  await api.downloadBudget(rogue);').length === 1,
+    'it sees an untracked load just after a tracker call, which proximity matching missed',
+  );
+  // The round-2 hole: a rogue load made to look compliant by a redundant clear after it. This is
+  // the exact shape #410 removed from the real code, so the guard must not accept it as evidence.
+  check(
+    unguardedLoadSites('  const p = api.downloadBudget(syncId);\n  setLoadedBudgetSyncId(null);\n  await p;').length === 1,
+    'a redundant setLoadedBudgetSyncId after the load does NOT satisfy the guard; only registration does',
+  );
+  // and the one legitimate non-tracker site stays accepted, because it registers.
+  check(
+    unguardedLoadSites('    const p = api.loadBudget(localId);\n    registerBudgetLoad(p);\n    await p;').length === 0,
+    'a raw load that registers itself is accepted, which is what diagnose() does',
+  );
+  check(
+    unguardedLoadSites('    await trackBudgetMutation(\n      () => api.downloadBudget(syncId),\n      () => syncId,\n    );').length === 0,
+    'and it ACCEPTS a load passed as an argument to the tracked helper, so it is not reporting everything',
+  );
+  // The real import shape nests the raw call two wrappers deep inside the tracker. Requiring the
+  // IMMEDIATE enclosing call to be a tracker reported this correct site as an offender.
+  check(
+    unguardedLoadSites('    await importBudgetTracked(() => {\n      const started = withConcurrency(() =>\n        retry(() => rawImportBudget(input, opts), { retries: 0 }),\n      );\n      return started;\n    });').length === 0,
+    'and it accepts a load nested inside withConcurrency/retry within the tracker',
+  );
 }
 
 // ---------------------------------------------------------------------------

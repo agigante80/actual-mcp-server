@@ -46,12 +46,15 @@ api.init = async () => {};
 api.shutdown = async () => { loaded = null; };
 api.sync = async () => {};
 let hangForever = false;
+let slowBudget = null;
 api.downloadBudget = async (id) => {
   // Upstream closes the current budget FIRST, then opens the new one. Modelled, because it is
   // why an abandoned download is not a harmless no-op.
   loaded = null;
   if (hangForever) await new Promise(() => {});   // never settles, on purpose
-  if (downloadDelayMs) await new Promise((r) => setTimeout(r, downloadDelayMs));
+  if (downloadDelayMs && (slowBudget === null || slowBudget === id)) {
+    await new Promise((r) => setTimeout(r, downloadDelayMs));
+  }
   loaded = id;
 };
 let readDelayMs = 0;
@@ -65,7 +68,16 @@ api.getAccounts = async () => {
   if (readDelayMs) await new Promise((r) => setTimeout(r, readDelayMs));
   return [{ id: ACC, name: `acct-in-${loaded}` }];
 };
-api.addTransactions = async () => 'ok';
+// #406: the witness for case (7). The adapter destructures the raw api functions at module load,
+// so a stub reassigned AFTER that import is never called. The sampling has to live here.
+let sampleWriteWitness = false;
+let pendingAtWrite = null;
+api.addTransactions = async () => {
+  if (sampleWriteWitness && pendingAtWrite === null) {
+    pendingAtWrite = apiState._hasPendingBudgetLoadForTests();
+  }
+  return 'ok';
+};
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
 const adapter = adapterMod.default;
@@ -257,6 +269,131 @@ describe('(6) #393: a NEVER-settling load must not wedge the process');
     `a WRITE after a never-settling load settles rather than stranding its caller (got ${JSON.stringify(writeOutcome).slice(0, 70)})`);
   check(!!writeOutcome.err,
     `and it rejects rather than silently succeeding (got ${writeOutcome.err?.slice(0, 60) ?? 'no error'})`);
+
+  // HYGIENE, and it is load bearing for every case below this one. The load registered above never
+  // settles, and `registerBudgetLoad` only removes an entry when its promise settles: there is no
+  // unregister hook. Leaving it pending means every LATER acquisition in this file times out, so a
+  // later case would silently exercise a poisoned lock while claiming to test something else.
+  // Clearing the registration set is the only way back, and it is safe here because every
+  // assertion in this case has already run.
+  apiState._clearPendingBudgetLoadsForTests();
+  check(apiState._hasPendingBudgetLoadForTests() === false,
+    'the never-settling load is deregistered, so later cases run against a FREE lock');
+}
+
+// --- (7) #406: the wait is per OPERATION, not per lock acquisition -----------
+// #393 made settling an abandoned load part of ACQUIRING the api lock, which makes the set of
+// call sites stop mattering. That holds wherever one acquisition serves one operation. The write
+// drain is the exception: it acquires ONCE and runs N operations inside, so before #406 every
+// operation after the first in a batch ran without ever waiting, against a singleton an abandoned
+// load was about to re-point. That is the #390 class reached by a different route.
+//
+// The witness is sampled from INSIDE the second operation's raw write, because that is the moment
+// that matters: a check before or after the drain cannot tell whether the op itself was serialised
+// against the pending load.
+describe('(7) #406: a LATER operation in the same drain still waits for an abandoned load');
+{
+  // THE SHAPE MATTERS, and the first version of this case got it wrong. With ONE operation per
+  // drain the lock acquisition's own wait (#393) covers it, so the case passed with the fix
+  // removed: a test that could not fail. #406 is specifically about a drain that acquires the lock
+  // ONCE and then runs N operations, where only the first is covered.
+  //
+  // So: two writes enqueued in ONE debounce window. Op1 is on a different budget, so it re-selects,
+  // and its download outruns ACTUAL_OP_TIMEOUT_MS and is ABANDONED while still in flight. Op2 then
+  // runs in the same drain, after the acquisition, with that load still pending.
+  hangForever = false;
+  readDelayMs = 0;
+  loaded = 'budget-A';
+  apiState.setApiInitialized(true);
+  apiState.setLoadedBudgetSyncId('budget-A');
+  apiState._clearPendingBudgetLoadsForTests();
+
+  // Only budget-B is slow, so op1 abandons while op2's own re-select stays fast.
+  slowBudget = 'budget-B';
+  downloadDelayMs = 900;
+
+  sampleWriteWitness = true;
+  pendingAtWrite = null;
+
+  // Session-to-budget mapping FIRST, while everything is fast. Doing the switches inline with the
+  // writes was the earlier mistake: switchBudget is not a queued write, so the two writes never
+  // shared a debounce window and never formed one batch.
+  downloadDelayMs = 0;
+  slowBudget = null;
+  await requestContext.run({ sessionId: 'sess-406-B' }, () => adapter.switchBudget('beta')).catch(() => {});
+  await requestContext.run({ sessionId: 'sess-406-A' }, () => adapter.switchBudget('alpha')).catch(() => {});
+
+  // Now make ONLY budget-B slow, and leave budget-A loaded so op-A needs no slow re-select.
+  loaded = 'budget-A';
+  apiState.setApiInitialized(true);
+  apiState.setLoadedBudgetSyncId('budget-A');
+  apiState._clearPendingBudgetLoadsForTests();
+  slowBudget = 'budget-B';
+  downloadDelayMs = 900;
+
+  sampleWriteWitness = true;
+  pendingAtWrite = null;
+
+  // Enqueued back to back with no await between them, so they land in ONE debounce window and one
+  // drain: one lock acquisition, two operations. B first, so its abandoned load is in flight when
+  // A runs.
+  const opB = requestContext.run({ sessionId: 'sess-406-B' }, () =>
+    adapter.addTransactions([{ account: ACC, date: '2026-01-01', amount: -1 }]),
+  ).catch((e) => 'B-rejected: ' + e.message);
+  const opA = requestContext.run({ sessionId: 'sess-406-A' }, () =>
+    adapter.addTransactions([{ account: ACC, date: '2026-01-01', amount: -2 }]),
+  ).catch((e) => 'A-rejected: ' + e.message);
+
+  const [rB, rA] = await Promise.all([opB, opA]);
+  sampleWriteWitness = false;
+  downloadDelayMs = 0;
+  slowBudget = null;
+
+  check(String(rB).startsWith('B-rejected'), `op B is abandoned by the bound (got ${String(rB).slice(0, 45)})`);
+  // The witness: was a budget load still in flight at the moment a raw write executed? Sampled from
+  // inside the write stub, because a check before or after the drain cannot see it.
+  // THE GUARANTEE, stated as what must never happen rather than as one particular good outcome.
+  // Op A may legitimately either wait for the abandoned load and then write, or fail closed when
+  // that wait exceeds the bound. In this configuration B's load outlives the bound, so A fails
+  // closed, which is #393's contract. What must NEVER happen is A executing a raw write while a
+  // load is still in flight: that write can land in whatever budget the abandoned load opens.
+  check(
+    pendingAtWrite !== true,
+    `no raw write ran while a budget load was still pending (pendingAtWrite=${pendingAtWrite}, A=${String(rA).slice(0, 40)})`,
+  );
+  check(
+    String(rA).startsWith('A-rejected'),
+    `and A failed CLOSED rather than writing anyway (got ${String(rA).slice(0, 45)})`,
+  );
+  apiState._clearPendingBudgetLoadsForTests();
+}
+
+// --- (8) the test-only registry hook must stay test-only --------------------
+// `_clearPendingBudgetLoadsForTests` clears the registration set #393 depends on. There is
+// deliberately no production unregister: an entry leaves only when its promise settles, which is
+// what makes "is a load outstanding" mean anything. A src/ caller would silently reintroduce the
+// leak the whole #393 chain exists to close.
+describe('(8) _clearPendingBudgetLoadsForTests has no src/ caller');
+{
+  const { readdirSync: rd, statSync: st, readFileSync: rf } = await import('node:fs');
+  const { join: jn, dirname: dn } = await import('node:path');
+  const { fileURLToPath: f2p } = await import('node:url');
+  const SRC = jn(dn(f2p(import.meta.url)), '..', '..', 'src');
+  const hits = [];
+  (function walk(dir) {
+    for (const e of rd(dir)) {
+      const full = jn(dir, e);
+      if (st(full).isDirectory()) walk(full);
+      else if (e.endsWith('.ts')) {
+        rf(full, 'utf8').split('\n').forEach((line, i) => {
+          if (/_clearPendingBudgetLoadsForTests\s*\(/.test(line) && !/^\s*(\*|\/\/)/.test(line) && !/export function\s+_clearPendingBudgetLoadsForTests/.test(line)) {
+            hits.push(`${full.replace(SRC, 'src')}:${i + 1}`);
+          }
+        });
+      }
+    }
+  })(SRC);
+  check(hits.length === 0, `no production caller clears the abandoned-load registry (found: ${hits.join(', ') || 'none'})`);
 }
 
 log(`\n[#390-abandon] Results: ${passed} passed, ${failed} failed`);

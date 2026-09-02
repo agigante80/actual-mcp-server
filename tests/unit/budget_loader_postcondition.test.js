@@ -47,8 +47,14 @@ let calls = { downloadBudget: 0, getBudgetMonths: 0, getBudgets: 0, loadBudget: 
 let downloadLoads = true;
 let downloadThrows = null;
 let downloadDelayMs = 0;
+// #410 review (I7): the witness for the clear-before invariant. Removing the redundant call-site
+// clears left `trackBudgetMutation`'s OWN clear with zero coverage of any kind: deleting it kept
+// the whole chain green. Sampled from inside the download, because that is the only moment the
+// record is supposed to be indeterminate.
+let recordDuringDownload;
 api.downloadBudget = async (id) => {
   calls.downloadBudget++;
+  recordDuringDownload = apiState.getLoadedBudgetSyncId();
   open = null;                       // upstream closes the current budget first
   if (downloadDelayMs) await new Promise((r) => setTimeout(r, downloadDelayMs));
   if (downloadThrows) throw downloadThrows;
@@ -472,6 +478,52 @@ describe('a failure mode that changes with no intervening success is picked up')
   }
   check(seen !== null, `the new reason surfaces without a restart (at failure #${seen})`);
   check(seen !== null && seen <= 23, `and within the bound, not eventually (was #${seen})`);
+}
+
+// --- 22. #409: a failed re-diagnosis keeps the answer it already had ---------
+describe('a re-diagnosis that fails falls back to the previous reason rather than reporting none');
+{
+  reset();
+  downloadLoads = false;
+  // Establish a cached reason.
+  const first = await settle(loadBudgetTracked('budget-A'));
+  check(!!first.err && /out-of-sync-migrations/.test(first.err.message), 'the reason is cached from the first failure');
+
+  // Burn EXACTLY the use budget: call 1 diagnosed and stored uses=0, these 20 take it to 20, all
+  // still cache hits. The NEXT call is the one that exceeds it and re-diagnoses, which is the call
+  // whose diagnosis must fail for this case to test anything. Getting this off by one silently
+  // turns the case into a plain cache hit, which is what the first version of it did.
+  for (let i = 0; i < 20; i++) await settle(loadBudgetTracked('budget-A'));
+  check(calls.getBudgets === 1, `still one diagnosis after the budget is spent (got ${calls.getBudgets})`);
+
+  // Now the re-diagnosis itself fails transiently.
+  getBudgetsThrows = new Error('Could not get remote files');
+  const after = await settle(loadBudgetTracked('budget-A'));
+  check(
+    !!after.err && /out-of-sync-migrations/.test(after.err.message),
+    `the previous reason survives a failed re-diagnosis (got: ${after.err && after.err.message.slice(0, 90)})`,
+  );
+  check(
+    !!after.err && !/discarded the reason/.test(after.err.message),
+    'and the caller is not told the reason was discarded',
+  );
+}
+
+// --- 23. #394/#410 (I7): the record is CLEARED before the load starts -------
+// An abandonment must leave the record INDETERMINATE, never confidently naming the old budget:
+// that is the one direction that makes #390's precondition silently pass. The clear lives in
+// trackBudgetMutation, and after the redundant call-site clears were removed nothing covered it.
+describe('the loaded-budget record is indeterminate while a load is in flight');
+{
+  reset();
+  apiState.setLoadedBudgetSyncId('budget-PREVIOUS');
+  recordDuringDownload = 'unset';
+  await settle(loadBudgetTracked('budget-A'));
+  check(
+    recordDuringDownload === null,
+    `the record was cleared BEFORE the download ran (was ${JSON.stringify(recordDuringDownload)})`,
+  );
+  check(apiState.getLoadedBudgetSyncId() === 'budget-A', 'and names the new budget once it settles');
 }
 
 log(`\n[#396-postcondition] ${passed} passed, ${failed} failed`);

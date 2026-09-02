@@ -1,5 +1,6 @@
 import api from '@actual-app/api';
 import { withOpTimeout } from './opTimeout.js';
+import config from '../config.js';
 import { setApiInitialized, setLoadedBudgetSyncId, registerBudgetLoad } from './apiState.js';
 import { createModuleLogger } from './loggerFactory.js';
 
@@ -196,6 +197,9 @@ export function _clearReasonCacheForTests(): void {
 }
 
 async function diagnose(syncId: string): Promise<string | undefined> {
+  // #409: what the cache held before a re-diagnosis, so a failed re-diagnosis can fall back to it
+  // rather than reporting nothing.
+  let staleReason: string | undefined;
   // #396 review: memoise the reason STRING, never the fail-closed decision. Without this, every
   // tool call while the condition persists pays two bounded network calls WHILE HOLDING the
   // process-global api mutex, so a single unloadable budget stalls unrelated sessions for up to
@@ -214,9 +218,16 @@ async function diagnose(syncId: string): Promise<string | undefined> {
       log.debug('reusing the cached load-failure reason', { syncId, uses: cached.uses });
       return cached.reason || undefined;
     }
-    // #404: the entry has served its budget of calls. Drop it and fall through to a fresh
-    // diagnosis, so a failure mode that changed without an intervening success is picked up.
-    reasonCache.delete(syncId);
+    // #404: the entry has served its budget of calls, so fall through to a fresh diagnosis and
+    // pick up a failure mode that changed without an intervening success.
+    //
+    // #409: do NOT delete it here. Deleting first meant a re-diagnosis that then failed
+    // transiently (a `getBudgets` blip) left the caller with "upstream discarded the reason"
+    // despite a perfectly good cached one having existed a moment earlier, and the next call paid
+    // two more bounded network calls inside the api mutex to rediscover it. The stale entry is
+    // kept as a fallback and is only overwritten when a new answer is actually produced.
+    staleReason = cached.reason;
+    cached.uses = 0;
     log.debug('re-diagnosing the load failure after the cached reason served its budget', {
       syncId,
       afterUses: REDIAGNOSE_AFTER_USES,
@@ -255,6 +266,13 @@ async function diagnose(syncId: string): Promise<string | undefined> {
       // stay in THIS brace-balanced block: the guard's window ends at the first `}` that takes
       // depth below zero, so a setter in a sibling `catch` or `finally` arm would be outside it.
       setLoadedBudgetSyncId(null);
+      // #407 review (I3): DROP any cached reason here. #409 stopped deleting the entry before a
+      // re-diagnosis, which is right for the failed-diagnosis path, but on THIS path the old
+      // reason has just been proven wrong: the load worked. Leaving it cached with uses reset
+      // meant the next 20 calls reported a permanent-sounding migration code for a condition the
+      // diagnosis had just shown to be transient, which is exactly the reading the comment below
+      // says to avoid.
+      reasonCache.delete(syncId);
       // #396 review: the retry SUCCEEDED, so this was not a deterministic unloadable budget. Say
       // so rather than reporting "upstream discarded the reason", which reads as permanent. The
       // operation still fails (the record is indeterminate by design, which forces a re-select),
@@ -280,6 +298,13 @@ async function diagnose(syncId: string): Promise<string | undefined> {
   } catch (diagErr) {
     // A failing diagnostic is LOGGED, never substituted for the post-condition error.
     log.warn('could not diagnose why the budget did not load', { syncId, error: messageOf(diagErr) });
+    // #409: fall back to the previous answer rather than reporting nothing. It described this same
+    // budget's failure moments ago and is far more useful than silence; the use counter was reset,
+    // so the next call re-attempts the diagnosis anyway.
+    if (staleReason !== undefined) {
+      reasonCache.set(syncId, { reason: staleReason, uses: 0 });
+      return staleReason || undefined;
+    }
     return undefined;
   }
 }
@@ -322,11 +347,17 @@ async function trackBudgetMutation<T>(
   label: string,
   verify?: () => Promise<void>,
   onRecorded?: () => void,
+  timeoutMs?: number,
 ): Promise<T> {
-  const raw = start();
-
-  // Indeterminate from here until it settles. Cleared first, deliberately.
+  // Indeterminate from here until it settles. Cleared BEFORE the load is even started, so the
+  // record can never name the outgoing budget while the singleton is moving away from it: that is
+  // the one direction that makes #390's precondition silently pass. It used to be cleared on the
+  // statement AFTER `start()`, which was safe in practice (both run in one synchronous turn, so
+  // nothing could observe the gap) but made the invariant untestable and the comment's own word
+  // "first" untrue.
   setLoadedBudgetSyncId(null);
+
+  const raw = start();
 
   const tracked = raw
     .then(async (result) => {
@@ -355,7 +386,7 @@ async function trackBudgetMutation<T>(
   registerBudgetLoad(tracked);
   // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
   // waits for it inside the lock rather than racing it.
-  return await withOpTimeout(() => tracked, label);
+  return await withOpTimeout(() => tracked, label, timeoutMs);
 }
 
 /**
@@ -392,26 +423,32 @@ export async function importBudgetTracked<T extends { id: string }>(
   // outside the ACL, so no session can ever legitimately match it and every session's next
   // operation re-selects its own budget. Configured sync ids are UUIDs, so an `imported:` prefix
   // can never compare equal to one.
-  return trackBudgetMutation(start, (result) => `imported:${result.id}`, label);
+  // #407: the import's OWN bound. See ACTUAL_IMPORT_TIMEOUT_MS in config.ts for why a long
+  // import must not be abandoned at the ordinary operation timeout: it is tracked, so every other
+  // session waits on it, and abandoning it early turns one tenant's import into a process-wide
+  // stall without making the import itself any faster.
+  return trackBudgetMutation(
+    start,
+    (result) => `imported:${result.id}`,
+    label,
+    undefined,
+    undefined,
+    config.ACTUAL_IMPORT_TIMEOUT_MS,
+  );
 }
 
 export async function loadBudgetTracked(syncId: string, encryptionPassword?: string, label = 'downloadBudget'): Promise<void> {
   try {
     await trackBudgetMutation(
-      () => {
-        const started = encryptionPassword
+      // #410: no redundant clear here any more. `trackBudgetMutation` owns the clear-before, and
+      // the guard in tests/unit/budget_selection_precondition.test.js now asserts the invariant
+      // that actually holds (a raw load must be inside the tracked helper) rather than looking for
+      // a setter in the same block, which had stopped discriminating.
+      () =>
+        encryptionPassword
           ? (api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> })
               .downloadBudget(syncId, { password: encryptionPassword })
-          : api.downloadBudget(syncId);
-        // Indeterminate from the moment the download starts. `trackBudgetMutation` clears the
-        // record too; this repeats it at the CALL SITE on purpose, AFTER the call, because block
-        // (4) of tests/unit/budget_selection_precondition.test.js scans FORWARD from the matched
-        // line to the end of its brace-balanced block and requires a record there. Satisfying
-        // that structurally, rather than exempting this file from the guard, is what keeps the
-        // #390 protection worth having.
-        setLoadedBudgetSyncId(null);
-        return started;
-      },
+          : api.downloadBudget(syncId),
       () => syncId,
       label,
       // #396: the post-condition runs INSIDE the tracked chain, before the record is written, so
