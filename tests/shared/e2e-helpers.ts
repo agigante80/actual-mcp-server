@@ -155,7 +155,16 @@ const RATE_MAX_CALLS_PER_WINDOW = 300;
 const recentCallTimes: number[] = [];
 
 /** Block until sending one more call keeps us inside the window budget. */
-async function pace(): Promise<void> {
+/**
+ * Exported for #383: the stdio client paces through the SAME window as the HTTP one.
+ *
+ * That sharing is the point rather than a convenience. Both transports drive the one Actual
+ * server behind them, so its 500-requests-per-minute limiter counts their calls together. Two
+ * independent pacers, each believing it owned the whole budget, would be a pacer that does not
+ * pace. Module scope gives them one window for free, and running the transports sequentially
+ * (which the runner does) keeps the wall-clock cost to roughly double rather than a stall.
+ */
+export async function pace(): Promise<void> {
   for (;;) {
     const now = Date.now();
     while (recentCallTimes.length > 0 && now - recentCallTimes[0] >= RATE_WINDOW_MS) {
