@@ -250,6 +250,37 @@ fi
 
 echo ""
 
+# Step 6b (#383): the SAME suite over stdio, on the HOST rather than in the runner container.
+#
+# It cannot run in that container: it mounts only tests/, the config and the two package files,
+# so it has neither the server's dist/ nor a docker socket and no route to a stdio server.
+# Giving the test runner the docker socket to save a process boundary is not a trade worth
+# making. The host has both docker and node (CI does `npm ci` before calling this script), and
+# this is the same approach tests/manual/mcp-client-stdio.js already uses.
+#
+# Sequential, not parallel: both transports drive the ONE Actual server behind them, so its
+# 500-requests-per-minute limiter counts their calls together, and running them at once would
+# either trip it or make the shared pacer stall. Roughly doubles the E2E wall clock.
+#
+# Only at the full level. The smoke level exists for fast local feedback.
+if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${SKIP_STDIO_E2E:-false}" != "true" ]; then
+  log_info "Step 6b: Running the same suite over STDIO (host-side, docker exec)..."
+  echo ""
+  MCP_TEST_TRANSPORT=stdio npx playwright test \
+    --config=playwright.config.docker.ts --project=docker-e2e-full-stdio
+  STDIO_EXIT_CODE=$?
+  if [ $STDIO_EXIT_CODE -ne 0 ]; then
+    log_error "STDIO transport FAILED (the HTTP transport passed)."
+    log_info "A failure here and not above means the two transports DIVERGE, which is the"
+    log_info "reason this second pass exists (#383). Re-run just it with:"
+    log_info "  MCP_TEST_TRANSPORT=stdio npx playwright test --config=playwright.config.docker.ts --project=docker-e2e-full-stdio"
+    TEST_EXIT_CODE=$STDIO_EXIT_CODE
+  else
+    log_success "STDIO transport passed"
+  fi
+  echo ""
+fi
+
 # Check results
 if [ $TEST_EXIT_CODE -eq 0 ]; then
   log_success "=========================================="
