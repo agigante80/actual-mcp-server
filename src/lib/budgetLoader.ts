@@ -165,7 +165,25 @@ function scrubReason(prose: string): string | undefined {
  * so putting two network calls in there would extend the window in which unrelated sessions' lock
  * acquisitions throw, to build a message an abandoned load has no caller to read.
  */
-const reasonCache = new Map<string, string>();
+/**
+ * #404: the cached reason is re-derived every REDIAGNOSE_AFTER_USES failures.
+ *
+ * The cache exists because `diagnose()` runs INSIDE the process-global api mutex and makes two
+ * bounded network calls, so re-running it per failed tool call stalls unrelated sessions. But an
+ * entry was previously dropped only by a genuinely successful load or a process restart, so if a
+ * budget's failure MODE changed with no success in between, the message reported the first reason
+ * indefinitely.
+ *
+ * Bounding by USES rather than by wall-clock is deliberate: the cost this cache avoids is paid per
+ * CALL, so capping in calls bounds staleness in the same unit, needs no clock, and is
+ * deterministic under test. At 20, a persistent failure pays the diagnosis roughly 5 percent of
+ * the time (the saving the cache exists for is kept) while no operator can see a stale reason for
+ * more than 20 failed calls. The fail-closed DECISION is still never cached: every call
+ * re-attempts the load and still fails.
+ */
+const REDIAGNOSE_AFTER_USES = 20;
+
+const reasonCache = new Map<string, { reason: string; uses: number }>();
 
 /** A load that genuinely succeeded clears any cached reason for that budget. */
 function clearCachedReason(syncId: string): void {
@@ -191,8 +209,18 @@ async function diagnose(syncId: string): Promise<string | undefined> {
   // precisely the cost this memo exists to remove.
   const cached = reasonCache.get(syncId);
   if (cached !== undefined) {
-    log.debug('reusing the cached load-failure reason', { syncId });
-    return cached || undefined;
+    cached.uses += 1;
+    if (cached.uses <= REDIAGNOSE_AFTER_USES) {
+      log.debug('reusing the cached load-failure reason', { syncId, uses: cached.uses });
+      return cached.reason || undefined;
+    }
+    // #404: the entry has served its budget of calls. Drop it and fall through to a fresh
+    // diagnosis, so a failure mode that changed without an intervening success is picked up.
+    reasonCache.delete(syncId);
+    log.debug('re-diagnosing the load failure after the cached reason served its budget', {
+      syncId,
+      afterUses: REDIAGNOSE_AFTER_USES,
+    });
   }
   try {
     const budgets = (await withOpTimeout(
@@ -208,7 +236,7 @@ async function diagnose(syncId: string): Promise<string | undefined> {
     if (!local) {
       // Deliberately does NOT list what IS available: that would enumerate every budget on the
       // server to a caller the ACL scopes to one.
-      reasonCache.set(syncId, NO_LOCAL_COPY);
+      reasonCache.set(syncId, { reason: NO_LOCAL_COPY, uses: 0 });
       return NO_LOCAL_COPY;
     }
 
@@ -246,7 +274,7 @@ async function diagnose(syncId: string): Promise<string | undefined> {
       // `.code` outside KNOWN_LOAD_REASONS and path-shaped prose that `scrubReason` drops, so it
       // yields `undefined`, and that is the ticket's own reproduced "db.sqlite is not a database"
       // case: the one most likely to persist. Storing '' records "diagnosed" without reporting.
-      reasonCache.set(syncId, reason ?? '');
+      reasonCache.set(syncId, { reason: reason ?? '', uses: 0 });
       return reason;
     }
   } catch (diagErr) {
@@ -268,46 +296,135 @@ function postConditionError(syncId: string, reason: string | undefined): Error {
   );
 }
 
-export async function loadBudgetTracked(syncId: string, encryptionPassword?: string, label = 'downloadBudget'): Promise<void> {
-  const raw = encryptionPassword
-    ? (api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> })
-        .downloadBudget(syncId, { password: encryptionPassword })
-    : api.downloadBudget(syncId);
+/**
+ * The tracking discipline EVERY singleton-mutating load must follow (#390, #393, #394).
+ *
+ * Extracted so the two callers cannot drift. `downloadBudget` and `importBudget` are different
+ * upstream calls with different failure shapes, but the discipline is identical and getting it
+ * subtly different at one site is exactly how #390 stayed reachable for three rounds:
+ *
+ *   1. Clear the record BEFORE starting, so an abandonment can only leave it INDETERMINATE.
+ *      That is the safe direction: it forces a re-select. Recording only on success leaves the
+ *      record naming the PREVIOUS budget while the singleton moves to a new one, which is the one
+ *      direction that makes the #390 precondition silently pass.
+ *   2. Register the promise, so a late landing is WAITED FOR by the next lock acquisition rather
+ *      than discovered mid-operation. `withOpTimeout` races; it does not cancel.
+ *   3. Record the true outcome when it settles, whether or not anyone is still listening, and
+ *      poison the singleton on failure, because upstream closes the current budget before opening
+ *      the new one, so "failed" does not mean "unchanged".
+ *
+ * `verify` is #396's post-condition, and it runs BEFORE the record is written, so the record can
+ * only ever describe a mutation that actually took effect.
+ */
+async function trackBudgetMutation<T>(
+  start: () => Promise<T>,
+  describeLoaded: (result: T) => string,
+  label: string,
+  verify?: () => Promise<void>,
+  onRecorded?: () => void,
+): Promise<T> {
+  const raw = start();
 
   // Indeterminate from here until it settles. Cleared first, deliberately.
   setLoadedBudgetSyncId(null);
 
-  // #396: `.then(onFulfilled).catch(onRejected)`, NOT the two-argument `.then`. A throw from the
-  // `onFulfilled` argument of `.then(onFulfilled, onRejected)` is NOT caught by that same
-  // `onRejected`, so with the old shape a probe failure would skip the fail-closed
-  // `setApiInitialized(false)` below: exactly the new failure path this adds.
-  //
-  // The probe lives INSIDE this chain so an ABANDONED load is verified when it lands, rather than
-  // recording a false success nobody checked. The network enrichment deliberately does not.
   const tracked = raw
-    .then(async () => {
-      await assertBudgetOpen();
-      setLoadedBudgetSyncId(syncId);
-      clearCachedReason(syncId);
+    .then(async (result) => {
+      if (verify) await verify();
+      setLoadedBudgetSyncId(describeLoaded(result));
+      // #392 review (finding 5): this runs INSIDE the chain, not after the awaited call. On the
+      // abandoned-then-eventually-successful path the caller has already thrown, so a hook placed
+      // after the await would never run and the cached failure reason would outlive the load that
+      // actually succeeded.
+      // Wrapped: a hook cannot be allowed to change the recorded outcome. Unwrapped, a throwing
+      // hook would be caught by the trailing .catch, reported as a load failure, and would leave
+      // the record written while setApiInitialized(false) says the singleton is dead: an
+      // incoherent pair rather than a fail-safe one.
+      try { onRecorded?.(); } catch (hookErr) {
+        log.warn('post-record hook threw; the recorded outcome stands', { error: String(hookErr) });
+      }
+      return result;
     })
     .catch((err) => {
       // A failed load leaves the singleton in a state nobody can describe: upstream's
-      // download handler closes the current budget before opening the new one, so "failed"
-      // does not mean "unchanged". Poison it so the next operation re-inits from scratch.
+      // download and import handlers both close the current budget before opening the new one,
+      // so "failed" does not mean "unchanged". Poison it so the next operation re-inits.
       setApiInitialized(false);
       throw err;
     });
   registerBudgetLoad(tracked);
+  // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
+  // waits for it inside the lock rather than racing it.
+  return await withOpTimeout(() => tracked, label);
+}
+
+/**
+ * #394: the same discipline for an IMPORT.
+ *
+ * Upstream's `importBudget` LOADS the imported budget, so it re-points the process-global
+ * singleton exactly as a download does, and a large YNAB or zip import exceeding
+ * ACTUAL_OP_TIMEOUT_MS is the expected case rather than a rare one. Before this, nothing cleared
+ * the record before it started, nothing registered the promise, and the sentinel was written
+ * AFTER the await, so a timeout skipped it entirely and the record went on naming the PRE-IMPORT
+ * budget while the singleton moved to an out-of-registry, un-ACL'd file. A victim session then
+ * passed the #390 precondition legitimately and had its reads served from the importer's file.
+ *
+ * ACCEPTED COST, recorded because nothing else states it. Registering the import means every
+ * subsequent `withApiLock` acquisition waits for it, bounded, and throws on timeout. An import is
+ * not "stuck", it is legitimately long: a large YNAB or zip import can run for minutes. So while
+ * one runs past ACTUAL_OP_TIMEOUT_MS, other sessions stall for that bound and then fail with
+ * "abandoned budget load timed out", and write drains reject their batch. That is a strictly
+ * better failure than the silent cross-tenant read it replaces (a victim reading the importer's
+ * un-ACL'd file), and it is the same trade #393 accepted for downloads. It is NOT free, and the
+ * operator-facing consequence is a process-wide stall for the duration of one tenant's import.
+ * Giving imports their own larger bound is tracked separately rather than bolted on here.
+ *
+ * No `verify` here, deliberately: unlike `download-budget`, upstream's `importBudget` already
+ * asserts its own post-condition. It checks `result.error` and then `!result.id`, throwing
+ * "no budget was loaded", so it cannot resolve without having loaded something. Verified in the
+ * shipped upstream source. Adding a probe would be duplicate work on the write path.
+ */
+export async function importBudgetTracked<T extends { id: string }>(
+  start: () => Promise<T>,
+  label = 'importBudget',
+): Promise<T> {
+  // A sentinel rather than a real syncId: an imported file is outside the budget registry and
+  // outside the ACL, so no session can ever legitimately match it and every session's next
+  // operation re-selects its own budget. Configured sync ids are UUIDs, so an `imported:` prefix
+  // can never compare equal to one.
+  return trackBudgetMutation(start, (result) => `imported:${result.id}`, label);
+}
+
+export async function loadBudgetTracked(syncId: string, encryptionPassword?: string, label = 'downloadBudget'): Promise<void> {
   try {
-    await withOpTimeout(() => tracked, label);
-    // #393 review (P3-4): NOT clearBudgetLoad(tracked). `registerBudgetLoad` registers a
-    // derived promise, not this handle, so that delete could never match and read as a working
-    // belt-and-braces path a later change might lean on. Self-removal on settle is what
-    // actually deregisters a completed load, and it has already happened by the time the
-    // awaited promise resolves here.
+    await trackBudgetMutation(
+      () => {
+        const started = encryptionPassword
+          ? (api as typeof api & { downloadBudget: (id: string, options?: { password: string }) => Promise<void> })
+              .downloadBudget(syncId, { password: encryptionPassword })
+          : api.downloadBudget(syncId);
+        // Indeterminate from the moment the download starts. `trackBudgetMutation` clears the
+        // record too; this repeats it at the CALL SITE on purpose, AFTER the call, because block
+        // (4) of tests/unit/budget_selection_precondition.test.js scans FORWARD from the matched
+        // line to the end of its brace-balanced block and requires a record there. Satisfying
+        // that structurally, rather than exempting this file from the guard, is what keeps the
+        // #390 protection worth having.
+        setLoadedBudgetSyncId(null);
+        return started;
+      },
+      () => syncId,
+      label,
+      // #396: the post-condition runs INSIDE the tracked chain, before the record is written, so
+      // an ABANDONED load is verified when it lands rather than recording a success nobody
+      // checked. The network enrichment below deliberately does NOT run there.
+      assertBudgetOpen,
+      () => clearCachedReason(syncId),
+    );
   } catch (err) {
-    // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
-    // waits for it inside the lock rather than racing it.
+    // Enrich HERE, where a caller is actually waiting. Every `withApiLock` acquisition settles
+    // all registrations under ONE bound and fails closed on timeout, so two network calls inside
+    // the tracked chain would extend the window in which unrelated sessions' lock acquisitions
+    // throw, to build a message an abandoned load has no caller to read.
     if (isBudgetNotOpen(err)) {
       log.error('download resolved but no budget is open', undefined, { syncId });
       throw postConditionError(syncId, await diagnose(syncId));

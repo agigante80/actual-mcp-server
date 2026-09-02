@@ -453,8 +453,70 @@ class ActualConnectionPool {
    * recreates it, or an infra-error drop where the next request re-establishes
    * the connection: in those cases the transport must survive.
    */
-  async shutdownConnection(sessionId: string, opts: { evict?: boolean } = {}): Promise<void> {
+  async shutdownConnection(sessionId: string, opts: { evict?: boolean; onlyIfExpired?: boolean } = {}): Promise<void> {
+    // #392: acquire the api mutex, because this calls api.shutdown() on the PROCESS-GLOBAL
+    // singleton. Without it, the idle sweep or an explicit session close can tear the api down
+    // while ANOTHER session's operation is in flight inside the lock, and that operation then
+    // observes a torn-down api. Reproduced during #390's security review for the sibling cleanup
+    // site, which #390 fixed; these were the paths it left behind.
+    //
+    // NOT reentrant, so this variant is for callers that do NOT hold the lock. Callers that DO
+    // must call shutdownConnectionLocked directly; wrapping there would deadlock, and the symptom
+    // is a ~30s stall ended by #270's timeout rather than an obvious hang. The audit of which is
+    // which is recorded on shutdownConnectionLocked.
+    // #392 review (BLOCKING): the acquisition itself can REJECT. Since #393, taking the api lock
+    // settles any abandoned budget load and THROWS on timeout, so this wrapper gained a rejection
+    // path the old body never had (it was try/catch/finally end to end). Its callers are cleanup
+    // paths that do not expect one: `cleanupIdleConnections` is invoked from `setInterval`
+    // unawaited, and "abandoned budget load timed out" is not in `rejection-allowlist.ts`, so the
+    // escape reached `src/index.ts`'s unhandledRejection handler and called process.exit(1). That
+    // is the exact defect #393 fixed one level up in the write drain, reintroduced at a new
+    // acquisition site.
+    //
+    // So the acquisition is swallowed, matching the established pattern in the session-open
+    // cleanup above: cleanup must not fail louder than the thing it is cleaning up after.
+    // The entry is still torn down on that path, unless the caller asked for expiry to be
+    // re-checked and the session came back, which is the sweep's own contract. Tearing down
+    // matters because a stuck load must not make idle sessions un-evictable: the pool would fill
+    // to MAX_CONCURRENT_SESSIONS and start refusing new sessions with nothing in the log saying
+    // why. The unlocked shutdown in this handler is acceptable for a specific reason worth
+    // stating: while a registration is stuck, EVERY lock acquisition throws, so no operation can
+    // be running inside the lock at the moment this path fires.
+    await withApiLock(() => this.shutdownConnectionLocked(sessionId, opts)).catch(async (err) => {
+      logger.error(
+        `[ConnectionPool] Could not acquire the api lock to shut down ${sessionId}; ` +
+          `tearing the entry down without it: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await this.shutdownConnectionLocked(sessionId, opts).catch(() => { /* cleanup is best effort */ });
+    });
+  }
+
+  /**
+   * The body of shutdownConnection, for callers that ALREADY hold the api mutex.
+   *
+   * #392 call-site audit, done explicitly rather than by inspection because the mutex is not
+   * reentrant and getting it wrong produces a stall that reads as a slow upstream server:
+   *
+   *   HOLDS the lock, so calls this variant:
+   *     - actual-adapter withActualApi pooled branch, infra-error drop
+   *     - actual-adapter withActualApiWrite, sync failure and infra-error drop
+   *     - actual-adapter processWriteQueue drain, sync failure and batch error
+   *   Does NOT hold it, so calls the wrapping shutdownConnection:
+   *     - actual-adapter switchBudget slow path (its own withApiLock block has closed by then)
+   *     - actualConnection.shutdownActualForSession (session close)
+   *     - this.cleanupIdleConnections (the idle sweep)
+   *     - this.shutdownAll
+   */
+  async shutdownConnectionLocked(sessionId: string, opts: { evict?: boolean; onlyIfExpired?: boolean } = {}): Promise<void> {
     const conn = this.connections.get(sessionId);
+
+    // #392 review: the idle sweep decides who is expired BEFORE waiting for the mutex, and that
+    // wait is no longer negligible. Re-checking here means a session that was touched while we
+    // queued keeps its connection instead of being closed mid-conversation.
+    if (opts.onlyIfExpired && conn && !this.isExpired(conn)) {
+      logger.debug(`[ConnectionPool] ${sessionId} was touched while waiting for the api lock; not evicting`);
+      return;
+    }
 
     if (!conn || !conn.initialized) {
       return;
@@ -498,6 +560,19 @@ class ActualConnectionPool {
    * Shutdown the shared connection
    */
   async shutdownSharedConnection(): Promise<void> {
+    // #392: same reasoning as shutdownConnection. Its only caller is shutdownAll, which does not
+    // hold the mutex.
+    await withApiLock(() => this.shutdownSharedConnectionLocked()).catch(async (err) => {
+      logger.error(
+        `[ConnectionPool] Could not acquire the api lock to shut down the shared connection; ` +
+          `tearing it down without it: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      await this.shutdownSharedConnectionLocked().catch(() => { /* cleanup is best effort */ });
+    });
+  }
+
+  /** The body of shutdownSharedConnection, for callers that already hold the api mutex. */
+  async shutdownSharedConnectionLocked(): Promise<void> {
     if (!this.sharedConnection?.initialized) {
       return;
     }
@@ -585,7 +660,15 @@ class ActualConnectionPool {
         // in the same window (#167). This is the path that previously drifted:
         // the pool's autonomous timer removed an entry httpServer's separate
         // timer knew nothing about.
-        await this.shutdownConnection(sessionId, { evict: true });
+        //
+        // #392 review: RE-CHECK expiry, because the decision above was taken before the lock and
+        // the eviction now waits for it. Before #392 that wait was effectively zero; since #378
+        // made drains sequential, one lock hold is the SUM of a batch's operations, so it is
+        // bounded only by batch length times ACTUAL_OP_TIMEOUT_MS. A session that was idle when
+        // marked can be active again by the time the lock arrives, and evicting it then closes
+        // its transport mid-conversation. Deciding and acting on the same side of the mutex is
+        // what makes the decision mean anything.
+        await this.shutdownConnection(sessionId, { evict: true, onlyIfExpired: true });
       }
     }
   }

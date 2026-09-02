@@ -127,8 +127,13 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     _setApiInitializedForTests(true);
     primePoolSession('sess-err-infra');
     let observedShutdown = false;
+    // #392 split this into shutdownConnection (acquires the api lock) and
+    // shutdownConnectionLocked (for callers already holding it). The adapter's pooled error
+    // paths hold the lock, so they call the Locked variant. Spy on BOTH, because the assertion
+    // is that the pool entry was dropped, not which variant did it.
     const originalShutdown = connectionPool.shutdownConnection.bind(connectionPool);
-    connectionPool.shutdownConnection = async (sid) => {
+    const originalShutdownLocked = connectionPool.shutdownConnectionLocked.bind(connectionPool);
+    connectionPool.shutdownConnectionLocked = async (sid) => {
       if (sid === 'sess-err-infra') observedShutdown = true;
       connectionPool.connections.delete(sid);
     };
@@ -142,6 +147,7 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     } catch (err) { thrown = err; }
 
     connectionPool.shutdownConnection = originalShutdown;
+    connectionPool.shutdownConnectionLocked = originalShutdownLocked;
 
     assert(thrown !== null && /too-many-requests/.test(thrown.message),
       'original infrastructure error propagated to caller');
@@ -160,8 +166,13 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     _setApiInitializedForTests(true);
     primePoolSession('sess-err-domain');
     let observedShutdown = false;
+    // #392 split this into shutdownConnection (acquires the api lock) and
+    // shutdownConnectionLocked (for callers already holding it). The adapter's pooled error
+    // paths hold the lock, so they call the Locked variant. Spy on BOTH, because the assertion
+    // is that the pool entry was dropped, not which variant did it.
     const originalShutdown = connectionPool.shutdownConnection.bind(connectionPool);
-    connectionPool.shutdownConnection = async (sid) => {
+    const originalShutdownLocked = connectionPool.shutdownConnectionLocked.bind(connectionPool);
+    connectionPool.shutdownConnectionLocked = async (sid) => {
       if (sid === 'sess-err-domain') observedShutdown = true;
       connectionPool.connections.delete(sid);
     };
@@ -175,6 +186,7 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     } catch (err) { thrown = err; }
 
     connectionPool.shutdownConnection = originalShutdown;
+    connectionPool.shutdownConnectionLocked = originalShutdownLocked;
 
     assert(thrown !== null && /payee_name/.test(thrown.message),
       'original domain error propagated to caller');
