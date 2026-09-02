@@ -80,7 +80,7 @@ import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
-import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, setLoadedBudgetSyncId } from './apiState.js';
+import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad } from './apiState.js';
 import { withApiLock } from './apiLock.js';
 import { loadBudgetTracked, importBudgetTracked } from './budgetLoader.js';
 
@@ -757,6 +757,12 @@ interface WriteOperation<T> {
   // write method costs one extra listing, while wrongly claiming preservation causes a false
   // not-found. Never invert this default.
   preservesListings?: readonly DrainListingKind[];
+  // #407: an optional per-operation timeout override. Only a budget import sets it: an import is
+  // legitimately long rather than stalled, and since #394 it is a TRACKED load that every other
+  // session waits on, so abandoning it at the general bound stalls the process without making the
+  // import finish any sooner. Undefined means the general ACTUAL_OP_TIMEOUT_MS, which is what
+  // every other write gets and must keep getting.
+  timeoutMs?: number;
 }
 
 let writeQueue: WriteOperation<any>[] = [];
@@ -1006,7 +1012,7 @@ async function processWriteQueue() {
         //
         // Each op keeps its own withOpTimeout (#270) and still settles individually, so one
         // stalled or rejected operation cannot hold the api mutex or fail its siblings.
-        for (const { operation, resolve, reject, preservesListings, requestStore } of batch) {
+        for (const { operation, resolve, reject, preservesListings, requestStore, timeoutMs } of batch) {
           try {
             // #390 round 2: run each op in the context it was ENQUEUED in.
             //
@@ -1023,8 +1029,40 @@ async function processWriteQueue() {
             // been correct wrong. Re-entering the captured store makes each op resolve its own
             // budget, which is what #158 captured a per-entry sessionId for in the first place.
             const result = await requestContext.run(requestStore ?? {}, async () => {
+              // #406: settle any abandoned budget load PER OPERATION, not per lock acquisition.
+              //
+              // #393 made the wait part of acquiring the api lock, which makes the set of call
+              // sites stop mattering: nothing reaches the api without the lock, so nothing reaches
+              // it without the wait. That holds for every path where one acquisition serves one
+              // operation. It does NOT hold here. This drain acquires the lock ONCE and then runs
+              // N operations inside it, so once any op abandons a load, every LATER op in the same
+              // batch runs against a singleton that abandoned load will re-point, having never
+              // waited for it. Reproduced with a slow import and a following write in one debounce
+              // window; it is the #390 class with a new author.
+              //
+              // Deliberately NOT inside ensureLoadedBudgetMatchesSession: that returns early when
+              // the loaded budget already matches, and an op whose budget happens to match still
+              // needs the wait, because the abandoned load is about to move the singleton AWAY
+              // from it. The wait has to be unconditional, so it sits before the precondition.
+              //
+              // A rejection here is caught by this loop's own per-op catch, so a stuck load fails
+              // ONE operation rather than the whole batch, which is the behaviour #393 round 4
+              // established for the drain.
+              await awaitAbandonedBudgetLoad(withOpTimeout);
               await ensureLoadedBudgetMatchesSession();
-              return await withOpTimeout(operation);
+              // #407: an operation may carry its OWN bound. Only a budget import does today, and
+              // it needs one: the import is legitimately long, and bounding it at the general
+              // operation timeout abandons it while every other session is already waiting on it
+              // as a tracked load. Without this the raised bound inside the loader is dead letter,
+              // because THIS wrapper would abandon the op first.
+              //
+              // A long op does NOT need a keep-alive heartbeat, and one was written and removed in
+              // review. The session cannot be swept out from under it: `cleanupIdleConnections`
+              // passes `onlyIfExpired`, so `shutdownConnectionLocked` re-checks expiry AFTER
+              // acquiring the mutex (#392), and the `finally` below touches every session in the
+              // batch before the lock is released. A sweep that queued behind this drain therefore
+              // finds the entry fresh and returns without evicting.
+              return await withOpTimeout(operation, 'operation', timeoutMs);
             });
             resolve(result);
           } catch (error) {
@@ -1176,7 +1214,7 @@ async function processWriteQueue() {
 
 function queueWriteOperation<T>(
   operation: () => Promise<T>,
-  options?: { preservesListings?: readonly DrainListingKind[] },
+  options?: { preservesListings?: readonly DrainListingKind[]; timeoutMs?: number },
 ): Promise<T> {
   // ACL enforcement at the write-queue entry (#156). Failing here means the
   // op is never enqueued and no upstream resource is touched.
@@ -1198,6 +1236,7 @@ function queueWriteOperation<T>(
       sessionId,
       requestStore: requestContext.getStore(),
       preservesListings: options?.preservesListings,
+      timeoutMs: options?.timeoutMs,
     };
 
     // #278: bound queue RESIDENCY, not just execution. #270's withOpTimeout bounds an
@@ -3442,6 +3481,25 @@ export async function importBudget(
     // #390 still holds at this call site: `importBudgetTracked` records the `imported:` sentinel
     // when the promise settles, whichever way, and the clear below states the same fact at the
     // call site where the guard in tests/unit/budget_selection_precondition.test.js can see it.
+    // #408: invalidate BEFORE the import starts, not after it resolves.
+    //
+    // The invalidation below used to run only after `queueWriteOperation` resolved, so on the
+    // TIMEOUT path it never ran at all, and a large import exceeding ACTUAL_OP_TIMEOUT_MS is the
+    // expected case rather than a rare one. Every pool entry then kept naming the pre-import
+    // syncId while the singleton moved to the imported file, and switchBudget's #172 fast path
+    // no-opped on a switch back: the reported-success-with-no-effect class #349 exists to prevent.
+    //
+    // Moving it here follows the same clear-before-you-start discipline #394 established for the
+    // record itself: a mutation that may be abandoned must leave state INDETERMINATE, never
+    // confidently wrong. It is idempotent and costs nothing on the success path, where the call
+    // after the write simply re-applies the same sentinel.
+    const preInvalidated = connectionPool.invalidateAllLoadedSyncIds('imported:pending');
+    if (preInvalidated > 0) {
+      logger.debug(
+        `[ADAPTER] importBudget: invalidated the pooled syncId on ${preInvalidated} session(s) before starting`,
+      );
+    }
+
     const imported = await importBudgetTracked(() => {
       const started = withConcurrency(() =>
         retry(() => rawImportBudget(input, opts) as Promise<{ id: string }>, {
@@ -3450,11 +3508,10 @@ export async function importBudget(
           isRetryable: isRetryableError,
         }),
       );
-      setLoadedBudgetSyncId(null);
       return started;
     });
     return imported;
-  });
+  }, { timeoutMs: config.ACTUAL_IMPORT_TIMEOUT_MS });
 
   // #349: an import CHANGES WHICH BUDGET IS LOADED, so the pool's record of it
   // must stop naming the old one.

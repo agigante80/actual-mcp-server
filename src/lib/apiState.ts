@@ -143,3 +143,18 @@ export async function awaitAbandonedBudgetLoad(
 export function _hasPendingBudgetLoadForTests(): boolean {
   return _pendingBudgetLoads.size > 0;
 }
+
+/**
+ * Test hook: drop every registration.
+ *
+ * There is deliberately no production unregister: an entry leaves this set only when its promise
+ * settles, which is what makes "is a load outstanding" mean anything (#393). But a test that
+ * registers a NEVER-settling load has no way back, and leaving one pending poisons every later
+ * lock acquisition in that file, so a later case silently exercises a poisoned lock while claiming
+ * to test something else. Both of this repo's abandoned-load test files hit exactly that.
+ *
+ * Test-only, and not exported through the package surface.
+ */
+export function _clearPendingBudgetLoadsForTests(): void {
+  _pendingBudgetLoads.clear();
+}

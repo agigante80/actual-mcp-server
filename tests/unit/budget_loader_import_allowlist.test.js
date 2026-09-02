@@ -41,7 +41,8 @@ const ALLOWED_IMPORTS = new Set([
   '@actual-app/api',   // the raw singleton: takes no lock of its own
   './opTimeout.js',    // a timer race, no lock
   './apiState.js',     // module-level flags, no lock
-  './loggerFactory.js' // winston, no lock
+  './loggerFactory.js', // winston, no lock
+  '../config.js'        // #407: a frozen Zod-parsed object, read at module load, no lock
 ]);
 
 // NOT allowed, and named explicitly so the failure message can explain itself rather than just

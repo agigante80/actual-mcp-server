@@ -29,6 +29,33 @@ export const configSchema = z.object({
     if (n === 0) return 0;
     return Math.min(Math.max(n, 250), 2147483647);
   }),
+
+  /**
+   * #407: a separate, larger bound for a budget IMPORT.
+   *
+   * An import is not a stalled operation, it is a legitimately long one: a large YNAB or zip
+   * import runs for minutes. #394 made it a TRACKED load, so while it is in flight every other
+   * session's lock acquisition waits for it and then fails at ACTUAL_OP_TIMEOUT_MS. Bounding a
+   * five-minute import at the 30 second operation default therefore turned one tenant's import
+   * into a process-wide stall, with every other session failing repeatedly for the duration.
+   *
+   * Same parse-and-clamp shape as ACTUAL_OP_TIMEOUT_MS, and the same escape hatch: 0 disables the
+   * bound, which for an import means it can hold the process-global api mutex indefinitely (the
+   * #393 P0 shape), so it is for diagnosis rather than production.
+   *
+   * The clamp floor is 250ms, the same as the operation timeout. It is deliberately NOT raised to
+   * the operation timeout's configured VALUE: an earlier comment here claimed an import bound below
+   * the general one was prevented, and it was not, so the claim is removed rather than left to
+   * mislead. A smaller import bound is unusual but coherent (abandon imports sooner than ordinary
+   * reads), and enforcing an ordering between two independently configured knobs at parse time
+   * would need one to be parsed before the other.
+   */
+  ACTUAL_IMPORT_TIMEOUT_MS: z.string().default('600000').transform(val => {
+    const n = parseInt(val, 10);
+    if (!Number.isFinite(n) || n < 0) return 600000;
+    if (n === 0) return 0;
+    return Math.min(Math.max(n, 250), 2147483647);
+  }),
   // Escape hatch for #161: allow an http:// upstream even when an E2E encryption
   // password is set (e.g. an isolated Docker network where the hop is trusted).
   // Off by default so a plaintext upstream + encryption password is refused.
