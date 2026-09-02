@@ -1,7 +1,7 @@
 // #402: make the "nothing in budgetLoader.ts takes withApiLock" invariant STRUCTURAL.
 //
 // After #396, `loadBudgetTracked` is called from inside the api lock at all six budget load
-// sites, and `withApiLock` (src/lib/apiLock.ts) is a NON-REENTRANT FIFO mutex. So a future edit
+// sites, and `withApiLock` (src/lib/apiLock.ts) is a NON-REENTRANT mutex (an affinity queue since #391). So a future edit
 // that reaches the api through `adapter.getBudgetMonths()` or `adapter.getBudgets()` instead of
 // the raw `api.*` deadlocks the whole process.
 //

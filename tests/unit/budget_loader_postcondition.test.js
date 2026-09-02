@@ -64,8 +64,10 @@ api.downloadBudget = async (id) => {
 let budgetMonths = ['2026-01', '2026-02'];
 let probeHangs = false;
 let probeThrows = null;
+let probeDelayMs = 0;
 api.getBudgetMonths = async () => {
   calls.getBudgetMonths++;
+  if (probeDelayMs) await new Promise((r) => setTimeout(r, probeDelayMs));
   if (probeHangs) await new Promise(() => {});   // never settles, on purpose
   if (probeThrows) throw probeThrows;
   // Upstream's checkFileOpen() throws APIError(), which RETURNS A PLAIN OBJECT
@@ -119,6 +121,7 @@ function reset() {
   downloadDelayMs = 0;
   probeHangs = false;
   probeThrows = null;
+  probeDelayMs = 0;
   getBudgetsThrows = null;
   getBudgetsResult = [
     { id: 'local-id-1', groupId: 'budget-A', name: 'Main' },
@@ -226,7 +229,12 @@ describe('an ABANDONED load is verified when it lands, and writes no record if i
   const probesAtTimeout = calls.getBudgetMonths;
   check(probesAtTimeout === 0, 'the probe has not run yet, because the download has not landed');
   await new Promise((res) => setTimeout(res, 700));   // let the abandoned download land
-  check(calls.getBudgetMonths === 1, `the probe ran as part of the late landing (got ${calls.getBudgetMonths})`);
+  // #403 CHANGED THIS. The probe used to run on the landing, which verified it but did so with no
+  // lock held, against the single SQLite connection, while another session could be mid-operation
+  // inside the lock. A landing whose caller has already given up now skips the probe and leaves
+  // the record INDETERMINATE instead, which forces the next operation to re-select. Same safety
+  // property (no false record), reached without an unsynchronised read.
+  check(calls.getBudgetMonths === 0, `the probe does NOT run unsynchronised on the landing (got ${calls.getBudgetMonths})`);
   check(apiState.getLoadedBudgetSyncId() === null, 'the late landing wrote NO false loaded-budget record');
   check(
     calls.getBudgets === 0 && calls.loadBudget === 0,
@@ -524,6 +532,34 @@ describe('the loaded-budget record is indeterminate while a load is in flight');
     `the record was cleared BEFORE the download ran (was ${JSON.stringify(recordDuringDownload)})`,
   );
   check(apiState.getLoadedBudgetSyncId() === 'budget-A', 'and names the new budget once it settles');
+}
+
+// --- 24. #403 (M2): the flag can flip DURING the probe ---------------------
+// `abandoned` is read before `verify()` and the record is written after it, so a load that resolves
+// just before its bound expires can pass the check and then have the flag set while the probe is
+// still running. Without the second check the probe runs and the record is written for a load whose
+// caller has gone, contradicting the contract stated in the code. The value written would be true
+// rather than false, so this is about the invariant being honest rather than about safety.
+describe('a load abandoned WHILE its post-condition runs records nothing');
+{
+  reset();
+  apiState.setLoadedBudgetSyncId('budget-PREVIOUS');
+  // The window needs care, and the first attempt at it did not discriminate. The probe has its OWN
+  // withOpTimeout, so a probe longer than the bound can never complete and the chain fails anyway.
+  // What creates the window is download + probe exceeding the OUTER bound while the probe stays
+  // inside its own: ACTUAL_OP_TIMEOUT_MS is 250 here, so a 200ms download plus a 100ms probe means
+  // the outer timeout fires at 250ms, mid-probe, and the probe still finishes at ~300ms.
+  downloadDelayMs = 200;
+  probeDelayMs = 100;
+  const r = await settle(loadBudgetTracked('budget-A'));
+  check(!r.ok, `the caller is given the timeout (got ${JSON.stringify(r).slice(0, 60)})`);
+  await new Promise((res) => setTimeout(res, 400));   // let the probe finish
+  check(
+    apiState.getLoadedBudgetSyncId() === null,
+    `no record was written for a load abandoned mid-probe (got ${JSON.stringify(apiState.getLoadedBudgetSyncId())})`,
+  );
+  probeDelayMs = 0;
+  downloadDelayMs = 0;
 }
 
 log(`\n[#396-postcondition] ${passed} passed, ${failed} failed`);

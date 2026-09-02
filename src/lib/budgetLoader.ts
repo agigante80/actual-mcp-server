@@ -359,9 +359,42 @@ async function trackBudgetMutation<T>(
 
   const raw = start();
 
+  // #403: was this load ABANDONED by the caller's bound?
+  //
+  // The post-condition probe lives inside this chain so an abandoned load is verified when it
+  // lands rather than recording a success nobody checked (#396). The cost, raised in review, is
+  // that a LATE landing runs that probe with no lock held, against the single SQLite connection,
+  // while another session may be mid-operation inside the lock.
+  //
+  // The resolution is not to probe on that path at all. A landing whose caller has already given
+  // up leaves the record INDETERMINATE, which forces the next operation to re-select. That is the
+  // safe direction #390 established, it costs one extra re-selection after an event that is rare
+  // by construction (a load that outran its bound), and it removes the unsynchronised read
+  // entirely rather than arguing about whether it is observable.
+  let abandoned = false;
   const tracked = raw
     .then(async (result) => {
+      if (abandoned) {
+        log.warn('an abandoned budget load landed after its caller gave up; leaving the record indeterminate', {
+          label,
+        });
+        // The load itself SUCCEEDED upstream, so any cached failure reason for this budget is
+        // stale even though we are not recording the syncId. Clearing here keeps the hook's stated
+        // contract true on the abandoned path as well (see the note on `onRecorded` below).
+        try { onRecorded?.(); } catch { /* a hook cannot change the outcome */ }
+        return result;
+      }
       if (verify) await verify();
+      // #403 review: re-check. `abandoned` can flip DURING `verify()`, when the load resolves just
+      // before its bound expires. Without this the probe runs and the record is written on a load
+      // whose caller has gone, which contradicts the contract stated above. The value written
+      // would be true rather than false, so this is about honesty of the invariant rather than
+      // safety, but a contract the code only honours on the common path is not a contract.
+      if (abandoned) {
+        log.warn('a budget load was abandoned while its post-condition ran; leaving the record indeterminate', { label });
+        try { onRecorded?.(); } catch { /* a hook cannot change the outcome */ }
+        return result;
+      }
       setLoadedBudgetSyncId(describeLoaded(result));
       // #392 review (finding 5): this runs INSIDE the chain, not after the awaited call. On the
       // abandoned-then-eventually-successful path the caller has already thrown, so a hook placed
@@ -384,9 +417,17 @@ async function trackBudgetMutation<T>(
       throw err;
     });
   registerBudgetLoad(tracked);
-  // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
-  // waits for it inside the lock rather than racing it.
-  return await withOpTimeout(() => tracked, label, timeoutMs);
+  try {
+    // On timeout the tracked promise is still running. Leave it REGISTERED: the next operation
+    // waits for it inside the lock rather than racing it.
+    return await withOpTimeout(() => tracked, label, timeoutMs);
+  } catch (err) {
+    // #403: from here the caller has given up, so anything still in flight must not touch the api
+    // with no lock held. The chain checks this before probing. Set on ANY rejection, which is
+    // harmless when the chain itself already failed: it has settled, so nothing reads the flag.
+    abandoned = true;
+    throw err;
+  }
 }
 
 /**
