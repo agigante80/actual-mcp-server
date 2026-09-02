@@ -168,5 +168,92 @@ describe('a session touched while the eviction waited for the lock is not closed
   check(connectionPool.connections?.get?.('sess-D') === undefined, 'an unconditional shutdown still evicts');
 }
 
+// --- 5. #412: shutdownAll takes ONE acquisition, not one per session -------
+// Since #392 each shutdownConnection takes the api mutex, and since #393 acquiring it settles any
+// abandoned load, bounded, and throws on timeout while KEEPING the registration. So with a stuck
+// load, N sessions cost N times ACTUAL_OP_TIMEOUT_MS. Fifteen sessions at the 30s default is 450
+// seconds, and Docker sends SIGKILL after a 10 second grace period: the container dies with a page
+// of "could not acquire" lines and no clean api.shutdown().
+describe('graceful shutdown costs one lock acquisition, not one per session');
+{
+  apiState.setApiInitialized(true);
+  for (const sid of ['sd-1', 'sd-2', 'sd-3']) {
+    connectionPool.connections?.set?.(sid, {
+      sessionId: sid, initialized: true, lastActivity: Date.now(),
+      dataDir: '/tmp/unit392', serverUrl: 'http://test-server', password: 'pw', syncId: 'budget-A',
+    });
+  }
+  // A load that never settles, so every acquisition pays the full bound.
+  let releaseStuck;
+  apiState.registerBudgetLoad(new Promise((r) => { releaseStuck = r; }));
+
+  const started = Date.now();
+  await connectionPool.shutdownAll();
+  const elapsed = Date.now() - started;
+
+  releaseStuck();
+  await new Promise((r) => setImmediate(r));
+
+  const bound = Number(process.env.ACTUAL_OP_TIMEOUT_MS || 2000);
+  check(
+    elapsed < bound * 2,
+    `three sessions cost roughly ONE bound, not three (elapsed ${elapsed}ms, bound ${bound}ms)`,
+  );
+  for (const sid of ['sd-1', 'sd-2', 'sd-3']) {
+    check(connectionPool.connections?.get?.(sid) === undefined, `${sid} was still torn down`);
+  }
+  apiState._clearPendingBudgetLoadsForTests();
+}
+
+// --- 6. #411: the Locked variants assert their precondition ----------------
+// The call-site audit lives in a doc comment, and this repo has paid four times for the difference
+// between a convention and a check.
+//
+// The first version of this case built a `warnings` array, never installed a stub, and asserted
+// only "it did not throw" and "it deleted the entry", both true with or without the guard. Review
+// proved it by deleting the whole precondition block and watching the suite stay green. This one
+// captures the warning through the winston instance the module logger delegates to, which is
+// resolved per call, so patching it after import works.
+describe('a Locked variant called without the mutex warns, and says nothing when told to expect it');
+{
+  const loggerMod = await import('../../dist/src/logger.js');
+  const winston = loggerMod.default || loggerMod;
+  const realWarn = winston.warn.bind(winston);
+  const seen = [];
+  winston.warn = (msg, ...rest) => { seen.push(String(msg)); return realWarn(msg, ...rest); };
+
+  const { isApiLockHeld } = await import('../../dist/src/lib/apiLock.js');
+  check(isApiLockHeld() === false, 'baseline: the lock is not held here');
+
+  apiState.setApiInitialized(true);
+  const plant = (sid) => connectionPool.connections?.set?.(sid, {
+    sessionId: sid, initialized: true, lastActivity: Date.now(),
+    dataDir: '/tmp/unit392', serverUrl: 'http://test-server', password: 'pw', syncId: 'budget-A',
+  });
+
+  // (a) unlocked and NOT expecting it: must warn, and must still do the work.
+  plant('sd-warn');
+  seen.length = 0;
+  let threw = false;
+  await connectionPool.shutdownConnectionLocked('sd-warn').catch(() => { threw = true; });
+  const warnedUnlocked = seen.some((m) => /without the api mutex/i.test(m));
+  check(!threw, 'it warns rather than throwing, because cleanup must not fail louder than its cause');
+  check(warnedUnlocked, `an unlocked Locked call WARNS (captured: ${JSON.stringify(seen).slice(0, 120)})`);
+  check(connectionPool.connections?.get?.('sd-warn') === undefined, 'and it still did the work');
+
+  // (b) unlocked and expecting it: the deliberate fallback path must be silent, or #412's
+  // teardown prints one of these per session at the exact moment it chose not to take the lock.
+  plant('sd-quiet');
+  seen.length = 0;
+  await connectionPool.shutdownConnectionLocked('sd-quiet', { expectUnlocked: true }).catch(() => {});
+  check(
+    !seen.some((m) => /without the api mutex/i.test(m)),
+    `expectUnlocked suppresses the warning (captured: ${JSON.stringify(seen).slice(0, 120)})`,
+  );
+  check(connectionPool.connections?.get?.('sd-quiet') === undefined, 'and it still did the work');
+
+  winston.warn = realWarn;
+}
+
 log(`\n[#392-shutdown-lock] ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

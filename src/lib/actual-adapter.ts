@@ -280,6 +280,25 @@ let connectionReuseCount = 0;
 // true based on its own per-session record; this flag is the second guard
 // — the singleton's actual state. Both must agree before reuse is safe.
 
+/**
+ * #391: the budget this acquisition will operate on, as an AFFINITY HINT for the api lock.
+ *
+ * Never an assertion, and never used for a correctness decision: the loaded-budget PRECONDITION
+ * (`ensureLoadedBudgetMatchesSession`) is what makes an operation safe, and it runs inside the
+ * lock regardless of how the lock chose to order us. This only lets the lock group a run of
+ * same-budget work so the process pays one re-selection instead of one per call.
+ *
+ * Resolved from the same source the precondition uses, so a hint can never name a budget the
+ * operation would not have selected anyway.
+ */
+function _affinityBudget(): string | undefined {
+  try {
+    return getActiveBudgetConfig().syncId;
+  } catch {
+    return undefined;   // no registry, no hint: FIFO is always correct
+  }
+}
+
 function _resolveSessionId(): string | undefined {
   return requestContext.getStore()?.sessionId;
 }
@@ -430,6 +449,8 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
 
   if (_hasPooledConnection(sessionId)) {
     // Pooled mode: skip init+shutdown.
+    // #391: name the budget this operation will run against, so the lock can group a run of
+    // same-budget work and pay ONE re-selection instead of one per call.
     return withApiLock(async () => {
       try {
         connectionReuseCount++;
@@ -450,7 +471,7 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
         }
         throw err;
       }
-    });
+    }, { budget: _affinityBudget() });
   }
 
   if (sessionId) {
@@ -465,7 +486,7 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
     } finally {
       await shutdownActualApi();
     }
-  });
+  }, { budget: _affinityBudget() });
 }
 
 /**
@@ -522,7 +543,7 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
         }
         throw err;
       }
-    });
+    }, { budget: _affinityBudget() });
   }
 
   if (sessionId) {
@@ -536,7 +557,7 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
     } finally {
       await shutdownActualApi();
     }
-  });
+  }, { budget: _affinityBudget() });
 }
 
 /**
@@ -1656,7 +1677,7 @@ export async function transferBudgetAmount(
 ): Promise<TransferBudgetResult> {
   observability.incrementToolCall('actual.budgets.transfer').catch(() => {});
   return queueWriteOperation(async () => {
-    // Inside processWriteQueue we already hold _apiSessionLock and the api is
+    // Inside processWriteQueue we already hold the api mutex in apiLock.ts and the api is
     // initialised. Call raw functions only: adapter wrappers would re-enter
     // queueWriteOperation / withActualApi and defeat the single-cycle goal.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

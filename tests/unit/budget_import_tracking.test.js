@@ -86,9 +86,13 @@ describe('an ABANDONED import never leaves the record naming the pre-import budg
     'the abandoned import stays REGISTERED, so the next lock acquisition waits for it',
   );
   await new Promise((res) => setTimeout(res, 700));   // let it land
+  // #403 CHANGED THIS. A landing whose caller gave up no longer records anything: it leaves the
+  // record INDETERMINATE so the next operation re-selects. The property this case exists for is
+  // unchanged and is asserted above, that the record never names the PRE-import budget while the
+  // singleton moves away from it.
   check(
-    apiState.getLoadedBudgetSyncId() === 'imported:imported-1',
-    `after landing the record names the imported file (got ${JSON.stringify(apiState.getLoadedBudgetSyncId())})`,
+    apiState.getLoadedBudgetSyncId() === null,
+    `after landing the record is indeterminate, not a value nobody verified (got ${JSON.stringify(apiState.getLoadedBudgetSyncId())})`,
   );
   check(
     apiState._hasPendingBudgetLoadForTests() === false,
