@@ -210,11 +210,13 @@ describe('a contended queue pays re-selections per ALTERNATION, not per call');
 
 // --- 8. an UNHINTED waiter is a barrier (the round-1 HIGH) -----------------
 // The worst thing in the first version of this change. An unhinted waiter can never equal the
-// loaded budget, so it was freely skipped, and the three unhinted acquisitions are the ones least
-// able to afford it: the write drain, the pool's session open, and shutdownAll. On a SINGLE-budget
-// deployment, where affinity can never save a re-selection because only one budget is ever loaded,
-// a drain enqueued first ran ninth behind eight reads. The majority deployment got the reordering
-// and none of the benefit, and a write could be overtaken by reads issued after it.
+// loaded budget, so it was freely skipped, and the acquisitions with no hint to give are the ones
+// least able to afford it: the pool's session open, shutdownAll, and the write drain whenever its
+// batch spans two budgets (#417 lets a UNANIMOUS batch hint, which is the common case). On a
+// SINGLE-budget deployment, where affinity can never save a re-selection because only one budget
+// is ever loaded, a drain enqueued first ran ninth behind eight reads. The majority deployment
+// got the reordering and none of the benefit, and a write could be overtaken by reads issued
+// after it.
 describe('affinity never reorders across an unhinted waiter');
 {
   apiState.setLoadedBudgetSyncId('budget-A');

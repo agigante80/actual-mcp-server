@@ -172,8 +172,10 @@ function grantNext(): void {
       //
       // Review caught this, and it was the worst thing in the change. An unhinted waiter can never
       // equal `loaded`, so without this it was freely skipped, and the three unhinted acquisitions
-      // are the ones least able to afford it: the write drain, the pool's session open, and
-      // `shutdownAll`. Reproduced on a SINGLE-budget setup, where affinity can never save a
+      // are the ones least able to afford it: the pool's session open, `shutdownAll`, and a write
+      // drain whose batch spans budgets. (#417 later let a UNANIMOUS drain hint its own budget, so
+      // that case is no longer a barrier. A mixed batch still is, and must stay so: one entry's
+      // budget says nothing about the rest.) Reproduced on a SINGLE-budget setup, where affinity can never save a
       // re-selection because only one budget is ever loaded: a drain enqueued first ran ninth,
       // behind eight reads. So the majority deployment got the reordering with none of the benefit,
       // a write could be overtaken by reads issued after it (impossible under the old FIFO, and
