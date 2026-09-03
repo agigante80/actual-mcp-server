@@ -99,3 +99,7 @@ temp/
 # Python bytecode from the .claude hooks
 __pycache__/
 *.pyc
+
+# Session scratchpad artifacts (never commit)
+scratchpad-*
+scratchpad-pr399/
