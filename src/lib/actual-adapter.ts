@@ -69,7 +69,7 @@ const {
 } = api as any;
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
-import { retry, isRetryableError } from './retry.js';
+import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
 import { NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg } from './errors.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
@@ -380,13 +380,16 @@ export function _shouldKeepSingletonAlive(activeSessions: number, forceFullShutd
  * actually corrupted but the error pattern doesn't match, the next call's op
  * will surface the same root cause and we'll catch it then.
  */
-// Whether an error is infrastructure-level (drop the pooled connection so the
-// next call re-inits cleanly). This is the SAME class as "retryable", so it
-// delegates to isRetryableError (#177): the pool-drop decision and the retry
-// decision share one pattern list and cannot drift. A consistency test pins
-// this equivalence.
+// Whether an error is infrastructure-level (drop the pooled connection / tear
+// down the stdio singleton so the next call re-inits cleanly). This DERIVES from
+// isRetryableError (#177: one authored pattern source, pool-drop and retry cannot
+// drift), with ONE deliberate subtraction (#422): a rate-limit is transient but
+// does NOT corrupt the connection, so it must not drop it. Re-logging-in during a
+// throttle adds a fresh login to an already-full window, cascading into a relogin
+// storm (observed over stdio in #383). Retry still backs a rate-limit off; drop
+// does not. A consistency test pins this exact relationship.
 function _shouldDropPoolOnError(err: unknown): boolean {
-  return isRetryableError(err);
+  return isRetryableError(err) && !isRateLimitError(err);
 }
 
 /**

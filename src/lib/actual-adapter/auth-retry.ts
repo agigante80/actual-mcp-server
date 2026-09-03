@@ -6,6 +6,7 @@
 // withAuthRetry. Linked issue: #127.
 
 import { DEFAULT_RETRY_ATTEMPTS, MAX_RETRY_DELAY_MS } from '../constants.js';
+import { isRateLimitError } from '../retry.js';
 import logger from '../../logger.js';
 
 let authRetryCount = 0;          // monotonic, observability
@@ -28,8 +29,14 @@ const AUTH_RETRY_BASE_BACKOFF_MS = 5000;
 
 export function isRetryableAuthError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
+  // #422: reconcile with the pool-drop rate-limit matcher by UNION, never a
+  // substitution. `isRateLimitError` matches BOTH the hyphenated `too-many-requests`
+  // code AND the spaced express default `Too many requests, ...` the current server
+  // returns, so this now retries a login throttle in either form (the spaced form
+  // was previously missed). The `network-failure` branch is preserved verbatim so
+  // withAuthRetry's login self-heal is not narrowed.
   return (
-    err.message.includes('Authentication failed: too-many-requests') ||
+    isRateLimitError(err) ||
     err.message.includes('Authentication failed: network-failure')
   );
 }

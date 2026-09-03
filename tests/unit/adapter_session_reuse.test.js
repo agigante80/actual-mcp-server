@@ -143,15 +143,16 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     let thrown = null;
     try {
       await requestContext.run({ sessionId: 'sess-err-infra' }, async () => {
-        // Simulates a real upstream failure — auth lost mid-call.
-        await withActualApi(async () => { throw new Error('Authentication failed: too-many-requests'); });
+        // Simulates a real upstream INFRASTRUCTURE failure (connection dropped mid-call). #422:
+        // must be a non-rate-limit transient, because a rate-limit no longer drops the connection.
+        await withActualApi(async () => { throw new Error('socket hang up'); });
       });
     } catch (err) { thrown = err; }
 
     connectionPool.shutdownConnection = originalShutdown;
     connectionPool.shutdownConnectionLocked = originalShutdownLocked;
 
-    assert(thrown !== null && /too-many-requests/.test(thrown.message),
+    assert(thrown !== null && /socket hang up/.test(thrown.message),
       'original infrastructure error propagated to caller');
     assert(observedShutdown === true,
       'connectionPool.shutdownConnection was called for the failing session');
@@ -282,10 +283,11 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     let thrown = null;
     try {
       await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
-        await withActualApi(async () => { throw new Error('Authentication failed: too-many-requests'); });
+        // #422: a NON-rate-limit infra transient (a rate-limit would now be kept alive, see Case 10).
+        await withActualApi(async () => { throw new Error('socket hang up'); });
       });
     } catch (e) { thrown = e; }
-    assert(thrown !== null && /too-many-requests/.test(thrown.message), 'transient error propagated');
+    assert(thrown !== null && /socket hang up/.test(thrown.message), 'transient error propagated');
     assert(isApiInitialized() === false,
       'transient error forced a full teardown (isApiInitialized reset) -> next op re-inits fresh');
 
@@ -329,6 +331,46 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
     }
     assert(poolMissWarns <= 1,
       `pool-miss warn fired at most once per process, not per call (got ${poolMissWarns})`);
+    _setApiInitializedForTests(false);
+    if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
+  }
+
+  // -------------------------------------------------------------------------
+  // Case 10 (#422): a RATE-LIMIT error must NOT tear the stdio singleton down.
+  // A rate-limit is transient (worth backing off) but does not corrupt the
+  // connection, so re-logging-in during the throttle would only add a fresh
+  // rejected login. Distinct from Case 8's non-rate-limit transient, which DOES
+  // tear down. This is the #383 relogin-cascade trigger, fixed at the source.
+  // -------------------------------------------------------------------------
+  describe('Case 10 (#422): a rate-limit error keeps the stdio singleton alive (no teardown)');
+  {
+    const priorStdio = process.env.MCP_STDIO_MODE;
+    process.env.MCP_STDIO_MODE = 'true';
+    const sid = 'stdio-ratelimit-1';
+
+    // Spaced express-default form (what the E2E server returns).
+    _setApiInitializedForTests(false);
+    let thrown = null;
+    try {
+      await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+        await withActualApi(async () => { throw new Error('Authentication failed: Too many requests, please try again later.'); });
+      });
+    } catch (e) { thrown = e; }
+    assert(thrown !== null && /too many requests/i.test(thrown.message), 'rate-limit error propagated');
+    assert(isApiInitialized() === true,
+      'a rate-limit did NOT force a teardown (singleton kept alive, no relogin storm)');
+
+    // Hyphenated code form (other server builds) behaves the same.
+    _setApiInitializedForTests(false);
+    thrown = null;
+    try {
+      await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+        await withActualApi(async () => { throw new Error('Authentication failed: too-many-requests'); });
+      });
+    } catch (e) { thrown = e; }
+    assert(thrown !== null, 'hyphenated rate-limit error propagated');
+    assert(isApiInitialized() === true, 'the hyphenated rate-limit form also keeps the singleton alive');
+
     _setApiInitializedForTests(false);
     if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
   }

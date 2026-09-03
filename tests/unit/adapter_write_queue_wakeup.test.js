@@ -213,13 +213,13 @@ console.log('\n[adapter-write-queue-wakeup]');
     adapter._setApiInitializedForTests(false);
     let msg = '';
     try {
-      await withWriteSession(async () => { throw new Error('Authentication failed: too-many-requests'); });
+      await withWriteSession(async () => { throw new Error('socket hang up'); });
     } catch (e) { msg = String(e && e.message || e); }
     await sleep(300);                       // let the batch-end shutdown run
     emit({ msg, aliveAfter: apiState.isApiInitialized() });
     process.exit(0);
   `);
-  check('DRAIN SELF-HEAL: the transient error propagates', /too-many-requests/.test(r.msg || ''), r.msg || r.__error);
+  check('DRAIN SELF-HEAL: the transient error propagates', /socket hang up/.test(r.msg || ''), r.msg || r.__error);
   check(
     'DRAIN SELF-HEAL: a transient drain error tears the stdio singleton down (next batch re-inits)',
     r.aliveAfter === false,
@@ -240,6 +240,32 @@ console.log('\n[adapter-write-queue-wakeup]');
   `);
   check(
     'DRAIN SELF-HEAL: a domain drain error leaves the stdio singleton alive (kept warm)',
+    r.aliveAfter === true,
+    r.aliveAfter === undefined ? r.__error : `isApiInitialized=${r.aliveAfter}`,
+  );
+}
+
+// ---------------------------------------------------------------------------
+// #422 DRAIN + rate-limit. A rate-limit error inside a drained write must NOT
+// tear the stdio singleton down (a throttle is not a corrupt connection), unlike
+// a genuine infrastructure error which does (#419). This is the non-login write
+// surface the #383 cascade also hit.
+// ---------------------------------------------------------------------------
+{
+  const r = runInChild({ MCP_STDIO_MODE: 'true' }, `
+    const apiState = await import(${JSON.stringify(APISTATE)});
+    adapter._setApiInitializedForTests(false);
+    let msg = '';
+    try {
+      await withWriteSession(async () => { throw new Error('Authentication failed: Too many requests, please try again later.'); });
+    } catch (e) { msg = String(e && e.message || e); }
+    await sleep(300);
+    emit({ msg, aliveAfter: apiState.isApiInitialized() });
+    process.exit(0);
+  `);
+  check('DRAIN RATE-LIMIT: the rate-limit error propagates', /too many requests/i.test(r.msg || ''), r.msg || r.__error);
+  check(
+    'DRAIN RATE-LIMIT: a rate-limit drain error keeps the stdio singleton alive (no teardown, no relogin storm)',
     r.aliveAfter === true,
     r.aliveAfter === undefined ? r.__error : `isApiInitialized=${r.aliveAfter}`,
   );

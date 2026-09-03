@@ -7,8 +7,17 @@ const log = ModuleLoggers.RETRY;
  * Error-message fragments that mark a TRANSIENT / infrastructure-level failure:
  * the kind a retry can actually recover from, and the kind worth dropping a
  * pooled connection over. Single source of truth for #177: the adapter's
- * `_shouldDropPoolOnError` delegates to `isRetryableError`, so the retry
+ * `_shouldDropPoolOnError` derives from `isRetryableError`, so the retry
  * decision and the pool-drop decision cannot drift apart.
+ *
+ * #422 is the ONE deliberate divergence: a rate-limit ("too-many-requests") is
+ * transient and worth backing off, but it does NOT corrupt the connection, so
+ * `_shouldDropPoolOnError` subtracts it (`isRetryableError && !isRateLimitError`).
+ * Re-initing during a throttle adds a fresh login to an already-full window,
+ * which is itself rejected, cascading into a relogin storm (observed over stdio
+ * in #383). Retry stays unified with this list; only drop carves the one case
+ * out. That is #177's spirit (one authored pattern source) preserved, not a
+ * second divergent list.
  *
  * Anything NOT matching here (domain/validation errors such as "is required",
  * "not found", "does not exist", Zod failures, and any unknown error) is
@@ -39,6 +48,35 @@ export function isRetryableError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message || '';
   return TRANSIENT_ERROR_PATTERNS.some(p => msg.includes(p));
+}
+
+/**
+ * The rate-limit signal, in BOTH forms it reaches us (#422). `@actual-app/api`
+ * throws `Authentication failed: ${result.error}`, interpolating the server's
+ * raw string, so the exact shape is server-dependent:
+ *   - the hyphenated code `too-many-requests` (referenced by the auth-retry
+ *     comments, some Actual builds), and
+ *   - the spaced express-rate-limit default `Too many requests, please try
+ *     again later.` (what the E2E stack's server actually returns, #383).
+ * The `[\s-]?` arms match both; `rate[\s-]?limit` covers "rate limit" phrasing.
+ *
+ * Shared by `_shouldDropPoolOnError` (to NOT drop a throttled-but-live
+ * connection) and by `isRetryableAuthError` (to retry a login throttle). A
+ * non-Error rejection is not a rate-limit.
+ *
+ * Checks both `.message` AND `.code`: a login throttle carries it in the message
+ * (`Authentication failed: Too many requests...`), but a SYNC throttle surfaces
+ * as `Error("We had an unknown problem opening ...")` with the rate-limit only in
+ * `.code` (observed in the #383 write path). Matching just the message would miss
+ * that shape.
+ */
+export const RATE_LIMIT_PATTERN = /too[\s-]?many[\s-]?requests|rate[\s-]?limit/i;
+
+export function isRateLimitError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code = (err as { code?: unknown }).code;
+  const codeStr = typeof code === 'string' ? code : '';
+  return RATE_LIMIT_PATTERN.test(err.message || '') || RATE_LIMIT_PATTERN.test(codeStr);
 }
 
 export async function retry<T>(
