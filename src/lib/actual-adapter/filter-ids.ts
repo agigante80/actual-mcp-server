@@ -30,9 +30,9 @@
 import { UUID_PATTERN } from '../constants.js';
 
 /** The entity kinds that can appear as an optional filter id. */
-export type FilterIdKind = 'account' | 'category' | 'payee';
+export type FilterIdKind = 'account' | 'category' | 'category_group' | 'payee';
 
-/** A row from one of the three listings, narrowed to what name matching needs. */
+/** A row from one of the four listings (account, category, category_group, payee), narrowed to what name matching needs. */
 export interface NamedRow {
   id?: string | null;
   name?: string | null;
@@ -42,6 +42,10 @@ export interface NamedRow {
 export const FILTER_ID_ENTITIES: Record<FilterIdKind, { entity: string; listTool: string }> = {
   account: { entity: 'Account', listTool: 'actual_accounts_list' },
   category: { entity: 'Category', listTool: 'actual_categories_get' },
+  // #424: category_group joins so the aggregate tool's categoryGroupIds filter resolves a NAME the
+  // same way the other three do. Without it a group name would fall through resolveFilterId's rows
+  // resolver to the payee listing and match nothing (a wrong answer, not an error).
+  category_group: { entity: 'Category group', listTool: 'actual_category_groups_get' },
   payee: { entity: 'Payee', listTool: 'actual_payees_get' },
 };
 

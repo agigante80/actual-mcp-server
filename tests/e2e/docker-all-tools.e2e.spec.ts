@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 74 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 75 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 74 TOOLS', () => {
+test.describe('Docker E2E - ALL 75 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -702,6 +702,44 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
   test('actual_transactions_summary_by_payee - should summarize by payee', async ({ mcp }) => {
     const summary = await mcp.call('actual_transactions_summary_by_payee', { month: currentMonth() });
     expect(summary).toBeTruthy();
+  });
+
+  // #424: deterministic aggregation over the real splits:'grouped' query path. Filtered to a fresh
+  // account so other tests' rows cannot perturb the EXACT totals. The account holds a plain expense
+  // (-5000), a split (-3000 = children -2000 + -1000), and one transfer leg (-3000). Correct behaviour
+  // is expenseOutflow === 8000 exactly (expense + split children counted once; parent and transfer
+  // excluded). A loose >= assertion would pass even if the transfer leaked into spending, so this is
+  // exact on purpose.
+  test('actual_transactions_aggregate - counts splits once and excludes transfers (exact)', async ({ mcp, makeAccount, makeCategoryGroup, makeCategory, makeTransaction }) => {
+    const group = await makeCategoryGroup();
+    const category = await makeCategory({ group });
+    const acctA = await makeAccount();
+    const acctB = await makeAccount();
+    await makeTransaction({ account: acctA, amount: -5000, category: category.id, date: today() });
+    // A split whose children sum to the parent; only the children should be counted.
+    await mcp.call('actual_transactions_create', {
+      account: acctA.id, date: today(), amount: -3000,
+      subtransactions: [{ amount: -2000, category: category.id }, { amount: -1000, category: category.id }],
+    });
+    // A transfer leg lands in acctA carrying a transfer_id; it must not count as spending.
+    await mcp.call('actual_transfers_create', { from_account: acctA.id, to_account: acctB.id, amount: 3000, date: today() });
+    const res = await mcp.call('actual_transactions_aggregate', {
+      startDate: '2000-01-01', endDate: '2100-01-01', groupBy: 'category', accountIds: [acctA.id],
+    });
+    const agg = (res && (res as { result?: unknown }).result) ?? res;
+    const totals = (agg as { totals: { expenseOutflow: number; transferInflow: number; transferOutflow: number } }).totals;
+    expect(totals.expenseOutflow).toBe(8000);
+    expect(totals.transferInflow + totals.transferOutflow).toBe(0);
+  });
+
+  // #424 NEGATIVE: a category NAME passed as categoryIds is refused with the resolved id (#388),
+  // not silently ignored and not a bare "Invalid uuid".
+  test('actual_transactions_aggregate - ERROR: a category NAME filter is refused with the resolved id', async ({ mcp, makeCategoryGroup, makeCategory }) => {
+    const group = await makeCategoryGroup();
+    const category = await makeCategory({ group });
+    await expect(mcp.call('actual_transactions_aggregate', {
+      startDate: '2025-01-01', endDate: '2025-01-31', groupBy: 'category', categoryIds: [category.name],
+    })).rejects.toThrow(new RegExp(category.id));
   });
 
   // ==================== TRANSFERS (1 tool) ====================

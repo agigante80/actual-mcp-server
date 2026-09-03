@@ -566,6 +566,48 @@ export async function transactionTests(client, context) {
     }
   }
 
+  // #424: deterministic aggregation, exercised over BOTH transports by the dual-transport gate.
+  console.log("\n#424: actual_transactions_aggregate...");
+  try {
+    const aggRaw = await callTool("actual_transactions_aggregate", {
+      startDate: "2000-01-01", endDate: "2100-01-01", groupBy: "month", accountIds: [txAccountId],
+    });
+    const agg = aggRaw?.result ?? aggRaw;
+    if (!agg || !agg.totals || typeof agg.totals.expenseOutflow !== "number") {
+      fail(`aggregate: expected a totals object with integer-cent fields, got ${JSON.stringify(agg)?.slice(0, 120)}`);
+    } else {
+      console.log(`  ✓ aggregate: returned totals (expenseOutflow=${agg.totals.expenseOutflow})`);
+    }
+  } catch (err) {
+    fail(`aggregate: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
+  }
+  // NEGATIVE (#388/#424): a category NAME that EXISTS is refused WITH its resolved id (not silently
+  // ignored, not a bare Invalid uuid). Self-contained: creates and deletes its own group + category.
+  let aggGrpId, aggCatId;
+  try {
+    const grpRaw = await callTool("actual_category_groups_create", { name: `AggGrp-${Date.now()}` });
+    aggGrpId = grpRaw?.groupId || grpRaw?.id || grpRaw?.result || grpRaw;
+    const aggCatName = `AggCat-${Date.now()}`;
+    const catRaw = await callTool("actual_categories_create", { name: aggCatName, group_id: aggGrpId });
+    aggCatId = catRaw?.categoryId || catRaw?.id || catRaw?.result || catRaw;
+    try {
+      await callTool("actual_transactions_aggregate", {
+        startDate: "2000-01-01", endDate: "2100-01-01", groupBy: "category", categoryIds: [aggCatName],
+      });
+      fail("aggregate: a category NAME filter should be refused, but the call succeeded");
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (aggCatId && msg.includes(String(aggCatId))) {
+        console.log(`  ✓ aggregate: a category name is refused with its resolved id (#388/#424)`);
+      } else {
+        fail(`aggregate: refused, but the message did not carry the resolved id ${aggCatId}: ${msg.slice(0, 120)}`);
+      }
+    }
+  } finally {
+    if (aggCatId) await callTool("actual_categories_delete", { id: aggCatId }).catch(() => {});
+    if (aggGrpId) await callTool("actual_category_groups_delete", { id: aggGrpId }).catch(() => {});
+  }
+
   // Teardown: close then delete the dedicated transaction test account.
   // close() must come first: Actual tombstones (hard-deletes) accounts with zero
   // transactions on close(), making them unrecoverable. We need close() to set

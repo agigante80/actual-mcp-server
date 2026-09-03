@@ -52,6 +52,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_schedules_delete',
   'actual_schedules_get',
   'actual_schedules_update',
+  'actual_transactions_aggregate',
   'actual_transactions_create',
   'actual_transactions_delete',
   'actual_transactions_filter',

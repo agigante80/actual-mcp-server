@@ -64,6 +64,13 @@ const EXCEPTIONS = {
   'actual_transactions_filter:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
   'actual_transactions_filter:categoryId': 'Category B: resolved by adapter.resolveFilterId (#388)',
   'actual_transactions_filter:payeeId': 'Category B: resolved by adapter.resolveFilterId (#388)',
+  // #424: the aggregate tool's optional filter ARRAYS are bare strings so each element resolves a
+  // NAME via adapter.resolveFilterId (extended with a category_group kind). Tightening to
+  // CommonSchemas would delete that accommodation, same as the single-id Category B fields above.
+  'actual_transactions_aggregate:accountIds': 'Category B: resolved by adapter.resolveFilterId (#388, #424)',
+  'actual_transactions_aggregate:categoryIds': 'Category B: resolved by adapter.resolveFilterId (#388, #424)',
+  'actual_transactions_aggregate:categoryGroupIds': 'Category B: resolved by adapter.resolveFilterId (#388, #424)',
+  'actual_transactions_aggregate:payeeIds': 'Category B: resolved by adapter.resolveFilterId (#388, #424)',
   'actual_transactions_search_by_amount:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
   'actual_transactions_search_by_category:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
   'actual_transactions_search_by_month:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',

@@ -81,6 +81,7 @@ const READ_ONLY = new Set<string>([
   'actual_server_info',
   'actual_session_list',
   'actual_tags_list',
+  'actual_transactions_aggregate',
   'actual_transactions_filter',
   'actual_transactions_get',
   'actual_transactions_search_by_amount',

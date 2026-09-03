@@ -139,7 +139,7 @@
 
 ### Tool Definitions
 
-74 tools organized by category:
+75 tools organized by category:
 
 ```
 src/tools/
@@ -156,7 +156,8 @@ src/tools/
 ├── accounts_close.ts
 ├── accounts_reopen.ts
 ├── accounts_get_balance.ts
-├── transactions_create.ts              # Transactions (13 tools)
+├── transactions_aggregate.ts           # Transactions (deterministic analysis)
+├── transactions_create.ts
 ├── transactions_get.ts
 ├── transactions_update.ts
 ├── transactions_delete.ts
@@ -338,7 +339,7 @@ actual-mcp-server/
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
-│   ├── tools/                    # MCP tool definitions (74 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (75 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -369,7 +370,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 74 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 75 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── (#366: the suites/ tree was removed. It never executed, and every doc that
 │   │        named it now points at docker-all-tools.e2e.spec.ts instead)
@@ -431,7 +432,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 74 tools with MCP capabilities
+   └─> Registers 75 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance
