@@ -1109,6 +1109,39 @@ test.describe('Docker E2E - ALL 74 TOOLS', () => {
     ).toBeTruthy();
   });
 
+  test('actual_query_run - #420 boolean WHERE: the value actually PARTITIONS the rows', async ({ mcp }) => {
+    // Two things this proves that a `toBeTruthy()` on the result could not:
+    //   1. The query EXECUTES. Before #420 it threw "Can't convert string/integer to boolean".
+    //   2. The boolean value is HONOURED. `cleared = true` and `cleared = false` must sum to the
+    //      unfiltered count, which can only hold if each side filters correctly. `cleared` is used
+    //      deliberately rather than `is_parent`: upstream's default `splits: 'inline'` executor
+    //      appends `AND is_parent = 0` to every transactions query, so `is_parent = true` can never
+    //      return a row and would be a vacuous test. `cleared` has no such special-casing.
+    const rows = (r: any): number => {
+      const d = Array.isArray(r) ? r : (r?.data ?? r?.result?.data ?? []);
+      return Array.isArray(d) ? d.length : 0;
+    };
+    const total = rows(await mcp.call('actual_query_run', { query: 'SELECT id FROM transactions' }));
+    const cleared = rows(await mcp.call('actual_query_run', { query: 'SELECT id FROM transactions WHERE cleared = true' }));
+    const uncleared = rows(await mcp.call('actual_query_run', { query: 'SELECT id FROM transactions WHERE cleared = false' }));
+    expect(cleared + uncleared).toBe(total);
+
+    // The integer form must behave identically to the boolean form (SQL convention, #420).
+    const clearedInt = rows(await mcp.call('actual_query_run', { query: 'SELECT id FROM transactions WHERE cleared = 1' }));
+    expect(clearedInt).toBe(cleared);
+
+    // IN on a boolean column, which #420 routes through $or rather than the stringifying $oneof.
+    // (true, false) is the whole set, so it must return every row.
+    const both = rows(await mcp.call('actual_query_run', { query: 'SELECT id FROM transactions WHERE cleared IN (true, false)' }));
+    expect(both).toBe(total);
+  });
+
+  test('actual_query_run - #420 boolean WHERE: an invalid boolean literal is refused, naming the column', async ({ mcp }) => {
+    await expect(
+      mcp.call('actual_query_run', { query: 'SELECT id FROM transactions WHERE is_parent = maybe LIMIT 5' }),
+    ).rejects.toThrow(/is_parent|boolean/i);
+  });
+
   test('actual_query_run - ERROR: should reject invalid field (payee_name)', async ({ mcp }) => {
     await expect(
       mcp.call('actual_query_run', { query: 'SELECT id, payee_name FROM transactions LIMIT 5' }),

@@ -243,3 +243,25 @@ export function isValidField(tableName: string, fieldName: string): boolean {
 export function isValidJoinPath(path: string): boolean {
   return path in JOIN_PATHS;
 }
+
+/**
+ * Resolve a WHERE field to its declared type, for the given base table.
+ *
+ * Handles both a plain column (`is_parent`, resolved against `tableName`) and a joined field
+ * (`category.hidden`, resolved through JOIN_PATHS to the target table's column). Returns the
+ * `type` string from the schema, or `undefined` when the field is not known.
+ *
+ * #420: used to decide whether a WHERE literal must be coerced to a real boolean. It is
+ * deliberately conservative: an unknown field returns `undefined` and the caller then leaves the
+ * value untouched, so this can never turn a valid string comparison into a boolean by accident.
+ * The query validator (`query-validator.ts`) is what rejects an unknown field; this only reports a
+ * type when it is certain of one.
+ */
+export function getFieldType(tableName: string, field: string): string | undefined {
+  if (field.includes('.')) {
+    const join = JOIN_PATHS[field];
+    if (!join) return undefined;
+    return ACTUAL_SCHEMA[join.table]?.[join.field]?.type;
+  }
+  return ACTUAL_SCHEMA[tableName]?.[field]?.type;
+}

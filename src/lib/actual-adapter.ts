@@ -3135,9 +3135,10 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
           query = query.select(fieldList);
         }
         
-        // Apply WHERE conditions
+        // Apply WHERE conditions. tableName is passed so parseWhereClause can resolve column
+        // types and coerce boolean literals to real booleans (#420).
         if (whereClause) {
-          query = parseWhereClause(query, whereClause);
+          query = parseWhereClause(query, whereClause, tableName);
         }
         
         // Apply ORDER BY

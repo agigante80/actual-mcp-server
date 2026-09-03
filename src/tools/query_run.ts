@@ -28,6 +28,11 @@ Supported WHERE operators:
   • LIKE / NOT LIKE for pattern search (case-insensitive, accent-insensitive; use % as wildcard)
     e.g. "WHERE imported_payee LIKE '%amazon%'" to find raw bank-sync payee strings
   • IS NULL / IS NOT NULL e.g. "WHERE imported_payee IS NULL" to find unmerged rows
+  • Boolean columns take true / false (case-insensitive; 1 / 0 also accepted)
+    e.g. "WHERE cleared = false" for uncleared, "WHERE reconciled = true",
+    "WHERE category.hidden = true", "WHERE account.closed = true"
+    Note: transactions are returned in split-INLINE mode, so "WHERE is_parent = true" returns
+    nothing (parent rows are hidden); use "is_parent = false" to exclude split children.
   • Combine conditions with AND. OR, REGEXP, NOT IN, and parenthesised groups are not yet
     supported and will return an error (the query is never silently run unfiltered).
 
