@@ -16,7 +16,7 @@ This guide covers connecting AI clients (LibreChat, LobeChat, or any MCP-compati
 ┌─────────────┐   MCP/HTTP   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  AI Client  │ ◄──────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │ (LibreChat  │              │  Server          │               │   Budget     │
-│  LobeChat)  │              │  (75 tools)      │               │   Server     │
+│  LobeChat)  │              │  (76 tools)      │               │   Server     │
 └─────────────┘              └──────────────────┘               └──────────────┘
 ```
 
@@ -65,7 +65,7 @@ Then restart LibreChat:
 docker restart ai-librechat
 ```
 
-Verify tools loaded. In the LibreChat UI you should see **75 tools** listed under the MCP server entry.
+Verify tools loaded. In the LibreChat UI you should see **76 tools** listed under the MCP server entry.
 
 ### LibreChat with OIDC
 
@@ -96,7 +96,7 @@ In the LobeChat UI:
    - **Authorization**: `Bearer YOUR_TOKEN_HERE`
 4. Click **Save**
 
-LobeChat will automatically discover all 75 tools.
+LobeChat will automatically discover all 76 tools.
 
 ---
 
@@ -244,7 +244,7 @@ After connecting an AI client, verify:
 curl http://localhost:3600/health
 # Expected: {"status":"ok","initialized":true,...}
 
-# 2. Tools loaded (should list 75 tools)
+# 2. Tools loaded (should list 76 tools)
 curl -s -X POST http://localhost:3600/http \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -253,7 +253,7 @@ curl -s -X POST http://localhost:3600/http \
 ```
 
 In your AI client you should see:
-- ✅ 75 tools loaded with `actual_` prefix
+- ✅ 76 tools loaded with `actual_` prefix
 - ✅ `actual_server_info` tool available
 - ✅ Natural language queries returning results
 

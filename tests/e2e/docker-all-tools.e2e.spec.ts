@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 75 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 76 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 75 TOOLS', () => {
+test.describe('Docker E2E - ALL 76 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -740,6 +740,42 @@ test.describe('Docker E2E - ALL 75 TOOLS', () => {
     await expect(mcp.call('actual_transactions_aggregate', {
       startDate: '2025-01-01', endDate: '2025-01-31', groupBy: 'category', categoryIds: [category.name],
     })).rejects.toThrow(new RegExp(category.id));
+  });
+
+  // #425: actual_account_flow_summary reconciles a selection's balance change end to end. Two fresh
+  // accounts (opening balance 0), acctA gets a categorized expense (-5000) and a WITHIN-selection
+  // transfer to acctB (both accounts are in the selection). Correct behaviour: the transfer is never
+  // spending (expenseOutflow stays 5000), it is reported as a within-selection transfer, and the
+  // reconciliation is exact (difference 0). The date window brackets today() so opening is 0.
+  test('actual_account_flow_summary - reconciles exactly and separates a within-selection transfer', async ({ mcp, makeAccount, makeCategoryGroup, makeCategory, makeTransaction }) => {
+    const group = await makeCategoryGroup();
+    const category = await makeCategory({ group });
+    const acctA = await makeAccount();
+    const acctB = await makeAccount();
+    await makeTransaction({ account: acctA, amount: -5000, category: category.id, date: today() });
+    await mcp.call('actual_transfers_create', { from_account: acctA.id, to_account: acctB.id, amount: 3000, date: today() });
+    const res = await mcp.call('actual_account_flow_summary', {
+      startDate: '2000-01-01', endDate: '2100-01-01', accountIds: [acctA.id, acctB.id],
+    });
+    const flow = (res && (res as { result?: unknown }).result) ?? res;
+    const f = flow as {
+      external: { expenseOutflow: number };
+      transfers: { withinSelection: number; netTransferEffect: number };
+      reconciliation: { difference: number };
+    };
+    expect(f.external.expenseOutflow).toBe(5000);
+    expect(f.transfers.withinSelection).toBe(3000);
+    expect(f.transfers.netTransferEffect).toBe(0);
+    expect(f.reconciliation.difference).toBe(0);
+  });
+
+  // #425 NEGATIVE: an account NAME passed as accountIds is refused with the resolved id (#388),
+  // not silently returning an empty selection.
+  test('actual_account_flow_summary - ERROR: an account NAME is refused with the resolved id', async ({ mcp, makeAccount }) => {
+    const acct = await makeAccount();
+    await expect(mcp.call('actual_account_flow_summary', {
+      startDate: '2025-01-01', endDate: '2025-01-31', accountIds: [acct.name],
+    })).rejects.toThrow(new RegExp(acct.id));
   });
 
   // ==================== TRANSFERS (1 tool) ====================

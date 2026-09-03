@@ -23,7 +23,7 @@
  *   MCP_AUTH_TOKEN        Bearer token override
  *   MCP_TEST_LEVEL        Test level override
  *   ACTUAL_SERVER_URL     Actual Budget server URL (shown in cleanup prompt)
- *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 75)
+ *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 76)
  */
 
 import readline from 'node:readline/promises';
