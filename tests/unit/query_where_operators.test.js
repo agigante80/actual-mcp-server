@@ -19,6 +19,11 @@ process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID || 'unit-t
 import assert from 'assert';
 
 const { parseWhereClause } = await import('../../dist/src/lib/actual-adapter.js');
+// Imported at top level, not inside a test: `check()` is synchronous, so an `async` test body
+// would resolve to a pending promise that check() never awaits, and the assertions inside it would
+// never run (the guard would be permanently green). This import being here keeps the schema test's
+// body synchronous.
+const { ACTUAL_SCHEMA } = await import('../../dist/src/lib/actual-schema.js');
 
 let passed = 0;
 let failed = 0;
@@ -47,6 +52,13 @@ function makeStub() {
 // Returns the recorded filter objects for a WHERE clause.
 function filtersFor(where) {
   return parseWhereClause(makeStub(), where)._calls;
+}
+
+// #420: the boolean coercion is only active when the FROM table is passed, so the type of a column
+// can be resolved. This variant supplies it. `filtersFor` above deliberately does NOT, which is
+// what proves the pre-#420 behaviour is preserved for every existing assertion in this file.
+function filtersForTable(where, table) {
+  return parseWhereClause(makeStub(), where, table)._calls;
 }
 
 console.log('\n[query-where-operators] new operators');
@@ -144,6 +156,120 @@ console.log('\n[query-where-operators] keyword matching is case-insensitive');
 check('lowercase like / is null are recognised', () => {
   assert.deepStrictEqual(filtersFor("imported_payee like '%x%'"), [{ imported_payee: { $like: '%x%' } }]);
   assert.deepStrictEqual(filtersFor('imported_payee is null'), [{ imported_payee: null }]);
+});
+
+// ─── #420: boolean WHERE literals ──────────────────────────────────────────────
+//
+// ActualQL requires a real JS boolean for a boolean column: its compiler tags a value 'boolean'
+// only from `typeof value === 'boolean'`, and castInput has no string->boolean or integer->boolean
+// branch, so `"true"` and `1` are both rejected (the two errors #420 reports, reproduced live).
+// These assert on the OBJECT reaching the query builder, because the whole defect is a real boolean
+// vs the string "true", which a value-shape assertion can distinguish and a smoke test cannot.
+console.log('\n[query-where-operators] #420 boolean literals');
+
+check('= true on a boolean column yields a real boolean, not the string "true"', () => {
+  const [f] = filtersForTable('is_parent = true', 'transactions');
+  assert.deepStrictEqual(f, { is_parent: true });
+  assert.strictEqual(typeof f.is_parent, 'boolean');   // the crux: NOT "true"
+});
+
+check('= false yields boolean false', () => {
+  assert.deepStrictEqual(filtersForTable('cleared = false', 'transactions'), [{ cleared: false }]);
+});
+
+check('TRUE/FALSE are case-insensitive', () => {
+  assert.deepStrictEqual(filtersForTable('is_parent = TRUE', 'transactions'), [{ is_parent: true }]);
+  assert.deepStrictEqual(filtersForTable('hidden = False', 'categories'), [{ hidden: false }]);
+});
+
+check('1 and 0 are accepted as boolean, per SQL convention', () => {
+  assert.deepStrictEqual(filtersForTable('is_parent = 1', 'transactions'), [{ is_parent: true }]);
+  assert.deepStrictEqual(filtersForTable('is_parent = 0', 'transactions'), [{ is_parent: false }]);
+  assert.strictEqual(typeof filtersForTable('is_parent = 1', 'transactions')[0].is_parent, 'boolean');
+});
+
+check('!= true maps to $ne with a real boolean', () => {
+  assert.deepStrictEqual(filtersForTable('is_parent != true', 'transactions'), [{ is_parent: { $ne: true } }]);
+});
+
+check('a joined boolean field (category.hidden, account.closed) resolves through JOIN_PATHS', () => {
+  assert.deepStrictEqual(filtersForTable('category.hidden = true', 'transactions'), [{ 'category.hidden': true }]);
+  assert.deepStrictEqual(filtersForTable('account.closed = true', 'transactions'), [{ 'account.closed': true }]);
+});
+
+check('IN on a boolean column expands to $or of equalities, NOT $oneof', () => {
+  // $oneof stringifies its elements upstream, so IN ('true','false') would match nothing on a 0/1
+  // column. $or of real-boolean equalities is the only correct compilation.
+  assert.deepStrictEqual(
+    filtersForTable('is_parent IN (true,false)', 'transactions'),
+    [{ $or: [{ is_parent: true }, { is_parent: false }] }],
+  );
+});
+
+check('a boolean condition ANDs correctly with a date and a string filter', () => {
+  assert.deepStrictEqual(
+    filtersForTable("is_parent = false AND date >= '2020-01-01' AND notes LIKE '%x%'", 'transactions'),
+    [{ is_parent: false }, { date: { $gte: '2020-01-01' } }, { notes: { $like: '%x%' } }],
+  );
+});
+
+check('a bad boolean literal throws, naming the column and the value', () => {
+  assert.throws(() => filtersForTable('is_parent = maybe', 'transactions'),
+    /Invalid boolean value for column "is_parent": "maybe"/);
+});
+
+console.log('\n[query-where-operators] #420 NEGATIVE: non-boolean columns are untouched');
+
+check('a STRING column keeps a quoted "true" as the string "true"', () => {
+  // The trap: quotes are stripped before coercion, so is_parent=true and notes='true' look the
+  // same at that point. The column type is what separates them. `notes` is a string column.
+  const [f] = filtersForTable("notes = 'true'", 'transactions');
+  assert.deepStrictEqual(f, { notes: 'true' });
+  assert.strictEqual(typeof f.notes, 'string');
+});
+
+check('a numeric column is unaffected', () => {
+  assert.deepStrictEqual(filtersForTable('amount = 100', 'transactions'), [{ amount: 100 }]);
+});
+
+check('IN on a string column still uses $oneof', () => {
+  assert.deepStrictEqual(
+    filtersForTable("notes IN ('a','b')", 'transactions'),
+    [{ notes: { $oneof: ['a', 'b'] } }],
+  );
+});
+
+check('an ordering operator on a boolean column is NOT coerced (left for ActualQL to reject)', () => {
+  // We do not invent an ordering a boolean does not have; the value passes through unchanged and
+  // ActualQL rejects `>` on a boolean itself, which is the honest outcome.
+  assert.deepStrictEqual(filtersForTable('is_parent > true', 'transactions'), [{ is_parent: { $gt: 'true' } }]);
+});
+
+check('WITHOUT a table, nothing is treated as boolean (pre-#420 behaviour preserved)', () => {
+  // This is the guarantee that every other assertion in this file, all of which omit the table,
+  // is still exercising the original code path.
+  assert.deepStrictEqual(filtersFor('is_parent = true'), [{ is_parent: 'true' }]);
+});
+
+console.log('\n[query-where-operators] #420 every schema-declared boolean column is covered');
+
+// The acceptance criterion is that ALL boolean columns work, not the four in the original report.
+// This drives the mechanism off the schema itself, so a column added to the schema as boolean is
+// covered automatically and a regression that only fixed some columns would fail here.
+check('every boolean column in ACTUAL_SCHEMA coerces = true to a real boolean', () => {
+  let count = 0;
+  for (const [table, cols] of Object.entries(ACTUAL_SCHEMA)) {
+    for (const [col, def] of Object.entries(cols)) {
+      if (def && def.type === 'boolean') {
+        const [f] = filtersForTable(`${col} = true`, table);
+        assert.strictEqual(f[col], true, `${table}.${col} did not coerce to boolean true`);
+        assert.strictEqual(typeof f[col], 'boolean', `${table}.${col} is not a boolean`);
+        count++;
+      }
+    }
+  }
+  assert.ok(count >= 20, `expected many boolean columns, only exercised ${count}`);
+  console.log(`      (exercised ${count} boolean columns across the schema)`);
 });
 
 console.log(`\n[query-where-operators] Results: ${passed} passed, ${failed} failed`);
