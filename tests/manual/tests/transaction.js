@@ -613,12 +613,18 @@ export async function transactionTests(client, context) {
   // then a NAME-refusal negative. The seeded transactions are removed with the account at teardown.
   console.log("\n#426: actual_recurring_expenses_summary...");
   let recPayeeId, recPayeeName;
+  const recTxnIds = [];
   try {
     recPayeeName = `RecPayee-${Date.now()}`;
     const payeeRaw = await callTool("actual_payees_create", { name: recPayeeName });
     recPayeeId = payeeRaw?.id || payeeRaw?.result || payeeRaw;
     for (const date of ["2025-06-15", "2025-07-15", "2025-08-15"]) {
-      await callTool("actual_transactions_create", { account: txAccountId, date, amount: -1599, payee: recPayeeId });
+      // Capture the id: these charges give the account a non-zero balance, so they MUST be deleted
+      // in the finally below or the account teardown's close() fails (transferAccountId required)
+      // and the zero-residue assertion trips. Learned the hard way in the #426 dual-transport run.
+      const txnRaw = await callTool("actual_transactions_create", { account: txAccountId, date, amount: -1599, payee: recPayeeId });
+      const txnId = typeof txnRaw === "string" ? txnRaw : (txnRaw?.id || txnRaw?.result);
+      if (txnId) recTxnIds.push(txnId);
     }
     const recRaw = await callTool("actual_recurring_expenses_summary", {
       startDate: "2025-01-01", endDate: "2025-08-31", accountIds: [txAccountId], minOccurrences: 3, includeInactive: true,
@@ -642,6 +648,9 @@ export async function transactionTests(client, context) {
   } catch (err) {
     fail(`recurring: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
   } finally {
+    // Delete the seeded charges FIRST so the account balance returns to zero before teardown,
+    // then the payee (delete order: transactions, then payee).
+    for (const id of recTxnIds) await callTool("actual_transactions_delete", { id }).catch(() => {});
     if (recPayeeId) await callTool("actual_payees_delete", { id: recPayeeId }).catch(() => {});
   }
 
