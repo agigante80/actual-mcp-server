@@ -250,6 +250,61 @@ fi
 
 echo ""
 
+# Step 6b (#383): the SAME suite over stdio, on the HOST rather than in the runner container.
+#
+# It cannot run in that container: it mounts only tests/, the config and the two package files,
+# so it has neither the server's dist/ nor a docker socket and no route to a stdio server.
+# Giving the test runner the docker socket to save a process boundary is not a trade worth
+# making. The host has both docker and node (CI does `npm ci` before calling this script), and
+# this is the same approach tests/manual/mcp-client-stdio.js already uses.
+#
+# Sequential, not parallel: both transports drive the ONE Actual server behind them, so its
+# 500-requests-per-minute limiter counts their calls together, and running them at once would
+# trip it. Sequential is necessary but NOT sufficient, which is what the cool-down below is for.
+# Roughly doubles the E2E wall clock.
+#
+# Only at the full level. The smoke level exists for fast local feedback.
+if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${SKIP_STDIO_E2E:-false}" != "true" ]; then
+  # COOL-DOWN, and it is not optional. The pacer in tests/shared/e2e-helpers.ts is module scoped,
+  # so it shares one window only WITHIN a process, and these two legs are different processes: the
+  # HTTP one runs inside the container, this one on the host. The stdio leg therefore starts with
+  # its own counter at zero while Actual's 60-second window is still full from the HTTP leg.
+  #
+  # Observed before this wait, in CI rather than locally: the stdio leg's first Actual login was
+  # refused with "Too many requests", and because Playwright starts a fresh worker after a failure,
+  # each restart re-spawned the stdio server and re-logged in. 39 server restarts and 377 rate-limit
+  # errors, from one initial refusal. Draining the window first removes the trigger.
+  STDIO_COOLDOWN_S="${STDIO_COOLDOWN_S:-75}"
+  log_info "Cooling down ${STDIO_COOLDOWN_S}s so Actual's rate-limit window drains before the stdio leg..."
+  sleep "$STDIO_COOLDOWN_S"
+
+  log_info "Step 6b: Running the same suite over STDIO (host-side, docker exec)..."
+  echo ""
+  MCP_TEST_TRANSPORT=stdio npx playwright test \
+    --config=playwright.config.docker.ts --project=docker-e2e-full-stdio
+  STDIO_EXIT_CODE=$?
+  # ADVISORY, not gating, until #423. #383 landed this leg and #422 removed the relogin cascade,
+  # but a rate-limit tail remains on the write-heavy block (a throttled api.sync closes the budget,
+  # forcing a re-download + re-login that withAuthRetry backs off 25s and then fails). The leg still
+  # RUNS in CI so the divergence signal is visible and the #384 collection guard sees the project
+  # invoked, but a stdio-only failure does NOT fail the job yet. #423 drives it to zero and restores
+  # `TEST_EXIT_CODE=$STDIO_EXIT_CODE` here. Set STDIO_E2E_GATING=true to opt back into gating locally.
+  if [ $STDIO_EXIT_CODE -ne 0 ]; then
+    if [ "${STDIO_E2E_GATING:-false}" = "true" ]; then
+      log_error "STDIO transport FAILED (the HTTP transport passed). Gating is ON (STDIO_E2E_GATING)."
+      TEST_EXIT_CODE=$STDIO_EXIT_CODE
+    else
+      log_warn "STDIO transport had failures (ADVISORY until #423; not failing the job)."
+      log_info "The known residual is a rate-limit tail on the write-heavy block; see #423."
+      log_info "Re-run just it with:"
+      log_info "  MCP_TEST_TRANSPORT=stdio npx playwright test --config=playwright.config.docker.ts --project=docker-e2e-full-stdio"
+    fi
+  else
+    log_success "STDIO transport passed"
+  fi
+  echo ""
+fi
+
 # Check results
 if [ $TEST_EXIT_CODE -eq 0 ]; then
   log_success "=========================================="
