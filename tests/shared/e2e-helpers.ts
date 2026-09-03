@@ -146,16 +146,37 @@ export async function callTool(
  * came back with `A 'E2E-Group-...' category group already exists.` Pacing has no such
  * hazard, because no request is ever sent twice.
  *
- * The budget is counted in TOOL CALLS, because that is what this layer can see. The measured
- * ratio is about 1.4 Actual requests per tool call, so 300 calls per window lands near 420
- * requests, inside 500 with room for the ratio to drift as tools change.
+ * The budget is counted in TOOL CALLS, because that is what this layer can see. The AVERAGE
+ * ratio is about 1.4 Actual requests per tool call, but it is not uniform: a write call is
+ * op + sync (2 requests) and a read is 1, so a write-heavy BLOCK (the transactions and budgets
+ * runs) peaks near 1.8. At 300 calls that block reached ~540 requests and tripped the limiter
+ * (#383: 2 stdio failures at spec lines 686 to 697, over the SYNC path, after #422 removed the
+ * relogin cascade that had masked the real ratio). 230 calls at 1.8 is ~415 requests, inside
+ * 500 with margin, at the cost of a longer wall clock. The stdio leg is the tighter one: it
+ * runs host-side over docker exec and never reached the old 300 budget, so lowering it is what
+ * actually engages the pacer there.
  */
 const RATE_WINDOW_MS = 60_000;
-const RATE_MAX_CALLS_PER_WINDOW = 300;
+const RATE_MAX_CALLS_PER_WINDOW = 230;
 const recentCallTimes: number[] = [];
 
 /** Block until sending one more call keeps us inside the window budget. */
-async function pace(): Promise<void> {
+/**
+ * Exported for #383: the stdio client paces through the SAME window as the HTTP one.
+ *
+ * Both transports drive the one Actual server, so its 500-requests-per-minute limiter counts
+ * their calls together and they must not each believe they own the whole budget.
+ *
+ * READ THIS BEFORE RELYING ON IT: module scope shares this window only WITHIN A PROCESS, and the
+ * two E2E legs are SEPARATE processes (HTTP inside the runner container, stdio on the host). So
+ * the stdio leg starts with its counter at zero while Actual's window is still full from the HTTP
+ * leg. An earlier version of this comment claimed the two legs shared a window; they do not, and
+ * CI proved it: the stdio leg's first login was refused with "Too many requests", Playwright
+ * restarted its worker after the failure, and the restart re-spawned the server and re-logged in,
+ * 39 times. The cool-down in tests/e2e/run-docker-e2e.sh is what actually bridges the two
+ * processes. This pacer covers calls within one leg.
+ */
+export async function pace(): Promise<void> {
   for (;;) {
     const now = Date.now();
     while (recentCallTimes.length > 0 && now - recentCallTimes[0] >= RATE_WINDOW_MS) {

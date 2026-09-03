@@ -73,9 +73,24 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 
 ## Spec Files
 
-### What CI actually runs (#384)
+### What CI actually runs (#384, #383)
 
-**Only `docker-all-tools.e2e.spec.ts`.** Both workflows invoke `npm run test:e2e:docker:full`,
+**Only `docker-all-tools.e2e.spec.ts`, and since #383 it runs TWICE**: once over HTTP inside the
+runner container, then once over stdio from the HOST (`run-docker-e2e.sh` step 6b, reaching the
+server by `docker exec`, because the runner container has no route to a stdio server). Four tests
+are HTTP-only, each saying why at the test, so the stdio project skips exactly those four and
+otherwise matches HTTP (read the totals from `npx playwright test --list`, do not pin them; they are
+currently 105 collected, so 101 pass plus 4 skip over stdio). The two legs run in SEPARATE processes,
+so the module-scoped pacer does not span them; the 75s cool-down in `run-docker-e2e.sh`
+(`STDIO_COOLDOWN_S`) drains Actual's rate-limit window between them, and #419 (v0.16.13) is what
+keeps each leg under the ceiling by logging a stdio process in once rather than per call.
+
+The stdio leg is ADVISORY until #423: it RUNS in CI but a stdio-only failure does not fail the job,
+because a rate-limit tail remains on the write-heavy block (a throttled `api.sync()` closes the
+budget and forces a re-download + re-login). `STDIO_E2E_GATING=true` opts back into gating; #423
+drives it to zero and restores it.
+
+Both workflows invoke `npm run test:e2e:docker:full`,
 which selects the `docker-e2e-full` project, which collects that one file. Every other spec in this
 directory is a MANUAL diagnostic, and that is a decision rather than an oversight.
 
@@ -89,7 +104,7 @@ table below is enforced, not merely documented.
 
 | Spec | Runs in CI? | Why |
 |---|---|---|
-| `docker-all-tools.e2e.spec.ts` | **yes** | the gate |
+| `docker-all-tools.e2e.spec.ts` | **yes, TWICE** | the gate, over HTTP (`docker-e2e-full`) and then stdio (`docker-e2e-full-stdio`, #383) |
 | `mcp-client.playwright.spec.ts` | no, manual | round trip duplicated by docker-all-tools, session shim covered by `tests/unit/httpServer_session_not_found.test.js`; only the SSE connect is unique |
 | `docker.e2e.spec.ts` | no, manual | the smoke level, for fast local feedback; its assertions are a subset of docker-all-tools |
 

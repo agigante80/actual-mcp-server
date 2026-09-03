@@ -42,5 +42,19 @@ export default defineConfig({
       name: 'docker-e2e-full',
       testMatch: /docker-all-tools\.e2e\.spec\.ts$/,
     },
+    /**
+     * #383: the SAME spec file over stdio. Not a copy: the suite drives everything through one
+     * fixture (#375), so the transport is a fixture implementation rather than a second file.
+     *
+     * It runs on the HOST rather than inside `e2e-test-runner`, because that container has
+     * neither the server's `dist/` nor a docker socket and so has no route to a stdio server.
+     * `tests/e2e/run-docker-e2e.sh` invokes this project directly after the containerised HTTP
+     * run, while the stack is still up. Selected by MCP_TEST_TRANSPORT=stdio, which is the same
+     * env var the manual runner uses (#280).
+     */
+    {
+      name: 'docker-e2e-full-stdio',
+      testMatch: /docker-all-tools\.e2e\.spec\.ts$/,
+    },
   ],
 });
