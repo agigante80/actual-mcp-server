@@ -33,9 +33,11 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
   _resetConnectionReuseCounterForTests,
   _setApiInitializedForTests,
   _setSkipApiInitForTests,
+  _shouldKeepSingletonAlive,
 }) => {
   const { connectionPool } = await import('../../dist/src/lib/ActualConnectionPool.js');
   const { requestContext } = await import('../../dist/src/lib/requestContext.js');
+  const { isApiInitialized } = await import('../../dist/src/lib/apiState.js');
 
   // Disarm real network calls in the legacy fallback path.
   _setSkipApiInitForTests(true);
@@ -217,6 +219,118 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
       `pool branch skipped when _apiInitialized is false (got ${after})`);
 
     clearPoolSession('sess-stale');
+  }
+
+  // =========================================================================
+  // #419: stdio keeps the api singleton alive across ops (no per-call login),
+  // with a self-heal that tears it down on an infrastructure-level error.
+  //
+  // The skip seam's shutdownActualApi honours _shouldKeepSingletonAlive, so
+  // these cases observe the real branch decision through isApiInitialized()
+  // without driving a live api.init(). MCP_STDIO_MODE is the process signal.
+  // =========================================================================
+
+  // -------------------------------------------------------------------------
+  // Case 6: _shouldKeepSingletonAlive decision (pure, mutation-proof)
+  // -------------------------------------------------------------------------
+  describe('Case 6: _shouldKeepSingletonAlive decision (#419)');
+  {
+    const priorStdio = process.env.MCP_STDIO_MODE;
+    delete process.env.MCP_STDIO_MODE; // not a stdio process
+    assert(_shouldKeepSingletonAlive(0, false) === false, 'http, no active sessions -> full shutdown');
+    assert(_shouldKeepSingletonAlive(1, false) === true, 'http, active session -> keep alive');
+    assert(_shouldKeepSingletonAlive(1, true) === true, 'force does NOT defeat the active-HTTP-session keep-alive');
+    process.env.MCP_STDIO_MODE = 'true'; // stdio process
+    assert(_shouldKeepSingletonAlive(0, false) === true, 'stdio -> keep singleton alive between ops');
+    assert(_shouldKeepSingletonAlive(0, true) === false, 'stdio + forceFullShutdown -> self-heal teardown');
+    assert(_shouldKeepSingletonAlive(1, true) === true, 'an active session still wins even under force');
+    if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
+  }
+
+  // -------------------------------------------------------------------------
+  // Case 7: stdio keeps the singleton alive: one login for N calls
+  // -------------------------------------------------------------------------
+  describe('Case 7: stdio process keeps the singleton alive across ops (#419)');
+  {
+    const priorStdio = process.env.MCP_STDIO_MODE;
+    process.env.MCP_STDIO_MODE = 'true';
+    _setApiInitializedForTests(false); // fresh process, no login yet
+    const sid = 'stdio-keepalive-1';
+    await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+      await withActualApi(async () => 'ok');
+    });
+    assert(isApiInitialized() === true,
+      'after a stdio op the singleton stays live (next init no-ops -> one login for N calls)');
+    await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+      await withActualApi(async () => 'ok2');
+    });
+    assert(isApiInitialized() === true, 'still live after a second stdio op');
+    _setApiInitializedForTests(false);
+    if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
+  }
+
+  // -------------------------------------------------------------------------
+  // Case 8: self-heal: transient error tears down, domain error does not
+  // -------------------------------------------------------------------------
+  describe('Case 8: stdio self-heal on infrastructure error, not on domain error (#419)');
+  {
+    const priorStdio = process.env.MCP_STDIO_MODE;
+    process.env.MCP_STDIO_MODE = 'true';
+    const sid = 'stdio-selfheal-1';
+
+    _setApiInitializedForTests(false);
+    let thrown = null;
+    try {
+      await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+        await withActualApi(async () => { throw new Error('Authentication failed: too-many-requests'); });
+      });
+    } catch (e) { thrown = e; }
+    assert(thrown !== null && /too-many-requests/.test(thrown.message), 'transient error propagated');
+    assert(isApiInitialized() === false,
+      'transient error forced a full teardown (isApiInitialized reset) -> next op re-inits fresh');
+
+    _setApiInitializedForTests(false);
+    thrown = null;
+    try {
+      await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+        await withActualApi(async () => { throw new Error('Field "payee_name" does not exist'); });
+      });
+    } catch (e) { thrown = e; }
+    assert(thrown !== null && /payee_name/.test(thrown.message), 'domain error propagated');
+    assert(isApiInitialized() === true,
+      'domain error left the singleton alive (kept warm, no per-op login reintroduced)');
+
+    _setApiInitializedForTests(false);
+    if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
+  }
+
+  // -------------------------------------------------------------------------
+  // Case 9: pool-miss warn fires at most once per process, not per call
+  // -------------------------------------------------------------------------
+  describe('Case 9: pool-miss warning suppressed once the singleton is live (#419)');
+  {
+    const priorStdio = process.env.MCP_STDIO_MODE;
+    process.env.MCP_STDIO_MODE = 'true';
+    const loggerMod = await import('../../dist/src/logger.js');
+    const log = loggerMod.default;
+    const originalWarn = log.warn.bind(log);
+    let poolMissWarns = 0;
+    log.warn = (...args) => { if (/Pool miss/.test(String(args[0]))) poolMissWarns++; return originalWarn(...args); };
+    try {
+      _setApiInitializedForTests(false); // first call warns (a real init is ahead)
+      const sid = 'stdio-warn-1';
+      for (let i = 0; i < 3; i++) {
+        await requestContext.run({ sessionId: sid, transport: 'stdio' }, async () => {
+          await withActualApi(async () => 'ok');
+        });
+      }
+    } finally {
+      log.warn = originalWarn;
+    }
+    assert(poolMissWarns <= 1,
+      `pool-miss warn fired at most once per process, not per call (got ${poolMissWarns})`);
+    _setApiInitializedForTests(false);
+    if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
   }
 
   console.log(`\n[adapter-session-reuse] Results: ${passed} passed, ${failed} failed`);

@@ -81,16 +81,19 @@ export async function startStdioServer(
     //   - no `principal`, or getActiveBudgetConfig() would attempt the #189
     //     preferred-budget restore for a caller that has no authenticated
     //     identity, and the env default would stop being authoritative.
-    //   - `transport: 'stdio'` is what keeps stdio OFF the pooled path.
-    //     switchBudget's slow path calls connectionPool.getConnection(), so
-    //     WITHOUT this marker the first switch would silently move stdio onto
-    //     the pooled branch: writes would then rely on api.sync() instead of the
-    //     legacy init/shutdown cycle every existing stdio persistence behaviour
-    //     is built on, and the entry would never be touched (touch() is called
-    //     only from httpServer.ts), so it would expire after the idle timeout and
-    //     be torn down by the cleanup sweep without the api lock, possibly
-    //     mid-operation. That is a far larger change than this ticket, and it is
-    //     not one we want by accident.
+    //   - `transport: 'stdio'` is what keeps stdio OFF the pooled path, and it
+    //     stays that way after #419. switchBudget's slow path calls
+    //     connectionPool.getConnection(), so WITHOUT this marker the first switch
+    //     would silently move stdio onto the pooled branch, and the entry would
+    //     never be touched (touch() is called only from httpServer.ts), so it
+    //     would expire after the idle timeout and be torn down by the cleanup
+    //     sweep without the api lock, possibly mid-operation. That is a far larger
+    //     change than we want by accident.
+    //     #419 solved the per-call upstream login WITHOUT pooling stdio: a stdio
+    //     process keeps the api singleton alive between ops in shutdownActualApi
+    //     (see _shouldKeepSingletonAlive), so the legacy branch's init no-ops
+    //     after the first login. No pool entry is created, so there is nothing for
+    //     the sweep to evict and this comment's hazard never arises.
     //   - `allowedBudgets` is absent, so under AUTH_PROVIDER=oidc switchBudget
     //     still denies. Fail closed: a local pipe must not gain budget access an
     //     HTTP caller would need an ACL for.

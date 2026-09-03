@@ -27,6 +27,7 @@ import { dirname, join } from 'path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ADAPTER = pathToFileURL(join(ROOT, 'dist', 'src', 'lib', 'actual-adapter.js')).href;
 const RETRY = pathToFileURL(join(ROOT, 'dist', 'src', 'lib', 'retry.js')).href;
+const APISTATE = pathToFileURL(join(ROOT, 'dist', 'src', 'lib', 'apiState.js')).href;
 
 let passed = 0;
 let failed = 0;
@@ -194,6 +195,54 @@ console.log('\n[adapter-write-queue-wakeup]');
     emit({ a: a.state, b: b.state }); process.exit(0);
   `);
   check('DISABLED: with ACTUAL_OP_TIMEOUT_MS=0 both writes still resolve', r.a === 'resolved' && r.b === 'resolved', `${r.a}/${r.b} ${r.__error || ''}`);
+}
+
+// ---------------------------------------------------------------------------
+// #419 DRAIN self-heal. The write drain inits once and shuts down once per batch,
+// so the keep-alive that stops a stdio process re-logging-in per op could leave a
+// CORRUPT singleton live after a transient failure. The batch-end shutdown must
+// force a full teardown when any op in the batch hit an infrastructure-level
+// error, so the next batch re-inits fresh; a domain error must leave it alive.
+// Runs in its own process because MCP_STDIO_MODE and the singleton flag are
+// process-global (same reason the scenarios above fork).
+// ---------------------------------------------------------------------------
+{
+  // Transient error in a drained write -> singleton torn down (self-heal).
+  const r = runInChild({ MCP_STDIO_MODE: 'true' }, `
+    const apiState = await import(${JSON.stringify(APISTATE)});
+    adapter._setApiInitializedForTests(false);
+    let msg = '';
+    try {
+      await withWriteSession(async () => { throw new Error('Authentication failed: too-many-requests'); });
+    } catch (e) { msg = String(e && e.message || e); }
+    await sleep(300);                       // let the batch-end shutdown run
+    emit({ msg, aliveAfter: apiState.isApiInitialized() });
+    process.exit(0);
+  `);
+  check('DRAIN SELF-HEAL: the transient error propagates', /too-many-requests/.test(r.msg || ''), r.msg || r.__error);
+  check(
+    'DRAIN SELF-HEAL: a transient drain error tears the stdio singleton down (next batch re-inits)',
+    r.aliveAfter === false,
+    r.aliveAfter === undefined ? r.__error : `isApiInitialized=${r.aliveAfter}`,
+  );
+}
+{
+  // Domain error in a drained write -> singleton kept alive (no per-op login).
+  const r = runInChild({ MCP_STDIO_MODE: 'true' }, `
+    const apiState = await import(${JSON.stringify(APISTATE)});
+    adapter._setApiInitializedForTests(false);
+    try {
+      await withWriteSession(async () => { throw new Error('Field "payee_name" does not exist'); });
+    } catch (e) { /* expected */ }
+    await sleep(300);
+    emit({ aliveAfter: apiState.isApiInitialized() });
+    process.exit(0);
+  `);
+  check(
+    'DRAIN SELF-HEAL: a domain drain error leaves the stdio singleton alive (kept warm)',
+    r.aliveAfter === true,
+    r.aliveAfter === undefined ? r.__error : `isApiInitialized=${r.aliveAfter}`,
+  );
 }
 
 console.log(`\n[adapter-write-queue-wakeup] Results: ${passed} passed, ${failed} failed`);
