@@ -139,7 +139,7 @@
 
 ### Tool Definitions
 
-76 tools organized by category:
+77 tools organized by category:
 
 ```
 src/tools/
@@ -158,6 +158,7 @@ src/tools/
 ├── accounts_get_balance.ts
 ├── account_flow_summary.ts             # Cross-account balance-change reconciliation
 ├── transactions_aggregate.ts           # Transactions (deterministic analysis)
+├── recurring_expenses_summary.ts       # Recurring-charge detection (heuristic)
 ├── transactions_create.ts
 ├── transactions_get.ts
 ├── transactions_update.ts
@@ -340,7 +341,7 @@ actual-mcp-server/
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
-│   ├── tools/                    # MCP tool definitions (76 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (77 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -371,7 +372,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 76 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 77 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── (#366: the suites/ tree was removed. It never executed, and every doc that
 │   │        named it now points at docker-all-tools.e2e.spec.ts instead)
@@ -433,7 +434,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 76 tools with MCP capabilities
+   └─> Registers 77 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

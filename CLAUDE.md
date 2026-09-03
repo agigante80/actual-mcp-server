@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **76 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **77 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 22+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
@@ -82,7 +82,7 @@ node dist/src/index.js --stdio  # Production stdio
 
 # Testing (validation sequence, run in this order)
 npm run build                   # Step 1: must compile cleanly
-npm run verify-tools            # Step 2: all 76 tools registered (reads dist/)
+npm run verify-tools            # Step 2: all 77 tools registered (reads dist/)
 npm run test:unit-js            # Step 3: unit + schema tests
 npm audit --audit-level=moderate # Step 4: no new vulnerabilities
 
@@ -238,7 +238,7 @@ Express + StreamableHTTP             StdioServerTransport
     ↓                                     ↓
 ActualMCPConnection (src/lib/ActualMCPConnection.ts)
     ↓
-ActualToolsManager (76 tools, Zod validation, dispatch) at src/actualToolsManager.ts
+ActualToolsManager (77 tools, Zod validation, dispatch) at src/actualToolsManager.ts
     ↓
 actual-adapter.ts (withActualApi wrapper, retry 3x, concurrency limit 5)
     ↓
@@ -335,7 +335,7 @@ const tool: ToolDefinition = {
 export default tool;
 ```
 
-**Every tool declares MCP annotations, and they are HINTS, never a guard (#379).** `src/lib/tool-annotations.ts` classifies all 76 tools on the four fields the MCP spec defines, and `src/lib/tool-list-entry.ts` attaches them to every `tools/list` entry. Two things to know before touching this:
+**Every tool declares MCP annotations, and they are HINTS, never a guard (#379).** `src/lib/tool-annotations.ts` classifies all 77 tools on the four fields the MCP spec defines, and `src/lib/tool-list-entry.ts` attaches them to every `tools/list` entry. Two things to know before touching this:
 
 - **The spec's defaults are the conservative ones**, so declaring nothing already means write-capable, destructive and open-world. The value is telling clients which tools are SAFE, and correcting `openWorldHint`, whose default (`true`) is wrong for 73 of 74: this server's domain is one Actual instance, a CLOSED world, and only `actual_bank_sync` reaches a third party.
 - **Nothing in `src/` may branch on an annotation.** The spec says clients must treat them as untrusted, so they can never carry an authorisation or safety decision. Authorisation stays in `budget-acl.ts`; refusal stays in the adapter guards. An annotation that lies is worse than none, which is why `tests/unit/tool_annotations.test.js` derives the classification from the adapter call graph and fails if a `readOnlyHint: true` tool reaches `queueWriteOperation`. That guard also replaced #370's hand-maintained `READ_ONLY` list, so "can this tool write?" now has ONE answer.

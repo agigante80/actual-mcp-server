@@ -442,3 +442,281 @@ export function summarizeAccountFlow(snapshot: FinancialAnalysisSnapshot, input:
     },
   };
 }
+
+// ---- Recurring expenses (#426) ----------------------------------------------------------------
+// Detect recurring charges (subscriptions, bills) from posted history: group a payee/account into
+// amount lanes, merge lanes on a genuine price change, tolerate date drift and month-end clamping,
+// and suppress a series that has gone quiet (two-miss rule). Transfers, income and starting
+// balances are never recurring. This is the only HEURISTIC of the three tools, so it carries the
+// widest scenario set. Original implementation by @maxvanweenen (PR #399), ported verbatim.
+
+export type RecurrenceFrequency = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'other';
+
+type PaymentEvent = {
+  id: string;
+  date: string;
+  amount: number;
+  payeeId: string;
+  accountId: string;
+};
+
+type RecurringSeries = {
+  events: PaymentEvent[];
+  frequency: RecurrenceFrequency;
+  regularity: number;
+};
+
+export type RecurringInput = {
+  startDate: string;
+  endDate: string;
+  accountIds?: string[];
+  minOccurrences: number;
+  includeInactive: boolean;
+};
+
+function paymentEvents(snapshot: FinancialAnalysisSnapshot, input: RecurringInput, maps: Maps): PaymentEvent[] {
+  const selected = input.accountIds ? new Set(input.accountIds) : null;
+  const events: PaymentEvent[] = [];
+
+  for (const transaction of snapshot.transactions) {
+    if (transaction.date < input.startDate || transaction.date > input.endDate) continue;
+    if (selected && !selected.has(transaction.account)) continue;
+
+    const postings = transaction.is_parent === true || (transaction.subtransactions?.length ?? 0) > 0
+      ? postingRows([transaction])
+      : [transaction];
+    let amount = 0;
+    let payeeId = transaction.payee ?? null;
+
+    for (const posting of postings) {
+      if (posting.transfer_id != null) {
+        continue;
+      }
+      if (posting.starting_balance_flag === true) continue;
+      const category = posting.category ? maps.categories.get(posting.category) : undefined;
+      if (category && bool(category.is_income)) continue;
+      const postingAmount = integer(posting.amount, `Transaction ${posting.id} amount`);
+      if (postingAmount < 0) amount += Math.abs(postingAmount);
+      payeeId = payeeId ?? posting.payee ?? null;
+    }
+
+    if (amount <= 0 || !payeeId) continue;
+    events.push({ id: transaction.id, date: transaction.date, amount, payeeId, accountId: transaction.account });
+  }
+
+  return events.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+}
+
+function utcDate(value: string): Date {
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.round((utcDate(b).getTime() - utcDate(a).getTime()) / 86_400_000);
+}
+
+function isLastDayOfMonth(value: string): boolean {
+  const date = utcDate(value);
+  const next = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+  return date.getUTCDate() === new Date(next.getTime() - 86_400_000).getUTCDate();
+}
+
+function monthsBetween(a: string, b: string): number {
+  const left = utcDate(a);
+  const right = utcDate(b);
+  return (right.getUTCFullYear() - left.getUTCFullYear()) * 12 + right.getUTCMonth() - left.getUTCMonth();
+}
+
+function intervalMatches(a: string, b: string, frequency: RecurrenceFrequency): boolean {
+  const days = daysBetween(a, b);
+  if (frequency === 'weekly') return days >= 5 && days <= 9;
+  if (frequency === 'biweekly') return days >= 12 && days <= 16;
+  if (frequency === 'monthly') {
+    if (monthsBetween(a, b) !== 1) return false;
+    const dayDiff = Math.abs(utcDate(a).getUTCDate() - utcDate(b).getUTCDate());
+    return dayDiff <= 7 || (isLastDayOfMonth(a) && isLastDayOfMonth(b));
+  }
+  if (frequency === 'quarterly') return monthsBetween(a, b) === 3 && Math.abs(utcDate(a).getUTCDate() - utcDate(b).getUTCDate()) <= 10;
+  if (frequency === 'yearly') return monthsBetween(a, b) === 12 && Math.abs(utcDate(a).getUTCDate() - utcDate(b).getUTCDate()) <= 15;
+  return false;
+}
+
+function detectFrequency(events: PaymentEvent[]): { frequency: RecurrenceFrequency; regularity: number } {
+  if (events.length < 2) return { frequency: 'other', regularity: 0 };
+  const candidates: RecurrenceFrequency[] = ['weekly', 'biweekly', 'monthly', 'quarterly', 'yearly'];
+  let best: { frequency: RecurrenceFrequency; regularity: number } = { frequency: 'other', regularity: 0 };
+  for (const frequency of candidates) {
+    let matches = 0;
+    for (let i = 1; i < events.length; i += 1) {
+      if (intervalMatches(events[i - 1].date, events[i].date, frequency)) matches += 1;
+    }
+    const regularity = matches / (events.length - 1);
+    if (regularity > best.regularity) best = { frequency, regularity };
+  }
+  return best.regularity >= 0.6 ? best : { frequency: 'other', regularity: best.regularity };
+}
+
+function amountClose(a: number, b: number): boolean {
+  return Math.abs(a - b) <= Math.max(100, Math.round(Math.max(a, b) * 0.05));
+}
+
+function initialAmountLanes(events: PaymentEvent[]): PaymentEvent[][] {
+  const lanes: PaymentEvent[][] = [];
+  for (const event of events) {
+    const lane = lanes.find(candidate => amountClose(candidate[candidate.length - 1].amount, event.amount));
+    if (lane) lane.push(event);
+    else lanes.push([event]);
+  }
+  return lanes;
+}
+
+function mergePriceLanes(lanes: PaymentEvent[][]): PaymentEvent[][] {
+  const result = lanes.map(lane => [...lane].sort((a, b) => a.date.localeCompare(b.date)));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    outer: for (let i = 0; i < result.length; i += 1) {
+      for (let j = i + 1; j < result.length; j += 1) {
+        const a = result[i];
+        const b = result[j];
+        const aBeforeB = a[a.length - 1].date < b[0].date;
+        const bBeforeA = b[b.length - 1].date < a[0].date;
+        if (!aBeforeB && !bBeforeA) continue;
+        const combined = [...a, ...b].sort((x, y) => x.date.localeCompare(y.date));
+        const detected = detectFrequency(combined);
+        if (detected.frequency !== 'other' && detected.regularity >= 0.75) {
+          result[i] = combined;
+          result.splice(j, 1);
+          changed = true;
+          break outer;
+        }
+      }
+    }
+  }
+  return result;
+}
+
+function addFrequency(dateValue: string, frequency: RecurrenceFrequency): string | undefined {
+  if (frequency === 'other') return undefined;
+  const date = utcDate(dateValue);
+  if (frequency === 'weekly') date.setUTCDate(date.getUTCDate() + 7);
+  if (frequency === 'biweekly') date.setUTCDate(date.getUTCDate() + 14);
+  if (frequency === 'monthly' || frequency === 'quarterly' || frequency === 'yearly') {
+    const months = frequency === 'monthly' ? 1 : frequency === 'quarterly' ? 3 : 12;
+    const originalDay = date.getUTCDate();
+    const wasMonthEnd = isLastDayOfMonth(dateValue);
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + months);
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(wasMonthEnd ? lastDay : Math.min(originalDay, lastDay));
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+function establishedAmounts(events: PaymentEvent[]): { latest: number; previous?: number } {
+  const runs: number[][] = [];
+  for (const event of events) {
+    const current = runs[runs.length - 1];
+    // The wider amount tolerance belongs to series matching, not price history.
+    // Once events are known to be one series, preserve exact posted prices so a
+    // small increase cannot be hidden inside a historical median.
+    if (current && current[current.length - 1] === event.amount) current.push(event.amount);
+    else runs.push([event.amount]);
+  }
+  const median = (values: number[]) => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
+  return {
+    latest: median(runs[runs.length - 1]),
+    previous: runs.length > 1 ? median(runs[runs.length - 2]) : undefined,
+  };
+}
+
+function annualize(amount: number, frequency: RecurrenceFrequency): number | undefined {
+  const multiplier: Partial<Record<RecurrenceFrequency, number>> = {
+    weekly: 52,
+    biweekly: 26,
+    monthly: 12,
+    quarterly: 4,
+    yearly: 1,
+  };
+  const value = multiplier[frequency];
+  return value === undefined ? undefined : integer(amount * value, 'Annualized amount');
+}
+
+function inactiveAt(endDate: string, expectedNextDate: string | undefined, frequency: RecurrenceFrequency): boolean {
+  if (!expectedNextDate) return true;
+  const secondMiss = addFrequency(expectedNextDate, frequency);
+  return secondMiss !== undefined && endDate >= secondMiss;
+}
+
+export function summarizeRecurringExpenses(snapshot: FinancialAnalysisSnapshot, input: RecurringInput) {
+  const maps = buildMaps(snapshot);
+  const byPayeeAccount = new Map<string, PaymentEvent[]>();
+  for (const event of paymentEvents(snapshot, input, maps)) {
+    const key = `${event.payeeId}:${event.accountId}`;
+    const values = byPayeeAccount.get(key) ?? [];
+    values.push(event);
+    byPayeeAccount.set(key, values);
+  }
+
+  const detected: RecurringSeries[] = [];
+  for (const events of byPayeeAccount.values()) {
+    for (const lane of mergePriceLanes(initialAmountLanes(events))) {
+      const cadence = detectFrequency(lane);
+      if (cadence.frequency === 'other') continue;
+      const needed = cadence.frequency === 'yearly' ? Math.min(2, input.minOccurrences) : input.minOccurrences;
+      if (lane.length < needed) continue;
+      detected.push({ events: lane, ...cadence });
+    }
+  }
+
+  const series = detected.flatMap(item => {
+    const first = item.events[0];
+    const last = item.events[item.events.length - 1];
+    const expectedNextDate = addFrequency(last.date, item.frequency);
+    const inactive = inactiveAt(input.endDate, expectedNextDate, item.frequency);
+    if (inactive && !input.includeInactive) return [];
+    const amounts = establishedAmounts(item.events);
+    const annualizedAmount = annualize(amounts.latest, item.frequency);
+    if (annualizedAmount === undefined) return [];
+    const confidence = item.regularity >= 0.9 && item.events.length >= 4
+      ? 'high'
+      : item.regularity >= 0.7
+        ? 'medium'
+        : 'low';
+    const previousAmount = amounts.previous;
+    const priceChange = previousAmount !== undefined && previousAmount !== amounts.latest
+      ? {
+          previousAmount,
+          currentAmount: amounts.latest,
+          absoluteChange: amounts.latest - previousAmount,
+          percentageChange: Math.round(((amounts.latest - previousAmount) / previousAmount) * 10_000) / 100,
+        }
+      : undefined;
+    return [{
+      payeeId: first.payeeId,
+      payeeName: maps.payees.get(first.payeeId)?.name ?? first.payeeId,
+      accountId: first.accountId,
+      accountName: maps.accounts.get(first.accountId)?.name ?? first.accountId,
+      frequency: item.frequency,
+      occurrenceCount: item.events.length,
+      latestAmount: amounts.latest,
+      ...(previousAmount !== undefined ? { previousAmount } : {}),
+      annualizedAmount,
+      firstObservedDate: first.date,
+      lastObservedDate: last.date,
+      expectedNextDate,
+      ...(priceChange ? { priceChange } : {}),
+      confidence,
+      confidenceScore: Math.round(item.regularity * 100),
+      active: !inactive,
+    }];
+  }).sort((a, b) => a.payeeName.localeCompare(b.payeeName) || b.latestAmount - a.latestAmount);
+
+  return {
+    dateRange: { startDate: input.startDate, endDate: input.endDate },
+    series,
+    totalAnnualizedRecurringExpenses: series
+      .filter(item => item.active)
+      .reduce((total, item) => total + item.annualizedAmount, 0),
+  };
+}
