@@ -609,25 +609,26 @@ export async function transactionTests(client, context) {
   }
 
   // #426: recurring-expense detection, exercised over BOTH transports by the dual-transport gate.
-  // Seeds a monthly cadence for a fresh payee in this test account, asserts the series is detected,
-  // then a NAME-refusal negative. The seeded transactions are removed with the account at teardown.
+  // Uses its OWN disposable account, not the shared txAccountId: actual_transactions_create does not
+  // return an id in this runner (the main flow above locates its txn by notes), so the seeded charges
+  // cannot be deleted individually to zero the balance, and a non-zero balance makes accounts_close
+  // fail (transferAccountId required). accounts_delete force-removes an account WITH transactions and
+  // its rows in one call (proven by the #425 account_flow manual block), so a dedicated account is
+  // torn down cleanly regardless of balance and leaves zero residue.
   console.log("\n#426: actual_recurring_expenses_summary...");
-  let recPayeeId, recPayeeName;
-  const recTxnIds = [];
+  let recAccountId, recPayeeId, recPayeeName;
+  const recAcctName = `MCP-Rec-${Date.now()}`;
   try {
+    const recAcctRaw = await callTool("actual_accounts_create", { name: recAcctName, balance: 0 });
+    recAccountId = recAcctRaw.id || recAcctRaw.result || recAcctRaw;
     recPayeeName = `RecPayee-${Date.now()}`;
     const payeeRaw = await callTool("actual_payees_create", { name: recPayeeName });
     recPayeeId = payeeRaw?.id || payeeRaw?.result || payeeRaw;
     for (const date of ["2025-06-15", "2025-07-15", "2025-08-15"]) {
-      // Capture the id: these charges give the account a non-zero balance, so they MUST be deleted
-      // in the finally below or the account teardown's close() fails (transferAccountId required)
-      // and the zero-residue assertion trips. Learned the hard way in the #426 dual-transport run.
-      const txnRaw = await callTool("actual_transactions_create", { account: txAccountId, date, amount: -1599, payee: recPayeeId });
-      const txnId = typeof txnRaw === "string" ? txnRaw : (txnRaw?.id || txnRaw?.result);
-      if (txnId) recTxnIds.push(txnId);
+      await callTool("actual_transactions_create", { account: recAccountId, date, amount: -1599, payee: recPayeeId });
     }
     const recRaw = await callTool("actual_recurring_expenses_summary", {
-      startDate: "2025-01-01", endDate: "2025-08-31", accountIds: [txAccountId], minOccurrences: 3, includeInactive: true,
+      startDate: "2025-01-01", endDate: "2025-08-31", accountIds: [recAccountId], minOccurrences: 3, includeInactive: true,
     });
     const rec = recRaw?.result ?? recRaw;
     const found = Array.isArray(rec?.series) ? rec.series.find(sery => sery.payeeName === recPayeeName) : null;
@@ -638,19 +639,18 @@ export async function transactionTests(client, context) {
     }
     // NEGATIVE (#388/#426): an account NAME is refused with its resolved id.
     try {
-      await callTool("actual_recurring_expenses_summary", { startDate: "2025-01-01", endDate: "2025-12-31", accountIds: [txAcctName] });
+      await callTool("actual_recurring_expenses_summary", { startDate: "2025-01-01", endDate: "2025-12-31", accountIds: [recAcctName] });
       fail("recurring: an account NAME filter should be refused, but the call succeeded");
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes(String(txAccountId))) console.log(`  \u2713 recurring: an account name is refused with its resolved id (#388/#426)`);
-      else fail(`recurring: refused, but the message did not carry the resolved id ${txAccountId}: ${msg.slice(0, 120)}`);
+      if (msg.includes(String(recAccountId))) console.log(`  \u2713 recurring: an account name is refused with its resolved id (#388/#426)`);
+      else fail(`recurring: refused, but the message did not carry the resolved id ${recAccountId}: ${msg.slice(0, 120)}`);
     }
   } catch (err) {
     fail(`recurring: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
   } finally {
-    // Delete the seeded charges FIRST so the account balance returns to zero before teardown,
-    // then the payee (delete order: transactions, then payee).
-    for (const id of recTxnIds) await callTool("actual_transactions_delete", { id }).catch(() => {});
+    // accounts_delete removes the account and its seeded transactions in one call; then the payee.
+    if (recAccountId) await callTool("actual_accounts_delete", { id: recAccountId }).catch(() => {});
     if (recPayeeId) await callTool("actual_payees_delete", { id: recPayeeId }).catch(() => {});
   }
 
