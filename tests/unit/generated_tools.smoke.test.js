@@ -192,6 +192,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.txs = [{ date: '2024-01-15', amount: 100 }];
   if (name.includes('transactions_aggregate')) inputExample.startDate = '2025-01-01', inputExample.endDate = '2025-01-31', inputExample.groupBy = 'month';
   if (name.includes('account_flow_summary')) inputExample.startDate = '2025-01-01', inputExample.endDate = '2025-01-31', inputExample.accountIds = ['a1'];
+  if (name.includes('recurring_expenses_summary')) inputExample.months = 12; // #426: months alone satisfies the startDate-XOR-months rule; minOccurrences/includeInactive default
   if (name.includes('transactions_get')) inputExample.accountId = 'a1'; // matches getAccounts stub { id: 'a1' } — nil-UUID would hit not-found path and return { error } without result
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test', subtransactions: [{ amount: -200 }, { amount: -100 }] }; // #305: edit an existing split (-300 per runQuery stub)

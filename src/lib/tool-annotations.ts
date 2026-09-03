@@ -60,6 +60,7 @@ const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
  */
 const READ_ONLY = new Set<string>([
   'actual_account_flow_summary',
+  'actual_recurring_expenses_summary',
   'actual_accounts_get_balance',
   'actual_accounts_list',
   'actual_budgets_get_all',

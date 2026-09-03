@@ -72,6 +72,7 @@ const EXCEPTIONS = {
   'actual_transactions_aggregate:categoryGroupIds': 'Category B: resolved by adapter.resolveFilterId (#388, #424)',
   'actual_transactions_aggregate:payeeIds': 'Category B: resolved by adapter.resolveFilterId (#388, #424)',
   'actual_account_flow_summary:accountIds': 'Category B: resolved by adapter.resolveFilterId (#388, #425)',
+  'actual_recurring_expenses_summary:accountIds': 'Category B: resolved by adapter.resolveFilterId (#388, #426)',
   'actual_transactions_search_by_amount:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
   'actual_transactions_search_by_category:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',
   'actual_transactions_search_by_month:accountId': 'Category B: resolved by adapter.resolveFilterId (#388)',

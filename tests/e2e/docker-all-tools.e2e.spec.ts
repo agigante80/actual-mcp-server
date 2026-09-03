@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 76 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 77 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 76 TOOLS', () => {
+test.describe('Docker E2E - ALL 77 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -775,6 +775,37 @@ test.describe('Docker E2E - ALL 76 TOOLS', () => {
     const acct = await makeAccount();
     await expect(mcp.call('actual_account_flow_summary', {
       startDate: '2025-01-01', endDate: '2025-01-31', accountIds: [acct.name],
+    })).rejects.toThrow(new RegExp(acct.id));
+  });
+
+  // #426: actual_recurring_expenses_summary detects a recurring series from posted history. Seed one
+  // payee charged the same amount on the 15th of three consecutive months in a fresh account, then
+  // assert the tool reports it as a monthly series with the exact latest amount. includeInactive:true
+  // so the assertion does not depend on how long ago the fixed dates are. Filtered to the fresh
+  // account so other tests' rows cannot introduce a second series.
+  test('actual_recurring_expenses_summary - detects a monthly series with the right cadence and amount', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const acct = await makeAccount();
+    const payee = await makePayee();
+    for (const date of ['2025-06-15', '2025-07-15', '2025-08-15']) {
+      await makeTransaction({ account: acct, amount: -1599, date, payee: payee.id });
+    }
+    const res = await mcp.call('actual_recurring_expenses_summary', {
+      startDate: '2025-01-01', endDate: '2025-08-31', accountIds: [acct.id], minOccurrences: 3, includeInactive: true,
+    });
+    const out = (res && (res as { result?: unknown }).result) ?? res;
+    const series = (out as { series: Array<{ payeeName: string; frequency: string; latestAmount: number }> }).series;
+    const found = series.find(s => s.payeeName === payee.name);
+    expect(found, 'the seeded payee is detected as a series').toBeTruthy();
+    expect(found?.frequency).toBe('monthly');
+    expect(found?.latestAmount).toBe(1599);
+  });
+
+  // #426 NEGATIVE: an account NAME passed as accountIds is refused with the resolved id (#388),
+  // not silently returning an empty result.
+  test('actual_recurring_expenses_summary - ERROR: an account NAME is refused with the resolved id', async ({ mcp, makeAccount }) => {
+    const acct = await makeAccount();
+    await expect(mcp.call('actual_recurring_expenses_summary', {
+      startDate: '2025-01-01', endDate: '2025-12-31', accountIds: [acct.name],
     })).rejects.toThrow(new RegExp(acct.id));
   });
 

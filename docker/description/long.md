@@ -2,11 +2,11 @@
 
 A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budget APIs as conversational AI tools for LibreChat, LobeChat, Claude Desktop, and any MCP-compatible client.
 
-> **✅ Verified**: All 76 tools tested and working with LibreChat (HTTP/HTTPS + OIDC) and Claude Desktop (stdio native + mcp-remote).
+> **✅ Verified**: All 77 tools tested and working with LibreChat (HTTP/HTTPS + OIDC) and Claude Desktop (stdio native + mcp-remote).
 
 ## 🚀 Features
 
-- **76 Implemented Tools** - Comprehensive coverage of the Actual Budget API (84% of methods)
+- **77 Implemented Tools** - Comprehensive coverage of the Actual Budget API (84% of methods)
 - **6 Exclusive ActualQL Tools** - Advanced queries and summaries unique to this MCP server
 - **HTTP + stdio Transports** - Run as a remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
 - **Claude Desktop Native** - Connect without mcp-remote: spawn the server directly over stdin/stdout, zero config overhead
@@ -63,7 +63,7 @@ cd actual-mcp-server && npm install && npm run build
 }
 ```
 
-> No auth token needed. All 76 tools available. Claude Desktop spawns the process and owns its lifecycle.
+> No auth token needed. All 77 tools available. Claude Desktop spawns the process and owns its lifecycle.
 
 ### HTTPS Setup (Recommended for LibreChat)
 
@@ -128,7 +128,7 @@ BUDGET_2_PASSWORD=office-password
 BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
 ```
 
-## 📚 Available Tools (76 Total)
+## 📚 Available Tools (77 Total)
 
 ### Account Management (7 tools)
 create, list, update, delete, close, reopen, get balance

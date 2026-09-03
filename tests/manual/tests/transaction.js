@@ -608,6 +608,43 @@ export async function transactionTests(client, context) {
     if (aggGrpId) await callTool("actual_category_groups_delete", { id: aggGrpId }).catch(() => {});
   }
 
+  // #426: recurring-expense detection, exercised over BOTH transports by the dual-transport gate.
+  // Seeds a monthly cadence for a fresh payee in this test account, asserts the series is detected,
+  // then a NAME-refusal negative. The seeded transactions are removed with the account at teardown.
+  console.log("\n#426: actual_recurring_expenses_summary...");
+  let recPayeeId, recPayeeName;
+  try {
+    recPayeeName = `RecPayee-${Date.now()}`;
+    const payeeRaw = await callTool("actual_payees_create", { name: recPayeeName });
+    recPayeeId = payeeRaw?.id || payeeRaw?.result || payeeRaw;
+    for (const date of ["2025-06-15", "2025-07-15", "2025-08-15"]) {
+      await callTool("actual_transactions_create", { account: txAccountId, date, amount: -1599, payee: recPayeeId });
+    }
+    const recRaw = await callTool("actual_recurring_expenses_summary", {
+      startDate: "2025-01-01", endDate: "2025-08-31", accountIds: [txAccountId], minOccurrences: 3, includeInactive: true,
+    });
+    const rec = recRaw?.result ?? recRaw;
+    const found = Array.isArray(rec?.series) ? rec.series.find(sery => sery.payeeName === recPayeeName) : null;
+    if (found && found.frequency === "monthly" && found.latestAmount === 1599) {
+      console.log(`  \u2713 recurring: monthly series detected (latestAmount=${found.latestAmount})`);
+    } else {
+      fail(`recurring: expected a monthly series at 1599 for ${recPayeeName}, got ${JSON.stringify(rec?.series)?.slice(0, 160)}`);
+    }
+    // NEGATIVE (#388/#426): an account NAME is refused with its resolved id.
+    try {
+      await callTool("actual_recurring_expenses_summary", { startDate: "2025-01-01", endDate: "2025-12-31", accountIds: [txAcctName] });
+      fail("recurring: an account NAME filter should be refused, but the call succeeded");
+    } catch (err) {
+      const msg = err.message || String(err);
+      if (msg.includes(String(txAccountId))) console.log(`  \u2713 recurring: an account name is refused with its resolved id (#388/#426)`);
+      else fail(`recurring: refused, but the message did not carry the resolved id ${txAccountId}: ${msg.slice(0, 120)}`);
+    }
+  } catch (err) {
+    fail(`recurring: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
+  } finally {
+    if (recPayeeId) await callTool("actual_payees_delete", { id: recPayeeId }).catch(() => {});
+  }
+
   // Teardown: close then delete the dedicated transaction test account.
   // close() must come first: Actual tombstones (hard-deletes) accounts with zero
   // transactions on close(), making them unrecoverable. We need close() to set
