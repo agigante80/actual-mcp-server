@@ -85,10 +85,11 @@ so the module-scoped pacer does not span them; the 75s cool-down in `run-docker-
 (`STDIO_COOLDOWN_S`) drains Actual's rate-limit window between them, and #419 (v0.16.13) is what
 keeps each leg under the ceiling by logging a stdio process in once rather than per call.
 
-The stdio leg is ADVISORY until #423: it RUNS in CI but a stdio-only failure does not fail the job,
-because a rate-limit tail remains on the write-heavy block (a throttled `api.sync()` closes the
-budget and forces a re-download + re-login). `STDIO_E2E_GATING=true` opts back into gating; #423
-drives it to zero and restores it.
+The stdio leg is OPT-IN and OFF in CI until #423: step 6b runs only when `RUN_STDIO_E2E=true`, which
+CI does not set. Two blockers are tracked in #423: a strict-Playwright startup error (the HTML report
+nests inside `test-results`) and a rate-limit tail on the write-heavy block (a throttled `api.sync()`
+closes the budget, forcing a re-download + re-login). Run it locally with `RUN_STDIO_E2E=true`
+(ADVISORY unless `STDIO_E2E_GATING=true`); #423 fixes both, enables it in CI, and makes it gating.
 
 Both workflows invoke `npm run test:e2e:docker:full`,
 which selects the `docker-e2e-full` project, which collects that one file. Every other spec in this
