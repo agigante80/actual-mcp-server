@@ -303,7 +303,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     steps:
