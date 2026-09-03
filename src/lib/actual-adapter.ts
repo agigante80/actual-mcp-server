@@ -3315,6 +3315,7 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
 export async function getFinancialAnalysisSnapshot(params: {
   startDate: string;
   endDate: string;
+  balanceAccountIds?: string[];
 }): Promise<FinancialAnalysisSnapshot> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.financialAnalysis.snapshot').catch(() => {});
@@ -3347,7 +3348,42 @@ export async function getFinancialAnalysisSnapshot(params: {
       q('payees').select(['id', 'name', 'transfer_acct']),
     );
 
-    return { transactions, accounts, categories, categoryGroups, payees };
+    // #425: the transfer counterparts (the OTHER leg of each transfer), so account-flow can name the
+    // funding account. splits:'all' here (not inline/grouped) so a split transfer leg is still seen.
+    const transferIds = [...new Set(
+      transactions.flatMap(t => [t, ...(t.subtransactions ?? [])])
+        .map(t => t.transfer_id)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    )];
+    const transferCounterparts = transferIds.length > 0
+      ? await queryData<AnalysisTransaction>(
+          q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: transferIds } }).select('*'),
+        )
+      : [];
+
+    // #425: opening (strictly before startDate) and closing (through endDate) balances for the
+    // selected accounts. splits:'inline' expands a split to its children so each posting is summed
+    // ONCE; splits:'all' would double-count a split parent plus its children and break reconciliation.
+    const openingBalances: Record<string, number> = {};
+    const closingBalances: Record<string, number> = {};
+    const balanceAccountIds = params.balanceAccountIds ?? [];
+    if (balanceAccountIds.length > 0) {
+      const openingRows = await queryData<{ account: string; balance: number }>(
+        q('transactions').options({ splits: 'inline' })
+          .filter({ $and: [{ account: { $oneof: balanceAccountIds } }, { date: { $lt: params.startDate } }] })
+          .groupBy('account').select(['account', { balance: { $sum: '$amount' } }]),
+      );
+      const closingRows = await queryData<{ account: string; balance: number }>(
+        q('transactions').options({ splits: 'inline' })
+          .filter({ $and: [{ account: { $oneof: balanceAccountIds } }, { date: { $lte: params.endDate } }] })
+          .groupBy('account').select(['account', { balance: { $sum: '$amount' } }]),
+      );
+      for (const id of balanceAccountIds) { openingBalances[id] = 0; closingBalances[id] = 0; }
+      for (const row of openingRows) openingBalances[row.account] = row.balance ?? 0;
+      for (const row of closingRows) closingBalances[row.account] = row.balance ?? 0;
+    }
+
+    return { transactions, transferCounterparts, accounts, categories, categoryGroups, payees, openingBalances, closingBalances };
   });
 }
 

@@ -48,13 +48,17 @@ console.log('Running generated tools smoke tests');
     addTransactions: ['t1'],
     importTransactions: { added: ['t2'], updated: [], errors: [] },
     getTransactions: [{ id: 't1', amount: 100 }],
-    // #424: the financial-analysis tools read one snapshot. Minimal valid shape.
+    // #424/#425: the financial-analysis tools read one snapshot. Minimal valid shape, with the
+    // #425 balance/counterpart fields so actual_account_flow_summary reconciles (0 - 0 = 0).
     getFinancialAnalysisSnapshot: {
       transactions: [{ id: 't1', date: '2025-01-10', amount: -100, account: 'a1', category: 'c1' }],
+      transferCounterparts: [],
       accounts: [{ id: 'a1', name: 'Cash' }],
       categories: [{ id: 'c1', name: 'Food', group: 'g1' }],
       categoryGroups: [{ id: 'g1', name: 'Expenses' }],
       payees: [{ id: 'p1', name: 'Kroger' }],
+      openingBalances: { a1: 0 },
+      closingBalances: { a1: -100 },
     },
     getCategories: [{ id: 'c1', name: 'Food' }],
     getCategoryGroups: [{ id: '20000000-0000-4000-8000-000000000001', name: 'Expenses' }],
@@ -187,6 +191,7 @@ console.log('Running generated tools smoke tests');
 
   if (name.includes('transactions_import')) inputExample.accountId = '00000000-0000-0000-0000-000000000001', inputExample.txs = [{ date: '2024-01-15', amount: 100 }];
   if (name.includes('transactions_aggregate')) inputExample.startDate = '2025-01-01', inputExample.endDate = '2025-01-31', inputExample.groupBy = 'month';
+  if (name.includes('account_flow_summary')) inputExample.startDate = '2025-01-01', inputExample.endDate = '2025-01-31', inputExample.accountIds = ['a1'];
   if (name.includes('transactions_get')) inputExample.accountId = 'a1'; // matches getAccounts stub { id: 'a1' } — nil-UUID would hit not-found path and return { error } without result
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test', subtransactions: [{ amount: -200 }, { amount: -100 }] }; // #305: edit an existing split (-300 per runQuery stub)

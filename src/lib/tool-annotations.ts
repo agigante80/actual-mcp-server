@@ -59,6 +59,7 @@ const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
  *   actual_session_close   closes a pooled connection: server state, not budget data.
  */
 const READ_ONLY = new Set<string>([
+  'actual_account_flow_summary',
   'actual_accounts_get_balance',
   'actual_accounts_list',
   'actual_budgets_get_all',
