@@ -28,6 +28,7 @@ const check = (c, m) => { if (c) { log(`  PASS: ${m}`); passed++; } else { log(`
 const ACC = 'aaaaaaaa-0000-4000-8000-000000000001';
 const CAT = 'bbbbbbbb-0000-4000-8000-000000000002';
 const PAY = 'cccccccc-0000-4000-8000-000000000003';
+const GRP = 'dddddddd-0000-4000-8000-000000000004';
 const ABSENT = 'dddddddd-0000-4000-8000-00000000ffff';
 
 // Count every listing read, so "the happy path reads nothing" is a measurement rather than a claim.
@@ -42,6 +43,8 @@ api.getBudgetMonths = async () => ['2026-01'];
 api.getAccounts = async () => { reads.accounts++; return [{ id: ACC, name: 'Checking' }]; };
 api.getCategories = async () => { reads.categories++; return [{ id: CAT, name: 'Food' }]; };
 api.getPayees = async () => { reads.payees++; return [{ id: PAY, name: 'Amazon' }]; };
+// #424: category_group joined the resolver.
+api.getCategoryGroups = async () => [{ id: GRP, name: 'Bills' }];
 
 const pure = await import('../../dist/src/lib/actual-adapter/filter-ids.js');
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
@@ -92,7 +95,7 @@ describe('a well-formed id costs no listing read, so a correct call is unchanged
 // --- property 2: a name is resolved, not swallowed ---------------------------
 describe('a NAME is refused with the id it resolves to');
 {
-  for (const [kind, name, id] of [['account', 'Checking', ACC], ['category', 'Food', CAT], ['payee', 'Amazon', PAY]]) {
+  for (const [kind, name, id] of [['account', 'Checking', ACC], ['category', 'Food', CAT], ['category_group', 'Bills', GRP], ['payee', 'Amazon', PAY]]) {
     const r = await attempt(() => adapter.resolveFilterId(kind, name));
     const msg = r.ok ? '(resolved instead of refusing)' : String(r.error.message);
     check(!r.ok && isPreflightRefusal(r.error) && msg.includes(id),

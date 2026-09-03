@@ -49,6 +49,7 @@ export { default as schedules_delete } from './schedules_delete.js';
 export { default as schedules_get } from './schedules_get.js';
 export { default as schedules_update } from './schedules_update.js';
 export { default as server_info } from './server_info.js';
+export { default as transactions_aggregate } from './transactions_aggregate.js';
 export { default as transactions_create } from './transactions_create.js';
 export { default as transactions_delete } from './transactions_delete.js';
 export { default as transactions_filter } from './transactions_filter.js';

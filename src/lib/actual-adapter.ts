@@ -1638,6 +1638,14 @@ export const notifications = new EventEmitter();
 import { normalizeToTransactionArray, normalizeToId, normalizeImportResult } from './actual-adapter/normalize.js';
 import { isEntityId, matchByName, resolvedNameDetail, FILTER_ID_ENTITIES } from './actual-adapter/filter-ids.js';
 import type { FilterIdKind, NamedRow } from './actual-adapter/filter-ids.js';
+import type {
+  FinancialAnalysisSnapshot,
+  AnalysisTransaction,
+  AnalysisAccount,
+  AnalysisCategory,
+  AnalysisCategoryGroup,
+  AnalysisPayee,
+} from './financial-analysis.js';
 export { normalizeToTransactionArray, normalizeToId, normalizeImportResult };
 // ---------------------------------------------------------------------------
 
@@ -1893,6 +1901,7 @@ export async function resolveFilterId(
   const rows: readonly NamedRow[] = opts?.rows
     ?? (kind === 'account' ? await getAccounts()
       : kind === 'category' ? await getCategories()
+      : kind === 'category_group' ? (await getCategoryGroups()) as readonly NamedRow[]
       : await getPayees());
 
   if (isEntityId(value)) {
@@ -3294,6 +3303,54 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
   }
 }
 
+/**
+ * #424: one read snapshot for the deterministic financial-analysis tools. Runs a fixed set of
+ * ActualQL reads inside ONE withActualApi session (not N+1): the in-range transactions with splits
+ * GROUPED (so a split reduces to its children exactly once), plus the account/category/group/payee
+ * listings the tool needs to resolve filters and label groups. The account-flow tool (#425) extends
+ * this with transfer counterparts and opening/closing balances.
+ *
+ * Original query shapes by @maxvanweenen (PR #399).
+ */
+export async function getFinancialAnalysisSnapshot(params: {
+  startDate: string;
+  endDate: string;
+}): Promise<FinancialAnalysisSnapshot> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.financialAnalysis.snapshot').catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const queryData = async <T>(query: unknown): Promise<T[]> => {
+      const response = await withConcurrency(() =>
+        retry(() => rawRunQuery(query) as Promise<{ data?: T[] } | T[]>, { retries: 2, backoffMs: 200 }),
+      );
+      if (Array.isArray(response)) return response;
+      return Array.isArray(response?.data) ? response.data : [];
+    };
+
+    const transactions = await queryData<AnalysisTransaction>(
+      q('transactions')
+        .options({ splits: 'grouped' })
+        .filter({ $and: [{ date: { $gte: params.startDate } }, { date: { $lte: params.endDate } }] })
+        .select('*'),
+    );
+    const accounts = await queryData<AnalysisAccount>(
+      q('accounts').select(['id', 'name', 'offbudget', 'closed']),
+    );
+    const categories = await queryData<AnalysisCategory>(
+      q('categories').select(['id', 'name', 'is_income', 'group']),
+    );
+    const categoryGroups = await queryData<AnalysisCategoryGroup>(
+      q('category_groups').options({ categories: 'none' }).select(['id', 'name', 'is_income']),
+    );
+    const payees = await queryData<AnalysisPayee>(
+      q('payees').select(['id', 'name', 'transfer_acct']),
+    );
+
+    return { transactions, accounts, categories, categoryGroups, payees };
+  });
+}
+
 // WHERE-clause translation extracted to ./actual-adapter/query.ts (#166).
 // Imported for internal use by runQuery and re-exported (unit-tested directly).
 import { parseWhereClause } from './actual-adapter/query.js';
@@ -3925,6 +3982,7 @@ export async function getPreferences(): Promise<Record<string, unknown>> {
 export default {
   getAccounts,
   resolveFilterId,
+  getFinancialAnalysisSnapshot,
   getAccountsWithBalances,
   addTransactions,
   importTransactions,
