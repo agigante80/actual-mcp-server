@@ -18,7 +18,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
-const { retry, isRetryableError, TRANSIENT_ERROR_PATTERNS } = await import('../../dist/src/lib/retry.js');
+const { retry, isRetryableError, isRateLimitError, TRANSIENT_ERROR_PATTERNS } = await import('../../dist/src/lib/retry.js');
 
 let passed = 0, failed = 0;
 function check(label, cond) { if (cond) { console.log(`  ok: ${label}`); passed++; } else { console.error(`  FAIL: ${label}`); failed++; } }
@@ -80,10 +80,37 @@ await acheck('a transient error that eventually succeeds resolves (retry recover
   assert.strictEqual(calls, 2);
 });
 
-console.log('\n[retry-classifier] single source of truth: pool-drop delegates to the classifier');
+console.log('\n[retry-classifier] #422 isRateLimitError: matches BOTH forms, feeds the drop carve-out');
+// The two shapes @actual-app/api surfaces (server-dependent), plus the phrasing variant.
+check('spaced express-default form is a rate-limit', isRateLimitError(new Error('Authentication failed: Too many requests, please try again later.')) === true);
+check('hyphenated code form is a rate-limit', isRateLimitError(new Error('Authentication failed: too-many-requests')) === true);
+check('"rate limit exceeded" phrasing is a rate-limit', isRateLimitError(new Error('rate limit exceeded')) === true);
+// #422: the sync path surfaces the throttle in .code, not the message.
+check('rate-limit in .code (sync path) is a rate-limit', (() => { const e = new Error('We had an unknown problem opening "_test-budget".'); e.code = 'Too many requests, please try again later.'; return isRateLimitError(e); })() === true);
+check('a non-rate-limit .code is NOT a rate-limit', (() => { const e = new Error('boom'); e.code = 'ECONNRESET'; return isRateLimitError(e); })() === false);
+check('a non-rate-limit Authentication failed is NOT a rate-limit', isRateLimitError(new Error('Authentication failed: invalid-password')) === false);
+check('network-failure is NOT a rate-limit', isRateLimitError(new Error('Authentication failed: network-failure')) === false);
+check('a domain error is NOT a rate-limit', isRateLimitError(new Error('Schedule "x" not found')) === false);
+check('a non-Error is NOT a rate-limit', isRateLimitError('too many requests') === false);
+
+console.log('\n[retry-classifier] #422 drop relationship: drop == retryable AND NOT rate-limit');
+// The behavioural contract the source pin below fixes in place. A rate-limit is retryable but must
+// NOT drop the connection; a non-rate-limit transient error both retries AND drops.
+for (const m of ['Authentication failed: Too many requests, please try again later.', 'Authentication failed: too-many-requests']) {
+  const e = new Error(m);
+  check(`rate-limit is retryable but NOT droppable: "${m.slice(0, 32)}..."`, isRetryableError(e) === true && (isRetryableError(e) && !isRateLimitError(e)) === false);
+}
+for (const m of ['ECONNRESET', 'socket hang up', 'Authentication failed: invalid-password']) {
+  const e = new Error(m);
+  // invalid-password matches "Authentication failed" so it is transient AND droppable (unchanged).
+  const droppable = isRetryableError(e) && !isRateLimitError(e);
+  check(`non-rate-limit transient still drops: "${m}"`, droppable === isRetryableError(e));
+}
+
+console.log('\n[retry-classifier] single source of truth: pool-drop derives from the classifier (#177 + #422 carve-out)');
 const here = dirname(fileURLToPath(import.meta.url));
 const adapterSrc = readFileSync(resolve(here, '../../src/lib/actual-adapter.ts'), 'utf8');
-check('_shouldDropPoolOnError delegates to isRetryableError', /_shouldDropPoolOnError\([^)]*\)[^{]*\{\s*(\/\/[^\n]*\n\s*)*return isRetryableError\(err\);/.test(adapterSrc));
+check('_shouldDropPoolOnError = isRetryableError AND NOT isRateLimitError', /_shouldDropPoolOnError\([^)]*\)[^{]*\{\s*(\/\/[^\n]*\n\s*)*return isRetryableError\(err\) && !isRateLimitError\(err\);/.test(adapterSrc));
 check('write retry call sites opt into isRetryable (21 sites)', (adapterSrc.match(/isRetryable: isRetryableError/g) || []).length >= 21);
 check('read retry call sites do NOT opt in (kept always-retry)', /retry\(\(\) => rawGetAccounts\(\)[^\n]*\{ retries: 2, backoffMs: 200 \}/.test(adapterSrc));
 

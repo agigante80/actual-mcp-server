@@ -120,6 +120,10 @@ import('../../dist/src/lib/actual-adapter.js').then(async ({
   {
     assert(isRetryableAuthError(new Error('Authentication failed: too-many-requests')) === true,
       'too-many-requests is retryable');
+    // #422: the spaced express-default form the current server returns must ALSO retry (it was
+    // previously missed, so a login throttle was not absorbed by withAuthRetry).
+    assert(isRetryableAuthError(new Error('Authentication failed: Too many requests, please try again later.')) === true,
+      'the spaced Too-many-requests form is retryable (#422)');
     assert(isRetryableAuthError(new Error('Authentication failed: network-failure')) === true,
       'network-failure is retryable');
     assert(isRetryableAuthError(new Error('Authentication failed: invalid-password')) === false,
