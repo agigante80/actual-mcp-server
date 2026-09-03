@@ -272,6 +272,32 @@ async function setupLoggerCapture() {
   }
 
   // -------------------------------------------------------------------------
+  // #419 fail-closed: a stdio-shaped store (sessionId present since #348, no
+  // principal, no allowedBudgets) under OIDC must STILL be denied switchBudget.
+  // A' keeps the api singleton alive but creates NO pool entry and adds no
+  // principal/allowedBudgets, so this fail-closed property is unchanged. This
+  // pins it against a regression that would let a local pipe gain budget access.
+  // -------------------------------------------------------------------------
+  describe('Case 9b (#419): stdio store under OIDC is denied switchBudget (fail closed)');
+  {
+    warnCalls.length = 0;
+    config.AUTH_PROVIDER = 'oidc';
+    let caught;
+    try {
+      await requestContext.run(
+        { sessionId: 'stdio-acl-guard', transport: 'stdio' }, // no principal, no allowedBudgets
+        async () => switchBudget('Production'),
+      );
+    } catch (e) { caught = e; }
+    if (caught && /Budget ACL/.test(caught.message) && /allowedBudgets/.test(caught.message)) {
+      pass('stdio store under OIDC refused switchBudget (no allowedBudgets in context)');
+    } else {
+      bad('#419: stdio store under OIDC should refuse switch', caught ? caught.message : 'no error thrown');
+    }
+    config.AUTH_PROVIDER = 'bearer';
+  }
+
+  // -------------------------------------------------------------------------
   // #172 fast-path: same-server switch skips release+recreate
   // -------------------------------------------------------------------------
 

@@ -332,6 +332,36 @@ function _hasPooledConnection(sessionId: string | undefined): sessionId is strin
   return connectionPool.hasConnection(sessionId);
 }
 
+// #419: is this whole process a stdio server? The --stdio flag sets MCP_STDIO_MODE
+// in src/index.ts BEFORE any import, it is the RAW_ENV_ALLOWLIST-registered process
+// marker (config-registry.ts), and server_info.ts reads exactly this to report the
+// transport. A stdio process is one long-lived single-user session for its whole
+// lifetime, so keeping the api singleton alive between ops is a PROCESS fact. It is
+// deliberately NOT read from the ambient request context: the write drain calls
+// shutdownActualApi OUTSIDE the per-op requestContext.run (see processWriteQueue),
+// in a context that belongs to an unrelated enqueuer, which is the #390 trap.
+function _isStdioProcess(): boolean {
+  return process.env.MCP_STDIO_MODE === 'true';
+}
+
+/**
+ * #419: decide whether `shutdownActualApi` keeps the api singleton alive (sync-only)
+ * or tears it fully down (which resets `isApiInitialized`). Kept alive when another
+ * HTTP session still owns the singleton, OR when this is a stdio process and no
+ * infrastructure-level error forced a teardown.
+ *
+ * `forceFullShutdown` defeats ONLY the stdio process keep-alive, never the
+ * active-HTTP-session keep-alive: with active sessions other sessions own the
+ * singleton, so tearing it down would break them, and a stdio process always has
+ * `activeSessions === 0`, so forcing there tears down exactly its own singleton.
+ *
+ * Exported for unit tests: the branch is observable behaviour, not an internal.
+ */
+export function _shouldKeepSingletonAlive(activeSessions: number, forceFullShutdown: boolean): boolean {
+  if (activeSessions > 0) return true;
+  return _isStdioProcess() && !forceFullShutdown;
+}
+
 /**
  * Decide whether an error from the wrapped operation suggests the api
  * singleton is in a corrupted state and the pool's session connection should
@@ -497,17 +527,30 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
     }, { budget: _affinityBudget() });
   }
 
-  if (sessionId) {
+  // #419: only warn when a real re-init will actually happen. In a stdio process
+  // the singleton is kept alive between ops, so after the first login this is warm
+  // reuse, not a costly miss; gating on !isApiInitialized() makes the line appear
+  // at most once per process rather than per call, and keeps it honest for HTTP.
+  if (sessionId && !isApiInitialized()) {
     logger.warn(`[ADAPTER] Pool miss for session ${sessionId}; falling back to per-op init`);
   }
 
   // Legacy mode: init+shutdown around every operation.
   return withApiLock(async () => {
+    let forceFullShutdown = false;
     try {
       await initActualApiForOperation();
       return await withOpTimeout(operation);
+    } catch (err) {
+      // #419: the stdio keep-alive branch leaves the singleton live; on an
+      // infrastructure-level error it may be corrupt, so force a full teardown
+      // (which resets isApiInitialized) so the next op re-inits fresh. Mirrors
+      // the pool branch's _shouldDropPoolOnError drop above. Domain/validation
+      // errors leave the singleton intact (no per-op login reintroduced).
+      if (_shouldDropPoolOnError(err)) forceFullShutdown = true;
+      throw err;
     } finally {
-      await shutdownActualApi();
+      await shutdownActualApi({ forceFullShutdown });
     }
   }, { budget: _affinityBudget() });
 }
@@ -569,16 +612,23 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
     }, { budget: _affinityBudget() });
   }
 
-  if (sessionId) {
+  // #419: see the read-path note above; warn only when a real re-init happens.
+  if (sessionId && !isApiInitialized()) {
     logger.warn(`[ADAPTER] Pool miss for session ${sessionId}; falling back to per-op init (write)`);
   }
 
   return withApiLock(async () => {
+    let forceFullShutdown = false;
     try {
       await initActualApiForOperation();
       return await withOpTimeout(operation);
+    } catch (err) {
+      // #419: force a full teardown on an infrastructure-level error so the next
+      // stdio op re-inits fresh (see the read-path catch for the rationale).
+      if (_shouldDropPoolOnError(err)) forceFullShutdown = true;
+      throw err;
     } finally {
-      await shutdownActualApi();
+      await shutdownActualApi({ forceFullShutdown });
     }
   }, { budget: _affinityBudget() });
 }
@@ -717,36 +767,50 @@ async function initActualApiForOperation(): Promise<void> {
   }
 }
 
-async function shutdownActualApi(): Promise<void> {
+async function shutdownActualApi(opts?: { forceFullShutdown?: boolean }): Promise<void> {
+  const forceFullShutdown = opts?.forceFullShutdown === true;
   if (_skipApiInitForTests) {
-    setApiInitialized(false);
+    // Honour the SAME keep-alive decision the real path makes, so unit tests can
+    // observe the stdio keep-alive and self-heal behaviour without driving a live
+    // api.init(). In every non-stdio context _shouldKeepSingletonAlive is false
+    // (activeSessions === 0, not stdio), so this stays the pre-#419 always-reset
+    // and existing tests are unaffected.
+    let activeSessions = 0;
+    try { activeSessions = connectionPool.getStats().activeSessions; } catch { /* pool not up */ }
+    if (!_shouldKeepSingletonAlive(activeSessions, forceFullShutdown)) {
+      setApiInitialized(false);
+    }
     return;
   }
-  // If the connection pool currently has any active per-session connections,
-  // those sessions own the api singleton's lifecycle — tearing it down here
-  // would invalidate every active session's pool entry and force the next
-  // tool call back through legacy init+shutdown (the very pattern #134 is
-  // eliminating). Instead, just sync (the persistence guarantee that
-  // shutdown was previously providing implicitly) and leave the singleton
-  // alive for the pool to manage.
+  // Keep the api singleton alive (sync only) when another session still owns it
+  // OR when this is a stdio process (#419): tearing it down would invalidate an
+  // active session's pool entry, or, for stdio, force a fresh upstream LOGIN on
+  // the next tool call (the #127 burst, per stdio call). Instead sync (the
+  // persistence guarantee shutdown provided implicitly) and leave it alive.
+  //
+  // #419 self-heal: forceFullShutdown, set by a legacy branch on an
+  // infrastructure-level error, defeats ONLY the stdio keep-alive so the next op
+  // re-inits fresh against a clean singleton, exactly as the always-full-shutdown
+  // legacy path used to give for free.
+  let activeSessions = 0;
   try {
-    const stats = connectionPool.getStats();
-    if (stats.activeSessions > 0) {
-      try {
-        const apiAny = api as unknown as { sync?: () => Promise<unknown> };
-        if (typeof apiAny.sync === 'function') {
-          await withOpTimeout(() => apiAny.sync!(), 'sync');
-          logger.debug('[ADAPTER] api.sync() instead of shutdown (pool has active sessions)');
-        }
-      } catch (syncErr) {
-        logger.error('[ADAPTER] sync-without-shutdown failed:', syncErr);
-        // Don't propagate — shutdown was best-effort anyway.
-      }
-      return;
-    }
+    activeSessions = connectionPool.getStats().activeSessions;
   } catch (statsErr) {
-    // Pool not available (e.g. early startup) — fall through to legacy shutdown.
+    // Pool not available (e.g. early startup): fall through to legacy shutdown.
     logger.debug('[ADAPTER] could not read pool stats; defaulting to full shutdown:', statsErr);
+  }
+  if (_shouldKeepSingletonAlive(activeSessions, forceFullShutdown)) {
+    try {
+      const apiAny = api as unknown as { sync?: () => Promise<unknown> };
+      if (typeof apiAny.sync === 'function') {
+        await withOpTimeout(() => apiAny.sync!(), 'sync');
+        logger.debug('[ADAPTER] api.sync() instead of shutdown (singleton kept alive)');
+      }
+    } catch (syncErr) {
+      logger.error('[ADAPTER] sync-without-shutdown failed:', syncErr);
+      // Don't propagate: shutdown was best-effort anyway.
+    }
+    return;
   }
 
   try {
@@ -1156,6 +1220,11 @@ async function processWriteQueue() {
         // Each op keeps its own withOpTimeout (#270) and still settles individually, so one
         // stalled or rejected operation cannot hold the api mutex or fail its siblings.
         let stuckLoadError: Error | null = null;
+        // #419: the drain inits once and shuts down once per batch. If any op hits
+        // an infrastructure-level error, force the batch-end shutdownActualApi to
+        // fully tear the singleton down (self-heal) so the next stdio batch re-inits
+        // fresh, instead of the stdio keep-alive leaving a corrupt singleton live.
+        let drainForceFullShutdown = false;
         // Counted so the event is logged ONCE with a total. Without this the fail-fast path sits
         // outside the per-operation try, so it never reaches the '[WRITE QUEUE] Operation failed'
         // line and N operations fail with no log entry anywhere. Given this whole ticket family
@@ -1256,6 +1325,9 @@ async function processWriteQueue() {
             resolve(result);
           } catch (error) {
             logger.error('[WRITE QUEUE] Operation failed:', error);
+            // #419: remember an infrastructure-level failure so the batch-end
+            // shutdown self-heals (see drainForceFullShutdown above).
+            if (_shouldDropPoolOnError(error)) drainForceFullShutdown = true;
             reject(error);
           } finally {
             // #378: drop everything this operation did not explicitly promise to leave alone,
@@ -1320,6 +1392,10 @@ async function processWriteQueue() {
           logger.debug(`[WRITE QUEUE] Sync completed`);
         } catch (syncError) {
           logger.error('[WRITE QUEUE] Sync failed:', syncError);
+          // #419: a legacy-branch infrastructure-level sync failure self-heals
+          // too, so the next stdio batch re-inits fresh rather than reusing a
+          // singleton whose sync just failed.
+          if (!usePoolBranch && _shouldDropPoolOnError(syncError)) drainForceFullShutdown = true;
           // Pool branch: drop the connection on infrastructure-level sync
           // failure so the next write re-initialises cleanly. Mirrors
           // withActualApiWrite's policy.
@@ -1343,7 +1419,9 @@ async function processWriteQueue() {
           // Legacy branch only: actually shut the singleton down.
           // shutdownActualApi() itself short-circuits to sync-only if another
           // path has active pool sessions, so this is safe under contention.
-          await shutdownActualApi();
+          // #419: forceFullShutdown defeats the stdio keep-alive when the batch
+          // saw an infrastructure-level error, so the next batch re-inits fresh.
+          await shutdownActualApi({ forceFullShutdown: drainForceFullShutdown });
         }
         logger.debug(`[WRITE QUEUE] Batch completed successfully`);
       } catch (error) {
@@ -1369,7 +1447,9 @@ async function processWriteQueue() {
             }
           }
         } else {
-          await shutdownActualApi();
+          // #419: a fatal batch error is infrastructure-level by definition, so
+          // force a full teardown (stdio self-heal) regardless of the per-op flag.
+          await shutdownActualApi({ forceFullShutdown: true });
         }
       }
     }, { budget: batchBudget });
