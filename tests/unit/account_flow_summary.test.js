@@ -28,6 +28,47 @@ const range = { startDate: '2025-01-01', endDate: '2025-01-31' };
 
 console.log('\n[account-flow] reconciliation (pure)');
 
+check('#428 Finding 1: unpopulated balances read as NOT reconciled (balancesAvailable false, difference null)', () => {
+  // No openingBalances / closingBalances keys at all. Before #428 both reduced to 0 and difference
+  // read as a false exact 5000; now it must be null and flagged, while external accounting still runs.
+  const snapshot = {
+    transactions: [{ id: 'e1', date: '2025-01-05', amount: -5000, account: 'acc-1', category: 'cat-food' }],
+    transferCounterparts: [], accounts, categories, categoryGroups: [{ id: 'g', name: 'G' }], payees: [],
+  };
+  const r = summarizeAccountFlow(snapshot, { ...range, accountIds: ['acc-1'] });
+  assert.strictEqual(r.reconciliation.balancesAvailable, false, 'flagged unavailable');
+  assert.strictEqual(r.reconciliation.difference, null, 'difference is null, not a false 0 or 5000');
+  assert.strictEqual(r.balanceChange, null, 'balanceChange is null when balances are absent');
+  assert.strictEqual(r.external.expenseOutflow, 5000, 'external accounting still computes');
+});
+
+check('#428 Finding 1: the tool path (both maps supplied) stays exact and flagged available', () => {
+  const snapshot = {
+    transactions: [{ id: 'e1', date: '2025-01-05', amount: -5000, account: 'acc-1', category: 'cat-food' }],
+    transferCounterparts: [], accounts, categories, categoryGroups: [{ id: 'g', name: 'G' }], payees: [],
+    openingBalances: { 'acc-1': 10000 }, closingBalances: { 'acc-1': 5000 },
+  };
+  const r = summarizeAccountFlow(snapshot, { ...range, accountIds: ['acc-1'] });
+  assert.strictEqual(r.reconciliation.balancesAvailable, true);
+  assert.strictEqual(r.reconciliation.difference, 0, 'exact-by-construction preserved on the tool path');
+});
+
+check('#428 Finding 2: an unresolvable counterpart buckets by sign and reports matchedCounterpart false', () => {
+  // Transfer leg out of acc-1 whose counterpart row (x2) is absent and whose payee carries no
+  // transfer_acct. Deterministic: bucketed by sign (outOfSelection), surfaced via matchedCounterpart
+  // false, and reconciliation stays exact because netTransferEffect already counted the amount.
+  const snapshot = {
+    transactions: [{ id: 'x1', date: '2025-01-10', amount: -3000, account: 'acc-1', transfer_id: 'x2' }],
+    transferCounterparts: [], accounts, categories, categoryGroups: [{ id: 'g', name: 'G' }], payees: [],
+    openingBalances: { 'acc-1': 5000 }, closingBalances: { 'acc-1': 2000 },
+  };
+  const r = summarizeAccountFlow(snapshot, { ...range, accountIds: ['acc-1', 'acc-2'] });
+  assert.strictEqual(r.transfers.outOfSelection, 3000, 'bucketed by sign into outOfSelection');
+  assert.strictEqual(r.transfers.withinSelection, 0, 'not claimed as within-selection without proof');
+  assert.strictEqual(r.transfersByAccount[0].matchedCounterpart, false, 'unresolved counterpart is observable');
+  assert.strictEqual(r.reconciliation.difference, 0, 'reconciliation stays exact');
+});
+
 check('external-only: opening + net === closing, difference is 0', () => {
   const snapshot = {
     transactions: [

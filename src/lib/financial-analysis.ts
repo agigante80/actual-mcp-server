@@ -362,6 +362,13 @@ export function summarizeAccountFlow(snapshot: FinancialAnalysisSnapshot, input:
     const counterpart = transaction.transfer_id ? maps.transactions.get(transaction.transfer_id) : undefined;
     const payee = transaction.payee ? maps.payees.get(transaction.payee) : undefined;
     const counterpartAccountId = counterpart?.account ?? payee?.transfer_acct ?? null;
+    // #428: when the counterpart cannot be resolved (no counterpart row and no payee transfer_acct),
+    // counterpartSelected is false and the leg is bucketed by SIGN into intoSelection / outOfSelection.
+    // This is the deterministic rule: within-selection membership requires POSITIVE proof both legs are
+    // selected, which an unresolvable counterpart cannot give. The outcome is not silent: the
+    // transfersByAccount row below carries matchedCounterpart=false, so a caller can see the leg was
+    // classified without a resolved counterparty. netTransferEffect (line above) already counted the
+    // amount, so reconciliation stays exact regardless of the bucket.
     const counterpartSelected = counterpartAccountId ? selected.has(counterpartAccountId) : false;
 
     if (counterpartSelected) {
@@ -395,20 +402,25 @@ export function summarizeAccountFlow(snapshot: FinancialAnalysisSnapshot, input:
     }
   }
 
-  // The tool handler always supplies balances (via balanceAccountIds), so difference is exact here.
-  // If a future caller omits them, both reduce to 0 and difference reads as a false "exact": #428.
-  const openingBalance = uniqueAccountIds.reduce(
-    (sum, id) => sum + integer(snapshot.openingBalances?.[id] ?? 0, `Opening balance for ${id}`),
-    0,
-  );
-  const closingBalance = uniqueAccountIds.reduce(
-    (sum, id) => sum + integer(snapshot.closingBalances?.[id] ?? 0, `Closing balance for ${id}`),
-    0,
-  );
-  const balanceChange = closingBalance - openingBalance;
+  // #428: balances are OPTIONAL on the snapshot. The tool handler always supplies them (via
+  // balanceAccountIds), so on the tool path this is true and reconciliation is exact by construction.
+  // A caller that omits either map, though, would otherwise reduce both to 0 and read difference as a
+  // false "exact" zero. The check is on the MAP being undefined (entirely unpopulated), NOT a per-id
+  // lookup: the `?? 0` per-id default is legitimate for a genuine zero-balance account.
+  const balancesAvailable = snapshot.openingBalances !== undefined && snapshot.closingBalances !== undefined;
+  const openingBalance = balancesAvailable
+    ? uniqueAccountIds.reduce((sum, id) => sum + integer(snapshot.openingBalances?.[id] ?? 0, `Opening balance for ${id}`), 0)
+    : null;
+  const closingBalance = balancesAvailable
+    ? uniqueAccountIds.reduce((sum, id) => sum + integer(snapshot.closingBalances?.[id] ?? 0, `Closing balance for ${id}`), 0)
+    : null;
+  const balanceChange = openingBalance !== null && closingBalance !== null ? closingBalance - openingBalance : null;
   const netExternalCashFlow = income - incomeReversals + credits + uncategorizedInflows - expenseOutflow;
   const totalAdjustments = startingBalance;
   const calculatedBalanceChange = netExternalCashFlow + netTransferEffect + totalAdjustments;
+  // When balances are unavailable, difference must NOT read as a reconciled value. Null it so a
+  // caller cannot mistake an unpopulated run for a reconciled one.
+  const difference = balanceChange !== null ? balanceChange - calculatedBalanceChange : null;
 
   return {
     dateRange: { startDate: input.startDate, endDate: input.endDate },
@@ -436,9 +448,12 @@ export function summarizeAccountFlow(snapshot: FinancialAnalysisSnapshot, input:
     ),
     adjustments: { startingBalance, total: totalAdjustments },
     reconciliation: {
+      // #428: balancesAvailable is false when the snapshot omitted the balance maps; difference and
+      // actualBalanceChange are then null so an unpopulated run cannot read as a reconciled one.
+      balancesAvailable,
       calculatedBalanceChange,
       actualBalanceChange: balanceChange,
-      difference: balanceChange - calculatedBalanceChange,
+      difference,
     },
   };
 }
