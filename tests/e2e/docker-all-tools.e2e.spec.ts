@@ -1264,6 +1264,22 @@ test.describe('Docker E2E - ALL 77 TOOLS', () => {
     ).rejects.toThrow(/is_parent|boolean/i);
   });
 
+  // #421: the IN-list injection PoC must be rejected by OUR validation layer (comments and compound
+  // queries are refused before q()), NOT merely because SQLite would choke on unbalanced SQL. The
+  // error names the validation reason (comment or compound), so protection no longer rests on
+  // ActualQL's incidental parenthesisation.
+  test('actual_query_run - ERROR: #421 IN-list injection PoC is rejected at the validation layer', async ({ mcp }) => {
+    await expect(
+      mcp.call('actual_query_run', { query: "SELECT id FROM transactions WHERE notes IN ('a','b') UNION SELECT 1 --')" }),
+    ).rejects.toThrow(/comment|compound|union/i);
+  });
+
+  test('actual_query_run - ERROR: #421 an unknown column with IN is rejected (not only with =)', async ({ mcp }) => {
+    await expect(
+      mcp.call('actual_query_run', { query: "SELECT id FROM transactions WHERE bogus_col IN ('a')" }),
+    ).rejects.toThrow(/bogus_col|Available fields|invalid/i);
+  });
+
   test('actual_query_run - ERROR: should reject invalid field (payee_name)', async ({ mcp }) => {
     await expect(
       mcp.call('actual_query_run', { query: 'SELECT id, payee_name FROM transactions LIMIT 5' }),

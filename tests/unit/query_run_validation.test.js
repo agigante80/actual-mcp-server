@@ -10,7 +10,7 @@
 
 import assert from 'assert';
 
-const { validateQueryShape } = await import('../../dist/src/lib/query-validator.js');
+const { validateQueryShape, validateQuery } = await import('../../dist/src/lib/query-validator.js');
 
 let passed = 0, failed = 0;
 function ok(label, fn) {
@@ -42,9 +42,39 @@ const BLOCKED = [
   ['SELECT 1; DROP TABLE transactions',                  /stacked|read-only/i],   // stacked + keyword
   ["SELECT id FROM transactions WHERE notes = 'x'; DELETE FROM y", /stacked|read-only/i], // smuggled stacked write
   ['ATTACH DATABASE \'evil.db\' AS e',                   /read-only/i],
+  // #421: IN-list injection PoC and its building blocks. The trailing `--` and the UNION are the
+  // smuggling vectors; both are now rejected at the shape layer before q() is ever reached.
+  ["SELECT id FROM transactions WHERE notes IN ('a','b') UNION SELECT 1 --')", /comment|compound|union/i],
+  ["SELECT id FROM transactions WHERE notes IN ('a') UNION SELECT 1",          /compound|union/i],
+  ["SELECT id FROM transactions WHERE notes = 'a' -- trailing",               /comment/i],
+  ['SELECT id FROM transactions WHERE notes = 5 /* block */',                 /comment/i],
+  ['SELECT id FROM transactions EXCEPT SELECT 1',                             /compound|except/i],
 ];
 for (const [q, re] of BLOCKED) {
   ok(`blocks: ${q.slice(0, 52)}`, () => assert.throws(() => validateQueryShape(q), re));
+}
+
+// #421: validateQuery must allowlist the column for IN / LIKE / IS NULL, not only for a comparison
+// operator. Before the fix, an unknown column skipped validation on those three branches while it
+// was correctly rejected before `=`.
+console.log('\n[query-run-validation] validateQuery column allowlist covers IN / LIKE / IS NULL');
+const INVALID_COLUMN = [
+  "SELECT id FROM transactions WHERE bogus_col = 'a'",       // already worked, kept as the control
+  "SELECT id FROM transactions WHERE bogus_col IN ('a')",    // #421
+  "SELECT id FROM transactions WHERE bogus_col LIKE '%a%'",  // #421
+  'SELECT id FROM transactions WHERE bogus_col IS NULL',     // #421
+];
+for (const q of INVALID_COLUMN) {
+  ok(`rejects unknown column: ${q.slice(40)}`, () => assert.strictEqual(validateQuery(q).valid, false));
+}
+// Real columns on the same branches must stay valid (no regression on #178 operators).
+const VALID_COLUMN = [
+  "SELECT id FROM transactions WHERE notes IN ('groceries','rent')",
+  "SELECT id FROM transactions WHERE imported_payee LIKE '%amazon%'",
+  'SELECT id FROM transactions WHERE imported_payee IS NULL',
+];
+for (const q of VALID_COLUMN) {
+  ok(`accepts real column: ${q.slice(40)}`, () => assert.strictEqual(validateQuery(q).valid, true));
 }
 
 console.log(`\n[query-run-validation] Results: ${passed} passed, ${failed} failed`);

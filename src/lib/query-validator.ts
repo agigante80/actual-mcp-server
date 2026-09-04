@@ -101,15 +101,27 @@ function extractWhereFields(sql: string): Array<{ field: string; table?: string 
   
   const whereClause = whereMatch[1];
   
-  // Find field references (table.field or field)
-  const fieldMatches = whereClause.matchAll(/(\w+)\.(\w+)|(?:^|\s)(\w+)\s*[=<>!]/g);
+  // Find field references (table.field or field).
+  // #421: a bare column must be extracted (and therefore schema-validated) not only before a
+  // comparison operator, but also before IN / LIKE / IS / BETWEEN (with their NOT forms). Before
+  // this, `bogus_col IN ('a')`, `bogus_col LIKE '%a%'` and `bogus_col IS NULL` extracted no field
+  // and so skipped the allowlist check entirely, while `bogus_col = 'a'` was correctly rejected.
+  const fieldMatches = whereClause.matchAll(
+    /(\w+)\.(\w+)|(?:^|\s)(\w+)\s*[=<>!]|(?:^|\s)(\w+)\s+(?:NOT\s+)?(?:IN|LIKE|BETWEEN)\b|(?:^|\s)(\w+)\s+IS\b/gi,
+  );
   for (const match of fieldMatches) {
     if (match[1] && match[2]) {
       // table.field
       fields.push({ table: match[1], field: match[2] });
     } else if (match[3]) {
-      // simple field
+      // simple field before a comparison operator
       fields.push({ field: match[3] });
+    } else if (match[4]) {
+      // simple field before IN / LIKE / BETWEEN (optionally negated)
+      fields.push({ field: match[4] });
+    } else if (match[5]) {
+      // simple field before IS (NULL / NOT NULL)
+      fields.push({ field: match[5] });
     }
   }
   
@@ -292,6 +304,23 @@ export function validateQueryShape(query: string): void {
   // Stacked statements: a semicolon followed by more non-whitespace.
   if (/;\s*\S/.test(stripped)) {
     throw new Error('actual_query_run does not allow stacked statements (multiple statements separated by ";").');
+  }
+
+  // #421: SQL comments. Checked on the literal-blanked `stripped`, so a `--` or `/*` INSIDE a
+  // string literal is already gone and cannot false-trigger. A comment left in the query is a
+  // trailing-SQL smuggling vector (it comments out the tombstone filter this server relies on),
+  // and a read tool has no legitimate use for one, so it is rejected outright.
+  if (/--/.test(stripped) || /\/\*/.test(stripped)) {
+    throw new Error('actual_query_run does not allow SQL comments ("--" or "/* */").');
+  }
+
+  // #421: compound-query set operators. parseWhereClause translates a SINGLE WHERE clause, so a
+  // UNION/EXCEPT/INTERSECT can never be handled correctly, and left unrejected it lets a crafted
+  // IN-list value append a second SELECT past the validated clause. Rejected on the blanked string
+  // so the word inside a literal (e.g. notes = 'union dues') stays allowed.
+  const COMPOUND = /\b(UNION|EXCEPT|INTERSECT)\b/i;
+  if (COMPOUND.test(stripped)) {
+    throw new Error('actual_query_run does not allow compound queries (UNION, EXCEPT, INTERSECT).');
   }
 
   // Data- and schema-modification keywords.

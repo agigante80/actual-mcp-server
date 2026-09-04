@@ -272,5 +272,74 @@ check('every boolean column in ACTUAL_SCHEMA coerces = true to a real boolean', 
   console.log(`      (exercised ${count} boolean columns across the schema)`);
 });
 
+// #421: IN-list elements must be simple literals so a value cannot terminate its own quote and
+// smuggle trailing SQL into upstream's unescaped `$oneof`. validateQueryShape rejects the full PoC
+// earlier (UNION + comment), but this is the defense-in-depth layer at the builder itself, for a
+// payload that reaches parseWhereClause with a malformed element.
+console.log('\n[query-where-operators] #421 IN-list literal safety');
+
+check('a well-formed string IN list maps to $oneof', () => {
+  assert.deepStrictEqual(
+    filtersFor("notes IN ('groceries','rent')"),
+    [{ notes: { $oneof: ['groceries', 'rent'] } }],
+  );
+});
+
+check('a numeric IN list maps to $oneof of numbers', () => {
+  assert.deepStrictEqual(
+    filtersFor('amount IN (100, 200)'),
+    [{ amount: { $oneof: [100, 200] } }],
+  );
+});
+
+check('a comma inside a quoted IN value stays one element (quote-aware split)', () => {
+  assert.deepStrictEqual(
+    filtersFor("notes IN ('Smith, John', 'Doe')"),
+    [{ notes: { $oneof: ['Smith, John', 'Doe'] } }],
+  );
+});
+
+check('a double-quoted IN value is accepted when it holds no single quote', () => {
+  assert.deepStrictEqual(
+    filtersFor('notes IN ("cash")'),
+    [{ notes: { $oneof: ['cash'] } }],
+  );
+});
+
+check('a DOUBLE-quoted element hiding a single quote is rejected (upstream re-wraps in single quotes)', () => {
+  // The review-found bypass: "x' UNION ..." is well-formed as a double-quoted literal, but its inner
+  // single quote survives _stripWhereQuotes and would terminate upstream's unescaped `'${id}'` wrap.
+  assert.throws(
+    () => filtersFor("notes IN (\"x' UNION SELECT id FROM transactions --\")"),
+    /Invalid value in IN list/i,
+  );
+});
+
+check('an IN element that closes its own quote is rejected, never reaching $oneof', () => {
+  assert.throws(
+    () => filtersFor("notes IN ('a', 'b') UNION SELECT 1 --')"),
+    /Invalid value in IN list/i,
+  );
+});
+
+check('an IN element with a malformed trailing quote is rejected at the builder', () => {
+  // A doubled trailing quote, with no OR/UNION keyword that an earlier guard would catch, so this
+  // exercises the _isSafeInListElement check itself rather than another rejection path.
+  assert.throws(
+    () => filtersFor("notes IN ('a', 'b'')"),
+    /Invalid value in IN list/i,
+  );
+});
+
+check('an apostrophe value in an IN list is rejected today (documented limitation, tracked)', () => {
+  // #421 review: upstream compiles $oneof WITHOUT escaping, so no element reaching it may carry a
+  // single quote. That safely blocks injection but also refuses a legitimate apostrophe value such
+  // as a "McDonald's" payee, in either the raw or the SQL-escaped-doubled form. This is fail-safe (a
+  // clear error, never a wrong match or an injection). Pinned here so a future change cannot quietly
+  // reintroduce the injection by accepting apostrophes. Safe support is tracked in #433.
+  assert.throws(() => filtersFor("notes IN ('McDonald''s')"), /Invalid value in IN list/i);
+  assert.throws(() => filtersFor("notes IN ('Trader Joe's')"), /Invalid value in IN list/i);
+});
+
 console.log(`\n[query-where-operators] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
