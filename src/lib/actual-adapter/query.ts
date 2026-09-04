@@ -11,6 +11,47 @@ function _stripWhereQuotes(s: string): string {
   return s.trim().replace(/^['"]|['"]$/g, '');
 }
 
+// #421: split an IN-list body on commas that are OUTSIDE quoted literals, so a legitimate value
+// containing a comma (e.g. 'Smith, John') stays ONE element. A naive split(',') both broke such
+// values and, with the element check below, turned them into a confusing rejection.
+function _splitInList(valuesStr: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let quote: string | null = null;
+  for (const ch of valuesStr) {
+    if (quote) {
+      cur += ch;
+      if (ch === quote) quote = null;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      cur += ch;
+    } else if (ch === ',') {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+// #421: whether an IN-list element is safe to feed into upstream's `$oneof`, which stringifies each
+// element as `'${id}'` with NO escaping. Two conditions, and both matter:
+//   1. It must be WELL FORMED: a number, or a single-/double-quoted string with no embedded quote of
+//      the same kind, so a crafted element like `'b') UNION SELECT 1 --'` (unbalanced) is rejected.
+//   2. The value that ACTUALLY REACHES `$oneof` must contain no single quote. `_stripWhereQuotes`
+//      removes the outer pair of EITHER quote kind and upstream always re-wraps in SINGLE quotes, so
+//      a double-quoted element hiding a single quote (`"x' UNION SELECT 1 --"`) is well formed by (1)
+//      yet its inner `'` would terminate upstream's wrapper. Checking the stripped value closes that.
+// A legitimate `'groceries'`, `'Smith, John'`, `"cash"`, `100` or `-5.5` passes both.
+function _isSafeInListElement(raw: string): boolean {
+  const t = raw.trim();
+  const wellFormed = /^'[^']*'$/.test(t) || /^"[^"]*"$/.test(t) || /^-?\d+(?:\.\d+)?$/.test(t);
+  if (!wellFormed) return false;
+  return !_stripWhereQuotes(t).includes("'");
+}
+
 // Coerce a SQL value literal to a number when it looks numeric, else keep the
 // (unquoted) string. Used for IN lists and comparison operands. Empty stays a
 // string so an empty literal is not silently turned into 0.
@@ -112,7 +153,7 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
     const inMatch = trimmedCondition.match(/^([\w.]+)\s+IN\s+\((.+)\)$/i);
     if (inMatch) {
       const [, field, valuesStr] = inMatch;
-      const rawValues = valuesStr.split(',');
+      const rawValues = _splitInList(valuesStr);
       if (_isBooleanField(tableName, field)) {
         // #420: `$oneof` STRINGIFIES every element (upstream `compiler.ts` emits
         // `'${String(id)}'`), so `is_parent IN (true, false)` would compile to
@@ -123,6 +164,17 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
         const orConditions = rawValues.map((v) => ({ [field]: _coerceBoolean(field, v) }));
         query = query.filter({ $or: orConditions });
       } else {
+        // #421: every element must be safe before it reaches upstream's unescaped `$oneof`. Reject a
+        // value that could terminate its own quote (single- OR double-quote wrapped) and smuggle
+        // trailing SQL.
+        for (const raw of rawValues) {
+          if (!_isSafeInListElement(raw)) {
+            throw new Error(
+              `Invalid value in IN list for column "${field}": ${JSON.stringify(raw.trim())}. ` +
+              `Each value must be a number or a quoted string with no embedded quote.`,
+            );
+          }
+        }
         query = query.filter({ [field]: { $oneof: rawValues.map(_coerceWhereValue) } });
       }
       continue;
