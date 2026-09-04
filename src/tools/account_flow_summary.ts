@@ -29,7 +29,7 @@ export default createTool({
     'Explain the exact balance change across a selected set of accounts over an inclusive date range, in integer cents.',
     'Separates external income, expense outflow, credits, uncategorized inflows, starting-balance adjustments, and transfers into, out of, or within the selection.',
     'Transfers are detected from transfer_id and are never spending or income.',
-    'openingBalance is immediately before startDate and closingBalance is at the end of the inclusive endDate; reconciliation.difference is exact and transfersByAccount names the funding counterparties.',
+    'openingBalance is immediately before startDate and closingBalance is at the end of the inclusive endDate; reconciliation.difference is exact (reconciliation.balancesAvailable is true) and transfersByAccount names the funding counterparties.',
     'Amounts are in cents: $100.00 = 10000. Dates are YYYY-MM-DD.',
   ].join(' '),
   schema: InputSchema,
