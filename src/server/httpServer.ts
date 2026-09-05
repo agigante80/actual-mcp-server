@@ -31,6 +31,112 @@ import * as fs from 'node:fs';
 // `requestContext` from this module.
 import { requestContext } from '../lib/requestContext.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
+
+/**
+ * #438: classify a session-init failure into a CLOSED enum plus our own sentence.
+ *
+ * PURE and TOTAL: it never throws, never reads I/O, and never returns anything
+ * derived from the caught value. That last property is the wire contract: the
+ * response carries the enum member and the fixed sentence below and nothing
+ * else, so no upstream string reaches a remote client and no scrubber has to be
+ * correct. Upstream strings can carry a stack, raw SQL (`SyncError.meta.query`),
+ * an `EACCES ... mkdir '/home/<user>/.actual'` path, and a configured server URL.
+ *
+ * Exported for tests: there is NO fault-injection seam in actualConnection.ts or
+ * the pool, and booting against a closed port reaches only `network-failure`, so
+ * every other class is covered by calling this directly with synthetic values.
+ */
+export type InitFailureCause =
+  | 'schema_too_new' | 'auth_failed' | 'network_unreachable' | 'budget_not_found'
+  | 'out_of_sync' | 'encryption_error' | 'clock_drift' | 'permission_denied'
+  | 'timeout' | 'unknown';
+
+const INIT_FAILURE_SENTENCES: Record<InitFailureCause, string> = {
+  schema_too_new: "The Actual server's database schema is newer than the @actual-app/api this build bundles. Upgrade actual-mcp-server, or hold the server upgrade until its dependency update ships.",
+  auth_failed: 'Authentication against the Actual server failed. Check ACTUAL_PASSWORD and the budget password.',
+  network_unreachable: 'The Actual server could not be reached. Check ACTUAL_SERVER_URL and that the server is running.',
+  budget_not_found: 'The configured budget was not found on the Actual server. Check ACTUAL_BUDGET_SYNC_ID.',
+  out_of_sync: 'The local budget copy is out of sync with the Actual server and could not be reconciled.',
+  encryption_error: "The budget's end-to-end encryption password is wrong or missing.",
+  clock_drift: "The host clock differs too far from the Actual server's. Fix the system time.",
+  permission_denied: 'The server could not write to its data directory. Check the volume mount and its ownership.',
+  timeout: 'Initialising the Actual connection timed out.',
+  unknown: 'The Actual connection for this session could not be initialised. See the server log for the cause.',
+};
+
+/** Actual's own reason strings, from `withErrorCode` and SyncError, to our enum.
+ *  `out-of-sync-migrations` maps to schema_too_new, NOT out_of_sync: `invalid-schema`
+ *  is absent from budgetLoader's KNOWN_LOAD_REASONS, so migrations is the only route
+ *  by which a too-new schema surfaces on the post-condition path, and upstream's own
+ *  sentence for it is "This budget cannot be loaded with this version of the app." */
+const REASON_TO_CAUSE: Record<string, InitFailureCause> = {
+  'invalid-schema': 'schema_too_new',
+  'out-of-sync-migrations': 'schema_too_new',
+  'out-of-sync': 'out_of_sync',
+  'out-of-sync-data': 'out_of_sync',
+  'budget-not-found': 'budget_not_found',
+  'clock-drift': 'clock_drift',
+  'encrypt-failure': 'encryption_error',
+  'decrypt-failure': 'encryption_error',
+  'missing-key': 'encryption_error',
+};
+
+/** Node fs/net codes. A DIFFERENT namespace from Actual's reasons, deliberately
+ *  kept in its own table so the two can never be conflated. */
+const SYSTEM_CODE_TO_CAUSE: Record<string, InitFailureCause> = {
+  EACCES: 'permission_denied',
+  EPERM: 'permission_denied',
+  EROFS: 'permission_denied',
+  ECONNREFUSED: 'network_unreachable',
+  ENOTFOUND: 'network_unreachable',
+  ECONNRESET: 'network_unreachable',
+  EHOSTUNREACH: 'network_unreachable',
+  ETIMEDOUT: 'timeout',
+};
+
+export function classifyInitFailure(err: unknown): { cause: InitFailureCause; sentence: string } {
+  const done = (cause: InitFailureCause) => ({ cause, sentence: INIT_FAILURE_SENTENCES[cause] });
+  try {
+    const e = err as { code?: unknown; reason?: unknown; message?: unknown } | null | undefined;
+
+    // `.code` FIRST: upstream's api/download-budget and api/load-budget never let a
+    // SyncError escape, they throw a plain Error carrying .code via withErrorCode.
+    const code = typeof e?.code === 'string' ? e.code : undefined;
+    if (code && REASON_TO_CAUSE[code]) return done(REASON_TO_CAUSE[code]);
+    if (code && SYSTEM_CODE_TO_CAUSE[code]) return done(SYSTEM_CODE_TO_CAUSE[code]);
+
+    // `.reason` only as a defensive fallback, for a SyncError that reaches us by
+    // some path that does not go through those two handlers.
+    const reason = typeof e?.reason === 'string' ? e.reason : undefined;
+    if (reason && REASON_TO_CAUSE[reason]) return done(REASON_TO_CAUSE[reason]);
+
+    const message = typeof e?.message === 'string' ? e.message : '';
+
+    // Our OWN synthesized post-condition error (#396) embeds the upstream reason
+    // in prose. On a resync of an existing local copy this is the shape that
+    // actually arrives for the schema and migration classes, so a classifier that
+    // handled only the upstream shapes would answer `unknown` for exactly the
+    // failures this ticket is about.
+    const embedded = /Upstream reason: \[([a-z-]+)\]/.exec(message)?.[1];
+    if (embedded && REASON_TO_CAUSE[embedded]) return done(REASON_TO_CAUSE[embedded]);
+
+    // Last resort, message shapes. `network-failure` is tested BEFORE the auth
+    // wording because upstream reports an unreachable server as
+    // "Authentication failed: network-failure", where the actionable half is the
+    // network, not the credentials.
+    if (/network-failure|ECONNREFUSED|ENOTFOUND/i.test(message)) return done('network_unreachable');
+    if (/timed out|ETIMEDOUT/i.test(message)) return done('timeout');
+    if (/Authentication failed|invalid-password|Invalid password/i.test(message)) return done('auth_failed');
+    if (/invalid-schema/i.test(message)) return done('schema_too_new');
+    return done('unknown');
+  } catch {
+    // TOTAL by construction: a classifier that throws would land on the outer POST
+    // catch and egress as raw String(err), defeating this contract through the one
+    // line deliberately left to #446.
+    return done('unknown');
+  }
+}
+
 export { requestContext };
 
 // Resolve the authenticated principal for the per-principal budget preference
@@ -202,6 +308,36 @@ export async function startHttpServer(
 
   const transports = new Map<string, StreamableHTTPServerTransport>();
   const sessionInitPromises = new Map<string, Promise<void>>();  // Track session init completion
+  // #438: why a session is NOT in `transports`. Closure-scoped like its two
+  // siblings above, so repeated startHttpServer calls (which the unit tests make)
+  // never share state and no reset export is needed. PEEK-ONLY: no reader deletes,
+  // and the TTL is the sole reaper. Consume-on-read was rejected because two
+  // concurrent requests on one session id would race for the single record and the
+  // loser would silently get the generic 404, restoring this bug at random.
+  const INIT_FAILURE_TTL_MS = 60_000;
+  const INIT_FAILURE_MAX = 1000;
+  const sessionInitFailures = new Map<string, { cause: InitFailureCause; sentence: string; at: number }>();
+  const rememberInitFailure = (sid: string, err: unknown): void => {
+    const now = Date.now();
+    for (const [k, v] of sessionInitFailures) {
+      if (now - v.at > INIT_FAILURE_TTL_MS) sessionInitFailures.delete(k);
+    }
+    // FIFO once capped. A failed init creates no pool entry, so onSessionEvicted
+    // never fires for these and nothing else would ever reap them.
+    while (sessionInitFailures.size >= INIT_FAILURE_MAX) {
+      const oldest = sessionInitFailures.keys().next().value;
+      if (oldest === undefined) break;
+      sessionInitFailures.delete(oldest);
+    }
+    sessionInitFailures.set(sid, { ...classifyInitFailure(err), at: now });
+  };
+  /** Peek. Never deletes. Returns undefined once the TTL has elapsed. */
+  const peekInitFailure = (sid: string): { cause: InitFailureCause; sentence: string } | undefined => {
+    const rec = sessionInitFailures.get(sid);
+    if (!rec) return undefined;
+    if (Date.now() - rec.at > INIT_FAILURE_TTL_MS) return undefined;
+    return { cause: rec.cause, sentence: rec.sentence };
+  };
 
   // safe fallback if index didn't provide implementedTools
   const toolsList: string[] = Array.isArray(implementedTools) ? implementedTools : [];
@@ -485,6 +621,12 @@ export async function startHttpServer(
               logger.error(`[SESSION] Failed to initialize Actual for session ${sid}:`, err);
               // Don't add failed sessions to transports map - they won't be usable anyway
               // This prevents accumulation of dead sessions
+              // #438: remember WHY. The transport is still deliberately not registered,
+              // so the dead-session protection above is unchanged; without this the
+              // cause is known here and discarded, and the client's next request gets
+              // a bare "Session not found" that says nothing about a schema mismatch,
+              // a bad password or an unreachable server.
+              rememberInitFailure(sid, err);
               rejectInit?.(err);
             } finally {
               // Clean up the promise after a short delay to allow pending requests to complete
@@ -547,6 +689,38 @@ export async function startHttpServer(
           // Session doesn't exist (expired, server restarted, or invalid)
           // For tools/list, return tools for LobeChat discovery (they cache session IDs)
           // This allows LobeChat's backend to discover available tools even with expired sessions
+          // #438: ONE lookup, at the top of this block and BEFORE the shim, so
+          // there is a single read per request under peek semantics and a fourth
+          // caller cannot reintroduce the mask. Wrapped in its own try/catch: a
+          // throw here would land on the outer catch below, which returns raw
+          // String(err) (that line's sanitisation is #446), and would defeat the
+          // enum-only contract through the very hole left open there.
+          let knownFailure: { cause: InitFailureCause; sentence: string } | undefined;
+          try {
+            knownFailure = peekInitFailure(sessionId);
+          } catch {
+            knownFailure = undefined;
+          }
+
+          if (knownFailure) {
+            // A known init failure BEATS the discovery shim for this session id:
+            // answering 200 plus a full tool list to a session whose connection
+            // never came up is the same masking in a friendlier costume.
+            logger.warn(`[SESSION] Session ${sessionId} failed to initialize (${knownFailure.cause}); reporting the cause (method: ${method})`);
+            res.status(404).json({
+              jsonrpc: '2.0',
+              id: payload?.id ?? null,
+              error: {
+                code: -32001,
+                message: `${knownFailure.sentence} Re-initialize by calling initialize without an mcp-session-id header once the cause is fixed.`,
+                // Closed enum only. Nothing derived from the upstream error reaches
+                // the wire, which is why no scrubber has to be correct here.
+                data: { cause: knownFailure.cause, sessionInitFailed: true },
+              },
+            });
+            return;
+          }
+
           if (method === 'tools/list') {
             logger.debug('[LOBECHAT COMPAT] Handling tools/list with expired/invalid session - returning tools for discovery');
             const tools = buildToolListEntries(toolsList, resolveToolMeta);
@@ -592,6 +766,10 @@ export async function startHttpServer(
       const e2 = err as Error | { stack?: unknown } | undefined;
       if (e2 && typeof e2.stack === 'string') logger.error(e2.stack);
       if (!res.headersSent) {
+        // NOTE: this returns the raw error string to the client. That pre-existing
+        // disclosure is tracked as #446 and is deliberately out of scope here. The
+        // #438 session-init path above is CONTAINED by its own try/catch and never
+        // reaches this line, so its closed-enum contract cannot leak through here.
         res.status(500).json({ jsonrpc: '2.0', id: payload?.id ?? null, error: { code: -32603, message: String(err) } });
       }
     }
@@ -607,7 +785,26 @@ export async function startHttpServer(
     connectionPool.touch(sessionId); // Refresh the pool's idle clock (#167)
     const transport = transports.get(sessionId);
     if (!transport) {
-      res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Transport not ready' }, id: null });
+      // #438: same cause, this route's own status and code. The classifier owns no
+      // status: each caller maps the classification onto the shape it already
+      // returns. try/catch is load bearing here because this route has NONE and the
+      // file registers no error-handling middleware, so under Express 5 an async
+      // throw reaches the default final handler, which puts err.stack in the body
+      // whenever NODE_ENV is not production (unset for a bare node run, and
+      // `development` in docker-compose).
+      let knownFailure: { cause: InitFailureCause; sentence: string } | undefined;
+      try {
+        knownFailure = peekInitFailure(sessionId);
+      } catch {
+        knownFailure = undefined;
+      }
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: knownFailure
+          ? { code: -32000, message: knownFailure.sentence, data: { cause: knownFailure.cause, sessionInitFailed: true } }
+          : { code: -32000, message: 'Transport not ready' },
+        id: null,
+      });
       return;
     }
     await transport.handleRequest(req, res);
@@ -716,6 +913,7 @@ export async function startHttpServer(
     }
     transports.clear();
     sessionInitPromises.clear();
+    sessionInitFailures.clear(); // #438
     // Also shut down the shared/pooled connections
     await shutdownActual();
   };
