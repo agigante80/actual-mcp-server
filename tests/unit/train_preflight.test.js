@@ -237,7 +237,7 @@ check('the soak window is clamped to its floor', () => {
 // --- bump type ---------------------------------------------------------------
 
 check('an upstream MAJOR bumps us a MINOR, not a patch', () => {
-  // Semver describes OUR contract, the 71-tool MCP surface, not our dependency
+  // Semver describes OUR contract, the 77-tool MCP surface, not our dependency
   // versions. Minor also keeps tilde-pinned consumers off it automatically.
   assert.strictEqual(bumpTypeFor({ current: '26.8.0', latest: '27.0.0' }), 'minor');
   assert.strictEqual(decide({ current: '26.8.0', latest: '27.0.0' }).bumpType, 'minor');

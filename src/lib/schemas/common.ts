@@ -3,7 +3,7 @@
  * 
  * Common validation schemas used across MCP tools for Actual Budget.
  * These schemas provide consistent validation, better error messages,
- * and reduce duplication across the 43 tool definitions.
+ * and reduce duplication across the 77 tool definitions.
  */
 
 import { z } from 'zod';
