@@ -8,7 +8,8 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import {
   classifyLiveness, decideStaleTransition, buildStaleBody,
-  STALE_LABEL, STALE_THRESHOLD_HOURS, WATCHED_WORKFLOWS,
+  selectNewestScheduledRun, shouldConfirmStaleFinding, reconcileLivenessReads,
+  STALE_LABEL, STALE_THRESHOLD_HOURS, WATCHED_WORKFLOWS, CONFIRM_DELAY_MS,
 } from '../../scripts/report-train-stale.mjs';
 
 let passed = 0;
@@ -197,6 +198,196 @@ check('the runs query filters event=schedule and reads created_at', () => {
     'created_at timestamps the DISPATCH, which is the property under test');
   assert.ok(!/run_started_at/.test(src),
     'run_started_at conflates dispatch with runner availability and would report a queued-but-dispatched run as a dead cron');
+});
+
+// --- #436: selection by timestamp, never by position -------------------------
+//
+// The 2026-09-04 incident: the runs endpoint returned a 292h-old run at the head
+// of the page while a 4.5h-old run existed, so `workflow_runs?.[0]` failed the
+// job and filed a false P2 (#434). The endpoint has no `sort` or `direction`
+// parameter, so newest-first cannot be requested and must not be assumed.
+
+const OLD_AT = agoHours(292);
+const RECENT_AT = agoHours(4.5);
+
+check('#436: the newest run wins even when the page is out of order', () => {
+  const got = selectNewestScheduledRun([
+    { id: 32611627661, created_at: OLD_AT },
+    { id: 33826298441, created_at: RECENT_AT },
+  ]);
+  assert.deepStrictEqual(got, { runAt: RECENT_AT, runId: 33826298441, considered: 2 });
+});
+
+check('#436: an in-order page still selects the newest run (no regression)', () => {
+  const got = selectNewestScheduledRun([
+    { id: 33826298441, created_at: RECENT_AT },
+    { id: 32611627661, created_at: OLD_AT },
+  ]);
+  assert.deepStrictEqual(got, { runAt: RECENT_AT, runId: 33826298441, considered: 2 });
+});
+
+check('#436: an entry with an unusable created_at is ignored, not fatal', () => {
+  const got = selectNewestScheduledRun([
+    { id: 1, created_at: undefined },
+    { id: 2, created_at: 'not-a-date' },
+    { id: 3, created_at: OLD_AT },
+  ]);
+  assert.deepStrictEqual(got, { runAt: OLD_AT, runId: 3, considered: 1 },
+    'considered counts only the entries that carried a usable timestamp');
+});
+
+check('#436: an empty or absent page yields the cold-start shape', () => {
+  assert.deepStrictEqual(selectNewestScheduledRun([]), { runAt: null, runId: null, considered: 0 });
+  assert.deepStrictEqual(selectNewestScheduledRun(undefined), { runAt: null, runId: null, considered: 0 });
+});
+
+// --- #436: which findings get the confirming re-read -------------------------
+
+check('#436: both runs-page stale reasons are confirmed, and only those', () => {
+  // no_recent_run comes from a partial page, never_ran from an empty one. BOTH
+  // are reachable by an incomplete read, which is why never_ran cannot be left
+  // out: no page size fixes an empty page.
+  assert.strictEqual(shouldConfirmStaleFinding({ stale: true, reason: 'no_recent_run' }), true);
+  assert.strictEqual(shouldConfirmStaleFinding({ stale: true, reason: 'never_ran' }), true);
+  // disabled is derived from the workflow object, not the runs page: threshold
+  // free, immediately reportable, and no delay may be paid for it.
+  assert.strictEqual(shouldConfirmStaleFinding({ stale: true, reason: 'disabled' }), false);
+  for (const reason of ['too_young', 'ok', 'inconclusive']) {
+    assert.strictEqual(shouldConfirmStaleFinding({ stale: false, reason }), false, reason);
+  }
+});
+
+// --- #436: reconciling the two reads -----------------------------------------
+
+const staleFinding = (over = {}) => ({ file: 'dependency-update.yml', stale: true, reason: 'no_recent_run', ageHours: 292, ...over });
+
+check('#436: a run seen by EITHER read proves the cron fired', () => {
+  const first = staleFinding();
+  const second = { file: 'dependency-update.yml', stale: false, reason: 'ok', ageHours: 4.5 };
+  assert.deepStrictEqual(reconcileLivenessReads(first, second), second);
+});
+
+check('#436: two stale numeric reads report the freshest evidence either saw', () => {
+  const first = staleFinding({ ageHours: 292 });
+  const second = staleFinding({ ageHours: 100 });
+  assert.strictEqual(reconcileLivenessReads(first, second).ageHours, 100);
+  assert.strictEqual(reconcileLivenessReads(second, first).ageHours, 100, 'order independent');
+});
+
+check('#436: a numeric ageHours beats a null one, so a stale report never renders 0.0h', () => {
+  // never_ran ALWAYS carries ageHours: null, and a naive Math.min(292, null) is
+  // 0, which buildStaleBody renders as "0.0h": a stale report that reads as
+  // perfectly fresh under a 48h threshold.
+  const numeric = staleFinding({ ageHours: 292 });
+  const nullish = staleFinding({ reason: 'never_ran', ageHours: null });
+  assert.strictEqual(reconcileLivenessReads(numeric, nullish).ageHours, 292);
+  assert.strictEqual(reconcileLivenessReads(nullish, numeric).ageHours, 292, 'order independent');
+  const body = buildStaleBody({ findings: [reconcileLivenessReads(numeric, nullish)] });
+  assert.ok(/292\.0h/.test(body), 'the freshest evidence is rendered');
+  assert.ok(!/\b0\.0h/.test(body), 'Math.min(292, null) === 0 must never reach the body');
+});
+
+check('#436: two null ageHours reconcile to the first, so the contract is total', () => {
+  const a = staleFinding({ file: 'a.yml', reason: 'never_ran', ageHours: null });
+  const b = staleFinding({ file: 'b.yml', reason: 'never_ran', ageHours: null });
+  assert.strictEqual(reconcileLivenessReads(a, b).file, 'a.yml');
+});
+
+check('#436: a confirming read that failed is UNKNOWN, and unknown reports nothing either way', () => {
+  // The shell substitutes this shape when the second read throws. Falling back
+  // to the first read's stale verdict would reintroduce the single-observation
+  // bug this whole change exists to remove. Assert the WHOLE chain, not just the
+  // reconcile step: a reviewer reasonably read the non-stale return as the job
+  // asserting health, and the answer is that the reason travels with it, so the
+  // run neither opens nor closes.
+  const first = staleFinding();
+  const inconclusive = { file: 'dependency-update.yml', stale: false, reason: 'inconclusive', ageHours: null };
+  const reconciled = reconcileLivenessReads(first, inconclusive);
+  assert.strictEqual(reconciled.reason, 'inconclusive');
+  assert.strictEqual(decideStaleTransition({ findings: [reconciled], openStaleIssues: [{ number: 434 }] }).kind, 'noop',
+    'a valid issue is NOT closed on an unknown');
+  assert.strictEqual(decideStaleTransition({ findings: [reconciled], openStaleIssues: [] }).kind, 'noop',
+    'and no new issue is opened from a single observation');
+  const sibling = staleFinding({ file: 'api-surface-drift.yml', ageHours: 300 });
+  assert.strictEqual(decideStaleTransition({ findings: [reconciled, sibling], openStaleIssues: [] }).kind, 'open',
+    'a workflow that IS confirmed stale still reports, so unknown is not a blanket mute');
+});
+
+// --- #436: an unknown read is not evidence of RECOVERY ------------------------
+
+check('#436: an inconclusive finding suppresses the close branch', () => {
+  // Red against the pre-#436 transition function, which returned {kind:'close'}
+  // here and would POST "Recovered ..." then close a still-valid issue, on the
+  // very run that could not determine anything. The next push then files a fresh
+  // number, defeating the dedupe pinned above.
+  const t = decideStaleTransition({
+    findings: [
+      { file: 'dependency-update.yml', stale: false, reason: 'inconclusive' },
+      { file: 'api-surface-drift.yml', stale: false, reason: 'ok' },
+    ],
+    openStaleIssues: [{ number: 434 }],
+  });
+  assert.strictEqual(t.kind, 'noop', 'a read that failed is not evidence of recovery');
+});
+
+check('#436: a genuinely recovered run still closes, so suppression is not a blanket off-switch', () => {
+  const t = decideStaleTransition({
+    findings: [
+      { file: 'dependency-update.yml', stale: false, reason: 'ok' },
+      { file: 'api-surface-drift.yml', stale: false, reason: 'too_young' },
+    ],
+    openStaleIssues: [{ number: 434 }],
+  });
+  assert.strictEqual(t.kind, 'close');
+});
+
+check('#436: a genuine stale finding still opens even when a sibling read failed', () => {
+  const t = decideStaleTransition({
+    findings: [
+      staleFinding(),
+      { file: 'api-surface-drift.yml', stale: false, reason: 'inconclusive' },
+    ],
+    openStaleIssues: [],
+  });
+  assert.strictEqual(t.kind, 'open', 'suppression applies to closing, never to reporting');
+});
+
+// --- #436: the query shape the fix depends on --------------------------------
+
+check('#436: the runs query reads a PAGE and no code path indexes it positionally', () => {
+  // Comments stripped, for the reason given by the sibling case below.
+  const raw = readFileSync(new URL('../../scripts/report-train-stale.mjs', import.meta.url), 'utf8');
+  const src = raw.split('\n').filter((l) => !/^\s*\/\//.test(l) && !/^\s*\*/.test(l)).join('\n');
+  const POSITIONAL = /workflow_runs\s*\??\.?\s*\[\s*0\s*\]/;
+  // Witness: the pattern must be able to fire, or this case is vacuous. The
+  // defective line was `workflow_runs?.[0]`, so a literal `workflow_runs[0]`
+  // scan would have passed against the very code it was written to condemn.
+  assert.ok(POSITIONAL.test('const newest = runs?.workflow_runs?.[0];'), 'pattern matches optional chaining');
+  assert.ok(POSITIONAL.test('runs.workflow_runs[0]'), 'pattern matches plain indexing');
+  assert.ok(/per_page=30/.test(src), 'a page is read, not a single row');
+  assert.ok(!POSITIONAL.test(src),
+    'selection must go through selectNewestScheduledRun; the API has no sort or direction parameter, so position means nothing');
+});
+
+check('#436 review: a disabled verdict survives a failed runs read', () => {
+  // The runs GET sits in its own try precisely so this holds: `state` alone
+  // decides `disabled`, and classifyLiveness returns it before ever consulting
+  // the runs page. Sharing one try would let a rate-limited runs call discard
+  // the higher-severity signal, which is the one #327 exists to catch.
+  const f = classifyLiveness({ file: 'dependency-update.yml', state: 'disabled_inactivity', newestScheduledRunAt: null, now: NOW });
+  assert.strictEqual(f.stale, true);
+  assert.strictEqual(f.reason, 'disabled');
+  assert.strictEqual(shouldConfirmStaleFinding(f), false, 'and it needs no confirming re-read');
+});
+
+check('#436: the confirmation delay is a named constant with a real value', () => {
+  // A delay chosen "short" can be served by the same lagging index that caused
+  // the false read, which makes the confirmation inert while looking implemented.
+  assert.strictEqual(typeof CONFIRM_DELAY_MS, 'number');
+  assert.ok(CONFIRM_DELAY_MS >= 10000, 'must outlast a transient index lag');
+  // Worst case added wall clock is the delay times the watched set, and the job
+  // is capped at timeout-minutes: 10.
+  assert.ok((CONFIRM_DELAY_MS * WATCHED_WORKFLOWS.length) < 600000 / 2, 'stays well inside the job timeout');
 });
 
 console.log(`\n[report-train-stale] Results: ${passed} passed, ${failed} failed`);

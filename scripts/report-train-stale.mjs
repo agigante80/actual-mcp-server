@@ -46,6 +46,13 @@ import process from 'node:process';
 export const STALE_LABEL = 'train-stale';
 export const STALE_THRESHOLD_HOURS = 48;
 
+/** #436: how long to wait before the ONE confirming re-read of a workflow that
+ *  the first read called stale. Named rather than inlined because a delay chosen
+ *  "short" can be served by the same lagging index that caused the false read,
+ *  which makes the confirmation inert while looking implemented. Overridable by
+ *  env for the reproduction harness, the same shape as STALE_THRESHOLD_HOURS. */
+export const CONFIRM_DELAY_MS = 30000;
+
 /** Watched scheduled workflows. A LIST, not a hardcoded filename:
  *  api-surface-drift.yml is a second scheduled workflow with identical exposure,
  *  so adding a third later must be a one-line data change. */
@@ -104,6 +111,93 @@ export function classifyLiveness({ file, state, newestScheduledRunAt, workflowCr
 }
 
 /**
+ * Pick the newest scheduled run from a page, BY TIMESTAMP, never by position.
+ *
+ * #436: this used to be `workflow_runs?.[0]`, which assumes the API returns
+ * newest-first. That ordering is undocumented and the endpoint has no `sort` or
+ * `direction` parameter, so it cannot be requested. On 2026-09-04 a read put a
+ * 292h-old run at the head while a 4.5h-old run existed, which failed the job
+ * and filed a false P2 (#434).
+ *
+ * @param {{created_at?: string, id?: number}[]} runs
+ * @returns {{runAt: string|null, runId: number|null, considered: number}}
+ */
+export function selectNewestScheduledRun(runs = []) {
+  let runAt = null;
+  let runId = null;
+  let newest = -Infinity;
+  let considered = 0;
+  for (const run of Array.isArray(runs) ? runs : []) {
+    const t = Date.parse(run?.created_at ?? '');
+    if (!Number.isFinite(t)) continue;   // an unusable entry is ignored, not fatal
+    considered += 1;
+    if (t > newest) {
+      newest = t;
+      runAt = run.created_at;
+      runId = run?.id ?? null;
+    }
+  }
+  return { runAt, runId, considered };
+}
+
+/**
+ * Does this finding need the confirming re-read?
+ *
+ * TRUE for the two stale reasons derived from the RUNS PAGE, because both are
+ * reachable by a read that was incomplete rather than by a dead cron:
+ * `no_recent_run` from a partial page, `never_ran` from an empty one.
+ * FALSE for `disabled`, which is derived from the workflow object instead, is
+ * threshold-free, and is reportable immediately.
+ *
+ * Exported rather than inlined in the shell: the unit suite mocks no network, so
+ * a predicate living in main() would be unreachable by every test, and this is
+ * the predicate that was wrong when the ticket was first written.
+ *
+ * @returns {boolean}
+ */
+export function shouldConfirmStaleFinding(finding) {
+  return finding?.stale === true && (finding.reason === 'no_recent_run' || finding.reason === 'never_ran');
+}
+
+/**
+ * Reconcile two reads of the same workflow.
+ *
+ * Both arguments are classifyLiveness findings enriched with lastRunId, NOT raw
+ * pages. The shell always supplies both, because a confirming read that throws
+ * becomes an `inconclusive` finding rather than a missing one, so there is no
+ * absent-second case and a nullish argument throws here rather than silently
+ * resolving to nothing.
+ *
+ * A run seen by EITHER read proves the cron fired, so a non-stale finding always
+ * wins. Falling back to the first read's stale verdict is forbidden: that is the
+ * single-observation bug this exists to remove.
+ *
+ * @returns the finding to report
+ */
+export function reconcileLivenessReads(first, second) {
+  if (!first.stale) return first;
+  // An `inconclusive` second read is UNKNOWN, not health, and it is returned
+  // deliberately. Reading this as "the non-stale read wins" misses that the
+  // reason travels with it: decideStaleTransition then opens nothing AND closes
+  // nothing, so the run asserts neither staleness nor recovery and the next push
+  // retries. Returning `first` here instead would report stale on a SINGLE
+  // observation, which is precisely the bug this whole change exists to remove.
+  // The residue, a confirming read that fails persistently rather than once, is
+  // the permanent-versus-transient distinction tracked in #444.
+  if (second.reason === 'inconclusive') return second;
+  if (!second.stale) return second;
+  // Both stale. Prefer the read carrying EVIDENCE: `never_ran` always has a null
+  // ageHours, and a naive Math.min(292, null) is 0, which renders as "0.0h", a
+  // stale report that reads as perfectly fresh.
+  const a = Number.isFinite(first.ageHours) ? first.ageHours : null;
+  const b = Number.isFinite(second.ageHours) ? second.ageHours : null;
+  if (a === null && b === null) return first;
+  if (a === null) return second;
+  if (b === null) return first;
+  return b < a ? second : first;
+}
+
+/**
  * Map findings plus current tracker state onto one transition.
  *
  * The healthy steady state performs ZERO tracker writes. That is this ticket's
@@ -121,9 +215,16 @@ export function decideStaleTransition({ findings = [], openStaleIssues = [] } = 
     return { kind: 'update', issue: open[0], findings: stale, duplicates: open.slice(1) };
   }
 
+  // #436: a read that FAILED is not evidence of recovery. Without this, a
+  // workflow whose read threw reaches here as a non-stale finding, and an open
+  // issue is CLOSED with a "Recovered" comment on the very run that could not
+  // determine anything. That is a tracker write decided from an unknown, and the
+  // next push files a fresh number, defeating the dedupe this file is built on.
+  const unknown = findings.some((f) => f.reason === 'inconclusive');
+
   // Healthy. Closing an EXISTING train-stale issue is the explicit
   // stale-to-active transition, not part of the steady-state healthy path.
-  if (open.length > 0) return { kind: 'close', issues: open };
+  if (open.length > 0 && !unknown) return { kind: 'close', issues: open };
   return { kind: 'noop' };
 }
 
@@ -190,6 +291,37 @@ async function gh(token, path, init = {}) {
   return res.status === 204 ? null : res.json();
 }
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** A workflow whose read failed is UNKNOWN, not healthy. #436: it used to be
+ *  dropped from the findings list entirely, which reaches the same close branch
+ *  as a healthy verdict. */
+const inconclusiveFinding = (file, state) => ({ file, stale: false, reason: 'inconclusive', state, ageHours: null, lastRunId: null });
+
+/** Read the runs page and classify it. Used for BOTH the first pass and the
+ *  confirming re-read, so the two cannot drift apart. */
+async function readRunsFinding(token, repo, file, { state, workflowCreatedAt, thresholdHours }) {
+  // event=schedule specifically. dependency-update.yml also carries
+  // workflow_dispatch, and manually dispatching the train is the FIRST
+  // diagnostic step when it looks dead, so an unfiltered query would let
+  // that diagnostic reset the liveness clock while the cron stayed dead.
+  // Status is deliberately NOT filtered: a scheduled run that FAILED still
+  // proves the cron fired, and reporting that is #325's job, not this one's.
+  // per_page=30 covers about a month of a nightly cron, so a page returned in
+  // any order still contains the newest run. It is ONE request, exactly as the
+  // single-row read it replaces was.
+  const runs = await gh(token, `/repos/${repo}/actions/workflows/${file}/runs?event=schedule&per_page=30`);
+  // created_at, not run_started_at: created_at timestamps the DISPATCH,
+  // which is the property under test. run_started_at conflates dispatch with
+  // runner availability and would report a queued-but-dispatched run as dead.
+  const { runAt, runId } = selectNewestScheduledRun(runs?.workflow_runs);
+  const f = classifyLiveness({
+    file, state, newestScheduledRunAt: runAt, workflowCreatedAt,
+    now: new Date().toISOString(), thresholdHours,
+  });
+  return { ...f, lastRunId: runId };
+}
+
 async function main() {
   const token = process.env.GH_TOKEN;
   const repo = process.env.GITHUB_REPOSITORY;
@@ -199,44 +331,71 @@ async function main() {
     process.exit(1);
   }
 
+  const thresholdHours = Number.parseInt(process.env.STALE_THRESHOLD_HOURS ?? '', 10) || STALE_THRESHOLD_HOURS;
+  // Validated rather than `|| CONFIRM_DELAY_MS`: that idiom cannot express 0, so
+  // the harness override this constant documents would silently pay the full
+  // delay, and a NEGATIVE value would pass through truthy into sleep(-1), making
+  // the confirmation inert while looking implemented.
+  const parsedDelay = Number.parseInt(process.env.CONFIRM_DELAY_MS ?? '', 10);
+  const confirmDelayMs = Number.isFinite(parsedDelay) && parsedDelay >= 0 ? parsedDelay : CONFIRM_DELAY_MS;
+
   const findings = [];
   for (const file of WATCHED_WORKFLOWS) {
     let state = null;
-    let newestScheduledRunAt = null;
     let workflowCreatedAt = null;
-    let lastRunId = null;
     try {
       const wf = await gh(token, `/repos/${repo}/actions/workflows/${file}`);
       state = wf?.state ?? null;
       workflowCreatedAt = wf?.created_at ?? null;
-      // event=schedule specifically. dependency-update.yml also carries
-      // workflow_dispatch, and manually dispatching the train is the FIRST
-      // diagnostic step when it looks dead, so an unfiltered query would let
-      // that diagnostic reset the liveness clock while the cron stayed dead.
-      // Status is deliberately NOT filtered: a scheduled run that FAILED still
-      // proves the cron fired, and reporting that is #325's job, not this one's.
-      const runs = await gh(token, `/repos/${repo}/actions/workflows/${file}/runs?event=schedule&per_page=1`);
-      const newest = runs?.workflow_runs?.[0];
-      // created_at, not run_started_at: created_at timestamps the DISPATCH,
-      // which is the property under test. run_started_at conflates dispatch with
-      // runner availability and would report a queued-but-dispatched run as dead.
-      newestScheduledRunAt = newest?.created_at ?? null;
-      lastRunId = newest?.id ?? null;
     } catch (err) {
       annotate('warning', `report-train-stale: could not read ${file}: ${err.message}`);
+      findings.push(inconclusiveFinding(file, null));
       continue;
     }
-    const f = classifyLiveness({
-      file, state, newestScheduledRunAt, workflowCreatedAt, now: new Date().toISOString(),
-      thresholdHours: Number.parseInt(process.env.STALE_THRESHOLD_HOURS ?? '', 10) || STALE_THRESHOLD_HOURS,
-    });
-    findings.push({ ...f, lastRunId });
+
+    // The runs read is a SEPARATE try, because `state` is already in hand here
+    // and a `disabled` workflow is decidable from it ALONE: classifyLiveness
+    // returns `disabled` before it ever consults the runs page. Sharing one try
+    // with the read above would let a rate-limited runs call discard the very
+    // verdict #327 exists to catch, which is the higher-severity signal of the two.
+    let first;
+    try {
+      first = await readRunsFinding(token, repo, file, { state, workflowCreatedAt, thresholdHours });
+    } catch (err) {
+      annotate('warning', `report-train-stale: could not read runs for ${file}: ${err.message}`);
+      findings.push(state && state !== 'active'
+        ? { ...classifyLiveness({ file, state, now: new Date().toISOString(), thresholdHours }), lastRunId: null }
+        : inconclusiveFinding(file, state));
+      continue;
+    }
+
+    // The confirming re-read is paid ONLY when this pass is about to call a
+    // workflow dead, never on the healthy steady state, and never for a
+    // `disabled` finding, which needs no runs page at all.
+    if (!shouldConfirmStaleFinding(first)) {
+      findings.push(first);
+      continue;
+    }
+    annotate('notice', `${file} looks stale (${first.reason}); confirming with one re-read`);
+    await sleep(confirmDelayMs);
+    let second;
+    try {
+      second = await readRunsFinding(token, repo, file, { state, workflowCreatedAt, thresholdHours });
+    } catch (err) {
+      annotate('warning', `report-train-stale: confirming read for ${file} failed: ${err.message}`);
+      second = inconclusiveFinding(file, state);
+    }
+    findings.push(reconcileLivenessReads(first, second));
   }
 
   const stale = findings.filter((f) => f.stale);
 
-  // Zero tracker writes on the healthy steady state: the issue list is not even
-  // fetched unless something is stale or a previous run left an issue open.
+  // Zero tracker WRITES on the healthy steady state. Note the read below is
+  // unconditional: this list GET always happens, so the healthy path costs one
+  // request per watched workflow for the workflow object, one for its runs page,
+  // and this one. A GET is not a write, so the invariant holds, but the previous
+  // wording here claimed the list was not fetched at all unless something was
+  // stale, which was never true.
   let openStaleIssues = [];
   try {
     const list = await gh(token, `/repos/${repo}/issues?state=open&labels=${encodeURIComponent(STALE_LABEL)}&sort=created&direction=asc&per_page=100`);
@@ -251,7 +410,20 @@ async function main() {
   const t = decideStaleTransition({ findings, openStaleIssues });
 
   if (t.kind === 'noop') {
-    annotate('notice', `train liveness OK: ${findings.map((f) => `${f.file}=${f.reason}`).join(' ')}`);
+    // Do not print OK when a read failed: the run is inconclusive, not healthy,
+    // and the distinction is the whole point of the suppression above.
+    const unknown = findings.filter((f) => f.reason === 'inconclusive');
+    const label = unknown.length > 0 ? 'train liveness INCONCLUSIVE (nothing reported, next push retries)' : 'train liveness OK';
+    annotate('notice', `${label}: ${findings.map((f) => `${f.file}=${f.reason}`).join(' ')}`);
+    // A suppressed close must not be SILENT. If an issue is open and a read
+    // failed, the run can neither confirm recovery nor report staleness, and a
+    // read that keeps failing (a watched workflow renamed out of the repo, say)
+    // would otherwise hold that issue open forever at notice level. The design
+    // half, telling a permanent 404 from a transient failure, is #444; this
+    // makes the state visible meanwhile.
+    if (unknown.length > 0 && openStaleIssues.length > 0) {
+      annotate('warning', `report-train-stale: not closing #${openStaleIssues[0].number} while ${unknown.map((f) => f.file).join(', ')} could not be read`);
+    }
     return;
   }
 
