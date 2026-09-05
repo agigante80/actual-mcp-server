@@ -36,6 +36,12 @@ const FILES = [
   '.github/CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
   'tests/manual/tests/sanity.js', 'tests/manual/runner.js', 'tests/e2e/README.md', 'tests/manual/README.md',
   'tests/e2e/docker-all-tools.e2e.spec.ts',
+  // Two more files that state the whole-server total in prose and drifted unseen because
+  // the scan could not reach them: a header comment in the shared Zod schemas ("across
+  // the N tool definitions") and the semver rationale comment in the train pre-flight
+  // test ("the N-tool MCP surface"), which mirrors the same sentence in CLAUDE.md.
+  'src/lib/schemas/common.ts',
+  'tests/unit/train_preflight.test.js',
   // The api-design-principles SKILL states the tool total in its opening lines, and both
   // `tool-author` and `ticket-gate` read it. It sat at "71-tool set" while
   // IMPLEMENTED_TOOLS was 74, because this scan could not see `.claude/skills/**` (#377
@@ -95,6 +101,14 @@ export const TOTAL_PATTERNS = [
   { re: /Available Tools \((\d{2,3}) Total\)/g, label: 'Available Tools (N Total) (docker)' },
   { re: /\| (\d{2,3}) \+ shape checks/g, label: 'N + shape checks (TESTING cell)' },
   { re: /\| (\d{2,3})\/\1 \|/g, label: 'N/N table cell (no tools word)' },
+  // Hyphenated TOTAL forms describing the SURFACE or the semver CONTRACT, plus the
+  // bare "N tool definitions" comment form. None carries a "(N tools)" shape, so no
+  // anchor above reached them and all three sat stale while the advisory scan could
+  // only report them: CLAUDE.md said 71 and copilot-instructions.md said 63 while
+  // IMPLEMENTED_TOOLS was 77.
+  { re: /(\d{2,3})-tool MCP surface/g, label: 'N-tool MCP surface' },
+  { re: /(\d{2,3})-tool contract/g, label: 'N-tool contract' },
+  { re: /(\d{2,3}) tool definitions/g, label: 'N tool definitions' },
   // EXPECTED_TOOL_COUNT numeric spots (only where a number is present)
   { re: /EXPECTED_TOOL_COUNT \|\| '(\d{2,3})'/g, label: "EXPECTED_TOOL_COUNT || 'N'" },
   { re: /EXPECTED_TOOL_COUNT[^\n]*?\(default:?\s*`?(\d{2,3})`?\)/gi, label: 'EXPECTED_TOOL_COUNT (default: N)' },

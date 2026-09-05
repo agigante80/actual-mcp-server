@@ -93,7 +93,7 @@ src/
 │   └── loggerFactory.ts        # Module-scoped loggers (winston)
 ├── server/
 │   └── httpServer.ts           # HTTP transport
-└── tools/                      # 63 tool definitions (see actualToolsManager.ts)
+└── tools/                      # 77 tool definitions (see actualToolsManager.ts)
 ```
 
 ## Development Workflow
