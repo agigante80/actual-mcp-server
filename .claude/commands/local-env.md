@@ -10,9 +10,14 @@ Default test level if no argument given: `smoke`
 1. Run the deploy script from the project root:
 
    ```bash
-   cd $HOME/dev-github-personal/actual-mcp-server
+   cd <the repo root>          # the script derives its own paths from its location
    bash scripts/deploy-and-test.sh [ARGUMENTS]
    ```
+
+   The path used to be written out here and in the script itself. Both rotted when
+   the repo moved on 2026-09-04, so do NOT reintroduce an absolute path: the script
+   now derives `DEV_DIR` from its own location and refuses to run if that is not a
+   git working tree.
 
    - Valid test levels: `sanity` | `smoke` | `normal` | `extended` | `full`
    - Optional flag: `--bank-sync` to include per-account bank sync tests (GoCardless/SimpleFIN)

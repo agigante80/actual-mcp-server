@@ -45,7 +45,18 @@ set -euo pipefail
 
 # ── Config ─────────────────────────────────────────────────────────────────
 DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
-DEV_DIR="$HOME/dev-github-personal/actual-mcp-server"
+# DERIVED from this script's own location, never hardcoded. The previous absolute
+# path ($HOME/dev-github-personal/actual-mcp-server) rotted when the repo moved on
+# 2026-09-04, and the failure was quiet in the worst way: step 1 died before the
+# sync ran, so the Docker build context kept whatever it held (a 0.19.3 tree), and
+# every later "full gate" would have tested code from before the move while
+# reporting the current sha. Overridable for an unusual layout, but the default
+# now follows the script.
+DEV_DIR="${DEV_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+if [ ! -d "$DEV_DIR/.git" ]; then
+  echo "FATAL: DEV_DIR is not a git working tree: $DEV_DIR" >&2
+  exit 2
+fi
 MCP_SERVER_URL="https://localhost:3601/http"
 MCP_AUTH_TOKEN="MCP-BEARER-LOCAL-a9f3k2p8q7x1m4n6"
 STDIO_CONTAINER="actual-mcp-bearer-backend"   # container the stdio smoke execs into
@@ -80,8 +91,32 @@ echo ""
 
 # ── 1. Sync code & rebuild MCP image ──────────────────────────────────────
 info "Step 1/9: Sync latest code & rebuild MCP server image..."
+echo "  dev tree: $DEV_DIR ($(git -C "$DEV_DIR" rev-parse --short HEAD), VERSION $(cat "$DEV_DIR/VERSION"))"
 bash "$DOCKER_DIR/actual-mcp-server/sync-and-build.sh"
-ok "MCP image rebuilt"
+
+# POST-CONDITION: the build context must be byte-identical to the dev tree's src.
+# Without this the gate can certify a tree it never built: on 2026-09-05 the build
+# context was 37 hours stale at VERSION 0.19.3 while HEAD was 0.19.4, and nothing
+# would have said so. A green gate over the wrong code is worse than no gate, so
+# this compares content rather than trusting that the sync ran.
+BUILD_CTX="$DOCKER_DIR/actual-mcp-server/local-build"
+hash_src() { ( cd "$1" && find src -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d' ' -f1 ); }
+DEV_SRC_HASH="$(hash_src "$DEV_DIR")"
+CTX_SRC_HASH="$(hash_src "$BUILD_CTX" 2>/dev/null || echo missing)"
+if [ "$DEV_SRC_HASH" != "$CTX_SRC_HASH" ]; then
+  echo "FATAL: the Docker build context does not match the dev tree after the sync." >&2
+  echo "  dev tree src sha: $DEV_SRC_HASH  ($DEV_DIR)" >&2
+  echo "  context  src sha: $CTX_SRC_HASH  ($BUILD_CTX)" >&2
+  echo "  The image would be built from different code than this run reports." >&2
+  exit 2
+fi
+DEV_VERSION="$(cat "$DEV_DIR/VERSION")"
+CTX_VERSION="$(cat "$BUILD_CTX/VERSION" 2>/dev/null || echo missing)"
+if [ "$DEV_VERSION" != "$CTX_VERSION" ]; then
+  echo "FATAL: build context VERSION $CTX_VERSION != dev tree VERSION $DEV_VERSION" >&2
+  exit 2
+fi
+ok "MCP image rebuilt from $DEV_VERSION (build context verified identical to the dev tree)"
 
 # ── 2. Pull latest upstream images ────────────────────────────────────────
 info "Step 2/9: Pulling latest upstream images..."
