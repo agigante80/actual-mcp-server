@@ -28,8 +28,25 @@ export const REFUSAL_REASONS = ['', 'up_to_date', 'not_forward', 'denied', 'soak
 
 /** Documented floor for the soak window, in hours. A repository variable may
  *  RAISE the window or lower it only to this floor; it can never silently
- *  disable the control by being unset, empty, or mistyped. */
-export const SOAK_FLOOR_HOURS = 48;
+ *  disable the control by being unset, empty, or mistyped.
+ *
+ *  #440: lowered from 48 to 24. The soak exists because a bad upstream release
+ *  is typically yanked within 24 to 72 hours and this is an unattended nightly
+ *  job, so 24h sits at the LOW end of that range and catches fewer yanks than 48
+ *  did. That is an accepted trade, made deliberately: `.github/actual-api-denylist.txt`
+ *  (control 5) remains the REACTIVE backstop for a bad release that slips through,
+ *  while the cost of the longer window was paid by users. #427 is the instance:
+ *  26.9.0 published 2026-09-01 08:56Z, a reporter upgraded their Actual server
+ *  inside our window, and their 26.9.0 server met our still-26.8.1 bundled API.
+ *
+ *  What this actually buys is a third, not a half. The train is NIGHTLY, so the
+ *  real lag is this floor PLUS up to one cron interval, moving the worst case
+ *  from (48,72]h to (24,48]h. For #427 specifically, 64.4h becomes 40.4h.
+ *
+ *  NOT to be confused with STALE_THRESHOLD_HOURS in report-train-stale.mjs,
+ *  which is also 48 and is unrelated: that one is the #327 liveness threshold
+ *  and its value encodes "tolerates exactly one missed nightly cron". */
+export const SOAK_FLOOR_HOURS = 24;
 
 /** And a CEILING. Clamping only the floor left the one direction that silently
  *  disables the train: a fat-fingered 4800 instead of 48 makes every run report
