@@ -192,6 +192,39 @@ check('the soak FAILS CLOSED on unreadable age data', () => {
   assert.strictEqual(isSoaked({ publishedAt: null, now: '2026-08-04T00:00:00Z', windowHours: 48 }), false);
 });
 
+check('#440: the soak FLOOR is 24h, and these assertions are literal on purpose', () => {
+  // Deliberately literal, not `=== SOAK_FLOOR_HOURS`. Every existing clamp
+  // assertion in this file compares against the symbolic constant, so all of
+  // them pass identically at 24 and at 48 and NONE can detect this change or a
+  // revert of it. The whole suite passed 24/24 at both floors before these cases
+  // were added, which is the same class of blind assertion CLAUDE.md records for
+  // _getWriteQueueBatchCountForTests.
+  assert.strictEqual(SOAK_FLOOR_HOURS, 24);
+  assert.strictEqual(resolveSoakWindowHours(undefined), 24, 'unset falls back to the floor');
+  assert.strictEqual(resolveSoakWindowHours(''), 24, 'empty falls back to the floor');
+  assert.strictEqual(resolveSoakWindowHours('12'), 24, 'a value below the floor clamps UP to it');
+});
+
+check('#440: a release between 24h and 48h old now proceeds instead of soaking', () => {
+  // `soakWindowRaw: undefined` is load bearing. The shared `base` fixture pins
+  // it to '48', which OVERRIDES the floor, so a case written without this
+  // override still returns `soaking` at 30h and would fail CORRECT code.
+  const at30h = { publishedAt: '2026-08-02T18:00:00Z', now: '2026-08-04T00:00:00Z', soakWindowRaw: undefined };
+  assert.strictEqual(decide(at30h).updateNeeded, true, '30h clears the 24h floor');
+  assert.strictEqual(decide(at30h).refusalReason, '');
+  // And the lower bound still holds, so this is not a blanket disabling of the control.
+  const at12h = { publishedAt: '2026-08-03T12:00:00Z', now: '2026-08-04T00:00:00Z', soakWindowRaw: undefined };
+  assert.strictEqual(decide(at12h).refusalReason, 'soaking', '12h is still inside the floor');
+});
+
+check('#440: an explicit repository variable still RAISES the window above the floor', () => {
+  // Lowering the floor must not remove the operator's ability to be more
+  // cautious: TRAIN_SOAK_HOURS=72 still means 72, not 24.
+  assert.strictEqual(resolveSoakWindowHours('72'), 72);
+  const at30h = { publishedAt: '2026-08-02T18:00:00Z', now: '2026-08-04T00:00:00Z', soakWindowRaw: '72' };
+  assert.strictEqual(decide(at30h).refusalReason, 'soaking', '30h is still inside an explicitly raised 72h window');
+});
+
 check('REVIEW: the soak window is clamped at the CEILING too', () => {
   // Clamping only the floor left the one direction that silently disables the
   // train. A fat-fingered 4800 instead of 48 makes every run report `soaking`,
