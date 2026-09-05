@@ -139,7 +139,7 @@ check('#438: every cause carries a non-empty, actionable sentence', () => {
  *  THIS feature rather than about the file as a whole. */
 function initFailureBlocks() {
   const blocks = [];
-  const re = /knownFailure\s*\?[\s\S]{0,600}?\}|if \(knownFailure\) \{[\s\S]*?\n          \}/g;
+  const re = /if \(knownFailure\) \{[\s\S]*?\n          \}/g;
   let m;
   while ((m = re.exec(source)) !== null) blocks.push(m[0]);
   return blocks;
@@ -151,7 +151,7 @@ check('#438: WIRE CONTRACT: no upstream-derived string can reach the payload', (
   // from SyncError.meta.query, an EACCES path with the OS username, and the
   // configured server URL.
   const blocks = initFailureBlocks();
-  assert.ok(blocks.length >= 2, `expected the POST and GET response blocks, found ${blocks.length}`);
+  assert.strictEqual(blocks.length, 1, `only the POST route reports the cause, found ${blocks.length} blocks`);
   for (const b of blocks) {
     assert.ok(!/String\(err/.test(b), 'no String(err) in a #438 response');
     assert.ok(!/\berr\.message\b|\berror\.message\b/.test(b), 'no upstream message in a #438 response');
@@ -177,14 +177,34 @@ check('#438: the read is PEEK-ONLY, never consume', () => {
   assert.ok(!/\.delete\(/.test(peek[0]), 'peek must not delete: the TTL is the sole reaper');
 });
 
+check('#438: the cause is reported ONLY on the authenticated route', () => {
+  // Review finding: outside the OIDC branch, `authenticateRequest` is called only
+  // from the POST route, so anything the GET route returns is reachable without an
+  // Authorization header. The cause sentences are configuration hints, so putting
+  // them there would have widened what an unauthenticated caller can learn. The GET
+  // body stays the constant it has always been; the peek there feeds the LOG only.
+  const getBranch = /app\.get\(httpPath[\s\S]*?\n  \}\);/.exec(source);
+  assert.ok(getBranch, 'found the GET route');
+  assert.ok(/message: 'Transport not ready'/.test(getBranch[0]), 'GET keeps its constant body');
+  assert.ok(!/knownFailure\.sentence/.test(getBranch[0]), 'no cause sentence on the unauthenticated route');
+  assert.ok(!/data: \{ cause/.test(getBranch[0]), 'and no cause enum either');
+  assert.ok(/peekInitFailure\(sessionId\)/.test(getBranch[0]) && /logger\.warn/.test(getBranch[0]),
+    'the peek is kept, but only to explain the dead session in the server log');
+  assert.ok(/#447/.test(getBranch[0]),
+    'and the deferral names the ticket that owns the auth gap, so it is traceable');
+});
+
 check('#438: both call sites are CONTAINED by their own try/catch', () => {
   // POST: a throw would land on the outer catch and egress as raw String(err).
   // GET: that route has NO try/catch and the file registers no error-handling
   // middleware, so under Express 5 a throw reaches the default final handler,
   // which puts err.stack in the body whenever NODE_ENV is not production. That
   // is unset for a bare node run and is `development` in docker-compose.
-  const guarded = source.match(/try \{\s*\n\s*knownFailure = peekInitFailure\(sessionId\);\s*\n\s*\}\s*catch/g) ?? [];
-  assert.strictEqual(guarded.length, 2, `both lookups guarded, found ${guarded.length}`);
+  const post = source.match(/try \{\s*\n\s*knownFailure = peekInitFailure\(sessionId\);\s*\n\s*\}\s*catch/g) ?? [];
+  assert.strictEqual(post.length, 1, 'the POST lookup is guarded');
+  const get = /app\.get\(httpPath[\s\S]*?\n  \}\);/.exec(source)[0];
+  assert.ok(/try \{[\s\S]*?peekInitFailure\(sessionId\)[\s\S]*?\} catch/.test(get),
+    'the GET lookup is guarded too: that route has no error handling of its own');
 });
 
 check('#438: exactly ONE lookup per request, before the discovery shim', () => {

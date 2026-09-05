@@ -54,13 +54,18 @@ export type InitFailureCause =
 const INIT_FAILURE_SENTENCES: Record<InitFailureCause, string> = {
   schema_too_new: "The Actual server's database schema is newer than the @actual-app/api this build bundles. Upgrade actual-mcp-server, or hold the server upgrade until its dependency update ships.",
   auth_failed: 'Authentication against the Actual server failed. Check ACTUAL_PASSWORD and the budget password.',
-  network_unreachable: 'The Actual server could not be reached. Check ACTUAL_SERVER_URL and that the server is running.',
+  // Deliberately not asserting permanence: ECONNRESET and ETIMEDOUT are classed
+  // TRANSIENT by isRetryableError, so this can be a blip rather than misconfiguration.
+  network_unreachable: 'The Actual server could not be reached, which may be transient. If it persists, check ACTUAL_SERVER_URL and that the server is running.',
   budget_not_found: 'The configured budget was not found on the Actual server. Check ACTUAL_BUDGET_SYNC_ID.',
   out_of_sync: 'The local budget copy is out of sync with the Actual server and could not be reconciled.',
   encryption_error: "The budget's end-to-end encryption password is wrong or missing.",
   clock_drift: "The host clock differs too far from the Actual server's. Fix the system time.",
-  permission_denied: 'The server could not write to its data directory. Check the volume mount and its ownership.',
-  timeout: 'Initialising the Actual connection timed out.',
+  // A filesystem permission error, WITHOUT claiming which path: the classifier
+  // sees only the errno, and EACCES can come from the data directory, TLS
+  // material, or a socket during api.init.
+  permission_denied: 'The server was denied filesystem access while initialising. Check the data directory mount and its ownership first, then any TLS material.',
+  timeout: 'Initialising the Actual connection ran out of time, which may be transient.',
   unknown: 'The Actual connection for this session could not be initialised. See the server log for the cause.',
 };
 
@@ -712,7 +717,13 @@ export async function startHttpServer(
               id: payload?.id ?? null,
               error: {
                 code: -32001,
-                message: `${knownFailure.sentence} Re-initialize by calling initialize without an mcp-session-id header once the cause is fixed.`,
+                // The lowercase `re-initialize` token is load bearing, not styling:
+                // tests/manual/mcp-client.js:131 matches `includes('re-initialize')`
+                // to trigger its session reset, and that branch is checked BEFORE its
+                // `timed out` branch. Capitalising it made a failed-init session fall
+                // through to the timeout branch, which retries a permanently dead
+                // session until MCP_TEST_MAX_RETRIES is exhausted.
+                message: `${knownFailure.sentence} Please re-initialize by calling initialize without an mcp-session-id header once the cause is fixed.`,
                 // Closed enum only. Nothing derived from the upstream error reaches
                 // the wire, which is why no scrubber has to be correct here.
                 data: { cause: knownFailure.cause, sessionInitFailed: true },
@@ -792,19 +803,29 @@ export async function startHttpServer(
       // throw reaches the default final handler, which puts err.stack in the body
       // whenever NODE_ENV is not production (unset for a bare node run, and
       // `development` in docker-compose).
-      let knownFailure: { cause: InitFailureCause; sentence: string } | undefined;
+      // #438 REVIEW: this route is deliberately NOT given the cause. Outside the
+      // OIDC branch it never calls `authenticateRequest` (POST-only, at the single
+      // call site), so anything added here is reachable without an Authorization
+      // header, and the sentences are configuration hints. The body therefore stays
+      // the constant it has always been. The POST route, which IS authenticated,
+      // carries the whole value of this feature. Reporting here can be revisited
+      // once that route's auth posture is fixed, which is #447.
+      //
+      // The peek is kept solely for the log line: it tells an operator reading the
+      // server log why this session is dead, without putting it on an unauthenticated
+      // wire. try/catch is load bearing because this route has NO error handling and
+      // the file registers no error middleware, so under Express 5 a throw reaches the
+      // default final handler, which emits err.stack whenever NODE_ENV is not
+      // production (unset for a bare node run, `development` in docker-compose).
       try {
-        knownFailure = peekInitFailure(sessionId);
+        const knownFailure = peekInitFailure(sessionId);
+        if (knownFailure) {
+          logger.warn(`[SESSION] GET on session ${sessionId} whose init failed (${knownFailure.cause}); returning the generic body (auth posture, see the note above)`);
+        }
       } catch {
-        knownFailure = undefined;
+        // never let diagnostics break the response
       }
-      res.status(400).json({
-        jsonrpc: '2.0',
-        error: knownFailure
-          ? { code: -32000, message: knownFailure.sentence, data: { cause: knownFailure.cause, sessionInitFailed: true } }
-          : { code: -32000, message: 'Transport not ready' },
-        id: null,
-      });
+      res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Transport not ready' }, id: null });
       return;
     }
     await transport.handleRequest(req, res);
