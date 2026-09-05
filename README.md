@@ -60,8 +60,12 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 - [Testing](#testing)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
+- [Architecture](#architecture)
 - [License](#license)
+- [Acknowledgments](#acknowledgments)
 - [Disclaimer](#disclaimer)
+- [Support](#support)
+- [Sponsor](#sponsor)
 
 ---
 
@@ -458,10 +462,6 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 `actual_session_list` · `actual_session_close`
 
-### Not Yet Implemented
-
-- Scheduled/recurring transactions (`getSchedules`, `createSchedule`, `updateSchedule`, `deleteSchedule`)
-
 ---
 
 ## Configuration
@@ -773,8 +773,7 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ## Support
 
-- **[GitHub Issues](https://github.com/agigante80/actual-mcp-server/issues)**: bug reports and feature requests
-- **[GitHub Discussions](https://github.com/agigante80/actual-mcp-server/discussions)**: questions and ideas
+- **[GitHub Issues](https://github.com/agigante80/actual-mcp-server/issues)**: bug reports, feature requests, questions and ideas
 
 ---
 
