@@ -114,6 +114,12 @@ export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0
 export const SUPPORTED_ACTUAL_SERVER_RANGE = {
   /** Oldest server version this client supports. Below this: "too old" warning. */
   minVersion: '25.0.0',
-  /** Newest server MAJOR tested against `@actual-app/api` v26. Above this: "newer than tested". */
+  /** Newest server MAJOR tested against `@actual-app/api` v26. Above this: "newer than tested".
+   *  #439: now deliberately REDUNDANT with the derived upper bound (the installed
+   *  api version), which subsumes it whenever this constant holds the installed
+   *  major, the only value it is meant to hold. Retained as the hand-maintained
+   *  fallback for when the installed version cannot be resolved. Deleting it and
+   *  deriving the bound entirely is defensible and removes the drift class, but it
+   *  changes a shared constant, so it belongs in its own ticket. */
   testedMaxMajor: 26,
 } as const;

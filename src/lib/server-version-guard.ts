@@ -20,6 +20,7 @@
  */
 
 import { SUPPORTED_ACTUAL_SERVER_RANGE } from './constants.js';
+import { INSTALLED_API_VERSION } from './installed-api-version.js';
 
 export interface ServerVersionVerdict {
   ok: boolean;
@@ -50,6 +51,7 @@ function lessThan(a: [number, number, number], b: [number, number, number]): boo
 export function checkServerVersion(
   running: string,
   range: { minVersion: string; testedMaxMajor: number } = SUPPORTED_ACTUAL_SERVER_RANGE,
+  bundledApi: string | null = INSTALLED_API_VERSION,
 ): ServerVersionVerdict {
   const have = parseVersion(running);
   const min = parseVersion(range.minVersion);
@@ -76,6 +78,36 @@ export function checkServerVersion(
     };
   }
 
+  // #439: the server is ahead of the `@actual-app/api` this build bundles.
+  //
+  // LAST in the chain deliberately (DECISION 3). Server 27.0.0 against bundled
+  // 26.9.0 satisfies this AND the testedMaxMajor branch above, and the verdict is
+  // single-valued, so the precedence is decided here rather than discovered by
+  // whoever reads the message. The existing branch keeps priority and its
+  // assertion stays green unchanged.
+  //
+  // MAJOR.MINOR ONLY (DECISION 2). Actual ships schema changes in MINOR releases
+  // (26.9.0 added account_group_id), while server patches ship independently of
+  // api patches, so comparing patches would be pure false-positive volume. It is
+  // silent when equal and silent when the server is behind.
+  //
+  // Scope, stated because it is narrower than it looks: this fires only when ops
+  // still SUCCEED, since the caller runs after a completed operation. A server so
+  // far ahead that budget download already fails never reaches it, and that case
+  // is #438's (surface the real session-init error) rather than this one's.
+  const bundled = parseVersion(bundledApi ?? '');
+  if (bundled && (have[0] > bundled[0] || (have[0] === bundled[0] && have[1] > bundled[1]))) {
+    return {
+      ok: false,
+      message:
+        `Actual Budget server ${running} is newer than the @actual-app/api ${bundledApi} ` +
+        'this build bundles. Actual ships schema changes in minor releases, so a budget ' +
+        'download can fail with an invalid-schema error once one lands. Upgrade ' +
+        'actual-mcp-server, or hold the server upgrade until its dependency update has ' +
+        'shipped. Advisory only.',
+    };
+  }
+
   return { ok: true };
 }
 
@@ -98,6 +130,11 @@ let checked = false;
 export async function checkServerVersionOnce(
   readVersion: () => Promise<{ version: string } | { error: string }>,
   log: { warn: (msg: string) => void; debug: (msg: string) => void },
+  // #439: injected as a VALUE, not a function, and defaulted here rather than
+  // resolved per call. A per-call resolver would do blocking readFileSync inside
+  // the process-global api mutex. Tests pass an explicit literal so no in-chain
+  // assertion depends on what is installed (#321).
+  bundledApi: string | null = INSTALLED_API_VERSION,
 ): Promise<void> {
   if (checked) return;
   checked = true; // set synchronously, before any await, so a concurrent op cannot double-fire
@@ -108,7 +145,7 @@ export async function checkServerVersionOnce(
       log.debug('[server-version] could not read the Actual server version; skipping the compatibility check');
       return;
     }
-    const verdict = checkServerVersion(result.version);
+    const verdict = checkServerVersion(result.version, SUPPORTED_ACTUAL_SERVER_RANGE, bundledApi);
     if (!verdict.ok && verdict.message) {
       log.warn(verdict.message);
     }
