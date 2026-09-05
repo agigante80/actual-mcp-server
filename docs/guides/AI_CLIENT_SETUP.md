@@ -275,6 +275,20 @@ The HTTP transport is stateful: each client connection gets an `mcp-session-id`,
 HTTP 404  {"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found. Please re-initialize ..."}}
 ```
 
+**A session that was never usable reports why (#438).** The 404 above means the session is simply gone. A different case looks identical to a client but is not: the session was created, its connection to Actual failed to initialise, and the transport was never registered. Since #438 that answer names the cause instead of the generic sentence:
+
+```
+HTTP 404  {"jsonrpc":"2.0","error":{
+  "code": -32001,
+  "message": "The Actual server's database schema is newer than the @actual-app/api this build bundles. ... Please re-initialize by calling initialize without an mcp-session-id header once the cause is fixed.",
+  "data": { "cause": "schema_too_new", "sessionInitFailed": true }
+}}
+```
+
+`data.cause` is a CLOSED enum, safe to branch on: `schema_too_new`, `auth_failed`, `network_unreachable`, `budget_not_found`, `out_of_sync`, `encryption_error`, `clock_drift`, `permission_denied`, `timeout`, `unknown`. `data.sessionInitFailed` distinguishes this case from an ordinary expired session. The message carries no upstream error text by design, so it never leaks server paths, SQL or URLs; the full error is in the server log. The record lives 60 seconds, after which the generic body returns.
+
+The client action is the same in both cases (re-initialize), but `sessionInitFailed: true` means a bare retry will fail again until the underlying cause is fixed, so a client should surface the message rather than silently looping.
+
 What a spec-compliant client should do on that 404 is send a fresh `initialize` (without an `mcp-session-id` header), cache the new id, and retry. The server cannot resurrect the old session id: the MCP SDK assigns a session id only during `initialize` and validates later requests by exact match, with no way to re-adopt a previously issued id.
 
 To make that recovery cheap (a quiet re-initialize, not a full sign-in), keep the OAuth token decoupled from the MCP session:
