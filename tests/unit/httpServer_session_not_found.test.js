@@ -42,18 +42,43 @@ console.log('Running #188 session-not-found (spec 404 / -32001) tests');
 //    LobeChat discovery shim (200 + tools); any other method with an unknown
 //    session returns 404 / -32001.
 // ----------------------------------------------------------------------------
-function decideSessionOutcome({ method, isInitialize, transportPresent }) {
+function decideSessionOutcome({ method, isInitialize, transportPresent, knownInitFailure }) {
   // Initialize requests are handled as a new session upstream of the not-found
   // branch (a fresh transport is created), so they never 404.
   if (isInitialize) return { kind: 'init' };
   // A live, known session is served normally (pool idle clock is touched, #167).
   if (transportPresent) return { kind: 'route' };
   // Unknown/expired session below this point.
+  // #438 added a FOURTH input. A session whose Actual init is KNOWN to have
+  // failed reports the cause, and does so BEFORE the discovery shim: answering
+  // 200 plus a full tool list to a session whose connection never came up is the
+  // same masking this branch exists to remove, in a friendlier costume.
+  if (knownInitFailure) return { kind: 'init-failed', status: 404, code: -32001, cause: knownInitFailure };
   if (method === 'tools/list') return { kind: 'tools-list-shim', status: 200 };
   return { kind: 'not-found', status: 404, code: -32001 };
 }
 
 console.log('\n[behaviour] not-found branch routing');
+{
+  // #438 cases. The replica must stay in lockstep with the production decision,
+  // which now has four inputs; leaving it at three would assert a decision tree
+  // production no longer has.
+  const r = decideSessionOutcome({ method: 'tools/call', isInitialize: false, transportPresent: false, knownInitFailure: 'schema_too_new' });
+  assert(r.kind === 'init-failed' && r.status === 404 && r.code === -32001 && r.cause === 'schema_too_new',
+    '#438: a known init failure reports its cause instead of the generic not-found');
+
+  const shim = decideSessionOutcome({ method: 'tools/list', isInitialize: false, transportPresent: false, knownInitFailure: 'schema_too_new' });
+  assert(shim.kind === 'init-failed',
+    '#438: a known init failure takes precedence over the tools/list discovery shim');
+
+  const unknown = decideSessionOutcome({ method: 'tools/list', isInitialize: false, transportPresent: false, knownInitFailure: undefined });
+  assert(unknown.kind === 'tools-list-shim' && unknown.status === 200,
+    '#438: a merely unknown session still gets the shim, unchanged');
+
+  const live = decideSessionOutcome({ method: 'tools/call', isInitialize: false, transportPresent: true, knownInitFailure: 'schema_too_new' });
+  assert(live.kind === 'route',
+    '#438: a live session is unaffected even if an old failure record exists');
+}
 {
   const r = decideSessionOutcome({ method: 'tools/call', isInitialize: false, transportPresent: false });
   assert(r.kind === 'not-found' && r.status === 404 && r.code === -32001,
