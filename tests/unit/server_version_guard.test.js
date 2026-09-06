@@ -528,6 +528,29 @@ await (async () => {
 // hangs INSIDE withApiLock forever, stalling every session with no error at all. That is the
 // #278 lost-lock shape, and it is the reason the bound moved inside the guard rather than being
 // left to call sites.
+// THIS CASE COSTS 5 SECONDS OF REAL TIME, DELIBERATELY. Do not "optimise" it with fake timers.
+//
+// Measured on 2026-09-06: this file takes 5.8s, of which ~5.0s is the wait below, against a
+// 110s / 147-file `test:unit-js` chain. So it is about 4.6% of the gate, which is the whole of
+// the cost. #455 raised speeding it up and was closed as not-planned; read that thread before
+// reopening the idea, because the obvious fix is a coverage regression rather than a cleanup.
+//
+// The case asserts TWO properties and only ONE of them is fakeable:
+//   1. the bound fires and produces the right outcome (no warn, exactly one debug, guard still
+//      armed afterwards). Node's `mock.timers` handles this in about 1ms.
+//   2. the timer is NOT unref'd, so the bound actually fires in a real process. This one cannot
+//      be faked, and it is not hypothetical: `unref` was the first implementation here and it
+//      silently broke the bound, because an unref'd timer does not keep the event loop alive.
+//
+// Verified both directions rather than assumed:
+//   mock.timers + tick(5001), with unref() reintroduced -> debugs=1, looks HEALTHY (defect invisible)
+//   real timer,               with unref() reintroduced -> exit 13, unsettled top-level await
+//
+// So faking the timer here buys 5 seconds and drops the only defect this bound has ever had,
+// on a guard whose failure mode is a never-settling read inside withApiLock: a process-wide
+// stall with no error, the #278 shape. Five seconds is a good price for keeping that
+// behavioural and mutation-proven.
+//
 // HOW THIS FAILS when the bound is removed, so the signal is not mistaken for a crash: the
 // never-settling read is then awaited forever, nothing else is pending, and Node exits 13 with
 // "Detected unsettled top-level await" instead of reaching the summary. A non-zero exit stops the
