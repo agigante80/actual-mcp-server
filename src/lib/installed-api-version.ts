@@ -54,13 +54,29 @@ export function readVersionFromTree(startDir: string, pkgName: string = PACKAGE)
   return null;
 }
 
-function resolveInstalledApiVersion(): string | null {
+/** Resolve any installed package's real version, or null. Same contract as the
+ *  constant below: SILENT, never throws, and null is a normal state. #445 made
+ *  this take a name so `actual_server_info` can report the resolved MCP SDK
+ *  version too without duplicating the walk. */
+export function resolveInstalledVersion(pkgName: string, entry: string = pkgName): string | null {
   try {
     const require = createRequire(import.meta.url);
-    return readVersionFromTree(dirname(require.resolve(PACKAGE)));
+    // `entry` exists because a bare package name is NOT always resolvable. The MCP
+    // SDK exports no root path, so require.resolve('@modelcontextprotocol/sdk')
+    // throws MODULE_NOT_FOUND while '@modelcontextprotocol/sdk/server/index.js'
+    // resolves fine. That is the same class of trap as @actual-app/api not
+    // exporting its own package.json, and it matters more than it looks: with the
+    // omit-on-failure contract, an unresolvable name looks exactly like a package
+    // that is legitimately absent, so the caller passes a subpath it knows exists
+    // rather than letting the field silently disappear.
+    return readVersionFromTree(dirname(require.resolve(entry)), pkgName);
   } catch {
     return null;
   }
+}
+
+function resolveInstalledApiVersion(): string | null {
+  return resolveInstalledVersion(PACKAGE);
 }
 
 /** The installed version, or null when it cannot be determined. Resolved ONCE at

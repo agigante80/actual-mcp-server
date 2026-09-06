@@ -4,6 +4,12 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import actualToolsManager from '../actualToolsManager.js';
+import { INSTALLED_API_VERSION, resolveInstalledVersion } from '../lib/installed-api-version.js';
+
+/** Resolved once at module load, not per call: the walk does blocking file reads
+ *  and this tool can be called in a loop. The SDK exports no root path, so the
+ *  resolvable subpath is passed explicitly (#445). */
+const MCP_SDK_RESOLVED = resolveInstalledVersion('@modelcontextprotocol/sdk', '@modelcontextprotocol/sdk/server/index.js');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -69,9 +75,21 @@ Use this to check server status, verify version compatibility, or debug issues.`
         platform: process.platform,
         arch: process.arch,
       },
+      // #445: report BOTH the declared range and what is actually installed. They
+      // answer different questions ("what does this build allow" versus "what is it
+      // running"), and #427 needed the second: a caret range reports identically for
+      // every version inside it, which is exactly the ambiguity that made a server
+      // and api version skew hard to diagnose.
+      //
+      // The resolved fields are OMITTED when they cannot be determined, never set to
+      // a sentinel: absence means "could not resolve" and no consumer has to
+      // special-case a magic string. The declared fields keep their existing
+      // behaviour and value, so nothing that reads them today breaks.
       dependencies: {
         mcpSdk: packageInfo.dependencies?.['@modelcontextprotocol/sdk'] ?? 'unknown',
         actualApi: packageInfo.dependencies?.['@actual-app/api'] ?? 'unknown',
+        ...(MCP_SDK_RESOLVED ? { mcpSdkResolved: MCP_SDK_RESOLVED } : {}),
+        ...(INSTALLED_API_VERSION ? { actualApiResolved: INSTALLED_API_VERSION } : {}),
       },
       status: {
         uptime: uptimeFormatted,
