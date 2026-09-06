@@ -8,6 +8,85 @@ import actualToolsManager from '../actualToolsManager.js';
 import { requestContext } from '../lib/requestContext.js';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
+import { classifyInitFailure, isInitFailure } from '../lib/init-failure.js';
+
+/**
+ * The stdio `tools/call` handler, built as a named factory so #452's error mapping can be driven
+ * by a unit test with a stubbed connection, instead of only by starting a real process against a
+ * real server. `startStdioServer` registers exactly this.
+ */
+export function createStdioCallToolHandler(mcp: ActualMCPConnection, stdioSessionId: string) {
+  return async (request: unknown) => {
+    const req = request as { params?: Record<string, unknown> } | undefined;
+    const params = req?.params ?? {};
+    const rawName = params.name;
+    const args = params.arguments;
+    if (typeof rawName !== 'string') {
+      throw new Error('Tool name must be a string');
+    }
+    logger.debug(`[STDIO] tools/call ${rawName}`);
+    // Wrap the DISPATCH, not server.connect(). The transport invokes this handler
+    // from an I/O event, which is outside any scope established around connect(),
+    // so an AsyncLocalStorage context opened there would not be visible here.
+    // Everything downstream is awaited inside this callback, so it propagates.
+    //
+    // Only `sessionId` is placed in the store, deliberately:
+    //   - no `principal`, or getActiveBudgetConfig() would attempt the #189
+    //     preferred-budget restore for a caller that has no authenticated
+    //     identity, and the env default would stop being authoritative.
+    //   - `transport: 'stdio'` is what keeps stdio OFF the pooled path, and it
+    //     stays that way after #419. switchBudget's slow path calls
+    //     connectionPool.getConnection(), so WITHOUT this marker the first switch
+    //     would silently move stdio onto the pooled branch, and the entry would
+    //     never be touched (touch() is called only from httpServer.ts), so it
+    //     would expire after the idle timeout and be torn down by the cleanup
+    //     sweep without the api lock, possibly mid-operation. That is a far larger
+    //     change than we want by accident.
+    //     #419 solved the per-call upstream login WITHOUT pooling stdio: a stdio
+    //     process keeps the api singleton alive between ops in shutdownActualApi
+    //     (see _shouldKeepSingletonAlive), so the legacy branch's init no-ops
+    //     after the first login. No pool entry is created, so there is nothing for
+    //     the sweep to evict and this comment's hazard never arises.
+    //   - `allowedBudgets` is absent, so under AUTH_PROVIDER=oidc switchBudget
+    //     still denies. Fail closed: a local pipe must not gain budget access an
+    //     HTTP caller would need an ACL for.
+    try {
+      const result = await requestContext.run({ sessionId: stdioSessionId, transport: 'stdio' }, () =>
+        (mcp as unknown as { executeTool: (n: string, a?: unknown) => Promise<unknown> }).executeTool(rawName, args ?? {}),
+      );
+      return {
+        content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
+      };
+    } catch (err) {
+      // #452: give a FAILED CONNECTION the same named causes an HTTP client gets. Until this,
+      // stdio let the raw upstream sentence through, and for the #427 case that sentence
+      // ("Make sure you are using the latest version") names the wrong component: the user has
+      // already upgraded Actual, and the thing to upgrade is actual-mcp-server.
+      //
+      // GATED ON THE BRAND, never on the message. This catch sees EVERY tool error, and the
+      // classifier's last-resort branches match prose: a #270 op timeout would read as `timeout`
+      // and a #422 rate-limit as `auth_failed`, replacing a true message with a false one. Only an
+      // error marked by initActualApiForOperation is classified here. See src/lib/init-failure.ts.
+      if (isInitFailure(err)) {
+        const { cause, sentence } = classifyInitFailure(err);
+        if (cause !== 'unknown') {
+          // stderr only: stdout is JSON-RPC framing (scripts/stdio-framing-check.mjs).
+          logger.warn('[STDIO] tool call failed while establishing the Actual connection', {
+            tool: rawName,
+            cause,
+          });
+          // An MCP tool error, not a thrown exception, so the client renders the sentence as the
+          // tool's result. The upstream string is deliberately dropped rather than appended: a
+          // stdio tool error is handed to a cloud model, and #438's fixed-sentence contract exists
+          // so no upstream stack, SQL, filesystem path or server URL has to be scrubbed correctly.
+          // The raw error is still in the stderr log above the operator's own terminal.
+          return { isError: true, content: [{ type: 'text', text: sentence }] };
+        }
+      }
+      throw err;
+    }
+  };
+}
 
 export async function startStdioServer(
   mcp: ActualMCPConnection,
@@ -63,47 +142,7 @@ export async function startStdioServer(
   });
 
   // Call tool handler — delegates to ActualMCPConnection.executeTool()
-  server.setRequestHandler(CallToolRequestSchema, async (request: unknown) => {
-    const req = request as { params?: Record<string, unknown> } | undefined;
-    const params = req?.params ?? {};
-    const rawName = params.name;
-    const args = params.arguments;
-    if (typeof rawName !== 'string') {
-      throw new Error('Tool name must be a string');
-    }
-    logger.debug(`[STDIO] tools/call ${rawName}`);
-    // Wrap the DISPATCH, not server.connect(). The transport invokes this handler
-    // from an I/O event, which is outside any scope established around connect(),
-    // so an AsyncLocalStorage context opened there would not be visible here.
-    // Everything downstream is awaited inside this callback, so it propagates.
-    //
-    // Only `sessionId` is placed in the store, deliberately:
-    //   - no `principal`, or getActiveBudgetConfig() would attempt the #189
-    //     preferred-budget restore for a caller that has no authenticated
-    //     identity, and the env default would stop being authoritative.
-    //   - `transport: 'stdio'` is what keeps stdio OFF the pooled path, and it
-    //     stays that way after #419. switchBudget's slow path calls
-    //     connectionPool.getConnection(), so WITHOUT this marker the first switch
-    //     would silently move stdio onto the pooled branch, and the entry would
-    //     never be touched (touch() is called only from httpServer.ts), so it
-    //     would expire after the idle timeout and be torn down by the cleanup
-    //     sweep without the api lock, possibly mid-operation. That is a far larger
-    //     change than we want by accident.
-    //     #419 solved the per-call upstream login WITHOUT pooling stdio: a stdio
-    //     process keeps the api singleton alive between ops in shutdownActualApi
-    //     (see _shouldKeepSingletonAlive), so the legacy branch's init no-ops
-    //     after the first login. No pool entry is created, so there is nothing for
-    //     the sweep to evict and this comment's hazard never arises.
-    //   - `allowedBudgets` is absent, so under AUTH_PROVIDER=oidc switchBudget
-    //     still denies. Fail closed: a local pipe must not gain budget access an
-    //     HTTP caller would need an ACL for.
-    const result = await requestContext.run({ sessionId: stdioSessionId, transport: 'stdio' }, () =>
-      (mcp as unknown as { executeTool: (n: string, a?: unknown) => Promise<unknown> }).executeTool(rawName, args ?? {}),
-    );
-    return {
-      content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
-    };
-  });
+  server.setRequestHandler(CallToolRequestSchema, createStdioCallToolHandler(mcp, stdioSessionId));
 
   const transport = new StdioServerTransport();
   // server.connect() calls transport.start() internally — do NOT call transport.start() manually

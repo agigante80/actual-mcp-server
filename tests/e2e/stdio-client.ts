@@ -48,6 +48,14 @@ const DATA_DIR = process.env.MCP_STDIO_DATA_DIR || '/app/stdio-data';
 /** Where the compose entrypoint gets the sync id. See the note at the transport below. */
 const SYNC_ID_FILE = process.env.MCP_STDIO_SYNC_ID_FILE || '/tmp/actual-sync-id.txt';
 
+// #423: which Actual server this leg talks to. Unset means "inherit the container's own", which
+// is what anyone pointing this client at a different stack gets. The docker E2E run sets it to
+// the DEDICATED stdio server so the two legs no longer share one rate-limit window.
+//
+// It has to be passed with `-e`, not left to the container: `docker exec` inherits the
+// container's CONFIGURED environment, and the configured ACTUAL_SERVER_URL is the HTTP leg's.
+const SERVER_URL_OVERRIDE = process.env.MCP_STDIO_SERVER_URL || '';
+
 export type StdioSession = {
   raw(tool: string, args?: Record<string, unknown>): Promise<any>;
   call(tool: string, args?: Record<string, unknown>): Promise<any>;
@@ -98,6 +106,7 @@ export async function openStdioSession(): Promise<StdioSession> {
       'exec', '-i',
       '-u', 'app',
       '-e', `MCP_BRIDGE_DATA_DIR=${DATA_DIR}`,
+      ...(SERVER_URL_OVERRIDE ? ['-e', `ACTUAL_SERVER_URL=${SERVER_URL_OVERRIDE}`] : []),
       STDIO_CONTAINER,
       'sh', '-c',
       `export ACTUAL_BUDGET_SYNC_ID=$(cat ${SYNC_ID_FILE}) && exec node dist/src/index.js --stdio`,

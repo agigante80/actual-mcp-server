@@ -285,7 +285,7 @@ HTTP 404  {"jsonrpc":"2.0","error":{
 }}
 ```
 
-`data.cause` is a CLOSED enum, safe to branch on: `schema_too_new`, `auth_failed`, `network_unreachable`, `budget_not_found`, `out_of_sync`, `encryption_error`, `clock_drift`, `permission_denied`, `timeout`, `unknown`. `data.sessionInitFailed` distinguishes this case from an ordinary expired session. The message carries no upstream error text by design, so it never leaks server paths, SQL or URLs; the full error is in the server log. The record lives 60 seconds, after which the generic body returns.
+`data.cause` is a CLOSED enum, safe to branch on: `schema_too_new`, `auth_failed`, `network_unreachable`, `budget_not_found`, `out_of_sync`, `encryption_error`, `clock_drift`, `permission_denied`, `timeout`, `rate_limited`, `unknown`. (`rate_limited` was added in #452: a throttled login used to report `auth_failed`, which told a rate-limited user to check their password.) `data.sessionInitFailed` distinguishes this case from an ordinary expired session. The message carries no upstream error text by design, so it never leaks server paths, SQL or URLs; the full error is in the server log. The record lives 60 seconds, after which the generic body returns.
 
 The client action is the same in both cases (re-initialize), but `sessionInitFailed: true` means a bare retry will fail again until the underlying cause is fixed, so a client should surface the message rather than silently looping.
 

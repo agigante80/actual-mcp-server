@@ -21,7 +21,7 @@
 //
 // Run: node tests/unit/budget_loader_import_allowlist.test.js
 
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,7 +42,15 @@ const ALLOWED_IMPORTS = new Set([
   './opTimeout.js',    // a timer race, no lock
   './apiState.js',     // module-level flags, no lock
   './loggerFactory.js', // winston, no lock
-  '../config.js'        // #407: a frozen Zod-parsed object, read at module load, no lock
+  '../config.js',       // #407: a frozen Zod-parsed object, read at module load, no lock
+  './init-failure.js',  // #452: a pure classifier plus a Symbol brand. Its only import is
+                        // retry.js (the canonical rate-limit predicate, itself lock free), and
+                        // the transitive walk below enforces that it stays that way.
+  './server-version-guard.js' // #453: a pure comparator plus a once-guard; the version READER is
+                              // injected by the caller, so this file reaches the api only through
+                              // whatever budgetLoader hands it (raw api.getServerVersion). Its own
+                              // imports are constants.js and installed-api-version.js, both
+                              // lock free, and the transitive check below now enforces that.
 ]);
 
 // NOT allowed, and named explicitly so the failure message can explain itself rather than just
@@ -73,6 +81,54 @@ describe(`${TARGET} imports only from the lock-free allowlist`);
         'withApiLock is not reentrant, so a lock-taking import deadlocks the process. If the new ' +
         'import is genuinely lock free, add it to ALLOWED_IMPORTS in this test with a one line ' +
         'reason. If it is not, reach the api through the raw api.* instead.',
+  );
+}
+
+describe('and the allowlist is enforced TRANSITIVELY, one module deep and beyond');
+{
+  // #453 widened the allowlist to its first non-leaf entry (server-version-guard.js has imports
+  // of its own). Checking only budgetLoader's DIRECT imports would then let a lock taker in
+  // through the side door: allowlist a lock-free module today, and nothing stops it importing
+  // the pool or the adapter tomorrow, at which point the loader deadlocks and this guard, whose
+  // entire job is preventing that, stays green. So the walk follows local imports to a fixpoint.
+  const LOCAL = /^\.\.?\//;
+  const resolveSpec = (fromRel, spec) => {
+    const abs = path.resolve(path.dirname(path.join(REPO, fromRel)), spec.replace(/\.js$/, '.ts'));
+    return path.relative(REPO, abs);
+  };
+  const importsOf = (rel) => {
+    const full = path.join(REPO, rel);
+    if (!existsSync(full)) return null;   // a node builtin or a package: nothing local to follow
+    const src = readFileSync(full, 'utf8');
+    return [...src.matchAll(/^\s*import\s[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+  };
+
+  const seen = new Set();
+  const queue = [...ALLOWED_IMPORTS].filter((spec) => LOCAL.test(spec)).map((spec) => resolveSpec(TARGET, spec));
+  const reached = [];
+  while (queue.length) {
+    const rel = queue.shift();
+    if (seen.has(rel)) continue;
+    seen.add(rel);
+    const specs = importsOf(rel);
+    if (specs === null) continue;
+    for (const spec of specs) {
+      if (KNOWN_LOCK_TAKERS.has(spec) || spec === './apiLock.js') {
+        reached.push(`${rel} imports ${spec}`);
+        continue;
+      }
+      if (LOCAL.test(spec)) queue.push(resolveSpec(rel, spec));
+    }
+  }
+
+  check(seen.size > 0, `walked ${seen.size} allowlisted module(s) transitively`);
+  check(
+    reached.length === 0,
+    reached.length === 0
+      ? 'no allowlisted module reaches a lock taker'
+      : `an allowlisted module reaches the api mutex: ${reached.join('; ')}. ` +
+        'The loader runs inside withApiLock at every load site and the lock is not reentrant, so ' +
+        'this deadlocks. Break the import chain rather than removing this check.',
   );
 }
 

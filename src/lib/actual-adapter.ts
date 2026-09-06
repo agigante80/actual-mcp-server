@@ -75,6 +75,7 @@ import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
+import { markInitFailure } from './init-failure.js';
 import { NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg } from './errors.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
@@ -737,7 +738,14 @@ async function initActualApiForOperation(): Promise<void> {
     //
     // Checking HERE covers every legacy caller in one place: both withActualApi branches,
     // withActualApiWrite, and the drain's legacy branch.
-    await ensureLoadedBudgetMatchesSession();
+    // #452: branded on the same terms as the full-init path below. This branch skips api.init()
+    // but ensureLoadedBudgetMatchesSession can still DOWNLOAD a budget (after a budgets_switch,
+    // or when another session moved the singleton), so it raises the same load failures.
+    try {
+      await ensureLoadedBudgetMatchesSession();
+    } catch (err) {
+      throw markInitFailure(err);
+    }
     return;
   }
   try {
@@ -770,7 +778,12 @@ async function initActualApiForOperation(): Promise<void> {
     logger.debug('[ADAPTER] Actual API initialized for operation');
   } catch (err) {
     logger.error('[ADAPTER] Error initializing Actual API:', err);
-    throw err;
+    // #452: mark it as an INITIALISATION failure before it leaves this function. stdio has one
+    // catch for every tool error and cannot otherwise tell "the connection could not be
+    // established" from "the tool failed", and guessing from the message misfires: a #270 op
+    // timeout reads as `timeout` and a #422 rate-limit reads as `auth_failed`. The mark is
+    // additive and non-enumerable, so nothing about the error's own propagation changes.
+    throw markInitFailure(err);
   }
 }
 
@@ -3154,7 +3167,11 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
             }
           });
         } catch (error: any) {
-          throw new Error(`Query execution failed: ${error.message}`);
+          // #452 review: `cause` preserves the ORIGINAL error, so an init-failure BRAND survives
+          // the rewrap. Without it, actual_query_run reported a failed connection as
+          // "Query execution failed: <raw upstream text>" and stdio could not recognise it,
+          // silently exempting this tool from the fix.
+          throw new Error(`Query execution failed: ${error.message}`, { cause: error });
         }
       }
     
@@ -3303,7 +3320,7 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       throw error; // Re-throw the well-formatted validation error without wrapping
     }
     
-    throw new Error(`Query execution failed: ${errorMsg}`);
+    throw new Error(`Query execution failed: ${errorMsg}`, { cause: error });   // #452: keep the brand
   }
 }
 
@@ -3526,10 +3543,10 @@ export async function runBankSync(accountId?: string): Promise<void> {
       errorMsg.includes('NORDIGEN_ERROR') ||
       errorMsg.includes('Failed syncing account')
     ) {
-      throw new Error(`Bank sync failed: Provider error — ${errorMsg}`);
+      throw new Error(`Bank sync failed: Provider error — ${errorMsg}`, { cause: error });
     }
 
-    throw new Error(`Bank sync failed: ${errorMsg}`);
+    throw new Error(`Bank sync failed: ${errorMsg}`, { cause: error });   // #452: keep the brand
   }
 }
 export async function getBudgets(): Promise<unknown[]> {

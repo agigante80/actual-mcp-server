@@ -15,7 +15,7 @@ HOW TO USE
   3. Review the final summary for any ✗ failures or ℹ informational items.
 
 WHAT IT TESTS
-  Phase 7  — Transaction Summaries   (2 tools)
+  Phase 7  — Transaction Summaries   (5 tools)
   Phase 8  — Budgets                 (11 tools)
   Phase 9  — Advanced Query & Sync   (2 tools)
   Phase 9b: Notes                   (2 tools)
@@ -38,7 +38,7 @@ Use the SAME testing rules:
 
 ---
 
-**Phase 7 — Transaction Summaries (2 tools):**
+**Phase 7 — Transaction Summaries (5 tools):**
 
 - actual_transactions_summary_by_category
   Input: no required parameters (defaults to all months or current period)
@@ -49,6 +49,39 @@ Use the SAME testing rules:
   Input: no required parameters
   Expect: array of payee summary objects (possibly empty)
   Report count as ✓ informational
+
+---
+
+- actual_transactions_aggregate
+  Input: { startDate: "<first day of last month, YYYY-MM-DD>",
+           endDate: "<today, YYYY-MM-DD>", groupBy: "month" }
+  Expect: aggregated rows (possibly empty). Amounts are integer CENTS, never decimal dollars.
+  Report count as informational
+
+NEGATIVE for this tool:
+- actual_transactions_aggregate with endDate BEFORE startDate
+  Expect: a validation error saying endDate must be on or after startDate, NOT an empty result.
+          An empty result would be indistinguishable from "no matching transactions", which is
+          why this negative is worth running.
+
+- actual_account_flow_summary
+  Input: { startDate: "<first day of last month, YYYY-MM-DD>", endDate: "<today, YYYY-MM-DD>" }
+  Expect: per-account inflow and outflow totals (possibly empty on a quiet budget)
+  Report count as informational
+
+NEGATIVE for this tool:
+- actual_account_flow_summary with endDate BEFORE startDate
+  Expect: a validation error naming endDate.
+
+- actual_recurring_expenses_summary
+  Input: { months: 3 }
+  Expect: detected recurring expenses (an EMPTY array is a legitimate PASS: it needs repeated
+          transactions across months, which a fresh test budget will not have)
+  Report count as informational
+
+NEGATIVE for this tool:
+- actual_recurring_expenses_summary with BOTH { startDate: "2026-01-01", months: 12 }
+  Expect: a validation error saying to use startDate or months, not both.
 
 ---
 
@@ -251,19 +284,21 @@ Cleanup order (dependencies first):
 ═══════════════════════════════════════════════
 
 PROMPT 1 (Smoke):
-  Phase 1  Server & Read-Only:        X / 7
+  Phase 1  Server & Read-Only:        X / 8
 
 PROMPT 2 (Core CRUD):
   Phase 2  Accounts:                  X / 6
+  Phase 2b Account Groups:            X / 4
   Phase 3  Category Groups/Cats:      X / 6
-  Phase 4  Payees:                    X / 5
+  Phase 4  Payees:                    X / 6
   Phase 5  Rules:                     X / 4
   Phase 5b Batch/Uncategorized/Ups.:  X / 3
-  Phase 6  Transactions:              X / 11
+  Phase 6  Transactions:              X / 12
   Phase 6b Schedules:                 X / 4
+  Phase 6c Tags:                      X / 4
 
 PROMPT 3 (Advanced):
-  Phase 7  Transaction Summaries:     X / 2
+  Phase 7  Transaction Summaries:     X / 5
   Phase 8  Budgets:                   X / 11
   Phase 9  Query & Sync:              X / 2
   Phase 9b Notes:                      X / 2
@@ -273,7 +308,7 @@ PROMPT 3 (Advanced):
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 67
+  Total Tools Tested:   X / 82
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

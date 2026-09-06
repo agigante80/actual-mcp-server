@@ -106,13 +106,18 @@ export function assertSweepAllowed(env = process.env) {
 
 /** Collect everything that looks like test residue, without deleting anything. */
 export async function findResidue(callTool) {
-  const [accounts, payees, categories, groups, rules, schedules] = await Promise.all([
+  const [accounts, payees, categories, groups, rules, schedules, tags] = await Promise.all([
     callTool('actual_accounts_list', {}).then(list).catch(() => []),
     callTool('actual_payees_get', {}).then(list).catch(() => []),
     callTool('actual_categories_get', {}).then(list).catch(() => []),
     callTool('actual_category_groups_get', {}).then(list).catch(() => []),
     callTool('actual_rules_get', {}).then(list).catch(() => []),
     callTool('actual_schedules_get', {}).then(list).catch(() => []),
+    // #451: tags. Added with the tags integration module, because a fixture the sweep cannot
+    // see is a fixture the zero-residue assertion silently certifies as absent. tags.js deletes
+    // its own tag in a `finally`, but a run killed by the wall-clock guard or by an open circuit
+    // breaker never reaches it, and the next run would then inherit an invisible leftover.
+    callTool('actual_tags_list', {}).then(list).catch(() => []),
   ]);
 
   const named = (arr) => arr.filter((o) => isTestObjectName(o?.name));
@@ -134,13 +139,15 @@ export async function findResidue(callTool) {
     groups: named(groups),
     schedules: named(schedules),
     rules: rules.filter(isTestRule),
+    // A tag's word is in `tag`, not `name`, so it needs its own filter rather than `named()`.
+    tags: tags.filter((t) => isTestObjectName(t?.tag)),
   };
 }
 
 /** Count only what must be zero. Closed accounts are deliberately excluded. */
 export function residueCount(r) {
   return r.openAccounts.length + r.payees.length + r.categories.length +
-         r.groups.length + r.schedules.length + r.rules.length;
+         r.groups.length + r.schedules.length + r.rules.length + r.tags.length;
 }
 
 /**
@@ -189,6 +196,8 @@ export async function sweepResidue(callTool, env = process.env) {
   };
 
   // Order matters: rules and schedules reference payees/categories, so remove them first.
+  // Tags reference nothing and nothing references them, so the order is free here.
+  for (const t of found.tags) await tryRemove('tag delete', t.tag, () => callTool('actual_tags_delete', { id: t.id }));
   for (const r of found.rules) await tryRemove('rule delete', r.id, () => callTool('actual_rules_delete', { id: r.id }));
   for (const s of found.schedules) await tryRemove('schedule delete', s.name, () => callTool('actual_schedules_delete', { id: s.id }));
   for (const p of found.payees) await tryRemove('payee delete', p.name, () => callTool('actual_payees_delete', { id: p.id }));

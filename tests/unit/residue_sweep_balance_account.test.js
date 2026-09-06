@@ -128,5 +128,39 @@ await check('#280 guard: throws EXIT_UNSAFE_BUDGET when designated != active bud
   assert.ok(!names(calls).some((n) => /delete|close/.test(n)), 'no destructive call before the guard threw');
 });
 
+// #451: tags are swept too. Added when the tags integration module was added, because a fixture
+// the sweep cannot SEE is one the zero-residue assertion silently certifies as absent, which
+// weakens the dual-transport release gate (#280) rather than merely leaving a stray row.
+// A tag's word lives in `tag`, not `name`, so it needs its own predicate: a test that only
+// checked the delete call would pass with the collection filter matching nothing.
+await check('sweeps a test TAG, and matches on the `tag` field not `name`', async () => {
+  const TAG = 'MCP-Test-tag-1783679144993';
+  const { callTool, calls } = makeMock({
+    actual_accounts_list: () => ({ result: [] }),
+    actual_tags_list: () => ({ result: [
+      { id: 'tag-1', tag: TAG },
+      { id: 'tag-2', tag: 'groceries' },          // a REAL user tag: must never be touched
+      { id: 'tag-3', name: TAG },                 // wrong field: must not be treated as a match
+    ] }),
+    actual_tags_delete: () => ({ success: true }),
+  });
+  await sweepResidue(callTool, ENV);
+  const deletes = calls.filter((c) => c.name === 'actual_tags_delete');
+  assert.strictEqual(deletes.length, 1, `expected exactly one tag delete, got ${deletes.length}`);
+  assert.strictEqual(deletes[0].args.id, 'tag-1', 'the wrong tag was deleted');
+});
+
+await check('a budget with only a stray test tag is NOT reported clean', async () => {
+  // residueCount must include tags, or the sweep prints "already clean" and returns without
+  // deleting, which is the failure mode this whole section exists to prevent.
+  const { callTool, calls } = makeMock({
+    actual_accounts_list: () => ({ result: [] }),
+    actual_tags_list: () => ({ result: [{ id: 'tag-1', tag: 'MCP-Test-tag-1783679144993' }] }),
+    actual_tags_delete: () => ({ success: true }),
+  });
+  await sweepResidue(callTool, ENV);
+  assert.ok(calls.some((c) => c.name === 'actual_tags_delete'), 'the stray tag was never swept');
+});
+
 console.log(`\n[residue-sweep-balance-account] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

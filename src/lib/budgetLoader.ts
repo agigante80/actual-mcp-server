@@ -3,6 +3,8 @@ import { withOpTimeout } from './opTimeout.js';
 import config from '../config.js';
 import { setApiInitialized, setLoadedBudgetSyncId, registerBudgetLoad } from './apiState.js';
 import { createModuleLogger } from './loggerFactory.js';
+import { checkServerVersionOnce } from './server-version-guard.js';
+import { markInitFailure } from './init-failure.js';
 
 const log = createModuleLogger('BUDGET-LOADER');
 
@@ -431,6 +433,14 @@ async function trackBudgetMutation<T>(
 }
 
 /**
+ * How long the #453 pre-download version probe may take before it is abandoned. Deliberately a
+ * CONSTANT and not an env var: it is an advisory diagnostic, nobody should have to tune it, and
+ * a new config key would need to be threaded through config.ts, .env.example and the README
+ * table (the config-drift guard enforces all three) to buy nothing.
+ */
+const SERVER_VERSION_PROBE_TIMEOUT_MS = 5000;
+
+/**
  * #394: the same discipline for an IMPORT.
  *
  * Upstream's `importBudget` LOADS the imported budget, so it re-points the process-global
@@ -479,6 +489,51 @@ export async function importBudgetTracked<T extends { id: string }>(
 }
 
 export async function loadBudgetTracked(syncId: string, encryptionPassword?: string, label = 'downloadBudget'): Promise<void> {
+  // #453: warn BEFORE the download, not after a successful operation.
+  //
+  // #276's guard fires from `withActualApi` AFTER `rawOperation()` resolves, so it cannot reach
+  // the one case it would help most: a download that FAILS because the server's schema is newer
+  // than the bundled `@actual-app/api` (the #427 shape, which recurs on every Actual release that
+  // adds a column, for anyone who upgrades inside the dependency soak window). Nothing warned at
+  // all when the operation died.
+  //
+  // HERE rather than in `initActualApiForOperation`, which is the legacy path only: a pooled HTTP
+  // session downloads without passing through it, so a probe there would be silent for exactly the
+  // multi-user deployments most likely to run a separately-upgraded server. This function is the
+  // single funnel every load must pass through, enforced by budget_selection_precondition.test.js.
+  //
+  // Three properties hold it in place:
+  //   - OUTSIDE the tracked chain (before the try), because nothing in that chain may take the
+  //     api lock or extend the window an abandoned load holds open.
+  //   - BOUNDED by withOpTimeout: this runs inside the process-global api mutex, so an
+  //     unbounded advisory GET would stall every session. If /info is stalled the download was
+  //     going to fail anyway, so the bound costs nothing real.
+  //   - ONCE per process, via the guard's own synchronous flag, which is shared with the post-op
+  //     call site in actual-adapter.ts. Whichever fires first wins; the other becomes a no-op, so
+  //     there is no double warning. This one normally fires first, being earlier.
+  //
+  // `api.getServerVersion` is read at call time (not destructured) so it needs only the server URL
+  // that api.init() already established: NO budget has to be loaded, which is what makes a probe
+  // before the download possible at all.
+  await checkServerVersionOnce(
+    () => withOpTimeout(
+      () => (api as typeof api & { getServerVersion: () => Promise<{ version: string } | { error: string }> })
+        .getServerVersion(),
+      'server-version-probe',
+      // A SHORT dedicated bound, not the general ACTUAL_OP_TIMEOUT_MS (30s by default).
+      //
+      // Review of the first version caught the reason: `/info` is an unauthenticated GET on a
+      // different route from the sync endpoints, so it can stall while the login and download
+      // are perfectly healthy. At the general bound that stall costs 30s of the process-global
+      // api mutex, and since a failed probe leaves the guard armed it would be paid again on
+      // each of the next two loads. An ADVISORY diagnostic must never be able to do that. If
+      // the probe cannot answer in 5 seconds it has nothing useful to say.
+      SERVER_VERSION_PROBE_TIMEOUT_MS,
+      'the server-version probe bound (fixed, not configurable)',
+    ),
+    log,
+  );
+
   try {
     await trackBudgetMutation(
       // #410: no redundant clear here any more. `trackBudgetMutation` owns the clear-before, and
@@ -503,10 +558,16 @@ export async function loadBudgetTracked(syncId: string, encryptionPassword?: str
     // all registrations under ONE bound and fails closed on timeout, so two network calls inside
     // the tracked chain would extend the window in which unrelated sessions' lock acquisitions
     // throw, to build a message an abandoned load has no caller to read.
+    // #452 review: brand EVERY failed budget load, not just the ones that happen to pass through
+    // initActualApiForOperation. The write drain calls ensureLoadedBudgetMatchesSession directly
+    // per operation, and the pooled precondition sites do too, so a load failure there escaped
+    // unbranded and stdio handed the user the raw upstream sentence the fix exists to suppress.
+    // This function is the funnel every load passes through, so branding here needs no list of
+    // call sites, which is the same argument that put the version probe above.
     if (isBudgetNotOpen(err)) {
       log.error('download resolved but no budget is open', undefined, { syncId });
-      throw postConditionError(syncId, await diagnose(syncId));
+      throw markInitFailure(postConditionError(syncId, await diagnose(syncId)));
     }
-    throw err;
+    throw markInitFailure(err);
   }
 }

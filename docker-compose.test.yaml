@@ -52,6 +52,70 @@ services:
     networks:
       - e2e-test-network
 
+  # #423: a SECOND Actual Budget server, used ONLY by the stdio leg.
+  #
+  # WHY. Both legs used to drive the one server, so they shared its 500-requests-per-minute
+  # window, and the 75s cool-down between them was an estimate of how long that window takes to
+  # drain. It was not enough: a throttled api.sync makes upstream CLOSE the budget (#396 shape),
+  # the next operation needs a re-download and so a fresh login, and that login is refused inside
+  # the same full window. Four tests in the write-heavy block failed that way, two of them after
+  # a 25s withAuthRetry backoff.
+  #
+  # Options considered and rejected are on #423: pacing by requests tunes a number that drifts
+  # every time a test is added (which is how the ticket was created), and a longer cool-down
+  # guesses at a window nobody can observe. A second server REMOVES the coupling instead of
+  # timing around it, which is what makes the leg safe to gate on.
+  #
+  # It is the same image and the same fixture data, so the two legs start from identical budgets.
+  actual-budget-stdio-test:
+    image: actualbudget/actual-server:latest
+    container_name: actual-budget-e2e-stdio
+    ports:
+      - "5008:5006" # 5007 is the HTTP leg's server; 5006 is a dev instance
+    volumes:
+      - actual-stdio-test-data:/data
+    environment:
+      - NODE_ENV=production
+    networks:
+      - e2e-test-network
+
+  # Bootstrap for the stdio server. Identical to the one above except for its target and its
+  # /tmp volume: the sync ids MUST live in separate volumes, or the stdio leg could silently
+  # open the HTTP leg's budget and the whole point of the separation would be lost.
+  actual-budget-stdio-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: actual-budget-stdio-bootstrap
+    depends_on:
+      - actual-budget-stdio-test
+    environment:
+      - ACTUAL_SERVER_URL=http://actual-budget-stdio-test:5006
+      - ACTUAL_PASSWORD=test123
+    working_dir: /app
+    volumes:
+      - bootstrap-stdio-data:/tmp
+      - ./test-data:/app/test-data:ro
+    user: root
+    entrypoint: [ "/bin/sh" ]
+    command:
+      - -c
+      - |
+        apk add --no-cache curl -q
+        echo "Waiting for the stdio Actual Budget server..."
+        for i in $$(seq 1 30); do
+          if wget --spider -q http://actual-budget-stdio-test:5006/health 2>/dev/null; then
+            echo "Server is ready!"
+            break
+          fi
+          echo "Waiting... ($$i/30)"
+          sleep 2
+        done
+        export SKIP_SERVER_WAIT=true
+        sh scripts/bootstrap-and-init.sh
+    networks:
+      - e2e-test-network
+
   # MCP server under test (built from current source)
   mcp-server-test:
     build:
@@ -62,6 +126,11 @@ services:
       - "3602:3600" # Use port 3602 to avoid conflicts
     depends_on:
       actual-budget-bootstrap:
+        condition: service_completed_successfully
+      # #423: the stdio leg execs into THIS container and reads the stdio sync id from the mount
+      # below, so the container must not start before that file exists. Without this the leg
+      # fails at its first login with a bare config-validation error naming ACTUAL_BUDGET_SYNC_ID.
+      actual-budget-stdio-bootstrap:
         condition: service_completed_successfully
     environment:
       - ACTUAL_SERVER_URL=http://actual-budget-test:5006
@@ -89,6 +158,10 @@ services:
       # of the stack.
       - mcp-test-stdio-data:/app/stdio-data
       - bootstrap-data:/tmp:ro
+      # #423: the stdio leg's sync id, in its OWN path. Read-only, and deliberately NOT /tmp:
+      # the HTTP entrypoint reads /tmp/actual-sync-id.txt, and one file shadowing the other is
+      # exactly the confusion the second server exists to prevent.
+      - bootstrap-stdio-data:/tmp-stdio:ro
     entrypoint:
       - sh
       - -c
@@ -153,6 +226,10 @@ services:
 
 volumes:
   mcp-test-stdio-data:
+  actual-stdio-test-data:
+    name: actual-e2e-stdio-data
+  bootstrap-stdio-data:
+    name: bootstrap-e2e-stdio-data
   actual-test-data:
     name: actual-e2e-test-data
   mcp-test-data:
