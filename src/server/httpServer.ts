@@ -24,6 +24,15 @@ import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
+export {
+  classifyInitFailure,
+  INIT_FAILURE_SENTENCES,
+  REASON_TO_CAUSE,
+  SYSTEM_CODE_TO_CAUSE,
+} from '../lib/init-failure.js';
+export type { InitFailureCause } from '../lib/init-failure.js';
+import { classifyInitFailure } from '../lib/init-failure.js';
+import type { InitFailureCause } from '../lib/init-failure.js';
 
 // AsyncLocalStorage for request context: moved to src/lib/requestContext.ts
 // so adapter code can import it without a circular dependency on httpServer.
@@ -31,116 +40,6 @@ import * as fs from 'node:fs';
 // `requestContext` from this module.
 import { requestContext } from '../lib/requestContext.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
-
-/**
- * #438: classify a session-init failure into a CLOSED enum plus our own sentence.
- *
- * PURE and TOTAL: it never throws, never reads I/O, and never returns anything
- * derived from the caught value. That last property is the wire contract: the
- * response carries the enum member and the fixed sentence below and nothing
- * else, so no upstream string reaches a remote client and no scrubber has to be
- * correct. Upstream strings can carry a stack, raw SQL (`SyncError.meta.query`),
- * an `EACCES ... mkdir '/home/<user>/.actual'` path, and a configured server URL.
- *
- * Exported for tests: there is NO fault-injection seam in actualConnection.ts or
- * the pool, and booting against a closed port reaches only `network-failure`, so
- * every other class is covered by calling this directly with synthetic values.
- */
-export type InitFailureCause =
-  | 'schema_too_new' | 'auth_failed' | 'network_unreachable' | 'budget_not_found'
-  | 'out_of_sync' | 'encryption_error' | 'clock_drift' | 'permission_denied'
-  | 'timeout' | 'unknown';
-
-const INIT_FAILURE_SENTENCES: Record<InitFailureCause, string> = {
-  schema_too_new: "The Actual server's database schema is newer than the @actual-app/api this build bundles. Upgrade actual-mcp-server, or hold the server upgrade until its dependency update ships.",
-  auth_failed: 'Authentication against the Actual server failed. Check ACTUAL_PASSWORD and the budget password.',
-  // Deliberately not asserting permanence: ECONNRESET and ETIMEDOUT are classed
-  // TRANSIENT by isRetryableError, so this can be a blip rather than misconfiguration.
-  network_unreachable: 'The Actual server could not be reached, which may be transient. If it persists, check ACTUAL_SERVER_URL and that the server is running.',
-  budget_not_found: 'The configured budget was not found on the Actual server. Check ACTUAL_BUDGET_SYNC_ID.',
-  out_of_sync: 'The local budget copy is out of sync with the Actual server and could not be reconciled.',
-  encryption_error: "The budget's end-to-end encryption password is wrong or missing.",
-  clock_drift: "The host clock differs too far from the Actual server's. Fix the system time.",
-  // A filesystem permission error, WITHOUT claiming which path: the classifier
-  // sees only the errno, and EACCES can come from the data directory, TLS
-  // material, or a socket during api.init.
-  permission_denied: 'The server was denied filesystem access while initialising. Check the data directory mount and its ownership first, then any TLS material.',
-  timeout: 'Initialising the Actual connection ran out of time, which may be transient.',
-  unknown: 'The Actual connection for this session could not be initialised. See the server log for the cause.',
-};
-
-/** Actual's own reason strings, from `withErrorCode` and SyncError, to our enum.
- *  `out-of-sync-migrations` maps to schema_too_new, NOT out_of_sync: `invalid-schema`
- *  is absent from budgetLoader's KNOWN_LOAD_REASONS, so migrations is the only route
- *  by which a too-new schema surfaces on the post-condition path, and upstream's own
- *  sentence for it is "This budget cannot be loaded with this version of the app." */
-const REASON_TO_CAUSE: Record<string, InitFailureCause> = {
-  'invalid-schema': 'schema_too_new',
-  'out-of-sync-migrations': 'schema_too_new',
-  'out-of-sync': 'out_of_sync',
-  'out-of-sync-data': 'out_of_sync',
-  'budget-not-found': 'budget_not_found',
-  'clock-drift': 'clock_drift',
-  'encrypt-failure': 'encryption_error',
-  'decrypt-failure': 'encryption_error',
-  'missing-key': 'encryption_error',
-};
-
-/** Node fs/net codes. A DIFFERENT namespace from Actual's reasons, deliberately
- *  kept in its own table so the two can never be conflated. */
-const SYSTEM_CODE_TO_CAUSE: Record<string, InitFailureCause> = {
-  EACCES: 'permission_denied',
-  EPERM: 'permission_denied',
-  EROFS: 'permission_denied',
-  ECONNREFUSED: 'network_unreachable',
-  ENOTFOUND: 'network_unreachable',
-  ECONNRESET: 'network_unreachable',
-  EHOSTUNREACH: 'network_unreachable',
-  ETIMEDOUT: 'timeout',
-};
-
-export function classifyInitFailure(err: unknown): { cause: InitFailureCause; sentence: string } {
-  const done = (cause: InitFailureCause) => ({ cause, sentence: INIT_FAILURE_SENTENCES[cause] });
-  try {
-    const e = err as { code?: unknown; reason?: unknown; message?: unknown } | null | undefined;
-
-    // `.code` FIRST: upstream's api/download-budget and api/load-budget never let a
-    // SyncError escape, they throw a plain Error carrying .code via withErrorCode.
-    const code = typeof e?.code === 'string' ? e.code : undefined;
-    if (code && REASON_TO_CAUSE[code]) return done(REASON_TO_CAUSE[code]);
-    if (code && SYSTEM_CODE_TO_CAUSE[code]) return done(SYSTEM_CODE_TO_CAUSE[code]);
-
-    // `.reason` only as a defensive fallback, for a SyncError that reaches us by
-    // some path that does not go through those two handlers.
-    const reason = typeof e?.reason === 'string' ? e.reason : undefined;
-    if (reason && REASON_TO_CAUSE[reason]) return done(REASON_TO_CAUSE[reason]);
-
-    const message = typeof e?.message === 'string' ? e.message : '';
-
-    // Our OWN synthesized post-condition error (#396) embeds the upstream reason
-    // in prose. On a resync of an existing local copy this is the shape that
-    // actually arrives for the schema and migration classes, so a classifier that
-    // handled only the upstream shapes would answer `unknown` for exactly the
-    // failures this ticket is about.
-    const embedded = /Upstream reason: \[([a-z-]+)\]/.exec(message)?.[1];
-    if (embedded && REASON_TO_CAUSE[embedded]) return done(REASON_TO_CAUSE[embedded]);
-
-    // Last resort, message shapes. `network-failure` is tested BEFORE the auth
-    // wording because upstream reports an unreachable server as
-    // "Authentication failed: network-failure", where the actionable half is the
-    // network, not the credentials.
-    if (/network-failure|ECONNREFUSED|ENOTFOUND/i.test(message)) return done('network_unreachable');
-    if (/timed out|ETIMEDOUT/i.test(message)) return done('timeout');
-    if (/Authentication failed|invalid-password|Invalid password/i.test(message)) return done('auth_failed');
-    if (/invalid-schema/i.test(message)) return done('schema_too_new');
-    return done('unknown');
-  } catch {
-    // TOTAL by construction: a classifier that throws would land on the outer POST
-    // catch and egress as raw String(err), defeating this contract through the one
-    // line deliberately left to #446.
-    return done('unknown');
-  }
-}
 
 export { requestContext };
 
