@@ -86,8 +86,8 @@
   "devDependencies": {
     "@playwright/test": "^1.60.0",
     "@types/express": "^5.0.3",
-    "@types/node": "^26.1.0",
-    "knip": "^6.32.0",
+    "@types/node": "^26.4.1",
+    "knip": "^6.34.0",
     "node-fetch": "^3.3.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^7.0.2"
