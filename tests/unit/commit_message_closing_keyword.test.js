@@ -187,5 +187,30 @@ describe('other real invocation shapes are recognised');
   check(runHook(contraction).blocked, "a contraction (does not fix #N) is recognised");
 }
 
+// --- the miss of 2026-09-06 -------------------------------------------------
+describe('a qualifier between the negation and the keyword');
+{
+  // This exact sentence reached main in a version-bump commit body and GitHub
+  // closed #445 on it. The negation was present but one word away from the
+  // keyword, so the adjacency rule did not fire. The close happened to be
+  // CORRECT (the ticket had shipped), which is exactly why it would have gone
+  // unnoticed and stayed a live hazard.
+  const real = 'MINOR rather than patch. This batch is not only fixes: #445 adds fields.';
+  check(runHook(`${GIT_COMMIT} -m ${JSON.stringify(real)}`).blocked,
+    'the real 2026-09-06 miss: "not only fixes: #445"');
+
+  for (const q of ['just', 'merely', 'simply', 'always']) {
+    const msg = `This is not ${q} fixes: #391 in disguise.`;
+    check(runHook(`${GIT_COMMIT} -m ${JSON.stringify(msg)}`).blocked, `"not ${q} fixes: #N"`);
+  }
+
+  // Widening the negation must NOT start blocking the ordinary deliberate close,
+  // which is the whole point of keying on the negation rather than the keyword.
+  check(!runHook(`${GIT_COMMIT} -m ${JSON.stringify('Closes #391')}`).blocked,
+    'a plain deliberate close is still allowed');
+  check(!runHook(`${GIT_COMMIT} -m ${JSON.stringify('This only fixes #391, nothing else.')}`).blocked,
+    'a qualifier with NO negation is a genuine close and stays allowed');
+}
+
 log(`\n[#405-closing-keyword] ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);
