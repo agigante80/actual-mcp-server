@@ -390,5 +390,83 @@ check('#436: the confirmation delay is a named constant with a real value', () =
   assert.ok((CONFIRM_DELAY_MS * WATCHED_WORKFLOWS.length) < 600000 / 2, 'stays well inside the job timeout');
 });
 
+// --- #442: an unread issue list is UNKNOWN, not "nothing is open" ------------
+
+check('#442: a failed issue-list read reports nothing rather than a duplicate', () => {
+  // Red against the previous code, which defaulted the list to [] and so returned
+  // {kind:"open"}, filing a SECOND issue beside the one it had just failed to
+  // read. Same class as #436's close-on-unknown at a different call site: a
+  // tracker write decided from a read that did not happen.
+  const t = decideStaleTransition({
+    findings: [{ file: 'dependency-update.yml', stale: true, reason: 'no_recent_run', ageHours: 292 }],
+    openStaleIssues: null,
+  });
+  assert.strictEqual(t.kind, 'noop');
+  assert.strictEqual(t.reason, 'issue_list_unreadable', 'and it says WHY, so the log can explain the silence');
+});
+
+check('#442: a successful read that genuinely returns nothing still opens', () => {
+  // The other half, so the fix cannot be "never open anything".
+  const t = decideStaleTransition({
+    findings: [{ file: 'dependency-update.yml', stale: true, reason: 'no_recent_run', ageHours: 292 }],
+    openStaleIssues: [],
+  });
+  assert.strictEqual(t.kind, 'open');
+});
+
+check('#442: an unread list with nothing stale is still a plain noop', () => {
+  const t = decideStaleTransition({ findings: [{ file: 'a.yml', stale: false, reason: 'ok' }], openStaleIssues: null });
+  assert.strictEqual(t.kind, 'noop');
+  assert.strictEqual(t.reason, undefined, 'no spurious reason when there was nothing to report anyway');
+});
+
+// --- #444: permanent absence is not a transient unknown ----------------------
+
+check('#444: a workflow that does not exist is reported, not silently tolerated', () => {
+  const f = classifyLiveness({ file: 'renamed.yml', state: 'not_found', now: NOW });
+  assert.strictEqual(f.stale, true);
+  assert.strictEqual(f.reason, 'not_found');
+  assert.strictEqual(shouldConfirmStaleFinding(f), false, 'permanent, so no re-read and no delay');
+});
+
+check('#444: not_found does NOT suppress the close branch, unlike inconclusive', () => {
+  // The distinction this ticket exists for. A transient read failure must hold an
+  // open issue open; a workflow renamed out of the repo must not, or it wedges an
+  // unrelated recovered issue forever at notice level.
+  const notFound = { file: 'renamed.yml', stale: true, reason: 'not_found' };
+  const inconclusive = { file: 'renamed.yml', stale: false, reason: 'inconclusive' };
+  const ok = { file: 'other.yml', stale: false, reason: 'ok' };
+  assert.strictEqual(decideStaleTransition({ findings: [notFound, ok], openStaleIssues: [] }).kind, 'open',
+    'it is stale in its own right, so it reports');
+  assert.strictEqual(decideStaleTransition({ findings: [inconclusive, ok], openStaleIssues: [{ number: 1 }] }).kind, 'noop',
+    'whereas a transient unknown still suppresses the close');
+});
+
+check('#444: the gh() wrapper exposes the status as DATA, not only in prose', () => {
+  // Parsing a status back out of a message string is the prose matching this repo
+  // refuses elsewhere; the shell branches on 404 versus everything else.
+  const src = readFileSync(new URL('../../scripts/report-train-stale.mjs', import.meta.url), 'utf8');
+  assert.ok(/err\.status = res\.status/.test(src), 'the thrown error carries .status');
+  assert.ok(/err\?\.status === 404/.test(src), 'and the shell branches on it');
+});
+
+// --- #443: an affirmative liveness probe that ordering cannot defeat ---------
+
+check('#443: the windowed probe can only move the verdict toward ALIVE', () => {
+  // Verified against the live API before implementing: `created>=` IS honoured,
+  // but a MALFORMED value returns 0 rather than erroring. So a non-empty result is
+  // proof of life, while an empty one proves nothing and must fall back to the
+  // page read. Asserted over the source because the probe is I/O.
+  const src = readFileSync(new URL('../../scripts/report-train-stale.mjs', import.meta.url), 'utf8');
+  const fn = /async function hasRunInsideWindow[\s\S]*?\n\}/.exec(src);
+  assert.ok(fn, 'the probe exists');
+  assert.ok(/total_count[^\n]*> 0/.test(fn[0]), 'it returns true ONLY on an affirmative count');
+  assert.ok(/created=\$\{encodeURIComponent/.test(fn[0]), 'the cutoff is URL-encoded');
+  // The caller must treat a probe FAILURE as a fall-through, never as staleness.
+  const caller = /one affirmative check before anything else[\s\S]*?falling back to the page read[^\n]*\n/.exec(src);
+  assert.ok(caller, 'the caller documents and implements the fallback');
+  assert.ok(/catch \(err\)/.test(caller[0]), 'a failed probe is caught, not fatal');
+});
+
 console.log(`\n[report-train-stale] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
