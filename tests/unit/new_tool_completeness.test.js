@@ -89,28 +89,16 @@ const SURFACES = [
  * A reason is mandatory, and every entry is checked for staleness below.
  */
 const EXCEPTIONS = {
-  // PRE-EXISTING debt, tracked as #451, NOT a licence for new tools. Every entry here was
-  // red the first time this guard ran, before the account-group work that introduced it.
-  // The staleness check below fails if any of these is left after its gap is closed, so
-  // the list cannot quietly outlive the ticket.
+  // EMPTY, and that is the enforcing state. #451 closed the last of the pre-existing debt
+  // (payees_common_list and the tags family had no live-server block; nine tools had no prompt
+  // scenario). An empty map means a new tool cannot reach every other surface and quietly skip
+  // the manual and model-driven layers.
   //
-  // These nine reach the unit and E2E layers; what they miss is the LIVE-server manual
-  // integration modules and the model-driven prompt files.
-  'manual-integration:actual_payees_common_list': 'pre-existing gap, tracked in #451',
-  'manual-integration:actual_tags_list': 'pre-existing gap, tracked in #451',
-  'manual-integration:actual_tags_create': 'pre-existing gap, tracked in #451',
-  'manual-integration:actual_tags_update': 'pre-existing gap, tracked in #451',
-  'manual-integration:actual_tags_delete': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_account_flow_summary': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_recurring_expenses_summary': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_transactions_aggregate': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_transfers_create': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_payees_common_list': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_tags_list': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_tags_create': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_tags_update': 'pre-existing gap, tracked in #451',
-  'llm-prompt:actual_tags_delete': 'pre-existing gap, tracked in #451',
+  // Adding an entry is allowed but it is a DECISION, not a formality: give the reason and a
+  // ticket, the way the entries this replaced named #451. The staleness check below fails if an
+  // entry outlives its gap, so the list cannot decay into a blanket opt-out.
 };
+
 
 console.log('\n[new-tool-completeness] every registered tool reaches every required surface');
 
@@ -131,6 +119,69 @@ for (const surface of SURFACES) {
     }
   });
 }
+
+// #451: the prompt files carry hand-maintained tally blocks, and they had silently drifted.
+// #429 added Phase 2b (account groups, 4 tools) and never touched the summary, so the block
+// omitted the phase entirely and the printed total was 39 for phases summing to 43. A human
+// pasting the prompt into a model would then report a total that cannot be reconciled with the
+// phases above it, which is exactly the kind of number nobody rechecks.
+//
+// This asserts only INTERNAL CONSISTENCY: the printed total equals the sum of the phase lines
+// shown directly above it. It deliberately does NOT try to count tools in the prompt bodies. A
+// phase line is a nominal label (some tools appear in two phases, some are deferred to the
+// cleanup phase), so a count-derived assertion would be wrong in a way that is hard to argue
+// with and would be silenced rather than fixed.
+check('every prompt tally block adds up', () => {
+  const problems = [];
+  for (const file of readdirSync(join(ROOT, 'tests/manual-prompt')).filter((f) => f.startsWith('prompt-'))) {
+    const text = readFileSync(join(ROOT, 'tests/manual-prompt', file), 'utf8');
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+      const total = /^\s*Total(?: Tools Tested)?:\s*X\s*\/\s*(\d+)\s*$/.exec(lines[i]);
+      if (!total) continue;
+      // Walk BACKWARDS collecting `... X / N` phase lines until the block ends.
+      let sum = 0;
+      let counted = 0;
+      for (let j = i - 1; j >= 0; j--) {
+        const line = lines[j];
+        if (/^\s*(={3,}|-{3,}|─{3,})\s*$/.test(line)) continue;       // a rule inside the block
+        const phase = /^\s*Phase\s+\S+.*?X\s*\/\s*(\d+)\s*$/.exec(line);
+        if (phase) { sum += Number(phase[1]); counted++; continue; }
+        if (/^\s*(Phase\s+\d+\S*\s+\w.*Skipped|PROMPT\s|\s*$)/.test(line)) continue;  // headings, blanks, skips
+        break;
+      }
+      if (counted === 0) continue;   // not a tally block
+      if (sum !== Number(total[1])) {
+        problems.push(`${file}: total says ${total[1]} but the ${counted} phase lines above it sum to ${sum}`);
+      }
+    }
+  }
+  if (problems.length) fail(problems.join('\n      '));
+});
+
+// The prompt README carries the same tally as a MARKDOWN TABLE plus a stated grand total, and
+// the check above could not see it: it filters to files starting with `prompt-`. Review of #451
+// caught the guard passing over the one file that ticket had left wrong (the table summed to 82
+// while the total below it still said 68). A guard that misses the document it was written for
+// is worse than none, so the README is now checked on its own terms.
+check('the prompt README grand total matches its own table', () => {
+  const text = read('tests/manual-prompt/README.md') || '';
+  const stated = /\*\*Total:\s*(\d+)\s*tools across 3 prompts\*\*/.exec(text);
+  if (!stated) return fail('the README no longer states a grand total in the expected form');
+  // Rows look like: | 6b | Prompt 2 | 4 | Schedule CRUD |
+  let sum = 0;
+  let rows = 0;
+  for (const line of text.split('\n')) {
+    const row = /^\|\s*[0-9]+[a-z]?\s*\|\s*Prompt\s+\d\s*\|\s*(\d*)\s*\|/.exec(line);
+    if (!row) continue;
+    rows++;
+    if (row[1]) sum += Number(row[1]);   // blank cells (cleanup, optional phases) count as zero
+  }
+  if (rows < 10) return fail(`only ${rows} phase rows parsed from the README table; the format changed`);
+  if (sum !== Number(stated[1])) {
+    fail(`README says "${stated[1]} tools across 3 prompts" but its ${rows} table rows sum to ${sum}`);
+  }
+});
 
 check('no EXCEPTION is stale (a silenced entry that no longer needs silencing)', () => {
   // Without this the list decays into a blanket opt-out: an entry stays after its tool is

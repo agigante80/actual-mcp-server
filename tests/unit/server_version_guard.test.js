@@ -262,5 +262,164 @@ check('PURITY: neither source emits except through the passed logger, never cons
   }
 });
 
+// ---------------------------------------------------------------------------
+// #453: the probe must run BEFORE the download, not after a successful operation.
+//
+// #276 called the guard from `withActualApi` AFTER `rawOperation()` resolved, so the one case
+// it would most help could never reach it: a download that FAILS because the server's schema is
+// newer than the bundled @actual-app/api (#427). Nothing warned at all when the operation died.
+//
+// The probe lives at the top of `loadBudgetTracked`, which is the single funnel EVERY budget
+// load passes through (enforced by budget_selection_precondition.test.js), rather than in
+// `initActualApiForOperation`, which a pooled HTTP session bypasses entirely.
+//
+// These cases assert ORDER and NON-INTERFERENCE. The verdict itself is covered by the pure
+// comparator cases above, so nothing here depends on what version is installed (#321).
+// ---------------------------------------------------------------------------
+console.log('\n[server-version-guard] #453 probe runs before downloadBudget');
+
+process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL || 'http://test-server';
+process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD || 'dummy';
+process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID || 'unit-test-sync-id';
+
+const apiMod = await import('@actual-app/api');
+const api = apiMod.default || apiMod;
+
+let events = [];
+let versionResult = { version: '99.9.0' };   // far ahead of anything bundled: the #427 shape
+let versionBehaviour = 'ok';                 // 'ok' | 'throw' | 'error-object'
+let downloadThrows = null;
+
+api.getServerVersion = async () => {
+  events.push('probe');
+  if (versionBehaviour === 'throw') throw new Error('/info unreachable');
+  if (versionBehaviour === 'error-object') return { error: 'network-failure' };
+  return versionResult;
+};
+api.downloadBudget = async () => {
+  events.push('download');
+  if (downloadThrows) throw downloadThrows;
+};
+api.getBudgetMonths = async () => { events.push('post-condition'); return ['2026-01']; };
+api.init = async () => {};
+api.sync = async () => {};
+
+const { loadBudgetTracked } = await import('../../dist/src/lib/budgetLoader.js');
+const apiState = await import('../../dist/src/lib/apiState.js');
+
+function resetProbe() {
+  events = [];
+  versionBehaviour = 'ok';
+  downloadThrows = null;
+  _resetForTests();                 // the once-guard is per PROCESS; clear it per case
+  apiState.setApiInitialized(true);
+  apiState.setLoadedBudgetSyncId(null);
+}
+
+async function settle(p) {
+  try { await p; return { ok: true }; } catch (err) { return { ok: false, err }; }
+}
+
+await (async () => {
+  resetProbe();
+  const r = await settle(loadBudgetTracked('sync-1'));
+  check('the probe runs, and runs BEFORE downloadBudget', () => {
+    assert.ok(r.ok, `load should succeed: ${r.err && r.err.message}`);
+    assert.strictEqual(events.indexOf('probe'), 0, `expected probe first, got ${events.join(' -> ')}`);
+    assert.ok(events.indexOf('probe') < events.indexOf('download'), `order was ${events.join(' -> ')}`);
+  });
+})();
+
+await (async () => {
+  resetProbe();
+  // THE CASE THIS TICKET EXISTS FOR: the download fails the way #427 does. The warning must
+  // already have been emitted, which is only true because the probe ran first.
+  downloadThrows = Object.assign(new Error('This budget could not be loaded'), { code: 'invalid-schema' });
+  const r = await settle(loadBudgetTracked('sync-1'));
+  check('the probe still runs when the download then FAILS', () => {
+    assert.strictEqual(r.ok, false, 'the download failure must still propagate');
+    assert.strictEqual(events[0], 'probe', `expected probe first, got ${events.join(' -> ')}`);
+    assert.ok(events.includes('download'), 'the download must still be attempted');
+  });
+})();
+
+await (async () => {
+  resetProbe();
+  versionBehaviour = 'throw';
+  const r = await settle(loadBudgetTracked('sync-1'));
+  check('a THROWING probe never breaks the load (advisory means advisory)', () => {
+    assert.ok(r.ok, `load should still succeed: ${r.err && r.err.message}`);
+    assert.ok(events.includes('download'), `download must still happen, got ${events.join(' -> ')}`);
+  });
+})();
+
+await (async () => {
+  resetProbe();
+  versionBehaviour = 'error-object';
+  const r = await settle(loadBudgetTracked('sync-1'));
+  check('a probe returning {error} never breaks the load', () => {
+    assert.ok(r.ok, `load should still succeed: ${r.err && r.err.message}`);
+    assert.ok(events.includes('download'));
+  });
+})();
+
+await (async () => {
+  resetProbe();
+  await settle(loadBudgetTracked('sync-1'));
+  const first = events.filter((e) => e === 'probe').length;
+  events = [];
+  await settle(loadBudgetTracked('sync-1'));      // deliberately NO _resetForTests here
+  const second = events.filter((e) => e === 'probe').length;
+  check('the once-guard means a second load does not re-probe', () => {
+    assert.strictEqual(first, 1, 'the first load probes exactly once');
+    assert.strictEqual(second, 0, 'a later load must not probe again');
+  });
+})();
+
+// Round 2 review finding: moving the probe BEFORE the download also moved it to the most
+// failure-prone moment available. The once-guard latched synchronously, so ONE failed probe
+// (a slow or unreachable /info, or the op timeout firing) permanently disabled the warning for
+// the whole process, including #276's surviving post-op call site. The deployment that silences
+// it that way is exactly the one the guard exists for. Every case above calls _resetForTests(),
+// so none of them could see this.
+console.log('\n[server-version-guard] #453 a FAILED probe must not disarm the guard');
+
+await (async () => {
+  resetProbe();
+  versionBehaviour = 'throw';
+  await settle(loadBudgetTracked('sync-1'));         // probe fails
+  const afterFailure = events.filter((e) => e === 'probe').length;
+  events = [];
+  versionBehaviour = 'ok';
+  await settle(loadBudgetTracked('sync-1'));         // deliberately NO _resetForTests
+  const retried = events.filter((e) => e === 'probe').length;
+  check('a later load retries after a failed probe', () => {
+    assert.strictEqual(afterFailure, 1, 'the failing load probes once');
+    assert.strictEqual(retried, 1, 'a failed probe must leave the guard armed');
+  });
+})();
+
+await (async () => {
+  resetProbe();
+  versionBehaviour = 'error-object';
+  for (let i = 0; i < 6; i++) await settle(loadBudgetTracked('sync-1'));
+  check('but repeated failures are BOUNDED, not retried forever', () => {
+    const probes = events.filter((e) => e === 'probe').length;
+    assert.ok(probes >= 1 && probes <= 3, `expected at most 3 attempts, got ${probes}`);
+    assert.strictEqual(events.filter((e) => e === 'download').length, 6, 'every load still downloads');
+  });
+})();
+
+await (async () => {
+  resetProbe();
+  await settle(loadBudgetTracked('sync-1'));         // a SUCCESSFUL probe
+  events = [];
+  await settle(loadBudgetTracked('sync-1'));
+  check('a successful probe still latches permanently', () => {
+    assert.strictEqual(events.filter((e) => e === 'probe').length, 0,
+      'once a version has actually been read and judged, never ask again');
+  });
+})();
+
 console.log(`\n[server-version-guard] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

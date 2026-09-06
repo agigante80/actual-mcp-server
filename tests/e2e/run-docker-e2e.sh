@@ -193,10 +193,52 @@ else
   exit 1
 fi
 
+# Step 4b (#423): the SECOND Actual server, used only by the stdio leg, and its bootstrap.
+#
+# It has to be brought up HERE, with `up`, and not left to step 5. `docker compose create` only
+# CREATES dependency containers, it never starts them and it does not build a missing image, so
+# the first version of this change left `actual-budget-stdio-bootstrap` unbuilt: the run died at
+# `No such image` before a single test ran. The existing bootstrap works only because step 4 uses
+# `up`, which builds on demand. Mirroring steps 2 to 4 exactly is what keeps that true.
+#
+# Skipped when the stdio leg is off, so an HTTP-only run does not pay for a second server.
+if [ "$TEST_LEVEL" = "full" ] && [ "${RUN_STDIO_E2E:-true}" = "true" ]; then
+  log_info "Step 4b: Starting the dedicated stdio Actual Budget server..."
+  docker compose -f "$COMPOSE_FILE" up -d actual-budget-stdio-test
+
+  STDIO_WAIT=0
+  while ! curl -sf http://localhost:5008/health > /dev/null 2>&1; do
+    if [ $STDIO_WAIT -ge 30 ]; then
+      log_error "The stdio Actual Budget server failed to start after 30 seconds"
+      docker compose -f "$COMPOSE_FILE" logs actual-budget-stdio-test | tail -50
+      exit 1
+    fi
+    echo -n "."
+    sleep 2
+    STDIO_WAIT=$((STDIO_WAIT + 2))
+  done
+  echo ""
+  log_success "The stdio Actual Budget server is ready"
+
+  log_info "Step 4c: Bootstrapping the stdio budget..."
+  if docker compose -f "$COMPOSE_FILE" up actual-budget-stdio-bootstrap; then
+    log_success "Stdio bootstrap complete"
+  else
+    log_error "Stdio bootstrap failed!"
+    docker compose -f "$COMPOSE_FILE" logs actual-budget-stdio-bootstrap | tail -50
+    exit 1
+  fi
+fi
+
 # Step 5: Start MCP server
 log_info "Starting MCP server..."
-# Use 'create' then 'docker start' (not compose start) to avoid depends_on check
-docker compose -f "$COMPOSE_FILE" create mcp-server-test
+# Use 'create' then 'docker start' (not compose start) to avoid depends_on check.
+# `create` neither starts a dependency nor builds a missing image, which is why every service
+# this stack needs is brought up explicitly above.
+if ! docker compose -f "$COMPOSE_FILE" create mcp-server-test; then
+  log_error "Could not create the MCP server container"
+  exit 1
+fi
 docker start mcp-server-e2e-test
 
 # Wait for MCP server to be ready
@@ -258,31 +300,43 @@ echo ""
 # making. The host has both docker and node (CI does `npm ci` before calling this script), and
 # this is the same approach tests/manual/mcp-client-stdio.js already uses.
 #
-# Sequential, not parallel: both transports drive the ONE Actual server behind them, so its
-# 500-requests-per-minute limiter counts their calls together, and running them at once would
-# trip it. Sequential is necessary but NOT sufficient, which is what the cool-down below is for.
-# Roughly doubles the E2E wall clock.
+# Sequential, not parallel. #423 gave the stdio leg its OWN Actual server, so the two no longer
+# share a rate-limit window, but they still share this host's CPU and the one MCP container, and
+# a parallel run would make a failure in either leg hard to attribute. Roughly doubles the E2E
+# wall clock.
 #
-# OPT-IN via RUN_STDIO_E2E=true (default OFF), and only at the full level. #383 landed the stdio
-# infrastructure, but the leg is not yet CI-clean: on a strict Playwright it errors at startup with
-# "HTML reporter output folder clashes with the tests output folder" (the shared docker config nests
-# the HTML report inside test-results), and #422 left a rate-limit tail on the write-heavy block. Both
-# are tracked in #423, which fixes them, turns this ON in CI, and makes it gating. Until then CI does
-# NOT set RUN_STDIO_E2E, so the leg is skipped and the job cannot go red on it. Run it locally with
-# RUN_STDIO_E2E=true; it is ADVISORY (non-gating) unless STDIO_E2E_GATING=true.
-if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${RUN_STDIO_E2E:-false}" = "true" ]; then
-  # COOL-DOWN, and it is not optional. The pacer in tests/shared/e2e-helpers.ts is module scoped,
-  # so it shares one window only WITHIN a process, and these two legs are different processes: the
-  # HTTP one runs inside the container, this one on the host. The stdio leg therefore starts with
-  # its own counter at zero while Actual's 60-second window is still full from the HTTP leg.
+# ON by default at the full level since #423, and GATING. Set RUN_STDIO_E2E=false to skip it.
+# History, because the default flipped twice: #383 landed the infrastructure but the leg could
+# not even start (Playwright refused the config: the HTML report was nested inside test-results),
+# and once that was fixed four tests in the write-heavy block failed on Actual's rate limiter,
+# which the two legs shared. #423 fixed the reporter path and gave stdio a dedicated server.
+if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${RUN_STDIO_E2E:-true}" = "true" ]; then
+  # COOL-DOWN, now 0 by default (#423). It existed because both legs shared one Actual server and
+  # therefore one 60-second rate-limit window: the pacer in tests/shared/e2e-helpers.ts is module
+  # scoped, so it shares a window only WITHIN a process, and these legs are different processes.
+  # The stdio leg started with its own counter at zero while the window was still full from HTTP,
+  # and its first login was refused. Because Playwright restarts a worker after a failure, that
+  # one refusal became 39 server restarts and 377 rate-limit errors in CI.
   #
-  # Observed before this wait, in CI rather than locally: the stdio leg's first Actual login was
-  # refused with "Too many requests", and because Playwright starts a fresh worker after a failure,
-  # each restart re-spawned the stdio server and re-logged in. 39 server restarts and 377 rate-limit
-  # errors, from one initial refusal. Draining the window first removes the trigger.
-  STDIO_COOLDOWN_S="${STDIO_COOLDOWN_S:-75}"
-  log_info "Cooling down ${STDIO_COOLDOWN_S}s so Actual's rate-limit window drains before the stdio leg..."
-  sleep "$STDIO_COOLDOWN_S"
+  # The stdio leg now has its OWN server (actual-budget-stdio-test), so there is no shared window
+  # left to drain and the wait is pure wall clock. The knob is KEPT rather than deleted: if the
+  # legs ever share a server again, this is the first thing to turn back up.
+  STDIO_COOLDOWN_S="${STDIO_COOLDOWN_S:-0}"
+  # Numeric guard: `set -e` is active, so a non-integer here (STDIO_COOLDOWN_S=75s, say) would
+  # abort the whole run with "integer expression expected" rather than warn.
+  case "$STDIO_COOLDOWN_S" in
+    ''|*[!0-9]*) log_warn "STDIO_COOLDOWN_S is not a whole number of seconds; ignoring it"; STDIO_COOLDOWN_S=0 ;;
+  esac
+  if [ "$STDIO_COOLDOWN_S" -gt 0 ]; then
+    log_info "Cooling down ${STDIO_COOLDOWN_S}s before the stdio leg..."
+    sleep "$STDIO_COOLDOWN_S"
+  fi
+
+  # Point the leg at its OWN server and its OWN budget. Both are required and neither can be
+  # inherited: `docker exec` inherits the container's CONFIGURED env, which names the HTTP leg's
+  # server, and the HTTP sync id is at /tmp/actual-sync-id.txt inside the same container.
+  export MCP_STDIO_SERVER_URL="${MCP_STDIO_SERVER_URL:-http://actual-budget-stdio-test:5006}"
+  export MCP_STDIO_SYNC_ID_FILE="${MCP_STDIO_SYNC_ID_FILE:-/tmp-stdio/actual-sync-id.txt}"
 
   log_info "Step 6b: Running the same suite over STDIO (host-side, docker exec)..."
   echo ""
@@ -294,19 +348,18 @@ if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${RUN_STDIO_E2E
   else
     STDIO_EXIT_CODE=$?
   fi
-  # ADVISORY, not gating, until #423 (which also fixes the startup config error and the rate-limit
-  # tail on the write-heavy block: a throttled api.sync closes the budget, forcing a re-download +
-  # re-login that withAuthRetry backs off 25s and then fails). #423 restores
-  # `TEST_EXIT_CODE=$STDIO_EXIT_CODE` here. Set STDIO_E2E_GATING=true to opt into gating locally.
+  # GATING since #423. stdio is the transport half our Claude Desktop and Claude Code users run,
+  # and an advisory gate on the half with the largest desktop install base is not a gate.
+  # STDIO_E2E_GATING=false downgrades it to advisory for a local run that is deliberately dirty.
   if [ $STDIO_EXIT_CODE -ne 0 ]; then
-    if [ "${STDIO_E2E_GATING:-false}" = "true" ]; then
-      log_error "STDIO transport FAILED (the HTTP transport passed). Gating is ON (STDIO_E2E_GATING)."
+    if [ "${STDIO_E2E_GATING:-true}" = "true" ]; then
+      log_error "STDIO transport FAILED (the HTTP transport passed)."
+      log_info "Re-run just it with:"
+      log_info "  MCP_STDIO_SERVER_URL=http://actual-budget-stdio-test:5006 MCP_STDIO_SYNC_ID_FILE=/tmp-stdio/actual-sync-id.txt \\"
+      log_info "  MCP_TEST_TRANSPORT=stdio npx playwright test --config=playwright.config.docker.ts --project=docker-e2e-full-stdio"
       TEST_EXIT_CODE=$STDIO_EXIT_CODE
     else
-      log_warn "STDIO transport had failures (ADVISORY until #423; not failing the job)."
-      log_info "The known residual is a rate-limit tail on the write-heavy block; see #423."
-      log_info "Re-run just it with:"
-      log_info "  MCP_TEST_TRANSPORT=stdio npx playwright test --config=playwright.config.docker.ts --project=docker-e2e-full-stdio"
+      log_warn "STDIO transport had failures (advisory: STDIO_E2E_GATING=false)."
     fi
   else
     log_success "STDIO transport passed"

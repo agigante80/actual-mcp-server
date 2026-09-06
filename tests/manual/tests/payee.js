@@ -307,6 +307,30 @@ export async function payeeTests(client, context) {
     }
   }
 
+  // #451: actual_payees_common_list had no live-server coverage. READ ONLY, so it creates no
+  // residue and can sit anywhere in this module. Asserted as a shape plus a consistency check
+  // against the full list rather than against a fixed count: "common" is derived from recent
+  // transaction frequency, so the CONTENT legitimately varies between runs and between budgets.
+  console.log("\nListing common payees...");
+  try {
+    const commonRes = await callTool("actual_payees_common_list", {});
+    const common = commonRes?.result || commonRes || [];
+    if (!Array.isArray(common)) {
+      fail(`payees_common_list did not return an array: ${JSON.stringify(commonRes).slice(0, 120)}`);
+    } else {
+      const all = await allPayees();
+      const allIds = new Set(all.map((p) => p.id));
+      const strays = common.filter((p) => p && p.id && !allIds.has(p.id));
+      if (strays.length) {
+        fail(`payees_common_list returned ${strays.length} payee(s) absent from actual_payees_get`);
+      } else {
+        console.log(`  \u2713 payees_common_list returned ${common.length} payee(s), all present in the full list`);
+      }
+    }
+  } catch (err) {
+    fail(`payees_common_list threw: ${String(err.message || err).slice(0, 120)}`);
+  }
+
   // FIXED(BUG-2): actual_payees_delete with non-existent UUID now returns actionable error (pre-flight check in adapter)
   console.log("\nNEGATIVE: payees_delete with nil-UUID...");
   try {

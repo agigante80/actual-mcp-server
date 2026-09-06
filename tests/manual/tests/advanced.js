@@ -19,6 +19,7 @@ import { budgetTests } from './budget.js';
 import { rulesTests } from './rules.js';
 import { batchUncategorizedRulesUpsertTests } from './batch_uncategorized_rules_upsert.js';
 import { scheduleTests } from './schedule.js';
+import { tagTests } from './tags.js';
 import { fail, skip, noteTolerated } from '../assert.js';
 
 /**
@@ -503,5 +504,8 @@ export async function fullTests(client, context, opts = {}) {
   await rulesTests(client, context);
   await batchUncategorizedRulesUpsertTests(client, context);
   await scheduleTests(client, context);
+  // #451: tags are self-contained (no account, category or transaction), so they sit here in
+  // `full` rather than in `extended`: the block WRITES, and extended is the read-heavier level.
+  await tagTests(client, context);
   await advancedTests(client, context, opts);
 }

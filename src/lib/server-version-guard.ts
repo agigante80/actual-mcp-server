@@ -91,10 +91,12 @@ export function checkServerVersion(
   // api patches, so comparing patches would be pure false-positive volume. It is
   // silent when equal and silent when the server is behind.
   //
-  // Scope, stated because it is narrower than it looks: this fires only when ops
-  // still SUCCEED, since the caller runs after a completed operation. A server so
-  // far ahead that budget download already fails never reaches it, and that case
-  // is #438's (surface the real session-init error) rather than this one's.
+  // Scope: this USED to fire only when ops still SUCCEEDED, because the only caller ran after a
+  // completed operation, so a server far enough ahead that the budget download already failed
+  // never reached it. #453 removed that limit by adding a call site BEFORE the download in
+  // loadBudgetTracked, which is the case this branch most wanted to reach. The verdict is
+  // unchanged; only WHEN it can be asked changed. #438 still owns surfacing the real error
+  // AFTER a failure; this warns before one.
   const bundled = parseVersion(bundledApi ?? '');
   if (bundled && (have[0] > bundled[0] || (have[0] === bundled[0] && have[1] > bundled[1]))) {
     return {
@@ -115,7 +117,12 @@ export function checkServerVersion(
 // Per-process once-guard.
 // ---------------------------------------------------------------------------
 
-let checked = false;
+let checked = false;      // a version WAS read and judged: never check again
+let inFlight = false;     // a check is running right now: a concurrent caller must not duplicate it
+let attempts = 0;         // failed attempts, so an unreachable /info cannot be probed forever
+
+/** Failed probes tolerated before the check gives up for the process. */
+const MAX_PROBE_ATTEMPTS = 3;
 
 /**
  * Run the compatibility check at most once per process. Call this from inside a successful
@@ -136,26 +143,44 @@ export async function checkServerVersionOnce(
   // assertion depends on what is installed (#321).
   bundledApi: string | null = INSTALLED_API_VERSION,
 ): Promise<void> {
-  if (checked) return;
-  checked = true; // set synchronously, before any await, so a concurrent op cannot double-fire
+  if (checked || inFlight || attempts >= MAX_PROBE_ATTEMPTS) return;
+  // #453 review: the latch used to be set here, synchronously, before the await. That was right
+  // while this ran only AFTER a successful operation. Once the probe moved BEFORE the first
+  // download it became the most failure-prone moment available (a slow or unreachable /info, or
+  // the op timeout firing), and a single failure then disabled the warning for the LIFETIME of
+  // the process, including #276's surviving post-op call site. The deployment that silenced it
+  // is precisely the one the guard exists for.
+  //
+  // So: `inFlight` keeps the concurrency property the synchronous latch was actually providing,
+  // `checked` is now set only once a version was really read and judged, and `attempts` bounds
+  // the retries so an unreachable server costs at most MAX_PROBE_ATTEMPTS extra /info calls per
+  // process rather than one per budget load.
+  inFlight = true;
 
   try {
     const result = await readVersion();
     if (!result || 'error' in result || typeof result.version !== 'string') {
+      attempts++;
       log.debug('[server-version] could not read the Actual server version; skipping the compatibility check');
       return;
     }
+    checked = true;   // a real answer: this is the one and only judgement
     const verdict = checkServerVersion(result.version, SUPPORTED_ACTUAL_SERVER_RANGE, bundledApi);
     if (!verdict.ok && verdict.message) {
       log.warn(verdict.message);
     }
   } catch {
     // Advisory only: a failure to check must never surface as an error or affect the op.
+    attempts++;
     log.debug('[server-version] compatibility check threw; ignored');
+  } finally {
+    inFlight = false;
   }
 }
 
 /** Test-only: reset the once-guard between cases. */
 export function _resetForTests(): void {
   checked = false;
+  inFlight = false;
+  attempts = 0;
 }

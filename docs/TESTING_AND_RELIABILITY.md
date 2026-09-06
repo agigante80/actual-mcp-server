@@ -1036,8 +1036,14 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 ### Level 6: Manual Integration Tests 🧪 (Comprehensive: ~60s)
 
 **Purpose:** Test all 81 tools with real Actual Budget data  
-**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (14 domain modules)  
+**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (15 domain modules)  
 **Command:** `npm run test:integration:full`
+
+> **`tags.js` is self-contained (#451).** The four tags tools touch no account, category or
+> transaction, so the module creates and deletes its own fixture and leaves no residue. Its name
+> is timestamped because `actual_tags_create` is an UPSERT on the tag WORD: a fixed name would
+> silently reuse a previous run's row and the create assertion would pass having created nothing.
+> The delete is verified by ABSENCE from `actual_tags_list`, since it is a soft delete.
 
 > **`roundtrip.js` runs LAST and only at the `full` level (#332/#334).** `actual_budgets_import` creates a budget on the Actual server AND loads it, so anything scheduled after it would silently target the imported copy. The module switches back to the original configured budget before returning, but running it last is the primary defence. Its destructive half additionally requires `MCP_TEST_BUDGET_SYNC_ID` to be set, because the budget it creates is residue this suite has no tool to delete. Without that marker only the read-only export half runs.
 

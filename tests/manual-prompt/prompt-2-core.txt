@@ -19,11 +19,12 @@ WHAT IT TESTS
   Phase 2  — Accounts                        (6 tools)
   Phase 2b: Account Groups                  (4 tools)
   Phase 3  — Category Groups & Categories    (6 tools)
-  Phase 4  — Payees                          (5 tools)
+  Phase 4  — Payees                          (6 tools)
   Phase 5  — Rules                           (4 tools)
   Phase 5b — Batch, Uncategorized, Upsert    (3 tools)
-  Phase 6  — Transactions                   (11 tools)
+  Phase 6  — Transactions                   (12 tools)
   Phase 6b — Schedules                       (4 tools)
+  Phase 6c — Tags                            (4 tools)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
 
@@ -132,7 +133,7 @@ Use the SAME testing rules as Prompt 1:
 
 ---
 
-**Phase 4 — Payees (5 tools):**
+**Phase 4 — Payees (6 tools):**
 
 - actual_payees_create
   Input: { name: "MCP-Payee-{TS}" }
@@ -167,6 +168,13 @@ Use the SAME testing rules as Prompt 1:
 - actual_payees_merge
   Input: merge "{payee2_id}" into "{payee_id}"
   Expect: success; verify payee2 no longer in actual_payees_get list
+
+- actual_payees_common_list
+  Input: {}
+  Expect: array of payees. It may be EMPTY on a fresh budget: "common" is derived from recent
+          transaction frequency, so an empty result is a PASS, not a failure.
+  Verify: every id returned also appears in actual_payees_get
+  Report count as informational
 
 Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is used in transactions).
 
@@ -223,7 +231,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 ---
 
-**Phase 6 — Transactions (11 tools):**
+**Phase 6 — Transactions (12 tools):**
 
 Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
 
@@ -304,6 +312,19 @@ Note: actual_transactions_delete will be handled in Phase 12 cleanup.
 
 ---
 
+- actual_transfers_create
+  Input: { fromAccountId: "{txn_acct_id}", toAccountId: "{account1_id}", amount: 2500,
+           date: "<today, YYYY-MM-DD>", notes: "MCP-Transfer-{TS}" }
+  Expect: success, and TWO linked transactions are created (one per account)
+  Verify: actual_transactions_get on BOTH accounts shows a matching entry, with opposite signs
+          (amount is in integer cents: 2500 is $25.00 out of one account and into the other)
+  Note: a transfer creates the payee-side link automatically. Do NOT create a payee for it.
+
+NEGATIVE for this phase:
+- actual_transfers_create with fromAccountId equal to toAccountId
+  Expect: a validation or refusal error naming the problem, NOT a success and NOT a
+          self-transfer that has to be cleaned up afterwards
+
 **Phase 6b — Schedules (4 tools):**
 
 - actual_schedules_get
@@ -329,18 +350,61 @@ Note: actual_transactions_delete will be handled in Phase 12 cleanup.
 
 ---
 
-**Phase 2–6b Summary:**
+**Phase 6c — Tags (4 tools):**
+
+Tags are self-contained: no account, category or transaction is needed. The tag WORD is stored
+WITHOUT a leading "#".
+
+- actual_tags_list
+  Expect: array (possibly empty), no error
+  Save count as `{tag_count_before}`
+
+- actual_tags_create
+  Input: { tag: "MCP-Tag-{TS}", color: "#33aa33", description: "Prompt suite fixture" }
+  Expect: created with id
+  Save as `{tag_id}`
+  Verify: actual_tags_list now contains it
+
+- actual_tags_create (SAME word again, documented upsert)
+  Input: { tag: "MCP-Tag-{TS}" }
+  Expect: the SAME id as `{tag_id}` comes back, and actual_tags_list does NOT grow.
+          This tool is an upsert on the word, so a second create is not a duplicate.
+
+- actual_tags_update
+  Input: { id: "{tag_id}", tag: "MCP-Tag-{TS}-renamed", color: "#112233" }
+  Expect: success
+  Verify: the new word appears in actual_tags_list
+
+- actual_tags_delete
+  Input: { id: "{tag_id}" }
+  Expect: success
+  Verify: the tag is ABSENT from actual_tags_list. The delete is a soft delete (tombstone),
+          so absence from the list is the correct check, not an error on re-read.
+
+NEGATIVES for this phase:
+- actual_tags_update with { id: "00000000-0000-0000-0000-000000000000", tag: "x" }
+  Expect: a not-found error. A silent success would mean the pre-flight guard is gone.
+- actual_tags_update with only an id and no fields
+  Expect: a validation error saying at least one of tag, color or description is required.
+- actual_tags_delete with { id: "00000000-0000-0000-0000-000000000000" }
+  Expect: a not-found error.
+
+---
+
+**Phase 2 to 6c Summary:**
 After completing all phases, output:
 ```
 === PROMPT 2 RESULTS ===
 Phase 2  Accounts:         X / 6
+Phase 2b Account Groups:   X / 4
 Phase 3  Categories:       X / 6
-Phase 4  Payees:           X / 5
+Phase 4  Payees:           X / 6
 Phase 5  Rules:            X / 4
 Phase 5b Batch/Upsert:     X / 3
-Phase 6  Transactions:     X / 11
+Phase 6  Transactions:     X / 12
 Phase 6b Schedules:        X / 4
-Total:                     X / 39
+Phase 6c Tags:             X / 4
+Total:                     X / 49
 Failed:        X
 Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}
