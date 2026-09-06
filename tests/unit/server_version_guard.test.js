@@ -274,23 +274,55 @@ check('PURITY: the guard loads with a BARE environment (no ACTUAL_* vars)', () =
   // test:unit-js chain, and CI exports dummy ACTUAL_* vars for that step. So a config edge is
   // green in CI and red only on the documented local pre-commit sequence, which is the worst
   // place for a failure to hide.
-  const child = spawnSync(
-    process.execPath,
-    ['--input-type=module', '-e', "await import('./dist/src/lib/server-version-guard.js');"],
-    {
-      cwd: ROOT,
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(([k]) => !k.startsWith('ACTUAL_') && k !== 'MCP_BRIDGE_DATA_DIR'),
-      ),
-      encoding: 'utf8',
-    },
+  const bareEnv = Object.fromEntries(
+    Object.entries(process.env).filter(([k]) => !k.startsWith('ACTUAL_') && k !== 'MCP_BRIDGE_DATA_DIR'),
   );
+  // `timeout` matters: one impurity class (a load-time setInterval, an open socket, an unresolved
+  // top-level await) keeps the child alive forever, and without a bound spawnSync would BLOCK the
+  // blocking unit chain with no output instead of failing it. A timed-out child reports status
+  // null and signal SIGTERM, so the message below distinguishes a hang from a config edge.
+  const load = (mod) => spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', `await import('./dist/src/lib/${mod}');`],
+    { cwd: ROOT, env: bareEnv, encoding: 'utf8', timeout: 30000 },
+  );
+
+  // SELF-CHECK FIRST. The regex version this replaced carried one, and dropping it made the new
+  // guard unfalsifiable in-suite: its whole detection power rests on the premise that config.ts
+  // hard-exits without ACTUAL_* vars. If that premise ever changes (defaults added to the schema,
+  // the exit moved behind a NODE_ENV branch, a var renamed past the filter above), the child would
+  // exit 0 unconditionally and this check would pass forever while the regression it exists to
+  // catch is fully reintroduced. So prove the mechanism can still fail, on every run.
+  const control = load('opTimeout.js');
+  assert.notStrictEqual(
+    control.status, 0,
+    'SELF-CHECK FAILED: importing opTimeout.js (which reaches config.ts) was expected to fail ' +
+    'under a stripped environment, and did not. This check can therefore no longer detect ' +
+    'anything, so do not trust the assertion below until this is understood.',
+  );
+
+  const child = load('server-version-guard.js');
   assert.strictEqual(
     child.status, 0,
-    'server-version-guard.ts must load with no ACTUAL_* environment. It does not, which means ' +
-    'something it imports reads the environment at module load (config.ts, most likely reached ' +
-    'through opTimeout or the logger). Bound or log inline instead.\n' +
-    `stderr: ${(child.stderr || '').trim().slice(0, 400)}`,
+    child.signal
+      ? `server-version-guard.ts HUNG on load (signal ${child.signal}), which means something it ` +
+        'imports keeps the event loop alive at module load.'
+      : 'server-version-guard.ts must load with no ACTUAL_* environment. It does not, which means ' +
+        'something it imports reads the environment at module load (config.ts, most likely ' +
+        'reached through opTimeout).\n' +
+        `stderr: ${(child.stderr || '').trim().slice(0, 400)}`,
+  );
+
+  // The behavioural check cannot see a LOGGER import: loggerFactory loads cleanly under a bare
+  // environment, so it would pass here while breaking this module's stated design contract
+  // ("the comparator is PURE: no I/O, no logging"). One narrow structural assertion keeps that
+  // half, without trying to parse every import spelling, which is what went wrong three times.
+  const src = readFileSync(join(ROOT, 'src', 'lib', 'server-version-guard.ts'), 'utf8');
+  const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  assert.ok(
+    !/\bfrom\s*['"][^'"]*logger/i.test(code),
+    'the guard must not import a logger: it takes one as an argument so its callers control ' +
+    'where output goes (stdio framing depends on that).',
   );
 });
 

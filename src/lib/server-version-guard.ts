@@ -11,12 +11,17 @@
  *  - The comparator is PURE (no I/O, no logging), so its truth table is unit-testable.
  *  - It FAILS OPEN: an unparseable version produces no warning. A spurious warning on a
  *    healthy deployment would be worse than staying quiet.
- *  - The firing is a per-PROCESS once-guard: the flag is flipped SYNCHRONOUSLY before any
- *    await, so the check runs exactly once no matter how many ops or sessions occur, and it
- *    reuses the connection the triggering op already established (no extra auth burst,
- *    avoiding the #127/#134 class). There is NO boot-time probe: index.ts deliberately has
- *    no startup connection, and a naive boot call would double-init then be torn down by
- *    shutdownActualApi.
+ *  - The firing is a per-PROCESS once-guard ON SUCCESS, and the qualifier is #453's change:
+ *    `checked` is set only once a version has actually been READ, with `inFlight` providing the
+ *    concurrency property the old synchronous latch provided and `attempts` capping the retries
+ *    at MAX_PROBE_ATTEMPTS. A FAILING probe is therefore retried up to that cap instead of
+ *    silencing the warning for the life of the process, which is what the synchronous latch did
+ *    once the probe moved ahead of the first budget download. There are TWO call sites now: the
+ *    pre-download one in budgetLoader (which issues its own bounded /info read) and the original
+ *    post-op one in withActualApi (which reuses the connection the triggering op established, so
+ *    it adds no auth burst, avoiding the #127/#134 class). There is still NO boot-time probe:
+ *    index.ts deliberately has no startup connection, and a naive boot call would double-init
+ *    then be torn down by shutdownActualApi.
  */
 
 import { SUPPORTED_ACTUAL_SERVER_RANGE } from './constants.js';
