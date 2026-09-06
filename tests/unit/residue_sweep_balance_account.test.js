@@ -188,5 +188,30 @@ await check('a tag-only residue failure NAMES the tag it found', async () => {
   assert.ok(output.includes(TAG), `the failure listing must name the tag, got:\n${output}`);
 });
 
+// The sweep PREVIEW is the other printer, and it had the same tag omission. The existing sweep
+// case above exercises the line but asserts only on the recorded callTool calls, so deleting the
+// preview line again would leave the sweep under-reporting what it is about to delete with every
+// test still green. The preview exists to be READ before anything is destroyed, so its content
+// is the assertion.
+await check('the sweep preview names the tag it is about to delete', async () => {
+  const TAG = 'MCP-Test-tag-1783679144993';
+  const { callTool } = makeMock({
+    actual_accounts_list: () => ({ result: [] }),
+    actual_tags_list: () => ({ result: [{ id: 'tag-1', tag: TAG }] }),
+    actual_tags_delete: () => ({ success: true }),
+  });
+  const lines = [];
+  const origLog = console.log;
+  console.log = (...args) => { lines.push(args.join(' ')); };
+  try {
+    await sweepResidue(callTool, ENV);
+  } finally {
+    console.log = origLog;
+  }
+  const output = lines.join('\n');
+  assert.ok(/Sweep preview/.test(output), `expected a preview, got:\n${output}`);
+  assert.ok(output.includes(TAG), `the preview must name the tag it will delete, got:\n${output}`);
+});
+
 console.log(`\n[residue-sweep-balance-account] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

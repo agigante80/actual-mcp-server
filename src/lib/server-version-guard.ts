@@ -117,12 +117,55 @@ export function checkServerVersion(
 // Per-process once-guard.
 // ---------------------------------------------------------------------------
 
+/**
+ * How long a version probe may take before it is abandoned. Deliberately a CONSTANT and not an
+ * env var: it is an advisory diagnostic, nobody should have to tune it, and a new config key would
+ * need threading through config.ts, .env.example and the README table (the config-drift guard
+ * enforces all three) to buy nothing. 5 seconds is far more than a healthy /info needs.
+ */
+export const SERVER_VERSION_PROBE_TIMEOUT_MS = 5000;
+
 let checked = false;      // a version WAS read and judged: never check again
 let inFlight = false;     // a check is running right now: a concurrent caller must not duplicate it
 let attempts = 0;         // failed attempts, so an unreachable /info cannot be probed forever
 
 /** Failed probes tolerated before the check gives up for the process. */
 const MAX_PROBE_ATTEMPTS = 3;
+
+/**
+ * Bound the read WITHOUT importing `withOpTimeout`.
+ *
+ * The obvious implementation reuses that helper, and review caught what it drags in: `opTimeout`
+ * imports `config.ts`, which Zod-validates the environment AT MODULE LOAD and hard-exits when it
+ * is missing. `tests/unit/server_version_guard.test.js` imports this module directly and is in the
+ * blocking `test:unit-js` chain, so the whole file went red on any machine without a `.env`, while
+ * staying green in CI (which exports dummy ACTUAL_* vars). Red locally and green in CI is the
+ * worst possible place for a failure to live: the mandatory pre-commit sequence is exactly where
+ * it hides. It also contradicted this module's own design note, that the comparator is PURE and
+ * unit-testable without I/O.
+ *
+ * So the bound is an inline race with a fixed constant, and this module keeps importing nothing
+ * but its two pure siblings. The timer is always cleared, so a fast read leaves nothing pending
+ * to hold the process open.
+ */
+async function raceWithBound<T>(read: () => Promise<T>): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      read(),
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`server-version probe exceeded ${SERVER_VERSION_PROBE_TIMEOUT_MS}ms`)),
+          SERVER_VERSION_PROBE_TIMEOUT_MS,
+        );
+        // Never hold the process open for an advisory diagnostic.
+        if (typeof timer.unref === 'function') timer.unref();
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 
 /**
  * Run the compatibility check at most once per process. Call this from inside a successful
@@ -151,11 +194,11 @@ export async function checkServerVersionOnce(
   // the process, including #276's surviving post-op call site. The deployment that silenced it
   // is precisely the one the guard exists for.
   //
-  // EVERY CALL SITE MUST PASS A BOUNDED READER, and that is now an invariant rather than a
-  // courtesy: `inFlight` is cleared in a `finally`, so a reader whose promise NEVER settles would
-  // leave it true for the life of the process and permanently disable the warning, which is the
-  // very failure this rework removed, just relocated. Both sites bound the read with
-  // SERVER_VERSION_PROBE_TIMEOUT_MS. Do not add a third that does not.
+  // THE BOUND IS APPLIED HERE, not by the caller. It started at the call sites and review was
+  // right that prose cannot hold it: `inFlight` is cleared in a `finally`, so a reader whose
+  // promise NEVER settles leaves it true for the life of the process and permanently disables the
+  // warning, which is the very failure this rework removed, just relocated. Bounding inside makes
+  // the set of call sites stop mattering, the same argument #393 used for the abandoned-load wait.
   //
   // So: `inFlight` keeps the concurrency property the synchronous latch was actually providing,
   // `checked` is now set only once a version was really read and judged, and `attempts` bounds
@@ -164,7 +207,7 @@ export async function checkServerVersionOnce(
   inFlight = true;
 
   try {
-    const result = await readVersion();
+    const result = await raceWithBound(readVersion);
     if (!result || 'error' in result || typeof result.version !== 'string') {
       attempts++;
       log.debug('[server-version] could not read the Actual server version; skipping the compatibility check');

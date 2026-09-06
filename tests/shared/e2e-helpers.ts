@@ -200,7 +200,10 @@ const recentCallTimes: number[] = [];
  *
  * What remains, and what the per-transport budget above is for: a leg can exceed the ceiling on
  * its own. Measured with the legs already separated, the stdio leg tripped the limiter while
- * holding this pacer ZERO times.
+ * holding this pacer zero times AT THE OLD 230 BUDGET. That is the observation that set the stdio
+ * budget to 90, and at 90 it does hold: see the wall-clock evidence above. Read the two together,
+ * because on their own the first sentence reads as "pacing cannot help here", which is how the
+ * cause was misdiagnosed in the first place.
  */
 export async function pace(): Promise<void> {
   for (;;) {
