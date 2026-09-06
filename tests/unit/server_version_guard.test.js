@@ -16,6 +16,7 @@ import { dirname, join } from 'path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const {
   parseVersion, checkServerVersion, checkServerVersionOnce, _resetForTests,
+  SERVER_VERSION_PROBE_TIMEOUT_MS,
 } = await import('../../dist/src/lib/server-version-guard.js');
 const { SUPPORTED_ACTUAL_SERVER_RANGE } = await import('../../dist/src/lib/constants.js');
 const { readVersionFromTree } = await import('../../dist/src/lib/installed-api-version.js');
@@ -254,10 +255,25 @@ check('PURITY: the guard imports nothing that reads the environment at load', ()
   // in CI (which exports dummy ACTUAL_* vars): red locally, green in CI, in the module whose own
   // design note promises a PURE comparator that is unit-testable without I/O. The bound is an
   // inline race instead, and this keeps it that way.
+  //
+  // Matches THREE forms, because the first version of this guard matched only the first and a
+  // reviewer pointed out the other two defeat it while it still reports green:
+  //   import x from './y.js'      (plain)
+  //   import './y.js'             (side-effect only: still executes the module and its config load)
+  //   export { x } from './y.js'  (re-export: same graph edge)
   const ALLOWED = new Set(['./constants.js', './installed-api-version.js']);
   const src = readFileSync(join(ROOT, 'src', 'lib', 'server-version-guard.ts'), 'utf8');
-  const imports = [...src.matchAll(/^\s*import\s[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+  // `import type` / `export type` are ERASED at compile time, so they create no module-graph
+  // edge and cannot trigger config.ts's load-time validation. Flagging them would tell a
+  // maintainer to 'bound or log inline instead', which is wrong advice for a type import.
+  const SPECIFIER = /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^;'"]*?\sfrom\s)?\s*['"]([^'"]+)['"]/g;
+  const imports = [...src.matchAll(SPECIFIER)].map((m) => m[1]);
   assert.ok(imports.length > 0, 'expected to find imports to check');
+  // SELF-CHECK: the pattern must actually see all three forms, or this guard is decoration.
+  const probe = "import a from './p.js';\nimport './q.js';\nexport { z } from './r.js';\n";
+  const seen = [...probe.matchAll(new RegExp(SPECIFIER.source, 'g'))].map((m) => m[1]).sort();
+  assert.deepStrictEqual(seen, ['./p.js', './q.js', './r.js'],
+    `the import matcher misses a form; it saw ${JSON.stringify(seen)}`);
   const offenders = imports.filter((i) => !ALLOWED.has(i));
   assert.deepStrictEqual(
     offenders, [],
@@ -439,6 +455,62 @@ await (async () => {
       'once a version has actually been read and judged, never ask again');
   });
 })();
+
+// The BOUND itself, which was uncovered when it was written. Review deleted it from the built
+// output and every suite stayed green, so nothing pinned the one property it exists for.
+//
+// The failure it prevents is not cosmetic: a half-open socket to /info (the #270 scenario) makes
+// the reader never settle, `inFlight` stays true for the life of the process, the warning is
+// permanently disabled, and because the guard is no longer wrapped by withOpTimeout the await
+// hangs INSIDE withApiLock forever, stalling every session with no error at all. That is the
+// #278 lost-lock shape, and it is the reason the bound moved inside the guard rather than being
+// left to call sites.
+// HOW THIS FAILS when the bound is removed, so the signal is not mistaken for a crash: the
+// never-settling read is then awaited forever, nothing else is pending, and Node exits 13 with
+// "Detected unsettled top-level await" instead of reaching the summary. A non-zero exit stops the
+// &&-joined unit chain, which is the detection. Verified by deleting the bound from the built
+// output: exit 13 with the bound gone, exit 0 and 32 passing with it.
+console.log('\n[server-version-guard] the internal bound must actually bound');
+
+await (async () => {
+  _resetForTests();
+  const warns = [];
+  const debugs = [];
+  const log = { warn: (m) => warns.push(m), debug: (m) => debugs.push(m) };
+  const started = Date.now();
+  // NEVER settles. Without the bound this await would hang the process.
+  await checkServerVersionOnce(() => new Promise(() => {}), log, '26.9.0');
+  const elapsed = Date.now() - started;
+
+  check('a never-settling read is abandoned at the bound, not awaited forever', () => {
+    assert.ok(
+      elapsed >= SERVER_VERSION_PROBE_TIMEOUT_MS - 100 && elapsed < SERVER_VERSION_PROBE_TIMEOUT_MS + 2000,
+      `expected to give up near ${SERVER_VERSION_PROBE_TIMEOUT_MS}ms, took ${elapsed}ms`,
+    );
+    assert.strictEqual(warns.length, 0, 'a probe that never answered must not warn about a version');
+    assert.strictEqual(debugs.length, 1, `expected exactly one debug line, got ${JSON.stringify(debugs)}`);
+  });
+
+  check('and the guard is still armed afterwards, so the process is not silenced', () => {
+    // The whole point of latching only on a real answer: a stall must not disable the warning.
+    const warns2 = [];
+    return checkServerVersionOnce(
+      async () => ({ version: '99.9.0' }),
+      { warn: (m) => warns2.push(m), debug: () => {} },
+      '26.9.0',
+    ).then(() => {
+      assert.strictEqual(warns2.length, 1, 'a later successful probe must still be able to warn');
+    });
+  });
+})();
+
+check('the bound is a fixed constant, not read from the environment', () => {
+  // If this ever becomes configurable it must go through config.ts and the config-drift guard,
+  // which would also break the purity property pinned above. Pin the value so the choice is
+  // deliberate rather than drifting.
+  assert.strictEqual(typeof SERVER_VERSION_PROBE_TIMEOUT_MS, 'number');
+  assert.strictEqual(SERVER_VERSION_PROBE_TIMEOUT_MS, 5000);
+});
 
 console.log(`\n[server-version-guard] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

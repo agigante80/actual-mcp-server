@@ -500,9 +500,14 @@ export async function loadBudgetTracked(syncId: string, encryptionPassword?: str
   //   - BOUNDED by the GUARD itself, not here. Review of the first version moved it: this runs
   //     inside the process-global api mutex, so an unbounded advisory GET would stall every
   //     session, and a bound each call site has to remember is one a call site will forget.
-  //   - ONCE per process, via the guard's own synchronous flag, which is shared with the post-op
-  //     call site in actual-adapter.ts. Whichever fires first wins; the other becomes a no-op, so
-  //     there is no double warning. This one normally fires first, being earlier.
+  //   - ONCE per process ON SUCCESS, and the qualifier matters. The guard's latch is set only
+  //     when a version was actually READ (#453 review: latching on the attempt meant one failed
+  //     probe disabled the warning for the life of the process). It is shared with the post-op
+  //     call site in actual-adapter.ts, so on success whichever fires first wins and the other is
+  //     a no-op, and this one normally fires first, being earlier. On FAILURE both sites keep
+  //     retrying until MAX_PROBE_ATTEMPTS, so an unreachable /info costs up to three bounded
+  //     probes rather than one. That is the deliberate trade: a bounded, finite cost in exchange
+  //     for not being silenced by a single transient failure.
   //
   // `api.getServerVersion` is read at call time (not destructured) so it needs only the server URL
   // that api.init() already established: NO budget has to be loaded, which is what makes a probe
