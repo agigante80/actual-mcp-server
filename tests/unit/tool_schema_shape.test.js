@@ -108,15 +108,22 @@ function walk(node, path, root, offenders, seen, depth) {
     // (`prefixItems: []`) is a valid, constructible `[]` and must not be flagged. A tuple may
     // ALSO carry `items` as its rest-element schema, which must still be walked.
     const isTuple = Array.isArray(node.prefixItems);
+    // `items: false` is JSON Schema 2020-12 for "no additional elements permitted", which is
+    // the STRICTEST possible declaration, not a shapeless one. zod 4.5 emits it for a closed
+    // tuple where 4.4 emitted no `items` key at all (#448), and walking it flagged the very
+    // thing the guard exists to reward. Treat it as closed, everywhere an array is examined.
+    const itemsIsClosed = node.items === false;
     if (isTuple) {
       node.prefixItems.forEach((sub, i) => walk(sub, `${path}.prefixItems[${i}]`, root, offenders, seen, depth + 1));
-      if (node.items !== undefined) walk(node.items, `${path}.items`, root, offenders, seen, depth + 1); // rest element
+      if (node.items !== undefined && !itemsIsClosed) walk(node.items, `${path}.items`, root, offenders, seen, depth + 1); // rest element
+    } else if (itemsIsClosed) {
+      // A non-tuple array that forbids all elements is degenerate but perfectly shaped.
     } else if (node.items !== undefined) {
       walk(node.items, `${path}.items`, root, offenders, seen, depth + 1);   // isShapeless handles {} / non-object
     } else {
       offenders.push(`${path}.items`);      // array declaring neither items nor prefixItems
     }
-  } else if (node.items && typeof node.items === 'object') {
+  } else if (node.items && typeof node.items === 'object' && node.items !== false) {
     walk(node.items, `${path}.items`, root, offenders, seen, depth + 1);
   }
 
