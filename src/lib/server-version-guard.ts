@@ -144,12 +144,16 @@ const MAX_PROBE_ATTEMPTS = 3;
  *
  * The obvious implementation reuses that helper, and review caught what it drags in: `opTimeout`
  * imports `config.ts`, which Zod-validates the environment AT MODULE LOAD and hard-exits when it
- * is missing. `tests/unit/server_version_guard.test.js` imports this module directly and is in the
- * blocking `test:unit-js` chain, so the whole file went red on any machine without a `.env`, while
- * staying green in CI (which exports dummy ACTUAL_* vars). Red locally and green in CI is the
- * worst possible place for a failure to live: the mandatory pre-commit sequence is exactly where
- * it hides. It also contradicted this module's own design note, that the comparator is PURE and
- * unit-testable without I/O.
+ * is missing. That breaks this module's own design note, that the comparator is PURE and
+ * unit-testable without I/O, and it makes `tests/unit/server_version_guard.test.js` unable to
+ * load at all without an environment.
+ *
+ * ONE CORRECTION to how this was first justified, since a wrong reason in a comment outlives the
+ * observation that produced it: the original wording claimed the import turned the unit chain
+ * "red locally, green in CI". The chain ALREADY dies without env vars, earlier, at
+ * `config_https_validation.test.js`. So the import does not change what the chain does on a bare
+ * machine. The property is still worth enforcing (a pure comparator that any harness can import
+ * and test in isolation), the drama was not.
  *
  * So the bound is an inline race with a fixed constant, and this module keeps importing nothing
  * but its two pure siblings. The timer is always cleared, so a fast read leaves nothing pending

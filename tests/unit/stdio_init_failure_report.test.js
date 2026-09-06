@@ -274,5 +274,38 @@ await check('EVERY budget load failure is branded, not just those via initActual
   }
 });
 
+section('prototype keys must not be treated as known causes');
+
+// The lookup tables are object literals, so they inherit Object.prototype. A bare truthiness
+// test (`if (REASON_TO_CAUSE[code])`) therefore MATCHES an error carrying `code: 'constructor'`,
+// returns a `cause` that is not an InitFailureCause, and yields `INIT_FAILURE_SENTENCES[cause]`
+// === undefined. stdio would then answer a tool call with `text: undefined`, which the SDK's
+// result schema is entitled to reject. Pre-existing from #438; #452 is what makes every stdio
+// tool error pass through here, so it became reachable.
+//
+// Review found the Object.hasOwn fix had no test: reverting all four lookups left the suite
+// fully green. These cases are that test.
+for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__proto__']) {
+  await check(`code: '${key}' is not a known cause`, () => {
+    const err = markInitFailure(Object.assign(new Error('x'), { code: key }));
+    const { cause, sentence } = classifyInitFailure(err);
+    assert.strictEqual(cause, 'unknown', `a prototype key must classify as unknown, got '${cause}'`);
+    assert.strictEqual(typeof sentence, 'string', 'the sentence must never be undefined');
+    assert.ok(sentence.length > 0);
+  });
+
+  await check(`reason: '${key}' is not a known cause`, () => {
+    const err = markInitFailure(Object.assign(new Error('x'), { reason: key }));
+    assert.strictEqual(classifyInitFailure(err).cause, 'unknown');
+  });
+}
+
+await check('and the stdio handler never answers with an undefined text', async () => {
+  // The end-to-end consequence, through the real handler: branded (so it reaches the
+  // classifier) with a prototype key. It must PROPAGATE, not return a malformed result.
+  const err = markInitFailure(Object.assign(new Error('upstream text'), { code: 'constructor' }));
+  await assert.rejects(() => handlerThatThrows(err)(REQUEST), (thrown) => thrown === err);
+});
+
 log(`\n[#452] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
