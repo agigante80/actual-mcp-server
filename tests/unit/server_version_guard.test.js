@@ -8,6 +8,7 @@
 // Run: node tests/unit/server_version_guard.test.js
 
 import assert from 'assert';
+import { spawnSync } from 'child_process';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
@@ -248,62 +249,48 @@ check('#439: the resolver walks up to the NAME-matched manifest, over a syntheti
   rmSync(tmp, { recursive: true, force: true });
 });
 
-check('PURITY: the guard imports nothing that reads the environment at load', () => {
-  // A `withOpTimeout` import was added here to bound the probe, and it transitively pulls in
-  // config.ts, which Zod-validates the environment AT MODULE LOAD and hard-exits when it is
-  // missing. This whole file then went red on any machine without a `.env`, while staying green
-  // in CI (which exports dummy ACTUAL_* vars): red locally, green in CI, in the module whose own
-  // design note promises a PURE comparator that is unit-testable without I/O. The bound is an
-  // inline race instead, and this keeps it that way.
+check('PURITY: the guard loads with a BARE environment (no ACTUAL_* vars)', () => {
+  // BEHAVIOURAL, not syntactic. Three earlier versions of this guard parsed the import
+  // statements with a regex, and review walked past each one in turn: side-effect imports, then
+  // re-exports, then tight spacing and dynamic import(). The last version was ALSO producing
+  // false positives, matching specifiers inside comments in a heavily-commented file. Every fix
+  // made the pattern longer and the next hole smaller but not absent.
   //
-  // MATCHING IS DELIBERATELY BROAD, because the narrow version was walked past twice. It now
-  // finds every quoted module specifier reachable from an import or export, in ANY spacing:
-  //   import x from './y.js'      import './y.js'        export { x } from './y.js'
-  //   import{a}from'./y.js'       import a from'./y.js'  await import('./y.js')
-  // Type-only forms are skipped because they are ERASED at compile time, so they create no
-  // module-graph edge and cannot trigger config.ts's load-time validation; flagging one would
-  // also give the maintainer advice ("bound or log inline instead") that makes no sense for it.
-  const SPECIFIER = /\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]|(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g;
-  const isTypeOnly = (src, index) => {
-    const lineStart = src.lastIndexOf('\n', index) + 1;
-    return /^\s*(?:import|export)\s+type\b/.test(src.slice(lineStart, index + 1));
-  };
-  const collect = (src) => {
-    const out = [];
-    for (const m of src.matchAll(SPECIFIER)) {
-      if (isTypeOnly(src, m.index)) continue;
-      out.push(m[1] ?? m[2] ?? m[3]);
-    }
-    return out;
-  };
-
-  const ALLOWED = new Set(['./constants.js', './installed-api-version.js']);
-  const src = readFileSync(join(ROOT, 'src', 'lib', 'server-version-guard.ts'), 'utf8');
-  const imports = collect(src);
-  assert.ok(imports.length > 0, 'expected to find imports to check');
-
-  // SELF-CHECK: the matcher must see every form a real edge can take, or this guard is
-  // decoration. Each line below was verified to DEFEAT an earlier version of it.
-  const probe = [
-    "import a from './p.js';",
-    "import './q.js';",
-    "export { z } from './r.js';",
-    "import{b}from'./s.js';",
-    "import c from'./t.js';",
-    "const m = await import('./u.js');",
-    "import type { T } from './skipme.js';",     // erased: must NOT be reported
-  ].join('\n');
-  assert.deepStrictEqual(
-    collect(probe).sort(),
-    ['./p.js', './q.js', './r.js', './s.js', './t.js', './u.js'],
-    `the import matcher misses a form or wrongly reports a type import; it saw ${JSON.stringify(collect(probe))}`,
+  // So assert the PROPERTY instead of its syntax: load the built module in a child process with
+  // the environment stripped, and require it to succeed. Any LOAD-TIME edge to config.ts, however
+  // it is spelled, makes that child exit non-zero, because config.ts Zod-validates the
+  // environment at module load and hard-exits. No spelling evades it and no comment triggers it,
+  // which is what the three regex versions could not manage.
+  //
+  // Deliberate limit, stated so it is not mistaken for a hole: a LAZY `await import('config')`
+  // inside a function body is not caught, because it does not run at load. That is correct
+  // rather than a gap: the property being asserted is that this module LOADS without an
+  // environment, and a lazy import does not break it.
+  //
+  // Verified by mutation (each with the import genuinely used, so tsc does not elide it):
+  // `import{x}from'./opTimeout.js'` and `import './opTimeout.js'` both take this file to exit 1.
+  //
+  // Why it matters: this module is imported directly by THIS file, which is in the blocking
+  // test:unit-js chain, and CI exports dummy ACTUAL_* vars for that step. So a config edge is
+  // green in CI and red only on the documented local pre-commit sequence, which is the worst
+  // place for a failure to hide.
+  const child = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', "await import('./dist/src/lib/server-version-guard.js');"],
+    {
+      cwd: ROOT,
+      env: Object.fromEntries(
+        Object.entries(process.env).filter(([k]) => !k.startsWith('ACTUAL_') && k !== 'MCP_BRIDGE_DATA_DIR'),
+      ),
+      encoding: 'utf8',
+    },
   );
-
-  const offenders = imports.filter((i) => !ALLOWED.has(i));
-  assert.deepStrictEqual(
-    offenders, [],
-    `imports outside the pure allowlist: ${offenders.join(', ')}. Anything reaching config.ts ` +
-    'makes this module (and this test file) fail to load without a .env. Bound or log inline instead.',
+  assert.strictEqual(
+    child.status, 0,
+    'server-version-guard.ts must load with no ACTUAL_* environment. It does not, which means ' +
+    'something it imports reads the environment at module load (config.ts, most likely reached ' +
+    'through opTimeout or the logger). Bound or log inline instead.\n' +
+    `stderr: ${(child.stderr || '').trim().slice(0, 400)}`,
   );
 });
 
