@@ -174,6 +174,10 @@ export async function sweepResidue(callTool, env = process.env) {
   for (const g of found.groups) console.log(`     delete group     ${g.name}`);
   for (const s of found.schedules) console.log(`     delete schedule  ${s.name}`);
   for (const r of found.rules) console.log(`     delete rule      ${r.id}`);
+  // #451 review: tags are COUNTED by residueCount, so omitting them here made the preview
+  // under-report what the sweep is about to delete, which is the one thing this preview exists
+  // to show before anything is touched.
+  for (const t of found.tags) console.log(`     delete tag       ${t.tag}`);
 
   if (total > cap) {
     const err = new Error(
@@ -262,5 +266,9 @@ export async function assertNoResidue(callTool) {
   for (const g of found.groups) console.log(`     group         ${g.name}`);
   for (const s of found.schedules) console.log(`     schedule      ${s.name}`);
   for (const r of found.rules) console.log(`     rule          ${r.id} (condition value starts with ${RULE_MARKER_PREFIX})`);
+  // Without this, a TAG-only failure printed "1 object(s) left behind:" followed by nothing,
+  // which is the least useful possible form of a failing gate. Exactly the case that fired on
+  // the first live run of the tags module.
+  for (const t of found.tags) console.log(`     tag           ${t.tag}`);
   return total;
 }

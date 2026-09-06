@@ -151,6 +151,12 @@ export async function checkServerVersionOnce(
   // the process, including #276's surviving post-op call site. The deployment that silenced it
   // is precisely the one the guard exists for.
   //
+  // EVERY CALL SITE MUST PASS A BOUNDED READER, and that is now an invariant rather than a
+  // courtesy: `inFlight` is cleared in a `finally`, so a reader whose promise NEVER settles would
+  // leave it true for the life of the process and permanently disable the warning, which is the
+  // very failure this rework removed, just relocated. Both sites bound the read with
+  // SERVER_VERSION_PROBE_TIMEOUT_MS. Do not add a third that does not.
+  //
   // So: `inFlight` keeps the concurrency property the synchronous latch was actually providing,
   // `checked` is now set only once a version was really read and judged, and `attempts` bounds
   // the retries so an unreachable server costs at most MAX_PROBE_ATTEMPTS extra /info calls per

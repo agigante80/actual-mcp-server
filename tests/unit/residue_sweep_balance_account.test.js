@@ -15,7 +15,7 @@
 // Run: node tests/unit/residue_sweep_balance_account.test.js
 
 import assert from 'node:assert';
-import { sweepResidue, EXIT_UNSAFE_BUDGET } from '../manual/residue.js';
+import { sweepResidue, assertNoResidue, EXIT_UNSAFE_BUDGET } from '../manual/residue.js';
 
 const ACCT = 'MCP-Test-2026-07-10T20-46-50-942Z-Updated'; // matches TEST_OBJECT_RE (has a timestamp)
 const ENV = { MCP_TEST_BUDGET_SYNC_ID: 'budget-x', MCP_ACTIVE_BUDGET_SYNC_ID: 'budget-x' };
@@ -160,6 +160,32 @@ await check('a budget with only a stray test tag is NOT reported clean', async (
   });
   await sweepResidue(callTool, ENV);
   assert.ok(calls.some((c) => c.name === 'actual_tags_delete'), 'the stray tag was never swept');
+});
+
+// Review of #451 caught the failure LISTING omitting tags while residueCount included them, so a
+// tag-only failure printed "1 object(s) left behind:" followed by nothing at all. A gate that
+// fails without naming what failed is barely better than one that does not fail: this is the
+// exact case that fired on the first live run of the tags module, and the operator would have
+// been told a count and no name.
+await check('a tag-only residue failure NAMES the tag it found', async () => {
+  const TAG = 'MCP-Test-tag-1783679144993';
+  const { callTool } = makeMock({
+    actual_accounts_list: () => ({ result: [] }),
+    actual_tags_list: () => ({ result: [{ id: 'tag-1', tag: TAG }] }),
+  });
+  const lines = [];
+  const origLog = console.log;
+  console.log = (...args) => { lines.push(args.join(' ')); };
+  let total;
+  try {
+    total = await assertNoResidue(callTool);
+  } finally {
+    console.log = origLog;
+  }
+  assert.strictEqual(total, 1, 'the tag must be counted as residue');
+  const output = lines.join('\n');
+  assert.ok(/left behind/.test(output), `expected a failure line, got:\n${output}`);
+  assert.ok(output.includes(TAG), `the failure listing must name the tag, got:\n${output}`);
 });
 
 console.log(`\n[residue-sweep-balance-account] Results: ${passed} passed, ${failed} failed`);

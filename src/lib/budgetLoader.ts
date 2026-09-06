@@ -438,7 +438,7 @@ async function trackBudgetMutation<T>(
  * a new config key would need to be threaded through config.ts, .env.example and the README
  * table (the config-drift guard enforces all three) to buy nothing.
  */
-const SERVER_VERSION_PROBE_TIMEOUT_MS = 5000;
+export const SERVER_VERSION_PROBE_TIMEOUT_MS = 5000;
 
 /**
  * #394: the same discipline for an IMPORT.

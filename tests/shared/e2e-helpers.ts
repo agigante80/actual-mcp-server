@@ -174,7 +174,15 @@ const RATE_WINDOW_MS = 60_000;
  * the recovery costs a re-download plus a re-login, which is itself several requests.
  *
  * So the stdio leg is given a budget low enough that even a high ratio stays inside the ceiling.
- * The cost is wall clock on the slower leg, which is the right thing to trade for a gate.
+ *
+ * IT DOES BIND, and the averages say otherwise, so read this before "simplifying" it away. Review
+ * argued the branch is inert: 112 calls over 2.4 minutes is ~47 calls per minute, which cannot
+ * reach a 90-call budget. That reasoning uses the AVERAGE; the pacer uses a SLIDING 60-second
+ * window and the suite is bursty, with the write-heavy block far denser than the mean. The
+ * measurement settles it. Changing ONLY this number, with the dedicated server and the zero
+ * cool-down already in place, took the stdio leg from 4 failures to 0 AND its wall clock from
+ * 2.4 minutes to 5.2 minutes. A pacer that never slept could not have more than doubled the
+ * runtime. The extra time IS the pacer holding calls back, which is the cost being paid.
  */
 const RATE_MAX_CALLS_PER_WINDOW =
   process.env.MCP_TEST_TRANSPORT === 'stdio' ? 90 : 230;

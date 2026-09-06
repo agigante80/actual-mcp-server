@@ -127,11 +127,18 @@ services:
     depends_on:
       actual-budget-bootstrap:
         condition: service_completed_successfully
-      # #423: the stdio leg execs into THIS container and reads the stdio sync id from the mount
-      # below, so the container must not start before that file exists. Without this the leg
-      # fails at its first login with a bare config-validation error naming ACTUAL_BUDGET_SYNC_ID.
-      actual-budget-stdio-bootstrap:
-        condition: service_completed_successfully
+      # NOTE: deliberately NO depends_on for actual-budget-stdio-bootstrap.
+      #
+      # It was added here first and broke every level that does not run the stdio leg.
+      # `docker compose create mcp-server-test` creates a declared dependency, and creating it
+      # needs its IMAGE, which only the stdio path builds, so `test:e2e:docker:smoke`, `test:all`
+      # and a `full` run with RUN_STDIO_E2E=false all died with "No such image" before any test
+      # ran. Reproduced on Compose v5.5.1.
+      #
+      # Ordering is the SCRIPT's job instead: run-docker-e2e.sh brings the stdio server and its
+      # bootstrap up in step 4b/4c, before it creates this container in step 5, and only when the
+      # stdio leg is actually enabled. The /tmp-stdio mount below is harmless when that never
+      # happens: the named volume is simply created empty and nothing reads it.
     environment:
       - ACTUAL_SERVER_URL=http://actual-budget-test:5006
       - ACTUAL_PASSWORD=test123

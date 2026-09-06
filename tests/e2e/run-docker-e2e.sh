@@ -184,8 +184,14 @@ done
 echo ""
 log_success "Actual Budget is ready"
 
+# `docker compose up <service>` EXITS 0 EVEN WHEN THE CONTAINER FAILS, so a bare `if compose up`
+# can never detect a failed bootstrap and its error branch is dead code. Verified on this machine
+# with a service whose command is `exit 7`: plain `up` exits 0, `up --exit-code-from <svc>` exits 7.
+# Both bootstraps therefore use --exit-code-from. This mattered more once #423 removed the
+# `depends_on: service_completed_successfully` from mcp-server-test (that dependency was the only
+# other thing checking the stdio bootstrap, and it broke every non-stdio level).
 log_info "Step 4/5: Bootstrapping Actual Budget and importing test data..."
-if docker compose -f "$COMPOSE_FILE" up actual-budget-bootstrap; then
+if docker compose -f "$COMPOSE_FILE" up --exit-code-from actual-budget-bootstrap --abort-on-container-exit actual-budget-bootstrap; then
   log_success "Bootstrap complete"
 else
   log_error "Bootstrap failed!"
@@ -221,7 +227,7 @@ if [ "$TEST_LEVEL" = "full" ] && [ "${RUN_STDIO_E2E:-true}" = "true" ]; then
   log_success "The stdio Actual Budget server is ready"
 
   log_info "Step 4c: Bootstrapping the stdio budget..."
-  if docker compose -f "$COMPOSE_FILE" up actual-budget-stdio-bootstrap; then
+  if docker compose -f "$COMPOSE_FILE" up --exit-code-from actual-budget-stdio-bootstrap --abort-on-container-exit actual-budget-stdio-bootstrap; then
     log_success "Stdio bootstrap complete"
   else
     log_error "Stdio bootstrap failed!"

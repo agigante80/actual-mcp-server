@@ -121,14 +121,20 @@ function classifyOne(err: unknown): { cause: InitFailureCause; sentence: string 
 
     // `.code` FIRST: upstream's api/download-budget and api/load-budget never let a
     // SyncError escape, they throw a plain Error carrying .code via withErrorCode.
+    // `Object.hasOwn`, never a bare truthiness test on the lookup: these are object literals, so
+    // they inherit Object.prototype and an error carrying `code: 'constructor'` (or 'toString',
+    // 'valueOf') would match, returning a `cause` that is not an InitFailureCause and a sentence
+    // that is `undefined`. The stdio handler would then answer a tool call with
+    // `{ isError: true, content: [{ type: 'text', text: undefined }] }`. Pre-existing from #438,
+    // but #452 is what routes EVERY stdio tool error through here, so it is reachable now.
     const code = typeof e?.code === 'string' ? e.code : undefined;
-    if (code && REASON_TO_CAUSE[code]) return done(REASON_TO_CAUSE[code]);
-    if (code && SYSTEM_CODE_TO_CAUSE[code]) return done(SYSTEM_CODE_TO_CAUSE[code]);
+    if (code && Object.hasOwn(REASON_TO_CAUSE, code)) return done(REASON_TO_CAUSE[code]);
+    if (code && Object.hasOwn(SYSTEM_CODE_TO_CAUSE, code)) return done(SYSTEM_CODE_TO_CAUSE[code]);
 
     // `.reason` only as a defensive fallback, for a SyncError that reaches us by
     // some path that does not go through those two handlers.
     const reason = typeof e?.reason === 'string' ? e.reason : undefined;
-    if (reason && REASON_TO_CAUSE[reason]) return done(REASON_TO_CAUSE[reason]);
+    if (reason && Object.hasOwn(REASON_TO_CAUSE, reason)) return done(REASON_TO_CAUSE[reason]);
 
     const message = typeof e?.message === 'string' ? e.message : '';
 
@@ -138,7 +144,7 @@ function classifyOne(err: unknown): { cause: InitFailureCause; sentence: string 
     // handled only the upstream shapes would answer `unknown` for exactly the
     // failures this ticket is about.
     const embedded = /Upstream reason: \[([a-z-]+)\]/.exec(message)?.[1];
-    if (embedded && REASON_TO_CAUSE[embedded]) return done(REASON_TO_CAUSE[embedded]);
+    if (embedded && Object.hasOwn(REASON_TO_CAUSE, embedded)) return done(REASON_TO_CAUSE[embedded]);
 
     // Last resort, message shapes. `network-failure` is tested BEFORE the auth
     // wording because upstream reports an unreachable server as
