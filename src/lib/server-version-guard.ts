@@ -19,7 +19,9 @@
  *    once the probe moved ahead of the first budget download. There are TWO call sites now: the
  *    pre-download one in budgetLoader (which issues its own bounded /info read) and the original
  *    post-op one in withActualApi (which reuses the connection the triggering op established, so
- *    it adds no auth burst, avoiding the #127/#134 class). There is still NO boot-time probe:
+ *    it adds no auth burst, avoiding the #127/#134 class). NEITHER call site bounds its reader:
+ *    the bound lives in `raceWithBound` below, deliberately, so the set of call sites cannot
+ *    matter. Do not delete it on the strength of a caller looking safe. There is still NO boot-time probe:
  *    index.ts deliberately has no startup connection, and a naive boot call would double-init
  *    then be torn down by shutdownActualApi.
  */
