@@ -160,8 +160,15 @@ function looseIdFields(published) {
     // `payees_merge.mergeIds` is the live example, and the previous source-regex detector
     // could not express this case at all.
     const target = sub?.type === 'array' && sub.items ? sub.items : sub;
+    // #448: a nullable string is `type: ["string","null"]` under zod 4.5 where 4.4 emitted
+    // `anyOf: [{type:"string"},{type:"null"}]`. Both forms must be recognised, and this is
+    // not cosmetic: without the type-array case the detector stops SEEING six fields, their
+    // EXCEPTIONS entries go stale, and the guard silently loses its grip on exactly the
+    // bare-string filter ids it was written to police.
+    const typeIsStringy = (t) => t === 'string' || (Array.isArray(t) && t.includes('string'));
     const isStringy =
-      target?.type === 'string' || (target?.anyOf ?? target?.oneOf ?? []).some((x) => x?.type === 'string');
+      typeIsStringy(target?.type) ||
+      (target?.anyOf ?? target?.oneOf ?? []).some((x) => typeIsStringy(x?.type));
     if (!isStringy) continue;
     if (!enforcesUuid(target)) out.push({ field: path, decl: JSON.stringify(target).slice(0, 70) });
   }
