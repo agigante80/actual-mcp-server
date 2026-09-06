@@ -177,7 +177,21 @@ check('#438: the read is PEEK-ONLY, never consume', () => {
   assert.ok(!/\.delete\(/.test(peek[0]), 'peek must not delete: the TTL is the sole reaper');
 });
 
-check('#438: the cause is reported ONLY on the authenticated route', () => {
+check('#447: the GET route is gated by the SAME authenticateRequest as POST', () => {
+  // The whole basis for reporting the cause here. Before #447 this route never
+  // called it outside the OIDC branch, so a GET on the MCP path was unauthenticated
+  // while a POST on the identical path was not.
+  const getBranch = /app\.get\(httpPath[\s\S]*?\n  \}\);/.exec(source);
+  assert.ok(getBranch, 'found the GET route');
+  assert.ok(/if \(!authenticateRequest\(req, res\)\) \{/.test(getBranch[0]),
+    'GET calls the same gate as POST, and returns on failure');
+  // It must be the FIRST thing the handler does: a check after the session lookup
+  // would leak the existence of a session id to an unauthenticated caller.
+  const beforeSession = getBranch[0].indexOf('authenticateRequest') < getBranch[0].indexOf("mcp-session-id");
+  assert.ok(beforeSession, 'the gate precedes any use of the session id');
+});
+
+check('#438 + #447: the cause is reported on BOTH routes, now that both are gated', () => {
   // Review finding: outside the OIDC branch, `authenticateRequest` is called only
   // from the POST route, so anything the GET route returns is reachable without an
   // Authorization header. The cause sentences are configuration hints, so putting
@@ -185,13 +199,10 @@ check('#438: the cause is reported ONLY on the authenticated route', () => {
   // body stays the constant it has always been; the peek there feeds the LOG only.
   const getBranch = /app\.get\(httpPath[\s\S]*?\n  \}\);/.exec(source);
   assert.ok(getBranch, 'found the GET route');
-  assert.ok(/message: 'Transport not ready'/.test(getBranch[0]), 'GET keeps its constant body');
-  assert.ok(!/knownFailure\.sentence/.test(getBranch[0]), 'no cause sentence on the unauthenticated route');
-  assert.ok(!/data: \{ cause/.test(getBranch[0]), 'and no cause enum either');
-  assert.ok(/peekInitFailure\(sessionId\)/.test(getBranch[0]) && /logger\.warn/.test(getBranch[0]),
-    'the peek is kept, but only to explain the dead session in the server log');
-  assert.ok(/#447/.test(getBranch[0]),
-    'and the deferral names the ticket that owns the auth gap, so it is traceable');
+  assert.ok(/knownFailure\.sentence/.test(getBranch[0]), 'GET reports the sentence');
+  assert.ok(/data: \{ cause: knownFailure\.cause/.test(getBranch[0]), 'and the closed enum');
+  assert.ok(/message: 'Transport not ready'/.test(getBranch[0]), 'while an UNKNOWN session still gets the constant body');
+  assert.ok(/code: -32000/.test(getBranch[0]), 'keeping this route\'s own status and code, not the POST route\'s');
 });
 
 check('#438: both call sites are CONTAINED by their own try/catch', () => {
@@ -200,11 +211,16 @@ check('#438: both call sites are CONTAINED by their own try/catch', () => {
   // middleware, so under Express 5 a throw reaches the default final handler,
   // which puts err.stack in the body whenever NODE_ENV is not production. That
   // is unset for a bare node run and is `development` in docker-compose.
-  const post = source.match(/try \{\s*\n\s*knownFailure = peekInitFailure\(sessionId\);\s*\n\s*\}\s*catch/g) ?? [];
-  assert.strictEqual(post.length, 1, 'the POST lookup is guarded');
-  const get = /app\.get\(httpPath[\s\S]*?\n  \}\);/.exec(source)[0];
-  assert.ok(/try \{[\s\S]*?peekInitFailure\(sessionId\)[\s\S]*?\} catch/.test(get),
-    'the GET lookup is guarded too: that route has no error handling of its own');
+  // Asserted PER ROUTE rather than by a global count: both lookups now have the
+  // same shape, so a count would pass even if one route lost its guard and the
+  // other grew a second one.
+  const postRoute = /app\.post\(httpPath[\s\S]*?\n  \}\);/.exec(source);
+  const getRoute = /app\.get\(httpPath[\s\S]*?\n  \}\);/.exec(source);
+  assert.ok(postRoute && getRoute, 'found both routes');
+  for (const [label, route] of [['POST', postRoute[0]], ['GET', getRoute[0]]]) {
+    assert.ok(/try \{[\s\S]*?peekInitFailure\(sessionId\)[\s\S]*?\}\s*catch/.test(route),
+      `the ${label} lookup is guarded`);
+  }
 });
 
 check('#438: exactly ONE lookup per request, before the discovery shim', () => {
@@ -236,14 +252,18 @@ check('#438: the failure is RECORDED where it is already known and was thrown aw
     'and must still NOT register the transport: dead-session accumulation stays prevented');
 });
 
-check('#438: the deferred #446 line is annotated, not silently left dirty', () => {
-  // A clean new path beside a known-dirty old one must be deliberate and
-  // traceable, or the next reader assumes the old one was reviewed and approved.
-  const outer = /error: \{ code: -32603, message: String\(err\) \}/.exec(source);
-  assert.ok(outer, 'the pre-existing raw-egress line still exists (out of scope here)');
-  const before = source.slice(Math.max(0, outer.index - 500), outer.index);
-  assert.ok(/#446/.test(before), 'annotated with the ticket that owns it');
-  assert.ok(/CONTAINED|contained/.test(before), 'and states that the #438 path never reaches it');
+check('#446: no raw error string reaches a client on the HTTP path', () => {
+  // Was deferred while #438 shipped beside it; now fixed, so this inverts from
+  // "the dirty line is annotated" to "the dirty line is gone and stays gone".
+  // String(err) here could carry a stack, raw SQL from SyncError.meta.query, an
+  // EACCES path with the OS username, or the configured upstream URL.
+  assert.ok(!/message: String\(err\)/.test(source), 'no String(err) in any response message');
+  assert.ok(!/message: `\$\{err/.test(source), 'and none interpolated either');
+  const outer = /Internal error\. The server logged the cause/.exec(source);
+  assert.ok(outer, 'the outer catch returns a stable, generic message');
+  const block = source.slice(outer.index - 900, outer.index + 500);
+  assert.ok(/requestId/.test(block), 'with a correlation id so an operator can join it to the log');
+  assert.ok(/logger\.error/.test(block), 'and the detail is logged server side');
 });
 
 console.log(`\n[#438] Results: ${passed} passed, ${failed} failed`);
