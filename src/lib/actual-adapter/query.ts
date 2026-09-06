@@ -45,11 +45,43 @@ function _splitInList(valuesStr: string): string[] {
 //      a double-quoted element hiding a single quote (`"x' UNION SELECT 1 --"`) is well formed by (1)
 //      yet its inner `'` would terminate upstream's wrapper. Checking the stripped value closes that.
 // A legitimate `'groceries'`, `'Smith, John'`, `"cash"`, `100` or `-5.5` passes both.
+/** A single-quoted literal whose internal quotes are SQL-ESCAPED by doubling.
+ *  `'McDonald''s'` matches; `'McDonald's'` (a lone quote) does not. */
+const SQL_ESCAPED_SINGLE_QUOTED = /^'(?:[^']|'')*'$/;
+
 function _isSafeInListElement(raw: string): boolean {
   const t = raw.trim();
-  const wellFormed = /^'[^']*'$/.test(t) || /^"[^"]*"$/.test(t) || /^-?\d+(?:\.\d+)?$/.test(t);
+  // #433: a single-quoted element may now carry DOUBLED internal quotes. That is
+  // safe for the reason #421 made the original rule, read the other way round:
+  // upstream compiles $oneof by inlining each value verbatim as `'${String(id)}'`
+  // (aql/compiler.ts, verified against the installed source), so a LONE quote
+  // terminates that wrapper and smuggles trailing SQL, while a DOUBLED quote is
+  // exactly the escape SQL defines and produces a balanced literal.
+  if (SQL_ESCAPED_SINGLE_QUOTED.test(t)) return true;
+  const wellFormed = /^"[^"]*"$/.test(t) || /^-?\d+(?:\.\d+)?$/.test(t);
   if (!wellFormed) return false;
+  // A double-quoted element must still carry no single quote at all: upstream
+  // re-wraps it in SINGLE quotes, so an internal one would break out exactly as
+  // before. This is the #421 injection witness shape.
   return !_stripWhereQuotes(t).includes("'");
+}
+
+/** Coercion for IN-list elements ONLY.
+ *
+ *  Deliberately separate from `_coerceWhereValue`, which serves `=`, `!=`, `<`
+ *  and friends. Those operands travel a different compile path, and this doubling
+ *  is correct ONLY because $oneof inlines its values into SQL text verbatim. A
+ *  shared coercion would apply SQL escaping to an operand that may never reach
+ *  raw SQL, which would silently match nothing.
+ *
+ *  The doubling is PRESERVED rather than unescaped, so upstream's `'${id}'` wrap
+ *  yields `'McDonald''s'`, which SQLite reads as `McDonald's`. */
+function _coerceInListValue(s: string): string | number {
+  const t = s.trim();
+  if (SQL_ESCAPED_SINGLE_QUOTED.test(t) && t.includes("''")) {
+    return t.slice(1, -1);   // keep the doubling; upstream supplies the outer quotes
+  }
+  return _coerceWhereValue(s);
 }
 
 // Coerce a SQL value literal to a number when it looks numeric, else keep the
@@ -171,11 +203,13 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
           if (!_isSafeInListElement(raw)) {
             throw new Error(
               `Invalid value in IN list for column "${field}": ${JSON.stringify(raw.trim())}. ` +
-              `Each value must be a number or a quoted string with no embedded quote.`,
+              `Each value must be a number, a double-quoted string with no single quote, ` +
+              `or a single-quoted string whose internal quotes are SQL-escaped by doubling ` +
+              `(for example 'McDonald''s').`,
             );
           }
         }
-        query = query.filter({ [field]: { $oneof: rawValues.map(_coerceWhereValue) } });
+        query = query.filter({ [field]: { $oneof: rawValues.map(_coerceInListValue) } });
       }
       continue;
     }

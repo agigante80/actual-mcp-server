@@ -331,14 +331,40 @@ check('an IN element with a malformed trailing quote is rejected at the builder'
   );
 });
 
-check('an apostrophe value in an IN list is rejected today (documented limitation, tracked)', () => {
-  // #421 review: upstream compiles $oneof WITHOUT escaping, so no element reaching it may carry a
-  // single quote. That safely blocks injection but also refuses a legitimate apostrophe value such
-  // as a "McDonald's" payee, in either the raw or the SQL-escaped-doubled form. This is fail-safe (a
-  // clear error, never a wrong match or an injection). Pinned here so a future change cannot quietly
-  // reintroduce the injection by accepting apostrophes. Safe support is tracked in #433.
-  assert.throws(() => filtersFor("notes IN ('McDonald''s')"), /Invalid value in IN list/i);
+check('#433: an SQL-ESCAPED apostrophe in an IN list is accepted and passed through doubled', () => {
+  // Replaces the assertion that pinned the old limitation. Safe for the same
+  // reason #421 made the rule, read the other way round: upstream compiles $oneof
+  // by inlining each value verbatim as `'${String(id)}'` (aql/compiler.ts, checked
+  // against the installed source), so a DOUBLED quote is exactly SQL's own escape
+  // and yields a balanced literal, while a LONE quote breaks out of the wrapper.
+  const f = filtersFor("notes IN ('McDonald''s')");
+  const oneof = JSON.stringify(f).match(/"\$oneof":\[([^\]]*)\]/);
+  assert.ok(oneof, `expected a $oneof filter, got ${JSON.stringify(f)}`);
+  // The DOUBLING IS PRESERVED on purpose: upstream supplies the outer quotes, so
+  // un-escaping here would produce `'McDonald's'` and reopen the injection.
+  assert.ok(oneof[1].includes("McDonald''s"), `doubling must survive to the builder, got ${oneof[1]}`);
+});
+
+check('#433: multiple escaped apostrophes and a mixed list still work', () => {
+  const f = JSON.stringify(filtersFor("notes IN ('Trader Joe''s', 'Wendy''s', 'plain', 42)"));
+  for (const needle of ["Trader Joe''s", "Wendy''s", 'plain', '42']) {
+    assert.ok(f.includes(needle), `${needle} survived, got ${f}`);
+  }
+});
+
+check('#421 STAYS CLOSED: a LONE quote in an IN list is still rejected', () => {
+  // The injection witnesses. These must never pass, whatever #433 accepts: a lone
+  // quote terminates upstream's wrapper and smuggles trailing SQL.
   assert.throws(() => filtersFor("notes IN ('Trader Joe's')"), /Invalid value in IN list/i);
+  assert.throws(() => filtersFor("notes IN ('x' UNION SELECT 1 --')"), /Invalid value in IN list/i);
+  assert.throws(() => filtersFor("notes IN ('a''b'c')"), /Invalid value in IN list/i,
+    'a doubled quote followed by a lone one is still unbalanced');
+});
+
+check('#421 STAYS CLOSED: a double-quoted element hiding a single quote is still rejected', () => {
+  // Upstream RE-WRAPS in single quotes, so an internal single quote breaks out
+  // exactly as it did before, regardless of the outer quoting the caller used.
+  assert.throws(() => filtersFor('notes IN ("x\' UNION SELECT 1 --")'), /Invalid value in IN list/i);
 });
 
 console.log(`\n[query-where-operators] Results: ${passed} passed, ${failed} failed`);
