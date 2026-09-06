@@ -244,6 +244,14 @@ export async function accountTests(client, context) {
     if (updated?.name === renamed) console.log("  \u2713 read-back: rename persisted");
     else fail(`account_groups_update: rename did not persist: ${JSON.stringify(updated)}`);
 
+    // NEGATIVE (create): an empty name is refused at the schema layer, writing nothing.
+    try {
+      await callTool("actual_account_groups_create", { name: "" });
+      fail("account_groups_create NEGATIVE: an empty name was accepted (expected a schema refusal)");
+    } catch (err) {
+      console.log("  \u2713 NEGATIVE: account_groups_create refuses an empty name");
+    }
+
     // NEGATIVE: a group that does not exist is refused, and the message says how to list them.
     const ghost = "00000000-0000-4000-8000-000000000999";
     for (const tool of ["actual_account_groups_update", "actual_account_groups_delete"]) {
