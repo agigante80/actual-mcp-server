@@ -25,7 +25,13 @@ export default defineConfig({
 
   reporter: [
     ['list'],
-    ['html', { outputFolder: 'test-results/docker-e2e-report', open: 'never' }],
+    // #423: OUTSIDE test-results/, which is Playwright's default `outputDir`.
+    // Nesting the HTML report inside the test output folder makes Playwright refuse
+    // to start ("HTML reporter output folder clashes with the tests output folder"),
+    // because the reporter clears its directory before writing and would delete the
+    // traces and attachments sitting beside it. That refusal is what kept the stdio
+    // leg from running at all.
+    ['html', { outputFolder: 'playwright-report/docker-e2e', open: 'never' }],
     ['json', { outputFile: 'test-results/docker-e2e-results.json' }],
   ],
 
