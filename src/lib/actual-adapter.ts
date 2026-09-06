@@ -87,7 +87,7 @@ import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad, hasPendingBudgetLoad } from './apiState.js';
 import { withApiLock } from './apiLock.js';
-import { loadBudgetTracked, importBudgetTracked } from './budgetLoader.js';
+import { loadBudgetTracked, importBudgetTracked, SERVER_VERSION_PROBE_TIMEOUT_MS } from './budgetLoader.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -500,7 +500,20 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
   const operation = async (): Promise<T> => {
     const result = await rawOperation();
     await checkServerVersionOnce(
-      () => rawGetServerVersion() as Promise<{ version: string } | { error: string }>,
+      // BOUNDED, with the same short dedicated timeout the pre-download probe uses (#453 review).
+      // This site passes no bound of its own, and it runs inside the operation's own
+      // withOpTimeout AND inside the process-global api lock, so a /info that stalls and then
+      // rejects at ~35s blew the 30s ACTUAL_OP_TIMEOUT_MS of an operation that had ALREADY
+      // SUCCEEDED, reporting a completed tool call to the caller as a timeout. That was survivable
+      // while the once-guard latched synchronously (it could happen at most once); once the latch
+      // moved to "only on a real answer" it became repeatable up to MAX_PROBE_ATTEMPTS. An
+      // advisory diagnostic must not be able to fail a successful operation even once.
+      () => withOpTimeout(
+        () => rawGetServerVersion() as Promise<{ version: string } | { error: string }>,
+        'server-version-probe',
+        SERVER_VERSION_PROBE_TIMEOUT_MS,
+        'the server-version probe bound (fixed, not configurable)',
+      ),
       logger,
     );
     return result;
@@ -3543,7 +3556,7 @@ export async function runBankSync(accountId?: string): Promise<void> {
       errorMsg.includes('NORDIGEN_ERROR') ||
       errorMsg.includes('Failed syncing account')
     ) {
-      throw new Error(`Bank sync failed: Provider error — ${errorMsg}`, { cause: error });
+      throw new Error(`Bank sync failed: Provider error: ${errorMsg}`, { cause: error });
     }
 
     throw new Error(`Bank sync failed: ${errorMsg}`, { cause: error });   // #452: keep the brand
