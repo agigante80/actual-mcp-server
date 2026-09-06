@@ -37,6 +37,18 @@ export async function tagTests(client, context) {
   const RENAMED = `MCP-Test-tag-${TS}-renamed`;
   const NIL_UUID = '00000000-0000-0000-0000-000000000000';
 
+  /**
+   * The id from a create response. The runner unwraps a tool result, and this tool returns the
+   * id as a BARE STRING, not as an object with `.id`. Reading only `.id` cost a release gate:
+   * the create assertion failed, `tagId` stayed null, the `finally` skipped the delete, and the
+   * tag survived as residue. Accept both shapes rather than betting on one.
+   */
+  function idOf(res) {
+    if (typeof res === 'string') return res;
+    if (res && typeof res.result === 'string') return res.result;
+    return res?.id || res?.result?.id || null;
+  }
+
   /** The tag list, normalised: the tools return an array, the runner may wrap it. */
   async function allTags() {
     const res = await callTool("actual_tags_list", {});
@@ -62,7 +74,7 @@ export async function tagTests(client, context) {
       color: '#33aa33',
       description: 'Created by the MCP integration suite',
     });
-    tagId = created?.id || created?.result?.id || null;
+    tagId = idOf(created);
     if (!tagId) {
       fail(`tags_create returned no id: ${JSON.stringify(created).slice(0, 160)}`);
       return;
@@ -82,7 +94,7 @@ export async function tagTests(client, context) {
     // description, so it is pinned here rather than assumed.
     console.log("\nRe-creating the SAME tag word (documented upsert)...");
     const recreated = await callTool("actual_tags_create", { tag: TAG_WORD });
-    const recreatedId = recreated?.id || recreated?.result?.id || null;
+    const recreatedId = idOf(recreated);
     if (recreatedId !== tagId) {
       fail(`Upsert: expected the same id back, got ${recreatedId} (was ${tagId})`);
     } else {
@@ -176,7 +188,24 @@ export async function tagTests(client, context) {
         fail(`Delete threw unexpectedly: ${String(err.message || err).slice(0, 120)}`);
       }
     } else {
-      skip("Skipping tag delete (no tag was created)");
+      // NO id, but a tag may still EXIST: that is exactly what happened on the first live run.
+      // The create succeeded, the id was read from the wrong shape, the assertion failed, and
+      // this branch skipped the delete, so the tag survived and failed the zero-residue gate.
+      // Recover by NAME rather than trusting that no id means no object.
+      const strays = (await allTags()).filter((t) => t?.tag === TAG_WORD || t?.tag === RENAMED);
+      if (strays.length === 0) {
+        skip("Skipping tag delete (no tag was created)");
+      } else {
+        console.log(`\nCleaning up ${strays.length} tag(s) found by name (no id was captured)...`);
+        for (const stray of strays) {
+          try {
+            await callTool("actual_tags_delete", { id: stray.id });
+            console.log(`  \u2713 Removed stray tag "${stray.tag}"`);
+          } catch (err) {
+            fail(`Could not remove stray tag "${stray.tag}": ${String(err.message || err).slice(0, 100)}`);
+          }
+        }
+      }
     }
   }
 }
