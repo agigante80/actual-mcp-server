@@ -256,24 +256,49 @@ check('PURITY: the guard imports nothing that reads the environment at load', ()
   // design note promises a PURE comparator that is unit-testable without I/O. The bound is an
   // inline race instead, and this keeps it that way.
   //
-  // Matches THREE forms, because the first version of this guard matched only the first and a
-  // reviewer pointed out the other two defeat it while it still reports green:
-  //   import x from './y.js'      (plain)
-  //   import './y.js'             (side-effect only: still executes the module and its config load)
-  //   export { x } from './y.js'  (re-export: same graph edge)
+  // MATCHING IS DELIBERATELY BROAD, because the narrow version was walked past twice. It now
+  // finds every quoted module specifier reachable from an import or export, in ANY spacing:
+  //   import x from './y.js'      import './y.js'        export { x } from './y.js'
+  //   import{a}from'./y.js'       import a from'./y.js'  await import('./y.js')
+  // Type-only forms are skipped because they are ERASED at compile time, so they create no
+  // module-graph edge and cannot trigger config.ts's load-time validation; flagging one would
+  // also give the maintainer advice ("bound or log inline instead") that makes no sense for it.
+  const SPECIFIER = /\bfrom\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]|(?:^|\n)\s*import\s*['"]([^'"]+)['"]/g;
+  const isTypeOnly = (src, index) => {
+    const lineStart = src.lastIndexOf('\n', index) + 1;
+    return /^\s*(?:import|export)\s+type\b/.test(src.slice(lineStart, index + 1));
+  };
+  const collect = (src) => {
+    const out = [];
+    for (const m of src.matchAll(SPECIFIER)) {
+      if (isTypeOnly(src, m.index)) continue;
+      out.push(m[1] ?? m[2] ?? m[3]);
+    }
+    return out;
+  };
+
   const ALLOWED = new Set(['./constants.js', './installed-api-version.js']);
   const src = readFileSync(join(ROOT, 'src', 'lib', 'server-version-guard.ts'), 'utf8');
-  // `import type` / `export type` are ERASED at compile time, so they create no module-graph
-  // edge and cannot trigger config.ts's load-time validation. Flagging them would tell a
-  // maintainer to 'bound or log inline instead', which is wrong advice for a type import.
-  const SPECIFIER = /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^;'"]*?\sfrom\s)?\s*['"]([^'"]+)['"]/g;
-  const imports = [...src.matchAll(SPECIFIER)].map((m) => m[1]);
+  const imports = collect(src);
   assert.ok(imports.length > 0, 'expected to find imports to check');
-  // SELF-CHECK: the pattern must actually see all three forms, or this guard is decoration.
-  const probe = "import a from './p.js';\nimport './q.js';\nexport { z } from './r.js';\n";
-  const seen = [...probe.matchAll(new RegExp(SPECIFIER.source, 'g'))].map((m) => m[1]).sort();
-  assert.deepStrictEqual(seen, ['./p.js', './q.js', './r.js'],
-    `the import matcher misses a form; it saw ${JSON.stringify(seen)}`);
+
+  // SELF-CHECK: the matcher must see every form a real edge can take, or this guard is
+  // decoration. Each line below was verified to DEFEAT an earlier version of it.
+  const probe = [
+    "import a from './p.js';",
+    "import './q.js';",
+    "export { z } from './r.js';",
+    "import{b}from'./s.js';",
+    "import c from'./t.js';",
+    "const m = await import('./u.js');",
+    "import type { T } from './skipme.js';",     // erased: must NOT be reported
+  ].join('\n');
+  assert.deepStrictEqual(
+    collect(probe).sort(),
+    ['./p.js', './q.js', './r.js', './s.js', './t.js', './u.js'],
+    `the import matcher misses a form or wrongly reports a type import; it saw ${JSON.stringify(collect(probe))}`,
+  );
+
   const offenders = imports.filter((i) => !ALLOWED.has(i));
   assert.deepStrictEqual(
     offenders, [],
@@ -491,16 +516,19 @@ await (async () => {
     assert.strictEqual(debugs.length, 1, `expected exactly one debug line, got ${JSON.stringify(debugs)}`);
   });
 
-  check('and the guard is still armed afterwards, so the process is not silenced', () => {
+  // `checkAsync`, NOT `check`. The synchronous helper discards a returned promise and counts a
+  // pass immediately, so the assertion below never ran: review mutated the expected count to 999
+  // and the file still reported 32 passed, exit 0. That is the same "a guard nothing can fail"
+  // defect this whole section was written to remove, reintroduced in the test that removes it.
+  await checkAsync('and the guard is still armed afterwards, so the process is not silenced', async () => {
     // The whole point of latching only on a real answer: a stall must not disable the warning.
     const warns2 = [];
-    return checkServerVersionOnce(
+    await checkServerVersionOnce(
       async () => ({ version: '99.9.0' }),
       { warn: (m) => warns2.push(m), debug: () => {} },
       '26.9.0',
-    ).then(() => {
-      assert.strictEqual(warns2.length, 1, 'a later successful probe must still be able to warn');
-    });
+    );
+    assert.strictEqual(warns2.length, 1, 'a later successful probe must still be able to warn');
   });
 })();
 
