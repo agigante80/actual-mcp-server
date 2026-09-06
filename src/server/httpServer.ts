@@ -777,17 +777,44 @@ export async function startHttpServer(
       const e2 = err as Error | { stack?: unknown } | undefined;
       if (e2 && typeof e2.stack === 'string') logger.error(e2.stack);
       if (!res.headersSent) {
-        // NOTE: this returns the raw error string to the client. That pre-existing
-        // disclosure is tracked as #446 and is deliberately out of scope here. The
-        // #438 session-init path above is CONTAINED by its own try/catch and never
-        // reaches this line, so its closed-enum contract cannot leak through here.
-        res.status(500).json({ jsonrpc: '2.0', id: payload?.id ?? null, error: { code: -32603, message: String(err) } });
+        // #446: the client gets a STABLE message plus a correlation id, never the
+        // raw error. `String(err)` here could carry a stack, raw SQL from
+        // SyncError.meta.query, an EACCES path with the OS username, or the
+        // configured upstream URL. The detail is already logged above with the
+        // request id stamped by requestContext (#221), so an operator joins the two
+        // by that id instead of reading it off the wire.
+        //
+        // The id is best effort: this catch can fire OUTSIDE requestContext.run
+        // (an error thrown while establishing the context), in which case there is
+        // nothing to correlate and the field is omitted rather than invented.
+        const requestId = requestContext.getStore()?.requestId;
+        logger.error(`[HTTP] Unhandled POST error${requestId ? ` (requestId=${requestId})` : ''}`);
+        res.status(500).json({
+          jsonrpc: '2.0',
+          id: payload?.id ?? null,
+          error: {
+            code: -32603,
+            message: 'Internal error. The server logged the cause; quote the requestId when reporting it.',
+            ...(requestId ? { data: { requestId } } : {}),
+          },
+        });
       }
     }
   });
 
   // GET for SSE connect (reuse transport)
   app.get(httpPath, async (req: Request, res: Response) => {
+    // #447: the SAME gate the POST route uses. Until now this route never called
+    // it outside the OIDC branch, so in the default static-bearer posture a GET on
+    // the MCP path was unauthenticated while a POST on the identical path was not.
+    // That inconsistency is what forced #438 to withhold the session-init cause
+    // here: the cause sentences are configuration hints, and putting them on an
+    // unauthenticated route would widen what a caller without a token can learn.
+    // authenticateRequest writes its own 401 and returns false, so this is the
+    // whole change.
+    if (!authenticateRequest(req, res)) {
+      return;
+    }
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (!sessionId) {
       res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'No session id' }, id: null });
@@ -803,29 +830,31 @@ export async function startHttpServer(
       // throw reaches the default final handler, which puts err.stack in the body
       // whenever NODE_ENV is not production (unset for a bare node run, and
       // `development` in docker-compose).
-      // #438 REVIEW: this route is deliberately NOT given the cause. Outside the
-      // OIDC branch it never calls `authenticateRequest` (POST-only, at the single
-      // call site), so anything added here is reachable without an Authorization
-      // header, and the sentences are configuration hints. The body therefore stays
-      // the constant it has always been. The POST route, which IS authenticated,
-      // carries the whole value of this feature. Reporting here can be revisited
-      // once that route's auth posture is fixed, which is #447.
-      //
-      // The peek is kept solely for the log line: it tells an operator reading the
-      // server log why this session is dead, without putting it on an unauthenticated
-      // wire. try/catch is load bearing because this route has NO error handling and
-      // the file registers no error middleware, so under Express 5 a throw reaches the
-      // default final handler, which emits err.stack whenever NODE_ENV is not
-      // production (unset for a bare node run, `development` in docker-compose).
+      // #438 + #447: the cause IS reported here now. It was withheld while this
+      // route was unauthenticated in the default static-bearer posture, because
+      // the cause sentences are configuration hints. #447 gated the route with the
+      // same authenticateRequest the POST route uses, so the reason for withholding
+      // is gone. Same closed enum, same fixed sentences, this route's own status
+      // and code. try/catch is still load bearing: this route has no error handling
+      // of its own and the file registers no error middleware, so under Express 5 a
+      // throw reaches the default final handler, which emits err.stack whenever
+      // NODE_ENV is not production.
+      let knownFailure: { cause: InitFailureCause; sentence: string } | undefined;
       try {
-        const knownFailure = peekInitFailure(sessionId);
-        if (knownFailure) {
-          logger.warn(`[SESSION] GET on session ${sessionId} whose init failed (${knownFailure.cause}); returning the generic body (auth posture, see the note above)`);
-        }
+        knownFailure = peekInitFailure(sessionId);
       } catch {
-        // never let diagnostics break the response
+        knownFailure = undefined;
       }
-      res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Transport not ready' }, id: null });
+      if (knownFailure) {
+        logger.warn(`[SESSION] GET on session ${sessionId} whose init failed (${knownFailure.cause}); reporting the cause`);
+      }
+      res.status(400).json({
+        jsonrpc: '2.0',
+        error: knownFailure
+          ? { code: -32000, message: knownFailure.sentence, data: { cause: knownFailure.cause, sessionInitFailed: true } }
+          : { code: -32000, message: 'Transport not ready' },
+        id: null,
+      });
       return;
     }
     await transport.handleRequest(req, res);
