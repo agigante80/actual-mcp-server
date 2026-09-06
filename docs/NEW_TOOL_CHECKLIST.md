@@ -10,6 +10,16 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 
 ## ⚡ Quick Reference (all checkboxes in one place)
 
+> **This list is now ENFORCED, not just documented.** `tests/unit/new_tool_completeness.test.js`
+> (in the blocking `test:unit-js` chain) asserts that every tool in `IMPLEMENTED_TOOLS` reaches
+> the README table, the E2E spec, a `tests/manual/tests/*.js` module and a
+> `tests/manual-prompt/prompt-*.txt` file, and that its own source file and index export exist.
+> A tool that skips one of those fails the build with the name of the missing surface.
+>
+> If a tool legitimately cannot reach a surface, add it to that test's `EXCEPTIONS` map WITH A
+> REASON. The guard fails on an exception that has gone stale, so the list cannot decay into a
+> blanket opt-out. Pre-existing gaps are tracked in #451, not silently accepted.
+
 ### Implementation
 - [ ] Tool file created: `src/tools/<domain>_<action>.ts`
 - [ ] Exported from `src/tools/index.ts`

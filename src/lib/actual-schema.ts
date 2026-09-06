@@ -69,6 +69,20 @@ export const ACTUAL_SCHEMA: DatabaseSchema = {
     mask: { type: 'string' },
     bank: { type: 'id', ref: 'banks' },
     account_sync_source: { type: 'string' },
+    // #429: these four exist in upstream's ActualQL schema but were missing here, so
+    // actual_query_run rejected valid queries against them. account_group_id arrived with
+    // account groups in 26.9.0; the other three predate it and were simply never added.
+    account_group_id: { type: 'id', ref: 'account_groups' },
+    last_reconciled: { type: 'string' },
+    last_sync: { type: 'string' },
+    bank_sync_status: { type: 'string' },
+  },
+
+  account_groups: {
+    id: { type: 'id' },
+    name: { type: 'string', required: true },
+    sort_order: { type: 'float' },
+    tombstone: { type: 'boolean' },
   },
   
   categories: {

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **77 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
+**Actual MCP Server** bridges AI assistants with [Actual Budget](https://actualbudget.org/) via the Model Context Protocol (MCP), exposing **81 tools** for conversational financial management. Supports two transports: **HTTP** (for LibreChat/LobeChat/multi-user deployments) and **stdio** (for Claude Desktop/Claude Code local use; pass the `--stdio` flag).
 
 **Tech Stack**: TypeScript (NodeNext/ESM), Node.js 22+, `@actual-app/api` v26, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright
 
@@ -82,7 +82,7 @@ node dist/src/index.js --stdio  # Production stdio
 
 # Testing (validation sequence, run in this order)
 npm run build                   # Step 1: must compile cleanly
-npm run verify-tools            # Step 2: all 77 tools registered (reads dist/)
+npm run verify-tools            # Step 2: all 81 tools registered (reads dist/)
 npm run test:unit-js            # Step 3: unit + schema tests
 npm audit --audit-level=moderate # Step 4: no new vulnerabilities
 
@@ -204,7 +204,7 @@ Project-local skills in `.claude/skills/` (invoked via the Skill tool, or automa
 | Skill | Purpose |
 |-------|---------|
 | `implement-ticket`, `merge-pr`, `release` | The workflow bodies behind the same-named slash commands above |
-| `api-design-principles` | Consistency rules for the 77-tool MCP surface; read before adding or revising a tool schema |
+| `api-design-principles` | Consistency rules for the 81-tool MCP surface; read before adding or revising a tool schema |
 | `owasp-api-security` | Security test patterns for the MCP transport (pairs with the `api-security-tester` agent) |
 | `fork-analysis` | Harvests feature ideas from forks/branches into gate-ready tickets; caches results in `docs/audit/FORK_ANALYSIS.md` |
 | `release-automation` | Governs the CI release gate (no main promotion without a version bump) and the auto-release lanes |
@@ -240,7 +240,7 @@ Express + StreamableHTTP             StdioServerTransport
     ↓                                     ↓
 ActualMCPConnection (src/lib/ActualMCPConnection.ts)
     ↓
-ActualToolsManager (77 tools, Zod validation, dispatch) at src/actualToolsManager.ts
+ActualToolsManager (81 tools, Zod validation, dispatch) at src/actualToolsManager.ts
     ↓
 actual-adapter.ts (withActualApi wrapper, retry 3x, concurrency limit 5)
     ↓
@@ -337,7 +337,7 @@ const tool: ToolDefinition = {
 export default tool;
 ```
 
-**Every tool declares MCP annotations, and they are HINTS, never a guard (#379).** `src/lib/tool-annotations.ts` classifies all 77 tools on the four fields the MCP spec defines, and `src/lib/tool-list-entry.ts` attaches them to every `tools/list` entry. Two things to know before touching this:
+**Every tool declares MCP annotations, and they are HINTS, never a guard (#379).** `src/lib/tool-annotations.ts` classifies all 81 tools on the four fields the MCP spec defines, and `src/lib/tool-list-entry.ts` attaches them to every `tools/list` entry. Two things to know before touching this:
 
 - **The spec's defaults are the conservative ones**, so declaring nothing already means write-capable, destructive and open-world. The value is telling clients which tools are SAFE, and correcting `openWorldHint`, whose default (`true`) is wrong for every tool but one: this server's domain is one Actual instance, a CLOSED world, and only `actual_bank_sync` reaches a third party.
 - **Nothing in `src/` may branch on an annotation.** The spec says clients must treat them as untrusted, so they can never carry an authorisation or safety decision. Authorisation stays in `budget-acl.ts`; refusal stays in the adapter guards. An annotation that lies is worse than none, which is why `tests/unit/tool_annotations.test.js` derives the classification from the adapter call graph and fails if a `readOnlyHint: true` tool reaches `queueWriteOperation`. That guard also replaced #370's hand-maintained `READ_ONLY` list, so "can this tool write?" now has ONE answer.
@@ -408,7 +408,7 @@ Four tools mutate WITHOUT the write queue, so the call graph says read and reali
 
 The rule is scoped to ENUMERATION, deliberately. Importing the package to monkeypatch it for mocking is correct and is what 20 existing unit tests do; do not read this as a ban on the import. Enforced by `tests/unit/unit_chain_membership.test.js`, which also guards that every `tests/unit/*.test.js` appears in the hand-maintained `test:unit-js` chain (there is no glob, so an unlisted file silently never runs, and two were already orphaned that way). Live-surface drift is reported by the separate `api-surface-drift` lane, which is non-blocking by construction.
 
-**The release train has six pre-flight controls (#324)**, in `scripts/train-preflight.mjs`, evaluated in a pinned order: validity, equality, prerelease, direction, denylist, soak. Order is load bearing and unit-tested. Notes that are easy to get wrong: `sort -V` is NOT a semver comparator (it ranks `26.8.0-alpha.1` ABOVE `26.8.0`), and an empty `LATEST` makes a sort-based direction check report a quiet "refusing to downgrade" rather than failing, which is why validity runs first and is the only control whose disposition is a RED run. `.github/actual-api-denylist.txt` makes a rollback stick, and **only its copy on `main` has any effect** because the train checks out `ref: main`. The soak window defaults to 24h since #440 (it was 48h) and is clamped at BOTH ends (`SOAK_FLOOR_HOURS = 24`, `SOAK_CEILING_HOURS = 168`). Do not confuse that constant with `STALE_THRESHOLD_HOURS = 48` in `report-train-stale.mjs`, which is still 48, is the #327 liveness threshold, and encodes "tolerates exactly one missed nightly cron": the two share a number and nothing else, and #440's original body nearly had both changed by instructing a sweep for the literal. The floor buys a third rather than a half, because the train is NIGHTLY: the real lag is the floor plus up to one cron interval, so the worst case moved from (48,72]h to (24,48]h, because clamping only the floor left the one direction that disables the train silently: a fat-fingered `4800` instead of `48` makes every run report `soaking`, which maps to `ignore`, so the train is off for six months and nobody is told. It also fails closed when the publish timestamp cannot be read. An upstream MAJOR bumps us a MINOR, not a patch: semver describes our 77-tool contract, not our dependency versions. Caveat: `@actual-app/api` majors are CalVer and roll over every January regardless of content, so this fires annually by construction. Rollback runbook: `docs/guides/DEPLOYMENT.md`.
+**The release train has six pre-flight controls (#324)**, in `scripts/train-preflight.mjs`, evaluated in a pinned order: validity, equality, prerelease, direction, denylist, soak. Order is load bearing and unit-tested. Notes that are easy to get wrong: `sort -V` is NOT a semver comparator (it ranks `26.8.0-alpha.1` ABOVE `26.8.0`), and an empty `LATEST` makes a sort-based direction check report a quiet "refusing to downgrade" rather than failing, which is why validity runs first and is the only control whose disposition is a RED run. `.github/actual-api-denylist.txt` makes a rollback stick, and **only its copy on `main` has any effect** because the train checks out `ref: main`. The soak window defaults to 24h since #440 (it was 48h) and is clamped at BOTH ends (`SOAK_FLOOR_HOURS = 24`, `SOAK_CEILING_HOURS = 168`). Do not confuse that constant with `STALE_THRESHOLD_HOURS = 48` in `report-train-stale.mjs`, which is still 48, is the #327 liveness threshold, and encodes "tolerates exactly one missed nightly cron": the two share a number and nothing else, and #440's original body nearly had both changed by instructing a sweep for the literal. The floor buys a third rather than a half, because the train is NIGHTLY: the real lag is the floor plus up to one cron interval, so the worst case moved from (48,72]h to (24,48]h, because clamping only the floor left the one direction that disables the train silently: a fat-fingered `4800` instead of `48` makes every run report `soaking`, which maps to `ignore`, so the train is off for six months and nobody is told. It also fails closed when the publish timestamp cannot be read. An upstream MAJOR bumps us a MINOR, not a patch: semver describes our 81-tool contract, not our dependency versions. Caveat: `@actual-app/api` majors are CalVer and roll over every January regardless of content, so this fires annually by construction. Rollback runbook: `docs/guides/DEPLOYMENT.md`.
 
 **The rest of the train chain.** Each script solves a distinct "the train died and nobody noticed" failure, and note that they are split across TWO workflows: the two reporting/verification controls deliberately live in `ci-cd.yml`, which runs on every push, because a control that only runs inside the scheduled train cannot report that the scheduled train never ran.
 

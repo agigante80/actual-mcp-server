@@ -59,6 +59,7 @@ const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
  *   actual_session_close   closes a pooled connection: server state, not budget data.
  */
 const READ_ONLY = new Set<string>([
+  'actual_account_groups_list',
   'actual_account_flow_summary',
   'actual_recurring_expenses_summary',
   'actual_accounts_get_balance',
@@ -104,6 +105,7 @@ const READ_ONLY = new Set<string>([
  * and in #357), so a close can be a delete.
  */
 const DESTRUCTIVE = new Set<string>([
+  'actual_account_groups_delete',
   'actual_accounts_close',
   'actual_accounts_delete',
   // Upstream `reconcileTransactions` overwrites fields on transactions that ALREADY exist
@@ -157,6 +159,8 @@ const DESTRUCTIVE = new Set<string>([
  * not, because on the split path it deletes and recreates child rows.
  */
 const ADDITIVE = new Set<string>([
+  'actual_account_groups_create',
+  'actual_account_groups_update',
   'actual_accounts_create',
   'actual_accounts_reopen',
   'actual_accounts_update',

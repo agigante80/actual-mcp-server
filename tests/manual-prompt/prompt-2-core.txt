@@ -17,6 +17,7 @@ HOW TO USE
 
 WHAT IT TESTS
   Phase 2  — Accounts                        (6 tools)
+  Phase 2b: Account Groups                  (4 tools)
   Phase 3  — Category Groups & Categories    (6 tools)
   Phase 4  — Payees                          (5 tools)
   Phase 5  — Rules                           (4 tools)
@@ -69,6 +70,34 @@ Use the SAME testing rules as Prompt 1:
   Verify with actual_accounts_list: "{acct_id}" no longer present
 
 ---
+
+**Phase 2b: Account Groups (4 tools, Actual 26.9.0+):**
+
+- actual_account_groups_list
+  Input: {}
+  Expect: an array (possibly empty on a fresh budget)
+
+- actual_account_groups_create
+  Input: { name: "MCP-Group-{TS}" }
+  Expect: an object with an id
+  Save as `{group_id}`
+  Verify with actual_account_groups_list: confirm the group appears with that name
+
+- actual_account_groups_update
+  Input: { id: "{group_id}", name: "MCP-Group-{TS}-Renamed" }
+  Expect: success
+  Verify with actual_account_groups_list: confirm the NEW name is listed
+  NEGATIVE: actual_account_groups_update { id: "00000000-0000-4000-8000-000000000999", name: "x" }
+    Expect: a not-found error that names actual_account_groups_list. Nothing is written.
+
+- actual_account_groups_delete
+  Input: { id: "{group_id}" }
+  Expect: success
+  Verify with actual_account_groups_list: the group is gone
+  NEGATIVE: actual_account_groups_delete { id: "00000000-0000-4000-8000-000000000999" }
+    Expect: a not-found error that names actual_account_groups_list
+  NOTE: deleting a group does NOT delete its accounts, they become ungrouped. An account
+  still pointing at a deleted group is expected under sync and means ungrouped, not an error.
 
 **Phase 3 — Category Groups & Categories (6 tools):**
 

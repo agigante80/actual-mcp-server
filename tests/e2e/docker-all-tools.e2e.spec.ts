@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 77 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 81 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 77 TOOLS', () => {
+test.describe('Docker E2E - ALL 81 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -1446,6 +1446,62 @@ test.describe('Docker E2E - ALL 77 TOOLS', () => {
   test('actual_tags_list - should list tags', async ({ mcp }) => {
     const data = await mcp.call('actual_tags_list');
     expect(Array.isArray(data)).toBeTruthy();
+  });
+
+  // ==================== ACCOUNT GROUPS (4 tools, #429) ====================
+
+  test('actual_account_groups_list - should list account groups', async ({ mcp }) => {
+    const groups = (await mcp.call('actual_account_groups_list')) ?? [];
+    expect(Array.isArray(groups)).toBe(true);
+  });
+
+  test('actual_account_groups_create - should create a group and read it back', async ({ mcp, cleanup }) => {
+    const name = `mcp-e2e-acct-group-${uniqueSuffix()}`;
+    const data = await mcp.call('actual_account_groups_create', { name });
+    const id = typeof data === 'string' ? data : (data as any)?.id;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
+      await mcp.call('actual_account_groups_delete', { id });
+    });
+
+    const groups = ((await mcp.call('actual_account_groups_list')) ?? []) as any[];
+    expect(groups.find((g: any) => g?.id === id)).toBeTruthy();
+  });
+
+  test('actual_account_groups_update - should rename and verify', async ({ mcp, cleanup }) => {
+    const name = `mcp-e2e-acct-group-${uniqueSuffix()}`;
+    const data = await mcp.call('actual_account_groups_create', { name });
+    const id = typeof data === 'string' ? data : (data as any)?.id;
+    cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
+      await mcp.call('actual_account_groups_delete', { id });
+    });
+
+    const renamed = `${name}-renamed`;
+    await mcp.call('actual_account_groups_update', { id, name: renamed });
+    const groups = ((await mcp.call('actual_account_groups_list')) ?? []) as any[];
+    expect(groups.find((g: any) => g?.id === id)?.name).toBe(renamed);
+  });
+
+  test('actual_account_groups_update - ERROR: a group that does not exist is refused', async ({ mcp }) => {
+    await expect(
+      mcp.call('actual_account_groups_update', { id: '00000000-0000-4000-8000-000000000999', name: 'nope' }),
+    ).rejects.toThrow(/not found/i);
+  });
+
+  test('actual_account_groups_delete - should delete and verify gone', async ({ mcp }) => {
+    const name = `mcp-e2e-acct-group-${uniqueSuffix()}`;
+    const data = await mcp.call('actual_account_groups_create', { name });
+    const id = typeof data === 'string' ? data : (data as any)?.id;
+
+    await mcp.call('actual_account_groups_delete', { id });
+    const groups = ((await mcp.call('actual_account_groups_list')) ?? []) as any[];
+    expect(groups.find((g: any) => g?.id === id)).toBeFalsy();
+  });
+
+  test('actual_account_groups_delete - ERROR: a group that does not exist is refused', async ({ mcp }) => {
+    await expect(
+      mcp.call('actual_account_groups_delete', { id: '00000000-0000-4000-8000-000000000999' }),
+    ).rejects.toThrow(/not found/i);
   });
 
   test('actual_tags_create - should create a tag', async ({ mcp, cleanup }) => {
