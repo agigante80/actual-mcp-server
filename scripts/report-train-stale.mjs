@@ -72,6 +72,14 @@ export const WATCHED_WORKFLOWS = ['dependency-update.yml', 'api-surface-drift.ym
 export function classifyLiveness({ file, state, newestScheduledRunAt, workflowCreatedAt, now, thresholdHours = STALE_THRESHOLD_HOURS } = {}) {
   // `state` is primary and threshold-free: a disabled workflow is reportable
   // immediately, without waiting out the recency window.
+  if (state === 'not_found') {
+    // #444: the workflow does not exist. That is a CONFIGURATION error (the entry
+    // in WATCHED_WORKFLOWS is wrong, or the file was renamed), and it is a
+    // liveness problem in its own right: nothing is watching that cron any more,
+    // which is the #327 gap reappearing by another route. Permanent, so it is
+    // reported rather than treated as a transient unknown.
+    return { file, stale: true, reason: 'not_found', state, ageHours: null };
+  }
   if (state && state !== 'active') {
     return { file, stale: true, reason: 'disabled', state, ageHours: null };
   }
@@ -156,6 +164,10 @@ export function selectNewestScheduledRun(runs = []) {
  * @returns {boolean}
  */
 export function shouldConfirmStaleFinding(finding) {
+  // Only the two reasons derived from the RUNS PAGE are confirmed. `disabled` and
+  // `not_found` (#444) both come from the workflow object, are threshold-free and
+  // permanent, and re-reading them would only add delay to a verdict that cannot
+  // change.
   return finding?.stale === true && (finding.reason === 'no_recent_run' || finding.reason === 'never_ran');
 }
 
@@ -206,6 +218,14 @@ export function reconcileLivenessReads(first, second) {
  */
 export function decideStaleTransition({ findings = [], openStaleIssues = [] } = {}) {
   const stale = findings.filter((f) => f.stale);
+  // #442: `null` means the open-issues read FAILED, which is not the same as "no
+  // issues are open". Defaulting it to [] made the shell open a DUPLICATE issue
+  // alongside the one it could not see, defeating the dedupe this file is built
+  // on. Same class as #436's close-on-unknown, at a different call site: a
+  // tracker write decided from a read that did not happen.
+  if (openStaleIssues === null) {
+    return stale.length > 0 ? { kind: 'noop', reason: 'issue_list_unreadable' } : { kind: 'noop' };
+  }
   const open = [...openStaleIssues];
 
   if (stale.length > 0) {
@@ -220,6 +240,11 @@ export function decideStaleTransition({ findings = [], openStaleIssues = [] } = 
   // issue is CLOSED with a "Recovered" comment on the very run that could not
   // determine anything. That is a tracker write decided from an unknown, and the
   // next push files a fresh number, defeating the dedupe this file is built on.
+  // #444: `not_found` is a PERMANENT condition (the watched workflow does not
+  // exist), so unlike `inconclusive` it does NOT suppress the close branch. If it
+  // did, a workflow renamed out of the repo would hold an unrelated recovered
+  // issue open forever at notice level. It is stale in its own right, so it
+  // reports through the normal stale path above.
   const unknown = findings.some((f) => f.reason === 'inconclusive');
 
   // Healthy. Closing an EXISTING train-stale issue is the explicit
@@ -286,7 +311,13 @@ async function gh(token, path, init = {}) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`GitHub API ${init.method ?? 'GET'} ${path}: ${res.status} ${text.slice(0, 200)}`);
+    const err = new Error(`GitHub API ${init.method ?? 'GET'} ${path}: ${res.status} ${text.slice(0, 200)}`);
+    // #444: expose the status as DATA. Parsing it back out of the message is the
+    // kind of prose matching this repo already refuses elsewhere, and the caller
+    // needs it to tell a permanent 404 (the watched entry is wrong) from a
+    // transient 5xx or 429 (retry next push).
+    err.status = res.status;
+    throw err;
   }
   return res.status === 204 ? null : res.json();
 }
@@ -300,6 +331,27 @@ const inconclusiveFinding = (file, state) => ({ file, stale: false, reason: 'inc
 
 /** Read the runs page and classify it. Used for BOTH the first pass and the
  *  confirming re-read, so the two cannot drift apart. */
+/**
+ * #443: ask the API directly whether ANY scheduled run exists inside the window.
+ *
+ * Verified against the live endpoint before this was written: the `created`
+ * qualifier IS honoured (268 runs unfiltered, 2 for `>=` two days ago, 0 for a
+ * future cutoff). A MALFORMED value returns 0 rather than an error, so this is
+ * used ONLY as positive proof of life: a non-empty result proves the cron fired
+ * and is independent of both ordering and which window the API returned. An empty
+ * result proves nothing and falls back to the page read, so the worst a broken
+ * cutoff can do is degrade to the previous behaviour instead of manufacturing a
+ * false alert.
+ *
+ * @returns {Promise<boolean>} true only when the API affirmatively reported a run
+ */
+async function hasRunInsideWindow(token, repo, file, thresholdHours) {
+  const cutoff = new Date(Date.now() - thresholdHours * 3600000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const q = `event=schedule&per_page=1&created=${encodeURIComponent('>=' + cutoff)}`;
+  const res = await gh(token, `/repos/${repo}/actions/workflows/${file}/runs?${q}`);
+  return Number(res?.total_count ?? 0) > 0;
+}
+
 async function readRunsFinding(token, repo, file, { state, workflowCreatedAt, thresholdHours }) {
   // event=schedule specifically. dependency-update.yml also carries
   // workflow_dispatch, and manually dispatching the train is the FIRST
@@ -348,8 +400,16 @@ async function main() {
       state = wf?.state ?? null;
       workflowCreatedAt = wf?.created_at ?? null;
     } catch (err) {
-      annotate('warning', `report-train-stale: could not read ${file}: ${err.message}`);
-      findings.push(inconclusiveFinding(file, null));
+      // #444: a 404 means the workflow is GONE, which is permanent and reportable.
+      // Anything else (5xx, 429, network) is transient and stays `inconclusive`,
+      // which suppresses the close branch until the next push can read cleanly.
+      if (err?.status === 404) {
+        annotate('error', `report-train-stale: watched workflow ${file} does not exist (404). Fix WATCHED_WORKFLOWS or restore the file.`);
+        findings.push({ ...classifyLiveness({ file, state: 'not_found', now: new Date().toISOString(), thresholdHours }), lastRunId: null });
+      } else {
+        annotate('warning', `report-train-stale: could not read ${file}: ${err.message}`);
+        findings.push(inconclusiveFinding(file, null));
+      }
       continue;
     }
 
@@ -358,7 +418,18 @@ async function main() {
     // returns `disabled` before it ever consults the runs page. Sharing one try
     // with the read above would let a rate-limited runs call discard the very
     // verdict #327 exists to catch, which is the higher-severity signal of the two.
+    // #443: one affirmative check before anything else. It can only ever move the
+    // verdict toward ALIVE, so a misbehaving filter degrades to the page read
+    // rather than inventing a false alert.
     let first;
+    try {
+      if (state === 'active' && await hasRunInsideWindow(token, repo, file, thresholdHours)) {
+        findings.push({ file, stale: false, reason: 'ok', state, ageHours: null, lastRunId: null });
+        continue;
+      }
+    } catch (err) {
+      annotate('warning', `report-train-stale: windowed probe for ${file} failed, falling back to the page read: ${err.message}`);
+    }
     try {
       first = await readRunsFinding(token, repo, file, { state, workflowCreatedAt, thresholdHours });
     } catch (err) {
@@ -396,7 +467,9 @@ async function main() {
   // and this one. A GET is not a write, so the invariant holds, but the previous
   // wording here claimed the list was not fetched at all unless something was
   // stale, which was never true.
-  let openStaleIssues = [];
+  // #442: `null` until the read succeeds, so a failed read is UNKNOWN rather than
+  // indistinguishable from "no issues are open".
+  let openStaleIssues = null;
   try {
     const list = await gh(token, `/repos/${repo}/issues?state=open&labels=${encodeURIComponent(STALE_LABEL)}&sort=created&direction=asc&per_page=100`);
     openStaleIssues = (list ?? [])
@@ -404,10 +477,18 @@ async function main() {
       .filter((i) => (i.labels ?? []).some((l) => (l.name ?? l) === STALE_LABEL));
   } catch (err) {
     annotate('warning', `report-train-stale: could not list issues: ${err.message}`);
-    if (stale.length === 0) return;
+    // Deliberately NOT returning early only when nothing is stale. Falling through
+    // with an empty list is what opened a duplicate issue beside the one this run
+    // could not see. `openStaleIssues` stays null and the pure transition treats
+    // that as unknown.
   }
 
   const t = decideStaleTransition({ findings, openStaleIssues });
+
+  if (t.kind === 'noop' && t.reason === 'issue_list_unreadable') {
+    annotate('warning', 'report-train-stale: a workflow looks stale but the open-issues list could not be read; reporting nothing rather than filing a possible duplicate. The next push retries.');
+    return;
+  }
 
   if (t.kind === 'noop') {
     // Do not print OK when a read failed: the run is inconclusive, not healthy,
