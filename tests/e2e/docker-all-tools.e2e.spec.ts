@@ -1468,6 +1468,10 @@ test.describe('Docker E2E - ALL 81 TOOLS', () => {
     expect(groups.find((g: any) => g?.id === id)).toBeTruthy();
   });
 
+  test('actual_account_groups_create - ERROR: an empty name is refused', async ({ mcp }) => {
+    await expect(mcp.call('actual_account_groups_create', { name: '' })).rejects.toThrow();
+  });
+
   test('actual_account_groups_update - should rename and verify', async ({ mcp, cleanup }) => {
     const name = `mcp-e2e-acct-group-${uniqueSuffix()}`;
     const data = await mcp.call('actual_account_groups_create', { name });
