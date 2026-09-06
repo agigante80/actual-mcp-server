@@ -211,4 +211,60 @@ export async function accountTests(client, context) {
     await callTool("actual_accounts_delete", { id: flowBId });
     console.log("  \u2713 flow-summary disposable accounts deleted");
   }
+
+  // ---------------------------------------------------------------------------
+  // ACCOUNT GROUPS (#429). Actual 26.9.0+. Full lifecycle with read-back after every
+  // write, and a negative case per mutating tool. Zero residue: the group is deleted.
+  // ---------------------------------------------------------------------------
+  {
+    const gts = new Date().toISOString().replace(/[:.]/g, '-');
+    const groupName = `MCP-AcctGroup-${gts}`;
+
+    const before = await callTool("actual_account_groups_list", {});
+    if (!Array.isArray(before)) fail(`account_groups_list: expected an array, got ${typeof before}`);
+    else console.log(`  \u2713 account_groups_list returned ${before.length} group(s)`);
+
+    const created = await callTool("actual_account_groups_create", { name: groupName });
+    const groupId = typeof created === 'string' ? created : created?.id;
+    if (!groupId) fail(`account_groups_create: no id returned: ${JSON.stringify(created)}`);
+    else console.log(`  \u2713 account_groups_create returned id ${groupId}`);
+
+    // READ-BACK: the group must be listed with the name we supplied.
+    const afterCreate = await callTool("actual_account_groups_list", {});
+    const found = Array.isArray(afterCreate) ? afterCreate.find(g => g.id === groupId) : null;
+    if (!found) fail("account_groups_create: group NOT found in the list after creation");
+    else if (found.name !== groupName) fail(`account_groups_create: name round-trip failed: ${found.name}`);
+    else console.log("  \u2713 read-back: the group is listed with the name supplied");
+
+    // UPDATE, then read back the new name.
+    const renamed = `${groupName}-renamed`;
+    await callTool("actual_account_groups_update", { id: groupId, name: renamed });
+    const afterUpdate = await callTool("actual_account_groups_list", {});
+    const updated = Array.isArray(afterUpdate) ? afterUpdate.find(g => g.id === groupId) : null;
+    if (updated?.name === renamed) console.log("  \u2713 read-back: rename persisted");
+    else fail(`account_groups_update: rename did not persist: ${JSON.stringify(updated)}`);
+
+    // NEGATIVE: a group that does not exist is refused, and the message says how to list them.
+    const ghost = "00000000-0000-4000-8000-000000000999";
+    for (const tool of ["actual_account_groups_update", "actual_account_groups_delete"]) {
+      const args = tool.endsWith("update") ? { id: ghost, name: "nope" } : { id: ghost };
+      try {
+        await callTool(tool, args);
+        fail(`${tool} NEGATIVE: a nonexistent group was accepted (expected refusal)`);
+      } catch (err) {
+        if (/not found/i.test(err.message) && err.message.includes("actual_account_groups_list")) {
+          console.log(`  \u2713 NEGATIVE: ${tool} refuses a nonexistent group and names the listing tool`);
+        } else {
+          fail(`${tool} NEGATIVE: refused, but the message is not actionable: ${err.message.slice(0, 140)}`);
+        }
+      }
+    }
+
+    // DELETE, then verify it is gone. Leaves zero residue.
+    await callTool("actual_account_groups_delete", { id: groupId });
+    const afterDelete = await callTool("actual_account_groups_list", {});
+    const stillThere = Array.isArray(afterDelete) ? afterDelete.find(g => g.id === groupId) : null;
+    if (stillThere) fail("account_groups_delete: the group is still listed after deletion");
+    else console.log("  \u2713 read-back: the group is gone after deletion (zero residue)");
+  }
 }

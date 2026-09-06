@@ -32,6 +32,11 @@ console.log('Running generated tools smoke tests');
   apiDefault.deleteSchedule = async () => {};
   apiDefault.deletePayee = async () => {};
   apiDefault.getTags = async () => [{ id: '00000000-0000-0000-0000-0000000000aa', tag: 'groceries' }];
+  // #429 account groups
+  apiDefault.getAccountGroups = async () => [{ id: '00000000-0000-0000-0000-0000000000bb', name: 'Savings', sort_order: 0 }];
+  apiDefault.createAccountGroup = async () => '00000000-0000-0000-0000-0000000000bb';
+  apiDefault.updateAccountGroup = async () => undefined;
+  apiDefault.deleteAccountGroup = async () => undefined;
   apiDefault.createTag = async () => 'tag-new';
   apiDefault.updateTag = async () => {};
   apiDefault.deleteTag = async () => {};
@@ -137,6 +142,10 @@ console.log('Running generated tools smoke tests');
     deleteSchedule: null,
     createTransfer: { success: true, from_id: '00000000-0000-0000-0000-000000000003', to_id: null },
     getTags: [{ id: '00000000-0000-0000-0000-0000000000aa', tag: 'groceries' }],
+    getAccountGroups: [{ id: '00000000-0000-0000-0000-0000000000bb', name: 'Savings', sort_order: 0 }],
+    createAccountGroup: '00000000-0000-0000-0000-0000000000bb',
+    updateAccountGroup: undefined,
+    deleteAccountGroup: undefined,
     createTag: 'tag-new',
     updateTag: null,
     deleteTag: null,
@@ -199,6 +208,9 @@ console.log('Running generated tools smoke tests');
   if (name.includes('transactions_update_batch')) inputExample.updates = [{ id: '00000000-0000-0000-0000-000000000001', fields: { notes: 'batch-test' } }];
   if (name.includes('entities_search')) inputExample.type = 'payees', inputExample.query = 'kroger'; // matches getPayees stub { name: 'Kroger' }
   if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';
+  if (name.includes('account_groups_create')) inputExample.name = 'MCP-Group';
+  if (name.includes('account_groups_update')) inputExample.id = '00000000-0000-0000-0000-0000000000bb', inputExample.name = 'Renamed'; // must match the getAccountGroups stub, or the adapter's existence guard refuses
+  if (name.includes('account_groups_delete')) inputExample.id = '00000000-0000-0000-0000-0000000000bb';
   if (name.includes('accounts_create')) inputExample.name = 'New';
   if (name.includes('accounts_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated Name' };
   if (name.includes('accounts_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';

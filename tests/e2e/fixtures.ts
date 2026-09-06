@@ -87,6 +87,12 @@ export const CLEANUP_ORDER = {
   categoryGroup: 50,
   account: 60,
   /**
+   * #429: an account group is torn down AFTER its member accounts, mirroring
+   * category/categoryGroup. Deleting a group nulls `account_group_id` on every member,
+   * so removing it first would mutate accounts a later step still expects to own.
+   */
+  accountGroup: 70,
+  /**
    * Not an entity: restoring the session's ACTIVE BUDGET. It must run last, because every
    * step above deletes through the session and would otherwise be aimed at the wrong
    * budget. Used by the export/import round trip.

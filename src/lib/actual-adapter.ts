@@ -65,6 +65,10 @@ const {
   exportBudget: rawExportBudget,
   importBudget: rawImportBudget,
   getPreferences: rawGetPreferences,
+  getAccountGroups: rawGetAccountGroups,
+  createAccountGroup: rawCreateAccountGroup,
+  updateAccountGroup: rawUpdateAccountGroup,
+  deleteAccountGroup: rawDeleteAccountGroup,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
@@ -3772,6 +3776,69 @@ export async function getServerVersion(): Promise<{ version: string } | { error:
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * Account groups (#429). Upstream added these in 26.9.0; the schema arrives through a
+ * migration SHIPPED IN `@actual-app/api` and applied to the LOCAL budget file, so these
+ * work against an older sync server too: the server relays messages and does not execute
+ * the queries.
+ *
+ * One semantic worth carrying into the tool descriptions, taken from upstream's own
+ * comment on the delete path: clearing member refs is best effort under CRDT sync, so a
+ * concurrent assignment on another device can win against those nulls. Consumers must
+ * treat an account whose `account_group_id` points at a missing or tombstoned group as
+ * UNGROUPED rather than as an error.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function getAccountGroups(): Promise<any[]> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.account_groups.list').catch(() => {});
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return await withConcurrency(() => retry(() => rawGetAccountGroups() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
+export async function createAccountGroup(group: { name: string; sort_order?: number }): Promise<string> {
+  observability.incrementToolCall('actual.account_groups.create').catch(() => {});
+  return queueWriteOperation(async () => {
+    const raw = await withConcurrency(() => retry(() => rawCreateAccountGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    return normalizeToId(raw);
+    // Lands in account_groups only, so the four entity listings are untouched.
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
+}
+
+export async function updateAccountGroup(id: string, fields: { name?: string; sort_order?: number }): Promise<void> {
+  observability.incrementToolCall('actual.account_groups.update').catch(() => {});
+  return queueWriteOperation(async () => {
+    // Read, decide and write inside ONE queued operation, so the existence check and the
+    // write are a single api-lock cycle and cannot be interleaved by a sibling (#371/#378).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const groups = await withConcurrency(() => retry(() => rawGetAccountGroups() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(groups as any[]).some((g: any) => g.id === id)) {
+      throw new NotFoundRefusal('Account group', id, 'actual_account_groups_list');
+    }
+    await withConcurrency(() => retry(() => rawUpdateAccountGroup(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    // Renames the group row itself; no account row changes, so listings are preserved.
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
+}
+
+export async function deleteAccountGroup(id: string): Promise<void> {
+  observability.incrementToolCall('actual.account_groups.delete').catch(() => {});
+  return queueWriteOperation(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const groups = await withConcurrency(() => retry(() => rawGetAccountGroups() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (!(groups as any[]).some((g: any) => g.id === id)) {
+      throw new NotFoundRefusal('Account group', id, 'actual_account_groups_list');
+    }
+    await withConcurrency(() => retry(() => rawDeleteAccountGroup(id) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    // NO preservesListings claim, deliberately: upstream's delete UPDATES every member
+    // account to null its account_group_id before removing the group, so the accounts
+    // listing CONTENT changes even though its id set does not. Claiming preservation here
+    // would serve a stale accounts listing to the next guard in the same drain.
+  });
+}
+
 export async function getTags(): Promise<any[]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.tags.get').catch(() => {});
@@ -4029,6 +4096,10 @@ export default {
   getPayees,
   getCommonPayees,
   createPayee,
+  getAccountGroups,
+  createAccountGroup,
+  updateAccountGroup,
+  deleteAccountGroup,
   getTags,
   createTag,
   updateTag,

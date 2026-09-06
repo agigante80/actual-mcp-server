@@ -76,6 +76,18 @@ export const API_TO_TOOL = {
   holdBudgetForNextMonth: 'actual_budgets_holdForNextMonth',
   resetBudgetHold: 'actual_budgets_resetHold',
   getBudgets: 'actual_budgets_list_available',
+  // account groups (#429)
+  getAccountGroups: 'actual_account_groups_list',
+  createAccountGroup: 'actual_account_groups_create',
+  updateAccountGroup: 'actual_account_groups_update',
+  deleteAccountGroup: 'actual_account_groups_delete',
+  // #321 added these three upstream in 26.8.0 and the tools were built, but this
+  // hand-maintained map was never updated, so the report listed them as genuine
+  // gaps for two releases. The script exits 0 (advisory), so nothing went red and
+  // nothing said otherwise.
+  exportBudget: 'actual_budgets_export',
+  importBudget: 'actual_budgets_import',
+  getPreferences: 'actual_preferences_get',
   // tags (#184)
   getTags: 'actual_tags_list',
   createTag: 'actual_tags_create',

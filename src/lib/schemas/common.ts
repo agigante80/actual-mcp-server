@@ -3,7 +3,7 @@
  * 
  * Common validation schemas used across MCP tools for Actual Budget.
  * These schemas provide consistent validation, better error messages,
- * and reduce duplication across the 77 tool definitions.
+ * and reduce duplication across the 81 tool definitions.
  */
 
 import { z } from 'zod';
@@ -77,6 +77,15 @@ export const ruleIdSchema = z
  * Tag UUID validation
  * Used for: tag management operations (update, delete)
  */
+/**
+ * Account group UUID validation (#429)
+ * Used for: account group management operations (update, delete)
+ */
+export const accountGroupIdSchema = z
+  .string()
+  .regex(UUID_PATTERN, 'Invalid account group ID format (expected UUID)')
+  .describe('Account group UUID');
+
 export const tagIdSchema = z
   .string()
   .regex(UUID_PATTERN, 'Invalid tag ID format (expected UUID)')
@@ -261,6 +270,7 @@ export const CommonSchemas = {
   categoryGroupId: categoryGroupIdSchema,
   payeeId: payeeIdSchema,
   ruleId: ruleIdSchema,
+  accountGroupId: accountGroupIdSchema,
   tagId: tagIdSchema,
   scheduleId: scheduleIdSchema,
 

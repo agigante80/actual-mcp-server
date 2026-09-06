@@ -141,6 +141,8 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_schedules_delete` | tool pre-check against `getSchedules()`, plus constraint-error translation |
 | `actual_schedules_update` | upstream throws `Schedule X not found` (`api.ts:920`) |
 | `actual_tags_delete` | adapter pre-check against `getTags()` |
+| `actual_account_groups_update` | adapter pre-check against `getAccountGroups()`, throwing `NotFoundRefusal`, in the SAME queued operation as the write (#429) |
+| `actual_account_groups_delete` | same adapter pre-check (#429). Note the delete is not purely its own table: upstream nulls `account_group_id` on every member account first, which is why it claims no listing preservation |
 | `actual_tags_update` | adapter throws `notFoundMsg('Tag', ...)` |
 | `actual_rules_update` | adapter throws `Rule with id <id> not found` |
 | `actual_payees_delete` (unknown id) | adapter pre-check against `getPayees()` |
@@ -197,6 +199,7 @@ something.
 | `actual_rules_create_or_update` | not traced | same as `actual_rules_create`, plus the update branch |
 | `actual_payees_create` | not traced | trace for a silent merge into an existing payee |
 | `actual_tags_create` | not traced | trace for a silent no-op on a duplicate tag |
+| `actual_account_groups_create` | not traced | trace for a silent duplicate-name outcome, the same shape as `actual_category_groups_create`. Upstream sends `api/account-group-create` and returns an id; whether a duplicate name mints a second group or returns the existing one is unverified (#429) |
 | `actual_transactions_import` | not traced; **do this one next** | `importTransactions` routes to `reconcileTransactions`, which takes `acctId` without looking it up, so it may share `actual_transactions_create`'s shape D exactly |
 | `actual_transactions_update_batch` | not traced | trace whether a failed entry can leave a partial field write |
 | `actual_bank_sync` | not traced; reaches a THIRD PARTY, so the effect is not ours alone | trace what a provider-side failure returns |
