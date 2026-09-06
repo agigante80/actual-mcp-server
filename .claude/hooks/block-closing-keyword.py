@@ -62,6 +62,13 @@ PATTERNS = [
     (
         re.compile(
             r"(?:rather\s+than|instead\s+of|not|n't|never|without|short\s+of|no)\s+"
+            # One optional QUALIFIER between the negation and the keyword. Added after a
+            # real miss on 2026-09-06: "this batch is not only fixes: #445 adds fields"
+            # reached main and GitHub closed #445 on it, because the negation was one word
+            # away from the keyword rather than adjacent. The list is deliberately short
+            # and closed: each entry is a word that leaves the negation intact, so it
+            # cannot start matching sentences that genuinely mean to close something.
+            + r"(?:(?:only|just|merely|simply|always|really|actually)\s+)?"
             + KEYWORDS + r"\s*:?\s+" + REF,
             re.IGNORECASE,
         ),

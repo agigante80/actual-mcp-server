@@ -117,10 +117,26 @@ suffix `(#NNN)`:
 ```
 git log "$RANGE" --pretty=format:%s | grep -oE '\(#[0-9]+\)' | tr -d '()#' | sort -un
 ```
-Use ONLY the subject `(#N)` form. Do NOT grep `#N` over commit BODIES: bodies
-reference CVE/alert numbers and cross-links (e.g. "alert #88", "see #166") that
-are not tickets to close. The bump commits (`chore(release): bump version`) carry
-no `(#N)` and are correctly ignored.
+**That list is a starting point, not an answer. Print the SUBJECTS beside it and
+decide.** Extract from subjects only: bodies reference CVE/alert numbers and
+cross-links ("alert #88", "see #166") that are not tickets to close.
+
+Two failure directions, both observed in one release on 2026-09-06:
+
+- **Under-reporting.** The pattern above matches a SINGLE trailing reference. A
+  subject like `fix(ci): ... (#442, #444, #443)` matches NOTHING, so three
+  shipped tickets stay open, defeating the entire purpose of this step. If a
+  release has multi-ticket commits, widen the extraction to `#[0-9]+` and read
+  the subjects.
+- **Over-reporting.** The widened form then captures references that are CONTEXT
+  rather than targets: `feat(query): ... keeping the #421 injection closed
+  (#433)` yields both, and 421 shipped two releases earlier. It also captures
+  work that only PARTLY shipped: `fix(e2e): ... (#423, blocker 1 of 2)` must NOT
+  be closed.
+
+So close only what the subject AND the ticket thread together confirm was
+delivered, and never pipe this list straight into `gh issue close`. The bump
+commits carry no reference and are correctly ignored.
 
 ### 2. Fast-forward main and push
 
