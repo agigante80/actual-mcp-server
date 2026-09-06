@@ -87,7 +87,7 @@ import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad, hasPendingBudgetLoad } from './apiState.js';
 import { withApiLock } from './apiLock.js';
-import { loadBudgetTracked, importBudgetTracked, SERVER_VERSION_PROBE_TIMEOUT_MS } from './budgetLoader.js';
+import { loadBudgetTracked, importBudgetTracked } from './budgetLoader.js';
 
 /**
  * Budget registry — all budgets configured via ACTUAL_* and BUDGET_n_* env vars.
@@ -492,28 +492,22 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
   // touched.
   _enforceBudgetAcl();
 
-  // #276: on the FIRST successful op, warn (once) if the Actual server version is outside
-  // the range this build supports. It runs inside the op while the connection is live and
-  // reuses it via rawGetServerVersion (NOT the withActualApi-wrapped getServerVersion, which
-  // would re-enter the lock). The once-guard flips its flag synchronously, so this never
-  // repeats per session or op. It is advisory: it never throws and never blocks the op.
-  const operation = async (): Promise<T> => {
-    const result = await rawOperation();
+  // #276: on the FIRST successful op, warn (once) if the Actual server version is outside the
+  // range this build supports, reusing the live connection via rawGetServerVersion (NOT the
+  // withActualApi-wrapped getServerVersion, which would re-enter the lock).
+  //
+  // It runs AFTER withOpTimeout, not inside it. Review caught that bounding the probe was not
+  // enough while it still sat inside the operation's own timeout: its 5 seconds came out of the
+  // operation's 30, so an op that took more than ~25s and SUCCEEDED was still reported to the
+  // caller as "Actual API operation timed out", and on a deliberately lowered
+  // ACTUAL_OP_TIMEOUT_MS the probe alone could consume the entire budget. The timeout text is
+  // classed transient, so it would also drop the pooled connection. An advisory diagnostic must
+  // not be able to fail, or slow, an operation that worked. Still inside withApiLock, because it
+  // needs the connection the operation established.
+  const runOperation = async (): Promise<T> => {
+    const result = await withOpTimeout(rawOperation);
     await checkServerVersionOnce(
-      // BOUNDED, with the same short dedicated timeout the pre-download probe uses (#453 review).
-      // This site passes no bound of its own, and it runs inside the operation's own
-      // withOpTimeout AND inside the process-global api lock, so a /info that stalls and then
-      // rejects at ~35s blew the 30s ACTUAL_OP_TIMEOUT_MS of an operation that had ALREADY
-      // SUCCEEDED, reporting a completed tool call to the caller as a timeout. That was survivable
-      // while the once-guard latched synchronously (it could happen at most once); once the latch
-      // moved to "only on a real answer" it became repeatable up to MAX_PROBE_ATTEMPTS. An
-      // advisory diagnostic must not be able to fail a successful operation even once.
-      () => withOpTimeout(
-        () => rawGetServerVersion() as Promise<{ version: string } | { error: string }>,
-        'server-version-probe',
-        SERVER_VERSION_PROBE_TIMEOUT_MS,
-        'the server-version probe bound (fixed, not configurable)',
-      ),
+      () => rawGetServerVersion() as Promise<{ version: string } | { error: string }>,
       logger,
     );
     return result;
@@ -532,7 +526,7 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
         // #390: verify the singleton holds THIS session's budget before the operation runs.
         // Inside the lock, so no other session can change it in between.
         await ensureLoadedBudgetMatchesSession();
-        return await withOpTimeout(operation);
+        return await runOperation();
       } catch (err) {
         // Only drop the pool connection on errors that suggest the api
         // singleton itself is in a bad state. User-input validation /
@@ -561,7 +555,7 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
     let forceFullShutdown = false;
     try {
       await initActualApiForOperation();
-      return await withOpTimeout(operation);
+      return await runOperation();
     } catch (err) {
       // #419: the stdio keep-alive branch leaves the singleton live; on an
       // infrastructure-level error it may be corrupt, so force a full teardown

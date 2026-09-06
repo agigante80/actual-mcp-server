@@ -247,6 +247,25 @@ check('#439: the resolver walks up to the NAME-matched manifest, over a syntheti
   rmSync(tmp, { recursive: true, force: true });
 });
 
+check('PURITY: the guard imports nothing that reads the environment at load', () => {
+  // A `withOpTimeout` import was added here to bound the probe, and it transitively pulls in
+  // config.ts, which Zod-validates the environment AT MODULE LOAD and hard-exits when it is
+  // missing. This whole file then went red on any machine without a `.env`, while staying green
+  // in CI (which exports dummy ACTUAL_* vars): red locally, green in CI, in the module whose own
+  // design note promises a PURE comparator that is unit-testable without I/O. The bound is an
+  // inline race instead, and this keeps it that way.
+  const ALLOWED = new Set(['./constants.js', './installed-api-version.js']);
+  const src = readFileSync(join(ROOT, 'src', 'lib', 'server-version-guard.ts'), 'utf8');
+  const imports = [...src.matchAll(/^\s*import\s[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+  assert.ok(imports.length > 0, 'expected to find imports to check');
+  const offenders = imports.filter((i) => !ALLOWED.has(i));
+  assert.deepStrictEqual(
+    offenders, [],
+    `imports outside the pure allowlist: ${offenders.join(', ')}. Anything reaching config.ts ` +
+    'makes this module (and this test file) fail to load without a .env. Bound or log inline instead.',
+  );
+});
+
 check('PURITY: neither source emits except through the passed logger, never console.*', () => {
   // Protects stdio JSON-RPC framing: any stray console write to stdout corrupts it.
   // #439 added installed-api-version.ts to this scan. It is the file that actually

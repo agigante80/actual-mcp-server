@@ -241,8 +241,13 @@ export async function sweepResidue(callTool, env = process.env) {
 
 /**
  * The gate. Zero is the only pass, where zero means: no OPEN test accounts, and no test
- * payees, categories, groups, schedules, or rules. Closed test accounts are reported so
- * their growth stays visible, but they do not fail the run.
+ * payees, categories, groups, schedules, rules, or TAGS (#451). Closed test accounts are
+ * reported so their growth stays visible, but they do not fail the run.
+ *
+ * Tags are named explicitly because this docstring omitted them for one commit while
+ * residueCount already counted them, which is the same omission the printers below had: a
+ * maintainer reading the contract would conclude a stray tag does not fail the run, and the
+ * first live tags run proves it does.
  *
  * @returns {number} the residue count (0 = clean)
  */

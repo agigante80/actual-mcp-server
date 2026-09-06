@@ -433,14 +433,6 @@ async function trackBudgetMutation<T>(
 }
 
 /**
- * How long the #453 pre-download version probe may take before it is abandoned. Deliberately a
- * CONSTANT and not an env var: it is an advisory diagnostic, nobody should have to tune it, and
- * a new config key would need to be threaded through config.ts, .env.example and the README
- * table (the config-drift guard enforces all three) to buy nothing.
- */
-export const SERVER_VERSION_PROBE_TIMEOUT_MS = 5000;
-
-/**
  * #394: the same discipline for an IMPORT.
  *
  * Upstream's `importBudget` LOADS the imported budget, so it re-points the process-global
@@ -505,9 +497,9 @@ export async function loadBudgetTracked(syncId: string, encryptionPassword?: str
   // Three properties hold it in place:
   //   - OUTSIDE the tracked chain (before the try), because nothing in that chain may take the
   //     api lock or extend the window an abandoned load holds open.
-  //   - BOUNDED by withOpTimeout: this runs inside the process-global api mutex, so an
-  //     unbounded advisory GET would stall every session. If /info is stalled the download was
-  //     going to fail anyway, so the bound costs nothing real.
+  //   - BOUNDED by the GUARD itself, not here. Review of the first version moved it: this runs
+  //     inside the process-global api mutex, so an unbounded advisory GET would stall every
+  //     session, and a bound each call site has to remember is one a call site will forget.
   //   - ONCE per process, via the guard's own synchronous flag, which is shared with the post-op
   //     call site in actual-adapter.ts. Whichever fires first wins; the other becomes a no-op, so
   //     there is no double warning. This one normally fires first, being earlier.
@@ -516,21 +508,8 @@ export async function loadBudgetTracked(syncId: string, encryptionPassword?: str
   // that api.init() already established: NO budget has to be loaded, which is what makes a probe
   // before the download possible at all.
   await checkServerVersionOnce(
-    () => withOpTimeout(
-      () => (api as typeof api & { getServerVersion: () => Promise<{ version: string } | { error: string }> })
-        .getServerVersion(),
-      'server-version-probe',
-      // A SHORT dedicated bound, not the general ACTUAL_OP_TIMEOUT_MS (30s by default).
-      //
-      // Review of the first version caught the reason: `/info` is an unauthenticated GET on a
-      // different route from the sync endpoints, so it can stall while the login and download
-      // are perfectly healthy. At the general bound that stall costs 30s of the process-global
-      // api mutex, and since a failed probe leaves the guard armed it would be paid again on
-      // each of the next two loads. An ADVISORY diagnostic must never be able to do that. If
-      // the probe cannot answer in 5 seconds it has nothing useful to say.
-      SERVER_VERSION_PROBE_TIMEOUT_MS,
-      'the server-version probe bound (fixed, not configurable)',
-    ),
+    () => (api as typeof api & { getServerVersion: () => Promise<{ version: string } | { error: string }> })
+      .getServerVersion(),
     log,
   );
 
