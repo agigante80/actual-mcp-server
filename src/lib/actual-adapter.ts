@@ -501,9 +501,18 @@ export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<
   // operation's 30, so an op that took more than ~25s and SUCCEEDED was still reported to the
   // caller as "Actual API operation timed out", and on a deliberately lowered
   // ACTUAL_OP_TIMEOUT_MS the probe alone could consume the entire budget. The timeout text is
-  // classed transient, so it would also drop the pooled connection. An advisory diagnostic must
-  // not be able to fail, or slow, an operation that worked. Still inside withApiLock, because it
-  // needs the connection the operation established.
+  // classed transient, so it would also drop the pooled connection. Still inside withApiLock,
+  // because it needs the connection the operation established.
+  //
+  // WHAT THIS DOES AND DOES NOT BUY, stated precisely because the first version of this comment
+  // overclaimed. The probe can no longer FAIL an operation that succeeded. It can still SLOW one,
+  // by up to SERVER_VERSION_PROBE_TIMEOUT_MS, and that bound is FIXED: it does not scale down
+  // with ACTUAL_OP_TIMEOUT_MS, so an operator who sets the 250ms floor for a fast-fail posture
+  // still pays up to ~5s of api-mutex hold against a stalled /info, and on the legacy path can
+  // pay it twice in one call (the pre-download site, then here). It is bounded and finite (at
+  // most MAX_PROBE_ATTEMPTS times per process, then never again), which is the trade being made:
+  // a diagnostic that is occasionally slow beats one that is silently disabled by a single
+  // transient failure, which is what the previous design did.
   const runOperation = async (): Promise<T> => {
     const result = await withOpTimeout(rawOperation);
     await checkServerVersionOnce(

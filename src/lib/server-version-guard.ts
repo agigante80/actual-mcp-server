@@ -158,8 +158,16 @@ async function raceWithBound<T>(read: () => Promise<T>): Promise<T> {
           () => reject(new Error(`server-version probe exceeded ${SERVER_VERSION_PROBE_TIMEOUT_MS}ms`)),
           SERVER_VERSION_PROBE_TIMEOUT_MS,
         );
-        // Never hold the process open for an advisory diagnostic.
-        if (typeof timer.unref === 'function') timer.unref();
+        // NOT unref'd, and that is deliberate. `unref` was the first instinct ("never hold the
+        // process open for an advisory diagnostic") and it quietly breaks the bound: an unref'd
+        // timer does not keep the event loop alive, so in a process with nothing else pending
+        // Node exits before it fires and the race never rejects. The test that pins this bound
+        // caught exactly that, as an unsettled top-level await. A live server always has other
+        // work, so it would have fired there and the hazard would have stayed hidden.
+        //
+        // The cost of keeping it ref'd is bounded by construction: at most
+        // SERVER_VERSION_PROBE_TIMEOUT_MS, and the `finally` below clears it as soon as the read
+        // answers, so a healthy probe leaves nothing pending at all.
       }),
     ]);
   } finally {
@@ -218,10 +226,17 @@ export async function checkServerVersionOnce(
     if (!verdict.ok && verdict.message) {
       log.warn(verdict.message);
     }
-  } catch {
+  } catch (err) {
     // Advisory only: a failure to check must never surface as an error or affect the op.
+    //
+    // NAME THE CAUSE. Once the bound moved inside this function, "probe exceeded 5000ms" became
+    // the most common way through here, and it is indistinguishable from `rawGetServerVersion`
+    // being undefined (it is destructured from `api as any` at module load, so an upstream build
+    // that stops exporting it throws a TypeError down this same path). An operator wondering why
+    // the compatibility warning never appears would have had nothing to go on.
     attempts++;
-    log.debug('[server-version] compatibility check threw; ignored');
+    const reason = err instanceof Error ? err.message : String(err);
+    log.debug(`[server-version] compatibility check failed; ignored: ${reason}`);
   } finally {
     inFlight = false;
   }
