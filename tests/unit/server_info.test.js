@@ -87,6 +87,38 @@ function assert(condition, message) {
     assert(actualApi === 'unknown', `fallback: actualApi === 'unknown' when dependencies absent`);
   }
 
+  // --- #445: report what is INSTALLED, not only what is declared ---
+  console.log('\n--- #445: resolved versions alongside the declared ranges ---');
+  {
+    const mod = await import(`../../dist/src/tools/server_info.js?resolved=1`);
+    const { resolveInstalledVersion } = await import('../../dist/src/lib/installed-api-version.js');
+    const deps = (await mod.default.call({})).dependencies;
+
+    // Additive: the declared fields keep their exact previous value, so nothing
+    // reading them today breaks.
+    assert(deps.actualApi === pkg.dependencies['@actual-app/api'], 'declared range unchanged');
+
+    // The resolved ones are bare triples, never ranges. A caret reports identically
+    // for every version inside it, which is the ambiguity that made a server/api
+    // skew hard to diagnose.
+    assert(/^\d+\.\d+\.\d+/.test(deps.actualApiResolved || ''), `actualApiResolved is a triple (got ${deps.actualApiResolved})`);
+    assert(!String(deps.actualApiResolved).startsWith('^'), 'actualApiResolved is not a range');
+
+    // Regression guard for the trap this ticket hit: require.resolve on the BARE
+    // name throws MODULE_NOT_FOUND for the MCP SDK, which exports no root path, so
+    // the resolver takes an explicit entry subpath. Without it this field silently
+    // vanished, and under the omit-on-failure contract that is indistinguishable
+    // from a package that is legitimately absent.
+    assert(/^\d+\.\d+\.\d+/.test(deps.mcpSdkResolved || ''), `mcpSdkResolved is present and a triple (got ${deps.mcpSdkResolved})`);
+    assert(resolveInstalledVersion('@modelcontextprotocol/sdk') === null,
+      'and the bare name really does fail to resolve, which is WHY the entry hint exists');
+
+    // Absence means "could not resolve": no consumer has to special-case a
+    // sentinel string.
+    assert(resolveInstalledVersion('@definitely/not-installed-xyz') === null,
+      'an unresolvable package yields null rather than a sentinel');
+  }
+
   // --- Summary ---
   console.log(`\nserver_info tests: ${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
