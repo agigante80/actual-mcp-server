@@ -3550,7 +3550,7 @@ export async function runBankSync(accountId?: string): Promise<void> {
       const retryIn = reset ? ` Retry in ~${Math.ceil(Number(reset) / 60)} minute(s).` : '';
       throw new Error(
         `Bank sync failed: GoCardless rate limit exceeded for this account.${retryIn} ` +
-        `(NORDIGEN RATE_LIMIT_EXCEEDED — account success quota exhausted)`
+        `(NORDIGEN RATE_LIMIT_EXCEEDED: account success quota exhausted)`
       );
     }
     if (
