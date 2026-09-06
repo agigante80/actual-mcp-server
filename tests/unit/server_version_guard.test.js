@@ -294,11 +294,20 @@ check('PURITY: the guard loads with a BARE environment (no ACTUAL_* vars)', () =
   // exit 0 unconditionally and this check would pass forever while the regression it exists to
   // catch is fully reintroduced. So prove the mechanism can still fail, on every run.
   const control = load('opTimeout.js');
-  assert.notStrictEqual(
-    control.status, 0,
-    'SELF-CHECK FAILED: importing opTimeout.js (which reaches config.ts) was expected to fail ' +
-    'under a stripped environment, and did not. This check can therefore no longer detect ' +
-    'anything, so do not trust the assertion below until this is understood.',
+  // Assert the REASON, not merely a non-zero exit. `status !== 0` alone is also satisfied by
+  // ERR_MODULE_NOT_FOUND (if the path moves) or by the 30s timeout above (status null), either
+  // of which would let the self-check pass while proving nothing about the premise.
+  assert.strictEqual(
+    control.status, 1,
+    `SELF-CHECK FAILED: importing opTimeout.js was expected to exit 1 under a stripped ` +
+    `environment, got status ${control.status} signal ${control.signal}. ` +
+    `stderr: ${(control.stderr || '').trim().slice(0, 300)}`,
+  );
+  assert.ok(
+    /Missing or invalid environment variables|ACTUAL_SERVER_URL/.test(control.stderr || ''),
+    'SELF-CHECK FAILED: opTimeout.js exited 1 but NOT because config.ts rejected the environment, ' +
+    'so the premise this whole check rests on no longer holds and the assertion below proves ' +
+    `nothing. stderr: ${(control.stderr || '').trim().slice(0, 300)}`,
   );
 
   const child = load('server-version-guard.js');
@@ -319,10 +328,20 @@ check('PURITY: the guard loads with a BARE environment (no ACTUAL_* vars)', () =
   // half, without trying to parse every import spelling, which is what went wrong three times.
   const src = readFileSync(join(ROOT, 'src', 'lib', 'server-version-guard.ts'), 'utf8');
   const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
-  assert.ok(
-    !/\bfrom\s*['"][^'"]*logger/i.test(code),
-    'the guard must not import a logger: it takes one as an argument so its callers control ' +
-    'where output goes (stdio framing depends on that).',
+  // Match ANY quoted specifier naming a logger, in any construct: `from './logger.js'`,
+  // `import './loggerFactory.js'` (side effect), and `await import('./logger.js')` (dynamic) all
+  // count. Those last two are exactly the spellings that defeated the earlier regex versions of
+  // this guard, and neither of the other two checks covers them: loggerFactory loads cleanly
+  // under a bare environment so the child-process check stays green, and the console.* scan does
+  // not look at imports at all. This module has no legitimate reason to NAME a logger module: it
+  // takes one as an argument precisely so its callers decide where output goes, which is what
+  // keeps stdio JSON-RPC framing intact.
+  const loggerSpecifier = /['"][^'"]*logger[^'"]*['"]/i.exec(code);
+  assert.strictEqual(
+    loggerSpecifier, null,
+    'the guard must not reference a logger module (found ' + (loggerSpecifier && loggerSpecifier[0]) +
+    '): it takes a logger as an argument so its callers control where output goes, and stdio ' +
+    'framing depends on that.',
   );
 });
 
