@@ -18,7 +18,7 @@ import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
-import { discoverOidcMetadata, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
+import { discoverOidcMetadata, buildTrustedJwksHosts, setResolvedOidcMetadata, resolveUserInfoUri } from '../lib/oidc-discovery.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
@@ -141,6 +141,46 @@ export async function startHttpServer(
         res.json(oidcMetadata);
       });
       const jwks = createRemoteJWKSet(new URL(jwksUri));
+
+      // Resolve userinfo endpoint if advertised in the IdP's discovery document (#346)
+      let userinfoUri: string | null = null;
+      try {
+        userinfoUri = resolveUserInfoUri(oidcMetadata, config.OIDC_ISSUER, config.OIDC_ALLOW_INSECURE_ISSUER);
+      } catch {
+        userinfoUri = null;
+      }
+
+      const verifyUserInfoFallback = async (token: string) => {
+        if (!userinfoUri) return null;
+        try {
+          const res = await fetch(userinfoUri, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!res.ok) return null;
+          const data = (await res.json()) as Record<string, unknown>;
+          const sub =
+            typeof data.sub === 'string' && data.sub.length > 0
+              ? data.sub
+              : typeof data.email === 'string' && data.email.length > 0
+                ? data.email
+                : typeof data.preferred_username === 'string' && data.preferred_username.length > 0
+                  ? data.preferred_username
+                  : null;
+          if (!sub) return null;
+          logger.info(`[OIDC] Verified token via UserInfo endpoint for subject: ${sub}`);
+          return {
+            sub,
+            aud: acceptedAudiences,
+            iss: config.OIDC_ISSUER!,
+            scope: typeof data.scope === 'string' ? data.scope : 'openid email profile',
+            ...data,
+          };
+        } catch {
+          return null;
+        }
+      };
+
       const customJwtVerify = async (token: string) => {
         // Enforce the audience claim (#160, OWASP A07). Without it, any
         // signature-valid token from the trusted issuer is accepted, so a token
@@ -165,7 +205,9 @@ export async function startHttpServer(
             audience: acceptedAudiences,
           }));
         } catch (err) {
-          throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
+          const u = await verifyUserInfoFallback(token);
+          if (u) payload = u;
+          else throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
         }
         // #244: require a usable `sub`. authenticateRequest (#163) and budget-acl
         // key authorization on req.auth.subject, so a token with no string `sub`

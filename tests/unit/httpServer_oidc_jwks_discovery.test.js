@@ -242,5 +242,10 @@ check('httpServer rejects a token with no usable sub (invalid_token)', () => {
   assert.ok(src.includes('subject: payload.sub,'), 'expected subject populated from payload.sub');
 });
 
+check('httpServer provides verifyUserInfoFallback on JWT verification failure', () => {
+  assert.ok(src.includes('verifyUserInfoFallback(token)'), 'expected verifyUserInfoFallback called on verify error');
+  assert.ok(src.includes('resolveUserInfoUri(oidcMetadata'), 'expected resolveUserInfoUri called on oidcMetadata');
+});
+
 console.log(`\n[oidc-jwks-discovery] Results: ${failed === 0 ? 'all passed' : failed + ' failed'}`);
 process.exit(failed > 0 ? 1 : 0);

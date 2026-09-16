@@ -50,17 +50,28 @@ export function createMcpAuth(): MCPAuth | null {
   logger.info(`[OIDC] Resource identifier: ${config.OIDC_RESOURCE}`);
   logger.info(`[OIDC] Scopes required: ${scopesSupported.length ? scopesSupported.join(', ') : '(none)'}`);
 
+  const resourceList = [config.OIDC_RESOURCE];
+  const trimmed = config.OIDC_RESOURCE.replace(/\/+$/, '');
+  if (!trimmed.endsWith('/http')) {
+    resourceList.push(`${trimmed}/http`);
+  } else {
+    const baseWithoutHttp = trimmed.slice(0, -5);
+    if (baseWithoutHttp) {
+      resourceList.push(baseWithoutHttp);
+    }
+  }
+
+  const protectedResources = resourceList.map((resource) => ({
+    metadata: {
+      resource,
+      // Discovery config: mcp-auth fetches OIDC metadata lazily on first request.
+      authorizationServers: [{ issuer: config.OIDC_ISSUER!, type: 'oidc' as const }],
+      scopesSupported,
+    },
+  }));
+
   _instance = new MCPAuth({
-    protectedResources: [
-      {
-        metadata: {
-          resource: config.OIDC_RESOURCE,
-          // Discovery config: mcp-auth fetches OIDC metadata lazily on first request.
-          authorizationServers: [{ issuer: config.OIDC_ISSUER, type: 'oidc' }],
-          scopesSupported,
-        },
-      },
-    ],
+    protectedResources,
   });
 
   return _instance;
