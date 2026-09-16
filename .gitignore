@@ -103,3 +103,26 @@ __pycache__/
 # Session scratchpad artifacts (never commit)
 scratchpad-*
 scratchpad-pr399/
+# --- AI assistant files (local only, never published) ---
+# Anchored entries (/NAME) are root-only on purpose: a nested AGENTS.md or
+# CLAUDE.md can belong to the project's own content and must stay tracked.
+.claude/
+/CLAUDE.md
+/CLAUDE.local.md
+/AGENTS.md
+/GEMINI.md
+.gemini/
+.codex/
+.cursor/
+.cursorrules
+.cursorignore
+.aider*
+.continue/
+.windsurf/
+.windsurfrules
+.clinerules
+.roo/
+.roomodes
+.devin/
+.specstory/
+.github/copilot-instructions.md
