@@ -84,6 +84,26 @@ empties are filtered, and there is no wildcard or accept-any path, so a token wh
 the configured set is still rejected (the cross-relying-party replay protection from #160 holds).
 With no extras configured the set is exactly `[OIDC_RESOURCE]`, unchanged from before.
 
+**Cloudflare Access assertion mode (#462)**: `OIDC_TOKEN_SOURCE=cf-access-jwt-assertion` with
+`OIDC_JWKS_URI=https://<team>.cloudflareaccess.com/cdn-cgi/access/certs` is Cloudflare's documented
+pattern for an MCP server behind Access with Managed OAuth: the client's bearer is an opaque Cloudflare
+token, the edge forwards the signed Access JWT in the `Cf-Access-Jwt-Assertion` header, and this server
+verifies THAT exactly like any bearer JWT (signature, `iss` pinned, `aud` in the closed allowlist, non-empty
+`sub`). One token source per mode, one verification per request, no fallback: `Authorization` is never
+consulted in this mode, so a valid JWT arriving as a bearer with no assertion is refused (the
+captured-assertion-direct-to-origin case). The mode widens nothing: with it off the header is ignored, and
+`OIDC_JWKS_URI` is validated by the same body as a discovered `jwks_uri` (https, no credentials, same origin or
+`OIDC_JWKS_TRUSTED_HOSTS`) plus no query or fragment. Three startup refusals close the silent-misconfiguration
+cases: both variables require `AUTH_PROVIDER=oidc`, `OIDC_SCOPES` must be empty (the assertion carries no
+scope claim, so a required scope would 403 every request), and `AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo` is
+refused (no discovery document, and Cloudflare's UserInfo does not accept the assertion). The header name is
+in the log redaction denylist. **This mode is NOT a substitute for network restriction**: a captured
+assertion is accepted at a directly reachable origin until its `exp` (the Access application's Session
+Duration, default 24 hours, configurable up to one month; set it short), the AUD tag is not a secret (it
+is in every assertion), and a client-supplied `Cf-Access-Jwt-Assertion` is overwritten by Cloudflare only
+when the request traverses Cloudflare. Reaching the origin only through a Cloudflare Tunnel or a Cloudflare
+IP allowlist is REQUIRED for this mode.
+
 **Cross-origin JWKS allowlist (#254)**: by default the resolved `jwks_uri` must be same-origin
 with the issuer. `OIDC_JWKS_TRUSTED_HOSTS` (comma-separated `host` or `host:port`, exact match,
 lowercased, no wildcards) is an opt-in relaxation of ONLY that same-origin check, for IdPs that

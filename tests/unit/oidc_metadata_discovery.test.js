@@ -18,7 +18,7 @@ process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '000000
 process.env.ACTUAL_PASSWORD       = process.env.ACTUAL_PASSWORD       ?? 'stub-password-for-unit-test';
 
 import assert from 'node:assert';
-import { discoverOidcMetadata, discoverJwksUri } from '../../dist/src/lib/oidc-discovery.js';
+import { discoverOidcMetadata, discoverJwksUri, resolveJwksUri, resolveDirectJwksUri, resolveJwksSource } from '../../dist/src/lib/oidc-discovery.js';
 
 const ISSUER = 'https://idp.example.com';
 const JWKS = 'https://idp.example.com/jwks';
@@ -107,6 +107,70 @@ await check('throws (fail closed) when the fetch rejects, e.g. a redirect (redir
 
 await check('throws on a non-200 discovery response', async () => {
   await assert.rejects(() => discoverOidcMetadata(ISSUER, false, [], okFetch(DOC, 404)), /HTTP 404/);
+});
+
+console.log('\n[oidc-metadata-discovery] #462 resolveDirectJwksUri (operator-typed key URL, no discovery)');
+
+const TEAM = 'https://team.cloudflareaccess.test';
+const CERTS = `${TEAM}/cdn-cgi/access/certs`;
+const rejects = (fn, ...needles) => {
+  let msg = null;
+  try { fn(); } catch (e) { msg = e.message; }
+  assert.ok(msg !== null, 'expected a throw');
+  for (const n of needles) assert.ok(msg.includes(n), `message lacks "${n}": ${msg}`);
+};
+
+await check('accepts a same-origin https key URL (the Cloudflare certs endpoint) and returns it verbatim', async () => {
+  assert.strictEqual(resolveDirectJwksUri(CERTS, TEAM), CERTS);
+});
+await check('accepts a trusted cross-origin https host (OIDC_JWKS_TRUSTED_HOSTS, #254)', async () => {
+  assert.strictEqual(resolveDirectJwksUri('https://keys.example.test/certs', TEAM, false, ['keys.example.test']), 'https://keys.example.test/certs');
+});
+await check('rejects an untrusted cross-origin host, naming OIDC_JWKS_URI and OIDC_JWKS_TRUSTED_HOSTS', async () => {
+  rejects(() => resolveDirectJwksUri('https://keys.example.test/certs', TEAM), 'OIDC_JWKS_URI', 'OIDC_JWKS_TRUSTED_HOSTS');
+});
+await check('rejects a plaintext key URL under an https issuer, accepts http only same-origin with the insecure opt-in', async () => {
+  rejects(() => resolveDirectJwksUri('http://team.cloudflareaccess.test/certs', TEAM, false), 'OIDC_JWKS_URI');
+  assert.strictEqual(resolveDirectJwksUri('http://team.cloudflareaccess.test/certs', 'http://team.cloudflareaccess.test', true), 'http://team.cloudflareaccess.test/certs');
+});
+await check('rejects http cross-origin even with the opt-in AND the trusted host (never plaintext to a third party)', async () => {
+  rejects(() => resolveDirectJwksUri('http://keys.example.test/certs', TEAM, true, ['keys.example.test']), 'OIDC_JWKS_URI', 'https');
+});
+await check('rejects a fragment, a query string, and embedded credentials (direct-path rules)', async () => {
+  rejects(() => resolveDirectJwksUri(`${CERTS}#frag`, TEAM), 'OIDC_JWKS_URI', 'fragment');
+  rejects(() => resolveDirectJwksUri(`${CERTS}?p=x`, TEAM), 'OIDC_JWKS_URI', 'query');
+  const msg = (() => { try { resolveDirectJwksUri('https://u:s3cr3t@team.cloudflareaccess.test/certs', TEAM); } catch (e) { return e.message; } })();
+  assert.ok(msg && msg.includes('credentials') && !msg.includes('s3cr3t'), String(msg));
+});
+await check('rejects an empty or unparseable value naming OIDC_JWKS_URI', async () => {
+  rejects(() => resolveDirectJwksUri('', TEAM), 'OIDC_JWKS_URI');
+  rejects(() => resolveDirectJwksUri('not a url', TEAM), 'OIDC_JWKS_URI');
+});
+await check('still validates the ISSUER (assertSecureIssuer runs even though discovery is skipped)', async () => {
+  rejects(() => resolveDirectJwksUri(CERTS, 'http://team.cloudflareaccess.test'), 'OIDC_ISSUER');
+});
+await check('NEGATIVE CONTROL: the discovery path still ACCEPTS a query-bearing jwks_uri (Azure AD B2C ?p=policy), query intact', async () => {
+  const b2c = 'https://issuer.example.test/discovery/v2.0/keys?p=B2C_1_signin';
+  assert.strictEqual(resolveJwksUri({ jwks_uri: b2c }, 'https://issuer.example.test'), b2c);
+});
+
+console.log('\n[oidc-metadata-discovery] #462 resolveJwksSource');
+
+await check('with directJwksUri: returns { jwksUri, metadata: null } and NEVER calls fetch', async () => {
+  const r = await resolveJwksSource({ issuer: TEAM, allowInsecure: false, trustedHosts: [], directJwksUri: CERTS }, throwingFetch('fetch must not be called'));
+  assert.deepStrictEqual(r, { jwksUri: CERTS, metadata: null });
+});
+await check('without directJwksUri: delegates to discovery (metadata is the document, jwksUri from it)', async () => {
+  const r = await resolveJwksSource({ issuer: ISSUER, allowInsecure: false, trustedHosts: [], directJwksUri: undefined }, okFetch(DOC));
+  assert.strictEqual(r.jwksUri, JWKS);
+  assert.deepStrictEqual(r.metadata, DOC);
+});
+await check('an EMPTY directJwksUri is unset: discovery runs (the repo convention for optional vars, matching the config refines)', async () => {
+  const r = await resolveJwksSource({ issuer: ISSUER, allowInsecure: false, trustedHosts: [], directJwksUri: '' }, okFetch(DOC));
+  assert.deepStrictEqual(r.metadata, DOC);
+});
+await check('MUTATION: a bad direct URI rejects through resolveJwksSource too', async () => {
+  await assert.rejects(() => resolveJwksSource({ issuer: TEAM, allowInsecure: false, trustedHosts: [], directJwksUri: 'https://keys.example.test/certs' }, throwingFetch('x')), /OIDC_JWKS_URI/);
 });
 
 console.log(`\n[oidc-metadata-discovery] Results: ${passed} passed, ${failed} failed`);

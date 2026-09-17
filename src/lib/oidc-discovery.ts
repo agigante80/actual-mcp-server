@@ -142,6 +142,21 @@ export function resolveJwksUri(
   } catch {
     throw new Error(`OIDC "jwks_uri" is not a valid URL: ${jwksUri}`);
   }
+  return validateJwksUrl(jwks, issuerUrl, allowInsecure, trustedHosts);
+}
+
+/**
+ * The ONE validation body shared by the discovered path (`resolveJwksUri`) and the
+ * direct path (`resolveDirectJwksUri`, #462), so the rules that matter for key-source
+ * integrity cannot drift between them: https (loopback or the insecure opt-out only
+ * same-origin, never for a trusted cross-origin host), no embedded credentials, and
+ * same ORIGIN as the issuer unless the host is in OIDC_JWKS_TRUSTED_HOSTS (#254, with
+ * the audit log). Deliberately NOT here: a query or fragment refusal. A discovered
+ * jwks_uri is IdP-controlled and a query string on it is legitimate (Azure AD B2C
+ * publishes `.../discovery/v2.0/keys?p={policy}`), so that rule lives on the direct
+ * path only, where the URL is operator-typed.
+ */
+function validateJwksUrl(jwks: URL, issuerUrl: URL, allowInsecure: boolean, trustedHosts: string[]): string {
   if (jwks.protocol !== 'https:' && !isLoopbackHost(jwks.hostname) && !allowInsecure) {
     throw new Error(`OIDC "jwks_uri" must use https (got ${jwks.protocol}); refusing to fetch keys over plaintext`);
   }
@@ -186,6 +201,62 @@ export function resolveJwksUri(
     });
   }
   return jwks.toString();
+}
+
+/**
+ * #462: validate an operator-supplied DIRECT JWKS URL (OIDC_JWKS_URI), for issuers
+ * that publish no discovery document (Cloudflare Access serves its keys at
+ * `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`). Two direct-path-only
+ * rules first (no query string, no fragment: an operator-typed key URL has no
+ * legitimate use for either), then the shared body. `assertSecureIssuer` still runs
+ * here because discovery, which would otherwise run it, is skipped. Network-free.
+ */
+export function resolveDirectJwksUri(
+  uri: string | undefined,
+  issuer: string | undefined,
+  allowInsecure = false,
+  trustedHosts: string[] = [],
+): string {
+  const issuerUrl = assertSecureIssuer(issuer, allowInsecure);
+  if (typeof uri !== 'string' || uri.length === 0) {
+    throw new Error('OIDC_JWKS_URI is empty');
+  }
+  let jwks: URL;
+  try {
+    jwks = new URL(uri);
+  } catch {
+    throw new Error('OIDC_JWKS_URI is not a valid URL');
+  }
+  if (jwks.search || jwks.hash) {
+    throw new Error(
+      `OIDC_JWKS_URI must not contain a query string or fragment (${jwks.origin}${jwks.pathname}). ` +
+        'An IdP whose key URL needs a query publishes it through discovery; leave OIDC_JWKS_URI unset for it.',
+    );
+  }
+  try {
+    return validateJwksUrl(jwks, issuerUrl, allowInsecure, trustedHosts);
+  } catch (err) {
+    // Same rules, named for the knob the operator actually set.
+    throw new Error(`OIDC_JWKS_URI rejected: ${(err as Error).message}`);
+  }
+}
+
+/**
+ * #462: the single JWKS-source decision for startHttpServer. With `directJwksUri` set,
+ * validate it and fetch nothing (`metadata: null`: there is no discovery document to
+ * re-serve as RFC 8414, and userinfo identity (#346) is refused at config time for this
+ * mode). Otherwise delegate to discovery exactly as before. The composition root does
+ * not branch on OIDC_JWKS_URI itself. An EMPTY string is unset (the repo convention for
+ * optional vars, `OIDC_SCOPES=` included), and the config refines read it the same way.
+ */
+export async function resolveJwksSource(
+  opts: { issuer: string | undefined; allowInsecure: boolean; trustedHosts: string[]; directJwksUri: string | undefined },
+  fetchImpl: typeof fetch = fetch,
+): Promise<{ jwksUri: string; metadata: Record<string, unknown> | null }> {
+  if (opts.directJwksUri) {
+    return { jwksUri: resolveDirectJwksUri(opts.directJwksUri, opts.issuer, opts.allowInsecure, opts.trustedHosts), metadata: null };
+  }
+  return discoverOidcMetadata(opts.issuer, opts.allowInsecure, opts.trustedHosts, fetchImpl);
 }
 
 /**

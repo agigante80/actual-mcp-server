@@ -116,6 +116,18 @@ export const configSchema = z.object({
   // here; parsed fail-fast by buildTrustedJwksHosts (oidc-discovery.ts) at the
   // composition root, per the #245 pattern. Default empty: same-origin only.
   OIDC_JWKS_TRUSTED_HOSTS: z.string().optional(),
+  // #462: a DIRECT JWKS URL that bypasses OpenID discovery, for issuers that publish
+  // no discovery document (Cloudflare Access: https://<team>.cloudflareaccess.com/cdn-cgi/access/certs).
+  // Validated at startup by resolveDirectJwksUri with the same https / credentials /
+  // origin-or-trusted-host rules as a discovered jwks_uri, plus no query or fragment.
+  // When set, nothing is discovered, so there is no RFC 8414 document to re-serve.
+  OIDC_JWKS_URI: z.string().optional(),
+  // #462: where the bearer JWT is read from. 'cf-access-jwt-assertion' is Cloudflare's
+  // documented pattern for an MCP server behind Access with Managed OAuth: the client's
+  // bearer is opaque, the edge forwards a signed JWT in that header, and the origin must
+  // validate it. In that mode Authorization is NEVER consulted (one source, one
+  // verification, no fallback). Closed enum, default is today's behaviour.
+  OIDC_TOKEN_SOURCE: z.enum(['authorization', 'cf-access-jwt-assertion']).default('authorization'),
   // Comma-separated required scopes (e.g. "read,write"). Optional.
   OIDC_SCOPES: z.string().optional(),
   // JSON map of principal → budget sync-ID list for per-user budget ACL.
@@ -239,6 +251,49 @@ export const configSchema = z.object({
   .refine(
     (cfg) => !cfg.ACTUAL_BUDGET_PASSWORD || cfg.ALLOW_INSECURE_UPSTREAM || !/^http:\/\//i.test(cfg.ACTUAL_SERVER_URL),
     { message: 'ACTUAL_BUDGET_PASSWORD (E2E encryption) must not be sent over an http:// upstream. Use https:// for ACTUAL_SERVER_URL, or set ALLOW_INSECURE_UPSTREAM=true to override (e.g. a trusted isolated network).' },
+  )
+  // #462: the assertion mode and the direct JWKS knob only mean something under
+  // AUTH_PROVIDER=oidc. Under 'none' the static bearer branch authenticates, and
+  // silently ignoring the knob would let an operator believe Cloudflare protects an
+  // origin that the static token does. Refuse loudly.
+  .refine(
+    (cfg) => cfg.AUTH_PROVIDER === 'oidc' || (cfg.OIDC_TOKEN_SOURCE === 'authorization' && !cfg.OIDC_JWKS_URI),
+    {
+      path: ['OIDC_TOKEN_SOURCE'],
+      message:
+        'OIDC_TOKEN_SOURCE=cf-access-jwt-assertion and OIDC_JWKS_URI require AUTH_PROVIDER=oidc. Under ' +
+        'AUTH_PROVIDER=none the static bearer token is what authenticates, so these settings would be ' +
+        'silently ignored (#462).',
+    },
+  )
+  // #462: the Access application token carries no `scope` claim, so any required
+  // scope would make mcp-auth answer 403 missing_required_scopes on EVERY request,
+  // invisibly to the 401 tests. Refuse the pairing rather than ship a dead deployment.
+  .refine(
+    (cfg) => cfg.OIDC_TOKEN_SOURCE !== 'cf-access-jwt-assertion' || !(cfg.OIDC_SCOPES ?? '').trim(),
+    {
+      path: ['OIDC_SCOPES'],
+      message:
+        'OIDC_SCOPES must be empty with OIDC_TOKEN_SOURCE=cf-access-jwt-assertion: the Cloudflare Access ' +
+        'assertion carries no scope claim, so every request would be refused with missing_required_scopes (#462).',
+    },
+  )
+  // #462: the UserInfo identity source (#346) needs a resolved discovery document and
+  // a bearer that the IdP's UserInfo endpoint accepts. With OIDC_JWKS_URI nothing is
+  // discovered, and userinfo-identity.ts would fetch discovery on the REQUEST path
+  // against a domain that does not publish it, denying every request with a log that
+  // blames UserInfo (the #343 shape). In assertion mode the bearer is the assertion,
+  // which Cloudflare's UserInfo does not accept. Either pairing is refused at startup.
+  .refine(
+    (cfg) => cfg.AUTH_BUDGET_ACL_IDENTITY_SOURCE !== 'userinfo' || (!cfg.OIDC_JWKS_URI && cfg.OIDC_TOKEN_SOURCE === 'authorization'),
+    {
+      path: ['AUTH_BUDGET_ACL_IDENTITY_SOURCE'],
+      message:
+        'AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo cannot be combined with OIDC_JWKS_URI (no discovery ' +
+        'document is fetched, so the UserInfo endpoint cannot be resolved) or with ' +
+        'OIDC_TOKEN_SOURCE=cf-access-jwt-assertion (the bearer is the Cloudflare assertion, which the ' +
+        "IdP's UserInfo endpoint does not accept). Use AUTH_BUDGET_ACL_IDENTITY_SOURCE=token (#462).",
+    },
   );
 
 export type Config = z.infer<typeof configSchema>;

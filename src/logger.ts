@@ -172,6 +172,10 @@ const SENSITIVE_KEYS = new Set([
   'authorization', 'proxy-authorization', 'token', 'password', 'encryptionpassword',
   'cookie', 'set-cookie', 'secret', 'apikey', 'api_key', 'x-api-key',
   'access_token', 'refresh_token', 'client_secret',
+  // #462: the Cloudflare Access assertion header is a bearer JWT under another name.
+  // A literal here rather than the enum in oidc-token-source.ts: logger.ts loads
+  // before config.ts and must not import from the tree.
+  'cf-access-jwt-assertion',
 ]);
 
 /** A metadata key is sensitive if its lowercased name is denylisted or ends in a secret suffix. */

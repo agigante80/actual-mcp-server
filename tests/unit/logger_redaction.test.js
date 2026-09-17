@@ -38,7 +38,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const { logTransportWithDirection } = mod;
 
   out('\n[#220] isSensitiveKey');
-  for (const k of ['authorization', 'Authorization', 'password', 'encryptionPassword', 'cookie', 'Set-Cookie', 'token', 'client_secret', 'x-api-key'])
+  for (const k of ['authorization', 'Authorization', 'password', 'encryptionPassword', 'cookie', 'Set-Cookie', 'token', 'client_secret', 'x-api-key',
+    // #462: the Cloudflare Access assertion header is a bearer JWT under another name.
+    'cf-access-jwt-assertion', 'Cf-Access-Jwt-Assertion'])
     ok(isSensitiveKey(k), `"${k}" is sensitive`);
   for (const k of ['accountId', 'durationMs', 'content-type', 'module', 'message'])
     ok(!isSensitiveKey(k), `"${k}" is not over-flagged`);

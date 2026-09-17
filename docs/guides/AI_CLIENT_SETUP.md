@@ -244,6 +244,42 @@ proxy must forward `/.well-known/oauth-protected-resource` and `/.well-known/oau
 to the server UNREWRITTEN; the server mounts the path-specific document at the path taken from
 `OIDC_RESOURCE`, which is the public path.
 
+**Behind Cloudflare Access (Managed OAuth), #462.** Cloudflare's documented pattern for an MCP server is
+different from a plain OIDC resource server, and it needs a different configuration. With Managed OAuth
+enabled on the Access application, Cloudflare serves the OAuth discovery to the MCP client at your app
+domain, the client obtains an OPAQUE access token (`oauth:...`, not a JWT, by design) and sends it as the
+bearer, Cloudflare resolves it at the edge and forwards the signed Access JWT to your origin in the
+`Cf-Access-Jwt-Assertion` header, and "the MCP server must validate the Access JWT sent in the
+Cf-Access-Jwt-Assertion header". Do NOT configure an Access-for-SaaS OIDC application as the issuer for
+this server: its access tokens are opaque, cannot be verified by JWKS, and it publishes no introspection
+endpoint. Configure this instead:
+
+```bash
+AUTH_PROVIDER=oidc
+OIDC_TOKEN_SOURCE=cf-access-jwt-assertion                      # read the JWT Cloudflare forwards, never the opaque bearer
+OIDC_ISSUER=https://<team>.cloudflareaccess.com                # the assertion's iss (your Zero Trust team domain)
+OIDC_JWKS_URI=https://<team>.cloudflareaccess.com/cdn-cgi/access/certs   # no discovery document on the team domain
+OIDC_ACCEPTED_AUDIENCES=<Application Audience (AUD) tag>       # the assertion's aud: Zero Trust > Access > Applications > your app > Additional settings
+OIDC_RESOURCE=https://<app-domain>/http                        # this server's URL (#461); it is not the aud in this mode
+OIDC_SCOPES=                                                   # MUST be empty: the assertion carries no scope claim
+AUTH_BUDGET_ACL={"alice@example.com":["<sync-id>"]}            # the assertion carries sub and email; key the ACL on the email, or on the Cloudflare sub
+```
+
+Rules the server enforces at startup in this mode: `OIDC_SCOPES` must be empty, `AUTH_BUDGET_ACL_IDENTITY_SOURCE`
+must stay `token`, and both new variables require `AUTH_PROVIDER=oidc`. In this mode the `Authorization`
+header is never consulted (no fallback), `/.well-known/oauth-authorization-server` is not served by this
+server (Cloudflare serves discovery at the edge), and the assertion is verified exactly like any bearer
+JWT: signature against `OIDC_JWKS_URI`, `iss` pinned to `OIDC_ISSUER`, `aud` in the closed allowlist,
+non-empty `sub`.
+
+**The origin must be reachable only through Cloudflare.** This mode trusts a header that Cloudflare
+sets; the signature stops forgery, but a captured assertion is accepted at a directly reachable origin
+until its `exp` (the Access application's Session Duration, default 24 hours, configurable up to one
+month: set it short), the AUD tag is not a secret (it is in every assertion), and a client-supplied
+`Cf-Access-Jwt-Assertion` is overwritten by Cloudflare only when the request traverses Cloudflare. So
+the mode is NOT a substitute for network restriction: reach the origin only through a Cloudflare Tunnel
+or a Cloudflare IP allowlist.
+
 **Per-user budget access control** (`AUTH_BUDGET_ACL`):
 
 ```bash

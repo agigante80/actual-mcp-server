@@ -18,7 +18,8 @@ import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
-import { discoverOidcMetadata, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
+import { resolveJwksSource, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
+import { createAssertionPromotionMiddleware } from '../lib/oidc-token-source.js';
 import { oidcResourceStartupWarnings } from '../lib/oidc-resource.js';
 import { stripJoseCause } from '../lib/oidc-error-cause.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
@@ -120,11 +121,17 @@ export async function startHttpServer(
       // #254: opt-in cross-origin JWKS trusted hosts (e.g. Google serves keys from
       // www.googleapis.com). Parsed fail-fast here at the composition root and
       // threaded as a parameter; empty (the default) keeps same-origin-only.
-      const { jwksUri, metadata: oidcMetadata } = await discoverOidcMetadata(
-        config.OIDC_ISSUER,
-        config.OIDC_ALLOW_INSECURE_ISSUER,
-        buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS),
-      );
+      // #462: ONE decision on where the keys come from. With OIDC_JWKS_URI set the URL
+      // is validated (same rules as a discovered jwks_uri, plus no query or fragment)
+      // and NOTHING is fetched, so `oidcMetadata` is null: there is no discovery
+      // document to publish or re-serve, and this block does not branch on the knob.
+      const { jwksUri, metadata: oidcMetadata } = await resolveJwksSource({
+        issuer: config.OIDC_ISSUER,
+        allowInsecure: config.OIDC_ALLOW_INSECURE_ISSUER,
+        trustedHosts: buildTrustedJwksHosts(config.OIDC_JWKS_TRUSTED_HOSTS),
+        directJwksUri: config.OIDC_JWKS_URI,
+      });
+      if (oidcMetadata !== null) {
       // #346: publish the startup-validated document so the ACL's UserInfo path can
       // reuse it instead of re-fetching discovery on the authorization path with a
       // different (empty) trusted-hosts list.
@@ -146,6 +153,7 @@ export async function startHttpServer(
       app.get('/.well-known/oauth-authorization-server', (_req, res) => {
         res.json(oidcMetadata);
       });
+      }
       const jwks = createRemoteJWKSet(new URL(jwksUri));
       const customJwtVerify = async (token: string) => {
         // Enforce the audience claim (#160, OWASP A07). Without it, any
@@ -201,8 +209,13 @@ export async function startHttpServer(
         };
       };
 
+      // #462: with OIDC_TOKEN_SOURCE=cf-access-jwt-assertion the signed JWT Cloudflare
+      // forwards in that header is promoted into `Authorization` BEFORE bearerAuth
+      // reads it, and the opaque client bearer is discarded. With the default source
+      // this middleware is the identity function. Never log headers on this path.
       app.use(
         httpPath,
+        createAssertionPromotionMiddleware(config.OIDC_TOKEN_SOURCE),
         mcpAuth.bearerAuth(customJwtVerify, {
           resource: config.OIDC_RESOURCE,
           // Audience (aud=clientId) is enforced inside customJwtVerify via jose's
@@ -213,6 +226,11 @@ export async function startHttpServer(
         budgetAclMiddleware as express.RequestHandler,
       );
       logger.info(`[OIDC] JWT authentication enabled. Issuer: ${config.OIDC_ISSUER}`);
+      // #462 audit line: which header carries the JWT and where the keys come from.
+      logger.info('[OIDC] token source and JWKS mode', {
+        tokenSource: config.OIDC_TOKEN_SOURCE,
+        jwksMode: config.OIDC_JWKS_URI ? `direct: ${jwksUri}` : 'discovered',
+      });
     }
   }
 

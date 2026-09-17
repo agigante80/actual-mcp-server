@@ -538,6 +538,8 @@ OIDC_ISSUER=https://sso.yourdomain.com   # OIDC issuer URL
 OIDC_RESOURCE=https://actual-mcp.example.com/http   # This server's public MCP URL (RFC 9728 identifier, expected 'aud'; #461)
 OIDC_ACCEPTED_AUDIENCES=                 # Extra accepted 'aud' values (#245, optional)
 OIDC_JWKS_TRUSTED_HOSTS=                 # Cross-host JWKS allowlist, e.g. Google (#254, optional)
+OIDC_JWKS_URI=                           # Direct JWKS URL, bypasses discovery; Cloudflare Access certs (#462, optional)
+OIDC_TOKEN_SOURCE=authorization          # or cf-access-jwt-assertion behind Cloudflare Access Managed OAuth (#462)
 OIDC_ALLOW_INSECURE_ISSUER=false         # #244 opt-out for a trusted-LAN http issuer
 OIDC_SCOPES=                             # Required scopes (empty = none)
 AUTH_BUDGET_ACL=user@example.com:sync-id # Per-user budget ACL (optional)
