@@ -107,7 +107,7 @@ function main() {
  * Exact entry-point check, through realpath. Node's ESM loader realpaths
  * `import.meta.url`, so comparing a non-realpathed `process.argv[1]` makes this script a
  * SILENT no-op when invoked through a symlink, and this repo is reachable through one
- * (`[redacted]/[redacted]`). Silent-and-exit-0 is indistinguishable from
+ * (`~/proj/actual-mcp-server`). Silent-and-exit-0 is indistinguishable from
  * "current", which is precisely the failure mode #362 exists to remove.
  *
  * `realpathSync` THROWS on a path that does not exist, and an uncaught throw here would

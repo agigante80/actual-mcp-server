@@ -2,7 +2,7 @@
 // Regression for #270: a stalled (never-settling) upstream operation must be
 // bounded by a per-operation timeout, so it REJECTS and releases the global api
 // mutex (withApiLock), instead of hanging forever and wedging every subsequent
-// tool call. That hang is the [redacted] production symptom.
+// tool call. That hang is the budget-tracker production symptom.
 //
 // Transport-agnostic on purpose: both stdio and HTTP funnel reads through
 // withActualApi and writes through queueWriteOperation (here via withWriteSession),

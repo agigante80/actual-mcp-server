@@ -9,7 +9,7 @@
 //      mutex was released rather than held forever.
 //
 // The bug (no operation timeout) makes step 2 hang indefinitely, which wedges
-// every subsequent tool call. That is the [redacted] production hang.
+// every subsequent tool call. That is the budget-tracker production hang.
 //
 // Exit codes (consumed by deploy-and-test.sh):
 //   0  = correct behavior (fix present / working)

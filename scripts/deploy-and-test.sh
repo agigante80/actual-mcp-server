@@ -311,7 +311,7 @@ ok "Release evidence written: .release/dual-transport-report.json"
 echo ""
 
 # ── 9. (full level only) #270 upstream-stall regression (stdio + HTTP) ──────
-# Reproduces the [redacted] production hang: a stalled upstream operation
+# Reproduces the budget-tracker production hang: a stalled upstream operation
 # must reject within a bounded time (per-op timeout) and release the global api
 # mutex, instead of hanging forever and wedging every subsequent tool call.
 # stdio hits this on every op (legacy init+download); HTTP hits it at session

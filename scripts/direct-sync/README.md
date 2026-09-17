@@ -56,12 +56,12 @@ The Docker project's `.env` contains the real credentials. Source it before runn
 ```bash
 # Option A — source the docker .env
 set -a
-source [redacted]/docker/librechat-MCP-actual/actual-mcp-server/.env
+source ~/proj/actual-mcp-server/.env
 set +a
 node scripts/direct-sync/bank-sync-direct.mjs --list
 
 # Option B — run with env-file via Docker (no credentials leak to shell history)
-docker run --rm --env-file [redacted]/docker/librechat-MCP-actual/actual-mcp-server/.env \
+docker run --rm --env-file ~/proj/actual-mcp-server/.env \
   --network librechat-mcpactual_lobe-network \
   -v /tmp/actual-direct-sync:/data \
   -e ACTUAL_DATA_DIR=/data \
