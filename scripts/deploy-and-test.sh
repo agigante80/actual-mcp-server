@@ -46,7 +46,7 @@ set -euo pipefail
 # ── Config ─────────────────────────────────────────────────────────────────
 DOCKER_DIR="$HOME/docker/librechat-MCP-actual"
 # DERIVED from this script's own location, never hardcoded. The previous absolute
-# path ($HOME/[redacted]/actual-mcp-server) rotted when the repo moved on
+# path ($HOME/<old-checkout-root>/actual-mcp-server) rotted when the repo moved on
 # 2026-09-04, and the failure was quiet in the worst way: step 1 died before the
 # sync ran, so the Docker build context kept whatever it held (a 0.19.3 tree), and
 # every later "full gate" would have tested code from before the move while
