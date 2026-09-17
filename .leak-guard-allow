@@ -20,3 +20,15 @@ prefix /home/someuser
 prefix /home/someone
 # tests/unit/httpServer_oidc_jwks_discovery.test.js:94: a Google API identifier that only looks like an email
 email p@www.googleapis.com
+
+# Historical (public --history) hits, all benign: GitHub's own addresses and users.noreply
+# aliases, tool roots, a placeholder, and the purge's [redacted] marker (stripped form).
+email support@github.com
+email 223556219+Copilot@users.noreply.github.com
+email maxvanweenen@users.noreply.github.com
+email 6804522+agigante80@users.noreply.github.com
+root .nvm
+root .npm
+root docker
+root [redacted
+prefix /home/USER
