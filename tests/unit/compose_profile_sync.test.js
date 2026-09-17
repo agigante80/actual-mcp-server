@@ -9,7 +9,7 @@
 // Run: node tests/unit/compose_profile_sync.test.js
 
 import assert from 'assert';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -65,6 +65,19 @@ const DOCS = [
   'CLAUDE.md',
 ];
 
+// Assistant instruction files and .claude/ are kept OUT of the repository by the leak
+// guard (untracked by class, see the "leak-guard baseline" block in .gitignore), so a
+// fresh checkout does not have them. They stay in DOCS so a developer's working copy is
+// still checked; an absent one is skipped LOUDLY rather than failed, because an ENOENT
+// here says nothing about compose profiles. Before this, every push after the files were
+// ignored turned Run Tests red on exactly that ENOENT.
+const LOCAL_ONLY_DOCS = new Set([
+  '.github/copilot-instructions.md',
+  '.claude/agents/health-check.md',
+  '.claude/commands/full-review.md',
+  'CLAUDE.md',
+]);
+
 console.log('\n[compose-profile-sync]');
 
 const declared = declaredProfiles(read('docker-compose.yaml'));
@@ -74,6 +87,12 @@ check('docker-compose.yaml declares exactly the expected profiles', () => {
 });
 
 for (const doc of DOCS) {
+  if (!existsSync(join(ROOT, doc))) {
+    assert.ok(LOCAL_ONLY_DOCS.has(doc), `${doc} is missing and is not a declared local-only file`);
+    console.log(`  skip: ${doc} (local-only, absent in this checkout)`);
+    continue;
+  }
+
   check(`${doc}: every --profile reference is a declared profile`, () => {
     const text = read(doc);
     const bad = referencedProfiles(text).filter((p) => !declared.has(p));

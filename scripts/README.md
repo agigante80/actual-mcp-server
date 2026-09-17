@@ -81,6 +81,21 @@ bash scripts/deploy-and-test.sh full
 | `playwright-version-drift.mjs` | `npm run playwright-version-drift` | #385: asserts every `mcr.microsoft.com/playwright:v<x>` reference (the compose file plus BOTH occurrences in `ci-cd.yml`) matches the `@playwright/test` version the LOCKFILE installs, since that is what actually runs inside the container. They had drifted five minor versions apart, invisibly, because no spec drives a browser: every spec uses the `request` fixture, so the browsers baked into the image are never launched. The first browser-touching spec would have failed with an opaque launch error instead. Fails when it finds NOTHING to check, so a renamed file cannot make it vacuous. |
 | `verify-release-ticket-states.mjs` | direct invoke (the `release` skill runs it) | #405: after a release, proves no ticket was closed by ACCIDENT. Enumerates every issue reference in the released commit range, separates the ones the release INTENDED to close (a `(#N)` in a commit subject) from the ones merely mentioned in a body, and reports any mentioned-only ticket that GitHub closed by keyword. Fails CLOSED on a reference it cannot verify. The earlier checks used a timestamp window around the push and missed both #414 and #416: clock skew, queued workflows and a multi-minute release all make a window a guess, while a commit range is deterministic. |
 
+## Leak guard (public repository hygiene)
+
+| Script | Runs in | Purpose |
+|---|---|---|
+| `check-public-leaks.sh` | `.github/workflows/leak-guard.yml` on every push and PR (`--all --allow-file .leak-guard-allow`); local commit hook | The PUBLIC half: catches home paths, unlisted `~/` roots and reachable addresses by SHAPE, so it needs no list of private names and can run in the open. `.leak-guard-allow` (tracked, public) holds `root` / `prefix` / `email` / `skip` entries for placeholders and third parties, NEVER a private name. `--history` (opt-in, run by hand before publishing) scans every publishable ref and commit message. |
+| `check-private-leaks.sh` | local hooks only, never CI | The PRIVATE half: project and folder NAMES that must not become public. The list lives OUTSIDE the repository at `~/.claude/forge-kit/private-names.txt`, because a committed denylist of the names being hidden is an index pointing at them. |
+
+Both scanners fail closed (exit 2 with the file named) when something cannot be read. Findings are fixed in content, not allowed. The same policy is why `/CLAUDE.md`, `.claude/`, `.github/copilot-instructions.md` and the other assistant state and instruction files are gitignored by class (see the "leak-guard baseline" block in `.gitignore`): a fresh checkout never has them, so any guard that reads them must skip loudly when they are absent, and anything CI must be able to run lives at a tracked path.
+
+## Local hooks that must stay testable
+
+| Script | Registered in | Purpose |
+|---|---|---|
+| `hooks/block-closing-keyword.py` | `.claude/settings.local.json` (`PreToolUse` on `Bash`, local and untracked) | #405: blocks a commit whose message would make GitHub CLOSE a ticket its author is saying they did NOT fix. It lives here rather than under `.claude/hooks/` because `tests/unit/commit_message_closing_keyword.test.js` executes it, and `.claude/` is never checked out in CI. |
+
 ## ACL end-to-end (#338 / #343)
 
 | Script | Purpose |

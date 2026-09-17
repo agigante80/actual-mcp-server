@@ -8,8 +8,14 @@
 //
 //   1. scripts/deploy-and-test.sh runs the suite with MCP_TEST_TRANSPORT=http AND =stdio,
 //      at the SAME level, and writes .release/dual-transport-report.json.
-//   2. CLAUDE.md states the hard rule.
-//   3. The release skill states the runnable, artifact-backed precondition.
+//   2. docs/TESTING_AND_RELIABILITY.md states the hard rule AND the artifact-backed
+//      precondition. This is the TRACKED copy and the one CI can see.
+//   3. CLAUDE.md and the release skill restate them for the assistant. Both are untracked
+//      by class (the leak guard keeps assistant instruction files and .claude/ out of the
+//      repository), so a fresh checkout does not have them. Where present they are checked
+//      exactly as before; where absent they are SKIPPED LOUDLY, never failed, because an
+//      absent local-only file says nothing about the gate. Before this split, every push
+//      after the files were ignored turned Run Tests red on an ENOENT here.
 //
 // Every rule is a PURE function over file content, so each is asserted twice: against the
 // real file (must PASS) and against an in-memory mutated copy with the line stripped (must
@@ -19,7 +25,7 @@
 // Run: node tests/unit/dual_transport_gate.test.js
 
 import assert from 'assert';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -27,6 +33,8 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 const DEPLOY = 'scripts/deploy-and-test.sh';
+const TESTING_DOC = 'docs/TESTING_AND_RELIABILITY.md';
+// Local-only restatements: checked where present, skipped loudly where absent.
 const CLAUDE = 'CLAUDE.md';
 const RELEASE_SKILL = '.claude/skills/release/SKILL.md';
 const ARTIFACT = '.release/dual-transport-report.json';
@@ -63,11 +71,23 @@ export const rules = {
   'deploy script writes the release evidence artifact': (deploy) =>
     deploy.includes(ARTIFACT.replace('.release/', '')) && deploy.includes('.release'),
 
+  'testing doc carries the literal hard rule': (doc) =>
+    doc.includes(HARD_RULE_ANCHOR),
+
+  'testing doc carries the artifact-backed precondition': (doc) =>
+    doc.includes(PRECONDITION_ANCHOR) && doc.includes(ARTIFACT),
+
   'CLAUDE.md carries the literal hard rule': (claude) =>
     claude.includes(HARD_RULE_ANCHOR),
 
   'release skill carries the artifact-backed precondition': (skill) =>
     skill.includes(PRECONDITION_ANCHOR) && skill.includes(ARTIFACT),
+};
+
+// Rules over a local-only file. Absent file: skipped loudly, not failed.
+const LOCAL_ONLY_RULES = {
+  'CLAUDE.md carries the literal hard rule': CLAUDE,
+  'release skill carries the artifact-backed precondition': RELEASE_SKILL,
 };
 
 // ---------------------------------------------------------------------------
@@ -82,14 +102,18 @@ function check(label, fn) {
 console.log('\n[dual-transport-gate]');
 
 const deploy = read(DEPLOY);
-const claude = read(CLAUDE);
-const skill = read(RELEASE_SKILL);
+const testingDoc = read(TESTING_DOC);
+const readLocal = (p) => (existsSync(join(ROOT, p)) ? read(p) : null);
+const claude = readLocal(CLAUDE);
+const skill = readLocal(RELEASE_SKILL);
 
 const sources = {
   'deploy script runs the suite over HTTP': deploy,
   'deploy script runs the suite over stdio': deploy,
   'both transport runs use the SAME level variable': deploy,
   'deploy script writes the release evidence artifact': deploy,
+  'testing doc carries the literal hard rule': testingDoc,
+  'testing doc carries the artifact-backed precondition': testingDoc,
   'CLAUDE.md carries the literal hard rule': claude,
   'release skill carries the artifact-backed precondition': skill,
 };
@@ -102,12 +126,21 @@ const breakers = {
   'both transport runs use the SAME level variable': (s) =>
     s.replace(/(MCP_TEST_TRANSPORT=stdio[\s\S]{0,600}?tests\/manual\/index\.js[\s\S]{0,200}?)"\$TEST_LEVEL"/, '$1"sanity"'),
   'deploy script writes the release evidence artifact': (s) => s.replace(/\.release/g, '/tmp/nowhere'),
+  'testing doc carries the literal hard rule': (s) => s.replace(HARD_RULE_ANCHOR, 'some weaker suggestion'),
+  'testing doc carries the artifact-backed precondition': (s) => s.split(ARTIFACT).join('nothing.json'),
   'CLAUDE.md carries the literal hard rule': (s) => s.replace(HARD_RULE_ANCHOR, 'some weaker suggestion'),
   'release skill carries the artifact-backed precondition': (s) => s.split(ARTIFACT).join('nothing.json'),
 };
 
 for (const [label, rule] of Object.entries(rules)) {
   const src = sources[label];
+
+  if (src === null) {
+    // A local-only file this checkout does not have. Say so on its own line so a CI log
+    // shows the gap rather than a silent pass; the tracked copy above is the enforced one.
+    console.log(`  skip: ${label} (${LOCAL_ONLY_RULES[label]} is local-only and absent here)`);
+    continue;
+  }
 
   check(`${label} (real file passes)`, () => {
     assert.ok(rule(src), `rule is not satisfied by the real file; the gate is not in place`);
@@ -119,6 +152,13 @@ for (const [label, rule] of Object.entries(rules)) {
     assert.ok(!rule(broken), 'rule still passed after the requirement was removed: this guard cannot fail');
   });
 }
+
+check('only declared local-only rules may be skipped (a tracked source can never be null)', () => {
+  for (const [label, src] of Object.entries(sources)) {
+    if (src === null) assert.ok(label in LOCAL_ONLY_RULES, `${label} has no source but is not declared local-only`);
+  }
+  for (const label of Object.keys(LOCAL_ONLY_RULES)) assert.ok(label in rules, `${label} is declared local-only but has no rule`);
+});
 
 check('the misleading "both transports covered" comment is gone', () => {
   // #280: the old comment claimed parity while stdio ran four read-only calls.

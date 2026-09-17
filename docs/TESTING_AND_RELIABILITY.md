@@ -248,6 +248,12 @@ GitHub Actions automatically runs:
 2. ❌ No Docker images published
 3. ❌ No GitHub releases created
 
+### Release gate: dual-transport evidence (#280)
+
+**A promotion to `main` REQUIRES a passing full integration run over BOTH transports (`MCP_TEST_TRANSPORT=http` and `MCP_TEST_TRANSPORT=stdio`) with a green zero-residue assertion.** Run `bash scripts/deploy-and-test.sh full`; it writes `.release/dual-transport-report.json`, and the release procedure verifies that dual-transport evidence against the `develop` HEAD sha before anything is fast-forwarded. HTTP-only evidence is not sufficient: stdio is the transport half our Claude Desktop users run on, and it had no write-path coverage until #280.
+
+This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors on its first sentence and on the phrase "dual-transport evidence" plus the artifact path, and fails the build if either is weakened or removed. It lives here, in a tracked document, because the assistant instruction files that used to carry it (`CLAUDE.md`, `.claude/skills/release/SKILL.md`) are kept out of the repository by the leak guard and so are absent on a fresh checkout; the test still checks those copies wherever they are present locally.
+
 ---
 
 ## 🔬 Test Types

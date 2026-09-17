@@ -50,6 +50,23 @@ const FILES = [
 ];
 
 /**
+ * Files in FILES that the leak guard keeps OUT of the repository (see the "leak-guard
+ * baseline" block in .gitignore): assistant instruction files at the root and everything
+ * under .claude/ are untracked by class, not by content, so a fresh checkout (CI) never
+ * has them while a developer's working copy does. They stay in scope so a local run keeps
+ * the working copy in sync, but an ABSENT one is a loud skip rather than a failure, and a
+ * pattern whose only anchor lives in one of them (`localOnly: true` below) cannot be
+ * reported stale when the file is missing. Before this, `Run Tests` went red on every
+ * push after the files were ignored: seven anchors "matched nothing" for the sole reason
+ * that the files holding them were not checked out.
+ */
+export const LOCAL_ONLY_FILES = [
+  'CLAUDE.md',
+  '.github/copilot-instructions.md',
+  '.claude/skills/api-design-principles/SKILL.md',
+];
+
+/**
  * TOTAL-count anchor patterns. Each regex has exactly one capture group holding the
  * total number, and is anchored on distinctive surrounding text so it matches ONLY a
  * total, never a subset "(N tools)" header or a per-domain/per-phase count.
@@ -60,7 +77,7 @@ export const TOTAL_PATTERNS = [
   { re: /\ball (\d{2,3}) tools\b/gi, label: 'all N tools' },
   // The api-design-principles skill states the total in its frontmatter `description:`,
   // which the phrasings above do not match, so it drifted silently.
-  { re: /(\d{2,3})-tool set\b/g, label: 'N-tool set' },
+  { re: /(\d{2,3})-tool set\b/g, label: 'N-tool set', localOnly: true },
   { re: /\*\*(\d{2,3}) tools\*\* across/g, label: '**N tools** across' },
   { re: /\*\*(\d{2,3}) tools\*\* listed/g, label: '**N tools** listed' },
   { re: /E2E \((\d{2,3}) tools\)/g, label: 'E2E (N tools)' },
@@ -71,13 +88,13 @@ export const TOTAL_PATTERNS = [
   { re: /(\d{2,3}) tools organized by category/gi, label: 'N tools organized by category' },
   { re: /(\d{2,3}) tools registered/gi, label: 'N tools registered' },
   { re: /Registers (\d{2,3}) tools/g, label: 'Registers N tools' },
-  { re: /(?:exposing|providing|exposes|provides) \*\*(\d{2,3}) tools\*\*/gi, label: 'exposing **N tools**' },
+  { re: /(?:exposing|providing|exposes|provides) \*\*(\d{2,3}) tools\*\*/gi, label: 'exposing **N tools**', localOnly: true },
   { re: /should list (\d{2,3}) tools/gi, label: 'should list N tools' },
-  { re: /\((\d{2,3}) tools in IMPLEMENTED_TOOLS/g, label: '(N tools in IMPLEMENTED_TOOLS' },
-  { re: /\((\d{2,3}) tools, Zod/g, label: '(N tools, Zod' },
+  { re: /\((\d{2,3}) tools in IMPLEMENTED_TOOLS/g, label: '(N tools in IMPLEMENTED_TOOLS', localOnly: true },
+  { re: /\((\d{2,3}) tools, Zod/g, label: '(N tools, Zod', localOnly: true },
   { re: /\((\d{2,3}) tools \+ index/g, label: '(N tools + index' },
-  { re: /Production-ready, (\d{2,3}) tools/g, label: 'Production-ready, N tools' },
-  { re: /(\d{2,3}) tools implemented/g, label: 'N tools implemented' },
+  { re: /Production-ready, (\d{2,3}) tools/g, label: 'Production-ready, N tools', localOnly: true },
+  { re: /(\d{2,3}) tools implemented/g, label: 'N tools implemented', localOnly: true },
   { re: /tool definitions \((\d{2,3}) tools\)/g, label: 'tool definitions (N tools)' },
   { re: /│\s*\((\d{2,3}) tools\)/g, label: 'ASCII diagram (N tools)' },
   { re: /(\d{2,3}) tools loaded with/g, label: 'N tools loaded with' },
@@ -107,7 +124,7 @@ export const TOTAL_PATTERNS = [
   // only report them: CLAUDE.md said 71 and copilot-instructions.md said 63 while
   // IMPLEMENTED_TOOLS was 77.
   { re: /(\d{2,3})-tool MCP surface/g, label: 'N-tool MCP surface' },
-  { re: /(\d{2,3})-tool contract/g, label: 'N-tool contract' },
+  { re: /(\d{2,3})-tool contract/g, label: 'N-tool contract', localOnly: true },
   { re: /(\d{2,3}) tool definitions/g, label: 'N tool definitions' },
   // EXPECTED_TOOL_COUNT numeric spots (only where a number is present)
   { re: /EXPECTED_TOOL_COUNT \|\| '(\d{2,3})'/g, label: "EXPECTED_TOOL_COUNT || 'N'" },
@@ -127,10 +144,14 @@ export function analyze() {
   const drift = [];
   const matchedSpans = new Map(); // file -> array of [start,end]
   const patternHits = new Map(); // label -> count
+  const skipped = []; // local-only files absent from this checkout
 
   for (const file of FILES) {
     const p = abs(file);
-    if (!existsSync(p)) continue;
+    if (!existsSync(p)) {
+      if (LOCAL_ONLY_FILES.includes(file)) skipped.push(file);
+      continue;
+    }
     const content = readFileSync(p, 'utf8');
     matchedSpans.set(file, []);
     for (const { re, label } of TOTAL_PATTERNS) {
@@ -151,7 +172,11 @@ export function analyze() {
   }
 
   // Stale-anchor guard: a pattern that matched nothing anywhere is dead and may be hiding drift.
-  const stale = TOTAL_PATTERNS.filter((p) => !patternHits.has(p.label)).map((p) => ({ label: p.label }));
+  // A `localOnly` pattern is exempt while a local-only file is absent: its anchor was not
+  // scanned, so "matched nothing" says nothing about the rule.
+  const stale = TOTAL_PATTERNS
+    .filter((p) => !patternHits.has(p.label) && !(p.localOnly && skipped.length > 0))
+    .map((p) => ({ label: p.label }));
 
   // Advisory: any `N tools` in an in-scope file not covered by a TOTAL anchor (likely a subset, but flag for awareness).
   const unclassified = [];
@@ -171,7 +196,7 @@ export function analyze() {
       }
     }
   }
-  return { canonical, drift, stale, unclassified };
+  return { canonical, drift, stale, unclassified, skipped };
 }
 
 export function applyFix() {
@@ -208,8 +233,12 @@ if (isMain) {
     console.log(`tool-count: canonical=${after.canonical}, applied ${n} fix(es). Drift now: ${after.drift.length}.`);
     process.exit(after.drift.length === 0 ? 0 : 1);
   }
-  const { canonical, drift, stale, unclassified } = analyze();
+  const { canonical, drift, stale, unclassified, skipped } = analyze();
   console.log(`tool-count: canonical=${canonical}`);
+  if (skipped.length) {
+    console.log(`\nSKIPPED (local-only governance files, untracked by the leak guard; scanned only where present):`);
+    for (const f of skipped) console.log(`  ${f}`);
+  }
   if (unclassified.length) {
     console.log(`\nAdvisory (unclassified "N tools", not enforced, likely subsets):`);
     for (const u of unclassified) console.log(`  ${u.file}:${u.line}  ${u.context}`);

@@ -17,8 +17,12 @@ import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// The hook script lives under scripts/hooks/, a TRACKED path, and .claude/settings.local.json
+// points at it from there. It used to live in .claude/hooks/, which the leak guard keeps out of
+// the repository by class, so a fresh checkout had no hook to run and this test died on ENOENT
+// in CI. A guard with teeth deserves to be tested where the tests run.
 const HOOK = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.claude', 'hooks', 'block-closing-keyword.py',
+  path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'scripts', 'hooks', 'block-closing-keyword.py',
 );
 
 let passed = 0, failed = 0;

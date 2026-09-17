@@ -4,7 +4,7 @@
  *
  * WHY THIS EXISTS. Three times in one afternoon a commit body reading "Filed rather than fixed:
  * #N" closed that ticket as COMPLETED when the release fast-forwarded main, because GitHub parses
- * `fixed: #N` as a closing keyword. The hook at .claude/hooks/block-closing-keyword.py stops the
+ * `fixed: #N` as a closing keyword. The hook at scripts/hooks/block-closing-keyword.py stops the
  * message being written. This is the other half: proof after the fact that no ticket was closed by
  * accident.
  *
@@ -165,7 +165,7 @@ if (isMain) {
     console.error('');
     console.error(`FAIL: ${unexpected.length} ticket(s) closed that this release did not intend to close: ${unexpected.map((n) => '#' + n).join(', ')}`);
     console.error('If a commit body says a ticket was NOT fixed, GitHub may have closed it anyway.');
-    console.error('Reopen it and check .claude/hooks/block-closing-keyword.py is registered.');
+    console.error('Reopen it and check scripts/hooks/block-closing-keyword.py is registered.');
     process.exit(1);
   }
   // Guarded: `process.exitCode = 1` does not stop execution, so without this the unverified branch
