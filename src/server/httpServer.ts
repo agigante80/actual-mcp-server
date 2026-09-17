@@ -19,6 +19,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
 import { discoverOidcMetadata, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
+import { oidcResourceStartupWarnings } from '../lib/oidc-resource.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
@@ -76,7 +77,11 @@ export async function startHttpServer(
   // When AUTH_PROVIDER=none (default), the existing static Bearer token check applies.
   let mcpAuth: ReturnType<typeof createMcpAuth> = null;
   if (config.AUTH_PROVIDER === 'oidc') {
-    mcpAuth = createMcpAuth();   // throws if OIDC_ISSUER / OIDC_RESOURCE missing
+    mcpAuth = createMcpAuth();   // throws if OIDC_ISSUER / OIDC_RESOURCE missing or malformed (#461)
+    // #461: advisories only (the validator inside createMcpAuth already refused anything
+    // fatal). Compared against the ADVERTISED path, not the listen path: OIDC_RESOURCE is
+    // the public URL, and a reverse proxy may rewrite the path in between.
+    for (const w of oidcResourceStartupWarnings({ resource: config.OIDC_RESOURCE, advertisedUrl, httpPath })) logger.warn(w);
     if (mcpAuth) {
       // Serve RFC 8707 Protected Resource Metadata (/.well-known/oauth-protected-resource/...)
       app.use(mcpAuth.protectedResourceMetadataRouter());

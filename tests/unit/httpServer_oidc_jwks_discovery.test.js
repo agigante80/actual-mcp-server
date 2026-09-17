@@ -242,5 +242,16 @@ check('httpServer rejects a token with no usable sub (invalid_token)', () => {
   assert.ok(src.includes('subject: payload.sub,'), 'expected subject populated from payload.sub');
 });
 
+check('#461: the OIDC block of startHttpServer carries no literal /http (the advertised path is derived, never hardcoded)', () => {
+  // Scoped between the two anchors above so the legitimate /mcp-info/http route outside
+  // the block is not a false positive.
+  const start = src.indexOf('mcpAuth = createMcpAuth()');
+  const end = src.indexOf('mcpAuth.bearerAuth(');
+  assert.ok(start > 0 && end > start, 'anchors not found');
+  assert.ok(!/['"`]\/http['"`]/.test(src.slice(start, end)), 'a hardcoded /http inside the OIDC block');
+  assert.ok(src.slice(start, end).includes('oidcResourceStartupWarnings({ resource: config.OIDC_RESOURCE, advertisedUrl, httpPath })'),
+    'the #461 startup warning call is missing or no longer takes the advertised URL');
+});
+
 console.log(`\n[oidc-jwks-discovery] Results: ${failed === 0 ? 'all passed' : failed + ' failed'}`);
 process.exit(failed > 0 ? 1 : 0);

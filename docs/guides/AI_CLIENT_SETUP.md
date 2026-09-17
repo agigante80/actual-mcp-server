@@ -209,12 +209,40 @@ For multi-user deployments with an OIDC provider (Casdoor, Keycloak, Auth0, etc.
 # .env
 AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
-OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
+OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL: the expected 'aud'
+OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
 OIDC_SCOPES=                          # leave empty for Casdoor (no 'scope' claim)
 # Only for IdPs whose JWKS lives on a different host than the issuer (#254).
 # Google: issuer accounts.google.com serves keys from www.googleapis.com:
 # OIDC_JWKS_TRUSTED_HOSTS=www.googleapis.com
 ```
+
+**`OIDC_RESOURCE` is a URL, not a client id (#461).** It is the canonical URL of this MCP server
+(RFC 9728 resource identifier, RFC 8707 resource indicator, the MCP authorization spec's "canonical
+server URI"). Two things derive from it: the well-known route where the protected-resource metadata
+is published, and the `aud` value a standards client asks your IdP to mint. A value that is not an
+absolute http(s) URL refuses to start with a message naming the variable. If your IdP ignores the
+`resource` parameter and puts the client id in `aud` (Authentik, Casdoor, Cloudflare Access and
+others do), keep `OIDC_RESOURCE` as the URL and add the client id to `OIDC_ACCEPTED_AUDIENCES`.
+
+**How a standards client discovers this server.** A client connecting to
+`https://actual-mcp.yourdomain.com/http` sends a request without a token, gets `401` with
+`WWW-Authenticate: Bearer resource_metadata="https://actual-mcp.yourdomain.com/.well-known/oauth-protected-resource/http"`,
+fetches that document, reads `authorization_servers`, fetches the IdP's RFC 8414 metadata, and
+runs the OAuth flow with `resource=<the document's resource value>`. The document's route follows
+`OIDC_RESOURCE` (RFC 9728 section 3.1):
+
+| `OIDC_RESOURCE` | Document served at | Who it works for |
+|---|---|---|
+| `https://host/http` (recommended, the endpoint form) | `/.well-known/oauth-protected-resource/http` | Every client: the path-specific URL strict clients look for, and the official MCP SDK's first attempt |
+| `https://host` (the origin form) | `/.well-known/oauth-protected-resource` | Clients that fall back to the root (the official MCP SDK does); a client without that fallback fails discovery |
+
+Use the endpoint form without a trailing slash. The server logs one warning at startup when the
+identifier's path differs from the advertised MCP path, naming the recommended value. Behind a
+reverse proxy that rewrites the MCP path (`MCP_BRIDGE_HTTP_PATH` differs from `MCP_HTTP_PATH`), the
+proxy must forward `/.well-known/oauth-protected-resource` and `/.well-known/oauth-authorization-server`
+to the server UNREWRITTEN; the server mounts the path-specific document at the path taken from
+`OIDC_RESOURCE`, which is the public path.
 
 **Per-user budget access control** (`AUTH_BUDGET_ACL`):
 

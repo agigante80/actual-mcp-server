@@ -68,7 +68,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `MCP_ALLOW_UNAUTHENTICATED` | bool string | `false` | No | no | schema | `index.ts` | #242 opt-out: only `true` lets HTTP serve unauthenticated on a non-loopback bind; otherwise the server refuses to start |
 | `OIDC_ISSUER` | url string | (none) | If oidc | no | schema | config | OIDC issuer URL |
 | `OIDC_ALLOW_INSECURE_ISSUER` | bool string | `false` | No | no | schema | `httpServer.ts` | #244 opt-out: allow an http OIDC issuer on a trusted network (default refuses non-https/non-loopback issuers at startup) |
-| `OIDC_RESOURCE` | url string | (none) | No | no | schema | config | Expected `aud` claim |
+| `OIDC_RESOURCE` | url string | (none) | If OIDC | no | schema | `setup.ts` | This server's canonical public MCP URL (RFC 9728 resource identifier and expected `aud`); validated as an absolute http(s) URL at startup, endpoint form recommended (#461) |
 | `OIDC_ACCEPTED_AUDIENCES` | csv string | (none) | No | no | schema | `httpServer.ts` | #245 extra accepted `aud` values beyond `OIDC_RESOURCE` (strict allowlist; for IdPs that put the client-id in `aud`, e.g. Authentik) |
 | `OIDC_JWKS_TRUSTED_HOSTS` | csv string | (none) | No | no | schema | `httpServer.ts` | #254 opt-in cross-origin JWKS hosts (`host` or `host:port`, exact match, no wildcards). For IdPs whose `jwks_uri` lives on another host, e.g. Google: `OIDC_ISSUER=https://accounts.google.com` needs `OIDC_JWKS_TRUSTED_HOSTS=www.googleapis.com`. Empty default keeps same-origin-only |
 | `OIDC_SCOPES` | csv string | (none) | No | no | schema | config | Comma-separated required scopes |

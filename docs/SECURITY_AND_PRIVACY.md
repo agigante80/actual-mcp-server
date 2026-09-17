@@ -113,10 +113,17 @@ registered with a partial document, and it is absent entirely when `AUTH_PROVIDE
 ```bash
 AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
-OIDC_RESOURCE=your-client-id          # must match 'aud' claim in JWT
+OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL: the expected 'aud' (#461)
+OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
 OIDC_SCOPES=                          # leave empty for Casdoor (no scope claim)
 AUTH_BUDGET_ACL={"alice@example.com":["budget-sync-id-1"]}
 ```
+
+`OIDC_RESOURCE` must be an absolute http(s) URL: it is the RFC 9728 resource identifier from which the
+protected-resource metadata route is derived, and the audience a standards client requests. A bare client id
+is refused at startup with a message naming the variable (#461); the accepted-audience set stays exactly
+`OIDC_RESOURCE` plus `OIDC_ACCEPTED_AUDIENCES`, closed, so this change adds no way to accept a token minted
+for another resource.
 
 **Casdoor compatibility**: Casdoor auth-code flow JWTs omit the `scope` claim.
 Set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements and logs `Scopes required: (none)`.

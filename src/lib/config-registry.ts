@@ -52,8 +52,8 @@ export const RAW_ENV_ALLOWLIST: readonly RawEnvVar[] = [
 
   // Deferred-config entry: read in src/index.ts to preserve the fast --help exit (#230).
   { name: 'MCP_BRIDGE_BIND_HOST', reason: 'deferred-config entry (index.ts reads process.env directly, #230)', readSite: 'index.ts' },
-  { name: 'MCP_HTTP_PATH', reason: 'deferred-config entry; the path the server LISTENS on', readSite: 'index.ts:195' },
-  { name: 'MCP_BRIDGE_HTTP_PATH', reason: 'deferred-config entry; the path ADVERTISED to clients, falls back to MCP_HTTP_PATH', readSite: 'index.ts:281' },
+  { name: 'MCP_HTTP_PATH', reason: 'deferred-config entry; the path the server LISTENS on', readSite: 'index.ts:235' },
+  { name: 'MCP_BRIDGE_HTTP_PATH', reason: 'deferred-config entry; the path ADVERTISED to clients, falls back to MCP_HTTP_PATH', readSite: 'index.ts:321' },
   { name: 'MCP_BRIDGE_PUBLIC_HOST', reason: 'deferred-config entry; advertised public host', readSite: 'index.ts:269, httpServer.ts:581' },
   { name: 'MCP_BRIDGE_PUBLIC_SCHEME', reason: 'deferred-config entry; advertised scheme override', readSite: 'index.ts' },
   { name: 'MCP_BRIDGE_USE_TLS', reason: 'deprecated alias of MCP_ENABLE_HTTPS; affects only advertised-scheme detection', readSite: 'index.ts:277' },

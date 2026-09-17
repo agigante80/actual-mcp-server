@@ -535,7 +535,7 @@ MCP_SSE_AUTHORIZATION=your_bearer_token  # Bearer token (optional)
 
 # OIDC / JWT authentication (AUTH_PROVIDER=oidc)
 OIDC_ISSUER=https://sso.yourdomain.com   # OIDC issuer URL
-OIDC_RESOURCE=your-client-id             # Expected 'aud' claim
+OIDC_RESOURCE=https://actual-mcp.example.com/http   # This server's public MCP URL (RFC 9728 identifier, expected 'aud'; #461)
 OIDC_ACCEPTED_AUDIENCES=                 # Extra accepted 'aud' values (#245, optional)
 OIDC_JWKS_TRUSTED_HOSTS=                 # Cross-host JWKS allowlist, e.g. Google (#254, optional)
 OIDC_ALLOW_INSECURE_ISSUER=false         # #244 opt-out for a trusted-LAN http issuer
