@@ -73,7 +73,9 @@ forge tokens); a loopback issuer is allowed for local dev, and `OIDC_ALLOW_INSEC
 is an explicit opt-out for a trusted-network http issuer (for example a LAN Casdoor). The resolved
 `jwks_uri` must be https and same-origin with the issuer, the discovery fetch does not follow
 redirects, and a failed or expired token now returns a clean 401 (the jose error is wrapped, never
-the token, so no token material leaks).
+the raw token); outside production the body's `cause` names the failing claim (for example
+`claim: aud`) but never the token's decoded payload, and in production the body carries no `cause`
+at all (#463).
 
 **Audience allowlist (#245)**: the `aud` claim is validated against a strict, closed set: the
 required `OIDC_RESOURCE` plus any explicitly configured `OIDC_ACCEPTED_AUDIENCES` (comma-separated,

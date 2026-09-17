@@ -20,6 +20,7 @@ import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
 import { discoverOidcMetadata, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
 import { oidcResourceStartupWarnings } from '../lib/oidc-resource.js';
+import { stripJoseCause } from '../lib/oidc-error-cause.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
@@ -159,8 +160,10 @@ export async function startHttpServer(
         // #244: map a jose verification failure (expired, malformed, wrong aud,
         // bad signature) to MCPAuthTokenVerificationError so mcp-auth's bearer
         // handler returns a clean 401 with a WWW-Authenticate header instead of
-        // re-throwing the raw jose error as a 500. Pass only the jose error as
-        // the cause (never the raw token), so no token material leaks.
+        // re-throwing the raw jose error as a 500. #463: pass a STRIPPED cause
+        // (code, claim, reason only), never the jose error itself: outside
+        // production showErrorDetails serialises the cause into the 401 body, and
+        // jose's claim errors carry the decoded token as an own property.
         let payload: Awaited<ReturnType<typeof jwtVerify>>['payload'];
         try {
           ({ payload } = await jwtVerify(token, jwks, {
@@ -170,7 +173,7 @@ export async function startHttpServer(
             audience: acceptedAudiences,
           }));
         } catch (err) {
-          throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
+          throw new MCPAuthTokenVerificationError('invalid_token', stripJoseCause(err));
         }
         // #244: require a usable `sub`. authenticateRequest (#163) and budget-acl
         // key authorization on req.auth.subject, so a token with no string `sub`
