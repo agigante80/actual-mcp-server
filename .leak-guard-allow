@@ -1,0 +1,22 @@
+# Things this project has decided it may show. Tracked and public on purpose.
+# Keys: root, prefix, email (public scanner); skip (both).
+# NEVER put a private NAME here — the file is public, and a name would be an index.
+root proj
+# docs/guides/MCP_CLIENTS_SETUP.md, examples/mcp-clients/codex-config.toml: generic tool roots in setup instructions
+root Library
+root .cursor
+root .gemini
+root .codex
+# tests/unit/budget_loader_postcondition.test.js:402: fixture string for a path-scrubbing test
+root actual
+# docs/guides/MCP_CLIENTS_SETUP.md, examples/mcp-clients/codex-config.toml: placeholder segment in setup instructions
+prefix /home/YOUR_USER
+# src/lib/budgetLoader.ts:150, tests/unit/budget_loader_postcondition.test.js: placeholder fixture user
+prefix /home/alice
+prefix /Users/alice
+# tests/unit/budget_loader_postcondition.test.js:308: placeholder fixture user
+prefix /home/someuser
+# tests/unit/httpServer_init_failure_report.test.js:84, tests/unit/stdio_init_failure_report.test.js:56: placeholder fixture user
+prefix /home/someone
+# tests/unit/httpServer_oidc_jwks_discovery.test.js:94: a Google API identifier that only looks like an email
+email p@www.googleapis.com
