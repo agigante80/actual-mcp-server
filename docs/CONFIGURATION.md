@@ -40,7 +40,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `MCP_BRIDGE_PUBLIC_HOST` | string | auto-detected | No | no | raw | `index.ts:269`, `httpServer.ts:581` | Advertised public host |
 | `MCP_BRIDGE_PUBLIC_SCHEME` | string | auto-detected | No | no | raw | `index.ts` | Advertised scheme override |
 | `MCP_BRIDGE_USE_TLS` | bool string | `false` | No | no | raw | `index.ts:277` | Deprecated alias of `MCP_ENABLE_HTTPS`; affects ONLY the advertised scheme |
-| `MCP_HTTP_BODY_LIMIT` | size string | `512kb` | No | no | schema | config | Max JSON-RPC request body (#168). #466: validated at startup as a positive byte size (units b, kb to pb, no surrounding spaces or separators), 1 byte to 9007199254740991 bytes (2^53 - 1); a fractional unit is floored to whole bytes (0.3kb is 307). An invalid value is refused naming the variable, never defaulted and never passed through to be misread; stdio also refuses to start on it |
+| `MCP_HTTP_BODY_LIMIT` | size string | `512kb` | No | no | schema | config | Max JSON-RPC request body (#168). #466: validated at startup as a positive byte size (units b, kb to pb; spaces between the number and the unit are allowed, as in `512 kb`; a leading space, a space after the unit (`512kb ` with a trailing space), separators, and a decimal with no unit or with `b`, as in `1.5` or `1.5b`, are refused), 1 byte to 9007199254740991 bytes (2^53 - 1); a fractional unit is floored to whole bytes (0.3kb is 307). An invalid value is refused naming the variable, never defaulted and never passed through to be misread; stdio also refuses to start on it |
 | `MCP_TRANSPORT_MODE` | enum | `--http` | No | no | schema | config | `--http` (stdio uses the `--stdio` flag) |
 
 ## Transport / routing

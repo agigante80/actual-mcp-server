@@ -67,16 +67,27 @@ check('#466: the field is validated by a .refine( chained after the default', /M
 // a tiny fraction as a 0-byte cap and a huge value as Infinity, which 2.3.0 accepts as
 // unlimited. Every accepted value must parse AND be a limit express.json accepts; every
 // refused value must fail naming the variable.
-const { configSchema } = await import('../../dist/src/config.js');
+const { configSchema, parseStrictByteSize } = await import('../../dist/src/config.js');
 const cfgBase = { ACTUAL_SERVER_URL: 'http://localhost:5006', ACTUAL_PASSWORD: 'x', ACTUAL_BUDGET_SYNC_ID: 's' };
 const parseLimit = (v) => configSchema.safeParse({ ...cfgBase, MCP_HTTP_BODY_LIMIT: v });
 
 console.log('\n[httpServer-body-limit] #466 accept table');
-for (const v of ['512kb', '1mb', '1.5MB', '1048576', '512b', '512 kb', '0.3kb', '7pb', '9007199254740991']) {
+// #468: each row pins the byte COUNT body-parser will enforce (values taken from
+// bytes@3.1.2, the parser body-parser 2.3.0 uses). Acceptance alone cannot see a wrong
+// multiplier: with kb = 1000, "512kb" is still accepted but becomes 512000 bytes.
+// Hard-coded literals, never a value derived from the function under test.
+const ACCEPT = [
+  ['512kb', 524288], ['1mb', 1048576], ['1.5MB', 1572864], ['1048576', 1048576], ['512b', 512],
+  ['512 kb', 524288], ['0.3kb', 307], ['7pb', 7881299347898368], ['9007199254740991', 9007199254740991],
+];
+for (const [v, bytes] of ACCEPT) {
   let builds = true;
   try { express.json({ limit: v }); } catch { builds = false; }
   check(`accepts ${JSON.stringify(v)} and express.json accepts it too`, parseLimit(v).success && builds);
+  check(`${JSON.stringify(v)} is exactly ${bytes} bytes`, parseStrictByteSize(v) === bytes);
 }
+check('parseStrictByteSize refuses "1.5b" and "10 potatoes" (null, not a misread size)',
+  parseStrictByteSize('1.5b') === null && parseStrictByteSize('10 potatoes') === null);
 check('an unset limit still defaults to 512kb', configSchema.safeParse(cfgBase).data?.MCP_HTTP_BODY_LIMIT === '512kb');
 
 console.log('\n[httpServer-body-limit] #466 reject table');

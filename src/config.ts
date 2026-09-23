@@ -12,7 +12,7 @@ import { parseIdentityMap } from './auth/identity-map.js';
 // accepts as NO cap at all: GHSA-v422-hmwv-36x6 by another route.
 const BODY_LIMIT_UNITS: Record<string, number> = { b: 1, kb: 2 ** 10, mb: 2 ** 20, gb: 2 ** 30, tb: 2 ** 40, pb: 2 ** 50 };
 const BODY_LIMIT_RE = new RegExp(`^(\\d+(?:\\.\\d+)?) *(${Object.keys(BODY_LIMIT_UNITS).join('|')})?$`, 'i');
-function parseStrictByteSize(value: string): number | null {
+export function parseStrictByteSize(value: string): number | null {
   const m = BODY_LIMIT_RE.exec(value);
   if (!m) return null;
   const unit = (m[2] ?? 'b').toLowerCase();
