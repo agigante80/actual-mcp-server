@@ -192,7 +192,7 @@ services:
 
   # Playwright test runner
   e2e-test-runner:
-    image: mcr.microsoft.com/playwright:v1.62.1-jammy
+    image: mcr.microsoft.com/playwright:v1.63.0-jammy
     container_name: e2e-test-runner
     depends_on:
       mcp-server-test:
