@@ -79,6 +79,8 @@ console.log('\n[httpServer-body-limit] #466 accept table');
 const ACCEPT = [
   ['512kb', 524288], ['1mb', 1048576], ['1.5MB', 1572864], ['1048576', 1048576], ['512b', 512],
   ['512 kb', 524288], ['0.3kb', 307], ['7pb', 7881299347898368], ['9007199254740991', 9007199254740991],
+  // #470: every unit's multiplier is pinned, gb and tb included.
+  ['1gb', 1073741824], ['1tb', 1099511627776],
 ];
 for (const [v, bytes] of ACCEPT) {
   let builds = true;
