@@ -1,6 +1,26 @@
 import { z } from 'zod';
 import { parseIdentityMap } from './auth/identity-map.js';
 
+// #466: the byte count body-parser will ACTUALLY enforce for MCP_HTTP_BODY_LIMIT, or
+// null when the value must be refused. Mirrors `bytes.parse` (what body-parser uses)
+// without importing that transitive package: floor(number * unit), units b and kb
+// through pb in powers of 1024. Stricter than `bytes` in exactly the places `bytes`
+// silently misreads: surrounding whitespace ("  512kb" is 512 bytes), trailing text
+// ("10 potatoes" is 10), separators ("1,000" is 1), a decimal with no unit or with b
+// ("1.5" is 1). The COMPUTED size is what is bounded, because a tiny fraction floors to
+// a 0-byte cap (every request 413) and a huge value is Infinity, which body-parser 2.3.0
+// accepts as NO cap at all: GHSA-v422-hmwv-36x6 by another route.
+const BODY_LIMIT_UNITS: Record<string, number> = { b: 1, kb: 2 ** 10, mb: 2 ** 20, gb: 2 ** 30, tb: 2 ** 40, pb: 2 ** 50 };
+const BODY_LIMIT_RE = new RegExp(`^(\\d+(?:\\.\\d+)?) *(${Object.keys(BODY_LIMIT_UNITS).join('|')})?$`, 'i');
+function parseStrictByteSize(value: string): number | null {
+  const m = BODY_LIMIT_RE.exec(value);
+  if (!m) return null;
+  const unit = (m[2] ?? 'b').toLowerCase();
+  if (unit === 'b' && m[1].includes('.')) return null;
+  const n = Math.floor(parseFloat(m[1]) * BODY_LIMIT_UNITS[unit]);
+  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+}
+
 export const configSchema = z.object({
   ACTUAL_SERVER_URL: z.string().url(),
   ACTUAL_PASSWORD: z.string().default(''),
@@ -89,7 +109,15 @@ export const configSchema = z.object({
   // express.json({ limit }). Express accepts a byte string like '512kb' or '2mb'.
   // Default 512kb is generous headroom over the largest legitimate batch payload
   // while bounding the memory-exhaustion surface. Raise it for bulk-import jobs.
-  MCP_HTTP_BODY_LIMIT: z.string().default('512kb'),
+  // #466: validated HERE, because body-parser 2.3.0 throws an opaque TypeError at HTTP
+  // startup on an unparseable limit (2.2.x silently ran with no cap), and some values
+  // it still silently misreads. Refused, never defaulted away. stdio parses this file
+  // too, so a bad value refuses stdio startup as well (as AUTH_BUDGET_ACL_CLAIM does).
+  MCP_HTTP_BODY_LIMIT: z.string().default('512kb').refine(
+    (v) => parseStrictByteSize(v) !== null,
+    'MCP_HTTP_BODY_LIMIT must be a positive byte size such as 512kb, 1mb or 1048576 (units b, kb, mb, gb, tb, pb; ' +
+      'no spaces around it, no separators; at least 1 byte and at most 9007199254740991 bytes) (#466)',
+  ),
   MAX_CONCURRENT_SESSIONS: z.string().default('15').transform(val => parseInt(val, 10)),
 
   // --- OIDC / mcp-auth (CF-5) ---

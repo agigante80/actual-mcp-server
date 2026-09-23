@@ -496,7 +496,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode. Only `--http` is a valid value; stdio is selected via the `--stdio` CLI flag, not this var |
 | `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
 | `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
-| `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`) |
+| `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`, `1048576`). Validated at startup: an invalid, zero or overflowing size refuses to start naming the variable (#466) |
 | **Session Management** ||||
 | `USE_CONNECTION_POOL` | `true` | No | Enable session-based connection pooling |
 | `MAX_CONCURRENT_SESSIONS` | `15` | No | Maximum concurrent MCP sessions allowed |
