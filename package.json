@@ -71,7 +71,7 @@
     "@actual-app/api": "^26.9.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "debug": "^4.4.3",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.1",
     "express": "^5.2.1",
     "fuse.js": "^7.4.2",
     "jose": "^6.2.12",
