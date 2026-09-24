@@ -142,8 +142,9 @@ export function resourceMetadataWarning(opts: { resource: string; advertisedPath
   // resource mints aud=${recommended}, which the closed allowlist then rejects.
   const detail = onlyTrailingSlash
     ? `The only difference is the trailing slash. A client that canonicalises the resource will request a token for ${recommended}, which is not in the accepted audience set, so use the form without the slash.`
-    : `Protected-resource metadata is served at /.well-known/oauth-protected-resource${url.pathname === '/' ? '' : url.pathname} only; ` +
-      `a client that looks for the path-specific document under ${canonicalPath} and does not fall back to the root will fail discovery. ` +
+    : (url.pathname === '/'
+        ? `Protected-resource metadata is served at the root /.well-known/oauth-protected-resource only; a client that looks for the path-specific document under ${canonicalPath} and does not fall back to the root will fail discovery. `
+        : `Protected-resource metadata is served at /.well-known/oauth-protected-resource${url.pathname} and the root /.well-known/oauth-protected-resource; a client that looks for the path-specific document under ${canonicalPath} will fail discovery. `) +
       `Switching changes the expected aud and stops serving the current document, so during the switch add OIDC_ACCEPTED_AUDIENCES=${url.origin}${url.pathname === '/' ? '' : url.pathname} to keep tokens minted for the old value valid.`;
   return (
     `[OIDC] ${VAR} is ${displayForm(url)} but the MCP endpoint is advertised at ${opts.advertisedPath}. ${detail} ` +

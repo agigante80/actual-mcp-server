@@ -75,9 +75,15 @@ const { listener, cleanup } = await startHttpServer({}, 0, httpPath, {}, [], 'de
 if (!listener.listening) await new Promise((res, rej) => { listener.once('listening', res); listener.once('error', rej); });
 const base = 'http://127.0.0.1:' + listener.address().port;
 const results = { base };
-const meta = async (p) => { const r = await realFetch(base + p); return { status: r.status, body: r.status === 200 ? await r.json() : null }; };
+const meta = async (p) => { const r = await realFetch(base + p); return { status: r.status, body: r.status === 200 ? await r.json() : null, cors: r.headers.get('access-control-allow-origin') }; };
+const preflight = async (p) => { const r = await realFetch(base + p, { method: 'OPTIONS', headers: { Origin: 'https://example.com', 'Access-Control-Request-Method': 'GET' } });
+  return { status: r.status, cors: r.headers.get('access-control-allow-origin') }; };
 results.metaPath = await meta('/.well-known/oauth-protected-resource' + httpPath);
 results.metaRoot = await meta('/.well-known/oauth-protected-resource');
+results.metaOther = await meta('/.well-known/oauth-protected-resource/not-our-path');
+results.metaQuery = await meta('/.well-known/oauth-protected-resource?query=1');
+results.preflightRoot = await preflight('/.well-known/oauth-protected-resource');
+results.preflightPath = await preflight('/.well-known/oauth-protected-resource' + httpPath);
 if (process.env.T_EXTRA_META) results.metaExtra = await meta(process.env.T_EXTRA_META);
 const body = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' });
 const post = async (headers) => { const r = await realFetch(base + httpPath, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body });
@@ -128,7 +134,7 @@ const booted = (r) => {
 };
 
 // ---------------------------------------------------------------------------
-console.log('\n[oidc-resource-metadata] #461 scenarios 1 and 2: endpoint form');
+console.log('\n[oidc-resource-metadata] #461 scenarios 1 and 2: endpoint form (#473 root discovery rewrite)');
 {
   const r = boot({ OIDC_RESOURCE: 'https://actual-mcp.example.com/http' }, 'endpoint form');
   check('server boots with the endpoint form and reports', () => booted(r));
@@ -137,8 +143,22 @@ console.log('\n[oidc-resource-metadata] #461 scenarios 1 and 2: endpoint form');
     assert.strictEqual(r.result.metaPath.body.resource, 'https://actual-mcp.example.com/http');
     assert.ok(r.result.metaPath.body.authorization_servers.includes(ISSUER), JSON.stringify(r.result.metaPath.body));
   });
-  check('the root document is NOT served for the endpoint form (one identifier, one document)', () => {
-    assert.strictEqual(r.result.metaRoot.status, 404);
+  check('the root document IS served for the endpoint form, deep-equal to path-specific document (#473)', () => {
+    assert.strictEqual(r.result.metaRoot.status, 200);
+    assert.deepStrictEqual(r.result.metaRoot.body, r.result.metaPath.body);
+    assert.strictEqual(r.result.metaRoot.cors, r.result.metaPath.cors);
+  });
+  check('root query string is preserved during rewrite (#473)', () => {
+    assert.strictEqual(r.result.metaQuery.status, 200);
+    assert.deepStrictEqual(r.result.metaQuery.body, r.result.metaPath.body);
+  });
+  check('OPTIONS CORS preflight on root returns CORS headers matching path-specific route (#473)', () => {
+    assert.strictEqual(r.result.preflightRoot.status, 204);
+    assert.strictEqual(r.result.preflightRoot.cors, '*');
+    assert.strictEqual(r.result.preflightRoot.cors, r.result.preflightPath.cors);
+  });
+  check('only the exact root path is rewritten: /not-our-path remains 404 (#473)', () => {
+    assert.strictEqual(r.result.metaOther.status, 404);
   });
   check('unauthenticated POST is 401 and WWW-Authenticate names the path-specific metadata URL', () => {
     assert.strictEqual(r.result.unauth.status, 401);
@@ -220,6 +240,8 @@ console.log('\n[oidc-resource-metadata] #461 scenarios 6 and 7: the advertised p
     booted(r);
     assert.strictEqual(r.result.metaPath.status, 200);
     assert.strictEqual(r.result.metaPath.body.resource, 'https://host/mcp');
+    assert.strictEqual(r.result.metaRoot.status, 200);
+    assert.deepStrictEqual(r.result.metaRoot.body, r.result.metaPath.body);
     assert.deepStrictEqual(r.warnings, []);
   });
   const p = boot({ OIDC_RESOURCE: 'https://host/mcp', T_ADVERTISED_URL: 'https://host/mcp', T_EXTRA_META: '/.well-known/oauth-protected-resource/mcp' }, 'proxied /mcp');
