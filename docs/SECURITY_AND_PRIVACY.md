@@ -147,8 +147,8 @@ is refused at startup with a message naming the variable (#461); the accepted-au
 `OIDC_RESOURCE` plus `OIDC_ACCEPTED_AUDIENCES`, closed, so this change adds no way to accept a token minted
 for another resource.
 
-**Casdoor compatibility**: Casdoor auth-code flow JWTs omit the `scope` claim.
-Set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements and logs `Scopes required: (none)`.
+**Casdoor & Cloudflare Access compatibility**: Casdoor and Cloudflare Access for SaaS auth-code flow JWTs omit the `scope` claim.
+Set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements and logs `Scopes required: (none)`. If a client requires scopes (like `offline_access`) advertised in discovery, set `OIDC_SCOPES_SUPPORTED`. Advertised scopes are not enforced on incoming tokens; access control comes from the signature, issuer, closed audience allowlist, non-empty `sub`, required scopes, and the budget ACL.
 
 **Per-user Budget ACL** (`AUTH_BUDGET_ACL`):
 ```

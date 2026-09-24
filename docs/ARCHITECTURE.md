@@ -541,7 +541,8 @@ OIDC_JWKS_TRUSTED_HOSTS=                 # Cross-host JWKS allowlist, e.g. Googl
 OIDC_JWKS_URI=                           # Direct JWKS URL, bypasses discovery; Cloudflare Access certs (#462, optional)
 OIDC_TOKEN_SOURCE=authorization          # or cf-access-jwt-assertion behind Cloudflare Access Managed OAuth (#462)
 OIDC_ALLOW_INSECURE_ISSUER=false         # #244 opt-out for a trusted-LAN http issuer
-OIDC_SCOPES=                             # Required scopes (empty = none)
+OIDC_SCOPES=                             # Required (enforced) scopes; also advertised
+OIDC_SCOPES_SUPPORTED=                   # Advertised discovery scopes not enforced (#472)
 AUTH_BUDGET_ACL=user@example.com:sync-id # Per-user budget ACL (optional)
 
 # HTTPS
@@ -584,6 +585,7 @@ export const configSchema = z.object({
   OIDC_ISSUER: z.string().optional(),
   OIDC_RESOURCE: z.string().optional(),
   OIDC_SCOPES: z.string().optional(),
+  OIDC_SCOPES_SUPPORTED: z.string().optional(),
   AUTH_BUDGET_ACL: z.string().optional(),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
   MCP_HTTPS_CERT: z.string().optional(),
