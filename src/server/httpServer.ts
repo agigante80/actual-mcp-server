@@ -23,6 +23,7 @@ import { createAssertionPromotionMiddleware } from '../lib/oidc-token-source.js'
 import { oidcResourceStartupWarnings } from '../lib/oidc-resource.js';
 import { stripJoseCause } from '../lib/oidc-error-cause.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
+import { parseScopeList } from '../lib/oidc-scopes.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
 import * as https from 'node:https';
@@ -88,9 +89,7 @@ export async function startHttpServer(
       // Serve RFC 8707 Protected Resource Metadata (/.well-known/oauth-protected-resource/...)
       app.use(mcpAuth.protectedResourceMetadataRouter());
       // Protect ALL httpPath routes with JWT validation + budget ACL
-      const requiredScopes = config.OIDC_SCOPES
-        ? config.OIDC_SCOPES.split(',').map((s) => s.trim()).filter(Boolean)
-        : [];
+      const requiredScopes = parseScopeList(config.OIDC_SCOPES);
 
       // #245: the strict, closed audience allowlist (OIDC_RESOURCE plus any
       // explicitly configured OIDC_ACCEPTED_AUDIENCES). jose treats the array as

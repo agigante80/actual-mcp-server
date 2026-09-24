@@ -84,7 +84,11 @@ const post = async (headers) => { const r = await realFetch(base + httpPath, { m
   return { status: r.status, wwwAuthenticate: r.headers.get('www-authenticate') }; };
 results.unauth = await post({});
 if (process.env.T_TOKEN_AUD) {
-  const token = await new SignJWT({ scope: 'openid' }).setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+  const claims = {};
+  if (process.env.T_NO_SCOPE !== '1') {
+    claims.scope = process.env.T_TOKEN_SCOPE || 'openid';
+  }
+  const token = await new SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'k1' })
     .setIssuer(ISSUER).setAudience(process.env.T_TOKEN_AUD).setSubject('user-1').setIssuedAt().setExpirationTime('5m').sign(privateKey);
   results.withToken = await post({ Authorization: 'Bearer ' + token });
 }
@@ -106,6 +110,8 @@ function boot(env, label) {
       OIDC_ISSUER: ISSUER,
       MCP_BRIDGE_HTTP_PATH: undefined,
       OIDC_ACCEPTED_AUDIENCES: undefined,
+      OIDC_SCOPES: undefined,
+      OIDC_SCOPES_SUPPORTED: undefined,
       ...env,
     },
     encoding: 'utf8',
@@ -274,6 +280,68 @@ console.log('\n[oidc-resource-metadata] #461 scenario 10: an unparseable adverti
     assert.strictEqual(r.warnings.length, 1, r.warnings.join('\n'));
     assert.ok(r.warnings[0].includes('MCP_BRIDGE_HTTP_PATH'), r.warnings[0]);
     assert.ok(!r.warnings[0].includes('3600mcp'), r.warnings[0]);
+  });
+}
+
+// ---------------------------------------------------------------------------
+console.log('\n[oidc-resource-metadata] #472: separate advertised scopes from required scopes');
+{
+  // Positive: advertised scopes without required scopes + JWT with no scope claim -> 200
+  const rPos = boot({
+    OIDC_RESOURCE: 'https://actual-mcp.example.com/http',
+    OIDC_SCOPES: '',
+    OIDC_SCOPES_SUPPORTED: 'openid,email,profile,offline_access',
+    T_TOKEN_AUD: 'https://actual-mcp.example.com/http',
+    T_NO_SCOPE: '1',
+  }, 'advertised scopes, required empty, JWT without scope');
+  check('#472: scopes_supported has advertised scopes and JWT with no scope claim returns 200', () => {
+    booted(rPos);
+    assert.strictEqual(rPos.result.metaPath.status, 200);
+    assert.deepStrictEqual(rPos.result.metaPath.body.scopes_supported, ['openid', 'email', 'profile', 'offline_access']);
+    assert.strictEqual(rPos.result.withToken.status, 200, JSON.stringify(rPos.result.withToken));
+  });
+
+  // Negative: required scope not present in JWT -> 403, and scopes_supported is merged
+  const rNeg = boot({
+    OIDC_RESOURCE: 'https://actual-mcp.example.com/http',
+    OIDC_SCOPES: 'read',
+    OIDC_SCOPES_SUPPORTED: 'offline_access',
+    T_TOKEN_AUD: 'https://actual-mcp.example.com/http',
+    T_TOKEN_SCOPE: 'offline_access',
+  }, 'required scope missing from JWT');
+  check('#472: scopes_supported merges advertised and required, and missing required scope returns 403', () => {
+    booted(rNeg);
+    assert.strictEqual(rNeg.result.metaPath.status, 200);
+    assert.deepStrictEqual(rNeg.result.metaPath.body.scopes_supported, ['offline_access', 'read']);
+    assert.strictEqual(rNeg.result.withToken.status, 403, JSON.stringify(rNeg.result.withToken));
+  });
+
+  // Backward compatibility positive: OIDC_SCOPES=openid only, JWT with scope: openid -> 200
+  const rCompatPos = boot({
+    OIDC_RESOURCE: 'https://actual-mcp.example.com/http',
+    OIDC_SCOPES: 'openid',
+    T_TOKEN_AUD: 'https://actual-mcp.example.com/http',
+    T_TOKEN_SCOPE: 'openid',
+  }, 'backward compatibility positive');
+  check('#472: backward compatibility: OIDC_SCOPES alone advertises and enforces required scope (200)', () => {
+    booted(rCompatPos);
+    assert.strictEqual(rCompatPos.result.metaPath.status, 200);
+    assert.deepStrictEqual(rCompatPos.result.metaPath.body.scopes_supported, ['openid']);
+    assert.strictEqual(rCompatPos.result.withToken.status, 200, JSON.stringify(rCompatPos.result.withToken));
+  });
+
+  // Backward compatibility negative: OIDC_SCOPES=openid only, JWT without scope -> 403
+  const rCompatNeg = boot({
+    OIDC_RESOURCE: 'https://actual-mcp.example.com/http',
+    OIDC_SCOPES: 'openid',
+    T_TOKEN_AUD: 'https://actual-mcp.example.com/http',
+    T_NO_SCOPE: '1',
+  }, 'backward compatibility negative');
+  check('#472: backward compatibility: OIDC_SCOPES alone rejects JWT without scope claim (403)', () => {
+    booted(rCompatNeg);
+    assert.strictEqual(rCompatNeg.result.metaPath.status, 200);
+    assert.deepStrictEqual(rCompatNeg.result.metaPath.body.scopes_supported, ['openid']);
+    assert.strictEqual(rCompatNeg.result.withToken.status, 403, JSON.stringify(rCompatNeg.result.withToken));
   });
 }
 

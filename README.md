@@ -508,11 +508,12 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `OIDC_ISSUER` | _(none)_ | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
 | `OIDC_ALLOW_INSECURE_ISSUER` | `false` | No | Allow a plaintext (http) OIDC issuer on a trusted network (#244). Off by default (http issuer refused at startup); set `true` only for local/LAN testing |
 | `OIDC_RESOURCE` | _(none)_ | If OIDC | This server's canonical URL, the RFC 9728 resource identifier and the expected `aud` (#461). Use the full public MCP endpoint URL, e.g. `https://actual-mcp.example.com/http`, no trailing slash. Must be an absolute http(s) URL (a bare client id refuses to start); put a client-id `aud` in `OIDC_ACCEPTED_AUDIENCES` instead |
-| `OIDC_ACCEPTED_AUDIENCES` | _(none)_ | No | Extra accepted `aud` values beyond `OIDC_RESOURCE`, comma-separated (#245). For IdPs that put the client-id in `aud` (e.g. Authentik). Strict allowlist, never a wildcard |
+| `OIDC_ACCEPTED_AUDIENCES` | _(none)_ | No | Extra accepted `aud` values beyond `OIDC_RESOURCE`, comma-separated (#245). For IdPs that put the client-id in `aud` (e.g. Authentik) or the OAuth client's redirect URI (Cloudflare Access for SaaS). Strict allowlist, never a wildcard |
 | `OIDC_JWKS_TRUSTED_HOSTS` | _(none)_ | No | Opt-in cross-origin JWKS hosts, comma-separated `host` or `host:port` (#254). For IdPs whose `jwks_uri` lives on another host, e.g. Google needs `www.googleapis.com`. Exact match, no wildcards; empty default keeps same-origin-only |
 | `OIDC_JWKS_URI` | _(none)_ | No | Direct JWKS URL that bypasses OpenID discovery (#462), for issuers with no discovery document (Cloudflare Access: `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`). Same https, credentials and origin-or-trusted-host rules as a discovered `jwks_uri`, plus no query or fragment. When set, `/.well-known/oauth-authorization-server` is not served and `AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo` is refused |
-| `OIDC_TOKEN_SOURCE` | `authorization` | No | Where the bearer JWT is read from (#462): `authorization` (default) or `cf-access-jwt-assertion` for an MCP server behind Cloudflare Access with Managed OAuth (the edge forwards the signed Access JWT in that header; `Authorization` is then never consulted, `OIDC_SCOPES` must be empty, and the origin must be reachable only via Cloudflare). See the Cloudflare recipe in `docs/guides/AI_CLIENT_SETUP.md` |
-| `OIDC_SCOPES` | _(none)_ | No | Comma-separated required scopes; leave empty for Casdoor |
+| `OIDC_TOKEN_SOURCE` | `authorization` | No | Where the bearer JWT is read from (#462): `authorization` (default) or `cf-access-jwt-assertion` for an MCP server behind Cloudflare Access with Managed OAuth (the edge forwards the signed Access JWT in that header; `Authorization` is then never consulted, `OIDC_SCOPES` must be empty, `OIDC_SCOPES_SUPPORTED` is allowed, and the origin must be reachable only via Cloudflare). See the Cloudflare recipe in `docs/guides/AI_CLIENT_SETUP.md` |
+| `OIDC_SCOPES` | _(none)_ | No | Comma-separated required (enforced) scopes, also advertised. Leave empty when the IdP's JWTs carry no `scope` claim (Casdoor, Cloudflare Access for SaaS) |
+| `OIDC_SCOPES_SUPPORTED` | _(none)_ | No | Comma-separated scopes advertised in `scopes_supported` but not enforced. Use when the IdP's JWTs carry no `scope` claim but the client needs a scope such as `offline_access` advertised (e.g. Gemini with Cloudflare Access for SaaS). Required scopes from `OIDC_SCOPES` are always advertised too |
 | `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
 | `AUTH_BUDGET_ACL_SOURCE` | `static` | No | `static` uses the `AUTH_BUDGET_ACL` map above. `actual` derives the ACL from the Actual server's own per-file access list, so revoking someone in Actual takes effect here without a config edit. Requires a multi-user (OpenID) Actual server that was password-bootstrapped first |
 | `AUTH_BUDGET_ACL_CLAIM` | `auto` | No | Which token claim identifies the principal when the source is `actual`. `auto` mirrors Actual's own precedence (`preferred_username`, `login`, `email`, `id`, `sub`) and matches the result against Actual's `userName`. Set a single claim name to pin one instead |
@@ -666,7 +667,8 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL (the expected 'aud')
 OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
-OIDC_SCOPES=                                            # leave empty for Casdoor
+OIDC_SCOPES=                                            # leave empty for Casdoor / Cloudflare Access for SaaS
+# OIDC_SCOPES_SUPPORTED=openid,offline_access           # extra scopes advertised in discovery without enforcement (#472)
 ```
 
 `OIDC_RESOURCE` is the canonical URL of this MCP server (the MCP authorization spec's "canonical server URI" and the RFC 9728 resource identifier), not an IdP client id: the protected-resource metadata route and the expected token audience are both derived from it, and a value that is not an absolute http(s) URL refuses to start with a message naming the variable (#461). Use the full public endpoint URL (`https://host/http`, or whatever `MCP_BRIDGE_HTTP_PATH` / `MCP_HTTP_PATH` advertises) rather than the bare origin: with the endpoint form the server publishes the path-specific document a strict client looks for, and it warns at startup when the two disagree.
@@ -693,7 +695,7 @@ Three things to know before enabling it:
 
 It is opt-in and fails closed: if the budget list cannot be read, or the principal matches no file, access is denied rather than granted.
 
-See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format and Casdoor notes.
+See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format, Casdoor notes, and the Cloudflare Access for SaaS + Gemini recipe.
 
 ---
 

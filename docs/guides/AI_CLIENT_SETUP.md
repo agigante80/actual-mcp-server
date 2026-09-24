@@ -293,7 +293,25 @@ Principal key formats:
 - `"some-sub-uuid"`: matches the `sub` claim
 - `"group:admin"`: matches an element in `groups` or `roles` array
 
-**Casdoor note**: Casdoor JWTs do not include a `scope` claim. Set `OIDC_SCOPES=` (empty string) to disable scope enforcement.
+**Casdoor note**: Casdoor JWTs do not include a `scope` claim. Set `OIDC_SCOPES=` (empty string) to disable scope enforcement. If clients need scopes advertised in discovery, use `OIDC_SCOPES_SUPPORTED`.
+
+#### Cloudflare Access for SaaS + Google Gemini
+
+When connecting Google Gemini's custom MCP connector to Actual MCP Server authenticated via Cloudflare Access for SaaS:
+
+1. **Audience**: Cloudflare mints access token JWTs with the `aud` claim set to the OAuth client's redirect URI (`https://oauth-redirect.googleusercontent.com/r/...`), rather than the resource URL or SaaS application ID. Set `OIDC_ACCEPTED_AUDIENCES` to this redirect URI.
+2. **Scopes**: Cloudflare access token JWTs omit the `scope` claim. Set `OIDC_SCOPES=` (empty) so the server enforces no scope requirements.
+3. **Refresh Tokens**: Gemini requires a refresh token for account linking and will only request one if `offline_access` is advertised in `scopes_supported`. Set `OIDC_SCOPES_SUPPORTED=openid,email,profile,offline_access` so `offline_access` is advertised in discovery without causing `missing_required_scopes` errors.
+4. **Discovery Path (Interim)**: Gemini probes `/.well-known/oauth-protected-resource` at the root domain first. Until built-in root metadata (#473) lands, configure your reverse proxy (e.g., Caddy or Nginx) to rewrite `/.well-known/oauth-protected-resource` to `/.well-known/oauth-protected-resource/http`.
+
+```dotenv
+AUTH_PROVIDER=oidc
+OIDC_ISSUER=https://<team>.cloudflareaccess.com/cdn-cgi/access/sso/oidc/<app-id>
+OIDC_RESOURCE=https://<app-domain>/http
+OIDC_ACCEPTED_AUDIENCES=https://oauth-redirect.googleusercontent.com/r/<client-specific-suffix>
+OIDC_SCOPES=                                                  # enforce nothing: JWT has no scope claim
+OIDC_SCOPES_SUPPORTED=openid,email,profile,offline_access     # advertise offline_access so client gets a refresh token
+```
 
 **OAuth discovery for Claude.ai / mcp-remote (#285)**: with `AUTH_PROVIDER=oidc`, the server automatically publishes both OAuth metadata documents a client needs to start a login: `/.well-known/oauth-protected-resource` (RFC 9728) and `/.well-known/oauth-authorization-server` (RFC 8414). The RFC 8414 document is re-served from your IdP's own OpenID discovery doc, which lets clients that resolve that path against the resource-server origin (and IdPs like Authentik that do not expose it where clients look) complete the flow. No configuration is required: point your OIDC client at the server's base URL and it discovers `OIDC_ISSUER`'s `authorization_endpoint` / `token_endpoint` automatically. If a client cannot find the token endpoint against a bare-OIDC IdP, confirm `AUTH_PROVIDER=oidc` is set (the endpoints exist only in OIDC mode).
 
