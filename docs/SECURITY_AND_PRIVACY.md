@@ -119,11 +119,14 @@ throws instead of sitting inert), and every allowlist acceptance is logged with 
 and JWKS host for an audit trail. Empty (default) means the same-origin-only behaviour is
 byte-identical to before.
 
-**OAuth discovery metadata endpoints (#285)**: in OIDC mode the server publishes two unauthenticated
-discovery documents so OAuth clients (mcp-remote, Claude.ai) can bootstrap a login. `/.well-known/oauth-protected-resource`
-(RFC 9728) identifies this resource server, and `/.well-known/oauth-authorization-server` (RFC 8414) is the
-authorization server metadata, re-served from the IdP's own OpenID discovery document because several clients
-resolve that path against the resource-server origin and some IdPs (Authentik) do not expose it there. Security
+**OAuth discovery metadata endpoints (#285)**: in OIDC mode the server publishes unauthenticated
+discovery documents so OAuth clients (mcp-remote, Claude.ai, Google Gemini) can bootstrap a login.
+`/.well-known/oauth-protected-resource` and `/.well-known/oauth-protected-resource<path>` (RFC 9728, #473)
+identify this resource server (when `OIDC_RESOURCE` has an endpoint path like `/http`, the canonical document is served
+at the path-specific URL and a root copy is served at `/.well-known/oauth-protected-resource` for clients that look only at the root),
+and `/.well-known/oauth-authorization-server` (RFC 8414) is the authorization server metadata, re-served from the IdP's own
+OpenID discovery document because several clients resolve that path against the resource-server origin and some IdPs (Authentik)
+do not expose it there. Security
 posture: the document is fetched ONCE at startup (the same hardened fetch used for JWKS discovery: https-only issuer,
 no redirects, timeout), so no client request ever triggers an outbound fetch and there is no request-path SSRF
 surface. It is served verbatim and exposes only the endpoints the IdP already publishes publicly (no tokens,

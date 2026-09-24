@@ -85,6 +85,26 @@ export async function startHttpServer(
     // the public URL, and a reverse proxy may rewrite the path in between.
     for (const w of oidcResourceStartupWarnings({ resource: config.OIDC_RESOURCE, advertisedUrl, httpPath })) logger.warn(w);
     if (mcpAuth) {
+      // #473: clients that skip the path-specific RFC 9728 discovery URL (e.g. Google Gemini)
+      // fetch /.well-known/oauth-protected-resource at the root. When OIDC_RESOURCE includes a
+      // path (e.g. /http or /mcp), rewrite root GET / HEAD / OPTIONS to the path-specific route
+      // so mcp-auth serves the identical metadata document and CORS headers in-process.
+      const resourcePath = config.OIDC_RESOURCE ? new URL(config.OIDC_RESOURCE).pathname : '/';
+      if (resourcePath !== '/') {
+        const rootMetadataPath = '/.well-known/oauth-protected-resource';
+        const targetMetadataPath = `${rootMetadataPath}${resourcePath}`;
+        app.use((req, _res, next) => {
+          if (
+            (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') &&
+            (req.path === rootMetadataPath || req.path === `${rootMetadataPath}/`)
+          ) {
+            const qIdx = req.url.indexOf('?');
+            const query = qIdx >= 0 ? req.url.slice(qIdx) : '';
+            req.url = `${targetMetadataPath}${query}`;
+          }
+          next();
+        });
+      }
       // Serve RFC 8707 Protected Resource Metadata (/.well-known/oauth-protected-resource/...)
       app.use(mcpAuth.protectedResourceMetadataRouter());
       // Protect ALL httpPath routes with JWT validation + budget ACL
