@@ -123,6 +123,45 @@ export function advertisedPathFrom(
   }
 }
 
+const METADATA_ROOT = '/.well-known/oauth-protected-resource';
+
+/**
+ * The route mcp-auth 0.2.0 serves the RFC 9728 document under for `resource` (#473), or
+ * null for the origin form, where it serves the root itself. This copies the rule in
+ * mcp-auth's `create-resource-metadata-endpoint.js` exactly, raw pathname included: it
+ * must NOT use `stripped()` below, because mcp-auth registers the route under the
+ * pathname as given, trailing slash and all, and a rewrite aimed anywhere else 404s.
+ */
+export function resourceMetadataPath(resource: string): string | null {
+  const { pathname } = new URL(resource);
+  return pathname === '/' ? null : `${METADATA_ROOT}${pathname}`;
+}
+
+/**
+ * The request URL a root metadata request is rewritten to (#473): the fixed target plus
+ * the original query string, verbatim from the first `?`. Pure so the query handling is
+ * testable: mcp-auth's route ignores the query, so a served 200 cannot tell a kept query
+ * from a dropped one.
+ */
+export function rootMetadataRewriteUrl(url: string, target: string): string {
+  const q = url.indexOf('?');
+  return q >= 0 ? `${target}${url.slice(q)}` : target;
+}
+
+/**
+ * True for a request the root rewrite applies to (#473). Exact lowercase path, with or
+ * without one trailing slash: Express 5's default non-strict routing already serves
+ * mcp-auth's own path-specific route both ways, so the root behaves the same, but it is
+ * two exact comparisons rather than a prefix, so no deeper path is ever rewritten. Only
+ * GET, HEAD (Express answers it through GET routes) and the OPTIONS CORS preflight.
+ */
+export function isRootMetadataRequest(method: string, path: string): boolean {
+  return (
+    (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') &&
+    (path === METADATA_ROOT || path === `${METADATA_ROOT}/`)
+  );
+}
+
 /**
  * Null when the identifier's path equals the advertised MCP path (the form under which
  * mcp-auth serves the path-specific RFC 9728 document a strict client looks for);
@@ -137,13 +176,15 @@ export function resourceMetadataWarning(opts: { resource: string; advertisedPath
   if (url.pathname === opts.advertisedPath || url.pathname === canonicalPath) return null;
   const recommended = `${url.origin}${canonicalPath}`;
   const onlyTrailingSlash = stripped(url.pathname) === canonicalPath;
+  const metadataPath = resourceMetadataPath(opts.resource);
   // Express serves the metadata route with and without the slash, so the slash form is
   // not a discovery 404; the hazard is the audience: a client that canonicalises the
   // resource mints aud=${recommended}, which the closed allowlist then rejects.
   const detail = onlyTrailingSlash
     ? `The only difference is the trailing slash. A client that canonicalises the resource will request a token for ${recommended}, which is not in the accepted audience set, so use the form without the slash.`
-    : `Protected-resource metadata is served at /.well-known/oauth-protected-resource${url.pathname === '/' ? '' : url.pathname} only; ` +
-      `a client that looks for the path-specific document under ${canonicalPath} and does not fall back to the root will fail discovery. ` +
+    : (metadataPath === null
+        ? `Protected-resource metadata is served at the root ${METADATA_ROOT} only; a client that looks for the path-specific document under ${canonicalPath} and does not fall back to the root will fail discovery. `
+        : `Protected-resource metadata is served at ${metadataPath} and, for clients that look only there, the root ${METADATA_ROOT} (#473); a client that looks for the path-specific document under ${canonicalPath} will fail discovery. `) +
       `Switching changes the expected aud and stops serving the current document, so during the switch add OIDC_ACCEPTED_AUDIENCES=${url.origin}${url.pathname === '/' ? '' : url.pathname} to keep tokens minted for the old value valid.`;
   return (
     `[OIDC] ${VAR} is ${displayForm(url)} but the MCP endpoint is advertised at ${opts.advertisedPath}. ${detail} ` +

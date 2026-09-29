@@ -26,6 +26,9 @@ import {
   advertisedPathFrom,
   resourceMetadataWarning,
   oidcResourceStartupWarnings,
+  resourceMetadataPath,
+  rootMetadataRewriteUrl,
+  isRootMetadataRequest,
 } from '../../dist/src/lib/oidc-resource.js';
 import { buildAcceptedAudiences } from '../../dist/src/lib/oidc-audiences.js';
 
@@ -208,6 +211,35 @@ async function metadataFor(resource) {
     assert.ok(msg && msg.includes('Invalid resource identifier URI'), String(msg));
   });
 }
+
+console.log('\n[oidc-resource] #473 root metadata rewrite helpers');
+
+check('resourceMetadataPath mirrors mcp-auth: raw pathname, no slash normalisation, null for the origin form', () => {
+  assert.strictEqual(resourceMetadataPath('https://host/http'), '/.well-known/oauth-protected-resource/http');
+  assert.strictEqual(resourceMetadataPath('https://host/http/'), '/.well-known/oauth-protected-resource/http/');
+  assert.strictEqual(resourceMetadataPath('https://host'), null);
+  assert.strictEqual(resourceMetadataPath('https://host/'), null);
+});
+
+check('rootMetadataRewriteUrl keeps the query string verbatim and nothing else', () => {
+  const T = '/.well-known/oauth-protected-resource/http';
+  assert.strictEqual(rootMetadataRewriteUrl('/.well-known/oauth-protected-resource', T), T);
+  assert.strictEqual(rootMetadataRewriteUrl('/.well-known/oauth-protected-resource?x=1', T), T + '?x=1');
+  assert.strictEqual(rootMetadataRewriteUrl('/.well-known/oauth-protected-resource/?a=1&b=2', T), T + '?a=1&b=2');
+});
+
+check('isRootMetadataRequest: exact lowercase root, optional single trailing slash, GET/HEAD/OPTIONS only', () => {
+  const R = '/.well-known/oauth-protected-resource';
+  for (const m of ['GET', 'HEAD', 'OPTIONS']) {
+    assert.strictEqual(isRootMetadataRequest(m, R), true, m);
+    assert.strictEqual(isRootMetadataRequest(m, R + '/'), true, m + ' slash');
+  }
+  for (const m of ['POST', 'PUT', 'DELETE', 'PATCH']) assert.strictEqual(isRootMetadataRequest(m, R), false, m);
+  assert.strictEqual(isRootMetadataRequest('GET', R + '/other'), false);
+  assert.strictEqual(isRootMetadataRequest('GET', R + '//'), false);
+  assert.strictEqual(isRootMetadataRequest('GET', '/.WELL-KNOWN/oauth-protected-resource'), false);
+  assert.strictEqual(isRootMetadataRequest('GET', '/.well-known/oauth-authorization-server'), false);
+});
 
 console.log('\n[oidc-resource] #461 purity');
 

@@ -91,5 +91,15 @@ check('the server-info probe is registered on /mcp-info',
 check('OIDC-mode RFC 9728 router is untouched (scenario 2): protectedResourceMetadataRouter still registered',
   /mcpAuth\.protectedResourceMetadataRouter\(\)/.test(src));
 
+{
+  // #473: the root metadata rewrite must sit inside `if (mcpAuth)` (so `none` mode never
+  // gets it) and before the router it feeds (so the rewritten URL reaches mcp-auth).
+  const guard = src.indexOf('if (mcpAuth) {');
+  const rewrite = src.indexOf('isRootMetadataRequest(req.method, req.path)');
+  const router = src.indexOf('app.use(mcpAuth.protectedResourceMetadataRouter())');
+  check('#473: root metadata rewrite is inside if (mcpAuth) and before protectedResourceMetadataRouter()',
+    guard >= 0 && rewrite > guard && router > rewrite && !src.slice(guard, rewrite).includes('\n    }\n'));
+}
+
 console.log(`\n[mcp-info-route] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

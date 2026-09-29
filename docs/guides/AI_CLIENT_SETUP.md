@@ -234,7 +234,7 @@ runs the OAuth flow with `resource=<the document's resource value>`. The documen
 
 | `OIDC_RESOURCE` | Document served at | Who it works for |
 |---|---|---|
-| `https://host/http` (recommended, the endpoint form) | `/.well-known/oauth-protected-resource/http` | Every client: the path-specific URL strict clients look for, and the official MCP SDK's first attempt |
+| `https://host/http` (recommended, the endpoint form) | `/.well-known/oauth-protected-resource/http`, plus the same document at the root `/.well-known/oauth-protected-resource` (#473) | Every client: the path-specific URL strict clients look for and the official MCP SDK's first attempt, and the root copy for clients that look only there (Google Gemini) |
 | `https://host` (the origin form) | `/.well-known/oauth-protected-resource` | Clients that fall back to the root (the official MCP SDK does); a client without that fallback fails discovery |
 
 Use the endpoint form without a trailing slash. The server logs one warning at startup when the
@@ -302,7 +302,6 @@ When connecting Google Gemini's custom MCP connector to Actual MCP Server authen
 1. **Audience**: Cloudflare mints access token JWTs with the `aud` claim set to the OAuth client's redirect URI (`https://oauth-redirect.googleusercontent.com/r/...`), rather than the resource URL or SaaS application ID. Set `OIDC_ACCEPTED_AUDIENCES` to this redirect URI.
 2. **Scopes**: Cloudflare access token JWTs omit the `scope` claim. Set `OIDC_SCOPES=` (empty) so the server enforces no scope requirements.
 3. **Refresh Tokens**: Gemini requires a refresh token for account linking and will only request one if `offline_access` is advertised in `scopes_supported`. Set `OIDC_SCOPES_SUPPORTED=openid,email,profile,offline_access` so `offline_access` is advertised in discovery without causing `missing_required_scopes` errors. The refresh token this unlocks is long-lived and lives at the IdP: this server validates access tokens only and cannot revoke it, so a compromised client keeps minting access tokens until you revoke its refresh token in Cloudflare Access (or your IdP). Advertise `offline_access` only for clients that need it.
-4. **Discovery Path (Interim)**: Gemini probes `/.well-known/oauth-protected-resource` at the root domain first. Until built-in root metadata (#473) lands, configure your reverse proxy (e.g., Caddy or Nginx) to rewrite `/.well-known/oauth-protected-resource` to `/.well-known/oauth-protected-resource/http`.
 
 ```dotenv
 AUTH_PROVIDER=oidc

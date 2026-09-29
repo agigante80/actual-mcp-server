@@ -20,7 +20,7 @@ import { MCPAuthTokenVerificationError } from 'mcp-auth';
 import { createMcpAuth } from '../auth/setup.js';
 import { resolveJwksSource, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
 import { createAssertionPromotionMiddleware } from '../lib/oidc-token-source.js';
-import { oidcResourceStartupWarnings } from '../lib/oidc-resource.js';
+import { isRootMetadataRequest, oidcResourceStartupWarnings, resourceMetadataPath, rootMetadataRewriteUrl } from '../lib/oidc-resource.js';
 import { stripJoseCause } from '../lib/oidc-error-cause.js';
 import { buildAcceptedAudiences } from '../lib/oidc-audiences.js';
 import { parseScopeList } from '../lib/oidc-scopes.js';
@@ -86,6 +86,20 @@ export async function startHttpServer(
     // the public URL, and a reverse proxy may rewrite the path in between.
     for (const w of oidcResourceStartupWarnings({ resource: config.OIDC_RESOURCE, advertisedUrl, httpPath })) logger.warn(w);
     if (mcpAuth) {
+      // #473: clients that skip the path-specific RFC 9728 discovery URL (e.g. Google Gemini)
+      // fetch /.well-known/oauth-protected-resource at the root. When OIDC_RESOURCE has a path,
+      // rewrite those requests onto the path-specific route so mcp-auth serves the identical
+      // document and CORS headers in-process. The target is fixed at startup from
+      // OIDC_RESOURCE, never taken from the request; the match rule is isRootMetadataRequest.
+      // Mounted inside `if (mcpAuth)` and before the router, so `none` mode never gets it and
+      // clients reach it without a token.
+      const metadataTarget = config.OIDC_RESOURCE ? resourceMetadataPath(config.OIDC_RESOURCE) : null;
+      if (metadataTarget) {
+        app.use((req, _res, next) => {
+          if (isRootMetadataRequest(req.method, req.path)) req.url = rootMetadataRewriteUrl(req.url, metadataTarget);
+          next();
+        });
+      }
       // Serve RFC 8707 Protected Resource Metadata (/.well-known/oauth-protected-resource/...)
       app.use(mcpAuth.protectedResourceMetadataRouter());
       // Protect ALL httpPath routes with JWT validation + budget ACL
