@@ -68,6 +68,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_transactions_search_by_category',
   'actual_transactions_search_by_month',
   'actual_transactions_search_by_payee',
+  'actual_transactions_split',
   'actual_transactions_summary_by_category',
   'actual_transactions_summary_by_payee',
   'actual_transactions_uncategorized',

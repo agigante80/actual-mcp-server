@@ -136,6 +136,7 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_budgets_import` | fixed in #349 |
 | `actual_transactions_delete` | adapter pre-flight by id with `splits: 'all'` (#212/#305); upstream also returns `[]` |
 | `actual_transactions_update` | same pre-flight (#212/#305) |
+| `actual_transactions_split` | adapter pre-flight checks existence, ensures not already a split and not a child, verifies subtransaction sum matches; orchestrates creation and deletion atomically in one write-queue cycle (#489) |
 | `actual_categories_delete` | adapter pre-check, AND upstream throws `Category with id X not found.` |
 | `actual_category_groups_delete` | tool pre-check against `getCategoryGroups()`, which includes hidden groups when called with no argument |
 | `actual_schedules_delete` | tool pre-check against `getSchedules()`, plus constraint-error translation |

@@ -2,6 +2,7 @@ import type { components } from '../../generated/actual-client/types.js';
 import { subtransactionsSum } from './schemas/common.js';
 
 import { AsyncLocalStorage } from 'async_hooks';
+import { randomUUID } from 'node:crypto';
 import api from '@actual-app/api';
 
 // @actual-app/api is a CJS package (no "type" field). In NodeNext/ESM context TypeScript
@@ -2424,6 +2425,131 @@ export async function deleteTransaction(id: string): Promise<void> {
     await withConcurrency(() => retry(() => rawDeleteTransaction(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
+
+export interface SplitTransactionOptions {
+  id: string;
+  subtransactions: Array<{
+    amount: number;
+    category?: string;
+    notes?: string;
+  }>;
+}
+
+export interface SplitTransactionResult {
+  created: string;
+  deleted: string | null;
+  warning?: string;
+}
+
+/**
+ * #489: split an existing plain transaction into subtransactions.
+ *
+ * Orchestration inside a single write-queue cycle:
+ * 1. Read original transaction (validating existence, non-split, non-child, and sum invariant).
+ * 2. Create the replacement split parent transaction carrying preserved bank sync /
+ *    reconciliation fields (imported_id, imported_payee, cleared, reconciled, date, account).
+ * 3. Delete the original plain transaction.
+ * 4. Report status: best-effort reporting that surfaces duplicates if delete fails.
+ */
+export async function splitTransaction(options: SplitTransactionOptions): Promise<SplitTransactionResult> {
+  observability.incrementToolCall('actual.transactions.split').catch(() => {});
+  return queueWriteOperation(async () => {
+    const { id, subtransactions } = options;
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const rawRes = await withConcurrency(() =>
+      retry(
+        () =>
+          rawRunQuery(
+            q('transactions')
+              .options({ splits: 'all' })
+              .filter({ id })
+              .select('*')
+          ) as Promise<{ data?: Array<Record<string, unknown>> } | Array<Record<string, unknown>>>,
+        { retries: 2, backoffMs: 200 }
+      )
+    );
+    const rows = Array.isArray(rawRes) ? rawRes : (Array.isArray(rawRes?.data) ? rawRes.data : []);
+
+    if (rows.length === 0) {
+      throw new NotFoundRefusal('Transaction', id, 'actual_transactions_get');
+    }
+
+    const orig = rows[0];
+
+    if (orig.is_parent) {
+      throw new Error(
+        `Transaction "${id}" is already a split parent. To update existing subtransactions, use actual_transactions_update instead.`
+      );
+    }
+    if (orig.is_child || orig.parent_id) {
+      throw new Error(
+        `Transaction "${id}" is a subtransaction (child of "${orig.parent_id}"). Splitting an existing child transaction is not supported.`
+      );
+    }
+
+    const origAmount = Number(orig.amount);
+    const sum = subtransactionsSum(subtransactions);
+    if (sum !== origAmount) {
+      throw new Error(
+        `Subtransactions must sum to the original transaction amount. Expected ${origAmount}, got ${sum}.`
+      );
+    }
+
+    const newId = randomUUID();
+    const newTransactionPayload = {
+      id: newId,
+      account: orig.account,
+      date: orig.date,
+      amount: origAmount,
+      payee: orig.payee || undefined,
+      notes: orig.notes || undefined,
+      imported_id: orig.imported_id || undefined,
+      imported_payee: orig.imported_payee || undefined,
+      cleared: Boolean(orig.cleared),
+      reconciled: Boolean(orig.reconciled),
+      is_parent: true,
+      subtransactions: subtransactions.map((sub) => ({
+        amount: sub.amount,
+        category: sub.category || undefined,
+        notes: sub.notes || undefined,
+      })),
+    };
+
+    await withConcurrency(() =>
+      retry(
+        () =>
+          rawAddTransactions(orig.account as string, [newTransactionPayload]) as Promise<unknown>,
+        { retries: 0, backoffMs: 200, isRetryable: isRetryableError }
+      )
+    );
+
+    let deleteSucceeded = false;
+    try {
+      await withConcurrency(() =>
+        retry(() => rawDeleteTransaction(id) as Promise<void>, { retries: 0, backoffMs: 200 })
+      );
+      deleteSucceeded = true;
+    } catch (delErr) {
+      logger.warn(`[ADAPTER] Failed to delete original transaction ${id} during split: ${delErr}`);
+    }
+
+    if (!deleteSucceeded) {
+      return {
+        created: newId,
+        deleted: null,
+        warning: `Split transaction was created with id "${newId}", but the original transaction "${id}" could not be deleted. Both transactions currently exist.`,
+      };
+    }
+
+    return {
+      created: newId,
+      deleted: id,
+    };
+  });
+}
+
 export async function updateCategory(id: string, fields: Partial<components['schemas']['Category']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.categories.update').catch(() => {});
   return queueWriteOperation(async () => {
@@ -4323,5 +4449,6 @@ export default {
   importBudget,
   getPreferences,
   getContext,
+  splitTransaction,
   notifications,
 };

@@ -169,6 +169,11 @@ console.log('Running generated tools smoke tests');
       fromCategory: { id: '10000000-0000-4000-8000-000000000001', previousAmount: 10000, newAmount: 5000 },
       toCategory: { id: '10000000-0000-4000-8000-000000000002', previousAmount: 0, newAmount: 5000 },
     },
+    // #489: splitTransaction atomic adapter method
+    splitTransaction: {
+      created: '00000000-0000-0000-0000-000000000002',
+      deleted: '00000000-0000-0000-0000-000000000001',
+    },
   };
 
   // Patch adapter default export functions
@@ -213,6 +218,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('transactions_delete')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('transactions_update') && !name.includes('batch')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { notes: 'test', subtransactions: [{ amount: -200 }, { amount: -100 }] }; // #305: edit an existing split (-300 per runQuery stub)
   if (name.includes('transactions_update_batch')) inputExample.updates = [{ id: '00000000-0000-0000-0000-000000000001', fields: { notes: 'batch-test' } }];
+  if (name.includes('transactions_split')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.subtransactions = [{ amount: -150 }, { amount: -150 }];
   if (name.includes('entities_search')) inputExample.type = 'payees', inputExample.query = 'kroger'; // matches getPayees stub { name: 'Kroger' }
   if (name.includes('accounts_get_balance')) inputExample.id = '00000000-0000-0000-0000-000000000001';
   if (name.includes('account_groups_create')) inputExample.name = 'MCP-Group';
@@ -292,9 +298,15 @@ console.log('Running generated tools smoke tests');
         'payees_get', 'budgets_getMonth', 'budgets_getMonths', 'budgets_get_all',
         'query_run', 'transactions_filter', 'transactions_get', 'transactions_import',
         'bank_sync', 'budgets_setAmount', 'budgets_transfer',
-        'accounts_create', 'payees_create', 'get_context'];
+        'accounts_create', 'payees_create', 'get_context', 'transactions_split'];
       if (resultWrappers.includes(n)) {
         if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
+      }
+
+      if (n === 'transactions_split') {
+        const r = res?.result;
+        if (!r?.created) shapeErr('expected created in result');
+        if (!r?.deleted) shapeErr('expected deleted in result');
       }
 
       if (n === 'get_context') {

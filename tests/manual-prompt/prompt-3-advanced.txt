@@ -293,7 +293,7 @@ PROMPT 2 (Core CRUD):
   Phase 4  Payees:                    X / 6
   Phase 5  Rules:                     X / 4
   Phase 5b Batch/Uncategorized/Ups.:  X / 3
-  Phase 6  Transactions:              X / 12
+  Phase 6  Transactions:              X / 13
   Phase 6b Schedules:                 X / 4
   Phase 6c Tags:                      X / 4
 
@@ -308,7 +308,7 @@ PROMPT 3 (Advanced):
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 83
+  Total Tools Tested:   X / 84
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X

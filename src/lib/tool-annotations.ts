@@ -131,6 +131,7 @@ const DESTRUCTIVE = new Set<string>([
   'actual_schedules_delete',
   'actual_tags_delete',
   'actual_transactions_delete',
+  'actual_transactions_split',
   // THE NON-OBVIOUS ONE. `fields.subtransactions` (CommonSchemas, `.strict()`) has no `id`,
   // so upstream's `makeChild` mints a fresh UUID for every child and `diffItems` tombstones
   // every existing one. Editing one amount on a six-way split DELETES all six rows and

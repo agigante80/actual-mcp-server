@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 82 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 83 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 82 TOOLS', () => {
+test.describe('Docker E2E - ALL 83 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -531,6 +531,30 @@ test.describe('Docker E2E - ALL 82 TOOLS', () => {
     const rows = ((await mcp.call('actual_transactions_filter', { accountId: account.id })) ??
       []) as any[];
     expect(rows.find((t: any) => t?.id === txn.id)?.amount).toBe(-7500);
+  });
+
+  test('actual_transactions_split - should split a plain transaction into subtransactions', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -5000 });
+
+    const res = (await mcp.call('actual_transactions_split', {
+      id: txn.id,
+      subtransactions: [
+        { amount: -3000, notes: 'Split part 1' },
+        { amount: -2000, notes: 'Split part 2' },
+      ],
+    })) as any;
+
+    const data = res?.result ?? res;
+    expect(data.created).toBeTruthy();
+    expect(data.deleted).toBe(txn.id);
+
+    const rows = ((await mcp.call('actual_transactions_filter', { accountId: account.id })) ?? []) as any[];
+    expect(rows.find((t: any) => t?.id === txn.id)).toBeFalsy();
+    const splitParent = rows.find((t: any) => t?.id === data.created);
+    expect(splitParent).toBeTruthy();
+    expect(splitParent?.amount).toBe(-5000);
+    expect(splitParent?.is_parent).toBe(true);
   });
 
   test('actual_transactions_filter - should filter transactions', async ({ mcp, makeAccount, makeTransaction }) => {

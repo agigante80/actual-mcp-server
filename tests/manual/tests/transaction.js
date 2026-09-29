@@ -654,6 +654,85 @@ export async function transactionTests(client, context) {
     if (recPayeeId) await callTool("actual_payees_delete", { id: recPayeeId }).catch(() => {});
   }
 
+  // #489: actual_transactions_split
+  console.log("\n#489: actual_transactions_split...");
+  let splitAcctId;
+  const splitAcctName = `MCP-Split-${Date.now()}`;
+  try {
+    const splitAcctRaw = await callTool("actual_accounts_create", { name: splitAcctName, balance: 0 });
+    splitAcctId = splitAcctRaw.id || splitAcctRaw.result || splitAcctRaw;
+    const splitTxnNote = `MCP-SplitTx-${Date.now()}`;
+    await callTool("actual_transactions_create", {
+      account: splitAcctId,
+      date: "2025-01-15",
+      amount: -5000,
+      notes: splitTxnNote,
+    });
+    // Locate created transaction
+    const filterRes = await callTool("actual_transactions_filter", {
+      accountId: splitAcctId,
+      notes: splitTxnNote,
+    });
+    const txList = Array.isArray(filterRes) ? filterRes : (filterRes.result || []);
+    const plainTx = txList.find(t => t.notes === splitTxnNote);
+    if (!plainTx) {
+      fail("transactions_split: could not locate plain transaction to split");
+    } else {
+      // 1. Negative test: sum mismatch
+      try {
+        await callTool("actual_transactions_split", {
+          id: plainTx.id,
+          subtransactions: [{ amount: -3000 }, { amount: -1000 }],
+        });
+        fail("transactions_split: should refuse unbalanced subtransactions");
+      } catch (err) {
+        const msg = err.message || String(err);
+        if (msg.includes("Subtransactions must sum")) {
+          console.log("  ✓ transactions_split: unbalanced subtransactions correctly refused");
+        } else {
+          fail(`transactions_split: unexpected error message on sum mismatch: ${msg}`);
+        }
+      }
+
+      // 2. Positive test: split plain transaction into -3000 and -2000
+      const splitRes = await callTool("actual_transactions_split", {
+        id: plainTx.id,
+        subtransactions: [
+          { amount: -3000, notes: "Split 1" },
+          { amount: -2000, notes: "Split 2" },
+        ],
+      });
+      const s = splitRes?.result ?? splitRes;
+      if (s?.created && s?.deleted === plainTx.id) {
+        console.log(`  ✓ transactions_split: plain transaction split successfully (created=${s.created}, deleted=${s.deleted})`);
+      } else {
+        fail(`transactions_split: unexpected return shape: ${JSON.stringify(s)}`);
+      }
+
+      // 3. Negative test: splitting an already split parent refuses
+      if (s?.created) {
+        try {
+          await callTool("actual_transactions_split", {
+            id: s.created,
+            subtransactions: [{ amount: -2500 }, { amount: -2500 }],
+          });
+          fail("transactions_split: should refuse to split an existing split parent");
+        } catch (err) {
+          const msg = err.message || String(err);
+          if (msg.includes("already a split parent")) {
+            console.log("  ✓ transactions_split: already a split parent correctly refused");
+          } else {
+            fail(`transactions_split: unexpected error for split parent: ${msg}`);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    fail(`transactions_split: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
+  } finally {
+    if (splitAcctId) await callTool("actual_accounts_delete", { id: splitAcctId }).catch(() => {});
+  }
+
   // Teardown: close then delete the dedicated transaction test account.
   // close() must come first: Actual tombstones (hard-deletes) accounts with zero
   // transactions on close(), making them unrecoverable. We need close() to set

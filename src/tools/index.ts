@@ -81,3 +81,4 @@ export { default as notes_get } from './notes_get.js';
 export { default as notes_update } from './notes_update.js';
 export { default as preferences_get } from './preferences_get.js';
 export { default as get_context } from './get_context.js';
+export { default as transactions_split } from './transactions_split.js';
