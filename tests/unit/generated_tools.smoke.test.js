@@ -156,6 +156,13 @@ console.log('Running generated tools smoke tests');
     exportBudget: new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0x00, 0x00]),
     importBudget: { id: '00000000-0000-0000-0000-0000000000ee' },
     getPreferences: { dateFormat: 'yyyy-MM-dd', numberFormat: 'dot-comma', firstDayOfWeekIdx: '1' },
+    getContext: {
+      accounts: [{ id: 'a1', name: 'Cash', offbudget: false, closed: false }],
+      category_groups: [{ id: 'g1', name: 'Expenses', is_income: false, categories: [{ id: 'c1', name: 'Food', hidden: false }] }],
+      payees: [{ id: 'p1', name: 'Kroger', transfer_acct: null }],
+      payees_truncated: false,
+      payee_total: 1,
+    },
     // #141: transferBudgetAmount is the new atomic adapter method.
     transferBudgetAmount: {
       transferred: 5000,
@@ -285,9 +292,18 @@ console.log('Running generated tools smoke tests');
         'payees_get', 'budgets_getMonth', 'budgets_getMonths', 'budgets_get_all',
         'query_run', 'transactions_filter', 'transactions_get', 'transactions_import',
         'bank_sync', 'budgets_setAmount', 'budgets_transfer',
-        'accounts_create', 'payees_create'];
+        'accounts_create', 'payees_create', 'get_context'];
       if (resultWrappers.includes(n)) {
         if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
+      }
+
+      if (n === 'get_context') {
+        const r = res?.result;
+        if (!Array.isArray(r?.accounts)) shapeErr('expected accounts array');
+        if (!Array.isArray(r?.category_groups)) shapeErr('expected category_groups array');
+        if (!Array.isArray(r?.payees)) shapeErr('expected payees array');
+        if (typeof r?.payees_truncated !== 'boolean') shapeErr('expected payees_truncated boolean');
+        if (typeof r?.payee_total !== 'number') shapeErr('expected payee_total number');
       }
 
       // Mutate / delete tools that return { success: true }

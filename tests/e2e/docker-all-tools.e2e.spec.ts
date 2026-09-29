@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 81 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 82 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 81 TOOLS', () => {
+test.describe('Docker E2E - ALL 82 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -1368,6 +1368,28 @@ test.describe('Docker E2E - ALL 81 TOOLS', () => {
     const data = await mcp.call('actual_get_id_by_name', { type: 'accounts', name: account.name });
     const resolvedId = data?.id ?? (typeof data === 'string' ? data : null);
     expect(resolvedId).toBe(account.id);
+  });
+
+  // ==================== GET CONTEXT (#484) ====================
+  test('actual_get_context - should return accounts, category groups, and payees in a single call', async ({ mcp, makeAccount, makeCategory, makePayee }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const payee = await makePayee();
+
+    const data = await mcp.call('actual_get_context', {});
+    const res = data?.result ?? data;
+
+    expect(Array.isArray(res.accounts)).toBe(true);
+    expect(res.accounts.some((a: any) => a.id === account.id)).toBe(true);
+
+    expect(Array.isArray(res.category_groups)).toBe(true);
+    const allCategories = res.category_groups.flatMap((g: any) => g.categories || []);
+    expect(allCategories.some((c: any) => c.id === category.id)).toBe(true);
+
+    expect(Array.isArray(res.payees)).toBe(true);
+    expect(res.payees.some((p: any) => p.id === payee.id)).toBe(true);
+    expect(typeof res.payees_truncated).toBe('boolean');
+    expect(typeof res.payee_total).toBe('number');
   });
 
   // ==================== DELETE OPERATIONS (6 tools) ====================

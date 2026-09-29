@@ -89,6 +89,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_budgets_export',
   'actual_budgets_import',
   'actual_preferences_get',
+  'actual_get_context',
 ];
 
 // 🔑 Mapping of Actual API function names → your MCP tool names

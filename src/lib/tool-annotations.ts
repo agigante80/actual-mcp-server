@@ -77,6 +77,7 @@ const READ_ONLY = new Set<string>([
   'actual_payees_common_list',
   'actual_payees_get',
   'actual_preferences_get',
+  'actual_get_context',
   'actual_query_run',
   'actual_rules_get',
   'actual_schedules_get',

@@ -487,6 +487,7 @@ function _enforceBudgetAcl(toolName?: string): void {
  * `@actual-app/api` is a process-wide singleton.
  */
 export async function withActualApi<T>(rawOperation: () => Promise<T>): Promise<T> {
+  _withActualApiCallCount++;
   // ACL enforcement BEFORE pool branching or lock acquisition (#156).
   // Denial here means the lock is never acquired and no upstream resource is
   // touched.
@@ -655,6 +656,20 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
       await shutdownActualApi({ forceFullShutdown });
     }
   }, { budget: _affinityBudget() });
+}
+
+let _withActualApiCallCount = 0;
+
+/**
+ * Test-only: count of withActualApi invocations. Used to verify single-cycle
+ * execution in multi-resource tools like get_context (#484).
+ */
+export function _getWithActualApiCallCountForTests(): number {
+  return _withActualApiCallCount;
+}
+
+export function _resetWithActualApiCallCountForTests(): void {
+  _withActualApiCallCount = 0;
 }
 
 /**
@@ -1885,6 +1900,127 @@ export async function getPayees(): Promise<components['schemas']['Payee'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.payees.get').catch(() => {});
     return await withConcurrency(() => retry(() => rawGetPayees() as Promise<components['schemas']['Payee'][]>, { retries: 2, backoffMs: 200 }));
+  });
+}
+
+export interface ContextOptions {
+  include_accounts?: boolean;
+  include_categories?: boolean;
+  include_payees?: boolean;
+  include_closed?: boolean;
+  payee_limit?: number;
+}
+
+export interface ContextResult {
+  accounts: Array<{
+    id: string;
+    name: string;
+    offbudget: boolean;
+    closed: boolean;
+  }>;
+  category_groups: Array<{
+    id: string;
+    name: string;
+    is_income: boolean;
+    categories: Array<{
+      id: string;
+      name: string;
+      hidden: boolean;
+    }>;
+  }>;
+  payees: Array<{
+    id: string;
+    name: string;
+    transfer_acct: string | null;
+  }>;
+  payees_truncated: boolean;
+  payee_total: number;
+  message?: string;
+}
+
+/**
+ * #484: read high-level budget structure (accounts, categories, payees) in a single
+ * withActualApi session (single api lock cycle).
+ */
+export async function getContext(options?: ContextOptions): Promise<ContextResult> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.get_context').catch(() => {});
+    const includeAccounts = options?.include_accounts ?? true;
+    const includeCategories = options?.include_categories ?? true;
+    const includePayees = options?.include_payees ?? true;
+    const includeClosed = options?.include_closed ?? false;
+    const payeeLimit = options?.payee_limit ?? 500;
+
+    let accounts: ContextResult['accounts'] = [];
+    if (includeAccounts) {
+      const rawAccounts = (await withConcurrency(() =>
+        retry(() => rawGetAccounts() as Promise<Array<Record<string, unknown>>>, { retries: 2, backoffMs: 200 })
+      )) || [];
+      accounts = (Array.isArray(rawAccounts) ? rawAccounts : [])
+        .filter((a) => includeClosed || !a.closed)
+        .map((a) => ({
+          id: String(a.id),
+          name: String(a.name ?? ''),
+          offbudget: Boolean(a.offbudget),
+          closed: Boolean(a.closed),
+        }));
+    }
+
+    let categoryGroups: ContextResult['category_groups'] = [];
+    if (includeCategories) {
+      const rawGroups = (await withConcurrency(() =>
+        retry(() => rawGetCategoryGroups() as Promise<Array<Record<string, unknown>>>, { retries: 2, backoffMs: 200 })
+      )) || [];
+      categoryGroups = (Array.isArray(rawGroups) ? rawGroups : []).map((g: any) => ({
+        id: String(g.id),
+        name: String(g.name ?? ''),
+        is_income: Boolean(g.is_income),
+        categories: (Array.isArray(g.categories) ? g.categories : []).map((c: any) => ({
+          id: String(c.id),
+          name: String(c.name ?? ''),
+          hidden: Boolean(c.hidden),
+        })),
+      }));
+    }
+
+    let payees: ContextResult['payees'] = [];
+    let payeesTruncated = false;
+    let payeeTotal = 0;
+    if (includePayees) {
+      const rawPayees = (await withConcurrency(() =>
+        retry(() => rawGetPayees() as Promise<Array<Record<string, unknown>>>, { retries: 2, backoffMs: 200 })
+      )) || [];
+      const list = (Array.isArray(rawPayees) ? rawPayees : [])
+        .map((p: any) => ({
+          id: String(p.id),
+          name: String(p.name ?? ''),
+          transfer_acct: p.transfer_acct != null ? String(p.transfer_acct) : null,
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      payeeTotal = list.length;
+      if (payeeTotal > payeeLimit) {
+        payeesTruncated = true;
+        payees = list.slice(0, payeeLimit);
+      } else {
+        payeesTruncated = false;
+        payees = list;
+      }
+    }
+
+    const result: ContextResult = {
+      accounts,
+      category_groups: categoryGroups,
+      payees,
+      payees_truncated: payeesTruncated,
+      payee_total: payeeTotal,
+    };
+
+    if (payeesTruncated) {
+      result.message = `Showing ${payees.length} of ${payeeTotal} payees. Use actual_entities_search or actual_get_id_by_name to look up other payees.`;
+    }
+
+    return result;
   });
 }
 /**
@@ -4186,5 +4322,6 @@ export default {
   exportBudget,
   importBudget,
   getPreferences,
+  getContext,
   notifications,
 };
