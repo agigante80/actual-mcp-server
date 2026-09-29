@@ -71,6 +71,9 @@ check('assertion mode + whitespace-only OIDC_SCOPES parses (empty after trim)', 
 check('discovery mode + OIDC_SCOPES=openid still parses (the scope rule is scoped to assertion mode)', () => {
   parses({ ...oidc, OIDC_SCOPES: 'openid' });
 });
+check('assertion mode + OIDC_SCOPES_SUPPORTED parses (advertising scopes does not violate assertion mode, #472)', () => {
+  parses({ ...oidc, OIDC_TOKEN_SOURCE: 'cf-access-jwt-assertion', OIDC_JWKS_URI: JWKS, OIDC_SCOPES: '', OIDC_SCOPES_SUPPORTED: 'openid,offline_access' });
+});
 
 console.log(`\n[config-oidc-assertion-refines] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

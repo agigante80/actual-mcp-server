@@ -11,6 +11,7 @@ import { MCPAuth } from 'mcp-auth';
 import config from '../config.js';
 import logger from '../logger.js';
 import { validateOidcResource } from '../lib/oidc-resource.js';
+import { parseScopeList, buildScopesSupported } from '../lib/oidc-scopes.js';
 
 let _instance: MCPAuth | null = null;
 
@@ -52,13 +53,13 @@ export function createMcpAuth(): MCPAuth | null {
 
   if (_instance) return _instance;
 
-  const scopesSupported = config.OIDC_SCOPES
-    ? config.OIDC_SCOPES.split(',').map((s) => s.trim()).filter(Boolean)
-    : [];
+  const requiredScopes = parseScopeList(config.OIDC_SCOPES);
+  const scopesSupported = buildScopesSupported(config.OIDC_SCOPES_SUPPORTED, config.OIDC_SCOPES);
 
   logger.info(`[OIDC] Configuring mcp-auth, issuer: ${config.OIDC_ISSUER}`);
   logger.info(`[OIDC] Resource identifier: ${resourceUrl.origin}${resourceUrl.pathname}`);
-  logger.info(`[OIDC] Scopes required: ${scopesSupported.length ? scopesSupported.join(', ') : '(none)'}`);
+  logger.info(`[OIDC] Scopes required: ${requiredScopes.length ? requiredScopes.join(', ') : '(none)'}`);
+  logger.info(`[OIDC] Scopes advertised: ${scopesSupported.length ? scopesSupported.join(', ') : '(none)'}`);
 
   _instance = new MCPAuth({
     protectedResources: [

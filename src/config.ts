@@ -156,8 +156,10 @@ export const configSchema = z.object({
   // validate it. In that mode Authorization is NEVER consulted (one source, one
   // verification, no fallback). Closed enum, default is today's behaviour.
   OIDC_TOKEN_SOURCE: z.enum(['authorization', 'cf-access-jwt-assertion']).default('authorization'),
-  // Comma-separated required scopes (e.g. "read,write"). Optional.
+  // Comma-separated required (enforced) scopes; also advertised (e.g. "read,write"). Optional.
   OIDC_SCOPES: z.string().optional(),
+  // Comma-separated scopes advertised in discovery (scopes_supported) but not enforced. Optional.
+  OIDC_SCOPES_SUPPORTED: z.string().optional(),
   // JSON map of principal → budget sync-ID list for per-user budget ACL.
   // Keys: email, sub, or "group:<name>". Values: array of sync IDs or ["*"] for all.
   // Example: {"alice@example.com":["budget-1"],"group:admin":["*"]}
