@@ -63,7 +63,6 @@ export const RAW_ENV_ALLOWLIST: readonly RawEnvVar[] = [
   { name: 'NODE_ENV', reason: 'framework var; selects prod log format and prod behaviours', readSite: 'httpServer.ts, logger.ts (resolveLogConfig)' },
   { name: 'DEBUG', reason: 'framework debug toggle', readSite: 'utils.ts, index.ts' },
   { name: 'LOG_LEVEL', reason: 'debug-detection toggle (distinct from MCP_BRIDGE_LOG_LEVEL, the winston level)', readSite: 'utils.ts' },
-  { name: 'DOTENV_CONFIG_QUIET', reason: 'dotenv internal flag, not an operator knob', readSite: 'index.ts', documented: false },
   { name: 'VERSION', reason: 'build-time version arg, injected by the Docker build, not an operator knob', readSite: 'index.ts, server_info.ts', documented: false },
 
   // Domain-time: read after config loads; future candidates for schema promotion.

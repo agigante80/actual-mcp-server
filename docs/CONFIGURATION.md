@@ -129,7 +129,6 @@ but does not fail; renumber consecutively to load them.
 | `NODE_ENV` | (none) / `production` | raw (internal) | Selects prod log format and behaviours |
 | `DEBUG` | (none) | raw (internal) | Framework debug toggle |
 | `MCP_STDIO_MODE` | `false` | raw (internal, not documented) | Mirrors the `--stdio` CLI flag; set in-process before the logger import |
-| `DOTENV_CONFIG_QUIET` | (none) | raw (internal, not documented) | dotenv flag |
 | `VERSION` | build arg | raw (internal, not documented) | Injected by the Docker build |
 
 ## Maintaining this file

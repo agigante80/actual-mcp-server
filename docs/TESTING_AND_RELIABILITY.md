@@ -273,6 +273,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `schema_json_openai_compat.test.js` | Every published tool schema is OpenAI/ECMA-262 regex-compatible: no `\p{...}` escape, each `pattern` compiles without the `u` flag (#293) |
 | `contributor_docs.test.js` | `AGENTS.md`, `CONTRIBUTING.md` and the PR template name only real `npm run` scripts and link only TRACKED paths; `AGENTS.md` exists, is not ignored and stays at or under 150 lines; every `.github/instructions/*.instructions.md` defers to `AGENTS.md` and never cites the local-only `CLAUDE.md` (#496) |
 | `httpServer_batch_cap.test.js` | A JSON-RPC batch of more than 100 messages on a session-bearing HTTP POST is refused with 400/-32600 by `@modelcontextprotocol/sdk` 1.30.1, and exactly 100 is not; the POST paths still hand the SDK `req.body`; a session-less array is refused by our own handler; installed and declared SDK are at least 1.30.1 (#500) |
+| `dotenv_stdout_quiet.test.js` | The single `dotenv.config()` in `src/index.ts` pins `quiet`, `debug`, `override` and `path`, and with dotenv 18 those options leave stdout and stderr empty under every `DOTENV_*` knob, keep a preset secret over the file, and ignore `DOTENV_PATH`; two witnesses prove the harness sees dotenv output and that the debug hazard is real (#501) |
 
 **Run**:
 ```bash

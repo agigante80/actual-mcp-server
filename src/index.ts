@@ -5,7 +5,7 @@
 // guard cannot live in bin/ alone. Importing the named export does not change that:
 // the module's top-level `enforceNodeVersion()` still fires here, exactly once.
 import { findRootPackageJson } from './lib/node-version-guard.js';
-import { dirname } from 'node:path';
+import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
@@ -93,11 +93,6 @@ process.on('uncaughtException', (error) => {
 // Minimal early help handling before any side-effectful modules (prevents dotenv from running on --help)
 const argsEarly = process.argv.slice(2);
 
-// dotenv v17 outputs diagnostic text to stdout by default (console.log).
-// Suppress it unconditionally — in stdio mode stdout is the JSON-RPC channel
-// (non-JSON corrupts the framing), and in other modes the diagnostic is noise.
-process.env.DOTENV_CONFIG_QUIET = 'true';
-
 // Set MCP_STDIO_MODE before the async IIFE so it is in place when src/logger.ts is first
 // imported. The Winston Console transport reads this env var at construction time to decide
 // whether to route all output to stderr (required in stdio mode — stdout writes corrupt JSON-RPC).
@@ -169,7 +164,24 @@ export {};
   // Load dotenv here (dynamic import) only when not running with --help
   if (!argsEarly.includes('--help')) {
     const dotenv = await import('dotenv');
-    dotenv.config();
+    // #501: this runs BEFORE ./logger.js hijacks console.*, so anything dotenv prints
+    // lands on the real stdout (the JSON-RPC channel under --stdio) and skips the #220
+    // redaction. Explicit options beat every DOTENV_* environment knob, so each is pinned:
+    // quiet and debug keep both streams empty, override keeps a secret already in the
+    // environment authoritative over the file, encoding stops DOTENV_ENCODING from silently
+    // skipping the file (a bogus value loads nothing and reports it only in the discarded
+    // result), fast keeps DOTENV_FAST from swapping in the alternate parser (no input was
+    // found that the two parse differently, so this pin is defensive rather than tested
+    // by behaviour), and path keeps the cwd-relative .env
+    // that npx, `node dist/src/index.js` and Docker (WORKDIR /app) all rely on.
+    dotenv.config({
+      quiet: true,
+      debug: false,
+      override: false,
+      encoding: 'utf8',
+      fast: false,
+      path: path.resolve(process.cwd(), '.env'),
+    });
   }
 
   // Enable verbose debug output when --debug is passed
