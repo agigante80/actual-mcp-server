@@ -47,6 +47,12 @@ const FILES = [
   // IMPLEMENTED_TOOLS was 74, because this scan could not see `.claude/skills/**` (#377
   // review, L8).
   '.claude/skills/api-design-principles/SKILL.md',
+  // CLAUDE.md was split on 2026-10-01 to shrink the always-loaded context: topic detail
+  // moved verbatim into non-imported files under .claude/reference/. Two of them carry
+  // total-count prose (the release train's "N-tool contract" and the skills table's
+  // "N-tool MCP surface"), so they stay in scope or those anchors stop being checked.
+  '.claude/reference/release-and-deps.md',
+  '.claude/reference/agents-and-skills.md',
 ];
 
 /**
@@ -64,6 +70,8 @@ export const LOCAL_ONLY_FILES = [
   'CLAUDE.md',
   '.github/copilot-instructions.md',
   '.claude/skills/api-design-principles/SKILL.md',
+  '.claude/reference/release-and-deps.md',
+  '.claude/reference/agents-and-skills.md',
 ];
 
 /**
