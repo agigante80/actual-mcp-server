@@ -22,3 +22,5 @@ Key rules:
 - Error messages must be actionable. See the [error-message scenario table](https://github.com/agigante80/actual-mcp-server/blob/6dc70654c15f4ad610d2521e61a122c356332215/docs/feature/IMPROVED_ERROR_MESSAGES.md), tracked by issue #206.
 - Never add shared mutable state outside the `context` object
 - Cleanup is automatic: test runner prompts for cleanup at end, or pass `yes` as 4th argument
+
+> On conflict, follow the precedence in [AGENTS.md](../../AGENTS.md); this file adds detail for its applyTo glob and must not contradict it.

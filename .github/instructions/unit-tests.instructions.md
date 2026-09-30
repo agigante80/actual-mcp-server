@@ -21,3 +21,5 @@ applyTo: "tests/unit/*.{js,ts}"
 ### General
 - Run all unit tests with: `npm run test:unit-js`
 - Tests must pass with zero live server connections
+
+> On conflict, follow the precedence in [AGENTS.md](../../AGENTS.md); this file adds detail for its applyTo glob and must not contradict it.

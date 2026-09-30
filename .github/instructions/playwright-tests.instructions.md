@@ -36,3 +36,5 @@ Key rules:
 ### Config files
 - Local testing: `playwright.config.ts`
 - Docker CI stack: `playwright.config.docker.ts`
+
+> On conflict, follow the precedence in [AGENTS.md](../../AGENTS.md); this file adds detail for its applyTo glob and must not contradict it.

@@ -271,6 +271,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `generated_tools.smoke.test.js` | All 82 tools: stub adapter, call succeeds, response shape correct |
 | `schema_validation.test.js` | Negative-path schemas: `rules_create`, `budget_updates_batch`, `budgets_transfer`, `budgets_setAmount` |
 | `schema_json_openai_compat.test.js` | Every published tool schema is OpenAI/ECMA-262 regex-compatible: no `\p{...}` escape, each `pattern` compiles without the `u` flag (#293) |
+| `contributor_docs.test.js` | `AGENTS.md`, `CONTRIBUTING.md` and the PR template name only real `npm run` scripts and link only TRACKED paths; `AGENTS.md` exists, is not ignored and stays at or under 150 lines; every `.github/instructions/*.instructions.md` defers to `AGENTS.md` and never cites the local-only `CLAUDE.md` (#496) |
 
 **Run**:
 ```bash
@@ -900,6 +901,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `transactions_create.test.js` | Zod schema for `transactions_create`: valid input accepted, empty rejected | 2 |
 | `generated_tools.smoke.test.js` | All 82 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 82 + shape checks |
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
+| `contributor_docs.test.js` | Contributor docs: real scripts, tracked links, `AGENTS.md` required and short, instructions files defer to it (#496) | 20+ |
 | `schema_json_openai_compat.test.js` | Walks all 71 published `z.toJSONSchema()` outputs; asserts no `\p{...}` escape and every `pattern` compiles without the `u` flag, so no tool schema is rejected by OpenAI's Responses validator (#293) | 71 schemas |
 | `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
 | `rejection-allowlist-purity.test.js` | Static analysis of `src/lib/rejection-allowlist.ts`: sentinel marker present; no static, dynamic, or CommonJS imports of non-node modules; no top-level side-effecting statements (#159) | 5 categories |

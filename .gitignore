@@ -109,7 +109,10 @@ scratchpad-pr399/
 .claude/
 /CLAUDE.md
 /CLAUDE.local.md
-/AGENTS.md
+# /AGENTS.md is deliberately NOT here: it is PUBLIC by decision (#496), a contributor
+# map to the tracked docs. A forge-kit leak-guard baseline re-sync must not re-add it
+# to this block or the baseline block below. tests/unit/contributor_docs.test.js fails
+# if it is ignored again.
 /GEMINI.md
 .gemini/
 .codex/

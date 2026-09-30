@@ -1,374 +1,166 @@
 # Contributing to Actual MCP Server
 
-Thank you for your interest in contributing to the Actual MCP Server! This document provides guidelines and instructions for contributing to the project.
+Thank you for your interest in contributing! This guide covers how to set up, what to run, and how a change reaches a release.
+
+If you work with a coding agent (Codex, Copilot, Cursor, Claude Code, Gemini CLI and others), point it at [AGENTS.md](../AGENTS.md) at the repository root. That file holds the technical rules and the validation commands, and most agents read it automatically. Humans should read it too: this guide does not repeat it.
 
 ## 📋 Table of Contents
 
-- [Code of Conduct](#code-of-conduct)
-- [Getting Started](#getting-started)
-- [Development Setup](#development-setup)
-- [Project Structure](#project-structure)
-- [Development Workflow](#development-workflow)
-- [Testing](#testing)
-- [Code Standards](#code-standards)
-- [Submitting Changes](#submitting-changes)
-- [Auto-merge Workflow](#auto-merge-workflow)
+- [Code of Conduct](#-code-of-conduct)
+- [Ways to Contribute](#-ways-to-contribute)
+- [Development Setup](#-development-setup)
+- [Making a Change](#-making-a-change)
+- [Testing](#-testing)
+- [Submitting a Pull Request](#-submitting-a-pull-request)
+- [How Your Change Reaches a Release](#-how-your-change-reaches-a-release)
+- [Getting Help](#-getting-help)
 
 ## 🤝 Code of Conduct
 
-This project adheres to a code of conduct that fosters an open and welcoming environment. By participating, you agree to:
+Be respectful and inclusive, keep feedback constructive, and put the community's interests first.
 
-- Be respectful and inclusive
-- Focus on constructive feedback
-- Accept responsibility for mistakes
-- Prioritize the community's best interests
+## 💡 Ways to Contribute
 
-## 🚀 Getting Started
+- 🐛 Report a bug or 💡 suggest a feature through the [issue templates](https://github.com/agigante80/actual-mcp-server/issues/new/choose). The templates ask only for what you know; the maintainer adds the test plan.
+- 📝 Improve documentation.
+- 🔧 Fix a bug or implement a feature.
+- 🧪 Add tests.
 
-### Prerequisites
-
-- **Node.js 20+** (LTS recommended)
-- **npm 9+** or **pnpm**
-- **Docker** (optional, for local Actual Budget server)
-- **Git**
-- Access to an Actual Budget server (or run one locally)
-
-### Ways to Contribute
-
-- 🐛 Report bugs and issues
-- 💡 Suggest new features or improvements
-- 📝 Improve documentation
-- 🔧 Fix bugs or implement features
-- 🧪 Add tests to increase coverage
-- 🎨 Improve code quality and performance
+Security vulnerabilities go through [SECURITY.md](SECURITY.md), never a public issue.
 
 ## 💻 Development Setup
 
-### 1. Fork and Clone
+### Prerequisites
+
+- **Node.js 22 or newer** (the server refuses to start on an older version) and npm 10+
+- **Git**
+- **Docker**, optional: needed only for the Docker E2E suite and the local full-stack run
+- An Actual Budget server, only if you want to run against real data
+
+### 1. Fork and clone
 
 ```bash
-# Fork the repository on GitHub, then clone your fork
 git clone https://github.com/YOUR_USERNAME/actual-mcp-server.git
 cd actual-mcp-server
-
-# Add upstream remote
 git remote add upstream https://github.com/agigante80/actual-mcp-server.git
 ```
 
-### 2. Install Dependencies
+### 2. Install and build
 
 ```bash
-npm install
-```
-
-### 3. Configure Environment
-
-```bash
-# Copy example environment file
-cp .env.example .env
-
-# Edit .env with your Actual Budget credentials
-# You need:
-#   - ACTUAL_SERVER_URL (your Actual server URL)
-#   - ACTUAL_PASSWORD (your Actual password)
-#   - ACTUAL_BUDGET_SYNC_ID (found in Actual: Settings → Sync ID)
-```
-
-### 4. Build the Project
-
-```bash
+npm ci
 npm run build
 ```
 
-### 5. Run in Development Mode
+### 3. Configure (only to run against a real server)
 
 ```bash
-# With debug logging
-npm run dev -- --debug
-
-# Test connection only
-npm run dev -- --test-actual-connection
+cp .env.example .env
+# Set ACTUAL_SERVER_URL, ACTUAL_PASSWORD and ACTUAL_BUDGET_SYNC_ID (Actual: Settings, Advanced, Sync ID).
 ```
 
-## 📁 Project Structure
+Every variable is documented in [docs/CONFIGURATION.md](../docs/CONFIGURATION.md).
+
+### 4. Run
+
+```bash
+npm run dev -- --http                    # HTTP transport; rebuilds first and enables debug logging
+npm run dev -- --stdio                   # stdio transport (Claude Desktop and similar)
+npm run dev -- --test-actual-connection  # check the Actual connection and exit
+```
+
+## 🔄 Making a Change
+
+Branch from **`develop`**, which is where all work lands. `main` only moves when a release is cut.
+
+```bash
+git fetch upstream
+git checkout -b feat/short-description upstream/develop
+```
+
+Branch prefixes: `feat/`, `fix/`, `docs/`, `refactor/`, `chore/`.
+
+### Project structure
 
 ```
 actual-mcp-server/
-├── src/                      # Source code
-│   ├── index.ts             # Main entry point
-│   ├── config.ts            # Configuration & validation
-│   ├── actualConnection.ts  # Actual Finance API connection
-│   ├── actualToolsManager.ts # MCP tool registry
-│   ├── lib/                 # Core libraries
-│   │   ├── actual-adapter.ts # API wrapper with retry logic
-│   │   └── ActualMCPConnection.ts # MCP protocol implementation
-│   ├── server/              # Transport implementations (HTTP)
-│   ├── tools/               # MCP tool definitions (82 tools)
-│   └── types/               # TypeScript type definitions
-├── test/                     # Test suites
-│   ├── e2e/                 # End-to-end tests (Playwright)
-│   ├── integration/         # Integration tests
-│   └── unit/                # Unit tests
-├── scripts/                  # Build and utility scripts (see scripts/README.md)
-│   ├── verify-tools.js         # Verify all tools are registered correctly
-│   ├── bootstrap-and-init.sh   # Docker: bootstrap Actual server + import test budget
-│   ├── import-test-budget.sh   # Import test-data/*.zip into Actual server
-│   ├── register-tsconfig-paths.js  # Path alias resolver for dist/ runtime
-│   ├── list-actual-api-methods.mjs # API coverage checker
-│   └── version-bump.js / version-check.js / version-dev.js  # Versioning helpers
+├── src/
+│   ├── index.ts              # Entry point and CLI flags
+│   ├── config.ts             # Environment validation (Zod)
+│   ├── actualToolsManager.ts # Tool registry and dispatch
+│   ├── lib/                  # Adapter, connection pool, shared schemas, logging
+│   ├── server/               # HTTP and stdio transports
+│   └── tools/                # MCP tool definitions (82 tools)
+├── types/                    # Type declarations (do not edit)
+├── tests/
+│   ├── unit/                 # Plain Node unit tests (the test:unit-js chain)
+│   ├── e2e/                  # Playwright E2E, run inside Docker
+│   └── manual/               # Integration runner against a live server
+├── scripts/                  # Build, drift-guard and release scripts (see scripts/README.md)
 ├── docs/                     # Documentation
-└── .github/                  # GitHub Actions workflows
+└── .github/                  # Workflows, issue and PR templates, path-scoped instructions
 ```
 
-## 🔄 Development Workflow
+The architecture and the rules that matter (every Actual call through the adapter, amounts in integer cents, dates as `YYYY-MM-DD`, no `console.*`) are in [AGENTS.md](../AGENTS.md). Adding a tool has its own checklist: [docs/NEW_TOOL_CHECKLIST.md](../docs/NEW_TOOL_CHECKLIST.md).
 
-### Creating a Branch
+### Commit messages
 
-```bash
-# Update your fork
-git fetch upstream
-git checkout main
-git merge upstream/main
-
-# Create a feature branch
-git checkout -b feature/your-feature-name
-
-# Or for bug fixes
-git checkout -b fix/issue-description
-```
-
-### Branch Naming Conventions
-
-- `feature/` - New features or enhancements
-- `fix/` - Bug fixes
-- `docs/` - Documentation changes
-- `refactor/` - Code refactoring
-- `test/` - Adding or updating tests
-- `chore/` - Maintenance tasks
-
-### Making Changes
-
-1. **Write code** following our [Code Standards](#code-standards)
-2. **Add tests** for new functionality
-3. **Update documentation** if needed
-4. **Run tests** to ensure nothing breaks
-5. **Commit changes** with clear messages
-
-### Commit Message Format
-
-Follow [Conventional Commits](https://www.conventionalcommits.org/):
+Follow [Conventional Commits](https://www.conventionalcommits.org/) and reference the issue:
 
 ```
-<type>(<scope>): <description>
-
-[optional body]
-
-[optional footer]
+feat(tools): add support for payee merging (#123)
+fix(adapter): handle null values in transaction import (#124)
+docs: correct the stdio setup steps
 ```
 
-**Types:**
-- `feat`: New feature
-- `fix`: Bug fix
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting)
-- `refactor`: Code refactoring
-- `test`: Adding or updating tests
-- `chore`: Maintenance tasks
-- `perf`: Performance improvements
-
-**Examples:**
-```bash
-feat(tools): add support for payee merging
-fix(adapter): handle null values in transaction import
-docs: update API coverage documentation
-test(e2e): add tests for account creation flow
-```
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `perf`, `chore`.
 
 ## 🧪 Testing
 
-### Running Tests
+Run the full validation sequence from [AGENTS.md](../AGENTS.md#validate-before-you-commit) before opening a pull request. The core of it:
 
 ```bash
-# Run all unit tests
-npm run test:unit
-
-# Run end-to-end tests
-npm run test:e2e
-
-# Run adapter tests
+npm run build
+npm run verify-tools
 npm run test:adapter
-
-# Run specific test file
-npx playwright test test/e2e/specific-test.spec.ts
+npm run test:unit-js
+npm run knip
+npm audit --audit-level=moderate
 ```
 
-### Writing Tests
+There is no `lint` or `format` script: the TypeScript build is the type check, and `knip` reports dead code.
 
-- **Unit tests**: Test individual functions and modules
-- **Integration tests**: Test interactions between components
-- **E2E tests**: Test complete user workflows
+- **Unit tests** are plain Node scripts in `tests/unit/`. Add a new file to the `test:unit-js` chain in `package.json`, or it never runs.
+- **End-to-end tests** for the tool surface go in `tests/e2e/docker-all-tools.e2e.spec.ts`, using the fixtures in `tests/e2e/fixtures.ts`. Run them with `npm run test:e2e:docker:full` (needs Docker).
+- Every new behaviour needs a positive and a negative test.
 
-Example test structure:
+The test layers and every test file are described in [docs/TESTING_AND_RELIABILITY.md](../docs/TESTING_AND_RELIABILITY.md).
 
-```typescript
-import { describe, it, expect } from '@playwright/test';
+## 📤 Submitting a Pull Request
 
-describe('accounts_list tool', () => {
-  it('should return list of accounts', async () => {
-    const result = await toolManager.callTool('actual_accounts_list', {});
-    expect(result).toBeDefined();
-    expect(Array.isArray(result.result)).toBe(true);
-  });
-});
-```
-
-### Test Coverage
-
-- Aim for >80% coverage for new code
-- All new tools must have corresponding tests
-- Critical paths require E2E test coverage
-
-## 📏 Code Standards
-
-### TypeScript Style
-
-- Use TypeScript strict mode
-- Prefer `const` over `let`
-- Use meaningful variable names
-- Add JSDoc comments for public APIs
-- Use Zod for runtime validation
-
-### Code Formatting
-
-```bash
-# Format code (if prettier is configured)
-npm run format
-
-# Lint code
-npm run lint
-```
-
-### Best Practices
-
-1. **Keep functions small**: Single responsibility principle
-2. **Error handling**: Always handle errors appropriately
-3. **Logging**: Use the logger for debugging, not console.log
-4. **Type safety**: Avoid `any` types when possible
-5. **Documentation**: Document complex logic with comments
-
-### Adding New MCP Tools
-
-When adding a new tool:
-
-1. Create tool file in `src/tools/`
-2. Define Zod input schema
-3. Implement tool function calling adapter
-4. Export from `src/tools/index.ts`
-5. Add tests in `test/unit/`
-6. Update documentation
-
-Example:
-
-```typescript
-// src/tools/your_new_tool.ts
-import { z } from 'zod';
-import type { ToolDefinition } from '../../types/tool.d.js';
-import adapter from '../lib/actual-adapter.js';
-
-const InputSchema = z.object({
-  id: z.string().describe('The ID parameter'),
-  // ... other parameters
-});
-
-const tool: ToolDefinition = {
-  name: 'actual_your_new_tool',
-  description: 'Description of what this tool does',
-  inputSchema: InputSchema,
-  call: async (args: unknown) => {
-    const validated = InputSchema.parse(args);
-    const result = await adapter.yourNewFunction(validated);
-    return { result };
-  },
-};
-
-export default tool;
-```
-
-## 📤 Submitting Changes
-
-### Pull Request Process
-
-1. **Update your branch**:
+1. Rebase on the latest `develop`:
    ```bash
    git fetch upstream
-   git rebase upstream/main
+   git rebase upstream/develop
    ```
+2. Push to your fork and open a pull request **against `develop`**.
+3. Fill in the pull request template and link the issue.
+4. Make sure CI passes, and answer review comments.
 
-2. **Push to your fork**:
-   ```bash
-   git push origin feature/your-feature-name
-   ```
+Keep a pull request to one concern, update the docs your change affects, and do not add dependencies without saying why.
 
-3. **Open a Pull Request**:
-   - Go to GitHub and create a PR from your branch to `main`
-   - Fill out the PR template
-   - Link related issues
-   - Add screenshots/demos if applicable
+## 🚀 How Your Change Reaches a Release
 
-4. **CI Checks**: Ensure all CI checks pass
-   - Build succeeds
-   - All tests pass
-   - No linting errors
-
-5. **Code Review**: Address reviewer feedback
-   - Make requested changes
-   - Push updates to your branch
-   - Respond to comments
-
-6. **Merge**: Once approved, your PR will be merged!
-
-### Pull Request Guidelines
-
-- **Keep PRs focused**: One feature/fix per PR
-- **Write clear descriptions**: Explain what and why
-- **Update documentation**: If you change behavior
-- **Add tests**: For new functionality
-- **Keep commits clean**: Squash if needed
-- **Be responsive**: Reply to review comments promptly
-
-## 🤖 Auto-merge Workflow
-
-To reduce manual overhead, this repository supports an automatic merge workflow.
-
-### How to Use Auto-merge
-
-1. **Open a PR** against `main` with focused changes (one concern per PR)
-2. **Ensure CI passes**: Build, unit tests, and E2E tests must be green
-3. **Add the `automerge` label**: GitHub Actions will attempt to merge automatically
-4. **Wait for checks**: Once all checks pass, the PR will be merged
-
-### Auto-merge Requirements
-
-- ✅ All CI checks must pass
-- ✅ Branch must be up-to-date with `main`
-- ✅ No merge conflicts
-- ✅ Required approvals met (if configured)
-
-### Notes
-
-- Branch protection rules still apply
-- Maintainers can manually merge if auto-merge fails
-- Remove the label if you want to prevent auto-merge
+The maintainer integrates every change through the same pipeline: a gated ticket, review, a version bump and a full live test run over both transports. Because of that, **your pull request may be reimplemented on `develop` and then closed as superseded instead of being merged**. That is the normal path, not a rejection. Your authorship is kept as a `Co-Authored-By` trailer on the commit, and you are credited in the release notes. The change reaches `main`, npm and Docker Hub in the next release.
 
 ## 🆘 Getting Help
 
-- **Issues**: Open a GitHub issue for bugs or feature requests
-- **Discussions**: Use GitHub Discussions for questions
-- **Documentation**: Check the `docs/` folder for detailed guides
+- **Questions, bugs and ideas**: open a [GitHub issue](https://github.com/agigante80/actual-mcp-server/issues).
+- **Documentation**: the [docs/](../docs/) folder, starting from [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 
 ## 📝 License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions are licensed under the [MIT License](../LICENSE).
 
 ---
 

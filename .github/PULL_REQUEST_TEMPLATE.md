@@ -4,6 +4,8 @@
 
 Please include a summary of the changes and which issue is fixed. Include relevant motivation and context.
 
+**Target branch: `develop`.** `main` only moves in a release. The maintainer may reimplement your change on `develop` and close this PR as superseded; you keep co-author credit on the commit and in the release notes. See [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](../AGENTS.md).
+
 Fixes # (issue)
 
 ## 🔄 Type of Change
@@ -61,7 +63,7 @@ npm audit --audit-level=moderate # No critical vulnerabilities
 - [ ] I have updated the README if needed
 - [ ] I have updated `docs/` files relevant to the change (README, ARCHITECTURE, etc.)
 - [ ] I have added JSDoc comments for new functions
-- [ ] If adding a tool, I ran `npm run docs:sync` to update **Tool Count:** markers
+- [ ] If adding a tool, I followed `docs/NEW_TOOL_CHECKLIST.md` (the maintainer updates the tool-count markers at release)
 
 ### Testing
 
@@ -134,18 +136,6 @@ After: ...
 ## 📝 Additional Notes
 
 Add any other context about the pull request here.
-
-## 🤖 Auto-Merge
-
-If you want this PR to be automatically merged when all checks pass:
-
-- [ ] I want this PR to auto-merge (add `automerge` label)
-
-**Note:** Auto-merge requires:
-- ✅ All CI checks passing
-- ✅ No merge conflicts
-- ✅ Branch up-to-date with main
-- ✅ Required approvals (if configured)
 
 ---
 
