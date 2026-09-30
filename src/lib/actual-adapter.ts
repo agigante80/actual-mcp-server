@@ -868,7 +868,7 @@ async function shutdownActualApi(opts?: { forceFullShutdown?: boolean }): Promis
   }
 }
 
-import { BANK_SYNC_SETTLE_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { BANK_SYNC_SETTLE_MS, SPLIT_VERIFY_INTERVAL_MS, SPLIT_VERIFY_TIMEOUT_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 // Concurrency limiter extracted to ./actual-adapter/concurrency.ts (#166).
 // Imported for internal use (every method wraps its raw call in withConcurrency)
@@ -1887,6 +1887,118 @@ export async function getPayees(): Promise<components['schemas']['Payee'][]> {
     return await withConcurrency(() => retry(() => rawGetPayees() as Promise<components['schemas']['Payee'][]>, { retries: 2, backoffMs: 200 }));
   });
 }
+
+export interface ContextOptions {
+  includeAccounts?: boolean;
+  includeCategories?: boolean;
+  includePayees?: boolean;
+  includeClosed?: boolean;
+  payeeLimit?: number;
+}
+
+/**
+ * A section that was not requested is ABSENT rather than an empty list, so "not asked" cannot be
+ * read as "empty budget". `payeesTruncated` and `payeeTotal` are present exactly when payees were
+ * requested; `hint` only when the payee list was cut. Upstream entity fields keep upstream spelling.
+ */
+export interface ContextResult {
+  accounts?: Array<{ id: string; name: string; offbudget: boolean; closed: boolean }>;
+  categoryGroups?: Array<{
+    id: string;
+    name: string;
+    is_income: boolean;
+    hidden: boolean;
+    categories: Array<{ id: string; name: string; hidden: boolean }>;
+  }>;
+  payees?: Array<{ id: string; name: string; transfer_acct: string | null }>;
+  payeesTruncated?: boolean;
+  payeeTotal?: number;
+  hint?: string;
+}
+
+/**
+ * #484: accounts, category groups and payees in ONE withActualApi session, so one api lock cycle
+ * and one consistent snapshot. The reads are raw and sequential: an `adapter.get*` call here would
+ * nest a session inside this one and deadlock until ACTUAL_OP_TIMEOUT_MS, and Promise.all would buy
+ * nothing because every call serialises on the one api singleton anyway.
+ */
+export async function getContext(options?: ContextOptions): Promise<ContextResult> {
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.context.get').catch(() => {});
+    const includeAccounts = options?.includeAccounts ?? true;
+    const includeCategories = options?.includeCategories ?? true;
+    const includePayees = options?.includePayees ?? true;
+    const includeClosed = options?.includeClosed ?? false;
+    const payeeLimit = options?.payeeLimit ?? 500;
+    const result: ContextResult = {};
+
+    // Payees need the account listing even when accounts were not requested: upstream getPayees()
+    // drops the transfer payees of DELETED accounts but not of CLOSED ones, so hiding closed
+    // accounts means hiding their transfer payees here too.
+    const closedIds = new Set<string>();
+    if (includeAccounts || (includePayees && !includeClosed)) {
+      const rawAccounts = await withConcurrency(() =>
+        retry(() => rawGetAccounts() as Promise<Array<Record<string, unknown>>>, { retries: 2, backoffMs: 200 })
+      );
+      const all = Array.isArray(rawAccounts) ? rawAccounts : [];
+      for (const a of all) if (a.closed) closedIds.add(String(a.id));
+      if (includeAccounts) {
+        result.accounts = all
+          .filter((a) => includeClosed || !a.closed)
+          .map((a) => ({
+            id: String(a.id),
+            name: String(a.name ?? ''),
+            offbudget: Boolean(a.offbudget),
+            closed: Boolean(a.closed),
+          }));
+      }
+    }
+
+    if (includeCategories) {
+      // No options: upstream then returns hidden groups and categories too, flagged by `hidden`.
+      const rawGroups = await withConcurrency(() =>
+        retry(() => rawGetCategoryGroups() as Promise<Array<Record<string, unknown>>>, { retries: 2, backoffMs: 200 })
+      );
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      result.categoryGroups = (Array.isArray(rawGroups) ? rawGroups : []).map((g: any) => ({
+        id: String(g.id),
+        name: String(g.name ?? ''),
+        is_income: Boolean(g.is_income),
+        hidden: Boolean(g.hidden),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        categories: (Array.isArray(g.categories) ? g.categories : []).map((c: any) => ({
+          id: String(c.id),
+          name: String(c.name ?? ''),
+          hidden: Boolean(c.hidden),
+        })),
+      }));
+    }
+
+    if (includePayees) {
+      const rawPayees = await withConcurrency(() =>
+        retry(() => rawGetPayees() as Promise<Array<Record<string, unknown>>>, { retries: 2, backoffMs: 200 })
+      );
+      // Name order, case-insensitive, id as the tie-break, so the cut is deterministic. Transfer
+      // payees count toward the cap. Recency is not an option: payees carry no last-used field.
+      const list = (Array.isArray(rawPayees) ? rawPayees : [])
+        .map((p) => ({
+          id: String(p.id),
+          name: String(p.name ?? ''),
+          transfer_acct: p.transfer_acct != null ? String(p.transfer_acct) : null,
+        }))
+        .filter((p) => includeClosed || p.transfer_acct === null || !closedIds.has(p.transfer_acct))
+        .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+      result.payees = list.slice(0, payeeLimit);
+      result.payeesTruncated = list.length > payeeLimit;
+      result.payeeTotal = list.length;
+      if (result.payeesTruncated) {
+        result.hint = `Showing ${result.payees.length} of ${list.length} payees. Use actual_entities_search or actual_get_id_by_name to find the rest.`;
+      }
+    }
+
+    return result;
+  });
+}
 /**
  * #388: turn an optional FILTER id that is actually a NAME into a refusal that names the id.
  *
@@ -2152,7 +2264,10 @@ export async function deleteAccount(id: string): Promise<void> {
     await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
-export async function updateTransaction(id: string, fields: Partial<components['schemas']['Transaction']> | unknown): Promise<void> {
+export async function updateTransaction(
+  id: string,
+  fields: Partial<components['schemas']['Transaction']> | unknown
+): Promise<{ split?: { parent: string; children: string[] } }> {
   observability.incrementToolCall('actual.transactions.update').catch(() => {});
   // Use write queue to batch concurrent updates in a single budget session
   return queueWriteOperation(async () => {
@@ -2160,7 +2275,7 @@ export async function updateTransaction(id: string, fields: Partial<components['
     // so an update that changed nothing would otherwise be reported as success. A
     // targeted ActualQL query by id keeps this cheap (indexed lookup). #305 extends
     // the select to is_parent + amount so the split guards below can run off the
-    // same read (single source; no second out-of-queue read).
+    // same read (single source; no second out-of-queue read); #489 adds is_child.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { q } = (await import('@actual-app/api')) as any;
     const rows = await withConcurrency(() =>
@@ -2172,42 +2287,95 @@ export async function updateTransaction(id: string, fields: Partial<components['
         // regular transactions, split parents, and split children as flat rows, so
         // the existence + is_parent + amount read is correct for every kind.
         const res = (await rawRunQuery(
-          q('transactions').options({ splits: 'all' }).filter({ id }).select(['id', 'is_parent', 'amount'])
-        )) as { data?: Array<{ id: string; is_parent?: boolean; amount?: number }> };
+          q('transactions').options({ splits: 'all' }).filter({ id }).select(['id', 'is_parent', 'is_child', 'amount', 'category'])
+        )) as { data?: Array<{ id: string; is_parent?: boolean; is_child?: boolean; amount?: number; category?: string | null }> };
         return Array.isArray(res?.data) ? res.data : [];
       }, { retries: 2, backoffMs: 200 })
     );
     if (rows.length === 0) {
-      throw new Error(`Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
+      // #489: a typed refusal (nothing was written), wording kept byte-identical to what callers saw.
+      throw new NotFoundRefusal('Transaction', id, 'actual_transactions_get', undefined,
+        `Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
     }
 
-    // #305: split-edit guards, BEFORE the raw write. Two rules:
-    //   (a) subtransactions may only edit a transaction that is ALREADY a split;
-    //       converting a plain transaction into a split via updateTransaction is
-    //       broken in @actual-app/api 26.7.0 (it strands orphan children), so it
-    //       is rejected here rather than silently corrupting data.
-    //   (b) child amounts must sum to the effective parent amount. The API does
-    //       not enforce this; the ground truth is the caller's new `amount` if
-    //       supplied, else the stored amount read above.
-    const subs = (fields as { subtransactions?: ReadonlyArray<{ amount: number }> })?.subtransactions;
+    // Split guards, BEFORE the raw write:
+    //   (a) a CHILD cannot itself be split: upstream nests one level only.
+    //   (b) child amounts must sum to the effective parent amount. The API does not
+    //       enforce this; the ground truth is the caller's new `amount` if supplied,
+    //       else the stored amount read above.
+    // #489 lifted #305's third rule, which refused a PLAIN target: "converting a plain
+    // transaction into a split via updateTransaction is broken in 26.7.0 (it strands orphan
+    // children)". That is no longer true. Upstream #8207 (`shared/transactions.ts`) converts in
+    // place through makeChild, and a live probe at 26.9.0 confirmed it persists across a fresh
+    // download with the SAME id and `imported_id`, and keeps a transfer balanced by replacing the
+    // single counterpart with one per child. Reusing that path is why #489 is not a create plus
+    // delete: raw `addTransactions` does not run transfers while `deleteTransaction` does, so the
+    // orchestration deleted a transfer's counterpart, and it re-ran rules on the new parent.
+    const subs = (fields as { subtransactions?: ReadonlyArray<{ amount: number; category?: string | null }> })?.subtransactions;
+    const row = rows[0];
+    const converting = Boolean(subs) && row.is_parent !== true;
     if (subs) {
-      const row = rows[0];
-      if (row.is_parent !== true) {
-        throw new Error(
-          `Transaction "${id}" is not a split. Converting a plain transaction into a split is not supported here; create the split with actual_transactions_create instead.`
+      if (row.is_child === true) {
+        throw new OutOfRangeRefusal(
+          `Transaction "${id}" is a split child and cannot itself be split. Edit its parent's subtransactions with actual_transactions_update instead.`,
+          id
         );
       }
       const providedAmount = (fields as { amount?: number | null }).amount;
       const parentAmount = providedAmount != null ? providedAmount : row.amount;
       const sum = subtransactionsSum(subs);
       if (sum !== parentAmount) {
-        throw new Error(
-          `Subtransactions must sum to the parent amount. Expected ${parentAmount}, got ${sum}.`
+        throw new OutOfRangeRefusal(
+          `Subtransactions must sum to the parent amount. Expected ${parentAmount}, got ${sum}.`,
+          String(sum)
         );
       }
     }
 
-    await withConcurrency(() => retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    // #489: a converted parent keeps its old category upstream (the update path nulls a parent's
+    // category only when `account` is in the diff), while the Actual UI shows a split parent with
+    // none. Clear it in the SAME write, and hand its category to every child that names none, so
+    // the children still inherit it exactly as upstream's makeChild would have done.
+    let payload = fields;
+    if (converting) {
+      const f = fields as { category?: string | null; subtransactions: ReadonlyArray<{ category?: string | null }> };
+      const inherited = 'category' in f ? f.category : (row.category ?? null);
+      payload = {
+        ...f,
+        category: null,
+        subtransactions: f.subtransactions.map((c) => ('category' in c ? c : { ...c, category: inherited })),
+      };
+    }
+    await withConcurrency(() => retry(() => rawUpdateTransaction(id, payload) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    if (!converting) return {};
+
+    // #489: verify AFTER the write. Upstream resolves before the conversion lands (see
+    // SPLIT_VERIFY_TIMEOUT_MS), so success is only claimed once the parent reads as a split
+    // with every requested child. Polling here, inside the drain, also guarantees the change is
+    // local before the drain's api.sync(). A retry after a timeout is safe: the row is then a
+    // split, so a second call EDITS its children rather than creating anything new.
+    const expected = subs!.length;
+    const deadline = Date.now() + SPLIT_VERIFY_TIMEOUT_MS;
+    for (;;) {
+      const res = (await rawRunQuery(
+        q('transactions').options({ splits: 'all' })
+          .filter({ $or: [{ id }, { parent_id: id }] })
+          .select(['id', 'is_parent', 'parent_id'])
+      )) as { data?: Array<{ id: string; is_parent?: boolean; parent_id?: string | null }> };
+      const data = Array.isArray(res?.data) ? res.data : [];
+      const parent = data.find((r) => r.id === id);
+      const children = data.filter((r) => r.parent_id === id).map((r) => r.id);
+      if (parent?.is_parent === true && children.length === expected) {
+        return { split: { parent: id, children } };
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `Transaction "${id}" was sent to be split into ${expected} parts, but the split was not visible after ${SPLIT_VERIFY_TIMEOUT_MS}ms (found ${children.length} children), so the outcome is unknown. ` +
+          'Read it back with actual_transactions_get before retrying: if it is already a split, a retry edits its children rather than duplicating them.'
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, SPLIT_VERIFY_INTERVAL_MS));
+    }
   });
 }
 export async function updateTransactionBatch(
@@ -4186,5 +4354,6 @@ export default {
   exportBudget,
   importBudget,
   getPreferences,
+  getContext,
   notifications,
 };

@@ -8,12 +8,12 @@
  * Writes to context:   (none)
  *
  * Environment:
- *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 81)
+ *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 82)
  */
 
 import { noteTolerated } from '../assert.js';
 
-const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '81', 10);
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '82', 10);
 
 /**
  * @param {{ listTools: Function, callTool: Function }} client
@@ -58,6 +58,15 @@ export async function sanityTests(client) {
   console.log("\nFiltering transactions...");
   await callTool("actual_transactions_filter", { account: null });
   console.log("✓ Transactions filter returned successfully");
+
+  // 5b. Get context (read-only)
+  console.log("\nGetting budget context...");
+  const contextRes = await callTool("actual_get_context", {});
+  const ctx = contextRes?.result ?? contextRes;
+  if (!Array.isArray(ctx?.accounts) || !Array.isArray(ctx?.categoryGroups) || !Array.isArray(ctx?.payees) || typeof ctx?.payeeTotal !== 'number') {
+    throw new Error(`actual_get_context: unexpected response shape: ${JSON.stringify(ctx).slice(0, 120)}`);
+  }
+  console.log(`✓ Budget context: ${ctx.accounts.length} accounts, ${ctx.categoryGroups.length} groups, ${ctx.payees.length} payees`);
 
   // 6. Valid SQL query
   console.log("\nRunning SQL query...");

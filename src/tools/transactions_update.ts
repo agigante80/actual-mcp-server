@@ -26,26 +26,31 @@ const InputSchema = z.object({
     transfer_id: z.string().nullable().optional().describe('Transfer transaction ID if this is a transfer'),
     cleared: z.boolean().nullable().optional().describe('Whether transaction is cleared'),
     reconciled: z.boolean().nullable().optional().describe('Whether transaction is reconciled'),
-    // #305: edit the children of an EXISTING split. The child amounts must sum
-    // to the parent amount; the target must already be a split. Both are
-    // enforced in the adapter pre-flight (it reads is_parent + amount), because
-    // the parent amount is not part of this input. Converting a plain
-    // transaction into a split here is rejected (unsupported by the API).
+    // #305: edit the children of an existing split. #489: or split a PLAIN transaction in
+    // place (same id, so imported_id and bank-sync matching are kept). The child amounts must
+    // sum to the parent amount, and a split child cannot itself be split; both are enforced in
+    // the adapter pre-flight (it reads is_parent, is_child and amount), because the stored
+    // amount is not part of this input.
     subtransactions: CommonSchemas.subtransactions
       .optional()
-      .describe('Replace the children of an existing split; amounts must sum to the parent amount. To create a split, use actual_transactions_create.'),
+      .describe('Split children. On a plain transaction this splits it in place (same id, import fields kept); on a split it replaces the children. Amounts must sum to the parent amount.'),
   }).describe('Fields to update'),
 });
 
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_update',
-  description: 'Update an existing transaction in Actual Budget. Provide the transaction ID and the fields you want to update.',
+  description:
+    'Update an existing transaction in Actual Budget. Provide the transaction ID and the fields you want to update. ' +
+    'To split an existing transaction across categories in one call, pass fields.subtransactions (amounts summing to the transaction amount): ' +
+    'it is split in place, keeping its id and import fields, and the result lists the new child ids. ' +
+    'The parent\'s own category is cleared; a child that names no category inherits it.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
-    await adapter.updateTransaction(input.id, input.fields);
-    return { success: true };
+    const split = (await adapter.updateTransaction(input.id, input.fields))?.split;
+    // #489: name the children only when a split was CREATED, so the common edit keeps its shape.
+    return split ? { success: true, split } : { success: true };
   },
 };
 

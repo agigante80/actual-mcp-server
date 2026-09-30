@@ -135,7 +135,7 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_accounts_delete` | verify-after in the tool (#347) |
 | `actual_budgets_import` | fixed in #349 |
 | `actual_transactions_delete` | adapter pre-flight by id with `splits: 'all'` (#212/#305); upstream also returns `[]` |
-| `actual_transactions_update` | same pre-flight (#212/#305) |
+| `actual_transactions_update` | same pre-flight (#212/#305); a plain-to-split conversion is also read back after the write (#489), because upstream `api/transaction-update` does not await the batch update it starts |
 | `actual_categories_delete` | adapter pre-check, AND upstream throws `Category with id X not found.` |
 | `actual_category_groups_delete` | tool pre-check against `getCategoryGroups()`, which includes hidden groups when called with no argument |
 | `actual_schedules_delete` | tool pre-check against `getSchedules()`, plus constraint-error translation |

@@ -190,14 +190,45 @@ export async function transactionTests(client, context) {
       else fail(`create rejected, but with an unexpected message: ${(err.message || '').slice(0, 120)}`);
     }
 
-    // NEGATIVE: subtransactions on a plain (non-split) target is rejected (no plain-to-split conversion).
-    if (context.transactionId) {
-      try {
-        await callTool("actual_transactions_update", { id: context.transactionId, fields: { subtransactions: [{ amount: -3750 }, { amount: -3750 }] } });
-        fail("Expected a non-split rejection but the update succeeded");
-      } catch (err) {
-        if (/not a split/i.test(err.message || '')) console.log("  ✓ NEGATIVE: subtransactions on a plain transaction rejected");
-        else fail(`update rejected, but with an unexpected message: ${(err.message || '').slice(0, 120)}`);
+    // #489: subtransactions on a PLAIN transaction split it IN PLACE: same id, the parent becomes
+    // a split, the children are the ones requested. A dedicated transaction with its own notes
+    // marker, so the conversion cannot disturb context.transactionId, and it is deleted here
+    // (deleting a parent removes its children) so the account still returns to a zero balance.
+    {
+      const plainNotes = `MCP-PlainToSplit-${timestamp}`;
+      const readPlain = async () => {
+        const got = await callTool("actual_transactions_get", { accountId: txAccountId, startDate: today, endDate: today });
+        const rows = got.transactions || got.result || (Array.isArray(got) ? got : []);
+        return rows.find(t => !t.parent_id && (t.notes || '') === plainNotes);
+      };
+      await callTool("actual_transactions_create", { account: txAccountId, date: today, amount: -4000, notes: plainNotes });
+      const plain = await readPlain();
+      if (!plain) {
+        fail("Plain-to-split: the plain transaction was not found after create");
+      } else {
+        try {
+          // NEGATIVE first: a sum mismatch is refused and leaves the transaction plain.
+          try {
+            await callTool("actual_transactions_update", { id: plain.id, fields: { subtransactions: [{ amount: -3000 }, { amount: -500 }] } });
+            fail("Plain-to-split: a mismatched sum was accepted");
+          } catch (err) {
+            if (/sum to the parent amount/i.test(err.message || '')) console.log("  ✓ NEGATIVE: mismatched split sum rejected on a plain target");
+            else fail(`Plain-to-split: rejected with an unexpected message: ${(err.message || '').slice(0, 120)}`);
+          }
+          const res = await callTool("actual_transactions_update", { id: plain.id, fields: { subtransactions: [{ amount: -2500 }, { amount: -1500 }] } });
+          const after = await readPlain();
+          const kids = (after && after.subtransactions) || [];
+          const kidSum = kids.reduce((n, c) => n + c.amount, 0);
+          if (after && after.id === plain.id && after.is_parent === true && kids.length === 2 && kidSum === -4000
+              && res && res.split && res.split.parent === plain.id) {
+            console.log("  ✓ Plain-to-split: same id, now a split with 2 children summing to -4000");
+          } else {
+            fail(`Plain-to-split: expected the same id as a split with 2 children, got ${JSON.stringify({ id: after && after.id, is_parent: after && after.is_parent, kids: kids.length, kidSum, split: res && res.split })}`);
+          }
+        } finally {
+          try { await callTool("actual_transactions_delete", { id: plain.id }); }
+          catch (err) { fail(`Plain-to-split teardown: ${(err.message || '').slice(0, 120)}`); }
+        }
       }
     }
 

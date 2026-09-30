@@ -20,7 +20,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 
 | File | Coverage | When to use |
 |------|----------|-------------|
-| [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1**: 8 read-only tools | Always run first. Confirms the server is up and connected. |
+| [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1**: 9 read-only tools | Always run first. Confirms the server is up and connected. |
 | [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2 to 6c**: ~49 CRUD tools | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules. |
 | [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7 to 12**: ~25 tools + full cleanup | Paste after Prompt 2 passes. Tests budgets, summaries, query engine, notes, preferences, the export/import round trip, session management, and cleans up everything. |
 
@@ -47,7 +47,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 
 | Phase | Prompt | Tools | Domain |
 |-------|--------|-------|--------|
-| 1 | Prompt 1 | 8 | Server info, read-only lists, `actual_get_id_by_name`, `actual_entities_search` |
+| 1 | Prompt 1 | 9 | Server info, read-only lists, `actual_get_context`, `actual_get_id_by_name`, `actual_entities_search` |
 | 2 | Prompt 2 | 6 | Account CRUD |
 | 2b | Prompt 2 | 4 | Account group CRUD (#429) |
 | 3 | Prompt 2 | 6 | Category Group & Category CRUD |
@@ -67,7 +67,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 82 tools across 3 prompts**
+**Total: 83 tools across 3 prompts**
 
 ---
 

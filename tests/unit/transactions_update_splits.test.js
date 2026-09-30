@@ -51,6 +51,7 @@ const ID = '00000000-0000-0000-0000-000000000abc';
   apiDefault.deleteTransaction = async (id) => { rawDeleteCalls.push(id); };
 
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
+  const { isPreflightRefusal } = await import('../../dist/src/lib/errors.js');
   const adapter = adapterMod.default;
   adapterMod._setSkipApiInitForTests(true);
 
@@ -66,14 +67,16 @@ const ID = '00000000-0000-0000-0000-000000000abc';
     check(rawUpdateCalls.length === 1 && rawUpdateCalls[0] === ID, 'rawUpdateTransaction reached');
   }
 
-  console.log('\n[#305][A] non-split target -> rejected, raw write NOT reached');
+  // #489 lifted the plain-target refusal that used to sit here: a plain transaction is now
+  // split in place, which tests/unit/transactions_update_split_convert.test.js covers. The rule
+  // that remains is that a split CHILD cannot itself be split.
+  console.log('\n[#489][A] split-child target -> typed refusal, raw write NOT reached');
   {
-    reset([{ id: ID, is_parent: false, amount: -800 }]);
+    reset([{ id: ID, is_parent: false, is_child: true, amount: -800 }]);
     let threw = null;
     try { await adapter.updateTransaction(ID, { subtransactions: subs(-500, -300) }); } catch (e) { threw = e; }
-    check(threw instanceof Error, 'throws for a non-split target');
-    check(/not a split/i.test(threw?.message || ''), 'message says not a split');
-    check(/actual_transactions_create/.test(threw?.message || ''), 'message points to the create tool');
+    check(isPreflightRefusal(threw), 'throws a typed pre-flight refusal', threw && threw.message);
+    check(/split child/i.test(threw?.message || ''), 'message says it is a split child');
     check(rawUpdateCalls.length === 0, 'rawUpdateTransaction NOT reached');
   }
 

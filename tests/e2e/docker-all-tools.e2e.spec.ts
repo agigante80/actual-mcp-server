@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 81 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 82 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 81 TOOLS', () => {
+test.describe('Docker E2E - ALL 82 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -531,6 +531,90 @@ test.describe('Docker E2E - ALL 81 TOOLS', () => {
     const rows = ((await mcp.call('actual_transactions_filter', { accountId: account.id })) ??
       []) as any[];
     expect(rows.find((t: any) => t?.id === txn.id)?.amount).toBe(-7500);
+  });
+
+  // #489: subtransactions on a PLAIN transaction split it in place. The id must survive (that is
+  // what keeps imported_id and reconciliation state), and the read-back must show the parent as a
+  // split with exactly the requested children, not a new parent next to an orphaned original.
+  test('actual_transactions_update - splits a plain transaction in place', async ({ mcp, makeAccount, makeCategoryGroup, makeCategory, makeTransaction }) => {
+    const group = await makeCategoryGroup();
+    const category = await makeCategory({ group });
+    const other = await makeCategory({ group });
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -5000, category: category.id });
+
+    // The second child names no category, so it must inherit the parent's; the parent's own
+    // category is cleared, which is how the Actual UI shows a split parent.
+    const res = await mcp.call('actual_transactions_update', {
+      id: txn.id,
+      fields: { subtransactions: [{ amount: -3000, category: other.id }, { amount: -2000 }] },
+    });
+    expect(res?.split?.parent).toBe(txn.id);
+    expect(res?.split?.children).toHaveLength(2);
+
+    const d = await mcp.call('actual_transactions_get', { accountId: account.id });
+    const rows = (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+    const parents = rows.filter((t: any) => !t?.parent_id && !t?.is_child);
+    expect(parents).toHaveLength(1);
+    expect(parents[0].id).toBe(txn.id);
+    expect(parents[0].is_parent).toBe(true);
+    expect((parents[0].subtransactions ?? []).map((c: any) => c.amount).sort()).toEqual([-3000, -2000].sort());
+    expect(parents[0].category ?? null).toBeNull();
+    const byAmount = new Map((parents[0].subtransactions ?? []).map((c: any) => [c.amount, c.category]));
+    expect(byAmount.get(-3000)).toBe(other.id);
+    expect(byAmount.get(-2000)).toBe(category.id);
+  });
+
+  // #489: a TRANSFER leg split in place. Upstream replaces the single counterpart with one per
+  // child, so neither account balance moves. Cleanup is the makeAccount teardown, as in the
+  // actual_transfers_create test below.
+  test('actual_transactions_update - splits a transfer in place', async ({ mcp, makeAccount }) => {
+    const src = await makeAccount({ name: `E2E-SplitXfer-Src-${uniqueSuffix()}` });
+    const dst = await makeAccount({ name: `E2E-SplitXfer-Dst-${uniqueSuffix()}` });
+    const created = await mcp.call('actual_transfers_create', {
+      from_account: src.id, to_account: dst.id, amount: 7000, date: today(),
+    });
+    expect(created?.success).toBeTruthy();
+
+    const rowsOf = async (acct: string) => {
+      const d = await mcp.call('actual_transactions_get', { accountId: acct });
+      return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+    };
+    const balanceOf = async (acct: string) => {
+      const b = await mcp.call('actual_accounts_get_balance', { id: acct });
+      return typeof b === 'number' ? b : b?.balance;
+    };
+    const debit = (await rowsOf(src.id)).find((t: any) => t?.amount === -7000);
+    const oldCounterpart = debit.transfer_id;
+    expect(oldCounterpart).toBeTruthy();
+    const before = { src: await balanceOf(src.id), dst: await balanceOf(dst.id) };
+
+    const res = await mcp.call('actual_transactions_update', {
+      id: debit.id,
+      fields: { subtransactions: [{ amount: -4000 }, { amount: -3000 }] },
+    });
+    expect(res?.split?.parent).toBe(debit.id);
+    expect(res?.split?.children).toHaveLength(2);
+
+    expect(await balanceOf(src.id)).toBe(before.src);
+    expect(await balanceOf(dst.id)).toBe(before.dst);
+    const dstRows = await rowsOf(dst.id);
+    expect(dstRows.find((t: any) => t?.id === oldCounterpart)).toBeUndefined();
+    const counterparts = dstRows.filter((t: any) => res.split.children.includes(t?.transfer_id));
+    expect(counterparts.map((t: any) => t.amount).sort()).toEqual([3000, 4000]);
+  });
+
+  // #489 NEGATIVE: children that do not sum to the parent are refused before anything is written.
+  test('actual_transactions_update - ERROR: a split that does not sum to the parent is refused', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -5000 });
+    await expect(mcp.call('actual_transactions_update', {
+      id: txn.id,
+      fields: { subtransactions: [{ amount: -3000 }, { amount: -1000 }] },
+    })).rejects.toThrow(/Expected -5000, got -4000/);
+    const d = await mcp.call('actual_transactions_get', { accountId: account.id });
+    const rows = (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+    expect(rows.find((t: any) => t?.id === txn.id)?.is_parent).toBeFalsy();
   });
 
   test('actual_transactions_filter - should filter transactions', async ({ mcp, makeAccount, makeTransaction }) => {
@@ -1368,6 +1452,34 @@ test.describe('Docker E2E - ALL 81 TOOLS', () => {
     const data = await mcp.call('actual_get_id_by_name', { type: 'accounts', name: account.name });
     const resolvedId = data?.id ?? (typeof data === 'string' ? data : null);
     expect(resolvedId).toBe(account.id);
+  });
+
+  // ==================== GET CONTEXT (#484) ====================
+  test('actual_get_context - should return accounts, category groups, and payees in a single call', async ({ mcp, makeAccount, makeCategory, makePayee }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const payee = await makePayee();
+
+    // The maximum cap, so the provisioned payee cannot fall outside the name-sorted window on
+    // a budget that has accumulated more payees than the default 500.
+    const data = await mcp.call('actual_get_context', { payeeLimit: 2000 });
+    const res = data?.result ?? data;
+
+    expect(Array.isArray(res.accounts)).toBe(true);
+    expect(res.accounts.some((a: any) => a.id === account.id)).toBe(true);
+
+    expect(Array.isArray(res.categoryGroups)).toBe(true);
+    const allCategories = res.categoryGroups.flatMap((g: any) => g.categories || []);
+    expect(allCategories.some((c: any) => c.id === category.id)).toBe(true);
+
+    expect(Array.isArray(res.payees)).toBe(true);
+    expect(res.payees.some((p: any) => p.id === payee.id)).toBe(true);
+    expect(typeof res.payeesTruncated).toBe('boolean');
+    expect(typeof res.payeeTotal).toBe('number');
+  });
+
+  test('actual_get_context - should reject an out-of-range payeeLimit', async ({ mcp }) => {
+    await expect(mcp.call('actual_get_context', { payeeLimit: 0 })).rejects.toThrow(/payeeLimit/i);
   });
 
   // ==================== DELETE OPERATIONS (6 tools) ====================

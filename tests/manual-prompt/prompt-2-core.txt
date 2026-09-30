@@ -304,9 +304,13 @@ tool count for this phase is unchanged; they add capability scenarios, not new t
   Input: { id: "{split_id}", fields: { subtransactions: [ { amount: -2500 }, { amount: -500 } ] } }
   Expect: success; re-fetch shows the two children replaced and still summing to -3000
 
-- actual_transactions_update (split, negative: target is not a split)
+- actual_transactions_update (split a plain transaction in place, positive)
   Input: { id: "{txn2_id}", fields: { subtransactions: [ { amount: 6000 }, { amount: 4000 } ] } }
-  Expect: rejected, pointing to the create tool; converting a plain transaction into a split is not supported
+  Expect: success with split.parent equal to {txn2_id}; re-fetch shows the SAME id as a split with two children summing to the parent amount
+
+- actual_transactions_update (split, negative: children do not sum to the parent)
+  Input: { id: "{txn2_id}", fields: { subtransactions: [ { amount: 6000 }, { amount: 1000 } ] } }
+  Expect: rejected before any write, naming the expected and actual sums
 
 Note: actual_transactions_delete will be handled in Phase 12 cleanup.
 

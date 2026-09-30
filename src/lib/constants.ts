@@ -56,6 +56,19 @@ export const BANK_SYNC_SETTLE_MS = 30_000;
  */
 export const WRITE_SESSION_DELAY_MS = 100;
 
+/**
+ * #489: how long (ms) to wait for a plain-to-split conversion to become visible.
+ *
+ * Upstream `api/transaction-update` returns `handlers['transactions-batch-update'](diff)['updated']`
+ * without awaiting it (verified at @actual-app/api 26.9.0), so the write lands AFTER the call
+ * resolves. Measured live, a read issued immediately after still sees the plain row. The adapter
+ * therefore reads the split back, polling every SPLIT_VERIFY_INTERVAL_MS, and refuses to report
+ * success if it has not appeared within this bound. A local SQLite write, so milliseconds in
+ * practice; the bound only decides how long a genuinely lost write takes to be reported.
+ */
+export const SPLIT_VERIFY_TIMEOUT_MS = 2000;
+export const SPLIT_VERIFY_INTERVAL_MS = 25;
+
 // ============================================================================
 // MCP SERVER
 // ============================================================================

@@ -71,6 +71,7 @@ const READ_ONLY = new Set<string>([
   'actual_categories_get',
   'actual_category_groups_get',
   'actual_entities_search',
+  'actual_get_context',
   'actual_get_id_by_name',
   'actual_notes_get',
   'actual_payee_rules_get',
