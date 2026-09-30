@@ -7,9 +7,11 @@
 // Nothing looked, so nothing noticed.
 //
 // Asserted here:
-//   1. every `npm run <script>` in the contributor docs exists in package.json `scripts`
-//   2. every RELATIVE markdown link in them, and in .github/instructions/, resolves to a
-//      TRACKED path
+//   1. every `npm run <script>` (and `npm test` / `npm start`) in the contributor docs and
+//      .github/instructions/ exists in package.json `scripts`, and every `node <path>`
+//      names a tracked file (#498)
+//   2. every RELATIVE markdown link in them, inline or reference-style, resolves to a
+//      TRACKED path inside the repository
 //   3. AGENTS.md exists, is not ignored, and stays short enough to be a map
 //   4. every .github/instructions/*.instructions.md defers to AGENTS.md and never cites
 //      CLAUDE.md
@@ -69,22 +71,66 @@ const TRACKED = new Set(
 // A dot is allowed only BETWEEN name characters: the #496 spec's plain `[A-Za-z0-9:._-]+`
 // captured sentence punctuation ("run npm run format." read as `format.`), which the
 // negative fixture below caught.
-const NPM_RUN_RE = /\bnpm run ([A-Za-z0-9:_-]+(?:\.[A-Za-z0-9:_-]+)*)/g;
+// #498: leading flags are skipped (`npm run --silent build` names `build`), and a flag
+// needs a letter after its dashes so the `--` argument separator is never read as one.
+const NPM_RUN_RE =
+  /\bnpm run((?:\s+--?[A-Za-z][\w-]*(?:=\S+)?)*)\s+([A-Za-z0-9:_-]+(?:\.[A-Za-z0-9:_-]+)*)/g;
+// `npm test` and `npm start` are lifecycle shorthands for the scripts of the same name,
+// and this repo deliberately has no `test` script.
+const NPM_LIFECYCLE_RE = /\bnpm (test|start)\b/g;
 function missingScripts(text, scripts) {
-  return [...new Set([...text.matchAll(NPM_RUN_RE)].map((m) => m[1]))].filter((s) => !scripts.has(s));
+  const named = [...text.matchAll(NPM_RUN_RE)].map((m) => m[2])
+    .concat([...text.matchAll(NPM_LIFECYCLE_RE)].map((m) => m[1]));
+  return [...new Set(named)].filter((s) => !scripts.has(s));
 }
 
-// Inline links `[text](target)`. Out of scope: any URL scheme (http:, https:, mailto:),
-// protocol-relative `//`, and fragment-only `#anchor`. For `path#frag` or `path?q` only
-// the path is checked. Targets resolve relative to the CONTAINING file, as GitHub does.
+// #498: `node <path>` must name a tracked file. `dist/` is build output and never tracked,
+// so it is skipped; a placeholder such as `node scripts/<file>` does not match.
+const NODE_TARGET_RE = /\bnode\s+((?:\.\/)?[\w./-]+\.(?:m?js|cjs|ts))\b/g;
+function missingNodeTargets(text, isTracked) {
+  const paths = [...text.matchAll(NODE_TARGET_RE)].map((m) => posix.normalize(m[1]));
+  return [...new Set(paths)].filter((p) => !p.startsWith('dist/') && !isTracked(p));
+}
+
+// Inline links `[text](target)` (an image `![alt](src)` matches too, and is checked), then
+// reference definitions `[label]: target`. Out of scope: any URL scheme (http:, https:,
+// mailto:), protocol-relative `//`, and fragment-only `#anchor`. For `path#frag` or `path?q`
+// only the path is checked. A relative target resolves against the CONTAINING file and a
+// `/`-rooted one against the repository root, both as GitHub renders them.
+//
+// #498: code is stripped first, because a link written inside a fence or a code span is an
+// example of syntax and GitHub does not render it as a link. Command checks still scan code.
+// A footnote definition (`[^1]: text`) is excluded: its text is prose, not a target.
 const LINK_RE = /\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+const REF_DEF_RE = /^[ \t]*\[(?!\^)[^\]]+\]:[ \t]*(\S+)/gm;
+const FENCE_RE = /^[ \t]*(`{3,}|~{3,})[^\n]*\n[\s\S]*?^[ \t]*\1[^\n]*$/gm;
+const CODE_SPAN_RE = /`[^`\n]*`/g;
+function stripCode(text) {
+  return text.replace(FENCE_RE, '').replace(CODE_SPAN_RE, '');
+}
 function brokenLinks(text, docPath, isTracked) {
+  const prose = stripCode(text);
+  const targets = [...prose.matchAll(LINK_RE)].map((m) => m[1])
+    .concat([...prose.matchAll(REF_DEF_RE)].map((m) => m[1].replace(/^<(.*)>$/, '$1')));
   const out = [];
-  for (const [, target] of text.matchAll(LINK_RE)) {
+  for (const target of targets) {
     if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//') || target.startsWith('#')) continue;
-    const bare = target.split('#')[0].split('?')[0];
+    let bare;
+    try {
+      bare = decodeURIComponent(target.split('#')[0].split('?')[0]);
+    } catch {
+      out.push(target); // malformed percent-encoding: GitHub cannot resolve it either
+      continue;
+    }
     if (!bare) continue;
-    const resolved = posix.normalize(posix.join(posix.dirname(docPath), bare));
+    const resolved = bare.startsWith('/')
+      ? posix.normalize(bare.slice(1) || '.')
+      : posix.normalize(posix.join(posix.dirname(docPath), bare));
+    if (resolved === '..' || resolved.startsWith('../')) {
+      out.push(`${target} (escapes the repository)`);
+      continue;
+    }
+    if (resolved === '.' || resolved === './') continue; // the repository root
     if (!isTracked(resolved)) out.push(target);
   }
   return out;
@@ -138,9 +184,13 @@ check(`AGENTS.md stays a map: at most ${AGENTS_MAX_LINES} lines`, () => {
 
 const isTracked = trackedPredicate(TRACKED);
 for (const doc of [...DOCS, ...INSTRUCTIONS]) {
-  check(`${doc}: every \`npm run\` script it names exists in package.json`, () => {
+  check(`${doc}: every npm script it names exists in package.json`, () => {
     const missing = missingScripts(read(doc), SCRIPTS);
     assert.deepStrictEqual(missing, [], `${doc} names script(s) not in package.json: ${missing.join(', ')}`);
+  });
+  check(`${doc}: every \`node <path>\` it names is a tracked file`, () => {
+    const missing = missingNodeTargets(read(doc), isTracked);
+    assert.deepStrictEqual(missing, [], `${doc} runs file(s) that are missing or not tracked: ${missing.join(', ')}`);
   });
 }
 for (const doc of [...DOCS, ...INSTRUCTIONS]) {
@@ -188,6 +238,50 @@ check('NEGATIVE: an instructions file citing CLAUDE.md without the footer report
     'references CLAUDE.md, which is local-only',
     'lacks the AGENTS.md deference footer',
   ]);
+});
+
+// #498: forms the #496 predicates got wrong in one direction or the other. None occur in the
+// docs today, which is why each is pinned by a fixture rather than left to the real scan.
+check('NEGATIVE (#498): a broken reference-style definition is reported; an image link is checked', () => {
+  const tracked = trackedPredicate(new Set(['docs/A.md']));
+  const text = '[ok][a] and [gone][g]\n\n[a]: docs/A.md\n[g]: <docs/GONE.md>\n\n![img](docs/NO.png)';
+  assert.deepStrictEqual(brokenLinks(text, 'AGENTS.md', tracked), ['docs/NO.png', 'docs/GONE.md']);
+});
+
+check('#498: a footnote definition is not a link target', () => {
+  assert.deepStrictEqual(brokenLinks('[^1]: See the notes.', 'AGENTS.md', trackedPredicate(new Set())), []);
+});
+
+check('#498: links inside code spans and fences are examples, not links', () => {
+  const text = 'Write `[x](docs/NOPE.md)` like this.\n\n```md\n[y](docs/NOPE2.md)\n[z]: docs/NOPE3.md\n```\n';
+  assert.deepStrictEqual(brokenLinks(text, 'AGENTS.md', trackedPredicate(new Set())), []);
+});
+
+check('#498: a percent-encoded path is decoded; a malformed one is reported without throwing', () => {
+  const tracked = trackedPredicate(new Set(['docs/A B.md']));
+  assert.deepStrictEqual(brokenLinks('[f](docs/A%20B.md) [m](docs/%ZZ.md)', 'AGENTS.md', tracked), ['docs/%ZZ.md']);
+});
+
+check('#498: a root-relative link resolves against the repository root, as GitHub renders it', () => {
+  const tracked = trackedPredicate(new Set(['docs/A.md']));
+  assert.deepStrictEqual(brokenLinks('[d](/docs/A.md)', '.github/CONTRIBUTING.md', tracked), []);
+});
+
+check('NEGATIVE (#498): a link that escapes the repository says so', () => {
+  const tracked = trackedPredicate(new Set(['outside.md']));
+  assert.deepStrictEqual(brokenLinks('[x](../../outside.md)', 'AGENTS.md', tracked),
+    ['../../outside.md (escapes the repository)']);
+});
+
+check('#498: flags before the script name are skipped; npm test and npm start need their scripts', () => {
+  const text = 'Run `npm run --silent build`, then `npm test` and `npm start`.';
+  assert.deepStrictEqual(missingScripts(text, new Set(['build', 'start'])), ['test']);
+});
+
+check('NEGATIVE (#498): a node target must be tracked, except build output under dist/', () => {
+  const tracked = trackedPredicate(new Set(['scripts/ok.mjs']));
+  const text = '`node scripts/ok.mjs` `node scripts/gone.mjs` `node dist/src/index.js --stdio` `node scripts/<file>`';
+  assert.deepStrictEqual(missingNodeTargets(text, tracked), ['scripts/gone.mjs']);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
