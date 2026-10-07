@@ -128,6 +128,41 @@ test.describe('Docker E2E - ALL 82 TOOLS', () => {
     expect(json.error.message).toMatch(/name|required/i);
   });
 
+  // #510: regression pins for a tools/call that OMITS `arguments`. SDK 1.32 started advertising
+  // that such a request is valid; it already was in 1.30.1. The first test pins that the SDK
+  // still accepts it. The second pins our own `args ?? {}` mapping in httpServer.ts, and it has to
+  // use a tool that parses its RAW input: createTool() tools parse `args || {}` themselves, so
+  // they cannot tell `undefined` from `{}`. actual_get_id_by_name says "name is required" for `{}`
+  // but only " is required" for `undefined`. HTTP-only for the same reason as the test above:
+  // they read the raw JSON-RPC envelope.
+  test('tools/call without arguments - a no-argument tool runs', async ({ mcp }) => {
+    test.skip(isStdio, 'asserts on the raw HTTP JSON-RPC envelope');
+    const res = await mcp.post({
+      jsonrpc: '2.0',
+      id: 9998,
+      method: 'tools/call',
+      params: { name: 'actual_accounts_list' }, // no 'arguments' key at all
+    });
+    const json = await res.json();
+    expect(json.error).toBeFalsy();
+    // The tool returns `{ result }`; only mcp.call's extractResult unwraps it.
+    expect(Array.isArray(JSON.parse(json.result.content[0].text).result)).toBe(true);
+  });
+
+  test('tools/call without arguments - ERROR: the tool validates an empty object', async ({ mcp }) => {
+    test.skip(isStdio, 'asserts on the raw HTTP JSON-RPC envelope');
+    const res = await mcp.post({
+      jsonrpc: '2.0',
+      id: 9997,
+      method: 'tools/call',
+      params: { name: 'actual_get_id_by_name' }, // no 'arguments', so no 'name'
+    });
+    const json = await res.json();
+    expect(json.error).toBeTruthy();
+    // Only `{}` yields a per-field message; a regression to `undefined` yields " is required".
+    expect(json.error.message).toMatch(/\bname is required/);
+  });
+
   test('actual_accounts_get_balance - should get account balance', async ({ mcp, makeAccount }) => {
     const account = await makeAccount();
     const data = await mcp.call('actual_accounts_get_balance', { id: account.id });

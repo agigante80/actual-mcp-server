@@ -121,6 +121,21 @@ await check('a successful call returns its JSON content', async () => {
   assert.strictEqual(res.content[0].text, JSON.stringify({ accounts: [] }));
 });
 
+await check('#510: a tools/call that OMITS arguments dispatches exactly {}', async () => {
+  // Regression pin, not a red-to-green check: it holds on SDK 1.30.1 and 1.32.1 alike. The SDK
+  // has always let a request omit `arguments`, and 1.32 started advertising that, so this pins
+  // our own `args ?? {}` mapping. Without it a tool would see `undefined` instead of an empty
+  // object and Zod would report a different, less useful error.
+  let received = 'not called';
+  const handler = createStdioCallToolHandler(
+    { executeTool: async (_name, args) => { received = args; return { result: [] }; } },
+    SESSION,
+  );
+  const res = await handler({ params: { name: 'actual_accounts_list' } });
+  assert.deepStrictEqual(received, {}, 'the executor must receive an empty object');
+  assert.ok(!res.isError, 'a success must not be flagged as an error');
+});
+
 await check('a non-string tool name still throws', async () => {
   const handler = createStdioCallToolHandler({ executeTool: async () => ({}) }, SESSION);
   await assert.rejects(() => handler({ params: { name: 42 } }), /Tool name must be a string/);
