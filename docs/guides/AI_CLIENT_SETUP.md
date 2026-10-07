@@ -211,7 +211,7 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL: the expected 'aud'
 OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
-OIDC_SCOPES=                          # leave empty for Casdoor (no 'scope' claim)
+OIDC_SCOPES=                          # leave empty when your clients request no scope (no 'scope' claim)
 # Only for IdPs whose JWKS lives on a different host than the issuer (#254).
 # Google: issuer accounts.google.com serves keys from www.googleapis.com:
 # OIDC_JWKS_TRUSTED_HOSTS=www.googleapis.com
@@ -222,8 +222,8 @@ OIDC_SCOPES=                          # leave empty for Casdoor (no 'scope' clai
 server URI"). Two things derive from it: the well-known route where the protected-resource metadata
 is published, and the `aud` value a standards client asks your IdP to mint. A value that is not an
 absolute http(s) URL refuses to start with a message naming the variable. If your IdP ignores the
-`resource` parameter and puts the client id in `aud` (Authentik, Casdoor, Cloudflare Access and
-others do), keep `OIDC_RESOURCE` as the URL and add the client id to `OIDC_ACCEPTED_AUDIENCES`.
+`resource` parameter and puts the client id in `aud` (Authentik, Cloudflare Access, Casdoor before
+v2.318.0 and others do), keep `OIDC_RESOURCE` as the URL and add the client id to `OIDC_ACCEPTED_AUDIENCES`.
 
 **How a standards client discovers this server.** A client connecting to
 `https://actual-mcp.yourdomain.com/http` sends a request without a token, gets `401` with
@@ -293,7 +293,7 @@ Principal key formats:
 - `"some-sub-uuid"`: matches the `sub` claim
 - `"group:admin"`: matches an element in `groups` or `roles` array
 
-**Casdoor note**: Casdoor JWTs do not include a `scope` claim. Set `OIDC_SCOPES=` (empty string) to disable scope enforcement. If clients need scopes advertised in discovery, use `OIDC_SCOPES_SUPPORTED`.
+**Casdoor note**: Casdoor copies the scopes of the authorization request into the access token's `scope` claim, so `OIDC_SCOPES` works for scopes your clients request; if the Casdoor application defines a Scopes list, each requested scope must be on it. When clients request no scope the claim is absent: set `OIDC_SCOPES=` (empty string) to disable scope enforcement, and use `OIDC_SCOPES_SUPPORTED` if clients need scopes advertised in discovery. Since v2.318.0 Casdoor honors the RFC 8707 `resource` parameter and puts it in `aud`, so `OIDC_ACCEPTED_AUDIENCES` is only needed for older versions or clients that send no `resource`.
 
 #### Cloudflare Access for SaaS + Google Gemini
 

@@ -513,7 +513,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `OIDC_JWKS_TRUSTED_HOSTS` | _(none)_ | No | Opt-in cross-origin JWKS hosts, comma-separated `host` or `host:port` (#254). For IdPs whose `jwks_uri` lives on another host, e.g. Google needs `www.googleapis.com`. Exact match, no wildcards; empty default keeps same-origin-only |
 | `OIDC_JWKS_URI` | _(none)_ | No | Direct JWKS URL that bypasses OpenID discovery (#462), for issuers with no discovery document (Cloudflare Access: `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`). Same https, credentials and origin-or-trusted-host rules as a discovered `jwks_uri`, plus no query or fragment. When set, `/.well-known/oauth-authorization-server` is not served and `AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo` is refused |
 | `OIDC_TOKEN_SOURCE` | `authorization` | No | Where the bearer JWT is read from (#462): `authorization` (default) or `cf-access-jwt-assertion` for an MCP server behind Cloudflare Access with Managed OAuth (the edge forwards the signed Access JWT in that header; `Authorization` is then never consulted, `OIDC_SCOPES` must be empty, `OIDC_SCOPES_SUPPORTED` is allowed, and the origin must be reachable only via Cloudflare). See the Cloudflare recipe in `docs/guides/AI_CLIENT_SETUP.md` |
-| `OIDC_SCOPES` | _(none)_ | No | Comma-separated required (enforced) scopes, also advertised. Leave empty when the IdP's JWTs carry no `scope` claim (Casdoor, Cloudflare Access for SaaS) |
+| `OIDC_SCOPES` | _(none)_ | No | Comma-separated required (enforced) scopes, also advertised. Leave empty when the IdP's JWTs carry no `scope` claim (Cloudflare Access for SaaS, or Casdoor when the client requests no scope) |
 | `OIDC_SCOPES_SUPPORTED` | _(none)_ | No | Comma-separated scopes advertised in `scopes_supported` but not enforced. Use when the IdP's JWTs carry no `scope` claim but the client needs a scope such as `offline_access` advertised (e.g. Gemini with Cloudflare Access for SaaS). Required scopes from `OIDC_SCOPES` are always advertised too |
 | `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) |
 | `AUTH_BUDGET_ACL_SOURCE` | `static` | No | `static` uses the `AUTH_BUDGET_ACL` map above. `actual` derives the ACL from the Actual server's own per-file access list, so revoking someone in Actual takes effect here without a config edit. Requires a multi-user (OpenID) Actual server that was password-bootstrapped first |
@@ -668,7 +668,7 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL (the expected 'aud')
 OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
-OIDC_SCOPES=                                            # leave empty for Casdoor / Cloudflare Access for SaaS
+OIDC_SCOPES=                                            # leave empty when the tokens carry no scope claim
 # OIDC_SCOPES_SUPPORTED=openid,offline_access           # extra scopes advertised in discovery without enforcement (#472)
 ```
 
