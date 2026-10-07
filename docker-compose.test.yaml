@@ -209,8 +209,18 @@ services:
     # package-locks: installs are essentially frozen", and it is "meant to be used in
     # automated environments such as test platforms". It also turns an out-of-sync lockfile
     # into a loud failure instead of a silent rewrite, and installs exactly what CI does.
+    #
+    # #508: install `make` and `g++` BEFORE `npm ci`. The Playwright image ships python3 but
+    # no compiler toolchain, and from @actual-app/api 26.10.0 the tree carries better-sqlite3
+    # 13.x, whose binding.gyp makes `npm ci` run `node-gyp rebuild` as its default install
+    # step. Without the toolchain that dies with "gyp ERR! stack Error: not found: make"
+    # before a single spec runs, which failed the nightly release train four nights running.
+    # The server image is unaffected: the Dockerfile build stage already installs python3,
+    # make and g++. Cost is roughly 20 seconds per run; the image runs as root, so no sudo.
     command: >
       sh -c "
+        apt-get update -qq &&
+        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends make g++ &&
         npm ci &&
         npx playwright test --config=playwright.config.docker.ts --project=$${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
       "

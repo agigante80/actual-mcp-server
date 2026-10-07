@@ -81,6 +81,19 @@ check('the real tree pins the image at exactly the lockfile version', () => {
   );
 });
 
+// #508: the runner image has no make/g++, and better-sqlite3 13.x (from @actual-app/api
+// 26.10.0) makes `npm ci` run `node-gyp rebuild`. Dropping the toolchain install re-breaks
+// only the NIGHTLY train, which nothing on a push would show, so pin it here.
+check('the real runner installs make and g++ before npm ci (#508)', () => {
+  const compose = readFileSync(join(ROOT, 'docker-compose.test.yaml'), 'utf8');
+  const runner = compose.slice(compose.indexOf('e2e-test-runner:'));
+  const install = runner.search(/apt-get install[^\n]*\bmake\b[^\n]*\bg\+\+/);
+  const ci = runner.search(/^\s*npm ci\b/m);
+  assert.ok(install !== -1, 'e2e-test-runner no longer installs make and g++');
+  assert.ok(ci !== -1, 'e2e-test-runner no longer runs npm ci');
+  assert.ok(install < ci, 'the toolchain install must come BEFORE npm ci');
+});
+
 check('CATCHES a drifted compose tag (the state this ticket was filed for)', () => {
   const dir = fixture({ locked: '1.62.1', composeTag: 'v1.57.0-jammy' });
   try {
