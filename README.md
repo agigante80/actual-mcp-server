@@ -789,7 +789,7 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ---
 
-**Version:** 0.22.11 | **Tool Count:** 82 (verified LibreChat-compatible)
+**Version:** 0.22.12 | **Tool Count:** 82 (verified LibreChat-compatible)
 
 ## Sponsor
 
