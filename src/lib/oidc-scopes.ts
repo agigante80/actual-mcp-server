@@ -4,9 +4,9 @@
  * Separates scopes advertised in discovery (RFC 9728 `scopes_supported`) from
  * scopes required (enforced) on incoming access tokens (`requiredScopes`).
  *
- * Some IdPs (such as Cloudflare Access for SaaS or Casdoor) issue JWTs without
- * a `scope` claim, while clients (such as Google Gemini) require `offline_access`
- * to be advertised in discovery in order to request and receive a refresh token.
+ * Some IdPs (such as Cloudflare Access for SaaS, or Casdoor when the client requests
+ * no scope) issue JWTs without a `scope` claim, while clients (such as Google Gemini)
+ * require `offline_access` to be advertised in discovery in order to request and receive a refresh token.
  *
  * Pure and side-effect-free for hermetic unit testing.
  */

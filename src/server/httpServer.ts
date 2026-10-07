@@ -123,7 +123,7 @@ export async function startHttpServer(
       }
 
       // Custom jose-based JWT verifier that bypasses mcp-auth's strict PKCE/discovery
-      // validation that fails when the IdP (e.g. Casdoor v2.13) doesn't advertise
+      // validation that fails when the IdP (e.g. Casdoor before v2.316.1) doesn't advertise
       // code_challenge_methods_supported in its discovery document.
       // #244: resolve the JWKS URI from the issuer's OpenID discovery document
       // instead of a hardcoded `${OIDC_ISSUER}/.well-known/jwks` (which 404s for

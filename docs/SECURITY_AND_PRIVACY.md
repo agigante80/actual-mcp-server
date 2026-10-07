@@ -140,7 +140,7 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL: the expected 'aud' (#461)
 OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
-OIDC_SCOPES=                          # leave empty for Casdoor (no scope claim)
+OIDC_SCOPES=                          # leave empty when the tokens carry no scope claim
 AUTH_BUDGET_ACL={"alice@example.com":["budget-sync-id-1"]}
 ```
 
@@ -150,8 +150,8 @@ is refused at startup with a message naming the variable (#461); the accepted-au
 `OIDC_RESOURCE` plus `OIDC_ACCEPTED_AUDIENCES`, closed, so this change adds no way to accept a token minted
 for another resource.
 
-**Casdoor & Cloudflare Access compatibility**: Casdoor and Cloudflare Access for SaaS auth-code flow JWTs omit the `scope` claim.
-Set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements and logs `Scopes required: (none)`. If a client requires scopes (like `offline_access`) advertised in discovery, set `OIDC_SCOPES_SUPPORTED`. Advertised scopes are not enforced on incoming tokens; access control comes from the signature, issuer, closed audience allowlist, non-empty `sub`, required scopes, and the budget ACL. Advertising `offline_access` exists to make the IdP issue the client a long-lived refresh token; this server cannot revoke it, so a compromised client keeps obtaining access tokens until the refresh token is revoked at the IdP. Advertise it only for clients that need it.
+**Casdoor & Cloudflare Access compatibility**: Cloudflare Access for SaaS auth-code flow JWTs omit the `scope` claim; Casdoor JWTs carry the scopes the client requested and omit the claim only when the client requests none.
+When the tokens carry no `scope` claim (Cloudflare Access for SaaS, or Casdoor when the client requests no scope), set `OIDC_SCOPES=` (empty string) so the server enforces no scope requirements and logs `Scopes required: (none)`. With Casdoor, list the scopes your clients request in `OIDC_SCOPES` instead, so they are enforced (see the Casdoor note in docs/guides/AI_CLIENT_SETUP.md). If a client requires scopes (like `offline_access`) advertised in discovery, set `OIDC_SCOPES_SUPPORTED`. Advertised scopes are not enforced on incoming tokens; access control comes from the signature, issuer, closed audience allowlist, non-empty `sub`, required scopes, and the budget ACL. Advertising `offline_access` exists to make the IdP issue the client a long-lived refresh token; this server cannot revoke it, so a compromised client keeps obtaining access tokens until the refresh token is revoked at the IdP. Advertise it only for clients that need it.
 
 **Per-user Budget ACL** (`AUTH_BUDGET_ACL`):
 ```
