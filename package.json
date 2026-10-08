@@ -68,7 +68,7 @@
     "audit:write-effect": "node scripts/check-write-effect-audit.mjs"
   },
   "dependencies": {
-    "@actual-app/api": "^26.9.0",
+    "@actual-app/api": "^26.10.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "debug": "^4.4.3",
     "dotenv": "^18.0.6",
