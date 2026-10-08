@@ -100,7 +100,8 @@ Use this to check server status, verify version compatibility, or debug issues.`
         },
       },
       tools: {
-        total: actualToolsManager.getToolNames().length,
+        total: actualToolsManager.getPublishedToolNames().length,
+        registered: actualToolsManager.getToolNames().length,
       },
     };
   },

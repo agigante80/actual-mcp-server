@@ -43,6 +43,14 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `MCP_HTTP_BODY_LIMIT` | size string | `512kb` | No | no | schema | config | Max JSON-RPC request body (#168). #466: validated at startup as a positive byte size (units b, kb to pb; spaces between the number and the unit are allowed, as in `512 kb`; a leading space, a space after the unit (`512kb ` with a trailing space), separators, and a decimal with no unit or with `b`, as in `1.5` or `1.5b`, are refused), 1 byte to 9007199254740991 bytes (2^53 - 1); a fractional unit is floored to whole bytes (0.3kb is 307). An invalid value is refused naming the variable, never defaulted and never passed through to be misread; stdio also refuses to start on it |
 | `MCP_TRANSPORT_MODE` | enum | `--http` | No | no | schema | config | `--http` (stdio uses the `--stdio` flag) |
 
+## Tool surface / toolsets
+
+| Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |
+|----------|------|---------|----------|--------|--------|--------------|-------|
+| `MCP_TOOLSETS` | comma-separated string | `all` | No | no | schema | config, `lib/toolsets.ts` | Toolsets and presets to publish (e.g. `chat` or `context,transactions`). `all` publishes all tools |
+| `MCP_TOOLS` | comma-separated string | (none) | No | no | schema | config, `lib/toolsets.ts` | Extra individual tools published on top of toolsets |
+| `MCP_READ_ONLY` | bool string | `false` | No | no | schema | config, `lib/toolsets.ts` | Drops all write-capable tools, publishing only read-only tools and refusing write calls |
+
 ## Transport / routing
 
 | Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |

@@ -282,8 +282,8 @@ export {};
     // Initialize tools before usage
     await actualToolsManager.initialize();
 
-    // Now get implemented tools after initialization
-    const implementedTools = actualToolsManager.getToolNames();
+    // Now get published tools after initialization
+    const implementedTools = actualToolsManager.getPublishedToolNames();
 
     // Extract schemas map with tool name → JSON schema
     const toolSchemas: Record<string, unknown> = {};

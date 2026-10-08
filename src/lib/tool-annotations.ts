@@ -1,5 +1,5 @@
 /**
- * MCP tool annotations for the 74-tool surface (#379).
+ * MCP tool annotations for the 82-tool surface (#379).
  *
  * The Model Context Protocol lets a server describe each tool's NATURE to clients, so a
  * model or a UI can know which tools mutate a budget BEFORE calling one. This file is the
@@ -17,7 +17,7 @@
  * So a tool that declares nothing is already treated as write-capable, destructive and
  * open-world. The value here is therefore NOT warning about the dangerous tools; it is
  * telling clients which tools are SAFE, and correcting `openWorldHint`, whose default is
- * wrong for 73 of our 74 tools: this server's domain is one Actual Budget instance, a
+ * wrong for 81 of our 82 tools: this server's domain is one Actual Budget instance, a
  * CLOSED world. Only `actual_bank_sync` reaches outside it, to GoCardless or SimpleFIN.
  *
  * THESE ARE HINTS, NEVER A GUARD. The spec is explicit: "all properties in ToolAnnotations

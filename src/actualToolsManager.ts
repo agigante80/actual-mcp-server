@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import type { ToolDefinition } from '../types/tool.d.js';
 import { formatZodError } from './lib/zod-error-format.js';
+import { resolvePublishedToolNames, getUnpublishedRefusalReason } from './lib/toolsets.js';
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -141,6 +142,9 @@ const API_TOOL_MAP: Record<string, string> = {
 
 class ActualToolsManager {
   private tools: Map<string, ToolDefinition> = new Map();
+  private publishedTools: string[] | null = null;
+  private publishedToolSet: Set<string> | null = null;
+  private currentEnv: NodeJS.ProcessEnv = process.env;
 
   constructor() {}
 
@@ -156,10 +160,29 @@ class ActualToolsManager {
       }
     }
     logger.info(`🔗 Loaded ${count} tool modules from src/tools`);
+    this.currentEnv = process.env;
+    this.publishedTools = resolvePublishedToolNames(this.getToolNames(), this.currentEnv);
+    this.publishedToolSet = new Set(this.publishedTools);
+    logger.info(`📋 Published ${this.publishedTools.length} of ${count} tools via toolsets policy`);
+  }
+
+  refreshPublishedTools(env: NodeJS.ProcessEnv = process.env): string[] {
+    this.currentEnv = env;
+    this.publishedTools = resolvePublishedToolNames(this.getToolNames(), env);
+    this.publishedToolSet = new Set(this.publishedTools);
+    return this.getPublishedToolNames();
   }
 
   getToolNames(): string[] {
     return Array.from(this.tools.keys());
+  }
+
+  getPublishedToolNames(): string[] {
+    return this.publishedTools ? [...this.publishedTools] : this.getToolNames();
+  }
+
+  isPublished(name: string): boolean {
+    return this.publishedToolSet ? this.publishedToolSet.has(name) : true;
   }
 
   getTool(name: string): ToolDefinition | undefined {
@@ -167,6 +190,10 @@ class ActualToolsManager {
   }
 
   async callTool(name: string, args: unknown): Promise<unknown> {
+    if (!this.isPublished(name)) {
+      const reason = getUnpublishedRefusalReason(name, this.currentEnv);
+      throw new Error(reason);
+    }
     const tool = this.getTool(name);
     if (!tool) throw new Error(`Tool not found: ${name}`);
     try {

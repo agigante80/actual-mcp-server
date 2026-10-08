@@ -65,7 +65,9 @@ Then restart LibreChat:
 docker restart ai-librechat
 ```
 
-Verify tools loaded. In the LibreChat UI you should see **82 tools** listed under the MCP server entry.
+Verify tools loaded. In the LibreChat UI you should see **82 tools** listed under the MCP server entry (or 10 tools if running with `MCP_TOOLSETS=chat`).
+
+> **Recommendation for chat assistants:** Chat clients like LibreChat and Gemini benefit significantly from setting `MCP_TOOLSETS=chat` on the MCP server, which cuts `tools/list` context overhead by ~80% (from ~26k tokens down to ~5k tokens) while keeping essential bootstrap, query, and batch-write capabilities.
 
 ### LibreChat with OIDC
 
@@ -302,6 +304,7 @@ When connecting Google Gemini's custom MCP connector to Actual MCP Server authen
 1. **Audience**: Cloudflare mints access token JWTs with the `aud` claim set to the OAuth client's redirect URI (`https://oauth-redirect.googleusercontent.com/r/...`), rather than the resource URL or SaaS application ID. Set `OIDC_ACCEPTED_AUDIENCES` to this redirect URI.
 2. **Scopes**: Cloudflare access token JWTs omit the `scope` claim. Set `OIDC_SCOPES=` (empty) so the server enforces no scope requirements.
 3. **Refresh Tokens**: Gemini requires a refresh token for account linking and will only request one if `offline_access` is advertised in `scopes_supported`. Set `OIDC_SCOPES_SUPPORTED=openid,email,profile,offline_access` so `offline_access` is advertised in discovery without causing `missing_required_scopes` errors. The refresh token this unlocks is long-lived and lives at the IdP: this server validates access tokens only and cannot revoke it, so a compromised client keeps minting access tokens until you revoke its refresh token in Cloudflare Access (or your IdP). Advertise `offline_access` only for clients that need it.
+4. **Tool Surface**: Set `MCP_TOOLSETS=chat` so Gemini is not burdened with all 82 tool schemas on every prompt turn.
 
 ```dotenv
 AUTH_PROVIDER=oidc

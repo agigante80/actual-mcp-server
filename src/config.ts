@@ -120,6 +120,11 @@ export const configSchema = z.object({
   ),
   MAX_CONCURRENT_SESSIONS: z.string().default('15').transform(val => parseInt(val, 10)),
 
+  // --- Server-side toolsets and presets (#483) ---
+  MCP_TOOLSETS: z.string().default('all'),
+  MCP_TOOLS: z.string().default(''),
+  MCP_READ_ONLY: z.string().default('false').transform(val => val === 'true'),
+
   // --- OIDC / mcp-auth (CF-5) ---
   // Set AUTH_PROVIDER=oidc to enable JWT validation via mcp-auth.
   // When 'none' (default), the legacy MCP_SSE_AUTHORIZATION static Bearer token is used.

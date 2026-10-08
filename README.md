@@ -498,6 +498,10 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
 | `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
 | `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`, `1048576`). Validated at startup: an invalid, zero or overflowing size refuses to start naming the variable (#466) |
+| **Tool Surface & Toolsets** ||||
+| `MCP_TOOLSETS` | `all` | No | Comma list of toolset groups and presets to publish (e.g. `chat` or `context,transactions`). Default `all` publishes all tools |
+| `MCP_TOOLS` | _(none)_ | No | Extra individual tools published on top of the toolsets, comma-separated |
+| `MCP_READ_ONLY` | `false` | No | Set to `true` to drop all write-capable tools, publishing only read-only tools and refusing write calls |
 | **Session Management** ||||
 | `USE_CONNECTION_POOL` | `true` | No | Enable session-based connection pooling |
 | `MAX_CONCURRENT_SESSIONS` | `15` | No | Maximum concurrent MCP sessions allowed |
@@ -543,6 +547,49 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `NODE_ENV` | _(none)_ / `production` | No | Node environment. No app default; the Docker image sets `production`, which selects json logs and hides stack traces in error responses |
 | `VERSION` | auto-detected | No | Server version (auto-set by build/Docker) |
 | `TZ` | `UTC` | No | Timezone for timestamps (e.g., `America/New_York`) |
+
+### Reducing the tool surface
+
+By default (`MCP_TOOLSETS=all`), the server publishes all 82 tools (about 103 KB / 26k tokens) on `tools/list`. You can narrow the published tools to match your client's needs using `MCP_TOOLSETS`, `MCP_TOOLS`, and `MCP_READ_ONLY`.
+
+#### Toolset groups
+
+Every registered tool belongs to exactly one group:
+
+| Toolset | Tools | Members (omit `actual_` prefix) |
+|---|---|---|
+| `context` | 14 | get_context, accounts_list, categories_get, category_groups_get, payees_get, get_id_by_name, entities_search, server_info, server_get_version, tags_list, account_groups_list, budgets_list_available, budgets_get_all, preferences_get |
+| `transactions` | 13 | transactions_get, _filter, _search_by_amount, _search_by_category, _search_by_month, _search_by_payee, _uncategorized, _create, _update, _update_batch, _delete, _import, transfers_create |
+| `analysis` | 7 | account_flow_summary, recurring_expenses_summary, transactions_summary_by_category, transactions_summary_by_payee, transactions_aggregate, accounts_get_balance, payees_common_list |
+| `budget` | 10 | budgets_getMonth, budgets_getMonths, budgets_setAmount, budgets_setCarryover, budgets_holdForNextMonth, budgets_resetHold, budgets_transfer, budget_updates_batch, notes_get, notes_update |
+| `rules` | 6 | rules_get, payee_rules_get, rules_create, rules_update, rules_create_or_update, rules_delete |
+| `schedules` | 4 | schedules_get, schedules_create, schedules_update, schedules_delete |
+| `structure` | 21 | create/update/delete of accounts, account groups, categories, category groups, payees, tags; accounts_close/reopen; payees_merge |
+| `query` | 1 | query_run |
+| `admin` | 6 | budgets_switch, budgets_import, budgets_export, bank_sync, session_list, session_close |
+
+#### The `chat` preset
+
+A preset cuts across groups to provide a minimal, highly capable set of tools for chat assistants with small context windows or strict turn limits:
+
+- **Bootstrap**: `actual_get_context`
+- **Read**: `actual_query_run`
+- **Batch writes**: `actual_transactions_update_batch`, `actual_budget_updates_batch`
+- **Single writes**: `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_setAmount`
+
+The `chat` preset publishes only 10 tools (approx. 20 KB / 5k tokens), an ~80% reduction in context overhead.
+
+#### Example profiles
+
+- **Chat assistant (e.g. Gemini, Claude, LibreChat):**
+  ```bash
+  MCP_TOOLSETS=chat
+  ```
+- **Read-only household assistant (inspect balances and spending without write permission):**
+  ```bash
+  MCP_TOOLSETS=context,analysis
+  MCP_READ_ONLY=true
+  ```
 
 ---
 
