@@ -472,7 +472,7 @@ Then run `npm run tool-count -- --fix` to update the PROSE total-count literals 
 - Add the tool to the domain section table if the domain section lists tools explicitly
 
 #### Planned-work tracking (GitHub issues)
-- If this tool closes a planned-capability issue, reference it in the commit (`(#N)`) so the release step closes it; there is no roadmap file to update.
+- If this tool closes a planned-capability issue, reference it in the commit (`(#N)`) so the release step closes it. The roadmap file does not list tickets, so it needs no edit; a new issue goes into a phase by setting its milestone (see `docs/roadmap.md`).
 - Every issue should carry an **area** label and a **priority** label (`P0` to `P3`, plus `icebox` for not-yet-committed ideas). Apply the priority on triage so the backlog is filterable.
 
 #### `docs/TESTING_AND_RELIABILITY.md`
