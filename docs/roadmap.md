@@ -15,10 +15,11 @@ plan: docs/plans/chat-client-tool-surface.md
 
 Chat clients (Gemini, LibreChat, Claude web) are limited to a few tool calls per turn and pay for the whole `tools/list` (82 tools, about 100 KB) on every message. #477 raised the problem. `actual_get_context` (#484) and the in-place split (#489) have already shipped. This phase finishes the remaining work in the order agreed with the reporter on #477: make the existing batch tools trustworthy and close the one real batch gap (rules), then server-side toolsets with a `chat` preset, then trimming the tool schemas and adding a size guard measured against the final tool list. It comes first because it holds the only P2 tickets and an outside contributor is waiting on it.
 
-Outcome: done (closed 2026-10-08). All five planned tickets (#517, #516, #485, #483, #486) shipped in v0.22.17 with dual-transport evidence; #477 was closed as split. `tools/list` went from 102,836 bytes (82 tools) to 101,827 bytes (83 tools) under a committed ceiling. The schema trim covered seven tools rather than the planned six. Review follow-ups went to Review follow-up hardening (#522, #525, #526) and Backlog (#527).
+Outcome: done (closed 2026-10-08). All five planned tickets (#517, #516, #485, #483, #486) shipped in v0.22.17 with dual-transport evidence; #477 was closed as split. `tools/list` went from 102,836 bytes (82 tools) to 101,827 bytes (83 tools) under a committed ceiling. The schema trim covered seven tools rather than the planned six. Review follow-ups went to Review follow-up hardening (#522, #525, #526) and API coverage and schedules (#527).
 
 ## Phase: Review follow-up hardening
-state: planned
+state: open
+plan: docs/plans/review-follow-up-hardening.md
 
 Small, independent follow-ups that code reviews below the fix threshold turned into tickets: guard tests that could not fail, a stdio stdout line in dev mode, missing transport error logging, dotenv precedence in the non-server scripts, and OIDC wording. Each one is cheap and gate-ready. Grouping them clears the review debt in one pass, instead of letting it trickle into feature phases where it competes with work that has a deadline.
 
