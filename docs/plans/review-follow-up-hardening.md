@@ -43,5 +43,5 @@ Not binding. In order:
 ## Out of scope
 
 - #518 (`transferBudgetAmount` docstring), #513 (OIDC scopes comment wording) and #488 (refresh-token lifetime guidance): Backlog. Docs-only polish with no defect behind it; pull #518 back if #523 item 2 touches the same comment.
-- Transports whose pool entry was dropped and never re-created are never evicted: Backlog, ticket to be filed. It predates this phase and is a bounded resource leak, not a review follow-up.
+- Transports whose pool entry was dropped and never re-created are never evicted: Backlog (#530). It predates this phase and is a bounded resource leak, not a review follow-up.
 - New review findings at low severity raised while doing this phase's work: Backlog.
