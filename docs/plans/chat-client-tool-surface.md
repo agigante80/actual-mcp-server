@@ -10,7 +10,7 @@ A chat client with a strict turn limit and a small context can do the day-to-day
 - `MCP_TOOLSETS=chat` publishes the preset agreed on #477, and every member exists in `IMPLEMENTED_TOOLS`.
 - Every multi-item task in #477 has a one-call path, or a recorded reason it does not (audit done 2026-10-08, comment on #485). Every batch tool returns per-item `succeeded` / `failed` results, reports an error as an error, and writes through the adapter guards. The README "Batch Operations" section lists every bulk path, including `actual_transactions_update_batch` and `actual_transactions_import`.
 - `tools/list` is smaller than the measured baseline (82 tools, 102,836 bytes on `dbc7c9a0`). A unit test in the `test:unit-js` chain fails when it grows past a committed ceiling.
-- The changes are released with dual-transport evidence, and #477 is closed with a comment to the reporter.
+- The changes are released with dual-transport evidence. (#477, the umbrella, was closed as split on 2026-10-08, with a comment mapping it to its successors.)
 
 ## Fails if
 
@@ -23,7 +23,7 @@ Premortem: the phase is over and it failed badly. What happened?
 - A batch tool in the `chat` preset still reported success for a write that never happened: `budget_updates_batch` counting an unknown category as `successful` (#516), or `transactions_update_batch` turning a validation error into a fake item failure (#517). The preset then concentrates clients on the least trustworthy tools.
 - Schema trimming in #486 loosened a Zod constraint while cutting prose, so inputs the tool used to reject are now accepted.
 - The size ceiling was measured before #485's new tool and #516's schema change landed and had to be raised in the next commit. Order: #517 and #516, then #485, then #483, then #486.
-- Work collided with the outside contributor, who already claimed and delivered #484 and #489. Before starting each ticket, ask on #477 whether they have picked it up.
+- Work collided with the outside contributor, who claimed and delivered #484 and #489. On 2026-10-08 the maintainer took all five remaining tickets, and #477 says so; a later claim on any of them is answered before work on it starts.
 - The phase stalled because the `chat` preset waited for a tool that never shipped. If #485 slips, ship the preset without that tool and extend it later. Do not extend the phase to wait for it.
 
 ## Expected work
@@ -35,7 +35,7 @@ Not binding. These are the tickets this phase expects to need:
 3. #485: `actual_rules_create_batch` and the README Batch Operations section. The audit is done; no transfer batch.
 4. #483: toolsets, the allowlist, read-only mode and the `chat` preset (re-measured 2026-10-08).
 5. #486: trim the six heaviest schemas and add the `tools/list` size budget test, after 2 and 3.
-6. #477: the umbrella. Close it when 1 to 5 have shipped.
+#477, the umbrella, is closed: a split closes the original and names its successors, so it does not wait for them.
 
 ## Out of scope
 
