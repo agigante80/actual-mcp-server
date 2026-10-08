@@ -112,6 +112,21 @@ console.log('\n[#485] rules_create: Zod-shape rejections never reach the adapter
   }
 }
 
+console.log('\n[#486] rules_create: still-rejected probes keep their exact error after the schema prose trim');
+{
+  const issuesOf = async (input) => {
+    calls = [];
+    try { await tool.call(input); return null; } catch (e) { return e?.issues ?? null; }
+  };
+  const issues = await issuesOf(rule([okCond], [okAct], { stage: 'default' }));
+  check(Array.isArray(issues) && issues.length === 1 && issues[0].code === 'invalid_value' && issues[0].path.join('.') === 'stage',
+    'stage "default" is a Zod invalid_value at stage', JSON.stringify(issues));
+  check(calls.length === 0, '  and createRule is never called');
+  const r = await attempt(rule([{ field: 'amount', op: 'contains', value: 5 }], [okAct]));
+  check(r.threw && r.message.startsWith('Invalid operator "contains" for field "amount". Field "amount" is a number field and only supports: is, gte, lte, gt, lt, isapprox.'),
+    'amount with "contains" and a numeric value is an Invalid operator error', r.message);
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_create characterisation checks passed');
 process.exit(0);

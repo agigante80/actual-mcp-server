@@ -4,27 +4,40 @@ import { z } from 'zod';
 // actual_rules_create_batch so both accept and reject exactly the same rules with the same
 // messages. actual_rules_create_or_update keeps its own copies on purpose (out of scope).
 
+// #486: describe strings shared by the rule tools. Only the TEXT is shared, never the object
+// schemas: actual_rules_update keeps its own ActionSchema (op required, no default) and
+// actual_rules_create_or_update keeps its own stage (no default, #342), so neither can reuse
+// ActionSchema or RuleItemSchema without changing what it accepts.
+export const ACTION_DESCRIBE = {
+  op: 'One of "set", "set-split-amount", "link-schedule", "prepend-notes", "append-notes"',
+  field: 'Field to modify, required for "set": category, payee, notes, cleared, account',
+  value: 'Value to assign: a UUID for category, payee and account, text for notes, a number for amounts',
+  type: 'Value type hint: "id", "string", "number" or "boolean"',
+  options: 'Additional options for the action',
+};
+
+export const STAGE_DESCRIBE =
+  'null is the normal stage (the UI default), "pre" runs before it, "post" after';
+
+// Operators per field type, for the rule tool descriptions that document conditions.
+export const CONDITION_OPERATORS_HELP =
+  'Condition operators by field: imported_payee, notes, description (text): contains, matches, doesNotContain, is, isNot. ' +
+  'payee, account, category (ids): is, isNot, oneOf, notOneOf. amount: is, gte, lte, gt, lt, isapprox. date: is, gte, lte, gt, lt.';
+
 // Define the schema for rule conditions and actions
 export const ConditionSchema = z.object({
-  field: z.string().describe('Field to match (e.g., "payee", "notes", "amount", "category")'),
-  op: z.string().describe('Operation (e.g., "is", "contains", "isapprox", "gte", "lte")'),
+  field: z.string().describe('Field to match, e.g. "payee", "notes", "amount", "category"'),
+  op: z.string().describe('Operator, e.g. "is", "contains", "gte"'),
   value: z.union([z.string(), z.number()]).describe('Value to match against'),
-  type: z.string().optional().describe('Type of condition (e.g., "string", "number", "id")'),
+  type: z.string().optional().describe('Type hint, e.g. "string", "number", "id"'),
 });
 
 export const ActionSchema = z.object({
-  op: z.string()
-    .default('set')
-    .describe('Operation to perform. Options: "set" (default, assign value to field), "set-split-amount" (split transaction), "link-schedule" (link to scheduled transaction), "prepend-notes" (add text before notes), "append-notes" (add text after notes)'),
-  field: z.string()
-    .optional()
-    .describe('Field to modify - required for "set" operation. Options: "category" (transaction category), "payee" (transaction payee), "notes" (transaction notes), "cleared" (cleared status), "account" (move to different account)'),
-  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()])
-    .describe('Value to assign. Use category/payee/account UUID for "id" types, text for "string" types, number for amounts'),
-  type: z.string()
-    .optional()
-    .describe('Value type hint. Options: "id" (UUID for category/payee/account), "string" (text value), "number" (numeric value), "boolean" (true/false)'),
-  options: z.object({}).passthrough().optional().describe('Additional options for the action'),
+  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default "set"`),
+  field: z.string().optional().describe(ACTION_DESCRIBE.field),
+  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
+  type: z.string().optional().describe(ACTION_DESCRIBE.type),
+  options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
 });
 
 // Operator validation map
@@ -62,14 +75,10 @@ export const RuleItemSchema = z.object({
     .nullable()
     .optional()
     .default(null)
-    .describe(
-      'When to apply the rule. null (the default) is Actual\'s normal stage, the one a rule gets in the UI ' +
-        'when no stage is chosen. "pre" runs before the default stage, "post" after. Leave unset unless you ' +
-        'specifically need the rule to out-rank or defer to the user\'s existing rules.',
-    ),
-  conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine multiple conditions'),
-  conditions: z.array(ConditionSchema).describe('Array of conditions that must be met for the rule to apply'),
-  actions: z.array(ActionSchema).describe('Array of actions to perform when conditions are met'),
+    .describe(`${STAGE_DESCRIBE}. Default null; leave unset unless the rule must out-rank or defer to the user's rules`),
+  conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine conditions'),
+  conditions: z.array(ConditionSchema).describe('Conditions that must be met'),
+  actions: z.array(ActionSchema).describe('Actions to perform when they are met'),
 });
 
 

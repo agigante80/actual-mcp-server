@@ -68,6 +68,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] `npm run test:adapter` ✅
 - [ ] `npm run test:unit-js` ✅
 - [ ] `npm run verify-tools` ✅ (confirms tool name matches registered name)
+- [ ] `tests/unit/tools_list_size_budget.test.js` passes. A new tool adds to the published `tools/list`; if it pushes the total over `TOTAL_CEILING`, raise that constant in the same commit with a comment stating why (keep the tool description and schema terse first). A single tool over `PER_TOOL_CEILING` should be trimmed, not allowed
 - [ ] `npm audit --audit-level=moderate` ✅
 - [ ] Commit message uses `feat(tools): add <tool_name>` format
 

@@ -130,6 +130,18 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(cycles() === 0,                                        'a Zod failure never reaches the write queue');
   }
 
+  console.log('\n[#486] rules_create_or_update: stage keeps NO default after the schema prose trim (#342)');
+  {
+    const noStage = { conditions: validInput.conditions, actions: validInput.actions };
+    const r = tool.inputSchema.safeParse(noStage);
+    check(r.success && !('stage' in r.data),                     'omitting stage parses with no stage key', JSON.stringify(r.data));
+    check(r.success && r.data.conditionsOp === 'and',            'conditionsOp still defaults to and');
+    const nulled = tool.inputSchema.safeParse({ ...noStage, stage: null });
+    check(nulled.success && nulled.data.stage === null,          'an explicit null stage is kept');
+    const bad = tool.inputSchema.safeParse({ ...noStage, stage: 'default' });
+    check(!bad.success && bad.error.issues[0].code === 'invalid_value' && bad.error.issues[0].path.join('.') === 'stage', 'stage "default" is a Zod invalid_value at stage');
+  }
+
   console.log('');
   if (failures === 0) console.log('[#142] All rules_create_or_update tests passed ✓');
   else { console.error(`[#142] ${failures} test(s) FAILED`); process.exit(2); }

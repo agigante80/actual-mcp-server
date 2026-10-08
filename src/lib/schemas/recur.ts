@@ -7,19 +7,19 @@ import { z } from 'zod';
 // actionable validation error rather than being forwarded unshaped.
 export const RecurConfigSchema = z.object({
   frequency: z.enum(['daily', 'weekly', 'monthly', 'yearly'])
-    .describe('How often the schedule repeats'),
+    .describe('How often it repeats'),
   start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-    .describe('Start date in YYYY-MM-DD format'),
+    .describe('Start date, YYYY-MM-DD'),
   endMode: z.enum(['never', 'after_n_occurrences', 'on_date'])
-    .describe('When the schedule stops: never, after N occurrences, or on a specific date'),
+    .describe('When it stops'),
   interval: z.number().int().positive().optional()
-    .describe('Every N periods. Default: 1 (every period)'),
+    .describe('Every N periods. Default 1'),
   skipWeekend: z.boolean().optional()
-    .describe('If true, occurrence is moved when it falls on a weekend'),
+    .describe('Move an occurrence that falls on a weekend'),
   weekendSolveMode: z.enum(['before', 'after']).optional()
-    .describe('Move to Friday before or Monday after the weekend. Requires skipWeekend: true'),
+    .describe('Friday before or Monday after. Requires skipWeekend'),
   endOccurrences: z.number().int().positive().optional()
-    .describe('Number of occurrences before stopping. Required when endMode is after_n_occurrences'),
+    .describe('Required when endMode is after_n_occurrences'),
   endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional()
-    .describe('Date (YYYY-MM-DD) after which the schedule stops. Required when endMode is on_date'),
+    .describe('YYYY-MM-DD. Required when endMode is on_date'),
 });

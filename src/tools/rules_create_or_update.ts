@@ -25,28 +25,16 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE } from '../lib/schemas/rules.js';
 
-// Mirrors the same schemas used in rules_create.ts
-const ConditionSchema = z.object({
-  field: z.string().describe('Field to match (e.g., "payee", "notes", "amount", "category", "imported_payee")'),
-  op: z.string().describe('Operation (e.g., "is", "contains", "isapprox", "gte", "lte")'),
-  value: z.union([z.string(), z.number()]).describe('Value to match against'),
-  type: z.string().optional().describe('Type of condition (e.g., "string", "number", "id")'),
-});
-
+// #486: the condition schema is the shared one; the action schema stays private (same shape as
+// the shared one) and only borrows the describe text.
 const ActionSchema = z.object({
-  op: z.string()
-    .default('set')
-    .describe('Operation to perform. Options: "set" (default), "set-split-amount", "link-schedule", "prepend-notes", "append-notes"'),
-  field: z.string()
-    .optional()
-    .describe('Field to modify — required for "set" op. Options: "category", "payee", "notes", "cleared", "account"'),
-  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()])
-    .describe('Value to assign. Use UUIDs for id-type fields, text for strings, numbers for amounts'),
-  type: z.string()
-    .optional()
-    .describe('Value type hint: "id", "string", "number", "boolean"'),
-  options: z.object({}).passthrough().optional().describe('Additional options for the action'),
+  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default "set"`),
+  field: z.string().optional().describe(ACTION_DESCRIBE.field),
+  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
+  type: z.string().optional().describe(ACTION_DESCRIBE.type),
+  options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
 });
 
 // Same operator validation map as rules_create.ts
@@ -71,34 +59,21 @@ const InputSchema = z.object({
     .enum(['pre', 'post'])
     .nullable()
     .optional()
-    .describe(
-      'When to apply the rule. null is Actual\'s normal stage (what the UI gives a rule with no stage chosen); ' +
-        '"pre" runs before it, "post" after. On an update, omitting this leaves the existing stage unchanged.',
-    ),
-  conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine multiple conditions'),
-  conditions: z.array(ConditionSchema).describe('Array of conditions that must be met'),
-  actions: z.array(ActionSchema).describe('Array of actions to perform when conditions match'),
+    .describe(`${STAGE_DESCRIBE}. On an update, omitting this leaves the existing stage unchanged`),
+  conditionsOp: z.enum(['and', 'or']).optional().default('and').describe('How to combine conditions'),
+  conditions: z.array(ConditionSchema).describe('Conditions that must be met'),
+  actions: z.array(ActionSchema).describe('Actions to perform when they are met'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_rules_create_or_update',
-  description: `Create a rule if no matching rule exists, or update the existing rule if one with the same conditions already exists. Prevents duplicate rules.
+  description: `Create a rule, or update the existing rule with the same conditions. Prevents duplicates.
 
-Matching logic: a rule is considered a "match" when it has the same set of conditions (field + op + value triples) and the same conditionsOp ("and"/"or"). Condition order is irrelevant.
+A rule matches when it has the same conditions (field, op, value) and conditionsOp, in any order. On a match the rule's actions are REPLACED, and its stage is replaced ONLY if you supply one (omit stage to leave it). A newly created rule with no stage gets the normal stage (null).
 
-When a match is found: the rule's actions are REPLACED with the new values. The stage is replaced ONLY if you
-supply one; omit stage to leave the matched rule in whatever stage it is already in. On a newly created rule,
-an omitted stage means the normal stage (null), the same one the UI assigns.
-When no match exists: a new rule is created.
+${CONDITION_OPERATORS_HELP}
 
-IMPORTANT Field Types:
-- "imported_payee" (string) — text matching. Supports: contains, matches, doesNotContain, is, isNot
-- "payee" (ID) — exact payee UUID. Supports: is, isNot, oneOf, notOneOf
-- "account", "category" (ID) — UUID matching. Supports: is, isNot, oneOf, notOneOf
-- "notes", "description" (string) — text matching. Supports: contains, matches, doesNotContain, is, isNot
-- "amount", "date" (number/date) — supports: is, gte, lte, gt, lt
-
-Returns: { id, created: boolean } — created=true if new rule was created, false if existing rule was updated.`,
+Returns: { id, created: boolean }, created=true for a new rule, false for an updated one.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206).

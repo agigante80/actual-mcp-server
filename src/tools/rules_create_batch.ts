@@ -5,7 +5,7 @@ import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
   rules: z.array(RuleItemSchema).min(1).max(50)
-    .describe('Array of 1 to 50 rules, each exactly the input of actual_rules_create'),
+    .describe('1 to 50 rules, each exactly the input of actual_rules_create'),
 });
 
 type BatchResult = {
@@ -22,15 +22,13 @@ type BatchResult = {
 // the rest continue. Only passing items reach the adapter, with their ORIGINAL indices.
 export default createTool<z.infer<typeof InputSchema>, BatchResult>({
   name: 'actual_rules_create_batch',
-  description: `Create many budget rules in one call. Accepts 1 to 50 rules; each rule is exactly the input of actual_rules_create (stage, conditionsOp, conditions, actions).
+  description: `Create 1 to 50 budget rules in one call, each exactly the input of actual_rules_create.
 
-NOT atomic and no rollback: each rule is created independently, and rules created before a failure stay created. A rule that fails its own checks, names a category, payee or account id that does not exist, or is rejected by Actual is reported in "failed" with its index, and the remaining rules are still attempted. Ids in link-schedule actions are not checked. A create is never retried automatically.
+NOT atomic and no rollback: each rule is created independently, and rules created before a failure stay created. A rule that fails its own checks, names a category, payee or account id that does not exist, or is rejected by Actual is reported in "failed" with its index, and the rest are still attempted. Ids in link-schedule actions are not checked. A create is never retried automatically.
 
 If the call itself fails (timeout, lost connection), or an item says "not attempted", read the rules back with actual_rules_get BEFORE retrying ANY item: items marked "not attempted" were never sent, but others may have been created.
 
-Returns: { succeeded: [{index, id}], failed: [{index, error}], total, successCount, failureCount }. Every rule failing is a normal result (successCount 0), not a tool error.
-
-Example: { "rules": [ { "conditions": [{"field": "imported_payee", "op": "contains", "value": "Amazon"}], "actions": [{"op": "set", "field": "category", "value": "<category-uuid>"}] } ] }`,
+Returns: { succeeded: [{index, id}], failed: [{index, error}], total, successCount, failureCount }. Every rule failing is a normal result (successCount 0), not a tool error.`,
   schema: InputSchema,
   handler: async (input) => {
     const total = input.rules.length;

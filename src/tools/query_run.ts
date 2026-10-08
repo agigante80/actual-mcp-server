@@ -10,57 +10,21 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_query_run',
-  description: `Execute SQL queries for advanced financial data analysis.
+  description: `Run a read-only SQL query against the budget data. Prefer SQL; a bare table name (e.g. "transactions") returns all its records.
 
-**RECOMMENDED: Use SQL syntax** - Most reliable and well-tested format.
+Form: SELECT [fields] FROM [table] WHERE [conditions] ORDER BY [field] DESC LIMIT [n]
+Example: "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 10"
 
-SQL SYNTAX (Preferred):
-  SELECT [fields] FROM [table] WHERE [conditions] ORDER BY [field] DESC LIMIT [n]
-  
-  Examples:
-  • "SELECT * FROM transactions ORDER BY date DESC LIMIT 5"
-  • "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0 LIMIT 10"
-  • "SELECT id, date, amount, category.name FROM transactions WHERE date >= '2025-01-01'"
+WHERE supports: =, !=, >, >=, <, <=; IN (v1, v2); LIKE / NOT LIKE (case and accent-insensitive, % wildcard, e.g. imported_payee LIKE '%amazon%'); IS NULL / IS NOT NULL; boolean columns as true / false (cleared = false, category.hidden = true); conditions joined with AND. OR, REGEXP, NOT IN and parenthesised groups are not supported and return an error (a query is never silently run unfiltered). Transactions come back in split-INLINE mode: "is_parent = true" returns nothing, use "is_parent = false" to exclude split children.
 
-Supported WHERE operators:
-  • Comparison: =, !=, >, >=, <, <=
-  • IN (v1, v2, ...)
-  • LIKE / NOT LIKE for pattern search (case-insensitive, accent-insensitive; use % as wildcard)
-    e.g. "WHERE imported_payee LIKE '%amazon%'" to find raw bank-sync payee strings
-  • IS NULL / IS NOT NULL e.g. "WHERE imported_payee IS NULL" to find unmerged rows
-  • Boolean columns take true / false (case-insensitive; 1 / 0 also accepted)
-    e.g. "WHERE cleared = false" for uncleared, "WHERE reconciled = true",
-    "WHERE category.hidden = true", "WHERE account.closed = true"
-    Note: transactions are returned in split-INLINE mode, so "WHERE is_parent = true" returns
-    nothing (parent rows are hidden); use "is_parent = false" to exclude split children.
-  • Combine conditions with AND. OR, REGEXP, NOT IN, and parenthesised groups are not yet
-    supported and will return an error (the query is never silently run unfiltered).
+Joins use dot notation: payee.name, category.name, account.name (NOT payee_name). Amounts are in cents: $100.00 = 10000.
 
-IMPORTANT - Field Names:
-  • Use payee.name (NOT payee_name) for payee names
-  • Use category.name (NOT category_name) for category names
-  • Use account.name (NOT account_name) for account names
-  • Amounts are in cents: $100.00 = 10000
-
-Available Tables:
-  • transactions: id, date, amount, notes, cleared, account, payee, category
-    - Join with: payee.name, category.name, account.name
-  • accounts: id, name, type, closed, offbudget
-  • categories: id, name, group, is_income
-  • payees: id, name
-  • category_groups: id, name, is_income
-
-Common Queries:
-  • Last 5 transactions: "SELECT * FROM transactions ORDER BY date DESC LIMIT 5"
-  • By category: "SELECT id, date, amount, payee.name FROM transactions WHERE category.name = 'Food' LIMIT 10"
-  • Expenses: "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 10"
-  • Date range: "SELECT * FROM transactions WHERE date >= '2025-01-01' AND date <= '2025-12-31'"
-
-Alternative Formats:
-  • Simple table name: "transactions" (returns all records)
-  • ActualQL objects: Not recommended, use SQL instead
-
-For details: https://actualbudget.org/docs/api/actual-ql/`,
+Tables:
+- transactions: id, date, amount, notes, cleared, account, payee, category
+- accounts: id, name, type, closed, offbudget
+- categories: id, name, group, is_income
+- payees: id, name
+- category_groups: id, name, is_income`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     try {

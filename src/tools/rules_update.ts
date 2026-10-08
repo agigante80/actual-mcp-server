@@ -2,21 +2,16 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE } from '../lib/schemas/rules.js';
 
-// Define the schema for rule conditions and actions (same as create)
-const ConditionSchema = z.object({
-  field: z.string().describe('Field to match (e.g., "payee", "notes", "amount", "category")'),
-  op: z.string().describe('Operation (e.g., "is", "contains", "isapprox", "gte", "lte")'),
-  value: z.union([z.string(), z.number()]).describe('Value to match against'),
-  type: z.string().optional().describe('Type of condition (e.g., "string", "number", "id")'),
-});
-
+// #486: the condition schema is the shared one. The action schema stays private because `op`
+// is REQUIRED here (the shared one defaults it to "set"); only the describe text is shared.
 const ActionSchema = z.object({
-  op: z.string().describe('Operation to perform (e.g., "set", "set-split-amount", "link-schedule", "prepend-notes", "append-notes")'),
-  field: z.string().optional().describe('Field to set (e.g., "category", "payee", "notes", "cleared") - required for "set" operation'),
-  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe('Value to set or use in operation'),
-  type: z.string().optional().describe('Type of action (e.g., "id", "string", "number", "boolean")'),
-  options: z.object({}).passthrough().optional().describe('Additional options for the action'),
+  op: z.string().describe(ACTION_DESCRIBE.op),
+  field: z.string().optional().describe(ACTION_DESCRIBE.field),
+  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
+  type: z.string().optional().describe(ACTION_DESCRIBE.type),
+  options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
 });
 
 // Operator validation map
@@ -43,33 +38,19 @@ const InputSchema = z.object({
       .enum(['pre', 'post'])
       .nullable()
       .optional()
-      .describe(
-        'When to apply the rule. null is Actual\'s normal stage (what the UI gives a rule with no stage chosen); ' +
-          '"pre" runs before it, "post" after. Omit to leave the rule\'s current stage unchanged.',
-      ),
-    conditionsOp: z.enum(['and', 'or']).optional().describe('How to combine multiple conditions'),
-    conditions: z.array(ConditionSchema).optional().describe('New array of conditions'),
-    actions: z.array(ActionSchema).optional().describe('New array of actions'),
+      .describe(`${STAGE_DESCRIBE}. Omit to leave the rule's current stage unchanged`),
+    conditionsOp: z.enum(['and', 'or']).optional().describe('How to combine conditions'),
+    conditions: z.array(ConditionSchema).optional().describe('New conditions'),
+    actions: z.array(ActionSchema).optional().describe('New actions'),
   }).describe('Fields to update'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_rules_update',
-  description: `Update an existing budget rule by ID. Only provide the fields you want to change.
+  description: `Update an existing budget rule by ID. Only provide the fields you want to change; do not repeat the rule ID inside fields.
 
-IMPORTANT Field Types:
-- "imported_payee" (string) - for text matching payee names. Supports: contains, matches, doesNotContain, is, isNot
-- "payee" (ID) - for exact payee ID matching. Supports: is, isNot, oneOf, notOneOf
-- "account", "category" (ID) - for account/category IDs. Supports: is, isNot, oneOf, notOneOf
-- "notes", "description" (string) - for text matching. Supports: contains, matches, doesNotContain, is, isNot
-- "amount", "date" (number/date) - supports: is, gte, lte, gt, lt
-
-Stage: omit it to leave the rule where it is. Pass null to move it to the normal stage (where UI-created
-rules live), 'pre' to run before that stage, or 'post' to run after. Do NOT pass "default" as a string;
-Actual rejects it.
-Action operators: 'set', 'set-split-amount', 'link-schedule', 'append-notes'.
-
-Do not include the rule ID in the fields object - it is provided separately.`,
+${CONDITION_OPERATORS_HELP}
+Stage: omit it to leave the rule where it is, pass null for the normal stage, or 'pre' / 'post'. Do NOT pass "default"; Actual rejects it.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

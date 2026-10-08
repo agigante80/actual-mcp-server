@@ -5,35 +5,35 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 import { RecurConfigSchema } from '../lib/schemas/recur.js';
 
 const InputSchema = z.object({
-  id: CommonSchemas.scheduleId.describe('UUID of the schedule to update (from actual_schedules_get)'),
+  id: CommonSchemas.scheduleId.describe('Schedule UUID'),
   name: z.string().optional()
-    .describe('New display name for the schedule'),
+    .describe('New display name'),
   payee: CommonSchemas.payeeId.nullable().optional()
-    .describe('New payee UUID, or null to clear'),
+    .describe('New payee UUID, null to clear'),
   account: CommonSchemas.accountId.nullable().optional()
-    .describe('New account UUID, or null to clear'),
+    .describe('New account UUID, null to clear'),
   amount: z.number().int().optional()
-    .describe('New amount in cents. Negative = expense, positive = income'),
+    .describe('New amount in cents, negative = expense'),
   amountOp: z.enum(['is', 'isapprox', 'isbetween']).optional()
     .describe('How to match the amount'),
   date: z.union([
     z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-      .describe('YYYY-MM-DD: one-off schedule on this specific date'),
+      .describe('One-off schedule on this date'),
     RecurConfigSchema
-      .describe('RecurConfig object (frequency, start, endMode, ...): recurring schedule'),
+      .describe('Recurring schedule'),
   ]).optional()
-    .describe('New date string (YYYY-MM-DD) or RecurConfig object. Set resetNextDate: true when changing this.'),
+    .describe('New YYYY-MM-DD date or RecurConfig object'),
   posts_transaction: z.boolean().optional()
-    .describe('Whether Actual auto-posts a transaction on each occurrence'),
+    .describe('Auto-post a transaction on each occurrence'),
   completed: z.boolean().optional()
-    .describe('Mark the schedule as completed (true) or reactivate it (false)'),
+    .describe('true marks it completed, false reactivates it'),
   resetNextDate: z.boolean().optional().default(false)
-    .describe('When true, recalculates next_date based on the updated date/recurrence config. Set to true whenever you change the date field.'),
+    .describe('Recalculate next_date; set it when changing the date'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_schedules_update',
-  description: `Update an existing schedule in Actual Budget. Supply the schedule's UUID and only the fields you want to change. Set resetNextDate: true when changing the date or recurrence config to force recalculation of next_date.`,
+  description: `Update a schedule; supply only the fields to change. Set resetNextDate: true when changing the date or recurrence.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
