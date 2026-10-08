@@ -1,5 +1,5 @@
 /**
- * MCP tool annotations for the 74-tool surface (#379).
+ * MCP tool annotations for the whole tool surface (#379).
  *
  * The Model Context Protocol lets a server describe each tool's NATURE to clients, so a
  * model or a UI can know which tools mutate a budget BEFORE calling one. This file is the
@@ -17,14 +17,15 @@
  * So a tool that declares nothing is already treated as write-capable, destructive and
  * open-world. The value here is therefore NOT warning about the dangerous tools; it is
  * telling clients which tools are SAFE, and correcting `openWorldHint`, whose default is
- * wrong for 73 of our 74 tools: this server's domain is one Actual Budget instance, a
+ * wrong for every tool but one: this server's domain is one Actual Budget instance, a
  * CLOSED world. Only `actual_bank_sync` reaches outside it, to GoCardless or SimpleFIN.
  *
  * THESE ARE HINTS, NEVER A GUARD. The spec is explicit: "all properties in ToolAnnotations
  * are hints. They are not guaranteed to provide a faithful description of tool behavior",
  * and "Clients should never make tool use decisions based on ToolAnnotations received from
  * untrusted servers." Nothing in `src/` may branch on an annotation. Authorisation stays in
- * `budget-acl.ts`, and refusal stays in the adapter guards.
+ * `budget-acl.ts`, and refusal stays in the adapter guards. That includes MCP_READ_ONLY (#483),
+ * which decides from the hard-coded WRITE_CAPABLE set in `toolsets.ts`, never from this table.
  *
  * WHY A CENTRAL TABLE rather than a field on each tool. `types/tool.d.ts` is in CLAUDE.md's
  * do-not-modify tier, and most tools use the legacy `ToolDefinition` shape, so a per-tool

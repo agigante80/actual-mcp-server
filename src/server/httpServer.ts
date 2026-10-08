@@ -425,11 +425,8 @@ export async function startHttpServer(
           content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
         };
       }
-      // fallback: attempt actualToolsManager
-      if (actualToolsManager && typeof (actualToolsManager as unknown as { invoke?: Function }).invoke === 'function') {
-        const r = await (actualToolsManager as unknown as { invoke?: (n: string, a?: unknown) => Promise<unknown> }).invoke!(name, args ?? {});
-        return { content: [{ type: 'text', text: JSON.stringify(r) }] };
-      }
+      // There is deliberately no second dispatch path here (#483): actualToolsManager has
+      // no `invoke`, and every call must go through callTool, which refuses unpublished tools.
       throw new Error(`Tool executor not available for ${name}`);
     });
 

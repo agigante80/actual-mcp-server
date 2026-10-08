@@ -294,10 +294,19 @@ check('VERSION: banner, --version, and actual_server_info all report the ROOT ve
 
     // (c) the actual_server_info version field (a pure local tool: no adapter, no live server)
     const infoUrl = pathToFileURL(join(ROOT, 'dist', 'src', 'tools', 'server_info.js')).href;
+    // #483: server_info reports the publication policy, which fails closed until the
+    // registry has resolved it, so resolve it first as startup does.
+    const managerUrl = pathToFileURL(join(ROOT, 'dist', 'src', 'actualToolsManager.js')).href;
     const infoScript =
+      `await (await import(${JSON.stringify(managerUrl)})).default.initialize();` +
       `const t = (await import(${JSON.stringify(infoUrl)})).default;` +
       'const r = await t.call({}); process.stdout.write(r.server.version);';
-    const infoOut = spawnSync(process.execPath, ['--input-type=module', '-e', infoScript], { encoding: 'utf8', env });
+    // MCP_STDIO_MODE routes the registry's startup log line to stderr, keeping stdout to the
+    // version alone (the transport field is not asserted here).
+    const infoOut = spawnSync(process.execPath, ['--input-type=module', '-e', infoScript], {
+      encoding: 'utf8',
+      env: { ...env, MCP_STDIO_MODE: 'true' },
+    });
     assert.strictEqual(infoOut.status, 0, `server_info exited ${infoOut.status}: ${infoOut.stderr}`);
     assert.strictEqual(base(infoOut.stdout), base(rootVersion), 'actual_server_info must report the ROOT version');
     assert.ok(!infoOut.stdout.includes('0.0.0-stale'), 'server_info must not read the dist mirror');

@@ -49,7 +49,7 @@ export class ActualMCPConnection extends EventEmitter {
     // If actualToolsManager is not ready, return demo tools
     let tools;
     try {
-      const toolNames = actualToolsManager.getToolNames();
+      const toolNames = actualToolsManager.getPublishedToolNames();
       tools = toolNames.map((name) => {
         const tool = actualToolsManager.getTool(name);
         if (!tool) {

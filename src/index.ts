@@ -282,8 +282,9 @@ export {};
     // Initialize tools before usage
     await actualToolsManager.initialize();
 
-    // Now get implemented tools after initialization
-    const implementedTools = actualToolsManager.getToolNames();
+    // The PUBLISHED tools (#483). This is the one name list every tools/list path receives
+    // (HTTP SDK handler, the no-session LobeChat path, the expired-session shim, stdio).
+    const implementedTools = actualToolsManager.getPublishedToolNames();
 
     // Extract schemas map with tool name → JSON schema
     const toolSchemas: Record<string, unknown> = {};

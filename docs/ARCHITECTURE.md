@@ -525,7 +525,14 @@ MCP_BRIDGE_BIND_HOST=0.0.0.0            # Bind address
 
 # Transport mode (Docker only)
 MCP_TRANSPORT_MODE=--http               # Only --http is supported
+
+# Tool surface (#483), all optional; the defaults publish every tool
+MCP_TOOLSETS=all                        # groups and presets, e.g. chat
+MCP_TOOLS=                              # extra tools by full name
+MCP_READ_ONLY=false                     # true hides and refuses write-capable tools
 ```
+
+`actualToolsManager.initialize()` resolves these once into an immutable policy (`src/lib/toolsets.ts`): the published list and, for every hidden tool, the setting that hid it. `tools/list` on every path reads that list, and `callTool` refuses a hidden tool with a `ToolUnavailableError` built from the stored reason. Dispatch never reads the environment. A configuration that publishes zero tools fails startup.
 
 #### Security
 

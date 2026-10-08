@@ -24,6 +24,10 @@ function assert(condition, message) {
   const require = createRequire(import.meta.url);
   const pkg = require('../../package.json');
 
+  // #483: server_info reports the publication policy, which fails closed until the registry
+  // has resolved it. Production does that at startup; this test calls the tool directly.
+  await (await import('../../dist/src/actualToolsManager.js')).default.initialize();
+
   // --- Test 1: transport = 'stdio' when MCP_STDIO_MODE=true ---
   console.log('\n--- Test 1: transport field = "stdio" when MCP_STDIO_MODE=true ---');
   {

@@ -504,6 +504,10 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
 | `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
 | `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`, `1048576`). Validated at startup: an invalid, zero or overflowing size refuses to start naming the variable (#466) |
+| **Tool Surface** ||||
+| `MCP_TOOLSETS` | `all` | No | Comma-separated toolset groups (`context`, `transactions`, `analysis`, `budget`, `rules`, `schedules`, `structure`, `query`, `admin`) and presets (`chat`) to publish; `all` publishes every tool. Unknown names refuse to start. See [Reducing the tool surface](#reducing-the-tool-surface) |
+| `MCP_TOOLS` | _(empty)_ | No | Extra tools to add on top of `MCP_TOOLSETS`, by full registered name (e.g. `actual_accounts_list`). Unknown names refuse to start |
+| `MCP_READ_ONLY` | `false` | No | `true` hides and refuses the 47 write-capable tools. Only `true` or `false` (case-insensitive) are accepted; any other value refuses to start |
 | **Session Management** ||||
 | `USE_CONNECTION_POOL` | `true` | No | Enable session-based connection pooling |
 | `MAX_CONCURRENT_SESSIONS` | `15` | No | Maximum concurrent MCP sessions allowed |
@@ -549,6 +553,42 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | `NODE_ENV` | _(none)_ / `production` | No | Node environment. No app default; the Docker image sets `production`, which selects json logs and hides stack traces in error responses |
 | `VERSION` | auto-detected | No | Server version (auto-set by build/Docker) |
 | `TZ` | `UTC` | No | Timezone for timestamps (e.g., `America/New_York`) |
+
+### Reducing the tool surface
+
+All 83 tools are published by default. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer, so the surface can be narrowed at startup. A tool that is not published is also refused if a client calls it by name, and the refusal names the setting responsible.
+
+| Toolset | Tools | Contents |
+|---------|-------|----------|
+| `context` | 14 | Orientation, lookups and server information |
+| `transactions` | 13 | Transaction reads, create, update, delete, import and transfers |
+| `analysis` | 7 | Summaries, aggregates and balances |
+| `budget` | 10 | Budget months, amounts, carryover, holds, transfers, batch updates and notes |
+| `rules` | 7 | Rules and payee rules, including `actual_rules_create_batch` |
+| `schedules` | 4 | Scheduled transactions |
+| `structure` | 21 | Accounts, account groups, categories, category groups, payees and tags |
+| `query` | 1 | `actual_query_run` (SELECT only) |
+| `admin` | 6 | Budget switching, import, export, bank sync and session management |
+
+Each tool is in exactly one group. The `chat` preset cuts across them and publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_transactions_update_batch`, `actual_rules_create`, `actual_rules_create_batch`, `actual_budget_updates_batch`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`. Measured on the `tools/list` payload, all 83 tools are 108,164 bytes and the `chat` preset is 25,949 bytes (about 6.5k tokens saved, a 76% cut).
+
+`MCP_READ_ONLY=true` additionally hides and refuses every write-capable tool (47 of the 83, including `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`), leaving 36. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/SECURITY_AND_PRIVACY.md#tool-surface-mcp_toolsets-and-mcp_read_only).
+
+Example: a chat assistant.
+
+```bash
+MCP_TOOLSETS=chat
+MCP_TOOLS=actual_accounts_list,actual_payees_list
+```
+
+Example: a read-only household assistant.
+
+```bash
+MCP_TOOLSETS=context,analysis,query
+MCP_READ_ONLY=true
+```
+
+A configuration that resolves to zero tools refuses to start.
 
 ---
 

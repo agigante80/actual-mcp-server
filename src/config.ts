@@ -120,6 +120,34 @@ export const configSchema = z.object({
   ),
   MAX_CONCURRENT_SESSIONS: z.string().default('15').transform(val => parseInt(val, 10)),
 
+  // --- Published tool surface (#483) ---
+  // Which tools this process publishes AND dispatches. Names are validated, and an unknown
+  // one aborts startup, by resolvePublishedToolNames (src/lib/toolsets.ts) in
+  // actualToolsManager.initialize(), because the registry is only known there.
+  //   MCP_TOOLSETS  comma list of toolsets and presets ('all' by default = every tool).
+  //   MCP_TOOLS     extra individual tool names published on top of MCP_TOOLSETS.
+  MCP_TOOLSETS: z.string().default('all'),
+  MCP_TOOLS: z.string().default(''),
+  // MCP_READ_ONLY drops every write-capable tool, and operators read it as a safety
+  // promise, so it is parsed STRICTLY and in this one place: trimmed and case-insensitive
+  // 'true' or 'false'; unset or empty is false; anything else ('1', 'yes', 'on', a typo)
+  // refuses startup naming the value. The usual `=== 'true'` idiom is wrong here: it
+  // fails SAFE for a flag that enables risk, but would fail OPEN for this one, silently
+  // publishing every writer when an operator wrote MCP_READ_ONLY=1.
+  MCP_READ_ONLY: z
+    .string()
+    .optional()
+    .transform((raw, ctx) => {
+      const v = (raw ?? '').trim().toLowerCase();
+      if (v === '' || v === 'false') return false;
+      if (v === 'true') return true;
+      ctx.addIssue({
+        code: 'custom',
+        message: `MCP_READ_ONLY must be "true" or "false" (case-insensitive; unset or empty means false), got ${JSON.stringify(raw)}.`,
+      });
+      return z.NEVER;
+    }),
+
   // --- OIDC / mcp-auth (CF-5) ---
   // Set AUTH_PROVIDER=oidc to enable JWT validation via mcp-auth.
   // When 'none' (default), the legacy MCP_SSE_AUTHORIZATION static Bearer token is used.

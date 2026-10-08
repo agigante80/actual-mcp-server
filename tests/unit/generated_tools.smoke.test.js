@@ -45,6 +45,9 @@ console.log('Running generated tools smoke tests');
 
   const toolsIndex = await import('../../dist/src/tools/index.js');
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
+  // #483: server_info reports the publication policy, which fails closed until initialize()
+  // has resolved it. Production resolves it at startup; this harness calls tools directly.
+  await (await import('../../dist/src/actualToolsManager.js')).default.initialize();
 
   // Simple monkeypatch map: for any adapter function we'll return a predictable value
   const stubResponses = {

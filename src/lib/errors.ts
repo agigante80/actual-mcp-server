@@ -107,6 +107,33 @@ export function isPreflightRefusal(error: unknown): error is PreflightRefusal {
   );
 }
 
+/** The server setting that can hide a registered tool (#483). MCP_TOOLS only adds tools. */
+export type ToolUnavailableSetting = 'MCP_TOOLSETS' | 'MCP_READ_ONLY';
+
+/**
+ * A registered tool exists but this process does not publish it (#483), so the call is
+ * refused before dispatch. Deliberately NOT a PreflightRefusal: a refusal is "the request
+ * named something that cannot be acted on, fix the request" and is treated as benign by
+ * rejection-allowlist.ts, whereas this is an operator policy decision the caller cannot
+ * fix. Decide on the type and `setting`, never on the message text.
+ */
+export class ToolUnavailableError extends Error {
+  readonly tool: string;
+  readonly setting: ToolUnavailableSetting;
+
+  constructor(tool: string, setting: ToolUnavailableSetting) {
+    super(
+      setting === 'MCP_READ_ONLY'
+        ? `Tool "${tool}" is not available: it can change state and this server runs with MCP_READ_ONLY=true.`
+        : `Tool "${tool}" is not available: it is not published by this server's MCP_TOOLSETS configuration.`,
+    );
+    this.name = 'ToolUnavailableError';
+    this.tool = tool;
+    this.setting = setting;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 /**
  * Build a "not found" message with a next-step hint.
  *

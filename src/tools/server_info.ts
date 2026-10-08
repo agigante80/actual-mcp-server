@@ -100,7 +100,11 @@ Use this to check server status, verify version compatibility, or debug issues.`
         },
       },
       tools: {
-        total: actualToolsManager.getToolNames().length,
+        // total is what this process PUBLISHES; registered is what exists. They differ
+        // when MCP_TOOLSETS, MCP_TOOLS or MCP_READ_ONLY narrows the surface (#483).
+        total: actualToolsManager.getPublishedToolNames().length,
+        registered: actualToolsManager.getToolNames().length,
+        policy: actualToolsManager.getToolPolicy(),
       },
     };
   },

@@ -4,6 +4,11 @@ import { z } from 'zod';
 
 import type { ToolDefinition } from '../types/tool.d.js';
 import { formatZodError } from './lib/zod-error-format.js';
+import config from './config.js';
+import { createModuleLogger } from './lib/loggerFactory.js';
+import { resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
+
+const toolsetLog = createModuleLogger('TOOLSETS');
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -142,10 +147,22 @@ const API_TOOL_MAP: Record<string, string> = {
 
 class ActualToolsManager {
   private tools: Map<string, ToolDefinition> = new Map();
+  // Resolved ONCE in initialize() (#483) and never recomputed. Null before that, and every
+  // accessor below throws rather than fall back to "all tools", so a caller that runs
+  // before initialize() fails closed instead of publishing a surface the operator hid.
+  private policy: PublishedPolicy | null = null;
 
   constructor() {}
 
-  async initialize() {
+  /**
+   * @param settings Overrides the validated config. Production passes nothing; the unit
+   *   tests pass explicit settings so they never depend on process.env.
+   */
+  async initialize(settings: ToolsetSettings = {
+    toolsets: config.MCP_TOOLSETS,
+    tools: config.MCP_TOOLS,
+    readOnly: config.MCP_READ_ONLY,
+  }) {
     // Dynamically import all tool modules from src/tools/index.ts
     const toolModules = (await import('./tools/index.js')) as Record<string, unknown>;
     let count = 0;
@@ -157,6 +174,41 @@ class ActualToolsManager {
       }
     }
     logger.info(`🔗 Loaded ${count} tool modules from src/tools`);
+
+    // Throws on an unknown name or an empty result: startup fails loudly (#483).
+    this.policy = resolvePublishedToolNames(this.getToolNames(), settings);
+    toolsetLog.info(
+      `Publishing ${this.policy.published.length} of ${this.policy.registered} registered tools`,
+      {
+        published: this.policy.published.length,
+        registered: this.policy.registered,
+        toolsets: this.policy.settings.toolsets,
+        extraTools: this.policy.settings.tools,
+        readOnly: this.policy.settings.readOnly,
+      },
+    );
+  }
+
+  private requirePolicy(): PublishedPolicy {
+    if (!this.policy) {
+      throw new Error('Tool publication policy is not resolved: actualToolsManager.initialize() has not run');
+    }
+    return this.policy;
+  }
+
+  /** The tools this process publishes (tools/list) and dispatches, in registry order. */
+  getPublishedToolNames(): string[] {
+    return [...this.requirePolicy().published];
+  }
+
+  isPublished(name: string): boolean {
+    return !this.requirePolicy().hidden.has(name) && this.tools.has(name);
+  }
+
+  /** The resolved MCP_TOOLSETS / MCP_TOOLS / MCP_READ_ONLY, for server_info. */
+  getToolPolicy(): { toolsets: string[]; tools: string[]; readOnly: boolean } {
+    const { toolsets, tools, readOnly } = this.requirePolicy().settings;
+    return { toolsets: [...toolsets], tools: [...tools], readOnly };
   }
 
   getToolNames(): string[] {
@@ -168,8 +220,16 @@ class ActualToolsManager {
   }
 
   async callTool(name: string, args: unknown): Promise<unknown> {
+    const policy = this.requirePolicy();
+    // Registration is checked BEFORE publication: an unregistered name stays "not found".
     const tool = this.getTool(name);
     if (!tool) throw new Error(`Tool not found: ${name}`);
+    // Hide AND refuse (#483): omitting a tool from tools/list is not access control.
+    const unavailable = unavailableError(policy, name);
+    if (unavailable) {
+      toolsetLog.warn('Refused a call to an unpublished tool', { tool: name, setting: unavailable.setting });
+      throw unavailable;
+    }
     try {
       const result = await tool.call(args);
 

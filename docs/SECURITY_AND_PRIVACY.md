@@ -361,12 +361,33 @@ accepted behaviour rather than defects:
 **Operational guidance.** In a shared or multi-user HTTP deployment, treat
 `actual_budgets_import` as an administrative operation. If your threat model does not
 allow it, remove it from the advertised surface rather than relying on the ACL to
-contain it. In single-user stdio deployments (Claude Desktop), the caller already has
+contain it: publish an `MCP_TOOLSETS` list without `admin`, or set `MCP_READ_ONLY=true`. In single-user stdio deployments (Claude Desktop), the caller already has
 the user's own filesystem privileges and this adds no new capability.
 
-`actual_budgets_export` carries none of this: it is read-only, writes only inside
+`actual_budgets_export` carries none of this: it writes a file, but only inside
 `ACTUAL_EXPORT_DIR`, and its filename input is restricted to a flat alphanumeric
-charset so it cannot traverse out of that directory.
+charset so it cannot traverse out of that directory. Because it writes a file it is
+withheld under `MCP_READ_ONLY=true`.
+
+#### Tool surface: MCP_TOOLSETS and MCP_READ_ONLY
+
+`MCP_TOOLSETS`, `MCP_TOOLS` and `MCP_READ_ONLY` choose which tools the server publishes.
+A tool that is not published is both left out of `tools/list` and refused if called by
+name; the refusal names the setting responsible.
+
+- `MCP_READ_ONLY=true` hides and refuses the 47 write-capable tools: every tool that
+  reaches the adapter write queue, plus `actual_bank_sync`, `actual_budgets_export`,
+  `actual_budgets_switch` and `actual_session_close`. 36 tools remain.
+  `actual_query_run` (SELECT only) and `actual_session_list` stay available.
+- The setting is per process, not per principal. Every caller of the process sees the
+  same surface.
+- It is not a substitute for a read-only Actual user or for `AUTH_BUDGET_ACL`. It narrows
+  what this server offers; it does not change what the underlying Actual account may do.
+- An HTTP session still downloads and loads its budget under read-only.
+- The write-capable set is a hard-coded list guarded by a call-graph test, not derived
+  from the MCP tool annotations, which are advisory hints.
+- Invalid values (an unknown toolset or tool name, a `MCP_READ_ONLY` other than `true`
+  or `false`, a configuration that publishes zero tools) stop the server at startup.
 
 ---
 

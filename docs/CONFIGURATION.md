@@ -59,6 +59,14 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `SESSION_IDLE_TIMEOUT_MINUTES` | int string | `5` | No | no | raw | `ActualConnectionPool.ts:63` | Minutes before idle session cleanup (future schema-promotion candidate) |
 | `ACTUAL_API_CONCURRENCY` | int string | `5` | No | no | raw | `lib/actual-adapter/concurrency.ts` | Adapter concurrency cap (future schema-promotion candidate) |
 
+## Tool surface (#483)
+
+| Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |
+|----------|------|---------|----------|--------|--------|--------------|-------|
+| `MCP_TOOLSETS` | csv string | `all` | No | no | schema | config, resolved once by `actualToolsManager.initialize()` | Toolset groups and presets to publish (`context`, `transactions`, `analysis`, `budget`, `rules`, `schedules`, `structure`, `query`, `admin`; preset `chat`; `all`). An unknown name refuses to start |
+| `MCP_TOOLS` | csv string | (empty) | No | no | schema | config, resolved once by `actualToolsManager.initialize()` | Extra tools added on top of `MCP_TOOLSETS`, by full registered name. An unknown name refuses to start |
+| `MCP_READ_ONLY` | strict bool string | `false` | No | no | schema | config, resolved once by `actualToolsManager.initialize()` | Trimmed, case-insensitive `true` or `false`; anything else is a startup error naming the variable and the value. `true` hides and refuses the 47 write-capable tools. A configuration resolving to zero tools refuses to start |
+
 ## Security / authentication
 
 | Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |

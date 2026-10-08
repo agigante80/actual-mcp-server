@@ -67,6 +67,8 @@ docker restart ai-librechat
 
 Verify tools loaded. In the LibreChat UI you should see **83 tools** listed under the MCP server entry.
 
+**Recommended for LibreChat and Gemini:** set `MCP_TOOLSETS=chat` on the MCP server. Both clients work better with a small tool list; the `chat` preset publishes 12 tools (about a quarter of the `tools/list` payload) and covers everyday transaction, rule and budget work. Add specific tools with `MCP_TOOLS` if you need them. See [Reducing the tool surface](../../README.md#reducing-the-tool-surface).
+
 ### LibreChat with OIDC
 
 When `AUTH_PROVIDER=oidc` is set on the MCP server, configure the OIDC MCP instance via the LibreChat admin UI (OAuth flow). For a static-token fallback, add to `librechat.yaml`:

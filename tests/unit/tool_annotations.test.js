@@ -22,10 +22,8 @@
 
 import assert from 'assert';
 import { readFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+import { join } from 'path';
+import { ROOT, classifyAdapterMethods, adapterCallsOf, stripComments, toolFileOf } from './helpers/adapter-call-graph.js';
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 let passed = 0;
@@ -33,50 +31,6 @@ let failed = 0;
 function check(label, fn) {
   try { fn(); console.log(`  ok: ${label}`); passed++; }
   catch (err) { console.error(`  FAIL: ${label} -> ${err.message}`); failed++; }
-}
-
-/**
- * Strip comments before any analysis. A docblock that MENTIONS `queueWriteOperation` in
- * prose would otherwise be read as a call: that exact false positive classified
- * `adapter.getNote` as a write while building this table, because `updateNote`'s docblock
- * sits between the two declarations.
- */
-function stripComments(s) {
-  return s
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/^\s*\/\/.*$/gm, '');
-}
-
-/** Which adapter methods reach the write queue? */
-function classifyAdapterMethods() {
-  let src = stripComments(read('src/lib/actual-adapter.ts'));
-  // Cut the default-export object: it lists every method name, and without this the LAST
-  // function's slice swallows it and is misread as writing.
-  // The default-export object lists EVERY method name, so without cutting it off the last
-  // function's slice swallows it and is misread as writing. The first version of this looked
-  // for `const adapter = {`, which does not exist (the file ends `export default {`), so the
-  // cut silently never ran. Asserted, not assumed: a guard whose safety step is a no-op is
-  // the kind of thing this file exists to catch.
-  const cut = src.indexOf('\nexport default {');
-  if (cut === -1) throw new Error('could not find the default-export block to cut; the classifier would misread the last function');
-  src = src.slice(0, cut);
-
-  const fns = [...src.matchAll(/^export (?:async )?function (\w+)\s*\(/gm)];
-  const writes = new Set();
-  const reads = new Set();
-  fns.forEach((m, i) => {
-    const end = i + 1 < fns.length ? fns[i + 1].index : src.length;
-    const body = src.slice(m.index, end);
-    (/\b(queueWriteOperation|batchBudgetUpdates)\s*\(/.test(body) ? writes : reads).add(m[1]);
-  });
-  return { writes, reads };
-}
-
-/** The adapter methods a tool file calls. */
-function adapterCallsOf(toolName) {
-  const file = `src/tools/${toolName.replace(/^actual_/, '')}.ts`;
-  if (!existsSync(join(ROOT, file))) return null;
-  return [...new Set([...stripComments(read(file)).matchAll(/adapter\.(\w+)\s*\(/g)].map((m) => m[1]))];
 }
 
 /**
@@ -119,7 +73,7 @@ check('THE ANTI-LYING CHECK: no readOnlyHint:true tool reaches the write queue',
   const liars = names.filter((n) => {
     if (!annotationsFor(n).readOnlyHint) return false;
     const calls = adapterCallsOf(n);
-    return calls !== null && calls.some((c) => writes.has(c));
+    return calls.some((c) => writes.has(c));
   });
   assert.strictEqual(
     liars.length,
@@ -133,7 +87,7 @@ check('the reverse: every readOnlyHint:false tool really does mutate', () => {
     if (annotationsFor(n).readOnlyHint) return false;
     if (n in NON_QUEUE_MUTATORS) return false;
     const calls = adapterCallsOf(n);
-    return calls !== null && !calls.some((c) => writes.has(c));
+    return !calls.some((c) => writes.has(c));
   });
   assert.strictEqual(
     suspects.length,
@@ -213,8 +167,8 @@ check('a tool whose OWN description claims upsert semantics is marked idempotent
   // from the call graph, so this reads the tool's own published claim instead: if a tool
   // TELLS clients it upserts, the annotation must agree with it.
   const liars = names.filter((n) => {
-    const file = `src/tools/${n.replace(/^actual_/, '')}.ts`;
-    if (!existsSync(join(ROOT, file))) return false;
+    const file = toolFileOf(n);
+    if (!existsSync(join(ROOT, file))) throw new Error(`${n}: tool file ${file} is missing (fails closed)`);
     const desc = stripComments(read(file));
     const claimsUpsert = /\bupsert\b/i.test(desc);
     return claimsUpsert && !annotationsFor(n).idempotentHint;
