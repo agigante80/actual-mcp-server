@@ -578,7 +578,7 @@ Example: a chat assistant.
 
 ```bash
 MCP_TOOLSETS=chat
-MCP_TOOLS=actual_accounts_list,actual_payees_list
+MCP_TOOLS=actual_accounts_list,actual_payees_get
 ```
 
 Example: a read-only household assistant.

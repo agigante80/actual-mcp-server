@@ -26,6 +26,8 @@ import {
   ROOT,
   classifyAdapterMethods,
   adapterCallsOf,
+  sideEffectsOf,
+  sideEffectsInSource,
   adapterCallsInSource,
   classifyAdapterSource,
 } from './helpers/adapter-call-graph.js';
@@ -245,19 +247,32 @@ const OPAQUE_READ = {
 // Mutators that never reach queueWriteOperation: the call graph says "read", reality says write.
 const NON_QUEUE_MUTATORS = ['actual_bank_sync', 'actual_budgets_export', 'actual_budgets_switch', 'actual_session_close'];
 
+// Adapter methods a non-queue mutator calls that are nonetheless pure reads, each reviewed.
+// Every OTHER adapter method a non-queue mutator calls counts as a write (below), so a new
+// tool calling `adapter.runBankSync(` is a writer even though runBankSync never queues.
+const SHARED_READS = {
+  resolveFilterId: 'resolves an account name to an id; a lookup, used by bank_sync and many readers',
+};
+
 /**
  * Classify every name. Returns the problems found, so the negative fixtures below can feed it
  * a synthetic registry. Fails closed: a tool file that is missing throws.
+ *
+ * A tool is a derived writer when it calls an adapter method in `writes`, or has a direct
+ * side effect (`sideEffectsOf`: fs writes, session teardown, pool mutation). There is no
+ * name-based exemption: the four non-queue mutators must derive as writers like any other.
  */
-function writeCapableProblems({ names, writeCapable, writes, callsOf, opaque }) {
+function writeCapableProblems({ names, writeCapable, writes, callsOf, sideEffectsOf: effectsOf, opaque }) {
   const problems = [];
   for (const n of names) {
     const calls = callsOf(n); // throws on a missing file
-    const derivedWrite = calls.some((c) => writes.has(c));
+    const effects = effectsOf(n); // throws on a missing file
+    const derivedWrite = calls.some((c) => writes.has(c)) || effects.length > 0;
     const inSet = writeCapable.has(n);
-    if (derivedWrite && !inSet) problems.push(`${n}: its adapter path queues a write but it is NOT in WRITE_CAPABLE`);
-    else if (inSet && !derivedWrite && !NON_QUEUE_MUTATORS.includes(n)) {
-      problems.push(`${n}: in WRITE_CAPABLE but no adapter call queues a write and it is not a reviewed non-queue mutator`);
+    if (derivedWrite && !inSet) {
+      problems.push(`${n}: it can change state (${[...calls.filter((c) => writes.has(c)), ...effects].join(', ')}) but it is NOT in WRITE_CAPABLE`);
+    } else if (inSet && !derivedWrite) {
+      problems.push(`${n}: in WRITE_CAPABLE but no adapter call writes and it has no direct side effect`);
     } else if (!inSet) {
       if (n in opaque) {
         if (calls.length !== 0) problems.push(`${n}: listed OPAQUE_READ but has visible adapter calls (${calls.join(', ')})`);
@@ -270,7 +285,12 @@ function writeCapableProblems({ names, writeCapable, writes, callsOf, opaque }) 
   return problems;
 }
 
-const { writes } = classifyAdapterMethods();
+const { writes: queueWrites } = classifyAdapterMethods();
+// The adapter methods the non-queue mutators reach, minus the reviewed shared reads.
+const nonQueueWrites = new Set(
+  NON_QUEUE_MUTATORS.flatMap((n) => adapterCallsOf(n)).filter((m) => !(m in SHARED_READS)),
+);
+const writes = new Set([...queueWrites, ...nonQueueWrites]);
 
 await check('the derivation is real (guards every WRITE_CAPABLE check below passing over nothing)', () => {
   assert.ok(writes.size > 20, `expected many write adapter methods, found ${writes.size}`);
@@ -284,6 +304,7 @@ await check('WRITE_CAPABLE matches the adapter call graph for every registered t
     writeCapable: WRITE_CAPABLE,
     writes,
     callsOf: adapterCallsOf,
+    sideEffectsOf,
     opaque: OPAQUE_READ,
   });
   assert.deepStrictEqual(problems, []);
@@ -301,9 +322,49 @@ await check('NEGATIVE: a synthetic writer tool missing from WRITE_CAPABLE is cau
     writeCapable: WRITE_CAPABLE,
     writes,
     callsOf: (n) => (n === 'actual_synthetic_writer' ? ['createRulesBatch'] : adapterCallsOf(n)),
+    sideEffectsOf: (n) => (n === 'actual_synthetic_writer' ? [] : sideEffectsOf(n)),
     opaque: OPAQUE_READ,
   });
-  assert.deepStrictEqual(problems, ['actual_synthetic_writer: its adapter path queues a write but it is NOT in WRITE_CAPABLE']);
+  assert.deepStrictEqual(problems, ['actual_synthetic_writer: it can change state (createRulesBatch) but it is NOT in WRITE_CAPABLE']);
+});
+
+await check('the non-queue write methods are derived, not empty', () => {
+  assert.deepStrictEqual([...nonQueueWrites].sort(), ['exportBudget', 'runBankSync', 'switchBudget']);
+  for (const m of Object.keys(SHARED_READS)) assert.ok(!writes.has(m), `${m} is a reviewed shared read and must not count as a write`);
+});
+
+await check('NEGATIVE: a synthetic tool calling a NON-queue writer (runBankSync) is caught', () => {
+  const problems = writeCapableProblems({
+    names: [...registered, 'actual_synthetic_sync_all'],
+    writeCapable: WRITE_CAPABLE,
+    writes,
+    callsOf: (n) => (n === 'actual_synthetic_sync_all' ? ['resolveFilterId', 'runBankSync'] : adapterCallsOf(n)),
+    sideEffectsOf: (n) => (n === 'actual_synthetic_sync_all' ? [] : sideEffectsOf(n)),
+    opaque: OPAQUE_READ,
+  });
+  assert.deepStrictEqual(problems, ['actual_synthetic_sync_all: it can change state (runBankSync) but it is NOT in WRITE_CAPABLE']);
+});
+
+await check('NEGATIVE: a synthetic tool with only a direct side effect (fs write, session teardown) is caught', () => {
+  const src = "import { writeFile } from 'node:fs/promises';\nimport { shutdownActualForSession } from '../actualConnection.js';\nawait writeFile('x', 'y');\nawait shutdownActualForSession('s');\nconnectionPool.touch('s');\nconnectionPool.getStats();";
+  assert.deepStrictEqual(sideEffectsInSource(src), ['connectionPool.touch', 'fs.writeFile', 'shutdownActualForSession']);
+  assert.deepStrictEqual(sideEffectsInSource("import { readFileSync } from 'fs';\nconnectionPool.getStats();\n// writeFile( shutdownActualForSession("), []);
+  const problems = writeCapableProblems({
+    names: [...registered, 'actual_synthetic_exporter'],
+    writeCapable: WRITE_CAPABLE,
+    writes,
+    callsOf: (n) => (n === 'actual_synthetic_exporter' ? ['getAccounts'] : adapterCallsOf(n)),
+    sideEffectsOf: (n) => (n === 'actual_synthetic_exporter' ? ['fs.writeFile'] : sideEffectsOf(n)),
+    opaque: OPAQUE_READ,
+  });
+  assert.deepStrictEqual(problems, ['actual_synthetic_exporter: it can change state (fs.writeFile) but it is NOT in WRITE_CAPABLE']);
+});
+
+await check('the four non-queue mutators derive as writers on their own source', () => {
+  for (const n of NON_QUEUE_MUTATORS) {
+    const derived = adapterCallsOf(n).some((c) => writes.has(c)) || sideEffectsOf(n).length > 0;
+    assert.ok(derived, `${n} must derive as a writer from its source, not from a name list`);
+  }
 });
 
 await check('NEGATIVE: a registered tool whose file is missing fails closed', () => {
@@ -329,6 +390,25 @@ await check('every OPAQUE_READ entry is registered, has no adapter call, and is 
     assert.ok(!WRITE_CAPABLE.has(n));
   }
   assert.deepStrictEqual(Object.keys(OPAQUE_READ).sort(), ['actual_server_info', 'actual_session_list']);
+});
+
+await check('every tool named in a documented MCP_TOOLS example is registered', () => {
+  // A wrong name in the copy-paste example stops startup for whoever copies it (#483 review).
+  // Window: the line naming MCP_TOOLS and the two after it, which covers the .env.example
+  // comment block where the example sits on the following line.
+  const files = ['README.md', '.env.example', 'unraid/actual-mcp-server.xml', 'docs/CONFIGURATION.md', 'docs/guides/AI_CLIENT_SETUP.md'];
+  let seen = 0;
+  for (const f of files) {
+    const lines = read(f).split('\n');
+    lines.forEach((line, i) => {
+      if (!/\bMCP_TOOLS\b/.test(line)) return;
+      for (const m of lines.slice(i, i + 3).join('\n').matchAll(/\bactual_[a-z_A-Z]+/g)) {
+        seen++;
+        assert.ok(registered.includes(m[0]), `${f}:${i + 1}: MCP_TOOLS example names ${m[0]}, which is not registered`);
+      }
+    });
+  }
+  assert.ok(seen >= 3, `expected the README, .env.example and unraid examples to be scanned, saw ${seen} names`);
 });
 
 // ---------------------------------------------------------------- preset reference guard

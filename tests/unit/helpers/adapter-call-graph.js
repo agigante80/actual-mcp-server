@@ -75,3 +75,44 @@ export function adapterCallsOf(toolName) {
   }
   return adapterCallsInSource(read(file));
 }
+
+// State changes a tool can make WITHOUT any adapter method: filesystem writes, tearing down a
+// session, clearing per-session state, or mutating the connection pool. The call graph above
+// cannot see these, so a tool that does any of them is a writer whatever its adapter calls say
+// (#483 review). Reading the pool (getStats, has) and reading files are not state changes.
+const FS_WRITE_FNS = [
+  'writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'mkdir', 'mkdirSync', 'rm', 'rmSync',
+  'unlink', 'unlinkSync', 'rename', 'renameSync', 'copyFile', 'copyFileSync', 'createWriteStream',
+  'truncate', 'truncateSync', 'cp', 'cpSync',
+];
+const POOL_READS = new Set(['getStats', 'has', 'hasConnection', 'isLive', 'getConnectionInfo', 'isInitialized', 'canAcceptNewSession', 'getIdleTimeoutMinutes']);
+
+/** Side-effect markers in a tool source (comments stripped); [] when it has none. */
+export function sideEffectsInSource(rawSrc) {
+  const src = stripComments(rawSrc);
+  const found = new Set();
+  for (const m of src.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"](?:node:)?fs(?:\/promises)?['"]/g)) {
+    for (const name of m[1].split(',').map((s) => s.trim().split(/\s+as\s+/)[0])) {
+      if (FS_WRITE_FNS.includes(name)) found.add(`fs.${name}`);
+    }
+  }
+  if (/import\s+\*\s+as\s+\w+\s+from\s*['"](?:node:)?fs(?:\/promises)?['"]|import\s+\w+\s+from\s*['"](?:node:)?fs(?:\/promises)?['"]/.test(src)) {
+    found.add('fs (namespace or default import)');
+  }
+  for (const fn of ['shutdownActualForSession', 'clearSessionBudgetState']) {
+    if (new RegExp(`\\b${fn}\\s*\\(`).test(src)) found.add(fn);
+  }
+  for (const m of src.matchAll(/\bconnectionPool\.(\w+)\s*\(/g)) {
+    if (!POOL_READS.has(m[1])) found.add(`connectionPool.${m[1]}`);
+  }
+  return [...found].sort();
+}
+
+/** The side-effect markers in a tool file. Throws when the tool's file is missing. */
+export function sideEffectsOf(toolName) {
+  const file = toolFileOf(toolName);
+  if (!existsSync(join(ROOT, file))) {
+    throw new Error(`${toolName}: expected tool file ${file} does not exist (the side-effect check fails closed)`);
+  }
+  return sideEffectsInSource(read(file));
+}
