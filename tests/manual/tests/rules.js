@@ -233,7 +233,9 @@ export async function rulesTests(client, context) {
     // Negative: a category id that does not exist is refused by BOTH create tools.
     const ghost = "19999999-0000-4000-8000-000000000009";
     const ghostRule = { conditions: [{ field: "notes", op: "contains", value: batchMarker }], actions: [{ op: "set", field: "category", value: ghost }] };
-    const batchGhost = (await callTool("actual_rules_create_batch", { rules: [ghostRule] })).result;
+    // callTool already unwraps the {result} envelope; accept both shapes, as the positive block above does.
+    const ghostOut = await callTool("actual_rules_create_batch", { rules: [ghostRule] });
+    const batchGhost = ghostOut?.result || ghostOut;
     const bge = batchGhost?.failed?.[0]?.error ?? "";
     if (batchGhost?.successCount === 0 && /not found/i.test(bge) && /available/i.test(bge) && bge.includes(ghost)) {
       console.log("  ok batch negative: dangling category is a per-item not-found with the available list");
