@@ -39,7 +39,7 @@ There is no `lint` or `format` script. If `test:adapter` or `test:unit-js` compl
 
 - **Every Actual API call goes through the adapter** (`withActualApi` and the `adapter.*` methods in `src/lib/actual-adapter.ts`). A raw `@actual-app/api` call outside it does not persist and bypasses the session pool.
 - **Never nest one adapter session inside another.** The api lock is not reentrant: a tool must not wrap an `adapter.*` call in a session of its own. The symptom is a 30 second stall ending in `Actual API operation timed out`.
-- **Only one tool imports `@actual-app/api` directly**: `src/tools/budget_updates_batch.ts`, which runs raw writes inside a single `adapter.batchBudgetUpdates(...)` session because calling back through `adapter.*` from there would nest. Anywhere else, call `adapter.*`.
+- **No tool statically imports `@actual-app/api` or performs a raw write.** Tools call `adapter.*`; code that needs several raw writes in one cycle (a batch of pure writes, for example `adapter.setBudgetBatch`) lives in the adapter, inside one `queueWriteOperation`, because calling back through `adapter.*` from inside a session would nest. The two summary tools that `await import('@actual-app/api')` only to get the `q()` query builder are out of scope.
 - **A read-then-write guard belongs in the adapter**, inside one `queueWriteOperation`, never in the tool.
 - **Amounts are integer cents** (`5000` is $50.00, negative is an outflow). **Dates are `YYYY-MM-DD` strings.**
 - **Refusals are typed.** Throw `NotFoundRefusal` or `OutOfRangeRefusal` and test with `isPreflightRefusal` (`src/lib/errors.ts`); never decide by matching message text.

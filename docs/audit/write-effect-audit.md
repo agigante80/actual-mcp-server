@@ -192,7 +192,7 @@ something.
 | `actual_budgets_switch` | not traced; changes session state rather than budget data | confirm the preference write cannot silently no-op |
 | `actual_budgets_export` | not traced; writes a zip rather than calling a write API | confirm a failed write surfaces rather than returning a path |
 | `actual_budgets_transfer` | not traced | trace the two-sided amount write for a partial application |
-| `actual_budget_updates_batch` | not traced; the one tool that calls raw api functions directly | trace whether a mid-batch failure leaves earlier writes applied |
+| `actual_budget_updates_batch` | traced in #516: `adapter.setBudgetBatch` (the tool no longer calls the raw api). The bracket is upstream `batchMessages`, not a transaction, so a mid-batch failure LEAVES earlier writes applied; there is no rollback. Each item gets its own verdict, with category and month guards applied before any write | none; the non-atomic contract is stated in the tool description |
 | `actual_categories_create` | not traced | trace for an unvalidated `group_id` (shape D) |
 | `actual_category_groups_create` | not traced | trace for a silent duplicate-name outcome |
 | `actual_rules_create` | not traced | trace for an unvalidated payee or category in conditions and actions |

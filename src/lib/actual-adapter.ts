@@ -3240,22 +3240,148 @@ export async function getPayeeRules(payeeId: string): Promise<unknown[]> {
     return filtered;
   });
 }
+/** One item of `setBudgetBatch`. At least one of `amount` / `carryover` is set (the tool's schema enforces it). */
+export interface BudgetBatchItem {
+  month: string;
+  categoryId: string;
+  amount?: number;
+  carryover?: boolean;
+}
+export interface BudgetBatchSucceeded { index: number; month: string; categoryId: string }
+export interface BudgetBatchFailed extends BudgetBatchSucceeded { error: string }
+export interface BudgetBatchResult { succeeded: BudgetBatchSucceeded[]; failed: BudgetBatchFailed[] }
+
+/** Error recorded for every item the cooperative deadline stopped before it was written. */
+export const BUDGET_BATCH_DEADLINE_ERROR = 'not attempted: batch time budget exhausted';
+/** Fraction of ACTUAL_OP_TIMEOUT_MS the item loop may consume; the rest is left for batch-budget-end and the sync. */
+const BUDGET_BATCH_DEADLINE_FRACTION = 0.75;
+
 /**
- * #378 CAVEAT ON THIS METHOD'S preservesListings CLAIM. This forwards an arbitrary callback to
- * rawBatchBudgetUpdates, which upstream is only a batch-budget-start / await func() /
- * batch-budget-end transaction bracket: it performs no writes of its own, so the annotation is
- * really a claim about whatever the CALLBACK does. It holds today because
- * src/tools/budget_updates_batch.ts is the only caller passing a real callback and it calls
- * only rawSetBudgetAmount and rawSetBudgetCarryover, both verified listing-safe. Nothing in
- * the signature or upstream constrains that. RE-AUDIT THIS when a second caller appears: a
- * callback reaching rawCreateCategory or rawDeleteAccount would violate the claim with no
- * compiler or runtime signal, and the symptom would be a false not-found elsewhere in the drain.
+ * #516: set budget amounts and/or carryover flags for many (month, category) pairs in ONE
+ * write cycle, with a verdict per item. NOT atomic and no rollback: items applied before a
+ * failure stay applied. The bracket is upstream's `batchMessages` (it batches sync messages),
+ * it is not a database transaction.
+ *
+ * TWO PHASES inside one `queueWriteOperation`:
+ *  1. Before the bracket: read the categories listing and the budget months ONCE each, then
+ *     decide a typed refusal per item. The guards apply to EVERY item, a carryover-only item
+ *     included, because upstream `api/budget-set-amount` validates neither category nor month
+ *     (it INSERTs an orphan `<month>-<category>` row) and the two fields should refuse alike.
+ *  2. ONE `rawBatchBudgetUpdates` whose callback holds only raw writes for the items that
+ *     passed. Every item is caught INSIDE the callback so no item error escapes the bracket
+ *     (upstream closes it in a `finally`, but an escaping error would also lose the verdicts).
+ *     Only `raw*` calls run there: an `adapter.*` call would nest the api lock and deadlock.
+ *
+ * INCOME CATEGORIES (maintainer decision): a carryover item whose category is an income
+ * category is refused in phase 1. Upstream `api/budget-set-carryover` rejects income
+ * categories too, but only AFTER an amount written for the same item has landed, so without
+ * this check an item setting both would half-apply. Upstream's own rejection stays as a
+ * backstop and is reported per item.
+ *
+ * RETRY: none. A refusal must never replay and a replayed partial bracket could double-apply;
+ * the client re-reads (`actual_budgets_getMonth`) and retries instead.
+ *
+ * COOPERATIVE DEADLINE. The whole operation runs under one `withOpTimeout`, a `Promise.race`
+ * that cannot cancel the callback. A callback abandoned mid-bracket keeps writing and leaks
+ * upstream's `IS_BATCHING` / `batchPromise` globals to later operations (a later batch-start
+ * throws "batch already started"). So the loop checks, before each item write, the time since
+ * this operation started against 75% of ACTUAL_OP_TIMEOUT_MS (skipped when it is 0, the
+ * documented "no bound" setting) and stops writing once it is exceeded; the remaining items go
+ * to `failed`. The 25% left over covers batch-budget-end and the sync.
+ * WHY NOT `queueWriteOperation`'s `timeoutMs` option: it would LENGTHEN the hold on the
+ * process-global api lock, and it still would not close the bracket on abandonment.
+ *
+ * `preservesListings` claim is safe: only raw budget amount and carryover writes run here.
  */
-export async function batchBudgetUpdates(fn: () => Promise<void>): Promise<void> {
-  observability.incrementToolCall('actual.budgets.batchUpdates').catch(() => {});
+export async function setBudgetBatch(items: BudgetBatchItem[]): Promise<BudgetBatchResult> {
+  observability.incrementToolCall('actual.budgets.setBatch').catch(() => {});
   return queueWriteOperation(async () => {
-    await withConcurrency(() => retry(() => rawBatchBudgetUpdates(fn) as Promise<void>, { retries: 2, backoffMs: 200 }));
-  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
+    const startedAt = Date.now();
+    const succeeded: BudgetBatchSucceeded[] = [];
+    const failed: BudgetBatchFailed[] = [];
+
+    // Phase 1: reads, then refusal decisions. Both reads happen BEFORE the bracket opens.
+    const categories = await withConcurrency(() =>
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
+    );
+    const categoryById = new Map<string, { id: string; is_income?: boolean }>();
+    for (const c of categories as Array<{ id: string; is_income?: boolean }>) categoryById.set(c.id, c);
+    const months = await withConcurrency(() =>
+      retry(() => rawGetBudgetMonths() as Promise<string[]>, { retries: 2, backoffMs: 200 })
+    );
+    const monthKnown = Array.isArray(months) && months.length > 0;
+
+    const toWrite: Array<{ index: number; item: BudgetBatchItem }> = [];
+    items.forEach((item, index) => {
+      let refusal: Error | null = null;
+      const category = categoryById.get(item.categoryId);
+      if (!category) {
+        refusal = new NotFoundRefusal('Category', String(item.categoryId), 'actual_categories_get');
+      } else if (monthKnown && !months.includes(String(item.month))) {
+        refusal = new OutOfRangeRefusal(
+          `Month "${item.month}" is outside this budget's range, which runs from ${months[0]} to ` +
+            `${months[months.length - 1]}. Use actual_budgets_getMonths to see the months you can budget to.`,
+          String(item.month),
+        );
+      } else if (item.carryover !== undefined && category.is_income) {
+        refusal = new OutOfRangeRefusal(
+          `Category "${item.categoryId}" is an income category, which cannot carry over. ` +
+            'Nothing was written for this item.',
+          String(item.categoryId),
+        );
+      }
+      if (refusal) failed.push({ index, month: item.month, categoryId: item.categoryId, error: refusal.message });
+      else toWrite.push({ index, item });
+    });
+
+    // Phase 2: one bracket, raw writes only.
+    if (toWrite.length > 0) {
+      const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;
+      await withConcurrency(() =>
+        rawBatchBudgetUpdates(async () => {
+          for (const { index, item } of toWrite) {
+            const ref = { index, month: item.month, categoryId: item.categoryId };
+            if (deadlineMs > 0 && Date.now() - startedAt > deadlineMs) {
+              failed.push({ ...ref, error: BUDGET_BATCH_DEADLINE_ERROR });
+              continue;
+            }
+            let amountWritten = false;
+            try {
+              if (item.amount !== undefined) {
+                await rawSetBudgetAmount(item.month, item.categoryId, item.amount);
+                amountWritten = true;
+              }
+              if (item.carryover !== undefined) {
+                await rawSetBudgetCarryover(item.month, item.categoryId, item.carryover);
+              }
+              succeeded.push(ref);
+            } catch (error) {
+              const msg = error instanceof Error ? error.message : String(error);
+              // INFRASTRUCTURE ERRORS ARE NOT PER-ITEM FAILURES. queueWriteOperation sets
+              // drainForceFullShutdown only when _shouldDropPoolOnError sees the error reach
+              // it. Swallowing a dropped connection into `failed` would leave the dead pooled
+              // connection in place for the next caller, so stop the loop and rethrow out of
+              // the bracket (upstream closes it in a `finally`). The original message text is
+              // kept so the pattern classification still matches. Rate-limit errors are not
+              // pool-drop errors (see _shouldDropPoolOnError), so they stay per-item failures.
+              if (_shouldDropPoolOnError(error)) {
+                const applied = succeeded.map((x) => x.index).join(', ') || 'none';
+                throw new Error(
+                  `Budget batch aborted after ${succeeded.length} of ${items.length} items (applied: ${applied}): ${msg}. ` +
+                    'Read back with actual_budgets_getMonth before retrying.',
+                );
+              }
+              failed.push({ ...ref, error: amountWritten ? `amount was applied, then the carryover failed: ${msg}` : msg });
+            }
+          }
+        }) as Promise<void>
+      );
+    }
+
+    succeeded.sort((a, b) => a.index - b.index);
+    failed.sort((a, b) => a.index - b.index);
+    return { succeeded, failed };
+  }, { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
 }
 /**
  * #355: RETURNS the upstream verdict instead of discarding it.
@@ -4334,7 +4460,7 @@ export default {
   deleteCategoryGroup,
   mergePayees,
   getPayeeRules,
-  batchBudgetUpdates,
+  setBudgetBatch,
   transferBudgetAmount,
   holdBudgetForNextMonth,
   resetBudgetHold,

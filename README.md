@@ -451,7 +451,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 ### Batch Operations (1)
 
-`actual_budget_updates_batch`: batch multiple budget updates in one call
+`actual_budget_updates_batch`: set budget amounts and/or carryover flags for 1 to 100 month/category pairs in one call. Each operation needs at least one of `amount` (integer cents) or `carryover`. Items are applied independently and NOT atomically (no rollback); the result reports every item: `{ succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }`. An unknown category, an out-of-range month or a carryover on an income category fails only that item. To rebalance categories, read the month with `actual_budgets_getMonth`, then send one batch of absolute amounts. After a timeout, read the months back before retrying.
 
 ### Server Information & Lookup (5)
 

@@ -127,6 +127,27 @@ async function expectCallError(tool, input, label) {
     'invalid month format (month 13)')) fail();
   if (!expectParseError(batch, { operations: [{ month: '25-01', categoryId: '10000000-0000-4000-8000-000000000001' }] },
     'invalid month format (2-digit year)')) fail();
+  // #516: integer cents, at-least-one-of, and the 1..100 bounds, with the exact messages
+  const CAT = '10000000-0000-4000-8000-000000000001';
+  const expectMessage = (input, fragment, label) => {
+    try { batch.inputSchema.parse(input); console.error(`  FAIL (expected Zod error) [${label}]`); return false; }
+    catch (e) {
+      const text = (e.issues ?? []).map((i) => i.message).join(' | ');
+      if (text.includes(fragment)) { console.log(`  ✓ rejected with "${fragment}" [${label}]`); return true; }
+      console.error(`  FAIL [${label}]: message "${text}" lacks "${fragment}"`); return false;
+    }
+  };
+  if (!expectMessage({ operations: [{ month: '2026-03', categoryId: CAT, amount: 12.5 }] },
+    'Amount must be an integer (cents)', 'amount 12.5 is not integer cents')) fail();
+  if (!expectMessage({ operations: [{ month: '2026-03', categoryId: CAT }] },
+    'each operation needs at least one of amount or carryover', 'neither amount nor carryover')) fail();
+  if (!expectParseError(batch, { operations: [] }, 'empty operations array')) fail();
+  if (!expectParseError(batch, { operations: Array.from({ length: 101 }, () => ({ month: '2026-03', categoryId: CAT, amount: 1 })) },
+    '101 operations exceed the cap')) fail();
+  if (!expectParseOk(batch, { operations: Array.from({ length: 100 }, () => ({ month: '2026-03', categoryId: CAT, amount: 1 })) },
+    '100 operations is the cap and is accepted')) fail();
+  if (!expectParseOk(batch, { operations: [{ month: '2026-03', categoryId: CAT, carryover: false }] },
+    'carryover alone (false is a value)')) fail();
   // Valid minimal input
   if (!expectParseOk(batch, {
     operations: [{ month: '2026-03', categoryId: '10000000-0000-4000-8000-000000000001', amount: 10000 }],

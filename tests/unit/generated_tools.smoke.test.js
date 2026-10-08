@@ -111,7 +111,11 @@ console.log('Running generated tools smoke tests');
     // for 10000, so returning that models a hold that was granted in full.
     holdBudgetForNextMonth: 10000,
     resetBudgetHold: null,
-    batchBudgetUpdates: null,
+    // #516: setBudgetBatch returns the per-item verdicts; the tool adds the counts.
+    setBudgetBatch: {
+      succeeded: [{ index: 0, month: '2025-12', categoryId: '10000000-0000-4000-8000-000000000001' }],
+      failed: [],
+    },
     createAccount: 'acct-new',
     updateAccount: null,
     deleteAccount: null,
@@ -314,9 +318,16 @@ console.log('Running generated tools smoke tests');
         'schedules_delete', 'schedules_update',
         'transactions_delete', 'transactions_update',
         'budgets_resetHold', 'budgets_holdForNextMonth',
-        'budgets_setCarryover', 'budget_updates_batch'];
+        'budgets_setCarryover'];
       if (successTools.includes(n)) {
         if (!res || res.success !== true) shapeErr(`expected success=true`);
+      }
+
+      // #516: actual_budget_updates_batch reports per-item verdicts, not { success }
+      if (n === 'budget_updates_batch') {
+        if (!Array.isArray(res?.succeeded)) shapeErr('expected succeeded array');
+        if (!Array.isArray(res?.failed)) shapeErr('expected failed array');
+        if (res?.total !== 1 || res?.successCount !== 1 || res?.failureCount !== 0) shapeErr('expected total/successCount/failureCount counts');
       }
 
       // Tools with custom named keys (not { result })

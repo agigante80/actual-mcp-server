@@ -1155,6 +1155,63 @@ test.describe('Docker E2E - ALL 82 TOOLS', () => {
     expect(cats.find((c: any) => c?.id === category.id)?.budgeted).toBe(10000 + 34 * 100);
   });
 
+  test('actual_budget_updates_batch - reports a per-item verdict and applies the good items (#516)', async ({ mcp, makeCategory }) => {
+    test.setTimeout(60000);
+    const good = await makeCategory();
+    const other = await makeCategory({ group: { id: good.groupId, name: 'reused' } });
+    const ghostId = '19999999-0000-4000-8000-000000000009'; // well-formed, does not exist
+
+    const result = await mcp.call('actual_budget_updates_batch', {
+      operations: [
+        { month: currentMonth(), categoryId: good.id, amount: 42000 },
+        { month: currentMonth(), categoryId: ghostId, amount: 1000 },
+        { month: currentMonth(), categoryId: other.id, amount: 7000 },
+      ],
+    }) as any;
+
+    expect(result.total).toBe(3);
+    expect(result.successCount).toBe(2);
+    expect(result.failureCount).toBe(1);
+    expect(result.succeeded.map((s: any) => s.index)).toEqual([0, 2]);
+    expect(result.failed).toHaveLength(1);
+    expect(result.failed[0].index).toBe(1);
+    expect(result.failed[0].categoryId).toBe(ghostId);
+    expect(result.failed[0].error).toMatch(/not found/i);
+
+    // The good items must have LANDED (not rolled back), the refused one must not exist.
+    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const cats = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []);
+    expect(cats.find((c: any) => c?.id === good.id)?.budgeted).toBe(42000);
+    expect(cats.find((c: any) => c?.id === other.id)?.budgeted).toBe(7000);
+    expect(cats.some((c: any) => c?.id === ghostId)).toBe(false);
+  });
+
+  test('actual_budget_updates_batch - an out-of-range month fails only that item (#516)', async ({ mcp, makeCategory }) => {
+    test.setTimeout(60000);
+    const category = await makeCategory();
+
+    // Every item failing is a normal result, not a tool error.
+    const result = await mcp.call('actual_budget_updates_batch', {
+      operations: [{ month: '1899-01', categoryId: category.id, amount: 1000 }],
+    }) as any;
+    expect(result.successCount).toBe(0);
+    expect(result.failureCount).toBe(1);
+    expect(result.failed[0].index).toBe(0);
+    expect(result.failed[0].month).toBe('1899-01');
+    expect(result.failed[0].error).toMatch(/outside this budget's range/i);
+  });
+
+  test('actual_budget_updates_batch - rejects invalid input at the schema (#516)', async ({ mcp, makeCategory }) => {
+    const category = await makeCategory();
+    await expect(mcp.call('actual_budget_updates_batch', {
+      operations: [{ month: currentMonth(), categoryId: category.id, amount: 12.5 }],
+    })).rejects.toThrow(/integer/i);
+    await expect(mcp.call('actual_budget_updates_batch', {
+      operations: [{ month: currentMonth(), categoryId: category.id }],
+    })).rejects.toThrow(/at least one of amount or carryover/i);
+    await expect(mcp.call('actual_budget_updates_batch', { operations: [] })).rejects.toThrow(/Validation error: operations/);
+  });
+
   test('actual_budgets_transfer - should transfer between categories', async ({ mcp, makeCategory }) => {
     const source = await makeCategory();
     // Same group, which is what the original did, and it keeps the teardown cheap.
