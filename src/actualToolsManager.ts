@@ -50,6 +50,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_payee_rules_get',
   'actual_query_run',
   'actual_rules_create',
+  'actual_rules_create_batch',
   'actual_rules_create_or_update',
   'actual_rules_delete',
   'actual_rules_get',

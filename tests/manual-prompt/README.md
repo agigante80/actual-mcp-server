@@ -21,7 +21,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | File | Coverage | When to use |
 |------|----------|-------------|
 | [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1**: 9 read-only tools | Always run first. Confirms the server is up and connected. |
-| [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2 to 6c**: ~49 CRUD tools | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules. |
+| [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2 to 6c**: ~50 CRUD tools | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules. |
 | [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7 to 12**: ~25 tools + full cleanup | Paste after Prompt 2 passes. Tests budgets, summaries, query engine, notes, preferences, the export/import round trip, session management, and cleans up everything. |
 
 ---
@@ -53,7 +53,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 3 | Prompt 2 | 6 | Category Group & Category CRUD |
 | 4 | Prompt 2 | 6 | Payee CRUD + rules + merge + common list (#451) |
 | 5 | Prompt 2 | 4 | Rules CRUD |
-| 5b | Prompt 2 | 3 | Batch update, uncategorized, rules upsert |
+| 5b | Prompt 2 | 4 | Batch update, uncategorized, rules upsert, rules batch (#485) |
 | 6 | Prompt 2 | 12 | Transaction CRUD + search + splits (#305) + transfers (#451) |
 | 6b | Prompt 2 | 4 | Schedule CRUD |
 | 6c | Prompt 2 | 4 | Tag CRUD (#184, covered here since #451) |
@@ -67,7 +67,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 83 tools across 3 prompts**
+**Total: 84 tools across 3 prompts**
 
 ---
 

@@ -2619,9 +2619,195 @@ export async function getRules(): Promise<unknown[]> {
     return Array.isArray(raw) ? raw : [];
   });
 }
+/** The entity kinds whose ids a rule can reference, with the field name and the listing that proves existence. */
+const RULE_REFERENCE_FIELDS = {
+  category: { entity: 'Category', listTool: 'actual_categories_get' },
+  payee: { entity: 'Payee', listTool: 'actual_payees_get' },
+  account: { entity: 'Account', listTool: 'actual_accounts_get' },
+} as const;
+type RuleReferenceField = keyof typeof RULE_REFERENCE_FIELDS;
+
+interface RuleReferenceListings {
+  category?: Set<string>;
+  payee?: Set<string>;
+  account?: Set<string>;
+}
+
+/** Every (field, id) pair a rule points at. Null, undefined and non-string values are skipped (a null `set category` clears it). */
+function ruleReferences(rule: unknown): Array<{ field: RuleReferenceField; id: string }> {
+  const out: Array<{ field: RuleReferenceField; id: string }> = [];
+  const r = (rule ?? {}) as { conditions?: unknown; actions?: unknown };
+  const add = (field: unknown, value: unknown) => {
+    if (typeof field !== 'string' || !(field in RULE_REFERENCE_FIELDS)) return;
+    const values = Array.isArray(value) ? value : [value];
+    for (const v of values) if (typeof v === 'string') out.push({ field: field as RuleReferenceField, id: v });
+  };
+  if (Array.isArray(r.conditions)) {
+    for (const c of r.conditions as Array<{ field?: unknown; value?: unknown }>) add(c?.field, c?.value);
+  }
+  if (Array.isArray(r.actions)) {
+    for (const a of r.actions as Array<{ op?: unknown; field?: unknown; value?: unknown }>) {
+      if (a?.op === 'set') add(a?.field, a?.value);
+    }
+  }
+  return out;
+}
+
+/**
+ * #485: read the listings the given rules need, once per kind, through the drain cache. Call
+ * INSIDE a queued op and BEFORE the first raw create. Only kinds that some rule references
+ * are read. The three listings are what upstream shows a user: categories (hidden included,
+ * group ids are not in it), payees (transfer payees included, tombstoned ones excluded here
+ * even if the listing returns them) and accounts (closed and off-budget accounts included, and
+ * both count as existing: a closed account is not a missing reference).
+ */
+async function loadRuleReferenceListings(rules: unknown[]): Promise<RuleReferenceListings> {
+  const need = new Set<RuleReferenceField>();
+  for (const rule of rules) for (const ref of ruleReferences(rule)) need.add(ref.field);
+  const listings: RuleReferenceListings = {};
+  if (need.has('category')) {
+    const rows = await withConcurrency(() =>
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+    );
+    listings.category = new Set((Array.isArray(rows) ? rows : []).map((c) => String(c?.id)));
+  }
+  if (need.has('payee')) {
+    const rows = await withConcurrency(() =>
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string; tombstone?: boolean }>>), { retries: 2, backoffMs: 200 })
+    );
+    listings.payee = new Set((Array.isArray(rows) ? rows : []).filter((p) => !p?.tombstone).map((p) => String(p?.id)));
+  }
+  if (need.has('account')) {
+    const rows = await withConcurrency(() =>
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+    );
+    listings.account = new Set((Array.isArray(rows) ? rows : []).map((a) => String(a?.id)));
+  }
+  return listings;
+}
+
+/**
+ * #485: refuse a rule that points at a category, payee or account that does not exist.
+ * Upstream `createRule` checks field, operator and nullability only, with no existence lookup
+ * of id values, so it stores a rule pointing at nothing. NOT exported: tests drive it through
+ * `createRule` and `createRulesBatch`, and it lives in the adapter so neither call site can
+ * skip it.
+ *
+ * KNOWN GAPS, accepted and tracked in #522: the other rule writes (`upsertRule`, `updateRule`
+ * and `updatePayee`'s default-category rule) are NOT guarded, and `link-schedule` action
+ * values are not checked.
+ */
+function assertRuleReferencesExist(rule: unknown, listings: RuleReferenceListings): void {
+  for (const ref of ruleReferences(rule)) {
+    const known = listings[ref.field];
+    if (known && !known.has(ref.id)) {
+      const meta = RULE_REFERENCE_FIELDS[ref.field];
+      throw new NotFoundRefusal(meta.entity, ref.id, meta.listTool, 'Nothing was created.');
+    }
+  }
+}
+
+/** Error text for a failed upstream rule create. `APIError` is a PLAIN OBJECT {type, message, meta}; `ruleModel.validate` throws a real Error. */
+function ruleCreateErrorText(error: unknown): string {
+  const e = error as { message?: unknown; meta?: { conditionErrors?: unknown; actionErrors?: unknown } } | null;
+  const base = e && typeof e === 'object' && e.message ? String(e.message) : typeof error === 'string' ? error : 'Failed creating a new rule';
+  const positions: string[] = [];
+  const collect = (label: string, list: unknown) => {
+    if (!Array.isArray(list)) return;
+    list.forEach((entry, i) => {
+      if (entry !== null && entry !== undefined) positions.push(`${label} ${i}: ${typeof entry === 'string' ? entry : 'invalid'}`);
+    });
+  };
+  if (e && typeof e === 'object' && e.meta) {
+    collect('condition', e.meta.conditionErrors);
+    collect('action', e.meta.actionErrors);
+  }
+  return positions.length > 0 ? `${base} (${positions.join('; ')})` : base;
+}
+
+export interface RuleBatchSucceeded { index: number; id: string }
+export interface RuleBatchFailed { index: number; error: string }
+export interface RuleBatchResult { succeeded: RuleBatchSucceeded[]; failed: RuleBatchFailed[] }
+
+/**
+ * #485: create many rules in ONE write cycle with a verdict per item. NOT atomic and no
+ * rollback: rules created before a failure stay created.
+ *
+ * `items` carry the caller's ORIGINAL indices (the tool drops items that fail its own
+ * validation before calling), `total` is the size of the caller's whole array and only feeds
+ * the abort message.
+ *
+ * TWO PHASES inside one `queueWriteOperation`:
+ *  1. Read the reference listings ONCE (before the first raw create), then decide a
+ *     NotFoundRefusal per item.
+ *  2. Raw creates for the items that passed, each with retries 0 (a retried create can store
+ *     the same rule twice if the first attempt landed), each caught per item. Only raw calls
+ *     run here: an `adapter.*` call would nest the api lock and deadlock.
+ *
+ * INFRASTRUCTURE ERRORS STOP THE BATCH. When `_shouldDropPoolOnError` matches, the loop stops
+ * and the error is rethrown with the original text kept (so the classification still matches)
+ * and the indices already created. The rethrow surfaces as a whole-call failure; on the legacy
+ * path of queueWriteOperation it also forces a full shutdown. (In pooled mode the pooled entry
+ * is dropped only if the following sync fails.) Rate limits and upstream rejections are per
+ * item and the loop continues.
+ *
+ * COOPERATIVE DEADLINE: same 0.75 fraction of ACTUAL_OP_TIMEOUT_MS as `setBudgetBatch`,
+ * because `withOpTimeout` cannot cancel this callback. Items not reached go to `failed` with
+ * BUDGET_BATCH_DEADLINE_ERROR and were never sent upstream.
+ */
+export async function createRulesBatch(items: Array<{ index: number; rule: unknown }>, total: number): Promise<RuleBatchResult> {
+  observability.incrementToolCall('actual.rules.createBatch').catch(() => {});
+  return queueWriteOperation(async () => {
+    const startedAt = Date.now();
+    const succeeded: RuleBatchSucceeded[] = [];
+    const failed: RuleBatchFailed[] = [];
+
+    const listings = await loadRuleReferenceListings(items.map((i) => i.rule));
+    const toWrite: Array<{ index: number; rule: unknown }> = [];
+    for (const item of items) {
+      try {
+        assertRuleReferencesExist(item.rule, listings);
+        toWrite.push(item);
+      } catch (error) {
+        failed.push({ index: item.index, error: (error as Error).message });
+      }
+    }
+
+    const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;
+    for (const { index, rule } of toWrite) {
+      if (deadlineMs > 0 && Date.now() - startedAt > deadlineMs) {
+        failed.push({ index, error: BUDGET_BATCH_DEADLINE_ERROR });
+        continue;
+      }
+      try {
+        const raw = await withConcurrency(() =>
+          retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })
+        );
+        succeeded.push({ index, id: normalizeToId(raw) });
+      } catch (error) {
+        const msg = ruleCreateErrorText(error);
+        if (_shouldDropPoolOnError(error)) {
+          const applied = succeeded.map((x) => x.index).join(', ') || 'none';
+          throw new Error(
+            `Rules batch aborted after ${succeeded.length} of ${total} items (applied: ${applied}): ${msg}. ` +
+              'Read back with actual_rules_get before retrying.',
+            { cause: error },
+          );
+        }
+        failed.push({ index, error: msg });
+      }
+    }
+
+    succeeded.sort((a, b) => a.index - b.index);
+    failed.sort((a, b) => a.index - b.index);
+    return { succeeded, failed };
+  }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
+}
 export async function createRule(rule: unknown): Promise<string> {
   observability.incrementToolCall('actual.rules.create').catch(() => {});
   return queueWriteOperation(async () => {
+    // #485: the reference guard shares this drain's cached listings with the write.
+    assertRuleReferencesExist(rule, await loadRuleReferenceListings([rule]));
     const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
@@ -4448,6 +4634,7 @@ export default {
   deletePayee,
   getRules,
   createRule,
+  createRulesBatch,
   updateRule,
   deleteRule,
   upsertRule,

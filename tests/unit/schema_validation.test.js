@@ -55,6 +55,7 @@ async function expectCallError(tool, input, label) {
   // Import tools from compiled dist (requires `npm run build` first)
   const [
     rules_create,
+    rules_create_batch,
     batch,
     transfer,
     setAmount,
@@ -76,6 +77,7 @@ async function expectCallError(tool, input, label) {
     entities_search_tool,
   ] = await Promise.all([
     import('../../dist/src/tools/rules_create.js').then(m => m.default),
+    import('../../dist/src/tools/rules_create_batch.js').then(m => m.default),
     import('../../dist/src/tools/budget_updates_batch.js').then(m => m.default),
     import('../../dist/src/tools/budgets_transfer.js').then(m => m.default),
     import('../../dist/src/tools/budgets_setAmount.js').then(m => m.default),
@@ -115,6 +117,18 @@ async function expectCallError(tool, input, label) {
     conditions: [{ field: 'notes', op: 'contains', value: 'test' }],
     actions:    [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }],
   }, 'valid minimal rule')) fail();
+
+  // ── actual_rules_create_batch (#485) ────────────────────────────────────
+  console.log('\n[actual_rules_create_batch]');
+
+  const batchRule = { conditions: [{ field: 'notes', op: 'contains', value: 'test' }], actions: [{ op: 'set', field: 'notes', value: 'n' }] };
+  if (!expectParseError(rules_create_batch, {}, 'empty input, missing rules')) fail();
+  if (!expectParseError(rules_create_batch, { rules: [] }, 'rules must have at least 1 item')) fail();
+  if (!expectParseError(rules_create_batch, { rules: Array.from({ length: 51 }, () => batchRule) }, '51 rules exceeds the cap')) fail();
+  if (!expectParseError(rules_create_batch, { rules: [{ ...batchRule, stage: 'default' }] }, 'stage "default" is rejected')) fail();
+  if (!expectParseError(rules_create_batch, { rules: [{ ...batchRule, conditionsOp: 'xor' }] }, 'conditionsOp must be and|or')) fail();
+  if (!expectParseError(rules_create_batch, { rules: [{ conditions: batchRule.conditions }] }, 'rule missing actions')) fail();
+  if (!expectParseOk(rules_create_batch, { rules: Array.from({ length: 50 }, () => batchRule) }, '50 rules is accepted')) fail();
 
   // ── actual_budget_updates_batch ─────────────────────────────────────────
   console.log('\n[actual_budget_updates_batch]');

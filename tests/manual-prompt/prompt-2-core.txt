@@ -21,7 +21,7 @@ WHAT IT TESTS
   Phase 3  — Category Groups & Categories    (6 tools)
   Phase 4  — Payees                          (6 tools)
   Phase 5  — Rules                           (4 tools)
-  Phase 5b — Batch, Uncategorized, Upsert    (3 tools)
+  Phase 5b — Batch, Uncategorized, Upsert    (4 tools)
   Phase 6  — Transactions                   (12 tools)
   Phase 6b — Schedules                       (4 tools)
   Phase 6c — Tags                            (4 tools)
@@ -203,7 +203,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 ---
 
-**Phase 5b — Batch, Uncategorized & Rules-Upsert (3 tools):**
+**Phase 5b — Batch, Uncategorized & Rules-Upsert (4 tools):**
 
 - actual_transactions_uncategorized (summary mode — default)
   Input: no parameters (defaults to all-time)
@@ -228,6 +228,19 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
   Second call: same conditions again
     Expect: { created: false, id: "{upsert_rule_id}" } (same id, no duplicate)
   Verify: actual_rules_get contains exactly 1 rule with that marker
+
+- actual_rules_create_batch (best-effort batch of rules)
+  Positive: { rules: [ { conditions: [{field: "notes", op: "contains", value: "MCP-RuleBatch-{TS}"}],
+                         actions: [{op: "set", field: "notes", value: "MCP-RuleBatch-{TS}-matched"}] },
+                       { conditions: [{field: "bogus_field", op: "is", value: "x"}],
+                         actions: [{op: "set", field: "notes", value: "MCP-RuleBatch-{TS}-bad"}] } ] }
+  Expect: total 2, successCount 1, failureCount 1; succeeded[0] has index 0 and an id (save as `{batch_rule_id}`);
+          failed[0] has index 1 and a readable error (not "[object Object]")
+  Verify: actual_rules_get contains `{batch_rule_id}` and no rule for the second item
+  Negative: { rules: [ { conditions: [{field: "notes", op: "contains", value: "MCP-RuleBatch-{TS}"}],
+                         actions: [{op: "set", field: "category", value: "19999999-0000-4000-8000-000000000009"}] } ] }
+  Expect: successCount 0 and failed[0].error says the category was not found and names that id; no rule created
+  Cleanup: actual_rules_delete { id: "{batch_rule_id}" }
 
 ---
 
@@ -404,11 +417,11 @@ Phase 2b Account Groups:   X / 4
 Phase 3  Categories:       X / 6
 Phase 4  Payees:           X / 6
 Phase 5  Rules:            X / 4
-Phase 5b Batch/Upsert:     X / 3
+Phase 5b Batch/Upsert:     X / 4
 Phase 6  Transactions:     X / 12
 Phase 6b Schedules:        X / 4
 Phase 6c Tags:             X / 4
-Total:                     X / 49
+Total:                     X / 50
 Failed:        X
 Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}

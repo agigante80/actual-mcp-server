@@ -195,7 +195,8 @@ something.
 | `actual_budget_updates_batch` | traced in #516: `adapter.setBudgetBatch` (the tool no longer calls the raw api). The bracket is upstream `batchMessages`, not a transaction, so a mid-batch failure LEAVES earlier writes applied; there is no rollback. Each item gets its own verdict, with category and month guards applied before any write | none; the non-atomic contract is stated in the tool description |
 | `actual_categories_create` | not traced | trace for an unvalidated `group_id` (shape D) |
 | `actual_category_groups_create` | not traced | trace for a silent duplicate-name outcome |
-| `actual_rules_create` | not traced | trace for an unvalidated payee or category in conditions and actions |
+| `actual_rules_create` | traced in #485: upstream `createRule` checks field, operator and nullability only and stores a rule whose category, payee or account id does not exist. `adapter.createRule` now refuses a missing reference with a `NotFoundRefusal` (`assertRuleReferencesExist`, listings read inside the write cycle) | `link-schedule` values are not checked; `upsertRule`, `updateRule` and `updatePayee`'s default-category rule write stay unguarded (#522) |
+| `actual_rules_create_batch` | traced in #485: `adapter.createRulesBatch`, one write cycle, the same reference guard per item, no retry on a create, each upstream rejection reported per item. NOT atomic: a mid-batch failure leaves earlier rules created | none; the non-atomic contract is stated in the tool description |
 | `actual_rules_create_or_update` | not traced | same as `actual_rules_create`, plus the update branch |
 | `actual_payees_create` | not traced | trace for a silent merge into an existing payee |
 | `actual_tags_create` | not traced | trace for a silent no-op on a duplicate tag |

@@ -38,6 +38,8 @@ process.env.ACTUAL_PASSWORD       = process.env.ACTUAL_PASSWORD       ?? 'stub-p
 const ALLOWLIST = new Set([
   'actual_rules_create.actions.items.value',
   'actual_rules_create.actions.items.options',
+  'actual_rules_create_batch.rules.items.actions.items.value',
+  'actual_rules_create_batch.rules.items.actions.items.options',
   'actual_rules_create_or_update.actions.items.value',
   'actual_rules_create_or_update.actions.items.options',
   'actual_rules_update.fields.actions.items.value',

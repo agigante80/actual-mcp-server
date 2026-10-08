@@ -85,6 +85,11 @@ console.log('Running generated tools smoke tests');
     mergePayees: ['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'],
     getRules: [{ id: '30000000-0000-4000-8000-000000000001', conditions: [] }],
     createRule: 'rule-new',
+    // #485: createRulesBatch returns the per-item verdicts (original indices); the tool adds the counts.
+    createRulesBatch: {
+      succeeded: [{ index: 0, id: 'rule-new' }],
+      failed: [],
+    },
     deleteRule: null,
     updateRule: null,
     // #376: rules_create_or_update calls adapter.upsertRule now (the read-match-write
@@ -239,7 +244,9 @@ console.log('Running generated tools smoke tests');
   if (name.includes('payees_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated' };
   if (name.includes('payees_merge')) inputExample.targetId = '11111111-1111-4111-8111-111111111111', inputExample.mergeIds = ['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'];
   if (name.includes('payee_rules_get')) inputExample.payeeId = '40000000-0000-4000-8000-000000000001';
-  if (name.includes('rules_create') && !name.includes('or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
+  if (name.includes('rules_create') && !name.includes('or_update') && !name.includes('batch')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
+  // #485: rules_create_batch takes an array of rules (the plain rules_create example above must not match it).
+  if (name.includes('rules_create_batch')) inputExample.rules = [{ conditions: [{ field: 'description', op: 'contains', value: 'test' }], actions: [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }] }];
   if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_delete')) inputExample.id = '30000000-0000-4000-8000-000000000001'; // matches getRules stub: { id: '30000000-0000-4000-8000-000000000001' }
   if (name.includes('rules_update')) inputExample.id = '30000000-0000-4000-8000-000000000001', inputExample.fields = { conditions: [] };
@@ -425,6 +432,14 @@ console.log('Running generated tools smoke tests');
       if (n === 'category_groups_create') {
         if (typeof res?.id !== 'string') shapeErr(`expected id string`);
         if (res?.success !== true) shapeErr(`expected success=true`);
+      }
+      // rules_create_batch: createTool wraps the batch verdicts in { result }
+      if (n === 'rules_create_batch') {
+        const r = res?.result;
+        if (!Array.isArray(r?.succeeded)) shapeErr(`expected result.succeeded array`);
+        if (!Array.isArray(r?.failed)) shapeErr(`expected result.failed array`);
+        if (r?.total !== 1 || r?.successCount !== 1 || r?.failureCount !== 0) shapeErr(`expected total 1, successCount 1, failureCount 0`);
+        if (r?.succeeded?.[0]?.id !== 'rule-new') shapeErr(`expected succeeded[0].id rule-new`);
       }
       // rules_create: old ToolDefinition pattern, returns { id, success }
       if (n === 'rules_create') {

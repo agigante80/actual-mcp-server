@@ -193,6 +193,66 @@ export async function rulesTests(client, context) {
     }
   }
 
+  // #485: actual_rules_create_batch. One good rule and one rule upstream rejects (unknown
+  // condition field), then a dangling category reference, which both create tools now refuse.
+  console.log("\n#485: actual_rules_create_batch (one good, one upstream-rejected)...");
+  {
+    const stamp = Date.now();
+    const batchMarker = `MCP-Rule-Batch-${stamp}`;
+    const countRules = async () => {
+      const rd = await callTool("actual_rules_get", {});
+      const arr = rd.rules || rd.result || rd || [];
+      return Array.isArray(arr) ? arr : [];
+    };
+    const before = (await countRules()).length;
+    const out = await callTool("actual_rules_create_batch", {
+      rules: [
+        { conditions: [{ field: "notes", op: "contains", value: batchMarker }], actions: [{ op: "set", field: "category", value: context.categoryId }] },
+        { conditions: [{ field: "bogus_field", op: "is", value: "x" }], actions: [{ op: "set", field: "notes", value: batchMarker }] },
+      ],
+    });
+    const res = out.result || out;
+    const createdId = res.succeeded?.[0]?.id;
+    if (res.total === 2 && res.successCount === 1 && res.failureCount === 1 && res.succeeded?.[0]?.index === 0 && createdId
+        && res.failed?.[0]?.index === 1 && res.failed[0].error && !String(res.failed[0].error).includes("[object Object]")) {
+      console.log(`  ok batch: 1 created (${createdId}), item 1 failed: ${String(res.failed[0].error).slice(0, 70)}`);
+    } else {
+      fail(`Batch result shape wrong: ${JSON.stringify(res).slice(0, 200)}`);
+    }
+    // Read-back: the rule exists and exactly one rule was added (nothing from the failed item).
+    const after = await countRules();
+    if (createdId && after.some(r => r.id === createdId) && after.length === before + 1) {
+      console.log("  ok batch read-back: the created rule exists, rule count +1");
+    } else {
+      fail(`Batch read-back: expected rule ${createdId} present and count ${before + 1}, got count ${after.length}`);
+    }
+    if (createdId) {
+      try { await callTool("actual_rules_delete", { id: createdId }); } catch (err) { fail(`Could not delete the batch-created rule ${createdId}: ${err.message}. That is residue.`); }
+    }
+
+    // Negative: a category id that does not exist is refused by BOTH create tools.
+    const ghost = "19999999-0000-4000-8000-000000000009";
+    const ghostRule = { conditions: [{ field: "notes", op: "contains", value: batchMarker }], actions: [{ op: "set", field: "category", value: ghost }] };
+    const batchGhost = (await callTool("actual_rules_create_batch", { rules: [ghostRule] })).result;
+    const bge = batchGhost?.failed?.[0]?.error ?? "";
+    if (batchGhost?.successCount === 0 && /not found/i.test(bge) && /available/i.test(bge) && bge.includes(ghost)) {
+      console.log("  ok batch negative: dangling category is a per-item not-found with the available list");
+    } else {
+      fail(`Batch negative: expected a not-found failure naming ${ghost}, got ${JSON.stringify(batchGhost).slice(0, 200)}`);
+    }
+    try {
+      const single = await callTool("actual_rules_create", ghostRule);
+      fail(`actual_rules_create accepted a dangling category id: ${JSON.stringify(single).slice(0, 120)}`);
+      const strayId = single.id || single.result?.id;
+      if (strayId) await callTool("actual_rules_delete", { id: strayId });
+    } catch (err) {
+      const msg = String(err.message);
+      if (/not found/i.test(msg) && /available/i.test(msg) && msg.includes(ghost)) console.log("  ok rules_create negative: dangling category refused with the available list");
+      else fail(`rules_create negative: expected a not-found error naming ${ghost}, got: ${msg.slice(0, 120)}`);
+    }
+    if ((await countRules()).length !== before) fail("Batch negative left a rule behind (residue)");
+  }
+
   // rules_delete: negative UUID test then real delete(s) + verify
   // FIXED(BUG-9): actual_rules_delete with nil-UUID now throws an actionable not-found error
   console.log("\nTesting rules_delete (negative UUID)...");

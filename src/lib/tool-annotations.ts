@@ -179,6 +179,7 @@ const ADDITIVE = new Set<string>([
   'actual_payees_create',
   'actual_payees_update',
   'actual_rules_create',
+  'actual_rules_create_batch',
   'actual_rules_create_or_update',
   'actual_rules_update',
   'actual_schedules_create',

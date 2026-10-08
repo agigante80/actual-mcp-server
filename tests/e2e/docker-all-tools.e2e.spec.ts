@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 82 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 83 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -14,7 +14,7 @@
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 
-test.describe('Docker E2E - ALL 82 TOOLS', () => {
+test.describe('Docker E2E - ALL 83 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -1280,6 +1280,54 @@ test.describe('Docker E2E - ALL 82 TOOLS', () => {
     const data = await mcp.call('actual_rules_get');
     const rules = (Array.isArray(data) ? data : (data?.rules ?? [])) as any[];
     expect(rules.find((r: any) => r?.id === rule.id)).toBeTruthy();
+  });
+
+  test('actual_rules_create - refuses a category id that does not exist (#485)', async ({ mcp }) => {
+    await expect(mcp.call('actual_rules_create', {
+      stage: 'pre',
+      conditionsOp: 'and',
+      conditions: [{ field: 'notes', op: 'contains', value: `E2E-Dangling-${uniqueSuffix()}` }],
+      actions: [{ op: 'set', field: 'category', value: '19999999-0000-4000-8000-000000000009' }],
+    })).rejects.toThrow(/not found/i);
+  });
+
+  test('actual_rules_create_batch - creates rules and reports a per-item verdict (#485)', async ({ mcp, makeCategory, cleanup }) => {
+    test.setTimeout(60000);
+    const category = await makeCategory();
+    const markers = [`E2E-Batch-${uniqueSuffix()}`, `E2E-Batch-${uniqueSuffix()}`];
+    const ghost = '19999999-0000-4000-8000-000000000009';
+    const mk = (marker: string, categoryId: string) => ({
+      stage: 'pre',
+      conditionsOp: 'and',
+      conditions: [{ field: 'notes', op: 'contains', value: marker }],
+      actions: [{ op: 'set', field: 'category', value: categoryId }],
+    });
+
+    const result = await mcp.call('actual_rules_create_batch', {
+      rules: [mk(markers[0], category.id), mk(`E2E-Batch-dangling-${uniqueSuffix()}`, ghost), mk(markers[1], category.id)],
+    });
+    for (const s of (result?.succeeded ?? []) as any[]) {
+      cleanup.add(CLEANUP_ORDER.rule, `batch rule ${s.id}`, async () => {
+        await mcp.call('actual_rules_delete', { id: s.id });
+      });
+    }
+    expect(result.total).toBe(3);
+    expect(result.successCount).toBe(2);
+    expect(result.failureCount).toBe(1);
+    expect(result.succeeded.map((x: any) => x.index)).toEqual([0, 2]);
+    expect(result.failed[0].index).toBe(1);
+    expect(result.failed[0].error).toContain(ghost);
+
+    // Read back: the two created rules exist, in the store.
+    const data = await mcp.call('actual_rules_get');
+    const rules = (Array.isArray(data) ? data : (data?.rules ?? [])) as any[];
+    for (const s of result.succeeded as any[]) {
+      expect(rules.find((r: any) => r?.id === s.id)).toBeTruthy();
+    }
+  });
+
+  test('actual_rules_create_batch - rejects an empty array at the schema (#485)', async ({ mcp }) => {
+    await expect(mcp.call('actual_rules_create_batch', { rules: [] })).rejects.toThrow(/Validation error: rules/);
   });
 
   test('actual_rules_update - should update rule', async ({ mcp, makeCategory, makeRule }) => {

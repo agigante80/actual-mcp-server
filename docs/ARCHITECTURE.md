@@ -139,7 +139,7 @@
 
 ### Tool Definitions
 
-82 tools organized by category:
+83 tools organized by category:
 
 ```
 src/tools/
@@ -206,8 +206,10 @@ src/tools/
 ├── payees_delete.ts
 ├── payees_merge.ts
 ├── payee_rules_get.ts                  # Payee Rules (1 tool)
-├── rules_get.ts                        # Rules (4 tools)
+├── rules_get.ts                        # Rules (6 tools)
 ├── rules_create.ts
+├── rules_create_batch.ts
+├── rules_create_or_update.ts
 ├── rules_update.ts
 ├── rules_delete.ts
 ├── tags_list.ts                        # Tags (4 tools)
@@ -346,7 +348,7 @@ actual-mcp-server/
 │   │   ├── setup.ts              # OIDC/JWKS factory (AUTH_PROVIDER=oidc)
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
-│   ├── tools/                    # MCP tool definitions (82 tools + index.ts)
+│   ├── tools/                    # MCP tool definitions (83 tools + index.ts)
 │   │   ├── server_info.ts        # Server info (1 tool)
 │   │   ├── session_*.ts          # Session management (2 tools)
 │   │   ├── accounts_*.ts         # Accounts (7 tools)
@@ -357,7 +359,7 @@ actual-mcp-server/
 │   │   ├── category_groups_*.ts  # Category groups (4 tools)
 │   │   ├── payees_*.ts           # Payees (6 tools)
 │   │   ├── payee_rules_get.ts    # Payee rules (1 tool)
-│   │   ├── rules_*.ts            # Rules (4 tools)
+│   │   ├── rules_*.ts            # Rules (6 tools)
 │   │   ├── tags_*.ts             # Tags (4 tools)
 │   │   ├── notes_*.ts            # Notes (2 tools)
 │   │   ├── query_run.ts          # Advanced ActualQL queries
@@ -377,7 +379,7 @@ actual-mcp-server/
 │   ├── e2e/                      # End-to-end tests (Playwright)
 │   │   ├── mcp-client.playwright.spec.ts  # Protocol compliance tests
 │   │   ├── docker.e2e.spec.ts             # Docker smoke tests
-│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 82 tools)
+│   │   ├── docker-all-tools.e2e.spec.ts   # All-tools Docker E2E (~80 named tests, all 83 tools)
 │   │   ├── run-docker-e2e.sh              # Docker test orchestrator
 │   │   └── (#366: the suites/ tree was removed. It never executed, and every doc that
 │   │        named it now points at docker-all-tools.e2e.spec.ts instead)
@@ -439,7 +441,7 @@ actual-mcp-server/
 5. Tool Registry Initialization
    └─> src/actualToolsManager.ts loads all tools
    └─> Validates tool schemas
-   └─> Registers 82 tools with MCP capabilities
+   └─> Registers 83 tools with MCP capabilities
 
 6. MCP Connection Setup
    └─> Create ActualMCPConnection instance

@@ -90,7 +90,7 @@ actual-mcp-server/
 │   ├── actualToolsManager.ts # Tool registry and dispatch
 │   ├── lib/                  # Adapter, connection pool, shared schemas, logging
 │   ├── server/               # HTTP and stdio transports
-│   └── tools/                # MCP tool definitions (82 tools)
+│   └── tools/                # MCP tool definitions (83 tools)
 ├── types/                    # Type declarations (do not edit)
 ├── tests/
 │   ├── unit/                 # Plain Node unit tests (the test:unit-js chain)
