@@ -752,6 +752,11 @@ test.describe('Docker E2E - ALL 82 TOOLS', () => {
       []) as any[];
     expect(rows.find((t: any) => t?.id === txn.id)?.notes).toBe(batchNote);
 
+    // NEGATIVE (#517): invalid input is a tool error, not a resolved fake failed item.
+    await expect(
+      mcp.call('actual_transactions_update_batch', { updates: 'not-an-array' }),
+    ).rejects.toThrow(/Validation error: updates/);
+
     // NEGATIVE: a non-existent id must not throw, and must not be counted as a success.
     const negData = await mcp.call('actual_transactions_update_batch', {
       updates: [{ id: '00000000-dead-beef-0000-000000000000', fields: { notes: 'should-fail' } }],

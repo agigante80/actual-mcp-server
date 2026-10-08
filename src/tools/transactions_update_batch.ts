@@ -57,32 +57,24 @@ Returns: { succeeded: [{id}], failed: [{id, error}], total, successCount, failur
 Example: { updates: [{ id: "txn-uuid-1", fields: { category: "cat-uuid" } }, { id: "txn-uuid-2", fields: { notes: "Reimbursement" } }] }`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
-    try {
-      const input = InputSchema.parse(args || {});
+    // No catch-all here (#517): a ZodError must reach actualToolsManager.callTool, which
+    // formats it, and a whole-call failure (no budget, timeout, lock) must surface as a
+    // tool error. Wrapping either as failed: [{id: 'batch'}] read as a per-item outcome.
+    const input = InputSchema.parse(args || {});
 
-      // Single adapter call: all updates share one init/sync/shutdown cycle (fixes issue #79).
-      // Calling adapter.updateTransaction() in a loop would trigger N separate budget sessions.
-      const { succeeded, failed } = await adapter.updateTransactionBatch(input.updates);
+    // Single adapter call: all updates share one init/sync/shutdown cycle (fixes issue #79).
+    // Calling adapter.updateTransaction() in a loop would trigger N separate budget sessions.
+    const { succeeded, failed } = await adapter.updateTransactionBatch(input.updates);
 
-      const result: BatchResult = {
-        succeeded,
-        failed,
-        total: input.updates.length,
-        successCount: succeeded.length,
-        failureCount: failed.length,
-      };
+    const result: BatchResult = {
+      succeeded,
+      failed,
+      total: input.updates.length,
+      successCount: succeeded.length,
+      failureCount: failed.length,
+    };
 
-      return result;
-    } catch (error: any) {
-      const message = error?.message || String(error);
-      return {
-        succeeded: [],
-        failed: [{ id: 'batch', error: `update_batch failed: ${message}` }],
-        total: 0,
-        successCount: 0,
-        failureCount: 1,
-      };
-    }
+    return result;
   },
 };
 
