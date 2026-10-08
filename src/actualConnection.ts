@@ -179,6 +179,11 @@ export async function shutdownActualForSession(sessionId: string) {
   }
 }
 
+function poolSummary() {
+  const { sessions: _sessions, ...summary } = connectionPool.getStats();
+  return summary;
+}
+
 export function getConnectionState() {
   // When using connection pooling, consider server initialized if pool is ready
   // (even with 0 active connections, pool being initialized means server is ready to accept sessions)
@@ -188,7 +193,9 @@ export function getConnectionState() {
   return {
     initialized: effectivelyInitialized,
     initializationError,
-    connectionPool: useConnectionPool ? connectionPool.getStats() : null,
+    // Aggregate figures only. This feeds the unauthenticated /health route, so the
+    // per-session list (full session ids) is left out on purpose.
+    connectionPool: useConnectionPool ? poolSummary() : null,
     idleTimeoutMinutes: useConnectionPool ? connectionPool.getIdleTimeoutMinutes() : null,
   };
 }

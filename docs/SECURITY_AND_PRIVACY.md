@@ -543,6 +543,17 @@ it is passed to `app.listen()`, so the server binds only to the configured inter
 at `0.0.0.0` only when remote clients must reach the MCP endpoint directly, and pair that with
 authentication (`MCP_SSE_AUTHORIZATION` or OIDC) and ideally a reverse proxy.
 
+#### Session ownership
+
+An MCP session id is bearer material for the Streamable HTTP transport, so each session
+belongs to the principal that initialized it (the OIDC subject, or the single static-bearer
+identity). A POST or GET on the MCP path that carries another principal's session id is
+answered exactly as an unknown session would be. `actual_session_list` lists only the
+caller's own sessions (its totals stay pool-wide), and `actual_session_close` only matches
+and closes the caller's own sessions. The unauthenticated `/health` endpoint reports pool
+counts only and never returns a session id. With authentication disabled every caller is
+the same anonymous principal, so nothing changes there.
+
 #### HTTP auth is required by default (#242)
 
 A blank `MCP_SSE_AUTHORIZATION` with `AUTH_PROVIDER` unset used to disable all HTTP

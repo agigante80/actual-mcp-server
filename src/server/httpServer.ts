@@ -34,6 +34,7 @@ import * as fs from 'node:fs';
 // Re-exported here for backward compatibility with any callers that imported
 // `requestContext` from this module.
 import { requestContext } from '../lib/requestContext.js';
+import { recordSessionOwner, forgetSessionOwner, sessionOwnerMatches } from '../lib/session-owners.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
 
 // #438 / #452: the init-failure classifier now lives in src/lib/init-failure.ts so BOTH
@@ -312,6 +313,7 @@ export async function startHttpServer(
     }
     transports.delete(sessionId);
     sessionInitPromises.delete(sessionId);
+    forgetSessionOwner(sessionId);
     logger.info(`[SESSION] Transport torn down for evicted session: ${sessionId}`);
   });
 
@@ -539,6 +541,9 @@ export async function startHttpServer(
         // to avoid duplicate noise and any risk of leaking credentials.
         initPromise.catch(() => {});
 
+        // The session belongs to the principal that initialized it. Resolved here,
+        // from this request, so the owner can never come from a later request.
+        const sessionOwner = resolvePrincipal(req);
         const transport = new StreamableHTTPServerTransport({
           sessionIdGenerator: () => randomUUID(),
           enableJsonResponse: true,
@@ -552,6 +557,7 @@ export async function startHttpServer(
               // Only register the transport if the pool connection succeeded.
               // The pool stamped lastActivity when it created the entry, so it
               // is already the source of truth for this session's idle clock.
+              recordSessionOwner(sid, sessionOwner);
               transports.set(sid, transport);
               logger.info(`[SESSION] Actual connection initialized for session: ${sid}`);
               resolveInit?.();
@@ -695,6 +701,32 @@ export async function startHttpServer(
         }
       }
       
+      // A session is usable only by the principal that created it. Another
+      // principal gets exactly the "Session not found" answer an unknown id gets,
+      // so the response does not confirm that the id exists. That includes the
+      // tools/list discovery fallback above: answering it with a 404 here while
+      // an unknown id gets the tool list would itself confirm the id is live.
+      if (!sessionOwnerMatches(sessionId, resolvePrincipal(req))) {
+        logger.warn(`[SESSION] Refused a request for session ${sessionId} from a principal that does not own it (method: ${method})`);
+        if (method === 'tools/list') {
+          res.json({
+            jsonrpc: '2.0',
+            id: payload?.id ?? null,
+            result: { tools: buildToolListEntries(toolsList, resolveToolMeta) },
+          });
+          return;
+        }
+        res.status(404).json({
+          jsonrpc: '2.0',
+          id: payload?.id ?? null,
+          error: {
+            code: -32001,
+            message: 'Session not found. Please re-initialize by calling initialize without mcp-session-id header.'
+          },
+        });
+        return;
+      }
+
       // Refresh the pool's idle clock for this session (single source of truth, #167).
       connectionPool.touch(sessionId);
 
@@ -751,6 +783,14 @@ export async function startHttpServer(
     const sessionId = req.headers['mcp-session-id'] as string | undefined;
     if (!sessionId) {
       res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'No session id' }, id: null });
+      return;
+    }
+    // Same ownership rule as the POST route, checked before the idle clock is
+    // touched so another principal cannot keep a session alive either. A refusal
+    // reads like an unknown session.
+    if (transports.has(sessionId) && !sessionOwnerMatches(sessionId, resolvePrincipal(req))) {
+      logger.warn(`[SESSION] Refused a GET for session ${sessionId} from a principal that does not own it`);
+      res.status(400).json({ jsonrpc: '2.0', error: { code: -32000, message: 'Transport not ready' }, id: null });
       return;
     }
     connectionPool.touch(sessionId); // Refresh the pool's idle clock (#167)
@@ -814,6 +854,9 @@ export async function startHttpServer(
   app.get('/mcp-info', (_req, res) => { res.json(mcpInfo()); });
   app.get('/mcp-info/http', (_req, res) => { res.json(mcpInfo()); });
 
+  // /health is unauthenticated, so it reports counts only. Session ids are bearer
+  // material for the transport and must never appear here; getConnectionState
+  // returns the pool's aggregate figures without the per-session list.
   app.get('/health', (_req, res) => {
     const state = getConnectionState();
     const poolStats = state.connectionPool || null;

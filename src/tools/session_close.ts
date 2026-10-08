@@ -3,19 +3,28 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import { connectionPool } from '../lib/ActualConnectionPool.js';
 import { shutdownActualForSession } from '../actualConnection.js';
 import { clearSessionBudgetState } from '../lib/actual-adapter.js';
+import { requestContext } from '../lib/requestContext.js';
+import { filterOwnedSessions } from '../lib/session-owners.js';
 
 const InputSchema = z.object({
-  sessionId: z.string().optional().describe('Session ID to close (partial match). If not provided, closes the oldest idle session.'),
+  sessionId: z.string().optional().describe('Session ID to close (partial match among your own sessions). If not provided, closes your oldest idle session.'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_session_close',
-  description: 'Close an idle MCP session to free up connection slots. Useful when you get "Max concurrent sessions reached" errors. Only closes sessions other than the current one.',
+  description: 'Close one of your idle MCP sessions to free up connection slots. Useful when you get "Max concurrent sessions reached" errors. Only closes sessions you opened, other than the current one.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     const stats = connectionPool.getStats();
-    
+    // Get the current session and principal from the request context: the
+    // session to protect from closing itself, and the owner to scope by.
+    const context = requestContext.getStore();
+    const currentSessionId = context?.sessionId;
+    // Only the caller's own sessions are candidates, and only their ids appear in
+    // any reply. Partial matching stays, because it runs over this list alone.
+    const ownSessions = filterOwnedSessions(stats.sessions, context?.principal);
+
     if (stats.totalSessions === 0) {
       return {
         success: false,
@@ -25,17 +34,12 @@ const tool: ToolDefinition = {
       };
     }
 
-    // Get current session ID from request context to prevent closing own session
-    const { requestContext } = await import('../server/httpServer.js');
-    const context = requestContext.getStore();
-    const currentSessionId = context?.sessionId;
-
     // Find session to close
     let targetSessionId: string | null = null;
 
     if (input.sessionId) {
       // Find session by partial match
-      const matchingSessions = stats.sessions.filter(s => 
+      const matchingSessions = ownSessions.filter(s => 
         s.sessionId.toLowerCase().includes(input.sessionId!.toLowerCase())
       );
       
@@ -43,7 +47,7 @@ const tool: ToolDefinition = {
         return {
           success: false,
           message: `No session found matching "${input.sessionId}"`,
-          availableSessions: stats.sessions.map(s => s.sessionId),
+          availableSessions: ownSessions.map(s => s.sessionId),
         };
       }
       
@@ -58,7 +62,7 @@ const tool: ToolDefinition = {
       targetSessionId = matchingSessions[0].sessionId;
     } else {
       // Close the oldest idle session (not current session)
-      const sortedSessions = [...stats.sessions]
+      const sortedSessions = [...ownSessions]
         .filter(s => !currentSessionId || !s.sessionId.includes(currentSessionId))
         .sort((a, b) => b.idleMinutes - a.idleMinutes);
       
@@ -91,7 +95,7 @@ const tool: ToolDefinition = {
         return {
           success: false,
           message: `Session ${targetSessionId} not found in connection pool`,
-          availableSessions: stats.sessions.map(s => s.sessionId),
+          availableSessions: ownSessions.map(s => s.sessionId),
         };
       }
 
