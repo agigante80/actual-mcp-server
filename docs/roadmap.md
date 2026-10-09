@@ -18,10 +18,12 @@ Chat clients (Gemini, LibreChat, Claude web) are limited to a few tool calls per
 Outcome: done (closed 2026-10-08). All five planned tickets (#517, #516, #485, #483, #486) shipped in v0.22.17 with dual-transport evidence; #477 was closed as split. `tools/list` went from 102,836 bytes (82 tools) to 101,827 bytes (83 tools) under a committed ceiling. The schema trim covered seven tools rather than the planned six. Review follow-ups went to Review follow-up hardening (#522, #525, #526) and API coverage and schedules (#527).
 
 ## Phase: Review follow-up hardening
-state: open
+state: done
 plan: docs/plans/review-follow-up-hardening.md
 
 Small, independent follow-ups that code reviews below the fix threshold turned into tickets: guard tests that could not fail, a stdio stdout line in dev mode, missing transport error logging, dotenv precedence in the non-server scripts, and OIDC wording. Each one is cheap and gate-ready. Grouping them clears the review debt in one pass, instead of letting it trickle into feature phases where it competes with work that has a deadline.
+
+Outcome (2026-10-09): done. All 15 tickets shipped in v0.22.19, released with dual-transport evidence. The phase review split #525 and #505 and created #532 (one shared comment stripper) and #533; nothing was dropped. The bounded review of the phase found no high or medium defects, and its lows went to Backlog as #535 to #541 rather than back into this phase.
 
 ## Phase: Write-path verification
 state: planned
