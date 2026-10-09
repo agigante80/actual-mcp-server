@@ -186,6 +186,7 @@ console.log('\n[#516] infrastructure errors abort the batch instead of becoming 
     'with the count, the applied indices, the original text and the read-back advice', threw?.message);
   // The pool-drop decision is isRetryableError && !isRateLimitError (_shouldDropPoolOnError delegates to exactly that).
   check(retryMod.isRetryableError(threw) && !retryMod.isRateLimitError(threw), 'the rethrown error is still classified as infrastructure (pool drop)');
+  check(threw?.cause instanceof Error && threw.cause.message === 'read ECONNRESET', '[#521] the abort carries the original error as cause');
   check(writes.length === 2 && events.at(-1) === 'bracket-exit', 'the loop stopped (item 3 never written) and the bracket was closed');
   // A rate limit is transient but does NOT drop the pool, so it stays a per-item failure.
   reset(); witness.reset(); amountFails = FOOD; amountFailMessage = 'Authentication failed: too-many-requests';

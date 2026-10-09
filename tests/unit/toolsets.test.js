@@ -454,6 +454,10 @@ const CHAT_REFERENCE_ALLOWLIST = {
     substitute: 'actual_query_run',
     reason: 'query_run reads the payees table (get_context payeeLimit text)',
   },
+  actual_transactions_get: {
+    substitute: 'actual_query_run',
+    reason: 'the update_batch description (#521) says to read applied ids back; query_run reads the transactions table',
+  },
   actual_get_id_by_name: {
     substitute: 'actual_query_run',
     reason: 'query_run reads the payees table (get_context payeeLimit text)',

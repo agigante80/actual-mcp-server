@@ -398,6 +398,46 @@ function _shouldDropPoolOnError(err: unknown): boolean {
 }
 
 /**
+ * The ONE rule for batch paths that catch per item (updateTransactionBatch, createRulesBatch,
+ * setBudgetBatch). INFRASTRUCTURE ERRORS STOP THE BATCH: when `_shouldDropPoolOnError` matches,
+ * this throws and the remaining items are never sent; otherwise it returns and the caller
+ * records the per-item failure and continues. Rate limits are not pool-drop errors, so they
+ * stay per item.
+ *
+ * The original error text is kept inside the message so `isRetryableError` (message-only) still
+ * classifies the wrapper, and `{ cause }` keeps the original error. The throw surfaces as a
+ * whole-call failure out of queueWriteOperation, which on the LEGACY path sets
+ * drainForceFullShutdown (full teardown). On the POOLED path the entry is dropped only if the
+ * drain's following `api.sync()` also fails with a pool-drop error. The trailing sync still runs
+ * on both paths and pushes the applied items, which is why the message tells the caller to read
+ * back instead of claiming a committed state.
+ *
+ * Per item this is realistically reached only by `out of memory` / `ENOMEM`: the raw update
+ * calls are LOCAL writes and the upstream sync is debounced, so a network error surfaces at the
+ * trailing sync rather than here (#521 premise). Do not re-litigate that; the guard is a
+ * defensive consistency rule shared by all three batch paths.
+ */
+function abortBatchOnInfrastructureError(
+  error: unknown,
+  ctx: {
+    label: string; // 'Transaction' | 'Rules' | 'Budget'
+    appliedCount: number;
+    total: number; // the caller's whole batch size
+    applied: string; // comma-joined ids or indices already applied ('' renders as 'none')
+    extra?: string; // appended inside the parentheses after '; '
+    message: string; // the original error text
+    readBackTool: string;
+  },
+): void {
+  if (!_shouldDropPoolOnError(error)) return;
+  throw new Error(
+    `${ctx.label} batch aborted after ${ctx.appliedCount} of ${ctx.total} items (applied: ${ctx.applied || 'none'}${ctx.extra ? '; ' + ctx.extra : ''}): ${ctx.message}. ` +
+      `Read back with ${ctx.readBackTool} before retrying.`,
+    { cause: error },
+  );
+}
+
+/**
  * Enforce per-request budget ACL before any pool branching or lock acquisition.
  *
  * Issue #156: the documented isolation model (CF-5 OIDC + AUTH_BUDGET_ACL)
@@ -2410,7 +2450,7 @@ export async function updateTransactionBatch(
 
     const succeeded: { id: string }[] = [];
     const failed: { id: string; error: string }[] = [];
-    for (const { id, fields } of updates) {
+    for (const [position, { id, fields }] of updates.entries()) {
       if (!existing.has(id)) {
         failed.push({ id, error: `Transaction "${id}" not found. Use actual_transactions_get to list transactions.` });
         continue;
@@ -2422,6 +2462,18 @@ export async function updateTransactionBatch(
         succeeded.push({ id });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        // Infrastructure errors stop the batch (see abortBatchOnInfrastructureError). The
+        // failing item's state is UNKNOWN (an ENOMEM can land after the local write ran);
+        // items after it were never sent.
+        abortBatchOnInfrastructureError(err, {
+          label: 'Transaction',
+          appliedCount: succeeded.length,
+          total: updates.length,
+          applied: succeeded.map((x) => x.id).join(', '),
+          extra: `failed before the abort: ${failed.map((x) => x.id).join(', ') || 'none'}; outcome unknown: ${id}; not attempted: ${updates.length - position - 1}`,
+          message,
+          readBackTool: 'actual_transactions_get',
+        });
         failed.push({ id, error: message });
       }
     }
@@ -2744,12 +2796,8 @@ export interface RuleBatchResult { succeeded: RuleBatchSucceeded[]; failed: Rule
  *     the same rule twice if the first attempt landed), each caught per item. Only raw calls
  *     run here: an `adapter.*` call would nest the api lock and deadlock.
  *
- * INFRASTRUCTURE ERRORS STOP THE BATCH. When `_shouldDropPoolOnError` matches, the loop stops
- * and the error is rethrown with the original text kept (so the classification still matches)
- * and the indices already created. The rethrow surfaces as a whole-call failure; on the legacy
- * path of queueWriteOperation it also forces a full shutdown. (In pooled mode the pooled entry
- * is dropped only if the following sync fails.) Rate limits and upstream rejections are per
- * item and the loop continues.
+ * INFRASTRUCTURE ERRORS STOP THE BATCH: see `abortBatchOnInfrastructureError`. Rate limits and
+ * upstream rejections are per item and the loop continues.
  *
  * COOPERATIVE DEADLINE: same 0.75 fraction of ACTUAL_OP_TIMEOUT_MS as `setBudgetBatch`,
  * because `withOpTimeout` cannot cancel this callback. Items not reached go to `failed` with
@@ -2786,14 +2834,14 @@ export async function createRulesBatch(items: Array<{ index: number; rule: unkno
         succeeded.push({ index, id: normalizeToId(raw) });
       } catch (error) {
         const msg = ruleCreateErrorText(error);
-        if (_shouldDropPoolOnError(error)) {
-          const applied = succeeded.map((x) => x.index).join(', ') || 'none';
-          throw new Error(
-            `Rules batch aborted after ${succeeded.length} of ${total} items (applied: ${applied}): ${msg}. ` +
-              'Read back with actual_rules_get before retrying.',
-            { cause: error },
-          );
-        }
+        abortBatchOnInfrastructureError(error, {
+          label: 'Rules',
+          appliedCount: succeeded.length,
+          total,
+          applied: succeeded.map((x) => x.index).join(', '),
+          message: msg,
+          readBackTool: 'actual_rules_get',
+        });
         failed.push({ index, error: msg });
       }
     }
@@ -3543,20 +3591,16 @@ export async function setBudgetBatch(items: BudgetBatchItem[]): Promise<BudgetBa
               succeeded.push(ref);
             } catch (error) {
               const msg = error instanceof Error ? error.message : String(error);
-              // INFRASTRUCTURE ERRORS ARE NOT PER-ITEM FAILURES. queueWriteOperation sets
-              // drainForceFullShutdown only when _shouldDropPoolOnError sees the error reach
-              // it. Swallowing a dropped connection into `failed` would leave the dead pooled
-              // connection in place for the next caller, so stop the loop and rethrow out of
-              // the bracket (upstream closes it in a `finally`). The original message text is
-              // kept so the pattern classification still matches. Rate-limit errors are not
-              // pool-drop errors (see _shouldDropPoolOnError), so they stay per-item failures.
-              if (_shouldDropPoolOnError(error)) {
-                const applied = succeeded.map((x) => x.index).join(', ') || 'none';
-                throw new Error(
-                  `Budget batch aborted after ${succeeded.length} of ${items.length} items (applied: ${applied}): ${msg}. ` +
-                    'Read back with actual_budgets_getMonth before retrying.',
-                );
-              }
+              // Infrastructure errors stop the batch (see abortBatchOnInfrastructureError);
+              // the throw leaves the bracket and upstream closes it in a `finally`.
+              abortBatchOnInfrastructureError(error, {
+                label: 'Budget',
+                appliedCount: succeeded.length,
+                total: items.length,
+                applied: succeeded.map((x) => x.index).join(', '),
+                message: msg,
+                readBackTool: 'actual_budgets_getMonth',
+              });
               failed.push({ ...ref, error: amountWritten ? `amount was applied, then the carryover failed: ${msg}` : msg });
             }
           }

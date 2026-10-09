@@ -60,6 +60,17 @@ const HINT = '(Array of {id, fields} objects. Maximum 50 per batch (higher value
       ok(!r.error?.includes('update_batch failed'), 'no catch-all prefix', r.error);
     }
 
+    console.log('\n[#521] an infrastructure abort from the adapter surfaces as a tool error');
+    adapter.updateTransactionBatch = async () => {
+      throw new Error(`Transaction batch aborted after 1 of 3 items (applied: ${ID1}; failed before the abort: none; outcome unknown: ${ID2}; not attempted: 1): read ECONNRESET. Read back with actual_transactions_get before retrying.`);
+    };
+    {
+      const r = await call({ updates: [{ id: ID1, fields: { notes: 'x' } }, { id: ID2, fields: { notes: 'y' } }] });
+      ok('error' in r, 'abort surfaces as a tool error', JSON.stringify(r.result));
+      ok(r.error?.includes('Transaction batch aborted'), 'abort text kept', r.error);
+      ok(r.error?.includes('actual_transactions_get before retrying'), 'read-back advice kept', r.error);
+    }
+
     console.log('\n[#517] per-item outcomes still resolve with real ids');
     const notFound = `Transaction "${ID2}" not found. Use actual_transactions_get to list transactions.`;
     adapter.updateTransactionBatch = async () => ({ succeeded: [{ id: ID1 }], failed: [{ id: ID2, error: notFound }] });
