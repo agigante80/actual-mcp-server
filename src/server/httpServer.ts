@@ -9,6 +9,7 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import logger, { resolveRequestId } from '../logger.js';
+import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession } from '../actualConnection.js';
@@ -398,6 +399,7 @@ export async function startHttpServer(
       },
       serverOptions
     );
+    attachTransportErrorLogger(server, 'http');
 
     // List tools handler
     server.setRequestHandler(ListToolsRequestSchema, async () => {

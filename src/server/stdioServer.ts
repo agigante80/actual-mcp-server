@@ -4,6 +4,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
 import logger from '../logger.js';
+import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { requestContext } from '../lib/requestContext.js';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
@@ -125,6 +126,7 @@ export async function startStdioServer(
     { name: serverDescription || 'actual-mcp-server', version: version || '0.1.0' },
     { capabilities, instructions: serverInstructions }
   );
+  attachTransportErrorLogger(server, 'stdio');
 
   // List tools handler — mirrors createServerInstance() in httpServer.ts
   server.setRequestHandler(ListToolsRequestSchema, async () => {
