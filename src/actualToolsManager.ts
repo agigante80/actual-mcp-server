@@ -201,10 +201,6 @@ class ActualToolsManager {
     return [...this.requirePolicy().published];
   }
 
-  isPublished(name: string): boolean {
-    return !this.requirePolicy().hidden.has(name) && this.tools.has(name);
-  }
-
   /** The resolved MCP_TOOLSETS / MCP_TOOLS / MCP_READ_ONLY, for server_info. */
   getToolPolicy(): { toolsets: string[]; tools: string[]; readOnly: boolean } {
     const { toolsets, tools, readOnly } = this.requirePolicy().settings;

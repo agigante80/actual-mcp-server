@@ -186,14 +186,18 @@ await check('NEGATIVE: a configuration that resolves to zero tools fails startup
   throwsMatching(() => resolve({ toolsets: 'structure', readOnly: true }), /0 tools/, 'structure is all writers');
 });
 
-await check('the hide reason is the setting responsible', () => {
+await check('the hide reason is the setting responsible (MCP_READ_ONLY first when both apply)', () => {
   const policy = resolve({ toolsets: 'query', readOnly: true });
-  assert.strictEqual(policy.hidden.get('actual_transactions_delete'), 'MCP_TOOLSETS');
+  assert.strictEqual(policy.hidden.get('actual_transactions_delete'), 'MCP_READ_ONLY');
+  const queryNames = publishedOf({ toolsets: 'query' });
+  const nonWriter = registered.find((n) => !WRITE_CAPABLE.has(n) && !queryNames.includes(n));
+  assert.ok(nonWriter, 'a non-writer outside the query toolset must exist');
+  assert.strictEqual(policy.hidden.get(nonWriter), 'MCP_TOOLSETS');
   const readOnlyAll = resolve({ readOnly: true });
   assert.strictEqual(readOnlyAll.hidden.get('actual_bank_sync'), 'MCP_READ_ONLY');
 });
 
-await check('the resolved policy is immutable', () => {
+await check('the resolved policy object, published and settings are frozen', () => {
   const policy = resolve({});
   assert.ok(Object.isFrozen(policy) && Object.isFrozen(policy.published) && Object.isFrozen(policy.settings));
 });
@@ -360,7 +364,10 @@ await check('NEGATIVE: a synthetic tool with only a direct side effect (fs write
   assert.deepStrictEqual(problems, ['actual_synthetic_exporter: it can change state (fs.writeFile) but it is NOT in WRITE_CAPABLE']);
 });
 
-await check('the four non-queue mutators derive as writers on their own source', () => {
+// The three adapter-calling non-queue mutators derive as writers because `nonQueueWrites` is
+// built from their own calls, so this loop cannot fail for them; the real guard for those is
+// the pin of `nonQueueWrites` above. Only session_close (a direct side effect) can fail here.
+await check('session_close derives as a writer from its own direct side effect (the other three are writers by construction)', () => {
   for (const n of NON_QUEUE_MUTATORS) {
     const derived = adapterCallsOf(n).some((c) => writes.has(c)) || sideEffectsOf(n).length > 0;
     assert.ok(derived, `${n} must derive as a writer from its source, not from a name list`);
@@ -489,17 +496,52 @@ await check('callTool refuses a hidden tool with ToolUnavailableError naming MCP
   const original = adapter.deleteTransaction;
   let adapterCalls = 0;
   adapter.deleteTransaction = async () => { adapterCalls++; return {}; };
+  const args = { id: '00000000-0000-4000-8000-000000000001' };
   try {
     await manager.initialize({ toolsets: 'query', tools: '', readOnly: false });
-    await assert.rejects(
-      () => manager.callTool('actual_transactions_delete', { id: 'x' }),
-      (e) => e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS' && e.tool === 'actual_transactions_delete'
-        && /MCP_TOOLSETS/.test(e.message) && !isPreflightRefusal(e),
-    );
+    const err = await manager.callTool('actual_transactions_delete', args).then(() => null, (e) => e);
     assert.strictEqual(adapterCalls, 0, 'a refused call must not reach the adapter');
+    assert.ok(err instanceof ToolUnavailableError, `expected ToolUnavailableError, got ${err}`);
+    assert.strictEqual(err.setting, 'MCP_TOOLSETS');
+    assert.strictEqual(err.tool, 'actual_transactions_delete');
+    assert.ok(/MCP_TOOLSETS/.test(err.message));
+    assert.ok(!isPreflightRefusal(err));
+    // Positive control: the stub is live, so the 0 above is meaningful.
+    await manager.initialize({ toolsets: 'all', tools: '', readOnly: false });
+    const ok = await manager.callTool('actual_transactions_delete', args);
+    assert.deepStrictEqual(ok, { success: true });
+    assert.strictEqual(adapterCalls, 1, 'the same call under toolsets=all must reach the stubbed adapter');
   } finally {
     adapter.deleteTransaction = original;
   }
+});
+
+await check('callTool under chat + read-only refuses a writer naming MCP_READ_ONLY (read-only wins the reason)', async () => {
+  await manager.initialize({ toolsets: 'chat', tools: '', readOnly: true });
+  const err = await manager.callTool('actual_bank_sync', {}).then(() => null, (e) => e);
+  assert.ok(err instanceof ToolUnavailableError, `expected ToolUnavailableError, got ${err}`);
+  assert.strictEqual(err.setting, 'MCP_READ_ONLY');
+  assert.ok(/MCP_READ_ONLY=true/.test(err.message));
+});
+
+await check('unavailableError fails closed: it decides on the published list, not on hidden', async () => {
+  const { unavailableError } = toolsets;
+  const handBuilt = { published: Object.freeze(['actual_accounts_list']), hidden: new Map(), registered: 2, settings: {} };
+  const e1 = unavailableError(handBuilt, 'actual_bank_sync');
+  assert.ok(e1 instanceof ToolUnavailableError);
+  assert.strictEqual(e1.setting, 'MCP_TOOLSETS');
+  assert.strictEqual(unavailableError(handBuilt, 'actual_accounts_list'), undefined);
+  const chat = resolve({ toolsets: 'chat' });
+  chat.hidden.delete('actual_bank_sync');
+  assert.ok(unavailableError(chat, 'actual_bank_sync') instanceof ToolUnavailableError, 'a missing hidden entry must not unhide a tool');
+});
+
+await check('the resolver partitions the registry: published and hidden are disjoint and cover it', () => {
+  const policy = resolve({ toolsets: 'chat', readOnly: true });
+  const hiddenKeys = [...policy.hidden.keys()];
+  assert.deepStrictEqual(policy.published.filter((n) => policy.hidden.has(n)), []);
+  sameSet([...policy.published, ...hiddenKeys], registered);
+  assert.strictEqual(policy.published.length + hiddenKeys.length, registered.length);
 });
 
 await check('callTool refuses a write-capable tool under MCP_READ_ONLY=true with setting MCP_READ_ONLY', async () => {
@@ -518,19 +560,16 @@ await check('an unregistered name keeps "Tool not found" under the default confi
   );
 });
 
-await check('isPublished and getPublishedToolNames follow the stored policy', async () => {
+await check('getPublishedToolNames follows the stored policy', async () => {
   await manager.initialize({ toolsets: 'chat', tools: '', readOnly: false });
   sameSet(manager.getPublishedToolNames(), PRESETS.chat);
-  assert.ok(manager.isPublished(PRESETS.chat[0]));
-  assert.ok(!manager.isPublished('actual_bank_sync'));
-  assert.ok(!manager.isPublished('actual_no_such_tool'));
+  assert.ok(!manager.getPublishedToolNames().includes('actual_bank_sync'));
 });
 
 await check('NEGATIVE: before initialize() the manager fails closed instead of publishing everything', async () => {
   const fresh = (await import('../../dist/src/actualToolsManager.js?fresh-instance')).default;
   assert.notStrictEqual(fresh, manager, 'the fresh import must be a distinct instance');
   assert.throws(() => fresh.getPublishedToolNames(), /initialize\(\)/);
-  assert.throws(() => fresh.isPublished('actual_accounts_list'), /initialize\(\)/);
   await assert.rejects(() => fresh.callTool('actual_accounts_list', {}), /initialize\(\)/);
 });
 

@@ -12,9 +12,10 @@
  *
  * Design rules, each the answer to a way this can go wrong:
  *   - ONE source. resolvePublishedToolNames is pure and runs once, in
- *     actualToolsManager.initialize(), from the validated config. It returns an immutable
- *     policy (the published set plus a per-tool hide reason). Nothing reads process.env
- *     at dispatch time.
+ *     actualToolsManager.initialize(), from the validated config. It returns a frozen
+ *     policy (the published set plus a per-tool hide reason; the hide map is a ReadonlyMap
+ *     by type only, since Object.freeze does not reach Map contents). Nothing reads
+ *     process.env at dispatch time.
  *   - Hide AND refuse. Omitting a tool from tools/list is not access control, so callTool
  *     refuses an unpublished tool with ToolUnavailableError.
  *   - Fail loud. An unknown toolset, preset or tool name throws, and so does a
@@ -243,7 +244,12 @@ export interface ToolsetSettings {
   readOnly: boolean;
 }
 
-/** The resolved, immutable publication policy for one process. */
+/**
+ * The resolved publication policy for one process. The policy object, `published` and
+ * `settings` are frozen. `hidden` is a ReadonlyMap by type only (Object.freeze does not
+ * freeze Map contents). The refusal decision keys on the frozen `published` list, so
+ * altering `hidden` cannot unhide a tool; `hidden` only supplies the reason.
+ */
 export interface PublishedPolicy {
   /** Published tool names, in registry order. */
   readonly published: readonly string[];
@@ -320,9 +326,16 @@ export function resolvePublishedToolNames(
   const published: string[] = [];
   const hidden = new Map<string, ToolUnavailableSetting>();
   for (const name of registeredNames) {
-    if (!selected.has(name)) hidden.set(name, 'MCP_TOOLSETS');
-    else if (settings.readOnly && WRITE_CAPABLE.has(name)) hidden.set(name, 'MCP_READ_ONLY');
+    // Read-only is checked FIRST: while it is on, adding a writer to MCP_TOOLSETS or MCP_TOOLS
+    // cannot publish it, so MCP_READ_ONLY is the setting to change first when both hide a tool.
+    if (settings.readOnly && WRITE_CAPABLE.has(name)) hidden.set(name, 'MCP_READ_ONLY');
+    else if (!selected.has(name)) hidden.set(name, 'MCP_TOOLSETS');
     else published.push(name);
+  }
+
+  // Partition invariant: every registered name is exactly one of published or hidden.
+  if (published.length + hidden.size !== registeredNames.length || published.some((n) => hidden.has(n))) {
+    throw new Error('toolsets: published and hidden must partition the registry');
   }
 
   if (published.length === 0) {
@@ -345,8 +358,12 @@ export function resolvePublishedToolNames(
   });
 }
 
-/** The typed refusal for a registered but unpublished tool, built from the stored reason. */
+/**
+ * The typed refusal for a registered but unpublished tool. Fails CLOSED: the decision is the
+ * frozen `published` list; `hidden` only supplies the reason. The fallback reason is
+ * unreachable in production because the resolver enforces the partition invariant.
+ */
 export function unavailableError(policy: PublishedPolicy, tool: string): ToolUnavailableError | undefined {
-  const setting = policy.hidden.get(tool);
-  return setting ? new ToolUnavailableError(tool, setting) : undefined;
+  if (policy.published.includes(tool)) return undefined;
+  return new ToolUnavailableError(tool, policy.hidden.get(tool) ?? 'MCP_TOOLSETS');
 }

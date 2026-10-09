@@ -373,7 +373,7 @@ withheld under `MCP_READ_ONLY=true`.
 
 `MCP_TOOLSETS`, `MCP_TOOLS` and `MCP_READ_ONLY` choose which tools the server publishes.
 A tool that is not published is both left out of `tools/list` and refused if called by
-name; the refusal names the setting responsible.
+name; the refusal names the setting responsible. When both settings hide a tool, the refusal names `MCP_READ_ONLY`, because no toolset change can publish it while read-only is on.
 
 - `MCP_READ_ONLY=true` hides and refuses the 47 write-capable tools: every tool that
   reaches the adapter write queue, plus `actual_bank_sync`, `actual_budgets_export`,

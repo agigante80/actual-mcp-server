@@ -532,7 +532,7 @@ MCP_TOOLS=                              # extra tools by full name
 MCP_READ_ONLY=false                     # true hides and refuses write-capable tools
 ```
 
-`actualToolsManager.initialize()` resolves these once into an immutable policy (`src/lib/toolsets.ts`): the published list and, for every hidden tool, the setting that hid it. `tools/list` on every path reads that list, and `callTool` refuses a hidden tool with a `ToolUnavailableError` built from the stored reason. Dispatch never reads the environment. A configuration that publishes zero tools fails startup.
+`actualToolsManager.initialize()` resolves these once into a frozen policy (`src/lib/toolsets.ts`): the policy object, the published list and the settings are frozen, while the per-tool hide map is a `ReadonlyMap` by type only (`Object.freeze` does not reach Map contents). It holds, for every hidden tool, the setting that hid it (`MCP_READ_ONLY` first when both apply). `tools/list` on every path reads that list, and `callTool` refuses any tool not on the frozen published list with a `ToolUnavailableError` built from the stored reason, so altering the hide map cannot unhide a tool. Dispatch never reads the environment. A configuration that publishes zero tools fails startup.
 
 #### Security
 

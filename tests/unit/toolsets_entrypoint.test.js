@@ -160,8 +160,11 @@ await check('stdio: MCP_READ_ONLY=true lists no write-capable tool, and refuses 
 await check('stdio: unset settings list more than the preset (the default is unchanged)', async () => {
   const res = await stdioSession({}, [INIT, INITIALIZED, LIST]);
   const names = res.get(2).result.tools.map((t) => t.name);
-  assert.ok(PRESETS.chat.every((n) => names.includes(n)));
-  assert.ok(names.length > PRESETS.chat.length);
+  const registryManager = (await import('../../dist/src/actualToolsManager.js')).default;
+  await registryManager.initialize({ toolsets: '', tools: '', readOnly: false });
+  const registry = registryManager.getToolNames();
+  assert.ok(registry.length > 0);
+  assert.deepStrictEqual([...names].sort(), [...registry].sort());
 });
 
 // ---------------------------------------------------------------- startup failures
