@@ -292,8 +292,8 @@ PROMPT 2 (Core CRUD):
   Phase 3  Category Groups/Cats:      X / 6
   Phase 4  Payees:                    X / 6
   Phase 5  Rules:                     X / 4
-  Phase 5b Batch/Uncategorized/Ups.:  X / 3
-  Phase 6  Transactions:              X / 12
+  Phase 5b Batch/Uncategorized/Ups.:  X / 4
+  Phase 6  Transactions:              X / 11
   Phase 6b Schedules:                 X / 4
   Phase 6c Tags:                      X / 4
 

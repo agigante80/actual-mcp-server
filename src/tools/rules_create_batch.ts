@@ -51,7 +51,7 @@ Returns: { succeeded: [{index, id}], failed: [{index, error}], total, successCou
       failed.push(...res.failed);
     }
     failed.sort((a, b) => a.index - b.index);
-    succeeded.sort((a, b) => a.index - b.index);
+    // succeeded comes back sorted by index from adapter.createRulesBatch, which owns that order (#524).
     return { succeeded, failed, total, successCount: succeeded.length, failureCount: failed.length };
   },
 });

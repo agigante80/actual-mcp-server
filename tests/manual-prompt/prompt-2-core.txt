@@ -22,7 +22,7 @@ WHAT IT TESTS
   Phase 4  — Payees                          (6 tools)
   Phase 5  — Rules                           (4 tools)
   Phase 5b — Batch, Uncategorized, Upsert    (4 tools)
-  Phase 6  — Transactions                   (12 tools)
+  Phase 6  — Transactions                   (11 tools)
   Phase 6b — Schedules                       (4 tools)
   Phase 6c — Tags                            (4 tools)
 ─────────────────────────────────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 ---
 
-**Phase 6 — Transactions (12 tools):**
+**Phase 6 — Transactions (11 tools):**
 
 Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
 
@@ -418,10 +418,10 @@ Phase 3  Categories:       X / 6
 Phase 4  Payees:           X / 6
 Phase 5  Rules:            X / 4
 Phase 5b Batch/Upsert:     X / 4
-Phase 6  Transactions:     X / 12
+Phase 6  Transactions:     X / 11
 Phase 6b Schedules:        X / 4
 Phase 6c Tags:             X / 4
-Total:                     X / 50
+Total:                     X / 49
 Failed:        X
 Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}

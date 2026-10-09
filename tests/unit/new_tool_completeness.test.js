@@ -32,7 +32,7 @@ const check = (name, fn) => {
 };
 const fail = (msg) => { throw new Error(msg); };
 
-const TOOLS = (read('src/actualToolsManager.ts').match(/^\s*'(actual_[a-z0-9_]+)'/gm) || [])
+const TOOLS = (read('src/actualToolsManager.ts').match(/^\s*'(actual_[A-Za-z0-9_]+)'/gm) || [])
   .map((l) => l.trim().replace(/'/g, '').replace(/,$/, ''));
 
 /**
@@ -164,6 +164,9 @@ check('every prompt tally block adds up', () => {
 // caught the guard passing over the one file that ticket had left wrong (the table summed to 82
 // while the total below it still said 68). A guard that misses the document it was written for
 // is worse than none, so the README is now checked on its own terms.
+// It also compares that ONE stated grand total against the canonical registered count (#524):
+// the table can be self-consistent and still wrong. The earlier rule (never derive counts from
+// prompt BODIES) still holds; only the README's stated total is compared to TOOLS.length.
 check('the prompt README grand total matches its own table', () => {
   const text = read('tests/manual-prompt/README.md') || '';
   const stated = /\*\*Total:\s*(\d+)\s*tools across 3 prompts\*\*/.exec(text);
@@ -180,6 +183,9 @@ check('the prompt README grand total matches its own table', () => {
   if (rows < 10) return fail(`only ${rows} phase rows parsed from the README table; the format changed`);
   if (sum !== Number(stated[1])) {
     fail(`README says "${stated[1]} tools across 3 prompts" but its ${rows} table rows sum to ${sum}`);
+  }
+  if (Number(stated[1]) !== TOOLS.length) {
+    fail(`README says "${stated[1]} tools across 3 prompts" but ${TOOLS.length} tools are registered`);
   }
 });
 

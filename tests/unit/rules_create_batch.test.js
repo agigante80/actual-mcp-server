@@ -127,7 +127,7 @@ console.log('\n[#485] a rate limit is per item and the batch continues');
   behaviour = (n) => (n === 1 ? new Error('Too many requests') : null);
   const res = (await tool.call({ rules: [rule('a'), rule('b'), rule('c')] })).result;
   check(retryMod.isRateLimitError(new Error('Too many requests')), 'the stub is a real rate-limit error');
-  check(created.length === 3, 'item 1 was attempted exactly once (no retry) and item 2 still ran');
+  check(created.length === 3, 'item 1 was sent once and item 2 still ran (a rate limit is not transient, so this does not pin the retry count; the ECONNRESET abort case does)');
   check(res.failed.length === 1 && res.failed[0].index === 1 && /Too many requests/.test(res.failed[0].error) && res.succeeded.length === 2, 'item 1 is failed, no abort');
 }
 
@@ -197,6 +197,27 @@ console.log('\n[#485] the tool file holds no raw API access and no console');
   const src = readFileSync(new URL('../../src/tools/rules_create_batch.ts', import.meta.url), 'utf8');
   check(!/from\s+['"]@actual-app\/api|import\(\s*['"]@actual-app\/api|require\(\s*['"]@actual-app\/api/.test(src), 'no @actual-app/api import');
   check(!/console\./.test(src), 'no console.*');
+}
+
+console.log('\n[#524] result order is sorted by index');
+{
+  const idx = (a) => a.map((x) => x.index).join();
+  const ok = await run([rule('a'), rule('b'), rule('c')]);
+  check(idx(ok.succeeded) === '0,1,2' && ok.failed.length === 0, 'U1a: all valid, succeeded 0,1,2 and no failures');
+
+  const mixed = await run([rule('a', [{ op: 'set', field: 'category', value: GHOST }]), rule('b'), rule('c', [{ op: 'set', field: 'category', value: 'not-a-uuid' }])]);
+  check(idx(mixed.failed) === '0,2' && idx(mixed.succeeded) === '1', 'U1b: tool-side failure at a high index meets an adapter refusal at a low one, failed sorted 0,2', idx(mixed.failed));
+  check(/Category/.test(mixed.failed[0]?.error ?? '') && (mixed.failed[0]?.error ?? '').includes(GHOST), 'U1b: index 0 is the adapter refusal naming Category and the ghost id');
+
+  // Direct adapter calls: going through the tool cannot detect a missing adapter sort, because the tool's own failed.sort would mask it.
+  reset(); witness.reset();
+  behaviour = (n) => (n === 0 ? { type: 'APIError', message: 'Failed creating a new rule' } : null);
+  const f = await adapterMod.createRulesBatch([{ index: 0, rule: rule('a') }, { index: 1, rule: rule('b', [{ op: 'set', field: 'category', value: GHOST }]) }], 2);
+  check(idx(f.failed) === '0,1', 'U1c: adapter failed list (guard refusal then upstream rejection) is sorted 0,1', idx(f.failed));
+
+  reset(); witness.reset();
+  const s = await adapterMod.createRulesBatch([{ index: 3, rule: rule('d') }, { index: 1, rule: rule('b') }], 4);
+  check(idx(s.succeeded) === '1,3', 'U1d: adapter succeeded list is sorted 1,3', idx(s.succeeded));
 }
 
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
