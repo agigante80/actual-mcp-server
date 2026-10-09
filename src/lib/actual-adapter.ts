@@ -2177,7 +2177,7 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
 }
 
 /**
- * Atomic budget transfer between two categories within a single month.
+ * Budget transfer between two categories within a single month.
  *
  * Reads the current budget amounts, validates source-side sufficient funds,
  * and writes both adjustments inside ONE `queueWriteOperation` cycle. This
@@ -2186,9 +2186,12 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
  * full Playwright timeout when the upstream server's mutator queue stalled
  * between cycles.
  *
- * Both writes run inside `rawBatchBudgetUpdates` so the upstream Actual
- * Budget server treats them as one transaction, guaranteeing no partial
- * transfer is observable from the server's perspective.
+ * Both writes run inside `rawBatchBudgetUpdates`, upstream's
+ * `batch-budget-start` / `batch-budget-end` bracket. That bracket batches
+ * sync messages (`batchMessages`); it is not a database transaction and does
+ * not roll back a write that already ran, so the pair is not atomic: if the
+ * second write fails, the first stays applied. The source-funds check above
+ * runs before either write, which narrows that window but does not close it.
  */
 export interface TransferBudgetResult {
   transferred: number;
