@@ -31,6 +31,7 @@ import {
   adapterCallsInSource,
   classifyAdapterSource,
 } from './helpers/adapter-call-graph.js';
+import { stripTsComments } from './helpers/source-text.js';
 
 // The CI dummy env, set BEFORE anything imports src/config.ts (which exits on invalid env).
 process.env.ACTUAL_SERVER_URL ??= 'http://localhost:5006';
@@ -364,6 +365,49 @@ await check('NEGATIVE: a synthetic tool with only a direct side effect (fs write
   assert.deepStrictEqual(problems, ['actual_synthetic_exporter: it can change state (fs.writeFile) but it is NOT in WRITE_CAPABLE']);
 });
 
+await check('#533 U2 to U6o, P2 to P5: sideEffectsInSource is an import allowlist', () => {
+  const S = sideEffectsInSource;
+  const cases = [
+    ['U2', "import { promises as fsp } from 'fs';\nawait fsp.writeFile('x','y');", ['fs.promises']],
+    ['U3', "import fs, { readFileSync } from 'fs';\nfs.writeFileSync('x','y');", ['fs (namespace or default import)']],
+    ['U4', "const m = await import('node:fs/promises');", ['fs (dynamic import)']],
+    ['U5', "import { shutdownActual } from '../actualConnection.js';\nawait shutdownActual();", ['shutdownActual']],
+    ['U5b', 'await shutdownActual();', ['shutdownActual']],
+    ['U6', 'foo(); // shutdownActualForSession(', []],
+    ['U6b', "import { clearSessionBudgetState } from '../lib/actual-adapter.js';\nclearSessionBudgetState('s');", ['clearSessionBudgetState']],
+    ['U6c', "import { connectionPool } from '../lib/ActualConnectionPool.js';\nconnectionPool?.removeConnection('s');", ['connectionPool.removeConnection']],
+    ['U6d', "import { connectionPool as p } from '../lib/ActualConnectionPool.js';\np.removeConnection('s');", ['connectionPool.removeConnection']],
+    ['U6e', "import { connectionPool as p } from '../lib/ActualConnectionPool.js';\nhelper(p);", ['connectionPool (non-call use)']],
+    ['U6f', "import * as api from '@actual-app/api';\nawait api.deleteAccount('a');", ['@actual-app/api (static import)']],
+    ['U6g', "const api = await import('@actual-app/api');\nawait api.deleteAccount('a');", ['@actual-app/api (use other than .q)']],
+    ['U6h', "const fs = require('fs');\nfs.writeFileSync('x');", ['fs (require)']],
+    ['U6i', 'const m = await import(name);', ['dynamic import (non-literal specifier)']],
+    ['U6j', "import { openSync } from 'fs';", ['fs.openSync']],
+    ['U6k', "import { connectToActualForSession } from '../actualConnection.js';", ['connectToActualForSession']],
+    ['U6l', "import a from '../lib/actual-adapter.js';\nawait a.updateAccount('x', {});", ['actual-adapter (default import not named adapter)']],
+    ['U6m', 'const m = require(name);', ['require (non-literal specifier)']],
+    ['U6n', "import { createRequire } from 'node:module';\nconst r = createRequire(import.meta.url);\nr('fs').writeFileSync('x');", ['createRequire (require alias)']],
+    ['U6o', 'const m = await import(`fs`);', ['dynamic import (non-literal specifier)']],
+    ['P2', "import { readFileSync } from 'fs';\nconst a = readFileSync('x','utf8');", []],
+    ['P3', "import { connectionPool } from '../lib/ActualConnectionPool.js';\nconnectionPool.getStats(); connectionPool?.has('s');", []],
+    ['P4', "const api = await import('@actual-app/api');\nconst q = (api as any).q;", []],
+    ['P5', "import adapter from '../lib/actual-adapter.js';\nawait adapter.getAccounts();", []],
+  ];
+  const wrong = cases.filter(([, src, want]) => JSON.stringify(S(src)) !== JSON.stringify(want))
+    .map(([id, src, want]) => `${id}: wanted ${JSON.stringify(want)}, got ${JSON.stringify(S(src))}`);
+  assert.deepStrictEqual(wrong, []);
+});
+
+await check('#533 U10: the live side-effect baseline is exactly budgets_export and session_close', () => {
+  const live = Object.fromEntries(registered.map((n) => [n, sideEffectsOf(n)]).filter(([, r]) => r.length));
+  assert.deepStrictEqual(live, {
+    actual_budgets_export: ['fs.mkdir', 'fs.writeFile'],
+    actual_session_close: ['clearSessionBudgetState', 'shutdownActualForSession'],
+  });
+  assert.deepStrictEqual(sideEffectsOf('actual_server_info'), []);
+  assert.deepStrictEqual(sideEffectsOf('actual_session_list'), []);
+});
+
 // The three adapter-calling non-queue mutators derive as writers because `nonQueueWrites` is
 // built from their own calls, so this loop cannot fail for them; the real guard for those is
 // the pin of `nonQueueWrites` above. Only session_close (a direct side effect) can fail here.
@@ -610,11 +654,47 @@ function srcFiles(dir) {
   });
 }
 const SRC = srcFiles('src');
-const code = (f) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const code = (f) => stripTsComments(read(f));
+
+// #533: the single-dispatch check. Only src/actualToolsManager.ts may invoke a tool; any
+// other .call(/.apply(/.bind( (hasOwnProperty.call included) needs a reviewed exemption. A
+// getTool( caller outside the five reviewed registry readers is a review event. `files` maps a
+// repo-relative path to stripTsComments text; returns a sorted string[], [] when clean.
+const DISPATCHER = 'src/actualToolsManager.ts';
+const GETTOOL_READERS = new Set([
+  DISPATCHER, 'src/index.ts', 'src/lib/ActualMCPConnection.ts', 'src/server/httpServer.ts', 'src/server/stdioServer.ts',
+]);
+function dispatchProblems(files) {
+  const problems = [];
+  for (const [path, text] of Object.entries(files)) {
+    if (path !== DISPATCHER && (
+      /(?:\?\.|\.)\s*(?:call|apply|bind)\s*\(/.test(text)
+      || /\[\s*['"`](?:call|apply|bind)['"`]\s*\]\s*\(/.test(text)
+      || /\bReflect\s*\.\s*apply\s*\(/.test(text))) {
+      problems.push(`${path}: invokes .call(, .apply( or .bind( (only ${DISPATCHER} may dispatch a tool)`);
+    }
+    if (/\bgetTool\s*\(/.test(text) && !GETTOOL_READERS.has(path)) {
+      problems.push(`${path}: calls getTool( but is not a reviewed registry reader`);
+    }
+  }
+  return problems.sort();
+}
+
+await check('#533 U1 to U1d, P1: dispatchProblems catches every spelling and allows property reads', () => {
+  const D = (path, text) => dispatchProblems({ [path]: stripTsComments(text) });
+  const NOT_MGR = 'only src/actualToolsManager.ts may dispatch a tool';
+  assert.deepStrictEqual(D('src/tools/x.ts', 'export const r = actualToolsManager.getTool(name)?.call(args);'), [
+    'src/tools/x.ts: calls getTool( but is not a reviewed registry reader',
+    `src/tools/x.ts: invokes .call(, .apply( or .bind( (${NOT_MGR})`,
+  ]);
+  assert.deepStrictEqual(D('src/lib/x.ts', 'const t = mgr.lookup(n); await t.call(a);'), [`src/lib/x.ts: invokes .call(, .apply( or .bind( (${NOT_MGR})`]);
+  assert.deepStrictEqual(D('src/tools/x.ts', 'const d = mgr.getTool(n);'), ['src/tools/x.ts: calls getTool( but is not a reviewed registry reader']);
+  assert.deepStrictEqual(D('src/lib/x.ts', "await t['call'](a); Reflect.apply(t, null, [a]);"), [`src/lib/x.ts: invokes .call(, .apply( or .bind( (${NOT_MGR})`]);
+  assert.deepStrictEqual(D('src/server/httpServer.ts', 'const d = actualToolsManager.getTool(name)?.description;'), []);
+});
 
 await check('only actualToolsManager.ts dispatches a tool (the one place that refuses hidden tools)', () => {
-  const callers = SRC.filter((f) => /\btool\.call\(/.test(code(f)));
-  assert.deepStrictEqual(callers, ['src/actualToolsManager.ts']);
+  assert.deepStrictEqual(dispatchProblems(Object.fromEntries(SRC.map((f) => [f, code(f)]))), []);
   assert.ok(!/\binvoke\b/.test(code('src/server/httpServer.ts')), 'the dead invoke fallback must stay deleted');
 });
 

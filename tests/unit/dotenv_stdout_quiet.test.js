@@ -12,7 +12,7 @@
 // copy, and its env is a copy of ours with every DOTENV_* key deleted, so a knob set in
 // the developer's shell cannot change the result.
 //
-// fast: false is checked by source only (U4). DOTENV_FAST swaps in dotenv's alternate
+// fast: false is checked by source only (U4, dotenvProblems). DOTENV_FAST swaps in dotenv's alternate
 // parser, and no .env input was found that the two parse differently, so U3b sets the knob
 // but cannot observe it; the pin keeps an environment variable from choosing the parser.
 //
@@ -24,16 +24,17 @@
 
 import assert from 'assert';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { stripTsComments } from './helpers/source-text.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const DOTENV_URL = pathToFileURL(createRequire(import.meta.url).resolve('dotenv')).href;
 
-// The option set src/index.ts must pass. U4 checks the source carries each of these.
+// The option set the child cases pass (dotenvProblems pins the same options in src/index.ts).
 const PINNED = "{ quiet: true, debug: false, override: false, encoding: 'utf8', fast: false, path: path.resolve(process.cwd(), '.env') }";
 
 let passed = 0;
@@ -120,15 +121,111 @@ try {
   rmSync(dir, { recursive: true, force: true });
 }
 
-check('U4: src/index.ts makes exactly one dotenv.config call, with the pinned options', () => {
-  const src = readFileSync(join(ROOT, 'src/index.ts'), 'utf8');
-  const calls = src.match(/dotenv\.config\(/g) ?? [];
-  assert.strictEqual(calls.length, 1, `expected one dotenv.config( call, found ${calls.length}`);
-  const at = src.indexOf('dotenv.config(');
-  const arg = src.slice(at, src.indexOf(');', at));
-  for (const opt of [/quiet:\s*true/, /debug:\s*false/, /override:\s*false/, /encoding:\s*'utf8'/, /fast:\s*false/, /path:\s*path\.resolve\(process\.cwd\(\), '\.env'/]) {
-    assert.match(arg, opt, `the dotenv.config call no longer pins ${opt}`);
+// #533: the dotenv load-path guard. `files` maps a repo-relative path to stripTsComments text;
+// returns a sorted string[], [] when clean. A bounded text scanner (typescript 7 has no JS
+// scanner API): it resolves the dotenv specifiers, the one `config(` call and the one binding.
+const DOTENV_PINS = [
+  /quiet:\s*true/, /debug:\s*false/, /override:\s*false/, /encoding:\s*'utf8'/, /fast:\s*false/,
+  /path:\s*path\.resolve\(process\.cwd\(\), '\.env'\)/,
+];
+const INDEX = 'src/index.ts';
+
+function dotenvProblems(files) {
+  const problems = new Set();
+  const specRe = /(?:\bfrom\s*|\bimport\s*\(\s*|\brequire\s*\(\s*|\bimport\s*)(['"])dotenv(\/[^'"]*)?\1/g;
+  for (const [path, text] of Object.entries(files)) {
+    for (const m of text.matchAll(specRe)) {
+      if (path !== INDEX) problems.add(`${path}: loads dotenv (only ${INDEX} may)`);
+      if (m[2]) problems.add(`${path}: imports the dotenv subpath 'dotenv${m[2]}'`);
+    }
+    if (/\bconfigDotenv\s*\(/.test(text)) problems.add(`${path}: calls configDotenv(`);
   }
+  const idx = files[INDEX] ?? '';
+  const calls = [...idx.matchAll(/\bconfig\s*\(/g)];
+  const written = calls.length === 1 && idx.slice(0, calls[0].index).endsWith('dotenv.');
+  let callAt = -1;
+  if (!written) {
+    problems.add(`${INDEX}: expected exactly one config( call, written dotenv.config(, found ${calls.length}`);
+  } else {
+    callAt = calls[0].index;
+    const open = idx.indexOf('(', callAt);
+    let depth = 0;
+    let end = -1;
+    let quote = '';
+    for (let i = open; i < idx.length && end < 0; i++) {
+      const c = idx[i];
+      if (quote) { if (c === '\\') i++; else if (c === quote) quote = ''; continue; }
+      if (c === "'" || c === '"' || c === '`') quote = c;
+      else if (c === '(') depth++;
+      else if (c === ')' && --depth === 0) end = i;
+    }
+    const arg = idx.slice(open + 1, end < 0 ? idx.length : end).trim();
+    if (!(arg.startsWith('{') && arg.endsWith('}'))) {
+      problems.add(`${INDEX}: the dotenv.config argument is not an object literal`);
+    } else {
+      if (arg.includes('...')) problems.add(`${INDEX}: the dotenv.config argument uses a spread`);
+      for (const pin of DOTENV_PINS) {
+        if (!pin.test(arg)) problems.add(`${INDEX}: the dotenv.config call no longer pins ${pin}`);
+      }
+    }
+  }
+  const decl = idx.match(/\bconst\s+([A-Za-z_$][\w$]*)\s*=\s*await\s+import\(\s*(['"])dotenv\2\s*\)/);
+  if (!decl) {
+    problems.add(`${INDEX}: dotenv is not bound by const <name> = await import('dotenv')`);
+  } else {
+    const declAt = decl.index + decl[0].indexOf(decl[1], 'const'.length);
+    const uses = [...idx.matchAll(new RegExp(`(?<![.\\w$'"])${decl[1].replace(/\$/g, '\\$&')}(?![\\w$])`, 'g'))];
+    // The allowed call occurrence is the binding just before `.config(`.
+    const callBinding = callAt >= 0 ? callAt - 'dotenv.'.length : -1;
+    if (uses.some((u) => u.index !== declAt && u.index !== callBinding)) {
+      problems.add(`${INDEX}: the dotenv binding is used other than the one dotenv.config( call`);
+    }
+  }
+  return [...problems].sort();
+}
+
+function srcTsFiles(dir) {
+  return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((d) => {
+    const rel = `${dir}/${d.name}`;
+    return d.isDirectory() ? srcTsFiles(rel) : rel.endsWith('.ts') ? [rel] : [];
+  });
+}
+const liveSrc = () => Object.fromEntries(srcTsFiles('src').map((f) => [f, stripTsComments(readFileSync(join(ROOT, f), 'utf8'))]));
+const rawIndex = readFileSync(join(ROOT, INDEX), 'utf8');
+// The raw dotenv.config({...}); statement in the live file, so fixtures follow the file.
+const cfgStart = rawIndex.indexOf('dotenv.config(');
+const cfgEnd = rawIndex.indexOf(');', cfgStart) + 2;
+const cfgStmt = rawIndex.slice(cfgStart, cfgEnd);
+const withIndex = (raw, extra = {}) => ({ ...liveSrc(), [INDEX]: stripTsComments(raw), ...extra });
+
+check('U4: src/ loads dotenv once, in src/index.ts, with the pinned options (comment-stripped, #533)', () => {
+  assert.deepStrictEqual(dotenvProblems(liveSrc()), []);
+});
+
+check('#533 P6, U7 to U9d: dotenvProblems fixtures', () => {
+  assert.ok(cfgStmt.endsWith('});'), 'fixture anchor: the dotenv.config statement');
+  assert.deepStrictEqual(dotenvProblems(withIndex(rawIndex)), []); // P6
+  assert.deepStrictEqual(
+    dotenvProblems(withIndex(rawIndex.replace(cfgStmt, `/* ${cfgStmt} */\n(await import('dotenv')).config();`))), // U7
+    ['src/index.ts: expected exactly one config( call, written dotenv.config(, found 1']);
+  assert.deepStrictEqual(
+    dotenvProblems({ ...liveSrc(), 'src/lib/env.ts': "import 'dotenv/config';" }), // U8
+    ["src/lib/env.ts: imports the dotenv subpath 'dotenv/config'", 'src/lib/env.ts: loads dotenv (only src/index.ts may)']);
+  assert.deepStrictEqual(
+    dotenvProblems({ ...liveSrc(), 'src/lib/env.ts': "import { configDotenv } from 'dotenv';\nconfigDotenv();" }), // U8b
+    ['src/lib/env.ts: calls configDotenv(', 'src/lib/env.ts: loads dotenv (only src/index.ts may)']);
+  assert.deepStrictEqual(
+    dotenvProblems(withIndex(rawIndex.replace('dotenv.config({', 'dotenv.config({ ...opts,'))), // U9
+    ['src/index.ts: the dotenv.config argument uses a spread']);
+  assert.deepStrictEqual(
+    dotenvProblems(withIndex(rawIndex.replace(cfgStmt, `${cfgStmt}\n    const c = dotenv.config; c();`))), // U9c
+    ['src/index.ts: the dotenv binding is used other than the one dotenv.config( call']);
+  assert.deepStrictEqual(
+    dotenvProblems(withIndex(rawIndex.replace(cfgStmt, `${cfgStmt}\n    dotenv['config']();`))), // U9d
+    ['src/index.ts: the dotenv binding is used other than the one dotenv.config( call']);
+  const b = dotenvProblems(withIndex(rawIndex.replace('quiet: true,', '/* quiet: true, */ quiet: false,'))); // U9b
+  assert.strictEqual(b.length, 1, JSON.stringify(b));
+  assert.match(b[0], /no longer pins .*quiet/);
 });
 
 check('U4: nothing under src/ sets or reads DOTENV_CONFIG_QUIET (one control, not two)', () => {

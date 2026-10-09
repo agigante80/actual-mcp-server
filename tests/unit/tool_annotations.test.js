@@ -23,7 +23,8 @@
 import assert from 'assert';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { ROOT, classifyAdapterMethods, adapterCallsOf, stripComments, toolFileOf } from './helpers/adapter-call-graph.js';
+import { ROOT, classifyAdapterMethods, adapterCallsOf, toolFileOf } from './helpers/adapter-call-graph.js';
+import { stripTsComments } from './helpers/source-text.js';
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 let passed = 0;
@@ -169,7 +170,7 @@ check('a tool whose OWN description claims upsert semantics is marked idempotent
   const liars = names.filter((n) => {
     const file = toolFileOf(n);
     if (!existsSync(join(ROOT, file))) throw new Error(`${n}: tool file ${file} is missing (fails closed)`);
-    const desc = stripComments(read(file));
+    const desc = stripTsComments(read(file));
     const claimsUpsert = /\bupsert\b/i.test(desc);
     return claimsUpsert && !annotationsFor(n).idempotentHint;
   });
