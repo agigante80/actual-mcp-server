@@ -12,6 +12,9 @@
 // console.log/info/warn/error/debug, and @actual-app/api 26.7.0 already calls
 // console.log at 14 sites and console.warn/error at 15, and stdio survives them
 // today because of that hijack.
+// Note (#502): console.* calls made BEFORE the logger loads (@dabh/diagnostics during
+// winston.createLogger, the --debug notice) are covered by installPreLoggerStderrConsole()
+// in src/index.ts, since the logger hijack above does not exist yet at that point.
 //
 // The genuinely uncovered failure mode is a direct `process.stdout.write` (or
 // any raw write to fd 1) from the dependency, which the console hijack does NOT

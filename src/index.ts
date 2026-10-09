@@ -9,6 +9,7 @@ import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
+import { format } from 'node:util';
 
 /**
  * #277: the single version reader for this module.
@@ -100,6 +101,27 @@ if (argsEarly.includes('--stdio')) {
   process.env.MCP_STDIO_MODE = 'true';
 }
 
+// #502: the pre-logger stdio chokepoint. Under --stdio, stdout is the JSON-RPC channel, but
+// anything that calls console.log before src/logger.ts loads reaches the real stdout:
+// @dabh/diagnostics (during winston.createLogger, when DEBUG/DIAGNOSTICS is set and NODE_ENV
+// is not production) and potentially dotenv. src/logger.ts wireConsoleAndDebug() replaces
+// these methods once the logger loads, exactly as before. This is installed under --stdio
+// only, so HTTP stdout behaviour is unchanged. It writes straight to process.stderr, so
+// there is no recursion risk. Output in this window bypasses the #220 redaction (as it
+// already did), which is acceptable only because everything printed here is static (the
+// debug notice, winston level names; dotenv is pinned quiet and debug false). A future
+// pre-logger print of dynamic data is a redaction concern.
+function installPreLoggerStderrConsole(): void {
+  const toStderr = (...args: unknown[]): void => {
+    process.stderr.write(format(...args) + '\n');
+  };
+  console.log = toStderr;
+  console.info = toStderr;
+  console.debug = toStderr;
+  console.warn = toStderr;
+  console.error = toStderr;
+}
+
 // Only load dotenv if we're not just showing help
 // dotenv will be loaded inside the async IIFE below via dynamic import
 // to avoid using require() in ESM and to keep the early --help fast exit.
@@ -161,6 +183,8 @@ Docs & source: https://github.com/agigante80/actual-mcp-server`);
 // Defer remaining imports until after help check to avoid starting servers on import
 export {};
 (async () => {
+  if (argsEarly.includes('--stdio')) installPreLoggerStderrConsole();
+
   // Load dotenv here (dynamic import) only when not running with --help
   if (!argsEarly.includes('--help')) {
     const dotenv = await import('dotenv');
@@ -192,7 +216,7 @@ export {};
     process.env.LOG_LEVEL = process.env.LOG_LEVEL || 'debug';
     // optional flag your code can check for even more verbose transport logging
     process.env.MCP_BRIDGE_DEBUG_TRANSPORT = 'true';
-    console.log('Debug mode enabled: DEBUG=* LOG_LEVEL=debug');
+    process.stderr.write('Debug mode enabled: DEBUG=* LOG_LEVEL=debug\n');
   }
 
   // dynamic imports to avoid running side effects on module import
