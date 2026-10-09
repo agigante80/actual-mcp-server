@@ -86,9 +86,12 @@ function missingScripts(text, scripts) {
 
 // #498: `node <path>` must name a tracked file. `dist/` is build output and never tracked,
 // so it is skipped; a placeholder such as `node scripts/<file>` does not match.
-const NODE_TARGET_RE = /\bnode\s+((?:\.\/)?[\w./-]+\.(?:m?js|cjs|ts))\b/g;
+// #499: leading flags (`--flag`, `-f`, `--flag=value`) and a `--` end-of-options marker between
+// `node` and the path are skipped; the path is group 2. Known, unpinned gap: flags that take a
+// SEPARATE value (`-r x`, `--import x`) need a per-flag table of Node options, so they are not handled.
+const NODE_TARGET_RE = /\bnode((?:\s+--?[A-Za-z][\w-]*(?:=\S+)?)*)(?:\s+--)?\s+((?:\.\/)?[\w./-]+\.(?:m?js|cjs|ts))\b/g;
 function missingNodeTargets(text, isTracked) {
-  const paths = [...text.matchAll(NODE_TARGET_RE)].map((m) => posix.normalize(m[1]));
+  const paths = [...text.matchAll(NODE_TARGET_RE)].map((m) => posix.normalize(m[2]));
   return [...new Set(paths)].filter((p) => !p.startsWith('dist/') && !isTracked(p));
 }
 
@@ -282,6 +285,23 @@ check('NEGATIVE (#498): a node target must be tracked, except build output under
   const tracked = trackedPredicate(new Set(['scripts/ok.mjs']));
   const text = '`node scripts/ok.mjs` `node scripts/gone.mjs` `node dist/src/index.js --stdio` `node scripts/<file>`';
   assert.deepStrictEqual(missingNodeTargets(text, tracked), ['scripts/gone.mjs']);
+});
+
+check('NEGATIVE (#499): a node target after flags or -- is still checked', () => {
+  const tracked = trackedPredicate(new Set());
+  const text = '`node --experimental-vm-modules scripts/gone.mjs` `node -- scripts/d.mjs` '
+    + '`node --experimental-vm-modules -- scripts/e.mjs` `node --x`';
+  assert.deepStrictEqual(missingNodeTargets(text, tracked),
+    ['scripts/gone.mjs', 'scripts/d.mjs', 'scripts/e.mjs']);
+});
+
+check('#499: a tracked node target after flags or -- is not reported', () => {
+  const tracked = trackedPredicate(new Set(['scripts/ok.mjs']));
+  const text = '`node --experimental-vm-modules scripts/ok.mjs` `node --max-old-space-size=4096 scripts/ok.mjs` `node -- scripts/ok.mjs`';
+  assert.deepStrictEqual(missingNodeTargets(text, tracked), []);
+  // Not vacuous: all three forms must actually be recognised, with the path in group 2.
+  assert.deepStrictEqual([...text.matchAll(NODE_TARGET_RE)].map((m) => m[2]),
+    ['scripts/ok.mjs', 'scripts/ok.mjs', 'scripts/ok.mjs']);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
