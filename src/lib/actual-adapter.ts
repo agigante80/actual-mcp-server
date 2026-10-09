@@ -2176,26 +2176,34 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
   }, { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
 }
 
-/**
- * Atomic budget transfer between two categories within a single month.
- *
- * Reads the current budget amounts, validates source-side sufficient funds,
- * and writes both adjustments inside ONE `queueWriteOperation` cycle. This
- * is the structural fix for issue #141: the previous tool body did three
- * separate lock cycles (read + write + write) which could hang for the
- * full Playwright timeout when the upstream server's mutator queue stalled
- * between cycles.
- *
- * Both writes run inside `rawBatchBudgetUpdates` so the upstream Actual
- * Budget server treats them as one transaction, guaranteeing no partial
- * transfer is observable from the server's perspective.
- */
 export interface TransferBudgetResult {
   transferred: number;
   fromCategory: { id: string; previousAmount: number; newAmount: number };
   toCategory: { id: string; previousAmount: number; newAmount: number };
 }
 
+/**
+ * Budget transfer between two categories within a single month.
+ *
+ * Reads the current budget amounts, validates source-side sufficient funds,
+ * and writes both adjustments inside ONE `queueWriteOperation` cycle. This
+ * is the structural fix for issue #141: the previous tool body did three
+ * separate lock cycles (read + write + write) which could hang for the
+ * full Playwright timeout when the upstream server's mutator queue stalled
+ * between cycles. The month read and the funds check run before either write.
+ *
+ * NOT atomic and no rollback (#518). Both writes run inside
+ * `rawBatchBudgetUpdates`, upstream's `batch-budget-start` /
+ * `batch-budget-end` bracket around `batchMessages`, which batches sync
+ * messages; it is not a database transaction. If the second write fails, the
+ * first stays applied, so a partial transfer is possible. A returned result
+ * means both writes were queued, not that both landed: `batch-budget-start`
+ * runs `batchMessages` un-awaited and `batch-budget-end` returns before the
+ * queued messages are applied, so a later apply failure is a detached
+ * rejection that is never returned to the caller (#539). The upstream trace is the
+ * `actual_budget_updates_batch` row of `docs/audit/write-effect-audit.md`,
+ * which shares this bracket (#516).
+ */
 export async function transferBudgetAmount(
   month: string,
   fromCategoryId: string,
