@@ -26,19 +26,23 @@ Premortem: the phase is over and it failed badly. What happened?
 
 ## Expected work
 
-Not binding. In order:
+Not binding. In order. Revised by the phase review of 2026-10-09: #532 and #533 were created, #521, #522, #523, #524, #504, #503 rewritten, #525 and #505 split.
 
-1. #502: route the `--debug` notice through stderr or the logger (stdio stdout write).
-2. #519: guard the cleanup of `batch_uncategorized_rules_upsert` so a thrown batch call cannot leave residue that fails the release gate.
-3. #521, with item 1 of #523 (the pool-drop comment scope) in the same change: stop the per-item catch swallowing infrastructure errors.
-4. #522: extend the rule reference guard to `upsertRule`, `updateRule` and `updatePayee`'s rule write, and set `createRule`'s raw create retries to 0.
-5. #524: the #485 follow-ups, built on #522's guard code; its `category_group` gap is done with #522.
+Adapter tickets, serially, `test:adapter` after each:
+
+1. #502: route the `--debug` notice through stderr (stdio stdout write).
+2. #519: guard the cleanup of `batch_uncategorized_rules_upsert` so a thrown call cannot strand its disposable objects until the next run's pre-run sweep.
+3. #521, with #523 item 1 folded in: abort `updateTransactionBatch` on a pool-drop error. The drop happens on the legacy path only; on the pooled path only when the following sync also fails.
+4. #522, with #524 items 1, 4 and 6 folded in: guard NEW rule references on update and upsert, a category check on `updatePayee`, and `createRule` raw create retries set to 0.
+5. #524: the remaining #485 follow-ups (sort test, rate-limit test label, `category_group` gap, manual-prompt totals).
 6. #523: the remaining #516 follow-ups.
-7. #525: the #483 follow-ups; drop item 8 first if effort is tight.
-8. #526: the #486 follow-ups.
-9. #504: set `server.onerror` (decide the stdio behaviour first).
-10. #503, #505, #499: guard hardening, sharing one comment-stripping helper.
-11. #487: the OIDC both-lists-set boot case.
+
+Test and guard tickets, independent of the adapter chain:
+
+7. #532: one shared comment-stripping helper, before any guard ticket that strips comments.
+8. #499, #487, #526, #504, #505 (L3 to L5): independent of each other.
+9. #503 and #533 (#525 items 3, 6, 8 and #505 L1): consume #532's helper.
+10. #525 (items 1, 2, 4, 5, 7): any time.
 
 ## Out of scope
 
