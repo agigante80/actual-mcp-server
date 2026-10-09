@@ -2580,6 +2580,15 @@ export async function updatePayee(id: string, fields: Partial<components['schema
       directFields = rest;
     }
 
+    // #522: an explicitly set category is checked BEFORE the direct-field write, so a refused
+    // category writes nothing at all (not even the name). null clears the rule and an absent key
+    // skips this. A hidden category passes (the listing includes it); a category GROUP id is
+    // refused as a missing Category. Same pipeline as the rule writes.
+    if (typeof categoryValue === 'string') {
+      const categoryRefs: RuleRef[] = [{ side: 'action', field: 'category', id: categoryValue }];
+      assertRuleReferencesExist(categoryRefs, await loadRuleReferenceListings(categoryRefs), RULE_REFUSAL_CHANGED);
+    }
+
     // Update the payee's direct fields (name, transfer_acct, etc.)
     if (Object.keys(directFields).length > 0) {
       await withConcurrency(() => retry(() => rawUpdatePayee(id, directFields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
@@ -2685,37 +2694,80 @@ interface RuleReferenceListings {
   account?: Set<string>;
 }
 
-/** Every (field, id) pair a rule points at. Null, undefined and non-string values are skipped (a null `set category` clears it). */
-function ruleReferences(rule: unknown): Array<{ field: RuleReferenceField; id: string }> {
-  const out: Array<{ field: RuleReferenceField; id: string }> = [];
+/** One id a rule points at, with the side of the rule it sits on (the diff on an update keys on the side). */
+interface RuleRef {
+  side: 'condition' | 'action';
+  field: RuleReferenceField;
+  id: string;
+}
+
+/**
+ * Condition operators whose value is an entity id (or an array of ids). `and` is upstream's
+ * INTERNAL op for `category` and `category_group` (shared/rules.ts `internalOps`), parsed like
+ * `oneOf`, so leaving it out would narrow what #485 already guarded. The text ops (`contains`,
+ * `matches`, `doesNotContain`) compare text and `onBudget` / `offBudget` carry no id: they are
+ * skipped and must never be refused.
+ */
+const RULE_ID_CONDITION_OPS: ReadonlySet<string> = new Set(['is', 'isNot', 'oneOf', 'notOneOf', 'and']);
+
+/** Refusal suffixes, one per write path, so no call site can inherit text that is false for it (#524 item 6). */
+const RULE_REFUSAL_CREATED = 'Nothing was created.';
+const RULE_REFUSAL_CHANGED = 'Nothing was changed.';
+const RULE_REFUSAL_BATCH_ITEM = 'This rule was not created.';
+
+/**
+ * Every id a rule points at. Null, undefined and non-string values are skipped (a null
+ * `set category` clears it). Conditions count only for an id operator (RULE_ID_CONDITION_OPS).
+ * Actions count only for `set`, and not when `options.template` is TRUTHY: upstream compiles a
+ * truthy template as Handlebars and does not use the value as an id (server/rules/action.ts,
+ * `if (options?.template)`), while an empty or absent template applies the plain value as the
+ * id. Do NOT test with `!== undefined` or `'template' in options`.
+ * The field filter uses `Object.hasOwn`, not `in`: a field named `toString` is on the prototype.
+ */
+function ruleReferences(rule: unknown): RuleRef[] {
+  const out: RuleRef[] = [];
   const r = (rule ?? {}) as { conditions?: unknown; actions?: unknown };
-  const add = (field: unknown, value: unknown) => {
-    if (typeof field !== 'string' || !(field in RULE_REFERENCE_FIELDS)) return;
+  const add = (side: RuleRef['side'], field: unknown, value: unknown) => {
+    if (typeof field !== 'string' || !Object.hasOwn(RULE_REFERENCE_FIELDS, field)) return;
     const values = Array.isArray(value) ? value : [value];
-    for (const v of values) if (typeof v === 'string') out.push({ field: field as RuleReferenceField, id: v });
+    for (const v of values) if (typeof v === 'string') out.push({ side, field: field as RuleReferenceField, id: v });
   };
   if (Array.isArray(r.conditions)) {
-    for (const c of r.conditions as Array<{ field?: unknown; value?: unknown }>) add(c?.field, c?.value);
+    for (const c of r.conditions as Array<{ field?: unknown; op?: unknown; value?: unknown }>) {
+      if (typeof c?.op === 'string' && RULE_ID_CONDITION_OPS.has(c.op)) add('condition', c?.field, c?.value);
+    }
   }
   if (Array.isArray(r.actions)) {
-    for (const a of r.actions as Array<{ op?: unknown; field?: unknown; value?: unknown }>) {
-      if (a?.op === 'set') add(a?.field, a?.value);
+    for (const a of r.actions as Array<{ op?: unknown; field?: unknown; value?: unknown; options?: { template?: unknown } | null }>) {
+      if (a?.op === 'set' && !a?.options?.template) add('action', a?.field, a?.value);
     }
   }
   return out;
 }
 
+const ruleRefKey = (ref: RuleRef): string => `${ref.side}|${ref.field}|${ref.id}`;
+
 /**
- * #485: read the listings the given rules need, once per kind, through the drain cache. Call
- * INSIDE a queued op and BEFORE the first raw create. Only kinds that some rule references
- * are read. The three listings are what upstream shows a user: categories (hidden included,
+ * Only the references `next` ADDS over `stored`. A dangling id already in the stored rule must
+ * not make an unrelated edit fail. The key includes the side: the same id newly added on the
+ * other side (condition to action) counts as new.
+ */
+function newRuleReferences(next: unknown, stored: unknown): RuleRef[] {
+  const had = new Set(ruleReferences(stored).map(ruleRefKey));
+  return ruleReferences(next).filter((ref) => !had.has(ruleRefKey(ref)));
+}
+
+/**
+ * #485: read the listings the given references need, once per kind, through the drain cache.
+ * Call INSIDE a queued op and BEFORE the first raw write. Only kinds that some reference needs
+ * are read, so an edit introducing no new reference reads no listing. The three listings are what upstream shows a user: categories (hidden included,
  * group ids are not in it), payees (transfer payees included, tombstoned ones excluded here
  * even if the listing returns them) and accounts (closed and off-budget accounts included, and
  * both count as existing: a closed account is not a missing reference).
  */
-async function loadRuleReferenceListings(rules: unknown[]): Promise<RuleReferenceListings> {
+async function loadRuleReferenceListings(refs: RuleRef[]): Promise<RuleReferenceListings> {
   const need = new Set<RuleReferenceField>();
-  for (const rule of rules) for (const ref of ruleReferences(rule)) need.add(ref.field);
+  for (const ref of refs) need.add(ref.field);
   const listings: RuleReferenceListings = {};
   if (need.has('category')) {
     const rows = await withConcurrency(() =>
@@ -2742,19 +2794,22 @@ async function loadRuleReferenceListings(rules: unknown[]): Promise<RuleReferenc
  * #485: refuse a rule that points at a category, payee or account that does not exist.
  * Upstream `createRule` checks field, operator and nullability only, with no existence lookup
  * of id values, so it stores a rule pointing at nothing. NOT exported: tests drive it through
- * `createRule` and `createRulesBatch`, and it lives in the adapter so neither call site can
- * skip it.
+ * the adapter methods, and it lives in the adapter so no call site can skip it. `suffix` is
+ * REQUIRED (no default) so a new call site cannot inherit text that is false for it.
  *
- * KNOWN GAPS, accepted and tracked in #522: the other rule writes (`upsertRule`, `updateRule`
- * and `updatePayee`'s default-category rule) are NOT guarded, and `link-schedule` action
- * values are not checked.
+ * The guard now covers every rule write: `createRule`, `createRulesBatch`, `updateRule`,
+ * `upsertRule` and `updatePayee`'s category. KNOWN GAPS that remain: `link-schedule` action
+ * values; `category_group` condition values (upstream `FIELD_INFO` types it `id`, but its value
+ * is a group id that appears in none of the three listings, #524 item 5); and, deliberately,
+ * text-pattern ops (`contains`, `matches`, `doesNotContain`) and actions with a truthy
+ * `options.template`.
  */
-function assertRuleReferencesExist(rule: unknown, listings: RuleReferenceListings): void {
-  for (const ref of ruleReferences(rule)) {
+function assertRuleReferencesExist(refs: RuleRef[], listings: RuleReferenceListings, suffix: string): void {
+  for (const ref of refs) {
     const known = listings[ref.field];
     if (known && !known.has(ref.id)) {
       const meta = RULE_REFERENCE_FIELDS[ref.field];
-      throw new NotFoundRefusal(meta.entity, ref.id, meta.listTool, 'Nothing was created.');
+      throw new NotFoundRefusal(meta.entity, ref.id, meta.listTool, suffix);
     }
   }
 }
@@ -2810,11 +2865,12 @@ export async function createRulesBatch(items: Array<{ index: number; rule: unkno
     const succeeded: RuleBatchSucceeded[] = [];
     const failed: RuleBatchFailed[] = [];
 
-    const listings = await loadRuleReferenceListings(items.map((i) => i.rule));
+    const listings = await loadRuleReferenceListings(items.flatMap((i) => ruleReferences(i.rule)));
     const toWrite: Array<{ index: number; rule: unknown }> = [];
     for (const item of items) {
       try {
-        assertRuleReferencesExist(item.rule, listings);
+        // The other items may well be created, so the single-rule suffix would be false here.
+        assertRuleReferencesExist(ruleReferences(item.rule), listings, RULE_REFUSAL_BATCH_ITEM);
         toWrite.push(item);
       } catch (error) {
         failed.push({ index: item.index, error: (error as Error).message });
@@ -2855,8 +2911,10 @@ export async function createRule(rule: unknown): Promise<string> {
   observability.incrementToolCall('actual.rules.create').catch(() => {});
   return queueWriteOperation(async () => {
     // #485: the reference guard shares this drain's cached listings with the write.
-    assertRuleReferencesExist(rule, await loadRuleReferenceListings([rule]));
-    const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    const refs = ruleReferences(rule);
+    assertRuleReferencesExist(refs, await loadRuleReferenceListings(refs), RULE_REFUSAL_CREATED);
+    // retries 0: a slow first attempt that lands followed by a retry stores a duplicate rule.
+    const raw = await withConcurrency(() => retry(() => rawCreateRule(rule) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     return id;
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
@@ -2870,7 +2928,7 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
     const existingRule = (rules as any[]).find((r: any) => r.id === id);
     
     if (!existingRule) {
-      throw new Error(`Rule with id ${id} not found`);
+      throw new NotFoundRefusal('Rule', id, 'actual_rules_get');
     }
     
     const fieldsObj = fields as any;
@@ -2895,6 +2953,12 @@ export async function updateRule(id: string, fields: unknown): Promise<void> {
       actions: fieldsObj.actions ?? existingRule.actions ?? [],
     };
     
+    // Only references this update ADDS are checked: a dangling id already stored does not make
+    // an unrelated edit fail. Diffing the merged rule equals diffing the payload, because an
+    // omitted conditions or actions takes the stored value, which contributes no new refs.
+    const addedRefs = newRuleReferences(rule, existingRule);
+    assertRuleReferencesExist(addedRefs, await loadRuleReferenceListings(addedRefs), RULE_REFUSAL_CHANGED);
+
     logger.debug(`[UPDATE RULE] Updating rule ${id} with merged fields: ${JSON.stringify(rule)}`);
     
     await withConcurrency(() => retry(() => rawUpdateRule(rule) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
@@ -2955,6 +3019,8 @@ export async function upsertRule(
         conditions: ruleData.conditions ?? (matchedRule as Record<string, unknown>).conditions ?? [],
         actions: ruleData.actions ?? (matchedRule as Record<string, unknown>).actions ?? [],
       };
+      const addedRefs = newRuleReferences(merged, matchedRule);
+      assertRuleReferencesExist(addedRefs, await loadRuleReferenceListings(addedRefs), RULE_REFUSAL_CHANGED);
       // Non-idempotent from upstream's point of view: do not retry the write.
       await withConcurrency(() => retry(() => rawUpdateRule(merged) as Promise<void>, { retries: 0, backoffMs: 200 }));
       return { id: matchedRule.id, created: false };
@@ -2965,6 +3031,8 @@ export async function upsertRule(
     // `Invalid rule stage: undefined`, so the key must be present. null is the correct
     // value: Actual's default stage.
     if (ruleData.stage === undefined) ruleData.stage = null;
+    const createRefs = ruleReferences(ruleData);
+    assertRuleReferencesExist(createRefs, await loadRuleReferenceListings(createRefs), RULE_REFUSAL_CREATED);
     const rawId = await withConcurrency(() => retry(() => rawCreateRule(ruleData) as Promise<unknown>, { retries: 0, backoffMs: 200 }));
     return { id: normalizeToId(rawId), created: true };
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });

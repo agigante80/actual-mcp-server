@@ -133,7 +133,7 @@ export function validateRuleInput(input: RuleItem): void {
   
   // Validate field usage to guide users toward correct field selection
   for (const condition of input.conditions) {
-    const fieldInfo = FIELD_OPERATORS[condition.field];
+    const fieldInfo = Object.hasOwn(FIELD_OPERATORS, condition.field) ? FIELD_OPERATORS[condition.field] : undefined;
     
     // Validate operator is compatible with field type
     if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {

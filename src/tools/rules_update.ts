@@ -102,7 +102,7 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
     // Validate field usage to guide users toward correct field selection
     if (input.fields.conditions) {
       for (const condition of input.fields.conditions) {
-        const fieldInfo = FIELD_OPERATORS[condition.field];
+        const fieldInfo = Object.hasOwn(FIELD_OPERATORS, condition.field) ? FIELD_OPERATORS[condition.field] : undefined;
         
         // Validate operator is compatible with field type
         if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {

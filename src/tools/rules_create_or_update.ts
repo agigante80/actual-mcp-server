@@ -81,7 +81,7 @@ Returns: { id, created: boolean }, created=true for a new rule, false for an upd
 
     // ── Validate conditions ──
     for (const condition of input.conditions) {
-      const fieldInfo = FIELD_OPERATORS[condition.field];
+      const fieldInfo = Object.hasOwn(FIELD_OPERATORS, condition.field) ? FIELD_OPERATORS[condition.field] : undefined;
       if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
         throw new Error(
           `Invalid operator "${condition.op}" for field "${condition.field}". ` +

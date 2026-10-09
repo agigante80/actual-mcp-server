@@ -220,6 +220,38 @@ console.log('\n[#524] result order is sorted by index');
   check(idx(s.succeeded) === '1,3', 'U1d: adapter succeeded list is sorted 1,3', idx(s.succeeded));
 }
 
+console.log('\n[#522] batch refusal suffix and forced shutdown on abort');
+{
+  // U10: the single-rule "Nothing was created." would be false here, other items may be created.
+  const res = await run([rule('a', [{ op: 'set', field: 'category', value: GHOST }]), rule('b', [NOTE('ok')])]);
+  check(res.failed.length === 1 && res.failed[0].index === 0 && res.failed[0].error.includes('This rule was not created.') && !res.failed[0].error.includes('Nothing was created.'), 'U10: the refused item says "This rule was not created."', JSON.stringify(res.failed));
+  check(res.succeeded.length === 1 && res.succeeded[0].index === 1, 'U10: the other item succeeded');
+
+  // U9: an infrastructure abort tears the singleton down once the drain finishes (stdio). The
+  // skip seam never calls api.shutdown(), so isApiInitialized() is the observable witness.
+  const { isApiInitialized } = await import('../../dist/src/lib/apiState.js');
+  const priorStdio = process.env.MCP_STDIO_MODE;
+  process.env.MCP_STDIO_MODE = 'true';
+  try {
+    reset(); witness.reset();
+    adapterMod._setApiInitializedForTests(true);
+    behaviour = (n) => (n === 0 ? new Error('read ECONNRESET') : null);
+    let threw = null;
+    try { await tool.call({ rules: [rule('a'), rule('b')] }); } catch (e) { threw = e; }
+    await new Promise((r) => setTimeout(r, 100));
+    check(threw instanceof Error && isApiInitialized() === false, 'U9: after an ECONNRESET abort the api singleton was torn down', `threw=${!!threw} init=${isApiInitialized()}`);
+
+    reset(); witness.reset();
+    adapterMod._setApiInitializedForTests(true);
+    const ok = await tool.call({ rules: [rule('a'), rule('b')] });
+    await new Promise((r) => setTimeout(r, 100));
+    check(ok.result.succeeded.length === 2 && isApiInitialized() === true, 'U9 control: no error leaves the singleton alive on stdio', `init=${isApiInitialized()}`);
+  } finally {
+    adapterMod._setApiInitializedForTests(false);
+    if (priorStdio === undefined) delete process.env.MCP_STDIO_MODE; else process.env.MCP_STDIO_MODE = priorStdio;
+  }
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_create_batch checks passed');
 process.exit(0);

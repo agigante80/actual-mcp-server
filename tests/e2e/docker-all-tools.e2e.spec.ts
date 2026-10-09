@@ -1354,6 +1354,26 @@ test.describe('Docker E2E - ALL 83 TOOLS', () => {
     expect(JSON.stringify(updated.conditions)).toContain(marker);
   });
 
+  test('actual_rules_update - refuses a category id that does not exist and leaves the rule unchanged (#522)', async ({ mcp, makeCategory, makeRule }) => {
+    const category = await makeCategory();
+    const rule = await makeRule({ categoryId: category.id });
+    const ghost = '19999999-0000-4000-8000-000000000009';
+
+    await expect(
+      mcp.call('actual_rules_update', {
+        id: rule.id,
+        fields: { actions: [{ op: 'set', field: 'category', value: ghost }] },
+      }),
+    ).rejects.toThrow(/not found/i);
+
+    const data = await mcp.call('actual_rules_get');
+    const rules = (Array.isArray(data) ? data : (data?.rules ?? [])) as any[];
+    const stored = rules.find((r: any) => r?.id === rule.id);
+    expect(stored).toBeTruthy();
+    expect(JSON.stringify(stored.actions)).toContain(category.id);
+    expect(JSON.stringify(stored.actions)).not.toContain(ghost);
+  });
+
   test('actual_rules_create_or_update - should upsert rule idempotently', async ({ mcp, makeCategory, cleanup }) => {
     const category = await makeCategory();
     const marker = `E2E-Upsert-${uniqueSuffix()}`;

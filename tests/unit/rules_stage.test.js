@@ -49,6 +49,9 @@ const baseInput = (extra = {}) => ({
   apiDefault.createRule = async (rule) => { created = rule; return 'new-rule-id'; };
   apiDefault.updateRule = async (rule) => { updated = rule; return rule; };
   apiDefault.getRules = async () => existingRules;
+  // #522: the upsert create/update branches now run the rule reference guard, which reads the
+  // categories listing (the baseInput action names CAT, so it must exist).
+  apiDefault.getCategories = async () => [{ id: CAT }];
   apiDefault.sync = async () => {};
   // The real adapter.updateRule (exercised in the last block) goes through the
   // write queue, which opens an Actual session. Stub the whole lifecycle so it
