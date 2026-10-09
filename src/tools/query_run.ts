@@ -17,7 +17,7 @@ Example: "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0
 
 WHERE supports: =, !=, >, >=, <, <=; IN (v1, v2); LIKE / NOT LIKE (case and accent-insensitive, % wildcard, e.g. imported_payee LIKE '%amazon%'); IS NULL / IS NOT NULL; boolean columns as true / false (cleared = false, category.hidden = true); conditions joined with AND. OR, REGEXP, NOT IN and parenthesised groups are not supported and return an error (a query is never silently run unfiltered). Transactions come back in split-INLINE mode: "is_parent = true" returns nothing, use "is_parent = false" to exclude split children.
 
-Joins use dot notation: payee.name, category.name, account.name (NOT payee_name). Amounts are in cents: $100.00 = 10000.
+Joins use dot notation: payee.name, category.name, account.name (NOT payee_name). Amounts are in cents: $100.00 = 10000. Dates are quoted YYYY-MM-DD strings: date >= '2025-01-01'.
 
 Tables:
 - transactions: id, date, amount, notes, cleared, account, payee, category
@@ -55,7 +55,7 @@ Tables:
       } else if (errorMessage.includes('ActualQL query builder not available')) {
         throw new Error('ActualQL query builder is not available. The Actual Budget API may not be properly initialized.');
       } else if (errorMessage.includes('parse') || errorMessage.includes('syntax')) {
-        throw new Error(`Query syntax error: ${errorMessage}\n\nRecommended: Use SQL syntax\nExample: SELECT * FROM transactions ORDER BY date DESC LIMIT 5\n\nSee tool description for more examples.`);
+        throw new Error(`Query syntax error: ${errorMessage}\n\nRecommended: Use SQL syntax\nExample: SELECT * FROM transactions ORDER BY date DESC LIMIT 5\n\nSee the tool description for the supported WHERE operators and join syntax.`);
       } else {
         throw new Error(`Query execution failed: ${errorMessage}`);
       }

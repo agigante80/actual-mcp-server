@@ -35,6 +35,13 @@ const rejectedWith = (tool, input, issue) => {
   return !r.ok && r.issues.length === 1 && r.issues[0] === issue;
 };
 
+// The issue strings of each branch of a single top-level invalid_union, or null.
+const unionBranches = (tool, input) => {
+  const r = tool.inputSchema.safeParse(input);
+  if (r.success || r.error.issues.length !== 1 || r.error.issues[0].code !== 'invalid_union') return null;
+  return r.error.issues[0].errors.map((b) => b.map((i) => `${i.code} at ${i.path.join('.')}`));
+};
+
 console.log('\n[#486] rules_update: op stays REQUIRED on every action (the shared ActionSchema defaults it)');
 {
   const r = where(rulesUpdate, { id: RID, fields: { actions: [{ field: 'notes', value: 'x' }] } });
@@ -64,12 +71,17 @@ console.log('\n[#486] schedules_create: date and amount constraints');
   const bad = where(schedulesCreate, { ...base, date: '2026-1-5' });
   check(!bad.ok && bad.issues.some((i) => i.startsWith('invalid_format at date')), 'date 2026-1-5 is invalid_format at date', bad.issues.join(','));
   check(rejectedWith(schedulesCreate, { ...base, amount: 12.5 }, 'invalid_type at amount'), 'amount 12.5 is invalid_type at amount');
-  check(!where(schedulesCreate, { name: 'x', amount: 100 }).ok, 'date is required');
-  check(!where(schedulesCreate, { ...base, amountOp: 'between' }).ok, 'an unknown amountOp is rejected');
-  check(!where(schedulesCreate, { ...base, account: 'not-a-uuid' }).ok, 'a non-uuid account is rejected');
+  check(rejectedWith(schedulesCreate, { name: 'x', amount: 100 }, 'invalid_union at date'), 'date is required (invalid_union at date)');
+  const missingBranches = unionBranches(schedulesCreate, { name: 'x', amount: 100 });
+  check(missingBranches !== null && missingBranches.length > 0 && missingBranches.every((b) => b.length === 1 && b[0] === 'invalid_type at '), 'a missing date fails every union branch with invalid_type', JSON.stringify(missingBranches));
+  check(rejectedWith(schedulesCreate, { ...base, amountOp: 'between' }, 'invalid_value at amountOp'), 'an unknown amountOp is invalid_value at amountOp');
+  check(rejectedWith(schedulesCreate, { ...base, account: 'not-a-uuid' }, 'invalid_format at account'), 'a non-uuid account is invalid_format at account');
   const rec = where(schedulesCreate, { ...base, date: { frequency: 'monthly', start: '2026-01-05', endMode: 'never' } });
   check(rec.ok, 'a RecurConfig date parses');
   const badRec = where(schedulesCreate, { ...base, date: { frequency: 'hourly', start: '2026-01-05', endMode: 'never' } });
+  check(rejectedWith(schedulesCreate, { ...base, date: { frequency: 'hourly', start: '2026-01-05', endMode: 'never' } }, 'invalid_union at date'), 'a RecurConfig with an unknown frequency is invalid_union at date');
+  const badBranches = unionBranches(schedulesCreate, { ...base, date: { frequency: 'hourly', start: '2026-01-05', endMode: 'never' } });
+  check(badBranches !== null && badBranches.some((b) => b.includes('invalid_value at frequency')), 'one union branch names invalid_value at frequency', JSON.stringify(badBranches));
   check(!badRec.ok, 'a RecurConfig with an unknown frequency is rejected');
   const defaults = where(schedulesCreate, base);
   check(defaults.ok && defaults.data.amountOp === 'is' && defaults.data.posts_transaction === false, 'amountOp defaults to is and posts_transaction to false');
@@ -79,14 +91,14 @@ console.log('\n[#486] schedules_update: constraints');
 {
   const SID = '44444444-4444-4444-4444-444444444444';
   check(where(schedulesUpdate, { id: SID, name: 'x' }).ok, 'a partial update parses');
-  check(!where(schedulesUpdate, { name: 'x' }).ok, 'id is required');
-  check(!where(schedulesUpdate, { id: SID, date: '2026-1-5' }).ok, 'date 2026-1-5 is rejected');
+  check(rejectedWith(schedulesUpdate, { name: 'x' }, 'invalid_type at id'), 'id is required (invalid_type at id)');
+  check(rejectedWith(schedulesUpdate, { id: SID, date: '2026-1-5' }, 'invalid_format at date'), 'date 2026-1-5 is invalid_format at date');
   check(rejectedWith(schedulesUpdate, { id: SID, amount: 12.5 }, 'invalid_type at amount'), 'amount 12.5 is invalid_type at amount');
   const nulls = where(schedulesUpdate, { id: SID, payee: null, account: null });
   check(nulls.ok && nulls.data.payee === null && nulls.data.account === null, 'payee and account accept null (clear)');
   const d = where(schedulesUpdate, { id: SID });
   check(d.ok && d.data.resetNextDate === false, 'resetNextDate defaults to false');
-  check(!where(schedulesUpdate, { id: SID, amountOp: 'between' }).ok, 'an unknown amountOp is rejected');
+  check(rejectedWith(schedulesUpdate, { id: SID, amountOp: 'between' }, 'invalid_value at amountOp'), 'an unknown amountOp is invalid_value at amountOp');
 }
 
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }

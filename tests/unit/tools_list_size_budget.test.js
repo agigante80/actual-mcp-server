@@ -5,7 +5,7 @@
 // slow erosion of the savings made by trimming the heaviest schemas.
 //
 // The list is built the way the server does: buildToolListEntries with z.toJSONSchema over
-// the full registry (toolsets 'all'), measured as Buffer.byteLength(JSON.stringify(entries)).
+// getPublishedToolNames(), the list src/index.ts hands to both transports (toolsets 'all'), measured as Buffer.byteLength(JSON.stringify(entries)).
 // The check is a pure function; this file also runs it on fixtures so the guard itself is
 // proven able to fail (a padded description, and a total ceiling 1 byte too low).
 //
@@ -56,18 +56,22 @@ console.log('\n[#486] tools/list size budget');
 const { buildToolListEntries } = await import('../../dist/src/lib/tool-list-entry.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 const { z } = await import('zod');
+const { getCanonicalCount } = await import('../../scripts/tool-count.mjs');
 
 await manager.initialize({ toolsets: 'all', tools: '', readOnly: false });
-const names = manager.getToolNames();
+const registered = manager.getToolNames();
+const names = manager.getPublishedToolNames();
 const entries = buildToolListEntries(names, (name) => {
   const tool = manager.getTool(name);
   return { description: tool.description, schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema) : undefined };
 });
 const realTotal = sizeOf(entries);
 
-await check('the registry is non-empty and every tool produced an entry', () => {
-  assert.ok(names.length > 0);
-  assert.strictEqual(entries.length, names.length);
+await check('the measured list is the full registry (published === registered === IMPLEMENTED_TOOLS)', () => {
+  const canonical = getCanonicalCount();
+  const counts = `published ${names.length}, registered ${registered.length}, IMPLEMENTED_TOOLS ${canonical}`;
+  assert.ok(names.length === canonical && registered.length === canonical, counts);
+  assert.strictEqual(entries.length, names.length, counts);
 });
 
 await check('the real list is within the total and per-tool ceilings', () => {
