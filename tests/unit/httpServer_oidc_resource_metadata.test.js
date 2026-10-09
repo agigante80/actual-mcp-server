@@ -372,6 +372,45 @@ console.log('\n[oidc-resource-metadata] #472: separate advertised scopes from re
     assert.ok(rNeg.stdout.includes('[OIDC] Scopes advertised: offline_access, read'), rNeg.stdout.slice(-1500));
   });
 
+  // #487: BOTH lists set. Enforcement is OIDC_SCOPES only; the advertised list is discovery metadata.
+  const bothEnv = {
+    OIDC_RESOURCE: 'https://actual-mcp.example.com/http',
+    OIDC_SCOPES: 'read',
+    OIDC_SCOPES_SUPPORTED: 'openid,offline_access',
+    T_TOKEN_AUD: 'https://actual-mcp.example.com/http',
+  };
+  // Token hygiene: no JWT material (eyJ) on any line outside the harness sentinel line.
+  const jwtLeaks = (r) => (r.stdout + '\n' + r.stderr).split('\n').filter((l) => !l.startsWith(SENTINEL) && l.includes('eyJ'));
+
+  const rBoth = boot({ ...bothEnv, T_TOKEN_SCOPE: 'read' }, 'both lists set, token with only the required scope');
+  check('#487: both lists set, a token with only the required scope returns 200 (advertised scopes are not enforced)', () => {
+    booted(rBoth);
+    // ENFORCEMENT, load-bearing: the only check in this file that catches the enforced list being widened to
+    // advertised-union-required (#487 mutation (c)). Not redundant with the #472 positive; do not drop it.
+    assert.strictEqual(rBoth.result.withToken.status, 200, JSON.stringify(rBoth.result.withToken));
+    // DISCOVERY: advertised first, then required (buildScopesSupported order).
+    assert.strictEqual(rBoth.result.metaPath.status, 200);
+    assert.deepStrictEqual(rBoth.result.metaPath.body.scopes_supported, ['openid', 'offline_access', 'read']);
+    // LOG: witnesses only the separate parse in src/auth/setup.ts, NOT enforcement.
+    const requiredLines = rBoth.stdout.split('\n').filter((l) => l.includes('[OIDC] Scopes required:'));
+    assert.strictEqual(requiredLines.length, 1, requiredLines.join('\n'));
+    assert.ok(requiredLines[0].includes('[OIDC] Scopes required: read'), requiredLines[0]);
+    assert.ok(!/openid|offline_access/.test(requiredLines[0]), requiredLines[0]);
+    assert.ok(rBoth.stdout.includes('[OIDC] Scopes advertised: openid, offline_access, read'), rBoth.stdout.slice(-1500));
+    // TOKEN HYGIENE
+    assert.deepStrictEqual(jwtLeaks(rBoth), [], 'JWT material echoed');
+  });
+
+  const rBothNeg = boot({ ...bothEnv, T_TOKEN_SCOPE: 'openid offline_access' }, 'both lists set, token with every advertised scope but not the required one');
+  check('#487: both lists set, a token with every advertised scope but not the required one returns 403 missing_required_scopes', () => {
+    booted(rBothNeg);
+    // ENFORCEMENT
+    assert.strictEqual(rBothNeg.result.withToken.status, 403, JSON.stringify(rBothNeg.result.withToken));
+    assert.match(rBothNeg.result.withToken.wwwAuthenticate || '', /missing_required_scopes/, JSON.stringify(rBothNeg.result.withToken));
+    // TOKEN HYGIENE
+    assert.deepStrictEqual(jwtLeaks(rBothNeg), [], 'JWT material echoed');
+  });
+
   // Backward compatibility positive: OIDC_SCOPES=openid only, JWT with scope: openid -> 200
   const rCompatPos = boot({
     OIDC_RESOURCE: 'https://actual-mcp.example.com/http',
