@@ -28,7 +28,7 @@ export interface RawEnvVar {
   /**
    * Whether this var belongs in the user-facing docs (.env.example, README env
    * table). Defaults to true. Set false for internal vars that are not operator
-   * knobs (a build arg, a dotenv flag, a CLI-flag mirror), so the drift guard does
+   * knobs (a build arg, a CLI-flag mirror), so the drift guard does
    * not force documenting them while the enumeration still accounts for them.
    */
   documented?: boolean;
@@ -113,8 +113,8 @@ export function canonicalConfigVars(schemaKeys: readonly string[]): Set<string> 
 /**
  * The subset of canonical vars that MUST appear in the user-facing docs
  * (.env.example and the README env table): every schema key, plus every allowlist
- * entry not flagged `documented: false`. Internal vars (build arg, dotenv flag,
- * CLI-flag mirror) are accounted for by the enumeration but exempt from the docs.
+ * entry not flagged `documented: false`. Internal vars (build arg, CLI-flag mirror)
+ * are accounted for by the enumeration but exempt from the docs.
  */
 export function documentedConfigVars(schemaKeys: readonly string[]): Set<string> {
   return new Set<string>([

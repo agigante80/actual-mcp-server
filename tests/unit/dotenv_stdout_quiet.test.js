@@ -20,6 +20,11 @@
 // debug hazard is real on the installed version. Without them, "stdout was empty" in U1
 // and U3b could just mean the child never ran dotenv at all.
 //
+// #505: the two non-server callers (tests/manual/runner.js and
+// scripts/direct-sync/bank-sync-direct.mjs) pin the same six options; see the #505 block
+// near the end of this file. Those checks, the grep status assertion and the child
+// timeout/NODE_OPTIONS hygiene are labelled N1 to N8.
+//
 // Run: node tests/unit/dotenv_stdout_quiet.test.js
 
 import assert from 'assert';
@@ -45,13 +50,16 @@ function check(label, fn) {
 }
 
 const dir = mkdtempSync(join(tmpdir(), 'dotenv-quiet-'));
-writeFileSync(join(dir, '.env'), 'DOTENV_TEST_VAR=from-file\nACTUAL_PASSWORD=from-file\n');
-writeFileSync(join(dir, 'other.env'), 'DOTENV_TEST_VAR=from-other\n');
+writeFileSync(join(dir, '.env'), 'DOTENV_TEST_VAR=from-file\nACTUAL_PASSWORD=from-file\nMCP_TEST_BUDGET_SYNC_ID=from-file\n');
+writeFileSync(join(dir, 'other.env'), 'DOTENV_TEST_VAR=from-other\nMCP_TEST_BUDGET_SYNC_ID=from-other\n');
+writeFileSync(join(dir, 'noisy.cjs'), "process.stdout.write('NOISY\\n')\n");
 
 function scrubbedEnv(extra) {
   const env = { ...process.env };
   for (const k of Object.keys(env)) if (k.startsWith('DOTENV_')) delete env[k];
   delete env.ACTUAL_PASSWORD;
+  delete env.NODE_OPTIONS;
+  delete env.MCP_TEST_BUDGET_SYNC_ID;
   return { ...env, ...extra };
 }
 
@@ -63,9 +71,9 @@ function runChild(configArg, extraEnv = {}) {
     "import { writeSync } from 'node:fs';",
     `const dotenv = (await import(${JSON.stringify(DOTENV_URL)})).default;`,
     `dotenv.config(${configArg});`,
-    'writeSync(3, JSON.stringify({ v: process.env.DOTENV_TEST_VAR, p: process.env.ACTUAL_PASSWORD }));',
+    'writeSync(3, JSON.stringify({ v: process.env.DOTENV_TEST_VAR, p: process.env.ACTUAL_PASSWORD, b: process.env.MCP_TEST_BUDGET_SYNC_ID }));',
   ].join('\n');
-  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], {
+  const r = spawnChecked(process.execPath, ['--input-type=module', '-e', script], {
     cwd: dir,
     env: scrubbedEnv(extraEnv),
     encoding: 'utf8',
@@ -116,6 +124,96 @@ try {
     for (const s of ['preset', 'from-file', 'ACTUAL_PASSWORD']) {
       assert.ok(!(r.stdout + r.stderr).includes(s), `a stream mentions ${s}`);
     }
+  });
+
+  // --- #505: pinned non-server callers and harness hygiene (checks N1 to N8) ---
+  const runnerSrc = readFileSync(join(ROOT, 'tests/manual/runner.js'), 'utf8');
+  const directSrc = readFileSync(join(ROOT, 'scripts/direct-sync/bank-sync-direct.mjs'), 'utf8');
+
+  check('#505 N1: tests/manual/runner.js pins all six dotenv options with the cwd .env path', () => {
+    assert.deepStrictEqual(pinProblems(runnerSrc, 'loadDotenv(', 1), []);
+    assert.ok(callArgs(runnerSrc, 'loadDotenv(')[0].includes("path.resolve(process.cwd(), '.env')"));
+  });
+
+  check('#505 N2a: the runner call text is inert under every DOTENV_* knob', () => {
+    const arg = callArgs(runnerSrc, 'loadDotenv(')[0];
+    const r = runChild(arg, {
+      DOTENV_OVERRIDE: 'true',
+      DOTENV_PATH: join(dir, 'other.env'),
+      DOTENV_DEBUG: 'true',
+      DOTENV_ENCODING: 'bogus',
+      DOTENV_FAST: 'true',
+      DOTENV_QUIET: 'false',
+      ACTUAL_PASSWORD: 'preset',
+    });
+    assert.strictEqual(r.stdout, '', `stdout: ${JSON.stringify(r.stdout)}`);
+    assert.strictEqual(r.stderr, '', `stderr: ${JSON.stringify(r.stderr)}`);
+    assert.strictEqual(r.p, 'preset');
+    assert.strictEqual(r.b, 'from-file');
+    assert.strictEqual(r.v, 'from-file');
+  });
+
+  check('#505 N2b: the runner call text keeps exported secrets over the file under DOTENV_OVERRIDE', () => {
+    const arg = callArgs(runnerSrc, 'loadDotenv(')[0];
+    const r = runChild(arg, {
+      DOTENV_OVERRIDE: 'true',
+      ACTUAL_PASSWORD: 'preset',
+      MCP_TEST_BUDGET_SYNC_ID: 'exported',
+    });
+    assert.strictEqual(r.b, 'exported');
+    assert.strictEqual(r.p, 'preset');
+    assert.strictEqual(r.v, 'from-file');
+  });
+
+  check('#505 N3: bank-sync-direct.mjs pins all six options on both calls, script-local path first', () => {
+    assert.deepStrictEqual(pinProblems(directSrc, 'dotenv.config(', 2), []);
+    const [a, b] = callArgs(directSrc, 'dotenv.config(');
+    assert.ok(a.includes("resolve(__dirname, '.env')"), `first call: ${a}`);
+    assert.ok(b.includes("resolve(projectRoot, '.env')"), `second call: ${b}`);
+  });
+
+  check('#505 N4: pinProblems can fail (partial pin, duplicated call, bare call)', () => {
+    const partial = pinProblems('loadDotenv({ override: false, quiet: true });', 'loadDotenv(', 1);
+    assert.strictEqual(partial.length, 4, JSON.stringify(partial));
+    for (const k of ['debug', 'encoding', 'fast', 'path']) {
+      assert.ok(partial.some((m) => m.includes(k)), `missing report for ${k}`);
+    }
+    const call = `loadDotenv(${PINNED});`;
+    const dup = pinProblems(`${call}\n${call}`, 'loadDotenv(', 1);
+    assert.ok(dup.some((m) => /count/.test(m)), JSON.stringify(dup));
+    assert.strictEqual(pinProblems('loadDotenv();', 'loadDotenv(', 1).length, 6);
+  });
+
+  check('#505 N5: quietFlagProblems passes only on grep status 1', () => {
+    assert.deepStrictEqual(quietFlagProblems(join(ROOT, 'src')), []);
+    assert.ok(quietFlagProblems(join(dir, 'does-not-exist')).length > 0, 'a grep error passed');
+    writeFileSync(join(dir, 'flag.txt'), 'DOTENV_CONFIG_QUIET=true\n');
+    const hit = quietFlagProblems(dir);
+    assert.ok(hit.length > 0 && hit.join('\n').includes('flag.txt'), JSON.stringify(hit));
+  });
+
+  check('#505 N6: a NODE_OPTIONS hook reaches the child only when injected after the scrub', () => {
+    const hook = `--require "${join(dir, 'noisy.cjs')}"`;
+    assert.match(runChild(PINNED, { NODE_OPTIONS: hook }).stdout, /NOISY/);
+    const saved = process.env.NODE_OPTIONS;
+    process.env.NODE_OPTIONS = hook;
+    try {
+      assert.strictEqual(runChild(PINNED).stdout, '');
+    } finally {
+      if (saved === undefined) delete process.env.NODE_OPTIONS;
+      else process.env.NODE_OPTIONS = saved;
+    }
+  });
+
+  check('#505 N7: spawnChecked throws on timeout instead of hanging', () => {
+    assert.throws(
+      () => spawnChecked(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'], { timeout: 300 }),
+      /timed out/,
+    );
+  });
+
+  check('#505 N8: config-registry.ts no longer mentions a dotenv flag', () => {
+    assert.ok(!readFileSync(join(ROOT, 'src/lib/config-registry.ts'), 'utf8').includes('dotenv flag'));
   });
 } finally {
   rmSync(dir, { recursive: true, force: true });
@@ -229,14 +327,59 @@ check('#533 P6, U7 to U9d: dotenvProblems fixtures', () => {
 });
 
 check('U4: nothing under src/ sets or reads DOTENV_CONFIG_QUIET (one control, not two)', () => {
-  const r = spawnSync('grep', ['-rl', 'DOTENV_CONFIG_QUIET', join(ROOT, 'src')], { encoding: 'utf8' });
-  assert.strictEqual(r.stdout.trim(), '', `found in: ${r.stdout.trim()}`);
+  const problems = quietFlagProblems(join(ROOT, 'src'));
+  assert.deepStrictEqual(problems, []);
 });
 
 check('U5: the installed dotenv is major 18 (the version whose options beat the env knobs)', () => {
   const pkg = JSON.parse(readFileSync(join(ROOT, 'node_modules/dotenv/package.json'), 'utf8'));
   assert.strictEqual(Number(pkg.version.split('.')[0]), 18, `installed dotenv is ${pkg.version}`);
 });
+
+// --- #505 helpers (function declarations, hoisted; used by runChild and the checks above) ---
+
+// The single place a child process is launched: default 10 s timeout, and a timeout is an
+// error (spawnSync reports it as status null / error.code ETIMEDOUT, which a status check alone could misread).
+function spawnChecked(cmd, args, opts = {}) {
+  const timeout = opts.timeout ?? 10000;
+  const r = spawnSync(cmd, args, { encoding: 'utf8', ...opts, timeout });
+  if (r.error?.code === 'ETIMEDOUT') throw new Error(`${cmd} timed out after ${timeout} ms`);
+  return r;
+}
+
+// [] only when grep exits exactly 1 (no match). 0 is a match, 2 or null is grep itself failing.
+function quietFlagProblems(target) {
+  const r = spawnChecked('grep', ['-rl', 'DOTENV_CONFIG_QUIET', target]);
+  if (r.status === 1) return [];
+  if (r.status === 0) return [`found in: ${r.stdout.trim()}`];
+  return [`grep did not run cleanly (status ${r.status}): ${r.stderr}`];
+}
+
+// The argument text of every `callee` occurrence, sliced to the matching ');'.
+function callArgs(src, callee) {
+  const out = [];
+  let at = src.indexOf(callee);
+  while (at !== -1) {
+    const start = at + callee.length;
+    const end = src.indexOf(');', start);
+    out.push(src.slice(start, end === -1 ? src.length : end));
+    at = src.indexOf(callee, start);
+  }
+  return out;
+}
+
+// [] when `callee` occurs expectedCount times and every call carries all six pins.
+function pinProblems(src, callee, expectedCount) {
+  const args = callArgs(src, callee);
+  const problems = [];
+  if (args.length !== expectedCount) problems.push(`count: expected ${expectedCount} ${callee} calls, found ${args.length}`);
+  const pins = [['quiet', /quiet:\s*true/], ['debug', /debug:\s*false/], ['override', /override:\s*false/],
+    ['encoding', /encoding:\s*'utf8'/], ['fast', /fast:\s*false/], ['path', /path:\s*\S/]];
+  args.forEach((arg, i) => {
+    for (const [name, re] of pins) if (!re.test(arg)) problems.push(`call ${i + 1} does not pin ${name}`);
+  });
+  return problems;
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

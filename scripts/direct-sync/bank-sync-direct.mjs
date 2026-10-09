@@ -58,9 +58,11 @@ const projectRoot = resolve(__dirname, '..', '..');
 try {
   const dotenv = await import('dotenv');
   // Load script-local .env first (test/override credentials), then project root .env.
-  // Later calls do NOT overwrite vars already set by earlier calls (dotenv default).
-  dotenv.config({ path: resolve(__dirname, '.env') });
-  dotenv.config({ path: resolve(projectRoot, '.env') });
+  // Later calls do NOT overwrite vars already set by earlier calls: override is pinned to false
+  // so that holds even when DOTENV_OVERRIDE=true is exported, and every other option is pinned
+  // too so no DOTENV_* variable changes what loads (#505).
+  dotenv.config({ quiet: true, debug: false, override: false, encoding: 'utf8', fast: false, path: resolve(__dirname, '.env') });
+  dotenv.config({ quiet: true, debug: false, override: false, encoding: 'utf8', fast: false, path: resolve(projectRoot, '.env') });
 } catch {
   // dotenv not installed — fine, env vars must be set another way
 }

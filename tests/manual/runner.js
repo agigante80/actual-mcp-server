@@ -26,6 +26,7 @@
  *   EXPECTED_TOOL_COUNT   Expected number of MCP tools (default: 83)
  */
 
+import path from 'node:path';
 import readline from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { config as loadDotenv } from 'dotenv';
@@ -42,8 +43,9 @@ import { extendedTests, fullTests } from './tests/advanced.js';
 import { roundtripTests } from './tests/roundtrip.js';
 import { cleanupMcpTestAccounts } from './cleanup.js';
 
-// Load .env from project root
-loadDotenv();
+// Load .env from the current directory (run from the repo root), with every dotenv option
+// pinned so no DOTENV_* variable in the shell changes what loads (#505).
+loadDotenv({ quiet: true, debug: false, override: false, encoding: 'utf8', fast: false, path: path.resolve(process.cwd(), '.env') });
 
 // Default targets the bearer instance (port 3601) — safe for automated tests.
 // The OIDC instance (port 3600) requires a Casdoor JWT and cannot be tested without a browser.
