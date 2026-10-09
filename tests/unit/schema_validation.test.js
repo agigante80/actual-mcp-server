@@ -137,10 +137,6 @@ async function expectCallError(tool, input, label) {
   if (!expectParseError(batch, { operations: 'not-array' }, 'operations must be an array')) fail();
   if (!expectParseError(batch, { operations: [{ categoryId: '10000000-0000-4000-8000-000000000001', amount: 100 }] },
     'operation missing required month')) fail();
-  if (!expectParseError(batch, { operations: [{ month: '2025-13', categoryId: '10000000-0000-4000-8000-000000000001' }] },
-    'invalid month format (month 13)')) fail();
-  if (!expectParseError(batch, { operations: [{ month: '25-01', categoryId: '10000000-0000-4000-8000-000000000001' }] },
-    'invalid month format (2-digit year)')) fail();
   // #516: integer cents, at-least-one-of, and the 1..100 bounds, with the exact messages
   const CAT = '10000000-0000-4000-8000-000000000001';
   const expectMessage = (input, fragment, label) => {
@@ -151,6 +147,11 @@ async function expectCallError(tool, input, label) {
       console.error(`  FAIL [${label}]: message "${text}" lacks "${fragment}"`); return false;
     }
   };
+  // amount: 1 so the at-least-one-of refine passes and only the month regex can reject
+  if (!expectMessage({ operations: [{ month: '2025-13', categoryId: CAT, amount: 1 }] },
+    'month must be in YYYY-MM format', 'invalid month format (month 13)')) fail();
+  if (!expectMessage({ operations: [{ month: '25-01', categoryId: CAT, amount: 1 }] },
+    'month must be in YYYY-MM format', 'invalid month format (2-digit year)')) fail();
   if (!expectMessage({ operations: [{ month: '2026-03', categoryId: CAT, amount: 12.5 }] },
     'Amount must be an integer (cents)', 'amount 12.5 is not integer cents')) fail();
   if (!expectMessage({ operations: [{ month: '2026-03', categoryId: CAT }] },

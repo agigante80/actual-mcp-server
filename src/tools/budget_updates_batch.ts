@@ -55,14 +55,16 @@ Example: Set health insurance budget for 2 months:
     const input = InputSchema.parse(args || {});
     const { succeeded, failed } = await adapter.setBudgetBatch(input.operations);
 
-    // Counts, plus index/month/categoryId per failure. Never amounts.
+    // Counts and failed indices only. Never amounts, months or category ids.
     log.info('Budget batch finished', {
       total: input.operations.length,
       successCount: succeeded.length,
       failureCount: failed.length,
     });
-    for (const f of failed) {
-      log.warn('Budget batch item failed', { index: f.index, month: f.month, categoryId: f.categoryId });
+    if (failed.length > 0) {
+      // setBudgetBatch returns `failed` already sorted ascending by index, so no re-sort here.
+      const failedIndices = failed.map((f) => f.index);
+      log.warn('Budget batch items failed', { failureCount: failed.length, failedIndices });
     }
 
     const result: BatchResult = {

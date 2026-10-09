@@ -91,8 +91,9 @@ console.log('\n[#516] valid items: applied inside ONE drain, guard reads before 
   const enter = events.indexOf('bracket-enter');
   const lastRead = Math.max(events.lastIndexOf('getCategories'), events.lastIndexOf('getBudgetMonths'));
   check(enter > -1 && lastRead > -1 && lastRead < enter, 'both guard reads happen BEFORE the bracket is entered', events.join(','));
-  check(events.filter((e) => e === 'getCategories').length === 1 && events.filter((e) => e === 'getBudgetMonths').length === 1,
-    'categories and months are each read exactly once', events.join(','));
+  check(events.filter((e) => e === 'getBudgetMonths').length === 1, 'months are read from upstream exactly once', events.join(','));
+  check(events.filter((e) => e === 'getCategories').length === 1,
+    'categories reach upstream exactly once (a repeated read through readDrainListing is absorbed by the drain cache, so this cannot see one)', events.join(','));
   check(events.filter((e) => e === 'bracket-enter').length === 1, 'exactly one bracket is opened');
   const inside = events.slice(enter + 1, events.indexOf('bracket-exit'));
   check(inside.length === 3 && inside.every((e) => e === 'setAmount' || e === 'setCarryover'), 'only raw writes run inside the bracket', inside.join(','));

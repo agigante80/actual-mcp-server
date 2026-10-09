@@ -25,6 +25,7 @@ const apiMod = await import('@actual-app/api');
 const apiDefault = (apiMod.default || apiMod);
 let writes = [];
 let bracketFails = false;
+let amountFailsFor = null;
 apiDefault.sync = async () => {};
 apiDefault.getCategories = async () => [
   { id: FOOD, name: 'Food', is_income: false },
@@ -35,8 +36,18 @@ apiDefault.batchBudgetUpdates = async (fn) => {
   if (bracketFails) throw new Error('batch-budget-start failed: ECONNRESET');
   await fn();
 };
-apiDefault.setBudgetAmount = async (month, categoryId, amount) => { writes.push({ month, categoryId, amount }); };
+apiDefault.setBudgetAmount = async (month, categoryId, amount) => {
+  if (amountFailsFor === categoryId) throw new Error('upstream rejected the amount');
+  writes.push({ month, categoryId, amount });
+};
 apiDefault.setBudgetCarryover = async (month, categoryId, flag) => { writes.push({ month, categoryId, flag }); };
+
+// Log capture (the seam budget_acl_enforcement.test.js uses): record every warn, forward it.
+const loggerDefault = (await import('../../dist/src/logger.js')).default;
+const warnRecords = [];
+const origWarn = loggerDefault.warn.bind(loggerDefault);
+loggerDefault.warn = (msg, meta) => { warnRecords.push({ msg: String(msg), meta }); return origWarn(msg, meta); };
+const batchWarns = () => warnRecords.filter((r) => r.meta?.module === 'BUDGET_BATCH');
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
 adapterMod._setSkipApiInitForTests(true);
@@ -65,6 +76,46 @@ console.log('\n[#516] shape and per-item results');
     'the unknown category is in failed with a not-found error', JSON.stringify(res.failed));
   check(writes.length === 2 && !writes.some((w) => w.categoryId === GHOST), 'nothing was written for the unknown category');
   check(!('success' in res) && !('successful' in res) && !('errors' in res), 'the old success/successful/errors fields are gone');
+}
+
+console.log('\n[#523] one aggregated warn for failed items');
+{
+  warnRecords.length = 0;
+  await tool.call({ operations: [
+    { month: '2026-01', categoryId: GHOST, amount: 1 },
+    { month: '2026-02', categoryId: GHOST, amount: 1 },
+    { month: '2026-03', categoryId: GHOST, amount: 1 },
+  ] });
+  let w = batchWarns();
+  check(w.length === 1, 'U3: exactly one BUDGET_BATCH warn for three failures', String(w.length));
+  check(w[0]?.msg.includes('Budget batch items failed'), 'U3: message names the aggregate');
+  check(w[0]?.meta?.failureCount === 3 && JSON.stringify(w[0]?.meta?.failedIndices) === '[0,1,2]', 'U3: failureCount 3, failedIndices [0,1,2]', JSON.stringify(w[0]?.meta));
+  check(!('month' in (w[0]?.meta ?? {})) && !('categoryId' in (w[0]?.meta ?? {})) && !('amount' in (w[0]?.meta ?? {})), 'U3: meta carries no month, categoryId or amount');
+
+  warnRecords.length = 0;
+  await tool.call({ operations: [{ month: '2026-01', categoryId: FOOD, amount: 1 }, { month: '2026-01', categoryId: RENT, amount: 1 }] });
+  check(batchWarns().length === 0, 'U4: no failures, no BUDGET_BATCH warn');
+
+  warnRecords.length = 0;
+  await tool.call({ operations: [
+    { month: '2026-01', categoryId: FOOD, amount: 1 },
+    { month: '2026-01', categoryId: GHOST, amount: 1 },
+    { month: '2026-01', categoryId: RENT, amount: 1 },
+    { month: '1899-01', categoryId: FOOD, amount: 1 },
+  ] });
+  w = batchWarns();
+  check(w.length === 1 && w[0].meta.failureCount === 2 && JSON.stringify(w[0].meta.failedIndices) === '[1,3]', 'U5: mixed batch logs one warn with failedIndices [1,3]', JSON.stringify(w.map((r) => r.meta)));
+
+  warnRecords.length = 0;
+  amountFailsFor = RENT;
+  try {
+    await tool.call({ operations: [
+      { month: '2026-01', categoryId: RENT, amount: 1 },
+      { month: '2026-01', categoryId: GHOST, amount: 1 },
+    ] });
+  } finally { amountFailsFor = null; }
+  w = batchWarns();
+  check(w.length === 1 && w[0].meta.failureCount === 2 && JSON.stringify(w[0].meta.failedIndices) === '[0,1]', 'U6: phase 2 write failure and phase 1 refusal share one record, ascending', JSON.stringify(w.map((r) => r.meta)));
 }
 
 console.log('\n[#516] every item failing resolves normally');

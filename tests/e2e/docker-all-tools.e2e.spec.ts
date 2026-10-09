@@ -1201,13 +1201,15 @@ test.describe('Docker E2E - ALL 83 TOOLS', () => {
     expect(result.failed[0].error).toMatch(/outside this budget's range/i);
   });
 
-  test('actual_budget_updates_batch - rejects invalid input at the schema (#516)', async ({ mcp, makeCategory }) => {
-    const category = await makeCategory();
+  test('actual_budget_updates_batch - rejects invalid input at the schema (#516)', async ({ mcp }) => {
+    // Well-formed, nonexistent: if the schema ever stopped rejecting, the adapter's category
+    // guard would refuse the item per-item, the call would RESOLVE, and nothing is written.
+    const ghostId = '19999999-0000-4000-8000-000000000009';
     await expect(mcp.call('actual_budget_updates_batch', {
-      operations: [{ month: currentMonth(), categoryId: category.id, amount: 12.5 }],
+      operations: [{ month: currentMonth(), categoryId: ghostId, amount: 12.5 }],
     })).rejects.toThrow(/integer/i);
     await expect(mcp.call('actual_budget_updates_batch', {
-      operations: [{ month: currentMonth(), categoryId: category.id }],
+      operations: [{ month: currentMonth(), categoryId: ghostId }],
     })).rejects.toThrow(/at least one of amount or carryover/i);
     await expect(mcp.call('actual_budget_updates_batch', { operations: [] })).rejects.toThrow(/Validation error: operations/);
   });
