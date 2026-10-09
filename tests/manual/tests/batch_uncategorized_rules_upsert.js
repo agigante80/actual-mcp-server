@@ -31,453 +31,458 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   // nulled context.categoryId in its teardown. Apply the same self-contained fallback pattern.
   let buruOwnedGroupId = null;  // set if we created a group here (cleaned up at end)
   let buruOwnedCatId = null;    // set if we created a category here (cleaned up at end)
-
-  if (!context.categoryId) {
-    const catData = await callTool("actual_categories_get", {});
-    const raw = catData.result || catData.categories || catData;
-    const flatCats = Array.isArray(raw)
-      ? raw.filter(g => !g.is_income).flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
-      : [];
-    const firstCat = flatCats[0];
-    if (firstCat) {
-      context.categoryId = firstCat.id;
-      console.log(`  ℹ Using existing category for batch/upsert tests: "${firstCat.name}" (${firstCat.id})`);
-    } else {
-      console.log("  ℹ No expense category found: creating disposable category group + category for batch/upsert tests...");
-      const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BuRU-Group-${timestamp}` });
-      buruOwnedGroupId = newGroup.id || newGroup.result || newGroup;
-      console.log(`  ✓ Created disposable category group: ${buruOwnedGroupId}`);
-
-      const newCat = await callTool("actual_categories_create", {
-        name: `MCP-BuRU-Cat-${timestamp}`,
-        group_id: buruOwnedGroupId,
-      });
-      buruOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
-      context.categoryId = buruOwnedCatId;
-      console.log(`  ✓ Created disposable category: ${buruOwnedCatId}`);
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 1. actual_transactions_uncategorized
-  // ──────────────────────────────────────────────────────────────────────────
-  console.log("\n=== actual_transactions_uncategorized ===");
-
-  // Create an uncategorized transaction so we know at least one exists
-  const uncatNotes = `MCP-Uncat-${timestamp}`;
-  console.log("\nCreating uncategorized test transaction...");
-  await callTool("actual_transactions_create", {
-    account: context.accountId,
-    date: today,
-    amount: -1234,
-    notes: uncatNotes,
-    // deliberately no category
-  });
-  console.log("✓ Uncategorized transaction created");
-
-  // List uncategorized transactions (default: all-time).
-  // NOTE: Since #121, actual_transactions_uncategorized returns only a summary
-  // by default (totalCount, totalAmount, byAccount, dateRange). Pass
-  // includeTransactions:true to also receive the paginated transactions[] we
-  // need for the find-by-notes assertions below.
-  console.log("\nListing uncategorized transactions (default: all-time)...");
-  const uncatResult = await callTool("actual_transactions_uncategorized", {
-    includeTransactions: true,
-    limit: 1000,
-  });
-  const uncatTxns = uncatResult?.transactions ?? [];
-  // totalCount lives at the top level (post-#121); summary.totalAmount no longer exists.
-  const uncatCount = uncatResult?.totalCount ?? uncatTxns.length;
-  const uncatTotalAmount = uncatResult?.totalAmount;
-  if (Array.isArray(uncatTxns)) {
-    console.log(`  ✓ actual_transactions_uncategorized: count=${uncatCount}, totalAmount=${uncatTotalAmount}`);
-  } else {
-    fail(`actual_transactions_uncategorized: expected transactions array, got ${JSON.stringify(uncatResult).slice(0, 120)}`);
-  }
-
-  // Verify our newly created transaction appears in the uncategorized list
-  const foundInUncat = uncatTxns.find(t => t?.notes === uncatNotes);
-  if (foundInUncat) {
-    console.log(`  ✓ Verify: uncategorized transaction found in list (notes="${uncatNotes}")`);
-  } else {
-    fail(`Verify: uncategorized transaction NOT found in list (notes="${uncatNotes}")`);
-  }
-
-  // Save the uncategorized transaction ID for batch update below
-  const uncatTxnId = foundInUncat?.id ?? null;
-
-  // NEGATIVE: non-existent account ID should return empty list (not error)
-  console.log("\nNEGATIVE: listing uncategorized for __nonexistent_MCP_test_value__ account...");
+  // #519: cleanup must survive a throwing call (since #517 a whole-call failure is a thrown
+  // tool error). try/finally with NO catch: the original error is deliberately not swallowed, so
+  // the runner reports it and exits 1 instead of firing more requests at a failing server.
   try {
-    const negResult = await callTool("actual_transactions_uncategorized", {
-      accountId: "__nonexistent_MCP_test_value__",
-    });
-    const negTxns = negResult?.transactions ?? [];
-    if (Array.isArray(negTxns) && negTxns.length === 0) {
-      console.log("  ✓ NEGATIVE: returned empty list for unknown account (expected)");
-    } else {
-      fail(`NEGATIVE: got ${negTxns.length} transactions for an unknown account, expected an empty list. "May depend on Actual behavior" is a question this test exists to answer, not a reason to pass.`);
-    }
-  } catch (err) {
-    // Some adapter versions may throw for invalid account IDs: acceptable
-    console.log(`  ✓ NEGATIVE: threw as expected for unknown account: ${err.message}`);
-  }
 
-  // EDGE CASE: date range guaranteed to have zero uncategorized transactions
-  console.log("\nEDGE CASE: listing uncategorized for far-future date range (expect empty list)...");
-  const emptyRangeResult = await callTool("actual_transactions_uncategorized", {
-    startDate: "2099-01-01",
-    endDate: "2099-01-31",
-  });
-  const emptyRangeTxns = emptyRangeResult?.transactions ?? [];
-  if (Array.isArray(emptyRangeTxns) && emptyRangeTxns.length === 0) {
-    console.log(`  ✓ EDGE CASE: transactions=[] for future date range (count=${emptyRangeResult?.count ?? 0})`);
-  } else {
-    fail(`EDGE CASE: expected an empty list for 2099, got ${emptyRangeTxns.length} items`);
-  }
-  if (emptyRangeResult?.count === 0) {
-    console.log(`  ✓ EDGE CASE: count=0`);
-  }
-  if (emptyRangeResult?.totalAmount === 0) {
-    console.log(`  ✓ EDGE CASE: totalAmount=0`);
-  }
+    if (!context.categoryId) {
+      const catData = await callTool("actual_categories_get", {});
+      const raw = catData.result || catData.categories || catData;
+      const flatCats = Array.isArray(raw)
+        ? raw.filter(g => !g.is_income).flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
+        : [];
+      const firstCat = flatCats[0];
+      if (firstCat) {
+        context.categoryId = firstCat.id;
+        console.log(`  ℹ Using existing category for batch/upsert tests: "${firstCat.name}" (${firstCat.id})`);
+      } else {
+        console.log("  ℹ No expense category found: creating disposable category group + category for batch/upsert tests...");
+        const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BuRU-Group-${timestamp}` });
+        buruOwnedGroupId = newGroup.id || newGroup.result || newGroup;
+        console.log(`  ✓ Created disposable category group: ${buruOwnedGroupId}`);
 
-  // ── Off-budget filtering regression (issue #80) ───────────────────────────
-  // actual_transactions_uncategorized must NOT include transactions from
-  // off-budget accounts (investment, HSA, etc.) because those transactions
-  // can never have categories assigned: any update is silently discarded.
-  //
-  // Account is named MCP-OffBudget-{timestamp} so cleanup can identify it.
-  // The off-budget transaction protects against tombstoning on close.
-  // Account is closed (not deleted) at the end so history is preserved.
-  console.log("\nOFF-BUDGET REGRESSION (issue #80): uncategorized must exclude off-budget txns...");
-  let offBudgetAccountId = null;
-  let offBudgetTxnId = null;
-  const offBudgetAccountName = `MCP-OffBudget-${timestamp}`;
-  try {
-    // 1. Create a named account, then update to set offbudget=true
-    // (actual_accounts_create does not accept offbudget at creation time)
-    const createAcctResult = await callTool("actual_accounts_create", {
-      name: offBudgetAccountName,
-    });
-    offBudgetAccountId = createAcctResult?.id ?? createAcctResult?.result ?? createAcctResult;
-    if (!offBudgetAccountId || typeof offBudgetAccountId !== 'string') {
-      throw new Error(`Failed to create off-budget account: got: ${JSON.stringify(createAcctResult)}`);
-    }
-    // Set offbudget=true via update (API does not support it at creation time)
-    await callTool("actual_accounts_update", {
-      id: offBudgetAccountId,
-      fields: { offbudget: true },
-    });
-    console.log(`  ✓ Off-budget account created: "${offBudgetAccountName}" (${offBudgetAccountId})`);
-
-    // Verify it is marked off-budget
-    const allAccounts = await callTool("actual_accounts_list", {});
-    const createdAcct = Array.isArray(allAccounts) ? allAccounts.find(a => a.id === offBudgetAccountId) : null;
-    if (createdAcct?.offbudget === true) {
-      console.log(`  ✓ Verified account.offbudget=true`);
-    } else {
-      fail(`account.offbudget is not true: got ${JSON.stringify(createdAcct?.offbudget)}. The rest of this block tests off-budget behaviour, so it is not testing anything if this is wrong.`);
+        const newCat = await callTool("actual_categories_create", {
+          name: `MCP-BuRU-Cat-${timestamp}`,
+          group_id: buruOwnedGroupId,
+        });
+        buruOwnedCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
+        context.categoryId = buruOwnedCatId;
+        console.log(`  ✓ Created disposable category: ${buruOwnedCatId}`);
+      }
     }
 
-    // 2. Create a transaction in the off-budget account (no category)
-    const offBudgetNotes = `MCP-OffBudget-Txn-${timestamp}`;
+    // ──────────────────────────────────────────────────────────────────────────
+    // 1. actual_transactions_uncategorized
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log("\n=== actual_transactions_uncategorized ===");
+
+    // Create an uncategorized transaction so we know at least one exists
+    const uncatNotes = `MCP-Uncat-${timestamp}`;
+    console.log("\nCreating uncategorized test transaction...");
     await callTool("actual_transactions_create", {
-      account: offBudgetAccountId,
+      account: context.accountId,
       date: today,
-      amount: -9999,
-      notes: offBudgetNotes,
+      amount: -1234,
+      notes: uncatNotes,
       // deliberately no category
     });
-    console.log(`  ✓ Off-budget transaction created (notes="${offBudgetNotes}")`);
+    console.log("✓ Uncategorized transaction created");
 
-    // Locate the transaction ID via actual_transactions_get (which, unlike transactions_filter,
-    // does not exclude off-budget accounts). We need it for teardown: closing an account with a
-    // non-zero balance requires deleting the transaction first so the balance reaches zero.
-    try {
-      const offTxns = await callTool("actual_transactions_get", { accountId: offBudgetAccountId });
-      const offTxnsArr = Array.isArray(offTxns) ? offTxns : (offTxns?.result ?? []);
-      const offTxn = offTxnsArr.find(t => t?.notes === offBudgetNotes);
-      offBudgetTxnId = offTxn?.id ?? null;
-    } catch (_) { /* best effort */ }
-
-    // 3. List uncategorized: off-budget transaction must NOT appear.
-    // Same #121 shape note: includeTransactions:true is required to get the array.
-    const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {
+    // List uncategorized transactions (default: all-time).
+    // NOTE: Since #121, actual_transactions_uncategorized returns only a summary
+    // by default (totalCount, totalAmount, byAccount, dateRange). Pass
+    // includeTransactions:true to also receive the paginated transactions[] we
+    // need for the find-by-notes assertions below.
+    console.log("\nListing uncategorized transactions (default: all-time)...");
+    const uncatResult = await callTool("actual_transactions_uncategorized", {
       includeTransactions: true,
       limit: 1000,
     });
-    const offBudgetUncatTxns = offBudgetUncatResult?.transactions ?? [];
-    const offBudgetTxnFound = offBudgetUncatTxns.find(t => t?.notes === offBudgetNotes);
-
-    // Also verify the on-budget transaction is still present (a too-broad filter would exclude everything)
-    const onBudgetStillPresent = offBudgetUncatTxns.find(t => t?.notes === uncatNotes);
-    if (onBudgetStillPresent) {
-      console.log("  ✓ ON-BUDGET VERIFY [#80]: on-budget transaction still appears in uncategorized list");
+    const uncatTxns = uncatResult?.transactions ?? [];
+    // totalCount lives at the top level (post-#121); summary.totalAmount no longer exists.
+    const uncatCount = uncatResult?.totalCount ?? uncatTxns.length;
+    const uncatTotalAmount = uncatResult?.totalAmount;
+    if (Array.isArray(uncatTxns)) {
+      console.log(`  ✓ actual_transactions_uncategorized: count=${uncatCount}, totalAmount=${uncatTotalAmount}`);
     } else {
-      fail("ON-BUDGET VERIFY [#80]: on-budget transaction missing: filter may be too broad");
+      fail(`actual_transactions_uncategorized: expected transactions array, got ${JSON.stringify(uncatResult).slice(0, 120)}`);
     }
 
-    if (!offBudgetTxnFound) {
-      console.log("  ✓ OFF-BUDGET REGRESSION [#80]: off-budget transaction correctly excluded from uncategorized list");
+    // Verify our newly created transaction appears in the uncategorized list
+    const foundInUncat = uncatTxns.find(t => t?.notes === uncatNotes);
+    if (foundInUncat) {
+      console.log(`  ✓ Verify: uncategorized transaction found in list (notes="${uncatNotes}")`);
     } else {
-      fail("OFF-BUDGET REGRESSION [#80]: off-budget transaction appeared in uncategorized list (bug confirmed)");
-      console.log(`     id=${offBudgetTxnFound.id}, notes=${offBudgetTxnFound.notes}`);
+      fail(`Verify: uncategorized transaction NOT found in list (notes="${uncatNotes}")`);
+    }
 
-      // 4. Also document the silent write discard if the bug is present and we have a category
-      if (context.categoryId) {
-        await callTool("actual_transactions_update", {
-          id: offBudgetTxnFound.id,
-          fields: { category: context.categoryId },
-        });
-        const readBack = await callTool("actual_transactions_uncategorized", {
-          includeTransactions: true,
-          limit: 1000,
-        });
-        const stillPresent = (readBack?.transactions ?? []).find(t => t?.id === offBudgetTxnFound.id);
-        if (stillPresent) {
-          console.log("  ✓ SILENT-WRITE CONFIRMED [#80]: update returned success but category still null (off-budget write is a no-op)");
-        } else {
-          fail("SILENT-WRITE CHECK [#80]: the transaction left the uncategorized list after an off-budget update, so the write was NOT a no-op. That inverts the regression this block pins.");
+    // Save the uncategorized transaction ID for batch update below
+    const uncatTxnId = foundInUncat?.id ?? null;
+
+    // NEGATIVE: non-existent account ID should return empty list (not error)
+    console.log("\nNEGATIVE: listing uncategorized for __nonexistent_MCP_test_value__ account...");
+    try {
+      const negResult = await callTool("actual_transactions_uncategorized", {
+        accountId: "__nonexistent_MCP_test_value__",
+      });
+      const negTxns = negResult?.transactions ?? [];
+      if (Array.isArray(negTxns) && negTxns.length === 0) {
+        console.log("  ✓ NEGATIVE: returned empty list for unknown account (expected)");
+      } else {
+        fail(`NEGATIVE: got ${negTxns.length} transactions for an unknown account, expected an empty list. "May depend on Actual behavior" is a question this test exists to answer, not a reason to pass.`);
+      }
+    } catch (err) {
+      // Some adapter versions may throw for invalid account IDs: acceptable
+      console.log(`  ✓ NEGATIVE: threw as expected for unknown account: ${err.message}`);
+    }
+
+    // EDGE CASE: date range guaranteed to have zero uncategorized transactions
+    console.log("\nEDGE CASE: listing uncategorized for far-future date range (expect empty list)...");
+    const emptyRangeResult = await callTool("actual_transactions_uncategorized", {
+      startDate: "2099-01-01",
+      endDate: "2099-01-31",
+    });
+    const emptyRangeTxns = emptyRangeResult?.transactions ?? [];
+    if (Array.isArray(emptyRangeTxns) && emptyRangeTxns.length === 0) {
+      console.log(`  ✓ EDGE CASE: transactions=[] for future date range (count=${emptyRangeResult?.count ?? 0})`);
+    } else {
+      fail(`EDGE CASE: expected an empty list for 2099, got ${emptyRangeTxns.length} items`);
+    }
+    if (emptyRangeResult?.count === 0) {
+      console.log(`  ✓ EDGE CASE: count=0`);
+    }
+    if (emptyRangeResult?.totalAmount === 0) {
+      console.log(`  ✓ EDGE CASE: totalAmount=0`);
+    }
+
+    // ── Off-budget filtering regression (issue #80) ───────────────────────────
+    // actual_transactions_uncategorized must NOT include transactions from
+    // off-budget accounts (investment, HSA, etc.) because those transactions
+    // can never have categories assigned: any update is silently discarded.
+    //
+    // Account is named MCP-OffBudget-{timestamp} so cleanup can identify it.
+    // The off-budget transaction protects against tombstoning on close.
+    // Account is closed (not deleted) at the end so history is preserved.
+    console.log("\nOFF-BUDGET REGRESSION (issue #80): uncategorized must exclude off-budget txns...");
+    let offBudgetAccountId = null;
+    let offBudgetTxnId = null;
+    const offBudgetAccountName = `MCP-OffBudget-${timestamp}`;
+    try {
+      // 1. Create a named account, then update to set offbudget=true
+      // (actual_accounts_create does not accept offbudget at creation time)
+      const createAcctResult = await callTool("actual_accounts_create", {
+        name: offBudgetAccountName,
+      });
+      offBudgetAccountId = createAcctResult?.id ?? createAcctResult?.result ?? createAcctResult;
+      if (!offBudgetAccountId || typeof offBudgetAccountId !== 'string') {
+        throw new Error(`Failed to create off-budget account: got: ${JSON.stringify(createAcctResult)}`);
+      }
+      // Set offbudget=true via update (API does not support it at creation time)
+      await callTool("actual_accounts_update", {
+        id: offBudgetAccountId,
+        fields: { offbudget: true },
+      });
+      console.log(`  ✓ Off-budget account created: "${offBudgetAccountName}" (${offBudgetAccountId})`);
+
+      // Verify it is marked off-budget
+      const allAccounts = await callTool("actual_accounts_list", {});
+      const createdAcct = Array.isArray(allAccounts) ? allAccounts.find(a => a.id === offBudgetAccountId) : null;
+      if (createdAcct?.offbudget === true) {
+        console.log(`  ✓ Verified account.offbudget=true`);
+      } else {
+        fail(`account.offbudget is not true: got ${JSON.stringify(createdAcct?.offbudget)}. The rest of this block tests off-budget behaviour, so it is not testing anything if this is wrong.`);
+      }
+
+      // 2. Create a transaction in the off-budget account (no category)
+      const offBudgetNotes = `MCP-OffBudget-Txn-${timestamp}`;
+      await callTool("actual_transactions_create", {
+        account: offBudgetAccountId,
+        date: today,
+        amount: -9999,
+        notes: offBudgetNotes,
+        // deliberately no category
+      });
+      console.log(`  ✓ Off-budget transaction created (notes="${offBudgetNotes}")`);
+
+      // Locate the transaction ID via actual_transactions_get (which, unlike transactions_filter,
+      // does not exclude off-budget accounts). We need it for teardown: closing an account with a
+      // non-zero balance requires deleting the transaction first so the balance reaches zero.
+      try {
+        const offTxns = await callTool("actual_transactions_get", { accountId: offBudgetAccountId });
+        const offTxnsArr = Array.isArray(offTxns) ? offTxns : (offTxns?.result ?? []);
+        const offTxn = offTxnsArr.find(t => t?.notes === offBudgetNotes);
+        offBudgetTxnId = offTxn?.id ?? null;
+      } catch (_) { /* best effort */ }
+
+      // 3. List uncategorized: off-budget transaction must NOT appear.
+      // Same #121 shape note: includeTransactions:true is required to get the array.
+      const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {
+        includeTransactions: true,
+        limit: 1000,
+      });
+      const offBudgetUncatTxns = offBudgetUncatResult?.transactions ?? [];
+      const offBudgetTxnFound = offBudgetUncatTxns.find(t => t?.notes === offBudgetNotes);
+
+      // Also verify the on-budget transaction is still present (a too-broad filter would exclude everything)
+      const onBudgetStillPresent = offBudgetUncatTxns.find(t => t?.notes === uncatNotes);
+      if (onBudgetStillPresent) {
+        console.log("  ✓ ON-BUDGET VERIFY [#80]: on-budget transaction still appears in uncategorized list");
+      } else {
+        fail("ON-BUDGET VERIFY [#80]: on-budget transaction missing: filter may be too broad");
+      }
+
+      if (!offBudgetTxnFound) {
+        console.log("  ✓ OFF-BUDGET REGRESSION [#80]: off-budget transaction correctly excluded from uncategorized list");
+      } else {
+        fail("OFF-BUDGET REGRESSION [#80]: off-budget transaction appeared in uncategorized list (bug confirmed)");
+        console.log(`     id=${offBudgetTxnFound.id}, notes=${offBudgetTxnFound.notes}`);
+
+        // 4. Also document the silent write discard if the bug is present and we have a category
+        if (context.categoryId) {
+          await callTool("actual_transactions_update", {
+            id: offBudgetTxnFound.id,
+            fields: { category: context.categoryId },
+          });
+          const readBack = await callTool("actual_transactions_uncategorized", {
+            includeTransactions: true,
+            limit: 1000,
+          });
+          const stillPresent = (readBack?.transactions ?? []).find(t => t?.id === offBudgetTxnFound.id);
+          if (stillPresent) {
+            console.log("  ✓ SILENT-WRITE CONFIRMED [#80]: update returned success but category still null (off-budget write is a no-op)");
+          } else {
+            fail("SILENT-WRITE CHECK [#80]: the transaction left the uncategorized list after an off-budget update, so the write was NOT a no-op. That inverts the regression this block pins.");
+          }
+        }
+      }
+    } catch (err) {
+      fail(`OFF-BUDGET REGRESSION: error during test: ${err.message}`);
+    } finally {
+      // 5. Clean up the off-budget account.
+      // actual_accounts_close requires zero balance: delete the transaction first so the
+      // balance reaches zero, then close() tombstones the account cleanly (zero-transaction
+      // accounts are hard-deleted on close, which is fine for test cleanup).
+      if (offBudgetAccountId) {
+        if (offBudgetTxnId) {
+          try {
+            await callTool("actual_transactions_delete", { id: offBudgetTxnId });
+          } catch (_) { /* best effort */ }
+        }
+        try {
+          await callTool("actual_accounts_close", { id: offBudgetAccountId });
+          console.log(`  ✓ Off-budget test account closed: "${offBudgetAccountName}" (${offBudgetAccountId})`);
+        } catch (closeErr) {
+          fail(`Could not close the off-budget test account (${offBudgetAccountId}): ${closeErr.message}. An object this suite created and could not remove is residue, which the dual-transport gate asserts is zero.`);
         }
       }
     }
-  } catch (err) {
-    fail(`OFF-BUDGET REGRESSION: error during test: ${err.message}`);
+    // ── End off-budget regression ──────────────────────────────────────────────
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 2. actual_transactions_update_batch
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log("\n=== actual_transactions_update_batch ===");
+
+    if (!uncatTxnId) {
+      skip("Skipping batch update (no uncategorized transaction ID available)");
+    } else {
+      const batchNotes = `MCP-Batch-${timestamp}`;
+      console.log(`\nBatch-updating 1 transaction (id=${uncatTxnId})...`);
+      const batchResult = await callTool("actual_transactions_update_batch", {
+        updates: [
+          { id: uncatTxnId, fields: { notes: batchNotes, category: context.categoryId } },
+        ],
+      });
+
+      const succeeded = batchResult?.succeeded ?? [];
+      const failed = batchResult?.failed ?? [];
+      if (batchResult?.total === 1 && batchResult?.successCount === 1 && batchResult?.failureCount === 0) {
+        console.log(`  ✓ actual_transactions_update_batch: total=1 successCount=1 failureCount=0`);
+      } else {
+        fail(`actual_transactions_update_batch: unexpected result: ${JSON.stringify(batchResult).slice(0, 120)}`);
+      }
+      if (Array.isArray(succeeded) && succeeded.length === 1 && succeeded[0]?.id === uncatTxnId) {
+        console.log(`  ✓ succeeded list contains the expected transaction ID`);
+      } else {
+        fail(`succeeded list unexpected: ${JSON.stringify(succeeded)}`);
+      }
+      if (Array.isArray(failed) && failed.length === 0) {
+        console.log(`  ✓ failed list is empty (no errors)`);
+      } else {
+        fail(`failed list not empty: ${JSON.stringify(failed)}`);
+      }
+
+      // Verify: read back and confirm note + category were applied
+      const verifyFilter = await callTool("actual_transactions_filter", {
+        accountId: context.accountId,
+        notes: batchNotes,
+      });
+      const verifyRows = Array.isArray(verifyFilter)
+        ? verifyFilter
+        : (verifyFilter?.result ?? []);
+      const verifiedTxn = verifyRows.find(t => t?.id === uncatTxnId);
+      if (verifiedTxn?.notes === batchNotes) {
+        console.log(`  ✓ Verify batch: notes updated to "${batchNotes}"`);
+      } else {
+        fail(`Verify batch: notes not updated (got "${verifiedTxn?.notes}")`);
+      }
+      if (verifiedTxn?.category === context.categoryId) {
+        console.log(`  ✓ Verify batch: category set to "${context.categoryId}"`);
+      } else {
+        fail(`Verify batch: category is "${verifiedTxn?.category}", expected "${context.categoryId}"`);
+      }
+
+      // NEGATIVE: batch with a non-existent transaction ID should report partial failure
+      console.log("\nNEGATIVE: batch update with __nonexistent_MCP_test_value__ ID...");
+      const negBatch = await callTool("actual_transactions_update_batch", {
+        updates: [{ id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } }],
+      });
+      if (negBatch?.failureCount === 1 && negBatch?.successCount === 0) {
+        console.log(`  ✓ NEGATIVE: failureCount=1 successCount=0 (non-existent ID correctly failed)`);
+      } else if (negBatch?.successCount === 1) {
+        // #387: this was a warning while "does the adapter validate existence?" was an open
+        // question. It is not open any more: #212 made the adapter pre-flight the id and route a
+        // non-existent one into failed[] with a not-found message, and that is asserted in
+        // tests/unit/update_tools_not_found.test.js. So a success here is a REGRESSION of #212,
+        // not an alternative upstream behaviour, and tolerating it would let the release gate go
+        // green on the exact defect #212 fixed.
+        fail(`NEGATIVE: the batch reported success for a non-existent ID. #212 requires it to land in failed[] with a not-found message.`);
+      } else {
+        // #380: FAIL, do not warn. This branch previously swallowed a Zod schema rejection
+        // for two full releases' worth of runs: the id had stopped parsing, so the batch was
+        // refused outright and this case never reached the behaviour it names, while the
+        // suite still reported green. An unexpected result is not a documented alternative
+        // outcome, it is the test failing to run.
+        fail(`batch NEGATIVE: unexpected result: ${JSON.stringify(negBatch).slice(0, 160)}`);
+      }
+
+      // PARTIAL FAILURE: mixed batch: one valid ID + one bad ID: proves the loop
+      // does NOT abort on failure; the valid item must still appear in succeeded[].
+      console.log("\nPARTIAL FAILURE: mixed batch (1 valid + 1 bad ID): valid should still succeed...");
+      const mixedNotes = `${batchNotes}-mixed`;
+      const mixedBatch = await callTool("actual_transactions_update_batch", {
+        updates: [
+          { id: uncatTxnId, fields: { notes: mixedNotes } },
+          { id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } },
+        ],
+      });
+      const mixedSucceeded = mixedBatch?.succeeded ?? [];
+      const mixedFailed = mixedBatch?.failed ?? [];
+      if (mixedBatch?.total === 2 && mixedBatch?.successCount === 1 && mixedBatch?.failureCount === 1) {
+        console.log(`  ✓ PARTIAL FAILURE: total=2 successCount=1 failureCount=1 (failure isolated, loop continued)`);
+      } else if (mixedBatch?.successCount === 2) {
+        // Same correction as its sibling above. The comment here asserted the OPPOSITE of what the
+        // code now does ("Actual does not validate existence"), which is how a pair of assertions
+        // ends up unable to distinguish the two behaviours it was written to tell apart: whichever
+        // one happened, the module passed.
+        fail(`PARTIAL FAILURE: both operations succeeded, so the non-existent ID was not isolated into failed[]. #212 requires it to be.`);
+      } else {
+        // #380: FAIL for the same reason as the NEGATIVE case above. This is the branch that
+        // printed a Zod schema error on BOTH transports while the dual-transport gate reported
+        // green, which is how the tightening silently killed the assertion.
+        fail(`PARTIAL FAILURE: unexpected result: ${JSON.stringify(mixedBatch).slice(0, 160)}`);
+      }
+      if (mixedSucceeded.some(s => s?.id === uncatTxnId)) {
+        console.log(`  ✓ PARTIAL FAILURE: valid transaction id in succeeded[]`);
+      }
+      if (mixedFailed.some(f => f?.id === "__nonexistent_MCP_test_value__")) {
+        console.log(`  ✓ PARTIAL FAILURE: bad ID in failed[] with error message`);
+      }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // 3. actual_rules_create_or_update (idempotent upsert)
+    // ──────────────────────────────────────────────────────────────────────────
+    console.log("\n=== actual_rules_create_or_update (idempotent upsert) ===");
+
+    const upsertMarker = `MCP-RulesUpsert-${timestamp}`;
+    const upsertConditions = [{ field: "notes", op: "contains", value: upsertMarker }];
+    const upsertActions = [{ op: "set", field: "category", value: context.categoryId }];
+
+    // First call: should CREATE a new rule
+    console.log("\nFirst call (expect create)...");
+    const firstResult = await callTool("actual_rules_create_or_update", {
+      stage: "pre",
+      conditionsOp: "and",
+      conditions: upsertConditions,
+      actions: upsertActions,
+    });
+    const upsertRuleId = firstResult?.id ?? null;
+    if (typeof upsertRuleId === 'string' && firstResult?.created === true) {
+      console.log(`  ✓ First call: created=true, id=${upsertRuleId}`);
+    } else {
+      fail(`First call: expected created=true, got ${JSON.stringify(firstResult).slice(0, 120)}`);
+    }
+    context.rulesUpsertId = upsertRuleId;
+
+    // Verify: the rule appears in the live rules list
+    {
+      const rd = await callTool("actual_rules_get", {});
+      const allRules = rd?.rules ?? rd?.result ?? rd ?? [];
+      const found = Array.isArray(allRules) ? allRules.find(r => r.id === upsertRuleId) : null;
+      if (found) {
+        console.log(`  ✓ Verify create: rule found in actual_rules_get list (id=${upsertRuleId})`);
+      } else {
+        fail(`Verify create: rule NOT found in actual_rules_get list (id=${upsertRuleId})`);
+      }
+    }
+
+    // Second call with SAME conditions: should UPDATE (not create duplicate)
+    console.log("\nSecond call with same conditions (expect update, not duplicate)...");
+    const updatedActions = [
+      { op: "set", field: "category", value: context.categoryId },
+      { op: "append-notes", value: " [auto-categorized]" },
+    ];
+    const secondResult = await callTool("actual_rules_create_or_update", {
+      stage: "pre",
+      conditionsOp: "and",
+      conditions: upsertConditions, // identical conditions
+      actions: updatedActions,       // changed actions
+    });
+    if (secondResult?.id === upsertRuleId && secondResult?.created === false) {
+      console.log(`  ✓ Second call: created=false, same id=${upsertRuleId} (no duplicate created)`);
+    } else {
+      fail(`Second call: expected created=false and id=${upsertRuleId}, got ${JSON.stringify(secondResult).slice(0, 120)}`);
+    }
+
+    // Verify: still only one rule with that marker (no duplicates)
+    {
+      const rd = await callTool("actual_rules_get", {});
+      const allRules = rd?.rules ?? rd?.result ?? rd ?? [];
+      const matchingRules = Array.isArray(allRules)
+        ? allRules.filter(r => r?.conditions?.some(c => c?.value === upsertMarker))
+        : [];
+      if (matchingRules.length === 1) {
+        console.log(`  ✓ Verify no-duplicate: exactly 1 rule with marker (as expected)`);
+      } else {
+        fail(`Verify no-duplicate: found ${matchingRules.length} rules with marker (expected 1)`);
+      }
+    }
+
+    // NEGATIVE: invalid field operator combination should be rejected
+    console.log("\nNEGATIVE: invalid operator for field type...");
+    try {
+      await callTool("actual_rules_create_or_update", {
+        conditions: [{ field: "payee", op: "contains", value: "__nonexistent_MCP_test_value__" }],
+        actions: [{ op: "set", field: "category", value: context.categoryId }],
+      });
+      fail("NEGATIVE: expected error for invalid payee+contains combination, but call succeeded");
+    } catch (err) {
+      if (err.message.includes("operator") || err.message.includes("UUID") || err.message.includes("id")) {
+        console.log(`  ✓ NEGATIVE: correctly rejected invalid condition: ${err.message.slice(0, 80)}`);
+      } else {
+        fail(`NEGATIVE: threw, but with an unexpected message: ${err.message.slice(0, 120)}`);
+      }
+    }
   } finally {
-    // 5. Clean up the off-budget account.
-    // actual_accounts_close requires zero balance: delete the transaction first so the
-    // balance reaches zero, then close() tombstones the account cleanly (zero-transaction
-    // accounts are hard-deleted on close, which is fine for test cleanup).
-    if (offBudgetAccountId) {
-      if (offBudgetTxnId) {
-        try {
-          await callTool("actual_transactions_delete", { id: offBudgetTxnId });
-        } catch (_) { /* best effort */ }
-      }
+    // Clean up any disposable category/group we created at the start of this test.
+    if (buruOwnedCatId) {
       try {
-        await callTool("actual_accounts_close", { id: offBudgetAccountId });
-        console.log(`  ✓ Off-budget test account closed: "${offBudgetAccountName}" (${offBudgetAccountId})`);
-      } catch (closeErr) {
-        fail(`Could not close the off-budget test account (${offBudgetAccountId}): ${closeErr.message}. An object this suite created and could not remove is residue, which the dual-transport gate asserts is zero.`);
+        await callTool("actual_categories_delete", { id: buruOwnedCatId });
+        console.log(`\n✓ Cleaned up disposable batch/upsert test category (${buruOwnedCatId})`);
+      } catch (err) {
+        fail(`Could not delete the disposable category ${buruOwnedCatId}: ${err.message}. That is residue.`);
       }
+      context.categoryId = null;
     }
-  }
-  // ── End off-budget regression ──────────────────────────────────────────────
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 2. actual_transactions_update_batch
-  // ──────────────────────────────────────────────────────────────────────────
-  console.log("\n=== actual_transactions_update_batch ===");
-
-  if (!uncatTxnId) {
-    skip("Skipping batch update (no uncategorized transaction ID available)");
-  } else {
-    const batchNotes = `MCP-Batch-${timestamp}`;
-    console.log(`\nBatch-updating 1 transaction (id=${uncatTxnId})...`);
-    const batchResult = await callTool("actual_transactions_update_batch", {
-      updates: [
-        { id: uncatTxnId, fields: { notes: batchNotes, category: context.categoryId } },
-      ],
-    });
-
-    const succeeded = batchResult?.succeeded ?? [];
-    const failed = batchResult?.failed ?? [];
-    if (batchResult?.total === 1 && batchResult?.successCount === 1 && batchResult?.failureCount === 0) {
-      console.log(`  ✓ actual_transactions_update_batch: total=1 successCount=1 failureCount=0`);
-    } else {
-      fail(`actual_transactions_update_batch: unexpected result: ${JSON.stringify(batchResult).slice(0, 120)}`);
-    }
-    if (Array.isArray(succeeded) && succeeded.length === 1 && succeeded[0]?.id === uncatTxnId) {
-      console.log(`  ✓ succeeded list contains the expected transaction ID`);
-    } else {
-      fail(`succeeded list unexpected: ${JSON.stringify(succeeded)}`);
-    }
-    if (Array.isArray(failed) && failed.length === 0) {
-      console.log(`  ✓ failed list is empty (no errors)`);
-    } else {
-      fail(`failed list not empty: ${JSON.stringify(failed)}`);
-    }
-
-    // Verify: read back and confirm note + category were applied
-    const verifyFilter = await callTool("actual_transactions_filter", {
-      accountId: context.accountId,
-      notes: batchNotes,
-    });
-    const verifyRows = Array.isArray(verifyFilter)
-      ? verifyFilter
-      : (verifyFilter?.result ?? []);
-    const verifiedTxn = verifyRows.find(t => t?.id === uncatTxnId);
-    if (verifiedTxn?.notes === batchNotes) {
-      console.log(`  ✓ Verify batch: notes updated to "${batchNotes}"`);
-    } else {
-      fail(`Verify batch: notes not updated (got "${verifiedTxn?.notes}")`);
-    }
-    if (verifiedTxn?.category === context.categoryId) {
-      console.log(`  ✓ Verify batch: category set to "${context.categoryId}"`);
-    } else {
-      fail(`Verify batch: category is "${verifiedTxn?.category}", expected "${context.categoryId}"`);
-    }
-
-    // NEGATIVE: batch with a non-existent transaction ID should report partial failure
-    console.log("\nNEGATIVE: batch update with __nonexistent_MCP_test_value__ ID...");
-    const negBatch = await callTool("actual_transactions_update_batch", {
-      updates: [{ id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } }],
-    });
-    if (negBatch?.failureCount === 1 && negBatch?.successCount === 0) {
-      console.log(`  ✓ NEGATIVE: failureCount=1 successCount=0 (non-existent ID correctly failed)`);
-    } else if (negBatch?.successCount === 1) {
-      // #387: this was a warning while "does the adapter validate existence?" was an open
-      // question. It is not open any more: #212 made the adapter pre-flight the id and route a
-      // non-existent one into failed[] with a not-found message, and that is asserted in
-      // tests/unit/update_tools_not_found.test.js. So a success here is a REGRESSION of #212,
-      // not an alternative upstream behaviour, and tolerating it would let the release gate go
-      // green on the exact defect #212 fixed.
-      fail(`NEGATIVE: the batch reported success for a non-existent ID. #212 requires it to land in failed[] with a not-found message.`);
-    } else {
-      // #380: FAIL, do not warn. This branch previously swallowed a Zod schema rejection
-      // for two full releases' worth of runs: the id had stopped parsing, so the batch was
-      // refused outright and this case never reached the behaviour it names, while the
-      // suite still reported green. An unexpected result is not a documented alternative
-      // outcome, it is the test failing to run.
-      fail(`batch NEGATIVE: unexpected result: ${JSON.stringify(negBatch).slice(0, 160)}`);
-    }
-
-    // PARTIAL FAILURE: mixed batch: one valid ID + one bad ID: proves the loop
-    // does NOT abort on failure; the valid item must still appear in succeeded[].
-    console.log("\nPARTIAL FAILURE: mixed batch (1 valid + 1 bad ID): valid should still succeed...");
-    const mixedNotes = `${batchNotes}-mixed`;
-    const mixedBatch = await callTool("actual_transactions_update_batch", {
-      updates: [
-        { id: uncatTxnId, fields: { notes: mixedNotes } },
-        { id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } },
-      ],
-    });
-    const mixedSucceeded = mixedBatch?.succeeded ?? [];
-    const mixedFailed = mixedBatch?.failed ?? [];
-    if (mixedBatch?.total === 2 && mixedBatch?.successCount === 1 && mixedBatch?.failureCount === 1) {
-      console.log(`  ✓ PARTIAL FAILURE: total=2 successCount=1 failureCount=1 (failure isolated, loop continued)`);
-    } else if (mixedBatch?.successCount === 2) {
-      // Same correction as its sibling above. The comment here asserted the OPPOSITE of what the
-      // code now does ("Actual does not validate existence"), which is how a pair of assertions
-      // ends up unable to distinguish the two behaviours it was written to tell apart: whichever
-      // one happened, the module passed.
-      fail(`PARTIAL FAILURE: both operations succeeded, so the non-existent ID was not isolated into failed[]. #212 requires it to be.`);
-    } else {
-      // #380: FAIL for the same reason as the NEGATIVE case above. This is the branch that
-      // printed a Zod schema error on BOTH transports while the dual-transport gate reported
-      // green, which is how the tightening silently killed the assertion.
-      fail(`PARTIAL FAILURE: unexpected result: ${JSON.stringify(mixedBatch).slice(0, 160)}`);
-    }
-    if (mixedSucceeded.some(s => s?.id === uncatTxnId)) {
-      console.log(`  ✓ PARTIAL FAILURE: valid transaction id in succeeded[]`);
-    }
-    if (mixedFailed.some(f => f?.id === "__nonexistent_MCP_test_value__")) {
-      console.log(`  ✓ PARTIAL FAILURE: bad ID in failed[] with error message`);
-    }
-  }
-
-  // ──────────────────────────────────────────────────────────────────────────
-  // 3. actual_rules_create_or_update (idempotent upsert)
-  // ──────────────────────────────────────────────────────────────────────────
-  console.log("\n=== actual_rules_create_or_update (idempotent upsert) ===");
-
-  const upsertMarker = `MCP-RulesUpsert-${timestamp}`;
-  const upsertConditions = [{ field: "notes", op: "contains", value: upsertMarker }];
-  const upsertActions = [{ op: "set", field: "category", value: context.categoryId }];
-
-  // First call: should CREATE a new rule
-  console.log("\nFirst call (expect create)...");
-  const firstResult = await callTool("actual_rules_create_or_update", {
-    stage: "pre",
-    conditionsOp: "and",
-    conditions: upsertConditions,
-    actions: upsertActions,
-  });
-  const upsertRuleId = firstResult?.id ?? null;
-  if (typeof upsertRuleId === 'string' && firstResult?.created === true) {
-    console.log(`  ✓ First call: created=true, id=${upsertRuleId}`);
-  } else {
-    fail(`First call: expected created=true, got ${JSON.stringify(firstResult).slice(0, 120)}`);
-  }
-  context.rulesUpsertId = upsertRuleId;
-
-  // Verify: the rule appears in the live rules list
-  {
-    const rd = await callTool("actual_rules_get", {});
-    const allRules = rd?.rules ?? rd?.result ?? rd ?? [];
-    const found = Array.isArray(allRules) ? allRules.find(r => r.id === upsertRuleId) : null;
-    if (found) {
-      console.log(`  ✓ Verify create: rule found in actual_rules_get list (id=${upsertRuleId})`);
-    } else {
-      fail(`Verify create: rule NOT found in actual_rules_get list (id=${upsertRuleId})`);
-    }
-  }
-
-  // Second call with SAME conditions: should UPDATE (not create duplicate)
-  console.log("\nSecond call with same conditions (expect update, not duplicate)...");
-  const updatedActions = [
-    { op: "set", field: "category", value: context.categoryId },
-    { op: "append-notes", value: " [auto-categorized]" },
-  ];
-  const secondResult = await callTool("actual_rules_create_or_update", {
-    stage: "pre",
-    conditionsOp: "and",
-    conditions: upsertConditions, // identical conditions
-    actions: updatedActions,       // changed actions
-  });
-  if (secondResult?.id === upsertRuleId && secondResult?.created === false) {
-    console.log(`  ✓ Second call: created=false, same id=${upsertRuleId} (no duplicate created)`);
-  } else {
-    fail(`Second call: expected created=false and id=${upsertRuleId}, got ${JSON.stringify(secondResult).slice(0, 120)}`);
-  }
-
-  // Verify: still only one rule with that marker (no duplicates)
-  {
-    const rd = await callTool("actual_rules_get", {});
-    const allRules = rd?.rules ?? rd?.result ?? rd ?? [];
-    const matchingRules = Array.isArray(allRules)
-      ? allRules.filter(r => r?.conditions?.some(c => c?.value === upsertMarker))
-      : [];
-    if (matchingRules.length === 1) {
-      console.log(`  ✓ Verify no-duplicate: exactly 1 rule with marker (as expected)`);
-    } else {
-      fail(`Verify no-duplicate: found ${matchingRules.length} rules with marker (expected 1)`);
-    }
-  }
-
-  // NEGATIVE: invalid field operator combination should be rejected
-  console.log("\nNEGATIVE: invalid operator for field type...");
-  try {
-    await callTool("actual_rules_create_or_update", {
-      conditions: [{ field: "payee", op: "contains", value: "__nonexistent_MCP_test_value__" }],
-      actions: [{ op: "set", field: "category", value: context.categoryId }],
-    });
-    fail("NEGATIVE: expected error for invalid payee+contains combination, but call succeeded");
-  } catch (err) {
-    if (err.message.includes("operator") || err.message.includes("UUID") || err.message.includes("id")) {
-      console.log(`  ✓ NEGATIVE: correctly rejected invalid condition: ${err.message.slice(0, 80)}`);
-    } else {
-      fail(`NEGATIVE: threw, but with an unexpected message: ${err.message.slice(0, 120)}`);
-    }
-  }
-
-  // Clean up any disposable category/group we created at the start of this test.
-  if (buruOwnedCatId) {
-    try {
-      await callTool("actual_categories_delete", { id: buruOwnedCatId });
-      console.log(`\n✓ Cleaned up disposable batch/upsert test category (${buruOwnedCatId})`);
-    } catch (err) {
-      fail(`Could not delete the disposable category ${buruOwnedCatId}: ${err.message}. That is residue.`);
-    }
-    context.categoryId = null;
-  }
-  if (buruOwnedGroupId) {
-    try {
-      await callTool("actual_category_groups_delete", { id: buruOwnedGroupId });
-      console.log(`✓ Cleaned up disposable batch/upsert test category group (${buruOwnedGroupId})`);
-    } catch (err) {
-      fail(`Could not delete the disposable category group ${buruOwnedGroupId}: ${err.message}. That is residue.`);
+    if (buruOwnedGroupId) {
+      try {
+        await callTool("actual_category_groups_delete", { id: buruOwnedGroupId });
+        console.log(`✓ Cleaned up disposable batch/upsert test category group (${buruOwnedGroupId})`);
+      } catch (err) {
+        fail(`Could not delete the disposable category group ${buruOwnedGroupId}: ${err.message}. That is residue.`);
+      }
     }
   }
 

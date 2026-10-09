@@ -571,6 +571,11 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   on every enqueue would close the deadlock and silently multiply init/sync cycles. Cases that
   depend on `ACTUAL_OP_TIMEOUT_MS` run in child processes: `config.ts` reads `process.env` once at
   module load, so an in-process env override is silently ignored and the assertion becomes vacuous.
+- **Integration cleanup guard** (#519): `tests/unit/batch_uncategorized_cleanup.test.js` drives
+  `tests/manual/tests/batch_uncategorized_rules_upsert.js` with a stub client. Since #517 a
+  whole-call failure is a thrown tool error, so the module body runs in `try/finally` (no `catch`):
+  the disposable category and group it created are removed, a failing cleanup is recorded via
+  `fail()` without masking the original error, and a borrowed category is never deleted.
 - **Node floor guard** (#275): `tests/unit/node_version_guard.test.js` covers
   `src/lib/node-version-guard.ts`, which rejects an unsupported interpreter at startup rather
   than letting it die later with a cryptic `ERR_IMPORT_ASSERTION_TYPE_MISSING`. The unit test
