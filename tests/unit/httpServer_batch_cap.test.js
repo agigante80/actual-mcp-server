@@ -10,9 +10,11 @@
 //      shape, handleRequest(req, res, req.body), so the cap is asserted on the
 //      pre-parsed body path we actually use. The SDK skips its own body reader on
 //      that path, which is why our body bound stays MCP_HTTP_BODY_LIMIT.
-//   2. Wiring (U3, U5): source guards that the session-bearing POST call still passes
-//      req.body, and that a session-less array is refused by OUR handler before the
-//      SDK ever sees it (an array has no `method`).
+//   2. Wiring (U3a, U5c): source guards, run on comment-stripped source (#503), that the
+//      session-bearing POST call still passes req.body, and that a session-less array is
+//      refused by OUR handler before the SDK ever sees it (an array has no `method`).
+//      U3b, U3c, U5a, U5b and U5b2 are mutation fixtures proving each predicate can fail;
+//      W1 proves a multi-line reformat still passes.
 //   3. Version floor (U4): both the installed SDK and the declared range, because npm
 //      consumers resolve the range and never see our lockfile.
 //
@@ -24,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import express from 'express';
+import { stripTsComments } from './helpers/source-text.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 
@@ -110,25 +113,118 @@ function blockAt(text, from) {
   return null;
 }
 
-const BODY_CALL = 'handleRequest(req, res, req.body)';
+// Predicates run on COMMENT-STRIPPED text (#503), so a comment holding the guarded text cannot
+// satisfy a guard. Each returns an array of violation strings, empty when the property holds,
+// and the negative fixtures below run through the SAME predicates to prove they can fail.
+const CALL_SRC = String.raw`\btransport\.handleRequest\(\s*req\s*,\s*res\s*,\s*req\.body\s*,?\s*\)`;
 
-await check('U3: exactly two POST-path calls pass req.body, one inside the session-bearing requestContext.run', () => {
-  const count = SRC.split(BODY_CALL).length - 1;
-  assert.strictEqual(count, 2, `expected 2 calls to ${BODY_CALL}, found ${count}; update this test if a new body-passing path is intended`);
-  const runAt = SRC.indexOf('requestContext.run({ sessionId, ');
-  assert.ok(runAt >= 0, 'the session-bearing requestContext.run({ sessionId, ... }) call is gone');
-  const callback = blockAt(SRC, SRC.indexOf('=>', runAt));
-  assert.ok(callback?.includes(BODY_CALL), `the session-bearing block no longer calls ${BODY_CALL}`);
+function u3Violations(text) {
+  const out = [];
+  const count = (text.match(new RegExp(CALL_SRC, 'g')) || []).length;
+  if (count !== 2) {
+    out.push(`expected 2 calls passing req.body, found ${count}; update this test if a new body-passing path is intended`);
+  }
+  // `sessionId,` does not match the session-less `sessionId: undefined` run.
+  const run = /requestContext\.run\(\s*\{\s*sessionId\s*,/.exec(text);
+  if (!run) {
+    out.push('the session-bearing requestContext.run({ sessionId, ... }) call is gone');
+  } else {
+    const callback = blockAt(text, text.indexOf('=>', run.index));
+    if (!callback || !new RegExp(CALL_SRC).test(callback)) {
+      out.push('the session-bearing requestContext.run block no longer passes req.body to handleRequest');
+    }
+  }
+  return out;
+}
+
+// Deliberate exact pin: "payload does not unwrap an array" cannot be stated as a denylist
+// ([0], .at(, .find(, destructuring, ...) without gaps, so the initializer is compared exactly
+// (whitespace removed). A benign refactor of this line reads as an intended test update.
+const PAYLOAD_PIN = '(req.body&&Object.keys(req.body).length)?req.body:{}';
+
+function u5Violations(text) {
+  const out = [];
+  const payload = text.match(/\bconst\s+payload\s*=\s*([^;]+);/);
+  if (!payload) out.push('payload: the const payload declaration is gone');
+  else if (payload[1].replace(/\s+/g, '') !== PAYLOAD_PIN) out.push('payload: the initializer changed, it may now unwrap an array');
+  if (!/\bconst\s+method\s*=\s*payload\?\.method\s*;/.test(text)) {
+    out.push('method: no longer read as payload?.method, so an array may not yield an undefined method');
+  }
+  const branch = blockAt(text, text.search(/\bif\s*\(\s*!sessionId\s*\)\s*\{/));
+  if (!branch) return [...out, 'branch: the if (!sessionId) branch is gone'];
+  // The WHOLE condition: a `false &&` prefix or `&& false` suffix must not match.
+  const cond = /\bif\s*\(\s*method\s*!==\s*'initialize'\s*&&\s*method\s*!==\s*'tools\/list'\s*\)\s*\{/.exec(branch);
+  if (!cond) return [...out, 'condition: the refusal condition is not exactly method !== initialize && method !== tools/list'];
+  const refusal = blockAt(branch, cond.index);
+  if (!refusal || !/res\.status\(\s*400\s*\)/.test(refusal)) out.push('refusal: no res.status(400) in the refusal block');
+  if (!refusal || !/code:\s*-32000/.test(refusal)) out.push('refusal: no code -32000 in the refusal block');
+  return out;
+}
+
+const STRIPPED = stripTsComments(SRC);
+
+// Build a fixture by text replacement on the real source; fail loudly if the anchor drifted,
+// so a stale anchor cannot make a negative fixture vacuous.
+function mutate(anchor, replacement) {
+  const m = SRC.replace(anchor, replacement);
+  assert.notStrictEqual(m, SRC, `fixture anchor not found: ${anchor.slice(0, 60)}`);
+  return stripTsComments(m);
+}
+
+const PAYLOAD_LINE = "const payload = (req.body && Object.keys(req.body).length) ? req.body : {};";
+const COND_LINE = "if (method !== 'initialize' && method !== 'tools/list') {";
+const BODY_STMT = 'await transport.handleRequest(req, res, req.body);';
+const SESSION_RUN = `requestContext.run({ sessionId, requestId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {\n        ${BODY_STMT}\n      });`;
+
+await check('U3a: exactly two POST-path calls pass req.body, one inside the session-bearing requestContext.run (comments stripped)', () => {
+  assert.deepStrictEqual(u3Violations(STRIPPED), []);
 });
 
-await check('U5: a session-less POST that is not initialize/tools/list is refused with 400 / -32000 before the SDK', () => {
-  assert.match(SRC, /const method = payload\?\.method;/,
-    'method is no longer read as payload?.method, so an array may not yield an undefined method');
-  const branch = blockAt(SRC, SRC.indexOf('if (!sessionId) {'));
-  assert.ok(branch, 'the if (!sessionId) branch is gone');
-  assert.match(branch, /method !== 'initialize' && method !== 'tools\/list'/);
-  assert.match(branch, /res\.status\(400\)/);
-  assert.match(branch, /code: -32000/);
+await check('U3b NEGATIVE: a sliced call with the original text kept only in a trailing comment is reported', () => {
+  const v = u3Violations(mutate(SESSION_RUN, SESSION_RUN.replace(BODY_STMT,
+    'await transport.handleRequest(req, res, Array.isArray(req.body) ? req.body.slice(0, 1) : req.body); // transport.handleRequest(req, res, req.body)')));
+  assert.ok(v.length > 0, 'a comment decoy must not satisfy U3');
+});
+
+await check('U3c NEGATIVE: the body-passing call moved out of the session-bearing run (count still 2) is reported', () => {
+  const v = u3Violations(mutate(SESSION_RUN, SESSION_RUN.replace(BODY_STMT, 'await transport.handleRequest(req, res);') + `\n      ${BODY_STMT}`));
+  assert.ok(v.length > 0, 'a call outside the session-bearing block must not satisfy U3');
+});
+
+await check('U5c: a session-less POST that is not initialize/tools/list is refused with 400 / -32000 before the SDK (comments stripped)', () => {
+  assert.deepStrictEqual(u5Violations(STRIPPED), []);
+});
+
+await check('U5a NEGATIVE: a payload that unwraps an array is reported', () => {
+  const v = u5Violations(mutate(PAYLOAD_LINE,
+    'const payload = Array.isArray(req.body) ? req.body[0] ?? {} : ((req.body && Object.keys(req.body).length) ? req.body : {});'));
+  assert.ok(v.some((x) => x.startsWith('payload')), v.join('; '));
+});
+
+await check('U5b NEGATIVE: a `false &&` prefix on the refusal condition is reported', () => {
+  const v = u5Violations(mutate(COND_LINE, "if (false && method !== 'initialize' && method !== 'tools/list') {"));
+  assert.ok(v.some((x) => x.startsWith('condition')), v.join('; '));
+});
+
+await check('U5b2 NEGATIVE: a `&& false` suffix on the refusal condition is reported', () => {
+  const v = u5Violations(mutate(COND_LINE, "if (method !== 'initialize' && method !== 'tools/list' && false) {"));
+  assert.ok(v.some((x) => x.startsWith('condition')), v.join('; '));
+});
+
+await check('W1: the guarded expressions reformatted over several lines still pass both predicates', () => {
+  let m = SRC;
+  for (const [anchor, rep] of [
+    [PAYLOAD_LINE, 'const payload = (\n      req.body &&\n      Object.keys(req.body).length\n    ) ? req.body : {};'],
+    [COND_LINE, "if (\n        method !== 'initialize' &&\n        method !== 'tools/list'\n      ) {"],
+    [SESSION_RUN, SESSION_RUN.replace('handleRequest(req, res, req.body);', 'handleRequest(\n          req,\n          res,\n          req.body,\n        );')],
+  ]) {
+    const next = m.replace(anchor, rep);
+    assert.notStrictEqual(next, m, `fixture anchor not found: ${anchor.slice(0, 60)}`);
+    m = next;
+  }
+  const t = stripTsComments(m);
+  assert.deepStrictEqual(u3Violations(t), []);
+  assert.deepStrictEqual(u5Violations(t), []);
 });
 
 // --- Version floor ---------------------------------------------------------------
