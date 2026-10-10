@@ -125,6 +125,7 @@ const API_TOOL_MAP: Record<string, string> = {
   deletePayee: 'actual_payees_delete',
   mergePayees: 'actual_payees_merge',
   getPayeeRules: 'actual_payee_rules_get',
+  // #539: the tool covers this capability through per-item writes; it never calls batchBudgetUpdates.
   batchBudgetUpdates: 'actual_budget_updates_batch',
   holdBudgetForNextMonth: 'actual_budgets_holdForNextMonth',
   resetBudgetHold: 'actual_budgets_resetHold',

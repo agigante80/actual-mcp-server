@@ -24,7 +24,7 @@ const GHOST = '19999999-0000-4000-8000-000000000009';
 const apiMod = await import('@actual-app/api');
 const apiDefault = (apiMod.default || apiMod);
 let writes = [];
-let bracketFails = false;
+let infraFails = false; // #539: the first raw write fails with an infrastructure error (there is no bracket to fail)
 let amountFailsFor = null;
 apiDefault.sync = async () => {};
 apiDefault.getCategories = async () => [
@@ -32,11 +32,8 @@ apiDefault.getCategories = async () => [
   { id: RENT, name: 'Rent', is_income: false },
 ];
 apiDefault.getBudgetMonths = async () => ['2026-01', '2026-02', '2026-03'];
-apiDefault.batchBudgetUpdates = async (fn) => {
-  if (bracketFails) throw new Error('batch-budget-start failed: ECONNRESET');
-  await fn();
-};
 apiDefault.setBudgetAmount = async (month, categoryId, amount) => {
+  if (infraFails) throw new Error('read ECONNRESET');
   if (amountFailsFor === categoryId) throw new Error('upstream rejected the amount');
   writes.push({ month, categoryId, amount });
 };
@@ -140,10 +137,10 @@ console.log('\n[#516] invalid input is a thrown schema error with the exact mess
 
 console.log('\n[#516] a whole-call failure is a tool error, not a result');
 {
-  bracketFails = true;
+  infraFails = true;
   let threw = null;
   try { await tool.call({ operations: [{ month: '2026-01', categoryId: FOOD, amount: 1 }] }); } catch (e) { threw = e; }
-  bracketFails = false;
+  infraFails = false;
   check(threw instanceof Error && /ECONNRESET/.test(threw.message), 'the error propagates');
 }
 

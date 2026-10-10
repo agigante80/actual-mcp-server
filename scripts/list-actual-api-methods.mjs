@@ -72,6 +72,7 @@ export const API_TO_TOOL = {
   getBudgetMonth: 'actual_budgets_getMonth',
   setBudgetAmount: 'actual_budgets_setAmount',
   setBudgetCarryover: 'actual_budgets_setCarryover',
+  // #539: the tool covers this capability through per-item writes; it never calls batchBudgetUpdates.
   batchBudgetUpdates: 'actual_budget_updates_batch',
   holdBudgetForNextMonth: 'actual_budgets_holdForNextMonth',
   resetBudgetHold: 'actual_budgets_resetHold',

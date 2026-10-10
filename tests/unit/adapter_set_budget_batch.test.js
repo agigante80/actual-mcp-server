@@ -15,6 +15,8 @@ process.env.ACTUAL_PASSWORD       = process.env.ACTUAL_PASSWORD       ?? 'stub-p
 process.env.ACTUAL_OP_TIMEOUT_MS  = '30000';
 
 import { makeCycleWitness } from './helpers/write-cycle.mjs';
+import { stripTsComments } from './helpers/source-text.js';
+import { readFileSync } from 'node:fs';
 
 let failures = 0;
 const pass = (label) => console.log(`  ✓ ${label}`);
@@ -35,7 +37,10 @@ let writes = [];
 let carryoverFails = null; // categoryId whose raw carryover write throws
 let amountFails = null;    // categoryId whose raw amount write throws
 let writeCostMs = 0;       // simulated clock advance per raw amount write
+let readCostMs = 0;        // simulated clock advance per getBudgetMonth read
 let amountFailMessage = 'upstream rejected the amount';
+let amountFailsOnCall = 0;  // #539: when > 0, the Nth raw amount write (1-based) throws amountFailMessage
+let amountCalls = 0;
 let witness = null;
 let clockOffset = 0;
 
@@ -49,13 +54,25 @@ apiDefault.getCategories = async () => {
   ];
 };
 apiDefault.getBudgetMonths = async () => { events.push('getBudgetMonths'); witness?.noteRead(); return ['2026-01', '2026-02', '2026-03']; };
+// #539: a TRIPWIRE, kept on purpose. The adapter must never call it (a source guard below
+// checks that too); if a change reintroduces the bracket, this stub's detached rejection
+// reaches the unhandled-rejection recorder and, outside it, kills this test process.
+// It is a stand-in for upstream's bracket. Upstream `api/batch-budget-start` runs
+// `batchMessages` un-awaited and applies the queued messages AFTER `batch-budget-end`
+// returns, so an apply failure is a rejection on a promise nobody holds. This stub
+// reproduces that shape: the caller's await resolves, then a detached promise rejects.
 apiDefault.batchBudgetUpdates = async (fn) => {
   events.push('bracket-enter');
   try { await fn(); } finally { events.push('bracket-exit'); }
+  void (async () => { await null; throw new Error('#539 deferred apply failed after batch-budget-end'); })();
 };
+apiDefault.getBudgetMonth = async () => (clockOffset += readCostMs, {
+  categoryGroups: [{ categories: [{ id: FOOD, budgeted: 5000 }, { id: RENT, budgeted: 1000 }] }],
+});
 apiDefault.setBudgetAmount = async (month, categoryId, amount) => {
   events.push('setAmount'); witness?.noteWrite();
-  if (categoryId === amountFails) throw new Error(amountFailMessage);
+  amountCalls += 1;
+  if (categoryId === amountFails || amountCalls === amountFailsOnCall) throw new Error(amountFailMessage);
   writes.push({ kind: 'amount', month, categoryId, amount });
   clockOffset += writeCostMs;
 };
@@ -73,10 +90,10 @@ witness = makeCycleWitness(adapterMod);
 adapterMod._setSkipApiInitForTests(true);
 const adapter = adapterMod.default;
 
-const reset = () => { amountFailMessage = 'upstream rejected the amount'; events = []; writes = []; carryoverFails = null; amountFails = null; writeCostMs = 0; };
+const reset = () => { amountFailMessage = 'upstream rejected the amount'; amountFailsOnCall = 0; amountCalls = 0; events = []; writes = []; carryoverFails = null; amountFails = null; writeCostMs = 0; readCostMs = 0; };
 const run = async (items) => { reset(); witness.reset(); return adapter.setBudgetBatch(items); };
 
-console.log('\n[#516] valid items: applied inside ONE drain, guard reads before the bracket');
+console.log('\n[#516] valid items: applied inside ONE drain, guard reads before the first write');
 {
   const res = await run([
     { month: '2026-01', categoryId: FOOD, amount: 1000 },
@@ -88,15 +105,15 @@ console.log('\n[#516] valid items: applied inside ONE drain, guard reads before 
   check(res.succeeded[0].month === '2026-01' && res.succeeded[0].categoryId === FOOD, 'and the month and categoryId');
   check(writes.length === 3, 'three raw writes happened');
   check(witness.sharedOneCycle(), 'guard reads and writes shared ONE write-queue drain', witness.describe());
-  const enter = events.indexOf('bracket-enter');
+  const firstWrite = events.findIndex((e) => e === 'setAmount' || e === 'setCarryover');
   const lastRead = Math.max(events.lastIndexOf('getCategories'), events.lastIndexOf('getBudgetMonths'));
-  check(enter > -1 && lastRead > -1 && lastRead < enter, 'both guard reads happen BEFORE the bracket is entered', events.join(','));
+  check(firstWrite > -1 && lastRead > -1 && lastRead < firstWrite, 'both guard reads happen BEFORE the first write', events.join(','));
   check(events.filter((e) => e === 'getBudgetMonths').length === 1, 'months are read from upstream exactly once', events.join(','));
   check(events.filter((e) => e === 'getCategories').length === 1,
     'categories reach upstream exactly once (a repeated read through readDrainListing is absorbed by the drain cache, so this cannot see one)', events.join(','));
-  check(events.filter((e) => e === 'bracket-enter').length === 1, 'exactly one bracket is opened');
-  const inside = events.slice(enter + 1, events.indexOf('bracket-exit'));
-  check(inside.length === 3 && inside.every((e) => e === 'setAmount' || e === 'setCarryover'), 'only raw writes run inside the bracket', inside.join(','));
+  check(!events.includes('bracket-enter'), '[#539] no upstream bracket is opened', events.join(','));
+  const after = events.slice(firstWrite);
+  check(after.length === 3 && after.every((e) => e === 'setAmount' || e === 'setCarryover'), 'only raw writes run after the reads', after.join(','));
 }
 
 console.log('\n[#516] an unknown category fails that item only, and is never written');
@@ -136,7 +153,7 @@ console.log('\n[#516] the guards apply to carryover-only items too');
   check(res.failed[0].error === new NotFoundRefusal('Category', GHOST, 'actual_categories_get').message, 'unknown category: the same not-found refusal as an amount');
   check(/outside this budget's range/.test(res.failed[1].error), 'bad month: the same range refusal as an amount');
   check(writes.length === 0 && !events.includes('setCarryover'), 'no raw carryover write was attempted');
-  check(!events.includes('bracket-enter'), 'with nothing to write, no bracket is opened');
+  check(!events.includes('bracket-enter'), 'with nothing to write, no bracket is opened (and none ever is, #539)');
 }
 
 console.log('\n[#516] an income category carryover is refused BEFORE its amount is written');
@@ -159,8 +176,8 @@ console.log('\n[#516] upstream rejection stays as a backstop, reported per item'
   check(res.failed.length === 1 && res.failed[0].index === 0, 'the item whose carryover upstream rejected is in failed');
   check(/upstream rejected the carryover/.test(res.failed[0].error) && /amount was applied/.test(res.failed[0].error),
     'its error says the amount was applied and carries the upstream message', res.failed[0].error);
-  check(res.succeeded.length === 1 && res.succeeded[0].index === 1, 'the next item still runs inside the same bracket');
-  check(events.filter((e) => e === 'bracket-enter').length === 1 && events.at(-1) === 'bracket-exit', 'the bracket was opened once and closed');
+  check(res.succeeded.length === 1 && res.succeeded[0].index === 1, 'the next item still runs');
+  check(!events.includes('bracket-enter'), '[#539] no bracket was opened');
   reset(); witness.reset(); amountFails = FOOD;
   const r2 = await adapter.setBudgetBatch([
     { month: '2026-01', categoryId: FOOD, amount: 1 },
@@ -187,7 +204,8 @@ console.log('\n[#516] infrastructure errors abort the batch instead of becoming 
   // The pool-drop decision is isRetryableError && !isRateLimitError (_shouldDropPoolOnError delegates to exactly that).
   check(retryMod.isRetryableError(threw) && !retryMod.isRateLimitError(threw), 'the rethrown error is still classified as infrastructure (pool drop)');
   check(threw?.cause instanceof Error && threw.cause.message === 'read ECONNRESET', '[#521] the abort carries the original error as cause');
-  check(writes.length === 2 && events.at(-1) === 'bracket-exit', 'the loop stopped (item 3 never written) and the bracket was closed');
+  check(writes.length === 2 && events.at(-1) === 'setAmount', 'the loop stopped at the failing write (item 3 never written)', events.join(','));
+  check(!events.includes('bracket-enter'), '[#539] no bracket was opened');
   // A rate limit is transient but does NOT drop the pool, so it stays a per-item failure.
   reset(); witness.reset(); amountFails = FOOD; amountFailMessage = 'Authentication failed: too-many-requests';
   const rl = await adapter.setBudgetBatch([{ month: '2026-01', categoryId: FOOD, amount: 1 }, { month: '2026-01', categoryId: RENT, amount: 2 }]);
@@ -231,8 +249,131 @@ console.log('\n[#516] cooperative deadline: stop writing at 75% of ACTUAL_OP_TIM
     check(res.failed.map((f) => f.index).join() === '3,4,5', 'the remaining items are failed', res.failed.map((f) => f.index).join());
     check(res.failed.every((f) => f.error === 'not attempted: batch time budget exhausted'), 'with the exact deadline error');
     check(writes.length === 3, 'and none of them reached a raw write');
-    check(events.at(-1) === 'bracket-exit', 'the bracket was still closed cleanly');
+    check(!events.includes('bracket-enter'), '[#539] no bracket was opened');
   } finally { Date.now = realNow; clockOffset = 0; writeCostMs = 0; }
+}
+
+console.log('\n[#539] no upstream bracket: a deferred apply rejection cannot escape setBudgetBatch or transferBudgetAmount');
+{
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(String(reason));
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    const res = await run([
+      { month: '2026-01', categoryId: FOOD, amount: 1000 },
+      { month: '2026-02', categoryId: RENT, carryover: true },
+    ]);
+    check(!events.includes('bracket-enter'), 'setBudgetBatch never opens the upstream bracket', events.join(','));
+    reset(); witness.reset();
+    const t = await adapter.transferBudgetAmount('2026-01', FOOD, RENT, 500);
+    // Let any detached rejection reach the process handler before asserting.
+    await new Promise((r) => setTimeout(r, 20));
+    check(res.succeeded.length === 2 && res.failed.length === 0, 'setBudgetBatch: both items succeed');
+    check(t.transferred === 500 && writes.length === 2, 'transferBudgetAmount: both writes happen', JSON.stringify(writes));
+    check(!events.includes('bracket-enter'), 'transferBudgetAmount never opens the upstream bracket', events.join(','));
+    check(unhandled.length === 0, 'no unhandled rejection reached the process', unhandled.join(' | '));
+  } finally { process.off('unhandledRejection', onUnhandled); }
+}
+
+console.log('\n[#539] a write whose apply rejects is a failed item, not a false success');
+{
+  amountFails = null;
+  reset(); witness.reset(); amountFails = RENT; amountFailMessage = 'SqliteError: database is locked';
+  const res = await adapter.setBudgetBatch([
+    { month: '2026-01', categoryId: FOOD, amount: 1 },
+    { month: '2026-01', categoryId: RENT, amount: 2 },
+  ]);
+  check(res.succeeded.map((s) => s.index).join() === '0', 'only the applied item is succeeded');
+  check(res.failed.length === 1 && res.failed[0].index === 1 && /database is locked/.test(res.failed[0].error), 'the rejected apply is reported on its item', JSON.stringify(res.failed));
+  check(!events.includes('bracket-enter'), 'every write was awaited on its own (no bracket)', events.join(','));
+}
+
+console.log('\n[#539] transfer: a first-write failure writes nothing and passes the error through');
+{
+  reset(); witness.reset(); amountFailsOnCall = 1; amountFailMessage = 'SqliteError: database is locked';
+  let threw = null;
+  try { await adapter.transferBudgetAmount('2026-01', FOOD, RENT, 500); } catch (e) { threw = e; }
+  check(threw instanceof Error && threw.message === 'SqliteError: database is locked', 'rejects with the upstream message unchanged', threw?.message);
+  check(writes.length === 0, 'nothing was written');
+}
+
+console.log('\n[#539] transfer: a second-write failure is reported as a partial transfer');
+{
+  const unhandled = [];
+  const onUnhandled = (reason) => unhandled.push(String(reason));
+  process.on('unhandledRejection', onUnhandled);
+  try {
+    reset(); witness.reset(); amountFailsOnCall = 2; amountFailMessage = 'SqliteError: database is locked';
+    let threw = null;
+    try { await adapter.transferBudgetAmount('2026-01', FOOD, RENT, 500); } catch (e) { threw = e; }
+    await new Promise((r) => setTimeout(r, 20));
+    const m = threw?.message || '';
+    check(threw instanceof Error && m.startsWith('Partial transfer:'), 'rejects as a partial transfer', m);
+    check(m.includes(`source category ${FOOD} was set from 5000 to 4500`), 'names the source and its old and new amounts', m);
+    check(m.includes(`target category ${RENT} failed, so it is unchanged at 1000`), 'says the target is unchanged', m);
+    check(m.includes('SqliteError: database is locked') && m.includes('actual_budgets_getMonth'), 'keeps the original text and the read-back tool', m);
+    check(threw?.cause instanceof Error && threw.cause.message === 'SqliteError: database is locked', 'carries the original error as cause');
+    check(writes.length === 1 && writes[0].categoryId === FOOD && writes[0].amount === 4500, 'exactly the source write landed', JSON.stringify(writes));
+    check(unhandled.length === 0, 'no unhandled rejection reached the process', unhandled.join(' | '));
+  } finally { process.off('unhandledRejection', onUnhandled); }
+}
+
+console.log('\n[#539] transfer: the partial-transfer rethrow keeps infrastructure classification');
+{
+  const classify = async (text) => {
+    reset(); witness.reset(); amountFailsOnCall = 2; amountFailMessage = text;
+    try { await adapter.transferBudgetAmount('2026-01', FOOD, RENT, 500); } catch (e) { return e; }
+    return null;
+  };
+  for (const text of ['out of memory', 'read ECONNRESET']) {
+    const e = await classify(text);
+    check(e && retryMod.isRetryableError(e) && !retryMod.isRateLimitError(e), `"${text}" on the second write still drops the pool`, e?.message);
+    check(e && e.message.includes(`so its outcome is unknown (it was 1000)`) && !e.message.includes('unchanged'),
+      `"${text}": the target is reported as unknown, never as unchanged`, e?.message);
+  }
+  const domain = await classify('category "x" is not an expense category');
+  check(domain && !retryMod.isRetryableError(domain), 'a domain error on the second write does not', domain?.message);
+  check(domain && domain.message.includes('so it is unchanged at 1000'), 'and a domain rejection may say the target is unchanged', domain?.message);
+}
+
+console.log('\n[#539] transfer: the cooperative deadline stops the second write');
+{
+  // 30000ms timeout -> 22500ms deadline; the first write costs 25000ms of simulated clock.
+  const realNow = Date.now;
+  Date.now = () => realNow() + clockOffset;
+  try {
+    clockOffset = 0;
+    reset(); witness.reset(); writeCostMs = 25000;
+    let threw = null;
+    try { await adapter.transferBudgetAmount('2026-01', FOOD, RENT, 500); } catch (e) { threw = e; }
+    const m = threw?.message || '';
+    check(m.startsWith('Partial transfer:') && m.includes('was not attempted (not attempted: batch time budget exhausted)') && m.includes('unchanged at 1000'),
+      'rejects as a partial transfer that names the deadline', m);
+    check(writes.length === 1 && writes[0].categoryId === FOOD, 'only the source write happened', JSON.stringify(writes));
+  } finally { Date.now = realNow; clockOffset = 0; writeCostMs = 0; }
+}
+
+console.log('\n[#539] transfer: the deadline clock counts the read, not just the first write');
+{
+  // A 20000ms read plus a 5000ms write is 25000ms > 22500ms. A clock started at the first
+  // write would see only 5000ms and make the second write after the caller timed out.
+  const realNow = Date.now;
+  Date.now = () => realNow() + clockOffset;
+  try {
+    clockOffset = 0;
+    reset(); witness.reset(); readCostMs = 20000; writeCostMs = 5000;
+    let threw = null;
+    try { await adapter.transferBudgetAmount('2026-01', FOOD, RENT, 500); } catch (e) { threw = e; }
+    check((threw?.message || '').includes('was not attempted'), 'a slow read counts toward the deadline', threw?.message);
+    check(writes.length === 1, 'so the target write is never made', JSON.stringify(writes));
+  } finally { Date.now = realNow; clockOffset = 0; writeCostMs = 0; readCostMs = 0; }
+}
+
+console.log('\n[#539] source guard: the adapter never references batchBudgetUpdates');
+{
+  const src = stripTsComments(readFileSync(new URL('../../src/lib/actual-adapter.ts', import.meta.url), 'utf8'));
+  check(!/\bbatchBudgetUpdates\b/.test(src) && !/\brawBatchBudgetUpdates\b/.test(src),
+    'no batchBudgetUpdates identifier outside comments (the bracket defers the apply onto a detached promise)');
 }
 
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
