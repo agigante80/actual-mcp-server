@@ -1,7 +1,7 @@
 ─────────────────────────────────────────────────────────────────────────────────
-PROMPT 3 OF 3 — ADVANCED + FULL CLEANUP
+PROMPT 3 OF 3: ADVANCED + FULL CLEANUP
   Tests budget management, summaries, query engine, session management, and
-  cleans up ALL test data created in Prompts 1–3.
+  cleans up ALL test data created in Prompts 1 to 3.
   Paste into the SAME chat session after Prompt 2 passes.
 
 PRE-CONDITIONS
@@ -11,34 +11,34 @@ PRE-CONDITIONS
 
 HOW TO USE
   1. In the SAME chat session, paste everything below "─── PROMPT START".
-  2. The AI will run Phases 7–12, then clean up all test data.
+  2. The AI will run Phases 7 to 12, then clean up all test data.
   3. Review the final summary for any ✗ failures or ℹ informational items.
 
 WHAT IT TESTS
-  Phase 7  — Transaction Summaries   (5 tools)
-  Phase 8  — Budgets                 (11 tools)
-  Phase 9  — Advanced Query & Sync   (2 tools)
+  Phase 7:   Transaction Summaries   (5 tools)
+  Phase 8:   Budgets                 (11 tools)
+  Phase 9:   Advanced Query & Sync   (2 tools)
   Phase 9b: Notes                   (2 tools)
   Phase 9c: Preferences              (1 tool)
   Phase 9d: Export / Import          (2 tools)
-  Phase 10 — Session Management      (2 tools)
-  Phase 11 — Concurrency             (optional, skipped by default)
-  Phase 12 — Full Cleanup            (non-blocking)
+  Phase 10:  Session Management      (2 tools)
+  Phase 11:  Concurrency             (optional, skipped by default)
+  Phase 12:  Full Cleanup            (non-blocking)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
 
-**Continuing from Prompt 2 — {TS} and all active IDs are still in scope.**
+**Continuing from Prompt 2: {TS} and all active IDs are still in scope.**
 
 Use the SAME testing rules:
 - ONE tool at a time, wait for each response, continue automatically
 - ONLY STOP on actual failure
-- One status line per tool: [Phase X] tool_name — ✓/✗/ℹ
-- ACTUALLY INVOKE each tool — do not simulate
+- One status line per tool: [Phase X] tool_name: ✓/✗/ℹ
+- ACTUALLY INVOKE each tool: do not simulate
 - NEVER call tools in parallel
 
 ---
 
-**Phase 7 — Transaction Summaries (5 tools):**
+**Phase 7: Transaction Summaries (5 tools):**
 
 - actual_transactions_summary_by_category
   Input: no required parameters (defaults to all months or current period)
@@ -85,9 +85,9 @@ NEGATIVE for this tool:
 
 ---
 
-**Phase 8 — Budgets (11 tools):**
+**Phase 8: Budgets (11 tools):**
 
-Select a category to work with — use the first category returned by actual_categories_get.
+Select a category to work with: use the first category returned by actual_categories_get.
 Save as `{budget_cat_id}`.
 Select a second different category for transfer test. Save as `{budget_cat2_id}`.
 
@@ -150,11 +150,11 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 
 ---
 
-**Phase 9 — Advanced Query & Sync (2 tools):**
+**Phase 9: Advanced Query & Sync (2 tools):**
 
 - actual_bank_sync
   Input: { account: "{txn_acct_id}" }
-  If no bank connection: report ✓ informational "no bank connection" — NOT a failure
+  If no bank connection: report ✓ informational "no bank connection": NOT a failure
   If bank connected: expect sync initiated successfully
 
 - actual_query_run
@@ -169,11 +169,11 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
   Query 3 (filter + sort):
     "SELECT payee, amount, date FROM transactions WHERE amount < 0 ORDER BY amount ASC LIMIT 5"
 
-  Report each query result as ✓ success or ✓ informational (unsupported) — only an exception = ✗ failure
+  Report each query result as ✓ success or ✓ informational (unsupported): only an exception = ✗ failure
 
 ---
 
-**Phase 9b — Notes (2 tools):**
+**Phase 9b: Notes (2 tools):**
 
 - actual_notes_update
   Input: { id: "budget-2026-01", note: "#template 250 MCP-Notes-{TS}" }
@@ -232,7 +232,7 @@ as skipped.
 
 ---
 
-**Phase 10 — Session Management (2 tools):**
+**Phase 10: Session Management (2 tools):**
 
 - actual_session_list
   Expect: { totalSessions: N, activeSessions: N, maxConcurrent: N }
@@ -245,19 +245,19 @@ as skipped.
 
 ---
 
-**Phase 11 — Concurrency Test (SKIP by default — only run if explicitly requested):**
+**Phase 11: Concurrency Test (SKIP by default; only run if explicitly requested):**
 
 If requested: create 10 transactions simultaneously in {txn_acct_id}:
   Amounts: -1000, -2000, -3000, -4000, -5000, -6000, -7000, -8000, -9000, -10000 (cents)
   Call them ONE AT A TIME sequentially (server enforces sequential writes)
   Verify all 10 are present in actual_transactions_filter
-By default: output "[Phase 11] concurrency — ℹ skipped (not requested)" and proceed to Phase 12.
+By default: output "[Phase 11] concurrency: ℹ skipped (not requested)" and proceed to Phase 12.
 
 ---
 
-**Phase 12 — Full Cleanup (Non-Blocking):**
+**Phase 12: Full Cleanup (Non-Blocking):**
 
-Attempt to delete all test data created across Prompts 1–3.
+Attempt to delete all test data created across Prompts 1 to 3.
 If any individual cleanup operation fails:
   - Report it as ✓ informational
   - Continue with remaining cleanup
@@ -265,21 +265,21 @@ If any individual cleanup operation fails:
 
 Cleanup order (dependencies first):
 
-1. actual_transactions_delete — delete {txn1_id}, {txn2_id}
-2. actual_rules_delete — delete {upsert_rule_id}
-3. actual_payees_delete — delete {payee_id}
-4. actual_accounts_delete — delete {txn_acct_id}
+1. actual_transactions_delete: delete {txn1_id}, {txn2_id}
+2. actual_rules_delete: delete {upsert_rule_id}
+3. actual_payees_delete: delete {payee_id}
+4. actual_accounts_delete: delete {txn_acct_id}
 5. Verify: actual_accounts_list does not contain any "MCP-*-{TS}" entries
 6. Verify: actual_payees_get does not contain any "MCP-Payee-{TS}" entries
 7. Verify: actual_rules_get does not contain any rules with "MCP-Upsert-{TS}" marker
 
 ---
 
-**Final Summary — output this exact block:**
+**Final Summary (output this exact block):**
 
 ```
 ═══════════════════════════════════════════════
-  ACTUAL MCP SERVER — FULL TEST RESULTS
+  ACTUAL MCP SERVER: FULL TEST RESULTS
   Session: {TS}
 ═══════════════════════════════════════════════
 
@@ -316,7 +316,7 @@ PROMPT 3 (Advanced):
 ─────────────────────────────────────────────
 
 FAILURES (if any):
-  [Phase X] tool_name — ✗ failure: <error>
+  [Phase X] tool_name: ✗ failure: <error>
 
 ITEMS NEEDING ATTENTION:
   <list any patterns, timeouts, or unexpected behaviours>

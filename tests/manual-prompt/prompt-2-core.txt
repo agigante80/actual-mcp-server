@@ -1,5 +1,5 @@
 ─────────────────────────────────────────────────────────────────────────────────
-PROMPT 2 OF 3 — CORE CRUD
+PROMPT 2 OF 3: CORE CRUD
   Tests ~39 tools covering accounts, categories, payees, rules, transactions,
   and schedules. Paste this into the SAME chat session after Prompt 1 passes.
 
@@ -16,30 +16,30 @@ HOW TO USE
   4. If any tool fails → fix and re-paste this prompt (start fresh from Phase 2).
 
 WHAT IT TESTS
-  Phase 2  — Accounts                        (6 tools)
+  Phase 2:   Accounts                        (6 tools)
   Phase 2b: Account Groups                  (4 tools)
-  Phase 3  — Category Groups & Categories    (6 tools)
-  Phase 4  — Payees                          (6 tools)
-  Phase 5  — Rules                           (4 tools)
-  Phase 5b — Batch, Uncategorized, Upsert    (4 tools)
-  Phase 6  — Transactions                   (11 tools)
-  Phase 6b — Schedules                       (4 tools)
-  Phase 6c — Tags                            (4 tools)
+  Phase 3:   Category Groups & Categories    (6 tools)
+  Phase 4:   Payees                          (6 tools)
+  Phase 5:   Rules                           (4 tools)
+  Phase 5b:  Batch, Uncategorized, Upsert    (4 tools)
+  Phase 6:   Transactions                   (11 tools)
+  Phase 6b:  Schedules                       (4 tools)
+  Phase 6c:  Tags                            (4 tools)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
 
-**Continuing from Prompt 1 — {TS} and all saved IDs from Phase 1 are still active.**
+**Continuing from Prompt 1: {TS} and all saved IDs from Phase 1 are still active.**
 
 Use the SAME testing rules as Prompt 1:
 - ONE tool at a time, wait for each response, continue automatically
 - ONLY STOP on actual failure
-- One status line per tool: [Phase X] tool_name — ✓/✗/ℹ
-- ACTUALLY INVOKE each tool — do not simulate
+- One status line per tool: [Phase X] tool_name: ✓/✗/ℹ
+- ACTUALLY INVOKE each tool: do not simulate
 - NEVER call multiple tools in parallel
 
 ---
 
-**Phase 2 — Accounts (6 tools):**
+**Phase 2: Accounts (6 tools):**
 
 - actual_accounts_create
   Input: { name: "MCP-Account-{TS}" }
@@ -100,7 +100,7 @@ Use the SAME testing rules as Prompt 1:
   NOTE: deleting a group does NOT delete its accounts, they become ungrouped. An account
   still pointing at a deleted group is expected under sync and means ungrouped, not an error.
 
-**Phase 3 — Category Groups & Categories (6 tools):**
+**Phase 3: Category Groups & Categories (6 tools):**
 
 - actual_category_groups_create
   Input: { name: "MCP-Group-{TS}" }
@@ -133,7 +133,7 @@ Use the SAME testing rules as Prompt 1:
 
 ---
 
-**Phase 4 — Payees (6 tools):**
+**Phase 4: Payees (6 tools):**
 
 - actual_payees_create
   Input: { name: "MCP-Payee-{TS}" }
@@ -180,7 +180,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 ---
 
-**Phase 5 — Rules (4 tools):**
+**Phase 5: Rules (4 tools):**
 
 - actual_rules_get
   Expect: rules array (possibly empty), no error
@@ -203,9 +203,9 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 ---
 
-**Phase 5b — Batch, Uncategorized & Rules-Upsert (4 tools):**
+**Phase 5b: Batch, Uncategorized & Rules-Upsert (4 tools):**
 
-- actual_transactions_uncategorized (summary mode — default)
+- actual_transactions_uncategorized (summary mode: default)
   Input: no parameters (defaults to all-time)
   Expect: { totalCount: N, totalAmount: N, byAccount: [...], dateRange: {...} }
   Verify: totalCount is a number ≥ 0, byAccount is an array, transactions key is absent
@@ -221,7 +221,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
   Input: { updates: [{ id: "<any existing txn id>", fields: { notes: "MCP-Batch-{TS}" } }] }
   Expect: { succeeded: [...], failed: [...], total: 1, successCount: 1, failureCount: 0 }
 
-- actual_rules_create_or_update (idempotent upsert — 2 sub-calls, counts as 1 tool):
+- actual_rules_create_or_update (idempotent upsert: 2 sub-calls, counts as 1 tool):
   First call: create rule with condition notes contains "MCP-Upsert-{TS}"
     Expect: { created: true, id: "<new-uuid>" }
     Save as `{upsert_rule_id}`
@@ -244,7 +244,7 @@ Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is u
 
 ---
 
-**Phase 6 — Transactions (11 tools):**
+**Phase 6: Transactions (11 tools):**
 
 Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
 
@@ -342,7 +342,7 @@ NEGATIVE for this phase:
   Expect: a validation or refusal error naming the problem, NOT a success and NOT a
           self-transfer that has to be cleaned up afterwards
 
-**Phase 6b — Schedules (4 tools):**
+**Phase 6b: Schedules (4 tools):**
 
 - actual_schedules_get
   Expect: schedules array (possibly empty), no error
@@ -367,7 +367,7 @@ NEGATIVE for this phase:
 
 ---
 
-**Phase 6c — Tags (4 tools):**
+**Phase 6c: Tags (4 tools):**
 
 Tags are self-contained: no account, category or transaction is needed. The tag WORD is stored
 WITHOUT a leading "#".
@@ -427,5 +427,5 @@ Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}
 ```
 
-If all passed: "✅ Prompt 2 complete — paste prompt-3-advanced.txt to continue."
-If any failed:  "❌ Prompt 2 failure — fix issues before pasting Prompt 3."
+If all passed: "✅ Prompt 2 complete: paste prompt-3-advanced.txt to continue."
+If any failed:  "❌ Prompt 2 failure: fix issues before pasting Prompt 3."

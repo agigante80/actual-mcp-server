@@ -209,6 +209,25 @@ check('every EXCEPTION carries a reason', () => {
   if (empty.length) fail(`these need a real reason: ${empty.map(([k]) => k).join(', ')}`);
 });
 
+// #537: the project forbids the em and en dash characters in every file it writes, and these
+// prompts are pasted into a model verbatim, so a dash here is copied into its report as well.
+// The box-drawing rule character (U+2500) used by the tally blocks is a different character
+// and stays allowed.
+const DASHES = /[\u2013\u2014]/;
+check('manual-prompt files contain no em or en dash', () => {
+  const dir = join(ROOT, 'tests/manual-prompt');
+  const files = readdirSync(dir).filter((f) => f.startsWith('prompt-') || f === 'README.md');
+  if (files.length < 4) fail(`expected the three prompts and the README, found ${files.join(', ')}`);
+  const hits = [];
+  for (const file of files) {
+    readFileSync(join(dir, file), 'utf8').split('\n').forEach((line, i) => {
+      if (DASHES.test(line)) hits.push(`${file}:${i + 1}`);
+    });
+  }
+  if (DASHES.test('a \u2014 b') === false) fail('the dash pattern cannot match');
+  if (hits.length) fail(`${hits.length} line(s) with an em or en dash: ${hits.slice(0, 10).join(', ')}`);
+});
+
 check('SELF-CHECK: the guard can actually fail', () => {
   // A completeness guard that cannot fail is worse than none, because it certifies. Prove
   // each surface rejects a tool that is genuinely absent everywhere.
