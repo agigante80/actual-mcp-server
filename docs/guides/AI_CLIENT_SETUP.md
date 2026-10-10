@@ -213,7 +213,7 @@ AUTH_PROVIDER=oidc
 OIDC_ISSUER=https://sso.yourdomain.com
 OIDC_RESOURCE=https://actual-mcp.yourdomain.com/http   # this server's public MCP URL: the expected 'aud'
 OIDC_ACCEPTED_AUDIENCES=your-client-id                  # only if your IdP puts the client id in 'aud' (#245)
-OIDC_SCOPES=                          # leave empty when your clients request no scope (no 'scope' claim)
+OIDC_SCOPES=                          # leave empty when the tokens carry no 'scope' claim
 # Only for IdPs whose JWKS lives on a different host than the issuer (#254).
 # Google: issuer accounts.google.com serves keys from www.googleapis.com:
 # OIDC_JWKS_TRUSTED_HOSTS=www.googleapis.com
