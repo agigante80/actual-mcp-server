@@ -179,6 +179,12 @@ function assert(condition, message) {
       HASH = '';
       v = run({});
       assert(v === '0.22.22', `10: an empty hash yields the plain version (got ${v})`);
+      // #546: a checkout whose package.json could not be read has the base 'unknown';
+      // 'unknown-dev-<hash>' would look like a real version, so no suffix is added.
+      HASH = 'abc1234';
+      calls = 0;
+      v = resolveMcpServerVersion('unknown', {}, root, runGit);
+      assert(v === 'unknown' && calls === 0, `11: an unknown base gets no suffix and runs no git (got ${v}, calls ${calls})`);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }

@@ -42,11 +42,15 @@ interface HttpErrorLike {
  * True when the request targets the MCP endpoint: the pathname of `originalUrl` (the query
  * string removed) equals `mcpPath` or starts with `mcpPath + '/'`. Never a bare prefix match:
  * with an MCP path of `/mcp`, `/mcp-info` is NOT the MCP endpoint and gets the plain shape.
+ *
+ * #545: compared case-insensitively, because this server never enables Express's
+ * `case sensitive routing`, so `/MCP` reaches the MCP route and must get its envelope too.
  */
 function isMcpRequestPath(originalUrl: string, mcpPath: string): boolean {
   const q = originalUrl.indexOf('?');
-  const pathname = q === -1 ? originalUrl : originalUrl.slice(0, q);
-  const base = mcpPath.length > 1 && mcpPath.endsWith('/') ? mcpPath.slice(0, -1) : mcpPath;
+  const pathname = (q === -1 ? originalUrl : originalUrl.slice(0, q)).toLowerCase();
+  const lowered = mcpPath.toLowerCase();
+  const base = lowered.length > 1 && lowered.endsWith('/') ? lowered.slice(0, -1) : lowered;
   // A root MCP path ('/') makes every request an MCP request.
   if (base === '/' || base === '') return true;
   return pathname === base || pathname.startsWith(`${base}/`);

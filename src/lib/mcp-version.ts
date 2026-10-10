@@ -24,6 +24,9 @@ export function resolveMcpServerVersion(
   runGit: (args: string[]) => string,
 ): string {
   if (env.VERSION && env.VERSION !== 'unknown') return env.VERSION;
+  // #546: no manifest was found, so there is no version to qualify; 'unknown-dev-<hash>'
+  // would read as a real one.
+  if (baseVersion === 'unknown') return baseVersion;
   if (!existsSync(join(root, '.git'))) return baseVersion;
   try {
     const branch = runGit(['rev-parse', '--abbrev-ref', 'HEAD']);

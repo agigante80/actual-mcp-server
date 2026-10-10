@@ -6,7 +6,7 @@
 // in the logs. Pinned here, against minimal apps with the production wiring shape:
 //   - malformed JSON on the MCP path: 400 + JSON-RPC -32700, id null;
 //   - malformed JSON elsewhere: 400 + plain {error}, no jsonrpc key;
-//   - the MCP-path match is exact (/mcp-info is not /mcp; /mcp?x=1 is);
+//   - the MCP-path match is exact (/mcp-info is not /mcp; /mcp?x=1 is) but case-insensitive like Express routing (/MCP is);
 //   - oversize: 413; other exposed body-parser 4xx (415, corrupt gzip 400) keep their status;
 //   - a thrown error: a fixed 500, even under NODE_ENV=development;
 //   - the request text (a sentinel) never reaches the response or the logs;
@@ -119,6 +119,10 @@ console.log(`\n[#543] httpErrorHandler (express ${expressVersion})`);
     check('/mcp?x=1 IS the MCP path: -32700 envelope', q.status === 400 && q.json?.error?.code === -32700, q.text);
     const sub = await post(base, '/mcp/sub', MALFORMED);
     check('/mcp/sub IS the MCP path: -32700 envelope', sub.status === 400 && sub.json?.error?.code === -32700, sub.text);
+    // #545: Express routes case-insensitively by default, so /MCP reaches the MCP route and
+    // must get the same envelope.
+    const upper = await post(base, '/MCP', MALFORMED);
+    check('/MCP IS the MCP path (case-insensitive routing): -32700 envelope', upper.status === 400 && upper.json?.error?.code === -32700, upper.text);
 
     const big = JSON.stringify({ note: `${SENTINEL} ${'x'.repeat(4000)}` });
     const over = await captured(() => post(base, '/mcp', big));
