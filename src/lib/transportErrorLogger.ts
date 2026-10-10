@@ -16,10 +16,12 @@ import { createModuleLogger, type ModuleLogger } from './loggerFactory.js';
 
 const MAX_DETAIL_CODE_POINTS = 200;
 const CUT_CHARS = /[{["'`]/;
-// Control (C0, C1), line/paragraph separators and bidi format characters. Written with
-// escapes, as src/logger.ts does: a raw U+2028 in source would terminate the literal.
+// Control (C0, C1), line/paragraph separators, bidi format characters, and (#535) the
+// invisible marks that can hide or reorder text in a log line: the Arabic letter mark,
+// zero-width space/joiners, LRM/RLM and the BOM. Written with escapes, as src/logger.ts
+// does: a raw U+2028 in source would terminate the literal.
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/g;
+const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f\u061c\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069\ufeff]/g;
 const OMITTED = '[payload omitted]';
 
 /** Pure: turn an arbitrary thrown value into a bounded, payload-free, single-line string. */

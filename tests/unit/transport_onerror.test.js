@@ -121,6 +121,13 @@ check('U2g percent, C1 and bidi characters are stripped; message stays constant'
   assert.ok(!/[\u0000-\u001f\u007f-\u009f\u2028\u2029\u202a-\u202e\u2066-\u2069]/.test(d));
 });
 
+check('U2i zero-width, mark and BOM characters are stripped (#535)', () => {
+  const d = sanitizeTransportErrorDetail(new Error('abc\u200eSPOOF\u200b\u061cx\u200fy\u200dz\ufeffw'));
+  assert.ok(!/[\u061c\u200b-\u200f\ufeff]/.test(d), JSON.stringify(d));
+  assert.strictEqual(sanitizeTransportErrorDetail(new Error('plain ascii text')), 'plain ascii text');
+  assert.strictEqual(sanitizeTransportErrorDetail(new Error('\u200b\u200e\ufeff')), '[no message]');
+});
+
 check('U2h stack and cause are never logged', () => {
   const { server, records } = setup();
   const e = new Error(`Unknown message type: {"a":1}`, { cause: new Error(CANARY) });
