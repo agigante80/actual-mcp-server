@@ -13,6 +13,7 @@
  */
 
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
+import { DEFAULT_MCP_SERVER_URL, HTTP_PATH } from '../shared/e2e-helpers.js';
 
 test.describe('Docker E2E - ALL 83 TOOLS', () => {
   // ==================== SERVER INFO ====================
@@ -126,6 +127,26 @@ test.describe('Docker E2E - ALL 83 TOOLS', () => {
     const json = await res.json();
     expect(json.error).toBeTruthy();
     expect(json.error.message).toMatch(/name|required/i);
+  });
+
+  // #543: an UNAUTHENTICATED malformed body on the MCP path. express.json runs before auth, so
+  // this reaches the final error handler with no token at all. It must answer 400 with a
+  // JSON-RPC -32700 envelope and never echo the request text. HTTP-only: stdio has no HTTP body
+  // parser. The no-logging half is pinned by tests/unit/httpServer_error_handler_wiring.test.js.
+  test('malformed JSON POST to the MCP path - ERROR: 400 -32700, request text not echoed', async ({ request }) => {
+    test.skip(isStdio, 'an HTTP body-parser error; stdio has no HTTP layer');
+    const sentinel = 'SENTINEL-543';
+    const res = await request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
+      data: `{"jsonrpc":"2.0","method":"tools/call","params":{"note":"${sentinel} Bearer eyJfake"`,
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
+    });
+    const text = await res.text();
+    expect(res.status()).toBe(400);
+    const json = JSON.parse(text);
+    expect(json.jsonrpc).toBe('2.0');
+    expect(json.error?.code).toBe(-32700);
+    expect(json.id).toBeNull();
+    expect(text).not.toContain(sentinel);
   });
 
   // #510: regression pins for a tools/call that OMITS `arguments`. SDK 1.32 started advertising
