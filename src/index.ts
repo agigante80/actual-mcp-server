@@ -2,38 +2,26 @@
 // source order, so this arms the Node floor check before zod, before the rejection
 // allowlist, and before the handlers below. `npm start` and the documented
 // `node dist/src/index.js --stdio` reach this file without going through bin/, so the
-// guard cannot live in bin/ alone. Importing the named export does not change that:
-// the module's top-level `enforceNodeVersion()` still fires here, exactly once.
-import { findRootPackageJson } from './lib/node-version-guard.js';
-import path, { dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+// guard cannot live in bin/ alone. It is a side-effect import: the module's top-level
+// `enforceNodeVersion()` fires here, exactly once.
+import './lib/node-version-guard.js';
+import { getMcpServerVersion } from './lib/mcp-version.js';
+import path from 'node:path';
 import { z } from 'zod';
 import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
 import { format } from 'node:util';
 
-/**
- * #277: the single version reader for this module.
+/*
+ * #277 / #541: this module's version comes from `getMcpServerVersion()` (src/lib/mcp-version.ts),
+ * which `--version`, `--help`, the startup banner, the MCP initialize `serverInfo.version` and
+ * `actual_server_info` all share. It reads the ROOT package.json through
+ * `findRootPackageJson`, never the stale `dist/package.json` mirror that a dynamic JSON import
+ * once produced (#277), and it honours a build-time `VERSION`.
  *
- * This used to be a dynamic JSON import of `../package.json` carrying an import
- * attribute, which from the compiled `dist/src/index.js` resolved to `dist/package.json`:
- * a mirror that tsc emitted precisely BECAUSE of this import (rootDir is "."), and that
- * went stale between a version bump and the next build. `src/tools/server_info.ts` reads
- * the ROOT manifest, so the two disagreed. Removing the import removes the mirror too.
- *
- * `findRootPackageJson` walks up to the outermost package.json named actual-mcp-server,
- * skipping that mirror. It never throws (it swallows unreadable and malformed files), so
- * the try/catch is belt-and-braces around a future change rather than a live path.
- * Removing the import attributes also removes the last instance of the construct that
- * crashed on Node 18 in #275.
+ * #541 reversed the gate's "leave `--version` unchanged": the old `readRootVersion()` here
+ * ignored `VERSION`, so a Docker image built as `X-dev-abc` printed plain `X` from
+ * `--version` while clients saw `X-dev-abc`. One reader means one string.
  */
-function readRootVersion(): string {
-  try {
-    const manifest = findRootPackageJson(dirname(fileURLToPath(import.meta.url)));
-    return manifest?.version ?? process.env.VERSION ?? 'unknown';
-  } catch {
-    return process.env.VERSION ?? 'unknown';
-  }
-}
 
 // Add global error handlers
 
@@ -159,7 +147,7 @@ if (
 
 if (argsEarly.includes('--help') || argsEarly.includes('-h') ||
     argsEarly.includes('--version') || argsEarly.includes('-v')) {
-  const version = readRootVersion();
+  const version = getMcpServerVersion();
   if (argsEarly.includes('--version') || argsEarly.includes('-v')) {
     console.log(version);
   } else {
@@ -245,26 +233,9 @@ export {};
   const { getLocalIp } = (utilsModule as unknown as { getLocalIp: () => string });
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
 
-  // Load version from environment (Docker build-time) or the ROOT package.json (local dev)
-  let VERSION = process.env.VERSION;
-  if (!VERSION || VERSION === 'unknown') {
-    VERSION = readRootVersion();
-
-    // Append git commit hash for development builds
-    try {
-      const { execSync } = await import('child_process');
-      const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
-      const commitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-      if (branch === 'develop' || branch !== 'main') {
-        VERSION = `${VERSION}-dev-${commitHash}`;
-      }
-    } catch (err) {
-      // Git not available or not in a git repo, use version as-is
-      logger.debug('Could not determine git commit hash:', err);
-    }
-  }
-  // Ensure VERSION is always a string (fallback to 0.1.0 if somehow still undefined)
-  const version: string = VERSION || '0.1.0';
+  // #541: the build-time VERSION, or the root package version plus a dev suffix on a
+  // checkout. Shared with actual_server_info so both report the identical string.
+  const version = getMcpServerVersion();
 
   // now continue with the original logic (args, flags, usage, etc.)
   const PORT = process.env.MCP_BRIDGE_PORT ? Number(process.env.MCP_BRIDGE_PORT) : 3600;
@@ -289,7 +260,7 @@ export {};
       process.exit(1);
     }
 
-    logger.info(`🚀 Starting Actual MCP Server v${VERSION}`);
+    logger.info(`🚀 Starting Actual MCP Server v${version}`);
 
     // NOTE: Persistent connection disabled - using init/shutdown per operation pattern
     // This ensures tombstone=0 for all created entities (they appear in UI)

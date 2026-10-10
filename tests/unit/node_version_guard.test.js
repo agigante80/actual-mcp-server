@@ -264,8 +264,8 @@ check('VERSION: banner, --version, and actual_server_info all report the ROOT ve
   // version, and resolution must ignore it either way. Planting it is also the only way to
   // prove these outputs are not reading it.
   //
-  // Note the normalisation: server_info.ts and the startup banner append `-dev-<sha>` on a
-  // non-main branch, while `--version` prints the raw version. Compare BASE versions.
+  // Note the normalisation: since #541 every path shares getMcpServerVersion(), which appends
+  // `-dev-<sha>` on a non-main checkout. Compare BASE versions.
   const distPkgPath = join(ROOT, 'dist', 'package.json');
   const preexisting = existsSync(distPkgPath) ? readFileSync(distPkgPath, 'utf8') : null;
   const rootPkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
@@ -337,7 +337,7 @@ check('MIRROR: a clean build no longer emits dist/package.json at all', () => {
 
 check('FALLBACK: a missing root package.json yields a fallback, and never throws', () => {
   // findRootPackageJson returns null rather than throwing, which is what lets
-  // readRootVersion() in index.ts degrade to process.env.VERSION / 'unknown'.
+  // getMcpServerVersion() (src/lib/mcp-version.ts) fall back to a base of 'unknown'.
   const tmp = tempTree('nvg-nopkg-');
   const start = join(tmp, 'a', 'b');
   mkdirSync(start, { recursive: true });
@@ -346,7 +346,8 @@ check('FALLBACK: a missing root package.json yields a fallback, and never throws
 });
 
 check('enforceNodeVersion fires exactly once, no matter how often the module is imported', () => {
-  // index.ts imports the module for findRootPackageJson; that must not re-run the guard.
+  // index.ts imports the module for its side effect and mcp-version.ts imports
+  // findRootPackageJson from it; neither may re-run the guard.
   const guardUrl = pathToFileURL(join(ROOT, 'dist', 'src', 'lib', 'node-version-guard.js')).href;
   const script =
     `const a = await import(${JSON.stringify(guardUrl)});` +
