@@ -126,7 +126,7 @@ console.log(`\n[#543] httpErrorHandler (express ${expressVersion})`);
 
     const big = JSON.stringify({ note: `${SENTINEL} ${'x'.repeat(4000)}` });
     const over = await captured(() => post(base, '/mcp', big));
-    check('oversize body on the MCP path -> 413 with a JSON-RPC error', over.result.status === 413 && over.result.json?.jsonrpc === '2.0', over.result.text);
+    check('oversize body on the MCP path -> 413 with a JSON-RPC error', over.result.status === 413 && over.result.json?.jsonrpc === '2.0' && over.result.json?.error?.code === -32600, over.result.text);
     check('the sentinel is absent from the 413 response and logs',
       !over.result.text.includes(SENTINEL) && !over.logs.includes(SENTINEL), over.logs);
     const overPlain = await post(base, '/health', big);
