@@ -26,7 +26,8 @@ Small, independent follow-ups that code reviews below the fix threshold turned i
 Outcome (2026-10-09): done. All 15 tickets shipped in v0.22.19, released with dual-transport evidence. The phase review split #525 and #505 and created #532 (one shared comment stripper) and #533; nothing was dropped. The bounded review of the phase found no high or medium defects, and its lows went to Backlog as #535 to #541 rather than back into this phase.
 
 ## Phase: Write-path verification
-state: planned
+state: open
+plan: docs/plans/write-path-verification.md
 
 `@actual-app/api` 26.9.0 and 26.10.0 return from transaction update and delete without waiting for the batch update to finish, so a read straight after a write can miss it. #489 closed this race only for split conversion. This phase starts by measuring whether the other write shapes actually miss on a live budget. It fixes only the shapes that reproduce, and it tightens the #489 poll and its tests. It sits after the hardening pass because it needs live measurement and a dual-transport run, while the hardening work needs neither.
 
