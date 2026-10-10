@@ -2465,6 +2465,18 @@ export async function updateTransaction(
     }
   });
 }
+/**
+ * Update many transactions in ONE write cycle, with a verdict per item. NOT atomic.
+ *
+ * COOPERATIVE DEADLINE (#538): same 0.75 fraction of ACTUAL_OP_TIMEOUT_MS as `createRulesBatch`
+ * and `setBudgetBatch`, because `withOpTimeout` cannot cancel this callback: without it a slow
+ * batch kept writing after its caller was told the operation timed out. The clock starts before
+ * the existence query, so a slow read counts. Items not reached go to `failed` with
+ * BUDGET_BATCH_DEADLINE_ERROR and were never sent upstream. A missing id keeps its not-found
+ * error even past the deadline: it was never going to be written, and "not attempted" would
+ * tell the client a retry could succeed. A raw update already in flight when the deadline
+ * passes can still overrun; the check runs between items.
+ */
 export async function updateTransactionBatch(
   updates: Array<{ id: string; fields: Partial<components['schemas']['Transaction']> | unknown }>
 ): Promise<{ succeeded: { id: string }[]; failed: { id: string; error: string }[] }> {
@@ -2473,6 +2485,7 @@ export async function updateTransactionBatch(
   // Sequential loop (not Promise.all) is intentional: concurrent rawUpdateTransaction calls
   // within one session can interleave withMutation CRDT messages unpredictably.
   return queueWriteOperation(async () => {
+    const startedAt = Date.now();
     // Nothing to do for an empty batch. The tool enforces min 1, but the adapter is a
     // public export, so guard here and avoid an empty-$oneof existence query.
     if (updates.length === 0) return { succeeded: [], failed: [] };
@@ -2497,9 +2510,14 @@ export async function updateTransactionBatch(
 
     const succeeded: { id: string }[] = [];
     const failed: { id: string; error: string }[] = [];
+    const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;
     for (const [position, { id, fields }] of updates.entries()) {
       if (!existing.has(id)) {
         failed.push({ id, error: `Transaction "${id}" not found. Use actual_transactions_get to list transactions.` });
+        continue;
+      }
+      if (deadlineMs > 0 && Date.now() - startedAt > deadlineMs) {
+        failed.push({ id, error: BUDGET_BATCH_DEADLINE_ERROR });
         continue;
       }
       try {

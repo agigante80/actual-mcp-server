@@ -12,6 +12,8 @@
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
 process.env.ACTUAL_PASSWORD       = process.env.ACTUAL_PASSWORD       ?? 'stub-password-for-unit-test';
+// #538: the cooperative deadline is 75% of this; pinned so the deadline cases do not depend on the environment.
+process.env.ACTUAL_OP_TIMEOUT_MS  = '30000';
 
 let failures = 0;
 const pass = (l) => console.log(`  ✓ ${l}`);
@@ -32,14 +34,21 @@ let updateCalls = [];
 let throwOn = new Map(); // id -> message
 let syncCalls = 0;
 let syncFails = false;
-apiDefault.runQuery = async () => ({ data: [...existingIds].map((id) => ({ id })) });
+// #538: a simulated clock. Each raw update advances it by writeCostMs, the existence query by
+// readCostMs, so the deadline cases run in milliseconds of real time.
+let clockOffset = 0;
+let writeCostMs = 0;
+let readCostMs = 0;
+apiDefault.runQuery = async () => { clockOffset += readCostMs; return { data: [...existingIds].map((id) => ({ id })) }; };
 apiDefault.updateTransaction = async (id) => {
   updateCalls.push(id);
+  clockOffset += writeCostMs;
   if (throwOn.has(id)) throw new Error(throwOn.get(id));
 };
 apiDefault.sync = async () => { syncCalls++; if (syncFails) throw new Error('read ECONNRESET'); };
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
+const { default: config } = await import('../../dist/src/config.js');
 const retryMod = await import('../../dist/src/lib/retry.js');
 const { connectionPool } = await import('../../dist/src/lib/ActualConnectionPool.js');
 const { requestContext } = await import('../../dist/src/lib/requestContext.js');
@@ -104,6 +113,66 @@ console.log('\n[#521] U4: not-found never reaches the catch (regression guard)')
   check(v.failed.length === 1 && v.failed[0].id === ID2 && /not found/.test(v.failed[0].error), 'ID2 reported not found');
   check(updateCalls.length === 2 && updateCalls[0] === ID1 && updateCalls[1] === ID3, 'raw calls for ID1 and ID3 only');
 }
+
+const ID5 = '50000000-0000-4000-8000-000000000005';
+const withClock = async (fn) => {
+  const realNow = Date.now;
+  Date.now = () => realNow() + clockOffset;
+  try { return await fn(); } finally { Date.now = realNow; clockOffset = 0; writeCostMs = 0; readCostMs = 0; }
+};
+
+console.log('\n[#538] D1: the cooperative deadline stops the batch at 75% of ACTUAL_OP_TIMEOUT_MS');
+await withClock(async () => {
+  // 30000ms timeout -> 22500ms deadline; each write costs 10000ms, so the clock reads 20000ms
+  // before item 3 (attempted) and 30000ms before item 4 (stopped).
+  reset({ exist: [ID1, ID2, ID3, ID4, ID5] });
+  writeCostMs = 10000;
+  const { value: v, err } = await attempt(() => adapter.updateTransactionBatch(batch([ID1, ID2, ID3, ID4, ID5])));
+  check(!err, 'the call resolves', err?.message);
+  check(v && v.succeeded.map((x) => x.id).join() === [ID1, ID2, ID3].join(), 'items before the deadline are applied', JSON.stringify(v?.succeeded));
+  check(v && v.failed.map((x) => x.id).join() === [ID4, ID5].join(), 'the rest are reported failed', JSON.stringify(v?.failed));
+  check(v && v.failed.every((f) => f.error === adapterMod.BUDGET_BATCH_DEADLINE_ERROR), 'with the shared deadline error');
+  check(updateCalls.join() === [ID1, ID2, ID3].join(), 'items past the deadline are never sent', updateCalls.join());
+});
+
+console.log('\n[#538] D2: the existence query counts toward the deadline');
+await withClock(async () => {
+  reset({ exist: [ID1, ID2] });
+  readCostMs = 25000;
+  const v = await adapter.updateTransactionBatch(batch([ID1, ID2]));
+  check(updateCalls.length === 0, 'a read that used the budget leaves nothing to send', updateCalls.join());
+  check(v.failed.length === 2 && v.failed.every((f) => f.error === adapterMod.BUDGET_BATCH_DEADLINE_ERROR), 'both items not attempted');
+});
+
+console.log('\n[#538] D3: a not-found id keeps its own error after the deadline (it was never a write)');
+await withClock(async () => {
+  reset({ exist: [ID1, ID3] });
+  writeCostMs = 25000;
+  const v = await adapter.updateTransactionBatch(batch([ID1, ID2, ID3]));
+  check(v.succeeded.length === 1 && v.succeeded[0].id === ID1, 'ID1 applied');
+  check(v.failed.find((f) => f.id === ID2) && /not found/.test(v.failed.find((f) => f.id === ID2).error), 'ID2 still reported not found');
+  check(v.failed.find((f) => f.id === ID3)?.error === adapterMod.BUDGET_BATCH_DEADLINE_ERROR, 'ID3 not attempted');
+});
+
+console.log('\n[#538] D4 (negative): a batch inside the deadline is unchanged');
+await withClock(async () => {
+  reset({ exist: [ID1, ID2, ID3] });
+  writeCostMs = 5000;
+  const v = await adapter.updateTransactionBatch(batch([ID1, ID2, ID3]));
+  check(v.succeeded.length === 3 && v.failed.length === 0 && updateCalls.length === 3, 'all three applied', JSON.stringify(v));
+});
+
+console.log('\n[#538] D5: ACTUAL_OP_TIMEOUT_MS=0 disables the deadline');
+await withClock(async () => {
+  const prev = config.ACTUAL_OP_TIMEOUT_MS;
+  config.ACTUAL_OP_TIMEOUT_MS = 0;
+  try {
+    reset({ exist: [ID1, ID2, ID3, ID4, ID5] });
+    writeCostMs = 1000000;
+    const v = await adapter.updateTransactionBatch(batch([ID1, ID2, ID3, ID4, ID5]));
+    check(v.succeeded.length === 5 && updateCalls.length === 5, 'every item is attempted', JSON.stringify(v.failed));
+  } finally { config.ACTUAL_OP_TIMEOUT_MS = prev; }
+});
 
 console.log('\n[#521] U5: a rate limit is a per-item failure, not an abort');
 {
