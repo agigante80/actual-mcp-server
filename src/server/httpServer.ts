@@ -42,6 +42,7 @@ import { buildToolListEntries } from '../lib/tool-list-entry.js';
 // transports can reach it (stdio could not, which was the whole of #452). Re-exported here
 // unchanged so existing importers and tests are unaffected.
 import { classifyInitFailure, type InitFailureCause } from '../lib/init-failure.js';
+import { createHttpErrorHandler } from './httpErrorHandler.js';
 export { classifyInitFailure };
 export type { InitFailureCause };
 
@@ -877,9 +878,18 @@ export async function startHttpServer(
       res.status(204).end();
       return;
     }
-    res.setHeader('Content-Type', 'text/plain; version=0.0.4');
+    // #543: the charset is spelled out because res.send appends it, and express 5.3.0
+    // appends it AFTER version=0.0.4 where 5.2.1 put it before. Stated in full, the header
+    // is passed through unchanged on both, so scrapers see the same value.
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8; version=0.0.4');
     res.send(txt);
   });
+
+  // #543: the FINAL layer, mounted globally (express.json above is global). Without it an
+  // error reaches Express's default handler, which from express 5.3.0 logs the whole error
+  // object, raw request body included, and under NODE_ENV=development renders the stack.
+  // Keep this the last app.use: anything registered after it is never reached on error.
+  app.use(createHttpErrorHandler({ mcpPath: httpPath }));
 
   // config validation (#169) guarantees both paths are set when HTTPS is on, so
   // the non-null assertions are safe. Wrap the reads so a missing/unreadable
