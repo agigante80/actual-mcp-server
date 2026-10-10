@@ -15,7 +15,8 @@
  *
  * Adapted for this project's conventions:
  * - No wrapToolCall: uses the direct call() pattern
- * - Reuses the exact same ConditionSchema / ActionSchema / FIELD_OPERATORS as rules_create.ts
+ * - Shares ConditionSchema with rules_create.ts (src/lib/schemas/rules.ts); ActionSchema and the
+ *   FIELD_OPERATORS map are private copies of the same shape (#540 found them identical)
  *
  * #376: the read-match-write cycle lives in `adapter.upsertRule` (identity rules in
  * `src/lib/rule-matching.ts`). This tool owns the schema, the operator/UUID validation and
