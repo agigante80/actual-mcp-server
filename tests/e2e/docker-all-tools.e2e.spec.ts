@@ -1639,6 +1639,30 @@ test.describe('Docker E2E - ALL 84 TOOLS', () => {
     ).toBeTruthy();
   });
 
+  test('actual_query_run - #567 matches apostrophes in comparison, LIKE, and IN filters', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const payee = await makePayee({ name: `E2E-Query-O'Brien-${uniqueSuffix()}` });
+    const account = await makeAccount();
+    const transaction = await makeTransaction({ account, payee: payee.id });
+    const sqlName = payee.name.replace(/'/g, "''");
+    const queries: Array<[string, string]> = [
+      [`payee.name = '${sqlName}'`, 'equality'],
+      [`payee.name LIKE '%${sqlName}%'`, 'LIKE'],
+      [`payee.name IN ('${sqlName}')`, 'IN'],
+    ];
+
+    for (const [where, operator] of queries) {
+      const result = await mcp.call('actual_query_run', {
+        query: `SELECT id FROM transactions WHERE ${where}`,
+      }) as unknown;
+      type QueryRow = { id: string };
+      type QueryResult = QueryRow[] | { data?: QueryRow[]; result?: { data?: QueryRow[] } };
+      const payload = result as QueryResult | null;
+      const rows = Array.isArray(payload) ? payload : (payload?.data ?? payload?.result?.data ?? []);
+      expect(Array.isArray(rows), `${operator} query should return rows`).toBe(true);
+      expect(rows.map((row) => row.id), `${operator} should match the transaction`).toContain(transaction.id);
+    }
+  });
+
   test('actual_query_run - #420 boolean WHERE: the value actually PARTITIONS the rows', async ({ mcp }) => {
     // Two things this proves that a `toBeTruthy()` on the result could not:
     //   1. The query EXECUTES. Before #420 it threw "Can't convert string/integer to boolean".

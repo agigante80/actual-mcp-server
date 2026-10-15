@@ -105,6 +105,31 @@ check('!= maps to $ne', () => {
   assert.deepStrictEqual(filtersFor('amount != 100'), [{ amount: { $ne: 100 } }]);
 });
 
+check('#567 comparison operators decode SQL-escaped apostrophes', () => {
+  const cases = [
+    ["payee.name = 'O''Brien'", { 'payee.name': "O'Brien" }],
+    ["payee.name != 'O''Brien'", { 'payee.name': { $ne: "O'Brien" } }],
+    ["payee.name > 'O''Brien'", { 'payee.name': { $gt: "O'Brien" } }],
+    ["payee.name >= 'O''Brien'", { 'payee.name': { $gte: "O'Brien" } }],
+    ["payee.name < 'O''Brien'", { 'payee.name': { $lt: "O'Brien" } }],
+    ["payee.name <= 'O''Brien'", { 'payee.name': { $lte: "O'Brien" } }],
+  ];
+  for (const [where, expected] of cases) {
+    assert.deepStrictEqual(filtersFor(where), [expected], where);
+  }
+});
+
+check('#567 LIKE and NOT LIKE decode SQL-escaped apostrophes', () => {
+  assert.deepStrictEqual(
+    filtersFor("notes LIKE '%O''Brien%'"),
+    [{ notes: { $like: "%O'Brien%" } }],
+  );
+  assert.deepStrictEqual(
+    filtersFor("notes NOT LIKE '%O''Brien%'"),
+    [{ notes: { $notlike: "%O'Brien%" } }],
+  );
+});
+
 check('IN maps to $oneof with mixed coercion', () => {
   assert.deepStrictEqual(
     filtersFor("category.name IN ('Food', 'Rent')"),
@@ -343,6 +368,10 @@ check('#433: an SQL-ESCAPED apostrophe in an IN list is accepted and passed thro
   // The DOUBLING IS PRESERVED on purpose: upstream supplies the outer quotes, so
   // un-escaping here would produce `'McDonald's'` and reopen the injection.
   assert.ok(oneof[1].includes("McDonald''s"), `doubling must survive to the builder, got ${oneof[1]}`);
+  assert.deepStrictEqual(
+    filtersFor("payee.name IN ('O''Brien')"),
+    [{ 'payee.name': { $oneof: ["O''Brien"] } }],
+  );
 });
 
 check('#433: multiple escaped apostrophes and a mixed list still work', () => {

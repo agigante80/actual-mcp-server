@@ -49,6 +49,16 @@ function _splitInList(valuesStr: string): string[] {
  *  `'McDonald''s'` matches; `'McDonald's'` (a lone quote) does not. */
 const SQL_ESCAPED_SINGLE_QUOTED = /^'(?:[^']|'')*'$/;
 
+// ActualQL's value compiler escapes comparison and LIKE strings for SQLite, so SQL's doubled
+// apostrophe must be decoded first. IN uses a separate path that deliberately preserves it.
+function _stripWhereSqlLiteral(s: string): string {
+  const t = s.trim();
+  if (SQL_ESCAPED_SINGLE_QUOTED.test(t)) {
+    return t.slice(1, -1).replace(/''/g, "'");
+  }
+  return _stripWhereQuotes(s);
+}
+
 function _isSafeInListElement(raw: string): boolean {
   const t = raw.trim();
   // #433: a single-quoted element may now carry DOUBLED internal quotes. That is
@@ -84,11 +94,10 @@ function _coerceInListValue(s: string): string | number {
   return _coerceWhereValue(s);
 }
 
-// Coerce a SQL value literal to a number when it looks numeric, else keep the
-// (unquoted) string. Used for IN lists and comparison operands. Empty stays a
-// string so an empty literal is not silently turned into 0.
+// Coerce a comparison operand to a number when it looks numeric, else keep the
+// (unquoted) string. Empty stays a string so an empty literal is not turned into 0.
 function _coerceWhereValue(s: string): string | number {
-  const v = _stripWhereQuotes(s);
+  const v = _stripWhereSqlLiteral(s);
   if (v === '') return v;
   const n = Number(v);
   return isNaN(n) ? v : n;
@@ -166,7 +175,7 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
     const notLikeMatch = trimmedCondition.match(/^([\w.]+)\s+NOT\s+LIKE\s+(.+)$/i);
     if (notLikeMatch) {
       const [, field, valueStr] = notLikeMatch;
-      query = query.filter({ [field]: { $notlike: _stripWhereQuotes(valueStr) } });
+      query = query.filter({ [field]: { $notlike: _stripWhereSqlLiteral(valueStr) } });
       continue;
     }
 
@@ -176,7 +185,7 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
     const likeMatch = trimmedCondition.match(/^([\w.]+)\s+LIKE\s+(.+)$/i);
     if (likeMatch) {
       const [, field, valueStr] = likeMatch;
-      query = query.filter({ [field]: { $like: _stripWhereQuotes(valueStr) } });
+      query = query.filter({ [field]: { $like: _stripWhereSqlLiteral(valueStr) } });
       continue;
     }
 
