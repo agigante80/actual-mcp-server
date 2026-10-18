@@ -364,7 +364,7 @@ export {};
     if (useHttp || useTestMcpClient) {
       const decision = enforceHttpAuthPosture({
         bindHost,
-        hasStaticToken: !!process.env.MCP_SSE_AUTHORIZATION,
+        hasStaticToken: !!process.env.MCP_SSE_AUTHORIZATION || !!process.env.MCP_STATIC_TOKENS?.trim(),
         oidcEnabled: process.env.AUTH_PROVIDER === 'oidc',
         allowUnauthenticated: process.env.MCP_ALLOW_UNAUTHENTICATED === 'true',
       });

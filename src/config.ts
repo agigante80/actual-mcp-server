@@ -98,6 +98,13 @@ export const configSchema = z.object({
   MCP_BRIDGE_PORT: z.string().default('3600'),
   MCP_TRANSPORT_MODE: z.enum(['--http']).default('--http'),
   MCP_SSE_AUTHORIZATION: z.string().optional(),
+  // Multiple static Bearer tokens, each bound to a principal and a budget allow-list
+  // (src/auth/static-tokens.ts). JSON keyed by principal:
+  //   {"alice":{"tokenEnv":"MCP_TOKEN_ALICE","budgets":["Home"]}}
+  // The token value is read from the variable named by tokenEnv. Validated at HTTP startup
+  // against the budget registry; an invalid value refuses startup. Coexists with
+  // MCP_SSE_AUTHORIZATION, which keeps its unrestricted single-principal behaviour.
+  MCP_STATIC_TOKENS: z.string().optional(),
   // #242: explicit opt-out for the required-by-default HTTP auth gate. When auth
   // is unconfigured AND the bind is non-loopback, the server refuses to start
   // unless this is the exact string 'true'. Strict parse (only 'true' enables)

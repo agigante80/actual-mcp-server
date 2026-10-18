@@ -183,7 +183,27 @@ function getActiveBudgetConfig(): BudgetConfig {
       return restored;
     }
   }
-  return [...budgetRegistry.values()][0];
+  // No selection and nothing restorable: the env-default budget, unless this request is
+  // restricted (MCP_STATIC_TOKENS / OIDC ACL) and the default is not permitted, in which case
+  // the first PERMITTED registry entry. Never hand a restricted caller a budget it cannot use.
+  const registryBudgets = [...budgetRegistry.values()];
+  const restricted = restrictedAllowedBudgets();
+  if (restricted) {
+    const firstAllowed = registryBudgets.find(b => restricted.includes(b.syncId));
+    if (firstAllowed) return firstAllowed;
+  }
+  return registryBudgets[0];
+}
+
+/**
+ * The request's allowedBudgets when it is actually RESTRICTED (present and not ['*']), else
+ * undefined. Unrestricted callers (legacy MCP_SSE_AUTHORIZATION, auth disabled, stdio, OIDC
+ * wildcard) get undefined and keep today's behaviour everywhere this is consulted.
+ */
+function restrictedAllowedBudgets(): string[] | undefined {
+  const allowed = requestContext.getStore()?.allowedBudgets;
+  if (!allowed || allowed.includes('*')) return undefined;
+  return allowed;
 }
 
 /**
@@ -4537,7 +4557,14 @@ export async function getBudgets(): Promise<unknown[]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.budgets.getAll').catch(() => {});
     const raw = await withConcurrency(() => retry(() => rawGetBudgets() as Promise<unknown>, { retries: 2, backoffMs: 200 }));
-    return Array.isArray(raw) ? raw : [];
+    const list = Array.isArray(raw) ? raw : [];
+    // Restricted callers only see budget files whose sync id (groupId) they may use.
+    const restricted = restrictedAllowedBudgets();
+    if (!restricted) return list;
+    return list.filter(b => {
+      const groupId = (b as { groupId?: unknown } | null)?.groupId;
+      return typeof groupId === 'string' && restricted.includes(groupId);
+    });
   });
 }
 
@@ -4589,8 +4616,9 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   }
 
   // ACL enforcement: the target budget must be in this session's allowedBudgets.
-  // OIDC mode: explicit ACL required. Non-OIDC: short-circuit allow (single-user).
-  if (config.AUTH_PROVIDER === 'oidc') {
+  // OIDC mode: explicit ACL required. Non-OIDC: enforced when the request carries an
+  // allow-list (MCP_STATIC_TOKENS); otherwise short-circuit allow (single-user).
+  if (config.AUTH_PROVIDER === 'oidc' || allowedBudgets) {
     if (!allowedBudgets) {
       logger.warn(
         JSON.stringify({
@@ -4747,7 +4775,10 @@ export function clearSessionBudgetState(sessionId: string): void {
  * Return all configured budgets from the registry (for listing in actual_budgets_list_available).
  */
 export function getBudgetRegistry(): Array<{ name: string; syncId: string; serverUrl: string; hasEncryption: boolean }> {
-  return [...budgetRegistry.values()].map(b => ({
+  // Restricted callers only see the budgets they may use. Outside a request (startup) the
+  // full registry is returned.
+  const restricted = restrictedAllowedBudgets();
+  return [...budgetRegistry.values()].filter(b => !restricted || restricted.includes(b.syncId)).map(b => ({
     name: b.name,
     syncId: b.syncId,
     serverUrl: b.serverUrl,
@@ -4982,6 +5013,11 @@ export async function importBudget(
   input: string | Uint8Array,
   opts: { type?: string; filename?: string } = {},
 ): Promise<{ id: string }> {
+  // An import creates and loads a budget outside the registry and outside any allow-list, so a
+  // restricted caller (MCP_STATIC_TOKENS / OIDC ACL) must not be able to use it.
+  if (restrictedAllowedBudgets()) {
+    throw new Error('Budget ACL: actual_budgets_import is not available to a caller restricted to specific budgets.');
+  }
   observability.incrementToolCall('actual.budgets.import').catch(() => {});
   const result = await queueWriteOperation(async () => {
     // #394: an import re-points the process-global singleton exactly as a download does, so it
