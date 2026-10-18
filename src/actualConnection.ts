@@ -146,7 +146,10 @@ export async function shutdownActual() {
  * Initialize connection for a specific MCP session
  * Uses connection pooling to give each session its own Actual Budget connection
  */
-export async function connectToActualForSession(sessionId: string) {
+export async function connectToActualForSession(
+  sessionId: string,
+  budget?: { serverUrl: string; password: string; syncId: string; encryptionPassword?: string },
+) {
   if (!useConnectionPool) {
     // Fallback to shared connection
     return connectToActual();
@@ -155,7 +158,9 @@ export async function connectToActualForSession(sessionId: string) {
   try {
     // Ensure connection pool initialization is complete before accepting connections
     await connectionPool.waitForInitialization();
-    await connectionPool.getConnection(sessionId);
+    // `budget`: the session's starting budget (initialBudgetForSession), so the first pool entry
+    // is bound to its server and credentials. Omitted → env defaults, as before.
+    await connectionPool.getConnection(sessionId, budget);
     logger.info(`Actual API connection ready for session: ${sessionId}`);
   } catch (err) {
     logger.error(`Failed to connect to Actual for session ${sessionId}:`, err);

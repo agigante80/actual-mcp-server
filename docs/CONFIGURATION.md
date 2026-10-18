@@ -73,6 +73,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 |----------|------|---------|----------|--------|--------|--------------|-------|
 | `AUTH_PROVIDER` | enum | `none` | No | no | schema | config | `none` (static Bearer) or `oidc` |
 | `MCP_SSE_AUTHORIZATION` | string | (none) | No | yes | schema | config | Static Bearer token (raw token, not `Bearer ...`) |
+| `MCP_STATIC_TOKENS` | string (JSON) | (none) | No | no | schema | config | Per-principal static Bearer tokens, each with a budget allow-list: `{"<principal>":{"tokenEnv":"MCP_TOKEN_<NAME>","budgets":["<budget name>"]}}`. Token values come from the `MCP_TOKEN_*` variables named by `tokenEnv`. Validated at HTTP startup |
 | `MCP_ALLOW_UNAUTHENTICATED` | bool string | `false` | No | no | schema | `index.ts` | #242 opt-out: only `true` lets HTTP serve unauthenticated on a non-loopback bind; otherwise the server refuses to start |
 | `OIDC_ISSUER` | url string | (none) | If oidc | no | schema | config | OIDC issuer URL |
 | `OIDC_ALLOW_INSECURE_ISSUER` | bool string | `false` | No | no | schema | `httpServer.ts` | #244 opt-out: allow an http OIDC issuer on a trusted network (default refuses non-https/non-loopback issuers at startup) |

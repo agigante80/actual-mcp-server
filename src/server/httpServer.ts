@@ -14,7 +14,7 @@ import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, canAcceptNewSession, isConnectionPoolEnabled } from '../actualConnection.js';
 import { connectionPool, type EvictionReason } from '../lib/ActualConnectionPool.js';
-import { clearSessionBudgetState, setSessionLivenessCheck, getBudgetRegistry } from '../lib/actual-adapter.js';
+import { clearSessionBudgetState, setSessionLivenessCheck, getBudgetRegistry, initialBudgetForSession } from '../lib/actual-adapter.js';
 import { parseStaticTokens, matchStaticToken, type StaticTokenEntry } from '../auth/static-tokens.js';
 import { errorLogFields } from '../lib/errors.js';
 import observability from '../observability.js';
@@ -618,7 +618,15 @@ export async function startHttpServer(
             sessionInitPromises.set(sid, initPromise);
             // Initialize connection pool for this session
             try {
-              await connectToActualForSession(sid);
+              // Bind the first pool entry to the budget this session will start on (restored
+              // preference / first permitted / default), so its server and credentials match.
+              const startBudget = initialBudgetForSession(sid);
+              await connectToActualForSession(sid, {
+                serverUrl: startBudget.serverUrl,
+                password: startBudget.password,
+                syncId: startBudget.syncId,
+                encryptionPassword: startBudget.encryptionPassword,
+              });
               // Only register the transport if the pool connection succeeded.
               // The pool stamped lastActivity when it created the entry, so it
               // is already the source of truth for this session's idle clock.

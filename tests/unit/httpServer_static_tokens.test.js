@@ -98,6 +98,7 @@ check('a matched static token sets req.staticPrincipal', /staticPrincipal\s*=\s*
 check('a matched static token sets req.allowedBudgets', /allowedBudgets\s*=\s*staticMatch\.allowedSyncIds/.test(src));
 check('resolvePrincipal prefers req.staticPrincipal', /if \(staticPrincipal\) return staticPrincipal;/.test(src));
 check('static tokens are compared through matchStaticToken (constant work)', /matchStaticToken\(token, staticTokens\)/.test(src));
+check('a new session connects with its starting budget (initialBudgetForSession)', /initialBudgetForSession\(sid\)[\s\S]{0,200}connectToActualForSession\(sid, \{/.test(src));
 
 console.log(`\n[static-tokens-http] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

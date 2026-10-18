@@ -26,12 +26,28 @@ process.env.BUDGET_1_NAME = 'Payday';
 process.env.BUDGET_1_SYNC_ID = 'payday-sync';
 process.env.BUDGET_2_NAME = 'Charity';
 process.env.BUDGET_2_SYNC_ID = 'charity-sync';
+// Charity lives on ANOTHER server with other credentials: a session starting on it must connect there.
+process.env.BUDGET_2_SERVER_URL = 'http://charity-server:5006';
+process.env.BUDGET_2_PASSWORD = 'pw-charity';
 process.env.ALLOW_INSECURE_UPSTREAM = 'true';
 process.env.MCP_BRIDGE_DATA_DIR = mkdtempSync(join(tmpdir(), 'static-tokens-'));
+
+// Upstream budget files, stubbed BEFORE the adapter is imported (it destructures the api at load).
+const apiMod = await import('@actual-app/api');
+const apiDefault = apiMod.default || apiMod;
+apiDefault.getBudgets = async () => [
+  { id: 'f1', name: 'House', groupId: 'house-sync' },
+  { id: 'f2', name: 'Payday', groupId: 'payday-sync' },
+  { id: 'f3', name: 'Charity', groupId: 'charity-sync' },
+  { id: 'f4', name: 'Imported', groupId: 'not-in-registry' },
+];
+apiDefault.sync = async () => {};
 
 const { parseStaticTokens, matchStaticToken, MIN_TOKEN_LENGTH } = await import('../../dist/src/auth/static-tokens.js');
 const adapter = await import('../../dist/src/lib/actual-adapter.js');
 const { requestContext } = await import('../../dist/src/lib/requestContext.js');
+const { connectToActualForSession } = await import('../../dist/src/actualConnection.js');
+const { connectionPool } = await import('../../dist/src/lib/ActualConnectionPool.js');
 
 let passed = 0, failed = 0;
 function ok(m) { console.log(`  PASS: ${m}`); passed++; }
@@ -179,6 +195,35 @@ try {
   ]);
   assert(JSON.stringify(results) === JSON.stringify(['payday-sync', 'house-sync', 'charity-sync']),
     `three concurrent principals each read their own budget (got ${JSON.stringify(results)})`);
+
+  console.log('\n[adapter] the first connection of a session is bound to its starting budget\'s server');
+  const seen = [];
+  const realGetConnection = connectionPool.getConnection.bind(connectionPool);
+  connectionPool.getConnection = async (sid, override) => { seen.push({ sid, override }); };
+  await run({ ...CHARITY }, async () => {
+    const start = adapter.initialBudgetForSession('charity-new');
+    await connectToActualForSession('charity-new', {
+      serverUrl: start.serverUrl, password: start.password, syncId: start.syncId, encryptionPassword: start.encryptionPassword,
+    });
+  });
+  connectionPool.getConnection = realGetConnection;
+  const ov = seen[0]?.override;
+  assert(ov?.serverUrl === 'http://charity-server:5006' && ov?.password === 'pw-charity' && ov?.syncId === 'charity-sync',
+    `a charity session connects to Charity's server with Charity's credentials (got ${ov?.serverUrl})`);
+  await run({ ...BUTLER }, async () => {
+    const start = adapter.initialBudgetForSession('butler-new');
+    assert(start.serverUrl === 'http://test-server:5006' && start.syncId === 'house-sync', 'a butler session starts on House on the default server');
+  });
+
+  console.log('\n[adapter] upstream budget-file listing (getBudgets) is filtered for restricted callers');
+  await run({ sessionId: 'butler-files', ...BUTLER }, async () => {
+    const files = await adapter.getBudgets();
+    assert(JSON.stringify(files.map(f => f.name)) === JSON.stringify(['House']), `butler sees only House's file (got ${JSON.stringify(files.map(f => f.name))})`);
+  });
+  await run({ sessionId: 'wild-files', principal: 'admin', allowedBudgets: ['*'] }, async () => {
+    const files = await adapter.getBudgets();
+    assert(files.length === 4, 'a wildcard ACL sees every file, including ones outside the registry');
+  });
 
   console.log('\n[adapter] unrestricted callers keep today\'s behaviour');
   await run({ sessionId: 'legacy-1', principal: 'static-bearer' }, async () => {

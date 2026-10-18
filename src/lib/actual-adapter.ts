@@ -196,6 +196,19 @@ function getActiveBudgetConfig(): BudgetConfig {
 }
 
 /**
+ * The budget a NEW session will start on, resolved in the creating request's context (principal,
+ * allowedBudgets) under the new session id: the restored preference if permitted, else the first
+ * permitted budget, else the env default. httpServer passes it to the pool so the session's first
+ * connection is bound to THAT budget's server and credentials, not to the env defaults. Without it
+ * a session whose starting budget lives on another server would download it over the default
+ * server's connection.
+ */
+export function initialBudgetForSession(sessionId: string): BudgetConfig {
+  const store = requestContext.getStore() ?? {};
+  return requestContext.run({ ...store, sessionId }, () => getActiveBudgetConfig());
+}
+
+/**
  * The request's allowedBudgets when it is actually RESTRICTED (present and not ['*']), else
  * undefined. Unrestricted callers (legacy MCP_SSE_AUTHORIZATION, auth disabled, stdio, OIDC
  * wildcard) get undefined and keep today's behaviour everywhere this is consulted.
