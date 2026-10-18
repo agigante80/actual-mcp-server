@@ -4,7 +4,7 @@
 // allow-list (src/auth/static-tokens.ts), enforced through the existing ACL paths.
 //
 // Two layers:
-//   parser  : parseStaticTokens / matchStaticToken by value — valid config, every refusal
+//   parser  : parseStaticTokens / matchStaticToken by value: valid config, every refusal
 //             (fail-fast, messages never echo a token), constant-work matching
 //   adapter : the incident this exists for. Two agents share one server with different tokens;
 //             agent A switches to budget X; a FRESH session of agent B (restricted to budget W)

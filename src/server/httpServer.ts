@@ -88,7 +88,7 @@ export async function startHttpServer(
     staticTokens = parseStaticTokens(config.MCP_STATIC_TOKENS, process.env, getBudgetRegistry(), config.MCP_SSE_AUTHORIZATION);
     if (staticTokens.length > 0) {
       logger.info(
-        `[AUTH] MCP_STATIC_TOKENS: ${staticTokens.length} principal(s) — ` +
+        `[AUTH] MCP_STATIC_TOKENS: ${staticTokens.length} principal(s): ` +
           staticTokens.map(e => `"${e.principal}" → [${e.budgets.join(', ')}]`).join('; '),
       );
     }
