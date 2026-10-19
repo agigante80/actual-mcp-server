@@ -20,18 +20,18 @@ const T_A = 'a'.repeat(40);
 const T_B = 'b'.repeat(40);
 
 process.env.ACTUAL_SERVER_URL = 'http://127.0.0.1:9';
-process.env.ACTUAL_BUDGET_SYNC_ID = 'house-sync';
+process.env.ACTUAL_BUDGET_SYNC_ID = 'alpha-sync';
 process.env.ACTUAL_PASSWORD = 'stub-password-for-unit-test';
-process.env.BUDGET_DEFAULT_NAME = 'House';
-process.env.BUDGET_1_NAME = 'Charity';
-process.env.BUDGET_1_SYNC_ID = 'charity-sync';
+process.env.BUDGET_DEFAULT_NAME = 'Alpha';
+process.env.BUDGET_1_NAME = 'Gamma';
+process.env.BUDGET_1_SYNC_ID = 'gamma-sync';
 process.env.ALLOW_INSECURE_UPSTREAM = 'true';
 process.env.MCP_SSE_AUTHORIZATION = LEGACY;
 process.env.MCP_TOKEN_A = T_A;
 process.env.MCP_TOKEN_B = T_B;
 process.env.MCP_STATIC_TOKENS = JSON.stringify({
-  agent_a: { tokenEnv: 'MCP_TOKEN_A', budgets: ['House'] },
-  agent_b: { tokenEnv: 'MCP_TOKEN_B', budgets: ['Charity'] },
+  agent_a: { tokenEnv: 'MCP_TOKEN_A', budgets: ['Alpha'] },
+  agent_b: { tokenEnv: 'MCP_TOKEN_B', budgets: ['Gamma'] },
 });
 delete process.env.AUTH_PROVIDER;
 
