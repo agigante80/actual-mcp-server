@@ -185,4 +185,26 @@ const cleanupWouldDelete = shouldDeleteCategory;
   assert.strictEqual(deletes.length, 1, `S5: runner.js has ${deletes.length} category delete paths; the guard covers one`);
 }
 
+// S6 (static guard, #591): a module that WRITES budget amounts (setAmount, setCarryover, transfer,
+// hold, batch) must not touch the shared category slot (dotted, optional, bracketed or
+// destructured) or borrow a category in code. A borrow is
+// safe only as a value; budget.js once wrote 42 amounts onto a borrowed category and never
+// restored them, invisibly to the residue sweep. Such a module creates its own categories.
+{
+  const here = dirname(fileURLToPath(import.meta.url));
+  const dir = join(here, '..', 'manual', 'tests');
+  const WRITES = /["'](actual_budgets_(setAmount|setCarryover|transfer|holdForNextMonth)|actual_budget_updates_batch)["']/;
+  const offences = [];
+  let writers = 0;
+  for (const file of readdirSync(dir).filter(f => f.endsWith('.js')).sort()) {
+    const src = readFileSync(join(dir, file), 'utf8');
+    const code = src.split('\n').map(l => (/^\s*(\/\/|\*|\/\*)/.test(l) ? '' : l.replace(/\/\/.*$/, ''))).join('\n');
+    if (!WRITES.test(code)) continue;
+    writers++;
+    for (const m of code.matchAll(/\bcontext\s*(\?\.|\.|\[\s*['"])\s*categoryId|\{[^}]*\bcategoryId\b[^}]*\}\s*=\s*context\b|borrowCategory/g)) offences.push(`${file}: uses ${m[0]} and writes budget amounts`);
+  }
+  assert.ok(writers > 0, 'S6: no module writes budget amounts; the guard pattern no longer matches anything');
+  assert.deepStrictEqual(offences, [], `S6: a budget-writing module borrows a category:\n${offences.join('\n')}`);
+}
+
 console.log('manual_borrowed_category.test.js: all cases passed');
