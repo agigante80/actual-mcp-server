@@ -85,11 +85,25 @@ log_error() {
   echo -e "${RED}✗${NC} $1"
 }
 
-# Cleanup function
+# Cleanup function. Runs from the EXIT trap, so `$?` on its first line is the exit status the
+# script is leaving with; capturing it first is what lets the dump below run only on failure.
+#
+# #593: on a failed run, print the service containers' logs BEFORE `down -v` removes them. A
+# later CI step cannot do this for a run that FAILED: this trap has already torn the stack down
+# by then. A run the CI step timeout KILLS is different: when that was tried (run 40330966576,
+# timeout 1), nothing from this trap reached the job log and the containers were still up at the
+# next step, so the workflow's cleanup step dumps them as well (ci-cd.yml, job docker-e2e). The
+# runner's own output is not dumped here because the `tee` below already streams it. `|| true`
+# keeps the dump from ever changing the exit code.
 cleanup() {
+  local rc=$?
   if [ "$NO_CLEANUP" = false ]; then
-    log_info "Cleaning up Docker resources..."
     cd "$PROJECT_ROOT"
+    if [ "$rc" -ne 0 ]; then
+      log_warn "Run failed (exit $rc): last 200 lines of each service container, before teardown"
+      docker compose -f "$COMPOSE_FILE" logs --no-color --tail=200 mcp-server-test actual-budget-test actual-budget-stdio-test 2>&1 || true
+    fi
+    log_info "Cleaning up Docker resources..."
     docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
     log_success "Cleanup complete"
   else

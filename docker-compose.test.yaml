@@ -210,18 +210,24 @@ services:
     # automated environments such as test platforms". It also turns an out-of-sync lockfile
     # into a loud failure instead of a silent rewrite, and installs exactly what CI does.
     #
-    # #508: install `make` and `g++` BEFORE `npm ci`. The Playwright image ships python3 but
-    # no compiler toolchain, and from @actual-app/api 26.10.0 the tree carries better-sqlite3
-    # 13.x, whose binding.gyp makes `npm ci` run `node-gyp rebuild` as its default install
-    # step. Without the toolchain that dies with "gyp ERR! stack Error: not found: make"
-    # before a single spec runs, which failed the nightly release train four nights running.
-    # The server image is unaffected: the Dockerfile build stage already installs python3,
-    # make and g++. Cost is roughly 20 seconds per run; the image runs as root, so no sudo.
+    # #508 / #593: `npm ci --ignore-scripts`, and NO apt prologue. From @actual-app/api 26.10.0
+    # the tree carries better-sqlite3 13.x, whose binding.gyp makes a plain `npm ci` run
+    # `node-gyp rebuild`; the Playwright image has no compiler, so that died with "gyp ERR!
+    # stack Error: not found: make" (#508). #508 answered by installing make and g++ from the
+    # Ubuntu mirrors first, which hung 3 of 6 CI runs on 2026-10-26: no output for 18 minutes,
+    # then the job was cancelled by its timeout (#593, where the stall is reproduced).
+    #
+    # The runner never needs that build. Nothing under tests/e2e/ or playwright.config.docker.ts
+    # imports @actual-app/api, src/ or better-sqlite3; the specs talk to the server over HTTP
+    # and the browsers ship in the image. better-sqlite3 is the only binding.gyp package in the
+    # lockfile and nothing in it has hasInstallScript, so --ignore-scripts skips exactly that
+    # one build. Probed in this image with no toolchain: `npm ci --ignore-scripts` installs 232
+    # packages in 16 s and @playwright/test loads; plain `npm ci` fails on the missing make.
+    # The server image is unaffected: its Dockerfile build stage installs python3, make and g++.
+    # tests/unit/playwright_version_drift.test.js pins this command shape.
     command: >
       sh -c "
-        apt-get update -qq &&
-        DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends make g++ &&
-        npm ci &&
+        npm ci --ignore-scripts &&
         npx playwright test --config=playwright.config.docker.ts --project=$${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
       "
     environment:

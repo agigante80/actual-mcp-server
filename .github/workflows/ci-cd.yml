@@ -355,7 +355,11 @@ jobs:
   docker-e2e:
     name: Docker E2E Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # #593: 25, not 20, so the run step's own 18 minute timeout (below) always fires first. Measured
+    # on the runs before this change: the steps before it take about 1 minute warm, the log dump
+    # and teardown under 15 seconds, the image cache save under 30 seconds, so a run that stalls
+    # to the step limit still ends with over 5 minutes of job time to spare.
+    timeout-minutes: 25
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     steps:
@@ -390,8 +394,36 @@ jobs:
             [ -f "$f" ] && docker load -i "$f" && echo "Loaded $f" || true
           done
 
+      # #593: a step-level timeout. A stall inside this step used to run into the job timeout and
+      # end as job `cancelled` (indistinguishable from a superseded push); a step timeout ends it
+      # as `failure` and still runs the always() steps below. `timeout-minutes` on a step counts
+      # only that step: across the 25 successful runs before this change it took 11.5 to 12.6
+      # minutes with warm image caches, and a cold cache (first run after the compose file
+      # changes) pulls two images inside it, so 18 leaves over 5 minutes on a healthy run. When
+      # this step timed out in a test run (40330966576, timeout 1), nothing from the script's
+      # EXIT trap reached the job log and the containers were still up at the cleanup step, so
+      # that step dumps the service logs too.
       - name: 🧪 Run Docker E2E tests (FULL - 63 tests)
+        id: e2e
+        timeout-minutes: 18
         run: npm run test:e2e:docker:full
+
+      # #593: this runs BEFORE the image cache save so the dump is the first thing after a stalled
+      # run step, not something a later step can push past the job timeout. When the run step
+      # timed out in a test run, nothing from the script's EXIT trap reached the job log and the
+      # containers were still up here, so their logs are the only record of what stalled. After a
+      # failure the script exited on its own, its trap already dumped and removed them, and this
+      # prints nothing. The runner's output is not dumped: it streams into the step log live.
+      - name: 🧹 Cleanup Docker containers
+        if: always()
+        run: |
+          if [ "${{ steps.e2e.outcome }}" != "success" ]; then
+            echo "::group::Service container logs (last 200 lines each; empty when the script already tore down)"
+            docker compose -f docker-compose.test.yaml logs --no-color --tail=200 \
+              mcp-server-test actual-budget-test actual-budget-stdio-test || true
+            echo "::endgroup::"
+          fi
+          docker compose -f docker-compose.test.yaml down -v
 
       - name: 🐳 Save Docker images to cache
         if: always()
@@ -401,10 +433,6 @@ jobs:
             -o /tmp/docker-image-cache/actual-server.tar 2>/dev/null || true
           docker save "mcr.microsoft.com/playwright:v1.64.1-jammy" \
             -o /tmp/docker-image-cache/playwright-jammy.tar 2>/dev/null || true
-
-      - name: 🧹 Cleanup Docker containers
-        if: always()
-        run: docker compose -f docker-compose.test.yaml down -v
 
       - name: 📋 Docker E2E summary
         if: always()

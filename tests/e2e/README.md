@@ -48,6 +48,16 @@ npm run test:e2e:docker:smoke       # ~11 tests, ~20 seconds
 ./tests/e2e/run-docker-e2e.sh full --no-cleanup
 ```
 
+The runner container installs with `npm ci --ignore-scripts` (#593): it never loads
+`@actual-app/api`, so the `better-sqlite3` native build that a plain `npm ci` would run is
+skipped and no compiler is installed in the image. When a run fails, the script prints the
+last 200 lines of the `mcp-server-test`, `actual-budget-test` and `actual-budget-stdio-test`
+containers before tearing the stack down, so a CI job log carries the server side of the
+failure as well as the runner output. In CI the run step also has its own `timeout-minutes`,
+so a stall ends the job as `failure` rather than `cancelled`. In that case nothing from the
+script's trap reaches the job log, so the workflow's cleanup step prints the same container
+logs before tearing the stack down.
+
 > **Do not use `npm run test:e2e` unless the Docker stack is already running.**
 > That command runs Playwright directly from the host and expects Docker-internal
 > hostnames (`mcp-server-test:3600`) to resolve — they won't from the host.
