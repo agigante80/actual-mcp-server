@@ -7,6 +7,7 @@ Utility and build scripts. All are invoked via `package.json` scripts or from wi
 | Script | npm script | Purpose |
 |---|---|---|
 | `deploy-and-test.sh` | `npm run deploy:full` / `npm run deploy:smoke` | **Periodic maintenance script.** Syncs latest dev code → rebuilds MCP Docker image → pulls latest upstream images (Actual Budget, LibreChat, LobeChat) → independently restarts each service → waits for MCP health → runs the full integration test suite with auto-cleanup. Requires all four services to already be installed and running. See `$DOCKER_DIR/README.md` and sub-folder READMEs for setup instructions. |
+| `refresh-test-budget-snapshot.mjs` | (called by `deploy-and-test.sh` step 8) | #595: re-uploads the disposable test budget with upstream `upload-budget` (same groupId) so a cold download replays only new messages, verifies the server file is unchanged and a second cold download replays at most `REFRESH_MAX_REPLAY` messages. Runs inside the bearer container: `docker exec -i -u app -w /app -e MCP_TEST_BUDGET_SYNC_ID=<id> actual-mcp-bearer-backend node --input-type=module - < scripts/refresh-test-budget-snapshot.mjs`. Exit 2/3/4 are refusals (designation, OIDC id, data dir), 5 a timeout. |
 
 ### Running deploy-and-test.sh
 

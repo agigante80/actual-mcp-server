@@ -260,6 +260,46 @@ echo ""
 STDIO_EXIT=0
 case "$TEST_LEVEL" in
   normal|extended|full)
+    # #595: every stdio op downloads the test budget into an empty data dir and replays
+    # every message newer than the server's stored file. Nothing else refreshes that file,
+    # so the replay grew about 800 messages per run until a load crossed the 30 s op
+    # timeout. Re-upload it (same groupId) right before this leg, so the leg replays only
+    # its own messages. It writes to the server, so it refuses unless the loaded budget is
+    # designated disposable, and a refusal or failure ends the run: a stdio leg on a stale
+    # snapshot fails later for a reason unrelated to the change under test.
+    info "  Refreshing the test budget's server snapshot (#595)..."
+    # Every sync id the OIDC instance serves: the refresh refuses to write to any of them.
+    # An unreadable OIDC container fails the run: an empty list would silently disable exit 3.
+    # Filtered inside the container, so its other secrets never reach this shell.
+    if ! OIDC_ENV=$(docker exec actual-mcp-server-backend sh -c \
+        "printenv | grep -E '^(ACTUAL_BUDGET_SYNC_ID|BUDGET_[0-9]+_SYNC_ID)=' || true"); then
+      err "cannot read actual-mcp-server-backend's environment; test budget refresh not run"
+      exit 1
+    fi
+    OIDC_SYNC_IDS=$(printf '%s\n' "$OIDC_ENV" | cut -d= -f2- | grep -v '^$' | paste -sd, - || true)
+    if [ -z "$OIDC_SYNC_IDS" ]; then
+      err "actual-mcp-server-backend exposes no sync id; test budget refresh not run"
+      exit 1
+    fi
+    REFRESH_LOG=$(mktemp)
+    set +e
+    timeout 300 docker exec -i -u app -w /app \
+      -e MCP_TEST_BUDGET_SYNC_ID="${MCP_TEST_BUDGET_SYNC_ID:-}" \
+      -e MCP_REFRESH_FORBIDDEN_SYNC_IDS="${OIDC_SYNC_IDS}" \
+      "$STDIO_CONTAINER" node --input-type=module - \
+      < "$DEV_DIR/scripts/refresh-test-budget-snapshot.mjs" > "$REFRESH_LOG" 2>&1
+    REFRESH_EXIT=$?
+    set -e
+    grep -E '^(  |refusing)' "$REFRESH_LOG" || true
+    if [ "$REFRESH_EXIT" -ne 0 ]; then
+      # Show the unfiltered tail: a docker or import failure prints nothing the filter keeps.
+      tail -n 40 "$REFRESH_LOG" >&2
+      rm -f "$REFRESH_LOG"
+      err "test budget snapshot refresh failed (exit ${REFRESH_EXIT}); stdio leg not run"
+      exit "$REFRESH_EXIT"
+    fi
+    rm -f "$REFRESH_LOG"
+    ok "  Test budget snapshot refreshed"
     set +e
     EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
       MCP_TEST_BANK_SYNC="${BANK_SYNC_FLAG}" \
