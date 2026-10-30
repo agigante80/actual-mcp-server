@@ -295,6 +295,31 @@ check('N8: a removed README summary marker is reported, never a vacuous pass', (
   assert.deepStrictEqual(drift({ readmeMd: md }), ['README env summary markers not found']);
 });
 
+check('N13: a var documented in two rows is reported, even when the second default is right', () => {
+  // Map.set kept only the last row, so a wrong 3700 followed by a right 3600 passed.
+  const md = withPortDefault('`3700`') +
+    '\n\n| Variable | Default |\n|---|---|\n| `MCP_BRIDGE_PORT` | `3600` |\n';
+  assert.deepStrictEqual(drift({ referenceMd: md }),
+    [`Documented more than once in ${REFERENCE}: MCP_BRIDGE_PORT`,
+      'Default mismatch for MCP_BRIDGE_PORT: docs 3700, schema 3600']);
+});
+
+check('N14: a double-backtick code span is read whole, not as an empty token', () => {
+  // ``3700`` renders as 3700; a single-backtick regex read its opening `` as ''.
+  assert.deepStrictEqual(drift({ referenceMd: withPortDefault('``3700``') }),
+    ['Default mismatch for MCP_BRIDGE_PORT: docs 3700, schema 3600']);
+  assert.deepStrictEqual(drift({ referenceMd: withPortDefault('`` 3600 ``') }), []);
+});
+
+check('N15: table rows without leading pipes are still parsed (GFM allows them)', () => {
+  const table = '\n\nVariable | Default\n--- | ---\n`MCP_NOT_A_VAR` | (none)\n';
+  assert.deepStrictEqual(drift({ referenceMd: referenceMd + table }),
+    [`In ${REFERENCE} but not a known config var: MCP_NOT_A_VAR`]);
+  const md = readmeMd.replace('<!-- env-summary:end -->',
+    '`MCP_NOT_A_VAR` | No | not real\n<!-- env-summary:end -->');
+  assert.deepStrictEqual(drift({ readmeMd: md }), ['In README env table but not a known config var: MCP_NOT_A_VAR']);
+});
+
 check('N12: a schema whose defaults cannot be unwrapped fails loudly', () => {
   const stub = {
     shape: Object.fromEntries(Object.keys(configSchema.shape).map((k) => [k, { _zod: { def: { type: 'string' } } }])),

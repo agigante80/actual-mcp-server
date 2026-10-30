@@ -48,22 +48,36 @@ function splitRow(line) {
 }
 
 /**
- * Every table of the reference: Map<name, Default cell>. A `| Variable | ... |`
+ * A table row is any line holding an unescaped pipe: GFM allows rows without the
+ * leading pipe, and a `startsWith('|')` test let such a table escape every check.
+ */
+const isTableLine = (line) => /(?<!\\)\|/.test(line);
+
+/**
+ * Every row of the reference, in order: [name, Default cell] pairs. A `Variable`
  * header row sets the Default column for the rows below it; a data row counts when
  * its first cell is exactly a backticked uppercase name, so separator, group,
  * `BUDGET_n_*` and `MCP_TOKEN_*` rows never match. A non-table line ends a table.
+ * Kept as a list, not a Map, so a var documented twice is still visible.
  */
-export function parseReferenceTables(md) {
-  const out = new Map();
+export function referenceRows(md) {
+  const out = [];
   let defaultIdx = -1;
   for (const line of md.split('\n')) {
-    if (!line.startsWith('|')) { defaultIdx = -1; continue; }
+    if (!isTableLine(line)) { defaultIdx = -1; continue; }
     const cells = splitRow(line);
     if (cells[0] === 'Variable') { defaultIdx = cells.indexOf('Default'); continue; }
     const m = cells[0].match(NAME_CELL);
     if (!m) continue;
-    out.set(m[1], defaultIdx >= 0 ? (cells[defaultIdx] ?? '') : '');
+    out.push([m[1], defaultIdx >= 0 ? (cells[defaultIdx] ?? '') : '']);
   }
+  return out;
+}
+
+/** Map<name, Default cell> of the reference; for a duplicated name the first row wins. */
+export function parseReferenceTables(md) {
+  const out = new Map();
+  for (const [name, cell] of referenceRows(md)) if (!out.has(name)) out.set(name, cell);
   return out;
 }
 
@@ -74,7 +88,7 @@ export function readmeSummaryVars(md) {
   if (start === -1 || end === -1 || end < start) return null;
   const names = new Set();
   for (const line of md.slice(start + SUMMARY_START.length, end).split('\n')) {
-    if (!line.startsWith('|')) continue;
+    if (!isTableLine(line)) continue;
     const m = splitRow(line)[0].match(NAME_CELL);
     if (m) names.add(m[1]);
   }
@@ -109,14 +123,18 @@ export function schemaDefaults(configSchema) {
 
 /**
  * The Default-cell convention: `(none)` and `(empty)` mean ''; otherwise the value is
- * the content of the FIRST backticked token, and a first token of `''` means ''.
+ * the content of the FIRST code span, and a first span of `''` means ''. A code span
+ * opens and closes with backtick runs of the SAME length (GFM), so ``x`` reads as x,
+ * and one leading plus one trailing space are stripped when both are present.
  * Returns null when the cell has neither (unreadable).
  */
 function normaliseDefaultCell(cell) {
   if (cell === '(none)' || cell === '(empty)') return '';
-  const m = cell.match(/`([^`]*)`/);
+  const m = cell.match(/(?<!`)(`+)(?!`)([\s\S]*?[^`])\1(?!`)/);
   if (!m) return null;
-  return m[1] === "''" ? '' : m[1];
+  let v = m[2];
+  if (v.length > 2 && v.startsWith(' ') && v.endsWith(' ') && v.trim() !== '') v = v.slice(1, -1);
+  return v === "''" ? '' : v;
 }
 
 const show = (v) => (v === '' ? '(none)' : v);
@@ -130,6 +148,7 @@ export function findDrift({ referenceMd, readmeMd, envText, configSchema, regist
   const accountedFor = (n) => canonical.has(n) || isDynamicFamilyVar(n) || OS_LEVEL_ENV.includes(n);
 
   const envNames = envExampleVars(envText);
+  const rows = referenceRows(referenceMd);
   const reference = parseReferenceTables(referenceMd);
   const readmeNames = readmeSummaryVars(readmeMd);
 
@@ -146,14 +165,18 @@ export function findDrift({ referenceMd, readmeMd, envText, configSchema, regist
   if (strayEnv.length) problems.push(`In .env.example but not a known config var: ${list(strayEnv)}`);
   if (missingRef.length) problems.push(`Missing from ${REFERENCE_PATH}: ${list(missingRef)}`);
   if (strayRef.length) problems.push(`In ${REFERENCE_PATH} but not a known config var: ${list(strayRef)}`);
+  const seen = new Set();
+  const dupes = new Set(rows.map(([n]) => n).filter((n) => seen.has(n) || !seen.add(n)));
+  if (dupes.size) problems.push(`Documented more than once in ${REFERENCE_PATH}: ${list(dupes)}`);
 
   const defaults = schemaDefaults(configSchema);
   for (const [name, schemaValue] of [...defaults].sort(([a], [b]) => a.localeCompare(b))) {
-    if (!reference.has(name)) continue; // already reported as missing
-    const cell = reference.get(name);
-    const docs = normaliseDefaultCell(cell);
-    if (docs === null) problems.push(`Unreadable default for ${name}: ${cell}`);
-    else if (docs !== schemaValue) problems.push(`Default mismatch for ${name}: docs ${show(docs)}, schema ${show(schemaValue)}`);
+    // Every row, not one: a duplicate's wrong row must not hide behind a right one.
+    for (const [, cell] of rows.filter(([n]) => n === name)) {
+      const docs = normaliseDefaultCell(cell);
+      if (docs === null) problems.push(`Unreadable default for ${name}: ${cell}`);
+      else if (docs !== schemaValue) problems.push(`Default mismatch for ${name}: docs ${show(docs)}, schema ${show(schemaValue)}`);
+    }
   }
 
   if (readmeNames === null) {
