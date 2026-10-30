@@ -195,26 +195,21 @@ Use this for HTTP-only Docker deployments. The `--allow-http` flag is required b
 
 Required for Options B and C. Skip this if you're using Option A (stdio).
 
-```bash
-# Generate a token
-openssl rand -hex 32
+First create `.env` with a generated token: run the step 1 block of the [README Docker quick start](../../README.md#option-a-docker-recommended). It prints the token, which is the value to use in place of `your_secret_token` in the client configs above. Then fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. Inside the container `localhost` is the container itself, so use your Actual server's LAN address or domain, or `http://host.docker.internal:5006` when Actual runs on the Docker host. Then, in the directory that holds `.env`:
 
-# Start the server
+<!-- runnable: http-docker-run -->
+```bash
 docker run -d \
   --name actual-mcp \
   --restart unless-stopped \
   -p 3600:3600 \
-  -e ACTUAL_SERVER_URL=http://localhost:5006 \
-  -e ACTUAL_PASSWORD=your_actual_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your-sync-id \
-  -e MCP_SSE_AUTHORIZATION=your_secret_token \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env \
   -v actual-mcp-data:/app/data \
   ghcr.io/agigante80/actual-mcp-server:latest
-
-# Verify
-curl http://localhost:3600/health
-# Expected: {"status":"ok","transport":"streamable-http", ...}
 ```
+
+After a few seconds, `curl http://localhost:3600/health` answers `{"status":"ok","transport":"streamable-http", ...}`.
 
 ---
 

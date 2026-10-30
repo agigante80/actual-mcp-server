@@ -1190,6 +1190,7 @@ USER app
 - Only production dependencies
 
 **Best practices**:
+<!-- install-snippets: fragment -->
 ```bash
 # Run with read-only filesystem
 docker run --read-only --tmpfs /tmp
@@ -1216,9 +1217,10 @@ services:
 ```
 
 **Environment variables**:
+<!-- install-snippets: fragment -->
 ```bash
 # Recommended: pass via .env file or shell environment
-docker run -e ACTUAL_PASSWORD=$(cat secrets/password.txt)
+docker run --env-file .env ...
 ```
 
 ---

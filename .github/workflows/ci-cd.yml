@@ -421,9 +421,17 @@ jobs:
     timeout-minutes: 25
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
+    # #600: this job only checks out, uses the Actions cache and builds images locally. It pushes
+    # nothing and never logs in to a registry, so it needs no write scope; actions/cache uses the
+    # runtime token, not GITHUB_TOKEN.
+    permissions:
+      contents: read
     steps:
       - name: 📥 Checkout repository
         uses: actions/checkout@v7
+        with:
+          # #600: later steps run repository scripts; do not leave the token in .git/config.
+          persist-credentials: false
 
       - name: 🔧 Setup Node.js
         uses: actions/setup-node@v7
@@ -492,6 +500,21 @@ jobs:
             -o /tmp/docker-image-cache/actual-server.tar 2>/dev/null || true
           docker save "mcr.microsoft.com/playwright:v1.64.1-jammy" \
             -o /tmp/docker-image-cache/playwright-jammy.tar 2>/dev/null || true
+
+      # #600: start the published image the way the README documents it. The step builds the
+      # image from source, creates .env with the README env-token block, and runs the README
+      # docker-run block with only the image and --name swapped (scripts/install-snippets.mjs,
+      # argv array, no shell). Dummy Actual settings: it proves the container starts and the auth
+      # posture accepts the documented configuration, not that a budget loads.
+      # Margin (#593): it is skipped unless the E2E run succeeded, so a stalled run keeps its
+      # just over 5 spare minutes. Worst success path: 1 + 18 + 0.25 + 0.5 + 4 = 23.75 minutes,
+      # under the 25 minute job. docker build runs inside this step and counts against its 4.
+      - name: 🚀 Install snippet startup smoke
+        if: steps.e2e.outcome == 'success'
+        timeout-minutes: 4
+        run: |
+          docker build -t actual-mcp-server:ci-smoke .
+          node scripts/install-snippets.mjs smoke --image actual-mcp-server:ci-smoke
 
       - name: 📋 Docker E2E summary
         if: always()

@@ -1,0 +1,6 @@
+# #600 negative fixture: the production service reads no .env.
+services:
+  mcp-server-prod:
+    image: ghcr.io/agigante80/actual-mcp-server:latest
+    environment:
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION:?MCP_SSE_AUTHORIZATION is required}

@@ -68,28 +68,35 @@ ACTUAL_BUDGET_SYNC_ID=your-sync-id-here
 
 ### Quick Start
 
+First create a private `.env` with a generated token. This is the same block as the README Docker quick start: it never overwrites a value you set, except a token that is missing, duplicated or shorter than 32 characters, and the last line prints the token your MCP client sends as its Bearer token:
+
+```bash
+[ -f .env ] || install -m 600 /dev/null .env
+for key in ACTUAL_SERVER_URL=http://YOUR-ACTUAL-HOST:5006 ACTUAL_PASSWORD= ACTUAL_BUDGET_SYNC_ID=; do
+  grep -q "^${key%%=*}=" .env || printf '%s\n' "$key" >> .env
+done
+chmod 600 .env
+if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
+  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+fi
+grep '^MCP_SSE_AUTHORIZATION=' .env
+```
+
+Then fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. The URL is read inside the container, where `localhost` is the container itself. Use the LAN address or domain of your Actual server (`http://192.168.1.50:5006`, `https://actual.yourdomain.com`), `http://host.docker.internal:5006` for Actual on the Docker host (the `--add-host` line below makes that name resolve on Linux), or `http://actual:5006` when both containers share a user-defined Docker network. Then start it:
+
+<!-- runnable: quick-start-docker-run -->
 ```bash
 docker run -d \
   --name actual-mcp-server-backend \
   -p 3600:3600 \
-  -e MCP_BRIDGE_PORT=3600 \
-  # Use the same URL you type in your browser to open Actual Budget.
-  # Examples:
-  #   http://localhost:5006          - Actual Budget on the same machine
-  #   http://192.168.1.50:5006       - Actual Budget on another machine on your network
-  #   https://actual.yourdomain.com  - Actual Budget on a remote server with a domain
-  #   http://actual:5006             - if both containers share a Docker network (use container service name)
-  -e ACTUAL_SERVER_URL=http://localhost:5006 \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$(openssl rand -hex 32) \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env \
   -v actual-mcp-data:/app/data \
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
-
-# Verify
-curl http://localhost:3600/health
 ```
+
+Verify after a few seconds with `curl http://localhost:3600/health`.
 
 > **Note:** actual-mcp does not need to run on the same machine as Actual Budget. You can run Actual Budget on one server and actual-mcp on another - all that is needed is network access to `ACTUAL_SERVER_URL`.
 
@@ -107,20 +114,15 @@ agigante80/actual-mcp-server:X.Y.Z
 
 ### Production docker run
 
-```bash
-# 1. Generate a strong token
-TOKEN=$(openssl rand -hex 32)
+Create `.env` with the Quick Start token block above and fill in the Actual settings (`ACTUAL_SERVER_URL=https://actual.yourdomain.com`, for example). Secrets stay in `.env`; only non-secret settings go on the command line. The port is bound to `127.0.0.1` for a reverse proxy on the same host:
 
-# 2. Run the container (bind port only on localhost if behind a reverse proxy)
+<!-- runnable: production-docker-run -->
+```bash
 docker run -d \
   --name actual-mcp-server-backend \
   --restart unless-stopped \
   -p 127.0.0.1:3600:3600 \
-  -e MCP_BRIDGE_PORT=3600 \
-  -e ACTUAL_SERVER_URL=https://actual.yourdomain.com \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=$TOKEN \
+  --env-file .env \
   -e MCP_BRIDGE_USE_TLS=true \
   -e MCP_BRIDGE_LOG_LEVEL=info \
   -e MCP_BRIDGE_STORE_LOGS=true \
@@ -128,10 +130,9 @@ docker run -d \
   -v actual-mcp-data:/app/data \
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
-
-# 3. Verify
-curl http://localhost:3600/health
 ```
+
+Verify after a few seconds with `curl http://localhost:3600/health`.
 
 ### Unraid and PUID/PGID (#227)
 
@@ -182,7 +183,7 @@ cp .env.example .env
 There is no bundled reverse proxy or Actual Budget server in `docker-compose.yaml`. For a stack that also runs Actual Budget (used by the Docker E2E tests), see `docker-compose.test.yaml`. For a reverse proxy, a commented Traefik example is included near the bottom of `docker-compose.yaml`.
 
 ```bash
-# Development (hot-reload source)
+# Development (hot-reload source, unauthenticated, bound to 127.0.0.1 only)
 docker compose --profile dev up -d
 
 # Production
@@ -196,7 +197,7 @@ docker compose down
 ```
 
 **Default ports:**
-- MCP server (HTTP): `3600`. Both the `dev` and `production` compose profiles set `MCP_BRIDGE_PORT=3600` and publish `3600:3600`.
+- MCP server (HTTP): `3600`. Both the `dev` and `production` compose profiles set `MCP_BRIDGE_PORT=3600`. `production` publishes `3600:3600`; `dev` runs without authentication and publishes `127.0.0.1:3600:3600` only. To reach a dev server from another machine, override `ports` in a `docker-compose.override.yml` (and set a token first).
 - A standalone `docker run` of the image listens on whatever `MCP_BRIDGE_PORT` you set (the application default is `3600`). The image's `EXPOSE` and `HEALTHCHECK` also use `3600`, so a direct `docker run` is consistent out of the box: map `-p 3600:3600` and the healthcheck and your published port agree.
 
 > **Upgrading from an earlier version?** The Compose profiles previously published the MCP server on host port `3000`; they now use `3600` to match the published image and all guides. If you reach the server on `3000` today, update your host mapping, reverse proxy, or client URL to `3600`. Your budget data is unaffected: the named volume and the host data directory are unchanged, only the in-container mount path moved from `/data` to `/app/data` together with `MCP_BRIDGE_DATA_DIR`, so the same files are still read.
@@ -204,11 +205,12 @@ docker compose down
 ### Production Compose deployment
 
 ```bash
-# 1. Clone and configure
+# 1. Clone and configure (never overwrites an existing .env)
 git clone https://github.com/agigante80/actual-mcp-server.git
 cd actual-mcp-server
-cp .env.example .env
-# Set ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID, MCP_SSE_AUTHORIZATION
+[ -f .env ] || install -m 600 .env.example .env
+# Set ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID; add the token with the
+# Quick Start token block above (the README Option B block does both steps)
 
 # 2. Start production stack
 docker compose --profile production up -d

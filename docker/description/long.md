@@ -22,20 +22,34 @@ A production-ready Model Context Protocol (MCP) bridge that exposes Actual Budge
 
 ### HTTP via Docker (for LibreChat / LobeChat)
 
+First create a private `.env` with a generated token. It never overwrites a value you set, except a token that is missing, duplicated or shorter than 32 characters, and the last line prints the token your MCP client sends as its Bearer token:
+
+```bash
+[ -f .env ] || install -m 600 /dev/null .env
+for key in ACTUAL_SERVER_URL=http://YOUR-ACTUAL-HOST:5006 ACTUAL_PASSWORD= ACTUAL_BUDGET_SYNC_ID=; do
+  grep -q "^${key%%=*}=" .env || printf '%s\n' "$key" >> .env
+done
+chmod 600 .env
+if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
+  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+fi
+grep '^MCP_SSE_AUTHORIZATION=' .env
+```
+
+Fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. Inside the container `localhost` is the container itself: use your Actual server's LAN address or domain, or `http://host.docker.internal:5006` when Actual runs on the Docker host. Then start it from the same directory:
+
+<!-- runnable: docker-run -->
 ```bash
 docker run -d \
   --name actual-mcp-server \
   -p 3600:3600 \
-  -e ACTUAL_SERVER_URL="http://your-actual-server:5006" \
-  -e ACTUAL_PASSWORD="your-password" \
-  -e ACTUAL_BUDGET_SYNC_ID="your-budget-id" \
-  -e MCP_SSE_AUTHORIZATION="$(openssl rand -hex 32)" \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env \
   -v actual-mcp-data:/app/data \
   agigante80/actual-mcp-server:latest
-
-# Also available on GHCR:
-# ghcr.io/agigante80/actual-mcp-server:latest
 ```
+
+Also available on GHCR: `ghcr.io/agigante80/actual-mcp-server:latest`.
 
 ### stdio for Claude Desktop native (no Docker, no HTTP server, no token)
 
@@ -67,25 +81,30 @@ cd actual-mcp-server && npm install && npm run build
 
 ### HTTPS Setup (Recommended for LibreChat)
 
+Generate a self-signed certificate:
+
 ```bash
 mkdir -p certs
 openssl req -x509 -newkey rsa:4096 -nodes \
   -keyout certs/key.pem -out certs/cert.pem \
   -days 365 -subj "/CN=YOUR_SERVER_IP" \
   -addext "subjectAltName=IP:YOUR_SERVER_IP"
+```
 
+Then, with `.env` created as in the HTTP quick start above, start the server with TLS:
+
+<!-- runnable: docker-run-https -->
+```bash
 docker run -d \
   --name actual-mcp-server \
   -p 3600:3600 \
-  -e ACTUAL_SERVER_URL="http://your-actual-server:5006" \
-  -e ACTUAL_PASSWORD="your-password" \
-  -e ACTUAL_BUDGET_SYNC_ID="your-budget-id" \
-  -e MCP_SSE_AUTHORIZATION="$(openssl rand -hex 32)" \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env \
   -e MCP_ENABLE_HTTPS=true \
   -e MCP_HTTPS_CERT=/app/certs/cert.pem \
   -e MCP_HTTPS_KEY=/app/certs/key.pem \
   -v actual-mcp-data:/app/data \
-  -v $(pwd)/certs:/app/certs:ro \
+  -v "$PWD/certs:/app/certs:ro" \
   agigante80/actual-mcp-server:latest
 ```
 

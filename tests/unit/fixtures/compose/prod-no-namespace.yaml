@@ -1,0 +1,9 @@
+# #600 negative fixture: the production image has no registry namespace.
+services:
+  mcp-server-prod:
+    image: actual-mcp-server:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION:?MCP_SSE_AUTHORIZATION is required}

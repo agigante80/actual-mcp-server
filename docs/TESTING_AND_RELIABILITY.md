@@ -583,13 +583,21 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   (every `actual_<domain>_<action>` tool name advertised in `README.md` resolves to
   `IMPLEMENTED_TOOLS`, catching documented-but-missing/renamed tools). These join the existing
   doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,
-  `dockerfile_data_dir_alignment`, `compose_profile_sync`,
+  `dockerfile_data_dir_alignment`, `compose_profile_sync` (#600: also the compose security
+  posture: production image namespace, optional `.env`, required token, loopback-only dev and
+  test ports), `install_snippets` (#600: every `docker run` block in the README and guides uses
+  `--env-file` and a registry image and puts no secret or container-side `localhost` on the
+  command line; the marked runnable blocks run against stub tools),
   `workflow_release_guards` (#261: auto-release workflow invariants + lockfile agreement),
   `report_train_failure` (#325: the release-train failure notifier),
   `bot_target_branch` (#265: dependabot blocks and the inert renovate config target develop), and
   `node_version_drift` (#275: `engines.node` is canonical; the Dockerfile `FROM node:` tags,
   every workflow's Node pin, and the README must agree with it. Run standalone with
   `npm run node-version-drift`).
+- **Install snippet startup smoke** (#600): after a successful E2E run, the `docker-e2e` job
+  builds the image and runs `node scripts/install-snippets.mjs smoke --image actual-mcp-server:ci-smoke`,
+  which creates `.env` with the README `env-token` block, starts the README `docker-run` block
+  with dummy Actual settings, and requires `/health` to answer 200 within 30 seconds.
 - **Write-queue wakeup guard** (#278): `tests/unit/adapter_write_queue_wakeup.test.js` pins the
   lost-wakeup regression in `src/lib/actual-adapter.ts`. A write enqueued while a previous batch
   was draining used to be stranded (never dispatched, promise never settled) until an unrelated

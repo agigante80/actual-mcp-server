@@ -78,23 +78,44 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 
 ### Option A: Docker (recommended)
 
+**1. Create `.env` with a generated token.** Run this in an empty directory. It creates a private `.env` (mode 600), adds the three Actual settings for you to fill in, and writes a random `MCP_SSE_AUTHORIZATION` token. It never overwrites a value you already set, except a token that is missing, duplicated or shorter than 32 characters, so it is safe to run again:
+
+<!-- runnable: env-token -->
+```bash
+[ -f .env ] || install -m 600 /dev/null .env
+for key in ACTUAL_SERVER_URL=http://YOUR-ACTUAL-HOST:5006 ACTUAL_PASSWORD= ACTUAL_BUDGET_SYNC_ID=; do
+  grep -q "^${key%%=*}=" .env || printf '%s\n' "$key" >> .env
+done
+chmod 600 .env
+if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
+  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+fi
+grep '^MCP_SSE_AUTHORIZATION=' .env
+```
+
+The last line prints your token. It is the Bearer token your MCP client sends, and it stays in this terminal's scrollback, so clear it if the terminal is shared.
+
+**2. Fill in `.env`.** Set `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` (Actual: Settings, Show advanced settings, Sync ID) and `ACTUAL_SERVER_URL`. The URL is read **inside the container**, where `localhost` is the container itself, never your Actual server. Use one of:
+
+- the LAN address or domain of the Actual server: `http://192.168.1.50:5006`, `https://actual.yourdomain.com`
+- `http://host.docker.internal:5006` when Actual runs on the Docker host itself (the `--add-host` line below makes that name resolve on Linux; Docker Desktop provides it)
+- the container name, `http://actual:5006`, when both containers share a user-defined Docker network (add `--network <name>` to the command below)
+
+**3. Start the server** from the same directory:
+
+<!-- runnable: docker-run -->
 ```bash
 docker run -d \
   --name actual-mcp-server-backend \
   -p 3600:3600 \
-  # Use the same URL you type in your browser to open Actual Budget:
-  #   http://localhost:5006          (if Actual Budget runs on the same machine)
-  #   http://192.168.1.50:5006       (if it runs on another machine on your network)
-  #   https://actual.yourdomain.com  (if you use a domain name)
-  #   http://actual:5006             (if both containers share a Docker network; use container name)
-  -e ACTUAL_SERVER_URL=http://localhost:5006 \
-  -e ACTUAL_PASSWORD=your_password \
-  -e ACTUAL_BUDGET_SYNC_ID=your_sync_id \
-  -e MCP_SSE_AUTHORIZATION=your_secret_token \
-  -v actual-mcp-data:/app/data \        # required, see note below
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env \
+  -v actual-mcp-data:/app/data \
   -v actual-mcp-logs:/app/logs \
   ghcr.io/agigante80/actual-mcp-server:latest
 ```
+
+Passwords and the token come from `.env`, so they never land in your shell history. Once it works, recreate it with `--restart unless-stopped` added before the image name so Docker restarts it after a reboot.
 
 > **Why the `/app/data` volume is required:** Actual Budget does not expose a REST API. The official `@actual-app/api` library (used internally by this server) works by downloading a local copy of your budget data, running all queries on that local copy, then syncing changes back. The `/app/data` volume gives the container a persistent, writable place to store that local copy (it is the directory the image creates and owns as the runtime user). Without it the container still starts, but the local copy is lost each time the container is replaced and the next start downloads the budget again. See the [Actual API docs](https://actualbudget.org/docs/api/) for details.
 >
@@ -107,9 +128,9 @@ docker run -d \
 curl http://localhost:3600/health
 # Expected: {"status":"ok","transport":"http","version":"..."}
 
-# Full MCP handshake (also verifies your token)
+# Full MCP handshake (also verifies your token; run it next to your .env)
 curl -s -X POST http://localhost:3600/http \
-  -H "Authorization: Bearer your_secret_token" \
+  -H "Authorization: Bearer $(sed -n 's/^MCP_SSE_AUTHORIZATION=//p' .env)" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"cli-test","version":"1.0"}}}' \
@@ -123,35 +144,50 @@ Also available on Docker Hub: `agigante80/actual-mcp-server:latest`
 
 ### Option B: Docker Compose
 
+Needs Docker Compose 2.24.0 or later (`docker compose version`).
+
 ```bash
 git clone https://github.com/agigante80/actual-mcp-server.git
 cd actual-mcp-server
-cp .env.example .env        # fill in ACTUAL_SERVER_URL, ACTUAL_PASSWORD, ACTUAL_BUDGET_SYNC_ID
-
-docker compose --profile production up -d   # production: MCP server listens on :3600
-# or
-docker compose --profile dev up -d          # dev mode with hot-reload
 ```
 
+Then create `.env` from the template (an existing `.env` is never overwritten), add a generated token, and start the `production` service, which pulls `ghcr.io/agigante80/actual-mcp-server:latest`:
+
+<!-- runnable: compose-production -->
+```bash
+[ -f .env ] || install -m 600 .env.example .env
+chmod 600 .env
+if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
+  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+fi
+grep '^MCP_SSE_AUTHORIZATION=' .env
+docker compose --profile production up -d
+```
+
+The printed line is your client's Bearer token. On a fresh `.env` the template values are placeholders: fill in `ACTUAL_SERVER_URL`, `ACTUAL_PASSWORD` and `ACTUAL_BUDGET_SYNC_ID` (the container `localhost` rule from Option A applies here too; `http://host.docker.internal:5006` reaches an Actual server on the Docker host), then run `docker compose --profile production up -d` again, which recreates the container with the new values. Without a `.env` at all, `up` stops with `ACTUAL_SERVER_URL is required`; without a token, with `MCP_SSE_AUTHORIZATION is required, run the token snippet`.
+
 > The compose file defines only the `dev` and `production` profiles. The MCP server listens on `:3600` directly: there is no bundled reverse proxy and no bundled Actual Budget server, so point `ACTUAL_SERVER_URL` at your own Actual instance. For TLS, enable native HTTPS with `MCP_ENABLE_HTTPS=true` (plus `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY`), or front the server with your own reverse proxy.
+>
+> **Contributors:** the `dev` profile is a hot-reload stack that builds from source and runs **without authentication**. It is bound to `127.0.0.1:3600` only, but that still leaves it reachable by every local process, by containers on the same Docker network, and by a web page through DNS rebinding. Use it on a machine you trust, never as a deployment.
 
 ### Option C: npm (HTTP server)
 
 > **Requires Node.js 22+.** npm and npx do not enforce this, so check with `node --version` first. On an older Node the server refuses to start and tells you so. Note that `npx` runs whichever `node` is first on your `PATH`, which is not always the one you installed most recently.
 
-```bash
-# Quick start via npx (no clone needed):
-ACTUAL_SERVER_URL=http://localhost:5006 \
-ACTUAL_PASSWORD=your_password \
-ACTUAL_BUDGET_SYNC_ID=your-sync-id \
-MCP_SSE_AUTHORIZATION=your_token \
-npx actual-mcp-server --http
+Quick start via npx, no clone needed. The server reads `.env` from the directory you start it in, so create one first with the Option A step 1 block and fill it in. This is not a container, so `ACTUAL_SERVER_URL=http://localhost:5006` is right when Actual runs on the same machine. Then, in that directory:
 
-# Or clone for development / custom config:
+<!-- runnable: npx-http -->
+```bash
+npx actual-mcp-server --http
+```
+
+Or clone for development or a custom config:
+
+```bash
 git clone https://github.com/agigante80/actual-mcp-server.git
 cd actual-mcp-server
 npm install
-cp .env.example .env        # fill in required values
+[ -f .env ] || install -m 600 .env.example .env   # then fill in the required values
 npm run build
 npm run dev -- --http
 ```
@@ -204,6 +240,8 @@ The Unraid template lives in [`unraid/actual-mcp-server.xml`](unraid/actual-mcp-
 ### Connect an AI client
 
 **LibreChat / LobeChat**: add to `librechat.yaml` (or LobeChat MCP plugin settings):
+
+The URL below uses the container name, which resolves only when LibreChat and the MCP server share a user-defined Docker network. Create one once with `docker network create actual-mcp`, start the MCP server with `--network actual-mcp` added to the Option A command, and attach LibreChat's container with `docker network connect actual-mcp <librechat-container>`. Otherwise use `http://<host-ip>:3600/http`. The header carries the token the Option A block printed.
 
 ```yaml
 mcpServers:
@@ -484,7 +522,7 @@ All configuration is via environment variables. Copy `.env.example` to `.env` to
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | **Actual Budget Connection** ||||
-| `ACTUAL_SERVER_URL` | _(none)_ | Yes | URL of your Actual Budget server. Use the same URL you type in your browser: `http://localhost:5006` (local), `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), or `http://actual:5006` (container name if on the same Docker network) |
+| `ACTUAL_SERVER_URL` | _(none)_ | Yes | URL of your Actual Budget server, as seen from where the MCP server runs: `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), `http://actual:5006` (container name on a shared Docker network), or `http://host.docker.internal:5006` (Actual on the Docker host). `http://localhost:5006` works only for npx, node and stdio runs: inside a container `localhost` is the container itself |
 | `ACTUAL_PASSWORD` | _(none)_ | Yes | Login password for your Actual Budget **server**, the one you type on its own login screen. Not the same as `ACTUAL_BUDGET_PASSWORD` (which decrypts an E2E-encrypted budget) and unrelated to `AUTH_PROVIDER=oidc` (which controls how MCP *clients* authenticate to this server, not how this server authenticates to Actual). This server always signs in to Actual with a password, so upstream password login must stay enabled |
 | `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
 | `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
@@ -700,15 +738,9 @@ See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all
 
 #### Static Bearer token (single-user)
 
-```bash
-# Generate a token
-openssl rand -hex 32
+Generate it with the Option A step 1 block (or the same lines in Option B): it writes a random 64-character `MCP_SSE_AUTHORIZATION` to `.env`, replaces a missing, duplicated or short one, and prints it. Never use a placeholder such as `your_token_here`: the server only checks that a token is set, so a placeholder is accepted as a real secret.
 
-# Add to .env
-MCP_SSE_AUTHORIZATION=your_token_here
-```
-
-Clients send: `Authorization: Bearer your_token_here`
+Clients send: `Authorization: Bearer <the printed token>`
 
 #### OIDC (multi-user)
 

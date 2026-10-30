@@ -8,7 +8,7 @@ services:
     image: actualbudget/actual-server:latest
     container_name: actual-budget-e2e-test
     ports:
-      - "5007:5006" # Use port 5007 to avoid conflicts with dev instances
+      - "127.0.0.1:5007:5006" # Use port 5007 to avoid conflicts with dev instances
     volumes:
       - actual-test-data:/data
     environment:
@@ -71,7 +71,7 @@ services:
     image: actualbudget/actual-server:latest
     container_name: actual-budget-e2e-stdio
     ports:
-      - "5008:5006" # 5007 is the HTTP leg's server; 5006 is a dev instance
+      - "127.0.0.1:5008:5006" # 5007 is the HTTP leg's server; 5006 is a dev instance
     volumes:
       - actual-stdio-test-data:/data
     environment:
@@ -123,7 +123,7 @@ services:
       dockerfile: Dockerfile
     container_name: mcp-server-e2e-test
     ports:
-      - "3602:3600" # Use port 3602 to avoid conflicts
+      - "127.0.0.1:3602:3600" # Use port 3602 to avoid conflicts
     depends_on:
       actual-budget-bootstrap:
         condition: service_completed_successfully

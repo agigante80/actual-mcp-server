@@ -1,0 +1,7 @@
+# #600 negative fixture: an unauthenticated dev server published on every interface.
+services:
+  mcp-server-dev:
+    ports:
+      - "3600:3600"
+    environment:
+      - MCP_ALLOW_UNAUTHENTICATED=true

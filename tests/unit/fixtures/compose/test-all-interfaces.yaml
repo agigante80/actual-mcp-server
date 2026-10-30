@@ -1,0 +1,5 @@
+# #600 negative fixture: a test stack port published on every interface.
+services:
+  mcp-server-test:
+    ports:
+      - "3602:3600"

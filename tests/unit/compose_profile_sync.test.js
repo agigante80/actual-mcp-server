@@ -6,12 +6,19 @@
 // lacks, in command form (`--profile X`) or as the specific `fullstack` phantom in
 // prose. Mirrors tests/unit/port_alignment.test.js.
 //
+// #600 adds a compose CONTENT check (checkCompose below), parsed with the `yaml` package
+// rather than the line parser: the production service must pull a namespaced image, read
+// `.env` through `env_file` (long syntax, required: false) and map MCP_SSE_AUTHORIZATION,
+// and no shipped compose file may publish an unauthenticated server (or the test stack at
+// all) on a non-loopback interface. The profile checks keep their line parser unchanged.
+//
 // Run: node tests/unit/compose_profile_sync.test.js
 
 import assert from 'assert';
 import { readFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { parseDocument, LineCounter, isMap, isSeq, isScalar } from 'yaml';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
@@ -114,6 +121,110 @@ check('NEGATIVE: an undeclared --profile reference is detected (space and = form
 check('NEGATIVE: the fullstack phantom is detected in prose by the production helper', () => {
   assert.ok(mentionsFullstackProfile('profiles: dev, production, fullstack'), 'phantom check must match prose mentions');
 });
+
+// ---------------------------------------------------------------------------------------------
+// #600 compose content check.
+
+// Every published port, as { spec, line, loopback }. Short syntax "HOST_IP:HOST:CONTAINER" is
+// loopback only with a 127.0.0.1 prefix; long syntax needs host_ip: 127.0.0.1.
+function publishedPorts(service, lc) {
+  const ports = service.get('ports', true);
+  if (!isSeq(ports)) return [];
+  return ports.items.map((item) => {
+    const line = lc.linePos(item.range[0]).line;
+    if (isMap(item)) {
+      return { spec: JSON.stringify(item.toJSON()), line, loopback: item.get('host_ip') === '127.0.0.1' };
+    }
+    const spec = String(isScalar(item) ? item.value : item);
+    return { spec, line, loopback: spec.startsWith('127.0.0.1:') };
+  });
+}
+
+// Environment entries as [{ key, value, line }], from list or map syntax.
+function environmentOf(service, lc) {
+  const env = service.get('environment', true);
+  if (isSeq(env)) {
+    return env.items.map((item) => {
+      const [key, ...rest] = String(item.value).split('=');
+      return { key, value: rest.join('='), line: lc.linePos(item.range[0]).line };
+    });
+  }
+  if (isMap(env)) {
+    return env.items.map((pair) => ({ key: String(pair.key.value), value: String(pair.value?.value ?? ''), line: lc.linePos(pair.key.range[0]).line }));
+  }
+  return [];
+}
+
+// kind: 'main' for docker-compose.yaml (keyed on mcp-server-prod and mcp-server-dev), 'test'
+// for docker-compose.test.yaml (every service, every port).
+function checkCompose(text, kind, file) {
+  const lc = new LineCounter();
+  const doc = parseDocument(text, { lineCounter: lc });
+  if (doc.errors.length) return [`${file} does not parse: ${doc.errors[0].message}`];
+  const services = doc.get('services', true);
+  if (!isMap(services)) return [`${file} has no services map`];
+  const errors = [];
+  const at = (line) => `(${file}:${line})`;
+  const serviceLine = (name) => lc.linePos(services.items.find((p) => p.key.value === name).key.range[0]).line;
+
+  if (kind === 'test') {
+    for (const pair of services.items) {
+      for (const p of publishedPorts(pair.value, lc)) {
+        if (!p.loopback) errors.push(`test stack publishes a port on all interfaces ${at(p.line)}`);
+      }
+    }
+    return errors;
+  }
+
+  const prod = services.get('mcp-server-prod', true);
+  if (prod) {
+    const image = prod.get('image', true);
+    if (!image || !String(image.value).includes('/')) {
+      errors.push(`production image has no registry namespace ${at(image ? lc.linePos(image.range[0]).line : serviceLine('mcp-server-prod'))}`);
+    }
+    const envFile = prod.get('env_file');
+    const entries = Array.isArray(envFile?.toJSON?.()) ? envFile.toJSON() : [];
+    if (!entries.some((e) => e && e.path === '.env' && e.required === false)) {
+      errors.push(`production env_file must be .env with required: false ${at(serviceLine('mcp-server-prod'))}`);
+    }
+    if (!environmentOf(prod, lc).some((e) => e.key === 'MCP_SSE_AUTHORIZATION')) {
+      errors.push(`production does not map MCP_SSE_AUTHORIZATION ${at(serviceLine('mcp-server-prod'))}`);
+    }
+  }
+  const dev = services.get('mcp-server-dev', true);
+  if (dev) {
+    const open = environmentOf(dev, lc).find((e) => e.key === 'MCP_ALLOW_UNAUTHENTICATED' && e.value === 'true');
+    if (open) {
+      for (const p of publishedPorts(dev, lc)) {
+        if (!p.loopback) errors.push(`dev publishes an unauthenticated server on all interfaces ${at(p.line)}`);
+      }
+    }
+  }
+  return errors;
+}
+
+check('docker-compose.yaml: production pulls the GHCR image, reads .env, maps the token; dev is loopback-bound', () => {
+  assert.deepStrictEqual(checkCompose(read('docker-compose.yaml'), 'main', 'docker-compose.yaml'), []);
+});
+
+check('docker-compose.test.yaml: every published port binds 127.0.0.1', () => {
+  assert.deepStrictEqual(checkCompose(read('docker-compose.test.yaml'), 'test', 'docker-compose.test.yaml'), []);
+});
+
+const fixture = (name) => read(`tests/unit/fixtures/compose/${name}`);
+const COMPOSE_NEGATIVES = [
+  ['prod-no-namespace.yaml', 'main', 'production image has no registry namespace'],
+  ['prod-token-commented.yaml', 'main', 'production does not map MCP_SSE_AUTHORIZATION'],
+  ['prod-no-env-file.yaml', 'main', 'production env_file must be .env with required: false'],
+  ['dev-all-interfaces.yaml', 'main', 'dev publishes an unauthenticated server on all interfaces'],
+  ['test-all-interfaces.yaml', 'test', 'test stack publishes a port on all interfaces'],
+];
+for (const [name, kind, message] of COMPOSE_NEGATIVES) {
+  check(`NEGATIVE: ${name} fails with "${message}"`, () => {
+    const errors = checkCompose(fixture(name), kind, name);
+    assert.ok(errors.some((e) => e.startsWith(message)), `got: ${JSON.stringify(errors)}`);
+  });
+}
 
 console.log(`\n[compose-profile-sync] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

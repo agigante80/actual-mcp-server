@@ -1,0 +1,10 @@
+# #600 negative fixture: the token mapping is commented out.
+services:
+  mcp-server-prod:
+    image: ghcr.io/agigante80/actual-mcp-server:latest
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - MCP_BRIDGE_PORT=3600
+      # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}

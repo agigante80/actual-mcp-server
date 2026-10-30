@@ -627,6 +627,7 @@ export const configSchema = z.object({
 **LibreChat Status**: ✅ Fully supported and verified
 
 **Configuration**:
+<!-- install-snippets: fragment -->
 ```bash
 # Start HTTP server
 npm run dev -- --http

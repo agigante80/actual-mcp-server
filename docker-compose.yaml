@@ -26,7 +26,10 @@ services:
       - dev
     restart: unless-stopped
     ports:
-      - "3600:3600"
+      # #600: loopback only. This stack runs with MCP_ALLOW_UNAUTHENTICATED=true, so it
+      # must never be published on every interface. To reach it from another machine,
+      # override ports in docker-compose.override.yml (and add a token first).
+      - "127.0.0.1:3600:3600"
     volumes:
       # Mount source code for development
       - ./src:/app/src:ro
@@ -122,11 +125,23 @@ services:
   # Production-ready configuration with secrets management
 
   mcp-server-prod:
-    image: actual-mcp-server:latest
+    # #600: the published image. A bare actual-mcp-server:latest resolves to
+    # docker.io/library/actual-mcp-server, which does not exist.
+    image: ghcr.io/agigante80/actual-mcp-server:latest
     container_name: actual-mcp-prod
     profiles:
       - production
     restart: unless-stopped
+    # Values come from .env next to this file. The long syntax with required: false needs
+    # Docker Compose 2.24.0 or later; a missing .env then fails on the
+    # "ACTUAL_SERVER_URL is required" check below instead of a bare file-not-found.
+    env_file:
+      - path: .env
+        required: false
+    # Lets ACTUAL_SERVER_URL=http://host.docker.internal:5006 reach an Actual server on
+    # the Docker host (Linux needs this mapping; Docker Desktop provides it).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "3600:3600"
     volumes:
@@ -138,8 +153,9 @@ services:
       - mcp-logs:/app/logs
     environment:
       # Actual Finance connection.
-      # Use the same URL you type in your browser to open Actual Budget.
-      # Examples: http://localhost:5006, http://192.168.1.50:5006, https://actual.yourdomain.com
+      # Inside a container, localhost is the container itself, never your Actual server.
+      # Examples: http://192.168.1.50:5006, https://actual.yourdomain.com,
+      # http://host.docker.internal:5006 (Actual on the Docker host).
       # If on the same Docker network, use the container service name: http://actual:5006
       - ACTUAL_SERVER_URL=${ACTUAL_SERVER_URL:?ACTUAL_SERVER_URL is required}
       - ACTUAL_PASSWORD=${ACTUAL_PASSWORD:?ACTUAL_PASSWORD is required}
@@ -178,8 +194,8 @@ services:
       - MCP_BRIDGE_PORT=3600
       - MCP_BRIDGE_BIND_HOST=0.0.0.0
       # #242: HTTP auth is required-by-default. On this 0.0.0.0 (non-loopback)
-      # bind the server refuses to start unless you set MCP_SSE_AUTHORIZATION (or
-      # AUTH_PROVIDER=oidc) below. To run open deliberately behind your own
+      # bind the server refuses to start unless MCP_SSE_AUTHORIZATION (mapped below)
+      # or AUTH_PROVIDER=oidc is set. To run open deliberately behind your own
       # authenticating proxy, set MCP_ALLOW_UNAUTHENTICATED=true.
       - MCP_BRIDGE_LOG_LEVEL=info
       - MCP_BRIDGE_STORE_LOGS=true
@@ -192,8 +208,10 @@ services:
       # - SESSION_IDLE_TIMEOUT_MINUTES=5
       # - ACTUAL_API_CONCURRENCY=5
 
-      # Authentication: static Bearer token or OIDC (see README)
-      # - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+      # Authentication: static Bearer token or OIDC (see README). #600: the token is
+      # required here; `up` fails with this message when .env has none. The README
+      # token snippet writes one.
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION:?MCP_SSE_AUTHORIZATION is required, run the token snippet}
       # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
       # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
       # - OIDC_RESOURCE=${OIDC_RESOURCE}
