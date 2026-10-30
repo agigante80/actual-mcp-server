@@ -39,7 +39,7 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 
 - **84 tools** across accounts, transactions, categories, payees, tags, notes, rules, budgets, batch operations, bank sync, and more. Every tool is listed with its description in the tables below, and `npm run check:coverage` reports which `@actual-app/api` methods have no tool.
 - **HTTP and stdio transport.** Runs as a real remote server for LibreChat/LobeChat (`--http`), or as a direct local process for Claude Desktop (`--stdio`). No Docker or HTTP server is needed for local use.
-- **8 exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
+- **Exclusive ActualQL-powered tools.** Search and summarise transactions by month, amount, category, or payee using Actual Budget's native query engine. Aggregated results, no raw data dumped into the AI context window.
 - **Multi-budget switching at runtime.** Configure multiple budget files and let the AI switch between them mid-conversation with `actual_budgets_switch`. Works on both transports: HTTP keys the active budget to the MCP session, and stdio (Claude Desktop, Claude Code, Cursor) gets a synthetic per-process session so a switch is scoped to that process rather than shared globally (#348).
 - **Multi-user ready with OIDC.** Secure every session with JWKS-validated JWTs and per-user budget ACLs. No shared tokens required.
 - **Connection pooling and retries on both transports.** HTTP connection pooling (up to 15 concurrent sessions), and a long-lived stdio process that logs in ONCE and reuses that connection for every tool call instead of re-authenticating per call, so Claude Desktop and Claude Code stay fast and a burst of calls no longer risks a per-call login storm against the upstream limiter. Automatic retry with exponential backoff, and a full test suite (unit + E2E + integration).
@@ -350,7 +350,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 **84 tools** across all categories. All tools use the `actual_<category>_<action>` naming convention.
 
-### Accounts (12)
+### Accounts
 
 | Tool | Description |
 |------|-------------|
@@ -367,9 +367,9 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_account_groups_update` | Rename an account group or change its sidebar position. A group that does not exist is refused, writing nothing |
 | `actual_account_groups_delete` | Delete an account group. Its accounts are NOT deleted, they become ungrouped |
 
-### Transactions (17)
+### Transactions
 
-**Standard (7)**
+**Standard**
 
 | Tool | Description |
 |------|-------------|
@@ -383,14 +383,14 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 > **Split transactions:** pass a `subtransactions` array (each child needs an `amount` in integer cents; `category` and `notes` are optional). The child amounts must sum to the parent `amount` (the server does not enforce this, so the tool does). A split parent carries no category of its own: put categories on the children. `actual_transactions_update` with `subtransactions` edits the children of a transaction that is already a split, or splits a plain transaction IN PLACE: it keeps its id, `imported_id` and cleared state, so a bank-synced transaction can be split without breaking import matching. Its own category is cleared, and a child that names no category inherits it. A split child cannot itself be split. Note: `actual_transactions_import` forwards a `subtransactions` array to the API but does NOT apply the sum check, so use `actual_transactions_create` for guaranteed-balanced splits.
 
-**Utility (2)**
+**Utility**
 
 | Tool | Description |
 |------|-------------|
 | `actual_transactions_uncategorized` | Summary of uncategorized transactions (totalCount, totalAmount, per-account breakdown); pass `includeTransactions:true` for paginated rows |
 | `actual_transactions_update_batch` | Apply many transaction updates in ONE call (`updates: [{ id, fields }]`); returns per-item success and failure counts |
 
-**Exclusive ActualQL-powered (8)**, unique to this MCP server
+**Exclusive ActualQL-powered**, unique to this MCP server
 
 | Tool | Description |
 |------|-------------|
@@ -403,7 +403,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_transactions_summary_by_payee` | Top vendors with totals and counts |
 | `actual_recurring_expenses_summary` | Detect recurring charges (subscriptions, bills) from posted history: cadence (with date-drift and month-end tolerance), latest amount, price changes, occurrences, annualized cost, and active or inactive state |
 
-### Transfers (1)
+### Transfers
 
 | Tool | Description |
 |------|-------------|
@@ -411,19 +411,19 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 > **Note:** Use `actual_transfers_create` for any account-to-account movement, not `actual_transactions_create`. The dedicated tool creates both sides (debit and credit) atomically so the books stay balanced. Limitations: both accounts must exist and be open, and `from_account` must differ from `to_account`.
 
-### Categories (4)
+### Categories
 
 `actual_categories_get` · `actual_categories_create` · `actual_categories_update` · `actual_categories_delete`
 
-### Category Groups (4)
+### Category Groups
 
 `actual_category_groups_get` · `actual_category_groups_create` · `actual_category_groups_update` · `actual_category_groups_delete`
 
-### Payees (7)
+### Payees
 
 `actual_payees_get` · `actual_payees_common_list` · `actual_payees_create` · `actual_payees_update` · `actual_payees_delete` · `actual_payees_merge` · `actual_payee_rules_get`
 
-### Tags (4)
+### Tags
 
 `actual_tags_list` · `actual_tags_create` · `actual_tags_update` · `actual_tags_delete`
 
@@ -434,7 +434,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_tags_update` | Update tag name, color, or description by UUID |
 | `actual_tags_delete` | Soft-delete a tag by UUID |
 
-### Notes (2)
+### Notes
 
 `actual_notes_get` · `actual_notes_update`
 
@@ -443,13 +443,13 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_notes_get` | Get the note for any entity (account/category/category-group/payee UUID, or budget-YYYY-MM) |
 | `actual_notes_update` | Set or clear the note for any entity; validates entity exists or matches budget-YYYY-MM pattern |
 
-### Preferences (1)
+### Preferences
 
 | Tool | Description |
 |------|-------------|
 | `actual_preferences_get` | Read the budget's synced display preferences (number format, date format, currency, first day of week). Display only: all amounts stay integer cents |
 
-### Budgets (12)
+### Budgets
 
 | Tool | Description |
 |------|-------------|
@@ -466,7 +466,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_budgets_export` | Export the active budget as a `.zip` into `ACTUAL_EXPORT_DIR`; returns path, byte size and sha256, never the file contents |
 | `actual_budgets_import` | Restore a budget from an Actual `.zip` or a YNAB4/YNAB5 export. **Destructive:** the budget id comes from the archive, so re-importing an export *replaces* that budget's data rather than making a copy. Also loads the imported budget, changing the session's active budget |
 
-### Rules (6)
+### Rules
 
 `actual_rules_get` · `actual_rules_create` · `actual_rules_update` · `actual_rules_delete`
 
@@ -475,7 +475,7 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_rules_create_or_update` | Idempotent upsert: create a rule, or update the existing one that matches the same conditions, in a single call. Use this instead of get-then-create when re-running a categorisation setup, so repeated runs do not pile up duplicate rules |
 | `actual_rules_create_batch` | Create 1 to 50 rules in one call, each exactly the input of `actual_rules_create`. Best-effort, not atomic (see Batch Operations): a rule that fails its own checks, names a category, payee or account that does not exist, or is rejected by Actual is reported with its index while the rest continue |
 
-### Schedules (4)
+### Schedules
 
 | Tool | Description |
 |------|-------------|
@@ -484,14 +484,14 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 | `actual_schedules_update` | Update an existing schedule's amount, payee, account, or recurrence |
 | `actual_schedules_delete` | Delete a schedule |
 
-### Advanced Query & Sync (2)
+### Advanced Query & Sync
 
 | Tool | Description |
 |------|-------------|
 | `actual_query_run` | Execute custom ActualQL query |
 | `actual_bank_sync` | Trigger bank sync (GoCardless/SimpleFIN) |
 
-### Batch Operations (1)
+### Batch Operations
 
 Four tools take many items in one call, for clients that allow only a few tool calls per turn. They share ONE contract: each item is applied independently and **not atomically**. There is no rollback, so items applied before a failure stay applied; a bad item is reported by its index and the rest continue; an infrastructure failure (lost connection, timeout) fails the whole call, and then you must read the data back before retrying anything. A bulk path never retries a create on its own.
 
@@ -500,7 +500,7 @@ Four tools take many items in one call, for clients that allow only a few tool c
 - `actual_budget_updates_batch`: set budget amounts and/or carryover flags for 1 to 100 month/category pairs, and the way to rebalance categories: read the month with `actual_budgets_getMonth`, then send one batch of absolute amounts. Each operation needs at least one of `amount` (integer cents) or `carryover`. Result: `{ succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }`. An unknown category, an out-of-range month or a carryover on an income category fails only that item. After a timeout, read the months back with `actual_budgets_getMonth` before retrying.
 - `actual_rules_create_batch` (counted under Rules): create 1 to 50 rules, each exactly the input of `actual_rules_create`. Result: `{ succeeded: [{index, id}], failed: [{index, error}], total, successCount, failureCount }`. Items marked "not attempted" were never sent. Re-read with `actual_rules_get` before retrying any item.
 
-### Server Information & Lookup (5)
+### Server Information & Lookup
 
 | Tool | Description |
 |------|-------------|
@@ -510,7 +510,7 @@ Four tools take many items in one call, for clients that allow only a few tool c
 | `actual_get_id_by_name` | Resolve an exact name → UUID for accounts, categories, payees |
 | `actual_entities_search` | Find accounts/categories/payees by a name pattern (contains/startsWith/endsWith/exact/fuzzy). Fixes "payee not found" from a partial or mistyped name |
 
-### Session Management (2)
+### Session Management
 
 `actual_session_list` · `actual_session_close`
 
@@ -543,6 +543,8 @@ Every variable, with its type, default, whether it is secret, and where it is re
 
 All 84 tools are published by default. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer, so the surface can be narrowed at startup. A tool that is not published is also refused if a client calls it by name, and the refusal names the setting responsible.
 
+<!-- BEGIN GENERATED: tools-summary -->
+<!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->
 | Toolset | Tools | Contents |
 |---------|-------|----------|
 | `context` | 14 | Orientation, lookups and server information |
@@ -555,9 +557,14 @@ All 84 tools are published by default. Chat clients with a small tool budget (Ge
 | `query` | 1 | `actual_query_run` (SELECT only) |
 | `admin` | 6 | Budget switching, import, export, bank sync and session management |
 
-Each tool is in exactly one group. The `chat` preset cuts across them and publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_transactions_update_batch`, `actual_rules_create`, `actual_rules_create_batch`, `actual_budget_updates_batch`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`. Measured on the `tools/list` payload, all 84 tools are 108,164 bytes and the `chat` preset is 25,949 bytes (about 6.5k tokens saved, a 76% cut).
+The `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`.
 
-`MCP_READ_ONLY=true` additionally hides and refuses the 48 write-capable tools (48 of the 84, including `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`), leaving 36. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/explanation/security-and-privacy.md#tool-surface-mcp_toolsets-and-mcp_read_only).
+`MCP_READ_ONLY=true` hides and refuses 48 write-capable tools and leaves 36 published.
+<!-- END GENERATED: tools-summary -->
+
+Each tool is in exactly one group. The `chat` preset cuts across them, and its `tools/list` payload is about a quarter of the full one.
+
+Under `MCP_READ_ONLY=true` the hidden tools include `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/explanation/security-and-privacy.md#tool-surface-mcp_toolsets-and-mcp_read_only).
 
 Example: a chat assistant.
 

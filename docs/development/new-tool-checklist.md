@@ -24,6 +24,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Tool file created: `src/tools/<domain>_<action>.ts`
 - [ ] Exported from `src/tools/index.ts`
 - [ ] Added to `IMPLEMENTED_TOOLS` in `src/actualToolsManager.ts`
+- [ ] **Added to the toolsets** (#603): Add the tool to exactly one `TOOLSETS` array in `src/lib/toolsets.ts`, and to `WRITE_CAPABLE` if it writes; then `npm run build && npm run docs:gen`. `tests/unit/toolsets.test.js` ("every registered tool belongs to exactly one toolset") fails if you skip it, and `docs:check` reports the README tools-summary block stale.
 - [ ] **Classified in `src/lib/tool-annotations.ts`** (#379): put it in exactly one of `READ_ONLY`, `DESTRUCTIVE` or `ADDITIVE`, and if it writes, decide idempotence. `npm run build && node tests/unit/tool_annotations.test.js` FAILS if you skip this (the guard reads `dist/`, so build first), and it checks the read-only claim against the adapter call graph
 - [ ] Adapter function(s) exist (or created) in `src/lib/actual-adapter.ts`
 - [ ] `npm run build` passes with zero errors
@@ -58,7 +59,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] `npm run test:e2e` passes
 
 ### Documentation
-- [ ] `README.md`: new tool row added in Available Tools table
+- [ ] `README.md`: new tool row added in Available Tools table, then `npm run build && npm run docs:gen` (regenerates the tools-summary block)
 - [ ] `docs/explanation/architecture.md`: tool listed in domain section (if relevant)
 - [ ] `docs/development/testing-and-reliability.md`: test file entries updated if new test module added
 - [ ] `npm run docs:sync` run to batch-update all **Tool Count:** markers
@@ -137,6 +138,8 @@ const IMPLEMENTED_TOOLS = [
   'actual_example_tool',  // ← add here, alphabetical within domain
 ];
 ```
+
+**Toolset**: Add the tool to exactly one `TOOLSETS` array in `src/lib/toolsets.ts`, and to `WRITE_CAPABLE` if it writes; then `npm run build && npm run docs:gen`. `tests/unit/toolsets.test.js` ("every registered tool belongs to exactly one toolset") fails if you skip it, and `docs:check` reports the README tools-summary block stale.
 
 Verify with:
 ```bash
@@ -468,7 +471,7 @@ Run `npm run docs:sync` to update all `**Tool Count:**` markers across `README.m
 Then run `npm run tool-count -- --fix` to update the PROSE total-count literals that `docs:sync` does not touch: the "all N tools" phrasings, the docker descriptions (`long.md` / `short.md`), `src/lib/constants.ts`, the `EXPECTED_TOOL_COUNT` defaults, and the test-doc totals. This script keys off `IMPLEMENTED_TOOLS` (the same canonical source as `verify-tools`), and rewrites only allowlisted TOTAL anchors, so it never corrupts a per-domain subset count like `### Categories (4 tools)`. `npm run tool-count` (check mode) is enforced in CI via `tests/unit/tool_count_sync.test.js`, so a stale total will fail the build; running `--fix` here keeps the build green.
 
 #### `README.md`
-- Add a row for the new tool in the Available Tools table (tool name, description, key parameters)
+- Add a row for the new tool in the Available Tools table (tool name, description, key parameters), then run `npm run build && npm run docs:gen`
 
 #### `docs/explanation/architecture.md`
 - Add the tool to the domain section table if the domain section lists tools explicitly
@@ -543,6 +546,7 @@ When implementing a new lookup tool, the `call` function should:
 | `src/tools/<domain>_<action>.ts` | **Create** the tool definition + Zod schema |
 | `src/tools/index.ts` | **Add** export line |
 | `src/actualToolsManager.ts` | **Add** tool name to `IMPLEMENTED_TOOLS` |
+| `src/lib/toolsets.ts` | **Add** the tool to exactly one `TOOLSETS` array (and `WRITE_CAPABLE` if it writes), then run `npm run build && npm run docs:gen` (#603) |
 | `src/lib/actual-adapter.ts` | **Add** adapter method if new API call needed |
 | `tests/unit/generated_tools.smoke.test.js` | **Add** stub response to `stubResponses` map (if new adapter method); add input example; add to `resultWrappers[]`, `successTools[]`, or custom `if (n === '...')` shape assertion |
 | `tests/unit/schema_validation.test.js` | **Add** negative schema tests for complex schemas |
@@ -553,7 +557,7 @@ When implementing a new lookup tool, the `call` function should:
 | `tests/manual/README.md` | **Update** module table if new file added |
 | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
 | `tests/manual-prompt/README.md` | **Update** Phase Overview table total |
-| `README.md` | **Add** tool table row in Available Tools section |
+| `README.md` | **Add** tool table row in Available Tools section, then run `npm run build && npm run docs:gen` |
 | `docs/explanation/architecture.md` | **Update** domain table if applicable |
 | `docs/development/testing-and-reliability.md` | **Update** if new test module added |
 | `README.md`, `docs/*.md`, `.github/copilot-instructions.md` | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers (docker/description/* carry no marker; update by hand) |

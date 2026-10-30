@@ -147,13 +147,13 @@ src/tools/
 ├── get_id_by_name.ts                   # Exact name → UUID lookup (accounts/categories/payees/schedules)
 ├── entities_search.ts                  # Pattern/fuzzy name search for accounts/categories/payees (#204)
 ├── get_context.ts                      # High-level budget structure (accounts/categories/payees) in one call (#484)
-├── session_list.ts                     # Session management (2 tools)
+├── session_list.ts                     # Session management
 ├── session_close.ts
-├── account_groups_list.ts              # Account groups (4 tools, #429, Actual 26.9.0+)
+├── account_groups_list.ts              # Account groups (#429, Actual 26.9.0+)
 ├── account_groups_create.ts            #   create / update / delete
 ├── account_groups_update.ts
 ├── account_groups_delete.ts
-├── accounts_create.ts                  # Accounts (8 tools)
+├── accounts_create.ts                  # Accounts
 ├── accounts_list.ts
 ├── accounts_update.ts
 ├── accounts_delete.ts
@@ -176,8 +176,8 @@ src/tools/
 ├── transactions_search_by_payee.ts
 ├── transactions_summary_by_category.ts
 ├── transactions_summary_by_payee.ts
-├── transfers_create.ts                  # Transfers (1 tool)
-├── budgets_list_available.ts            # Budgets (13 tools)
+├── transfers_create.ts                  # Transfers
+├── budgets_list_available.ts            # Budgets
 ├── budgets_switch.ts
 ├── budgets_getMonth.ts
 ├── budgets_getMonths.ts
@@ -190,33 +190,33 @@ src/tools/
 ├── budgets_export.ts                    # #332: writes a zip to ACTUAL_EXPORT_DIR
 ├── budgets_import.ts                    # #334: LOADS the imported budget (active budget changes)
 ├── budget_updates_batch.ts
-├── preferences_get.ts                   # Preferences (1 tool, #333)
-├── categories_get.ts                   # Categories (4 tools)
+├── preferences_get.ts                   # Preferences (#333)
+├── categories_get.ts                   # Categories
 ├── categories_create.ts
 ├── categories_update.ts
 ├── categories_delete.ts
-├── category_groups_get.ts              # Category Groups (4 tools)
+├── category_groups_get.ts              # Category Groups
 ├── category_groups_create.ts
 ├── category_groups_update.ts
 ├── category_groups_delete.ts
-├── payees_get.ts                       # Payees (6 tools)
+├── payees_get.ts                       # Payees
 ├── payees_common_list.ts
 ├── payees_create.ts
 ├── payees_update.ts
 ├── payees_delete.ts
 ├── payees_merge.ts
-├── payee_rules_get.ts                  # Payee Rules (1 tool)
-├── rules_get.ts                        # Rules (6 tools)
+├── payee_rules_get.ts                  # Payee Rules
+├── rules_get.ts                        # Rules
 ├── rules_create.ts
 ├── rules_create_batch.ts
 ├── rules_create_or_update.ts
 ├── rules_update.ts
 ├── rules_delete.ts
-├── tags_list.ts                        # Tags (4 tools)
+├── tags_list.ts                        # Tags
 ├── tags_create.ts
 ├── tags_update.ts
 ├── tags_delete.ts
-├── notes_get.ts                        # Notes (2 tools)
+├── notes_get.ts                        # Notes
 ├── notes_update.ts
 ├── query_run.ts                        # Advanced ActualQL queries
 ├── bank_sync.ts                        # Bank synchronization
@@ -349,19 +349,19 @@ actual-mcp-server/
 │   │   └── budget-acl.ts         # Per-user budget ACL (email/sub/group)
 │   │
 │   ├── tools/                    # MCP tool definitions (84 tools + index.ts)
-│   │   ├── server_info.ts        # Server info (1 tool)
-│   │   ├── session_*.ts          # Session management (2 tools)
-│   │   ├── accounts_*.ts         # Accounts (7 tools)
-│   │   ├── transactions_*.ts     # Transactions (14 tools, incl. search/summary)
-│   │   ├── budgets_*.ts          # Budgets (11 tools)
+│   │   ├── server_info.ts        # Server info
+│   │   ├── session_*.ts          # Session management
+│   │   ├── accounts_*.ts         # Accounts
+│   │   ├── transactions_*.ts     # Transactions (incl. search/summary)
+│   │   ├── budgets_*.ts          # Budgets
 │   │   ├── budget_updates_batch.ts # Batch budget operations
-│   │   ├── categories_*.ts       # Categories (4 tools)
-│   │   ├── category_groups_*.ts  # Category groups (4 tools)
-│   │   ├── payees_*.ts           # Payees (6 tools)
-│   │   ├── payee_rules_get.ts    # Payee rules (1 tool)
-│   │   ├── rules_*.ts            # Rules (6 tools)
-│   │   ├── tags_*.ts             # Tags (4 tools)
-│   │   ├── notes_*.ts            # Notes (2 tools)
+│   │   ├── categories_*.ts       # Categories
+│   │   ├── category_groups_*.ts  # Category groups
+│   │   ├── payees_*.ts           # Payees
+│   │   ├── payee_rules_get.ts    # Payee rules
+│   │   ├── rules_*.ts            # Rules
+│   │   ├── tags_*.ts             # Tags
+│   │   ├── notes_*.ts            # Notes
 │   │   ├── query_run.ts          # Advanced ActualQL queries
 │   │   ├── bank_sync.ts          # Bank synchronization
 │   │   └── index.ts              # Tool exports

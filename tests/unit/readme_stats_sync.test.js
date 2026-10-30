@@ -16,12 +16,12 @@
 //   - coverage claim                  -> de-hardcoded: the README must carry NO "NN% ... Actual
 //     Budget API" literal (a rotting percentage), the gaps are reported by check:coverage.
 //
-//   - (#601) ActualQL bullet          -> the README's own "Exclusive ActualQL-powered (N)" heading
-//     and the number of table rows under it
-//   - (#601) toolset table sum        -> the string entries of the TOOLSETS literal in
-//     src/lib/toolsets.ts
-//   - (#601) write-capable count      -> the string entries of the WRITE_CAPABLE literal
-//   #603 will generate these README numbers and retarget or retire the three #601 checks.
+//   - (#603) tool-surface numbers       -> the README tools-summary block, generated from
+//     dist/src/lib/toolsets.js by `npm run docs:gen` (scripts/docs/tools.mjs). The three #601
+//     bridge checks (ActualQL bullet, toolset table sum, write-capable count) are retired or
+//     retargeted: the ActualQL number and the domain heading numbers no longer exist, the
+//     table and write count are generated, and handTypedCounts below forbids re-typing them
+//     anywhere else.
 //
 // Run: node tests/unit/readme_stats_sync.test.js
 
@@ -134,71 +134,43 @@ function dependencyVersionLiterals(readme) {
   return hits;
 }
 
-// ----- #601: README counts pinned to their sources (a bridge until #603 generates them) -----
+// ----- #603: hand-typed tool-surface counts are forbidden outside the generated block -----
 
-// The text of the first `export const NAME ... = ` literal up to its closing bracket line. The
-// parse is bounded to ONE literal because PRESETS also holds `'actual_...'` strings, and names
-// carry capitals (`actual_budgets_getMonth`), so the class is [A-Za-z_], not [a-z_].
-function literalBody(src, name, close) {
-  const start = src.indexOf(`export const ${name}`);
-  assert(start >= 0, `could not find the ${name} literal in src/lib/toolsets.ts`);
-  const end = src.indexOf(close, start);
-  assert(end > start, `could not find the end of the ${name} literal`);
-  return src.slice(start, end);
-}
-const toolNames = (body) => [...body.matchAll(/'(actual_[A-Za-z_]+)'/g)].map((m) => m[1]);
-function registryCounts() {
-  const src = read('src/lib/toolsets.ts');
-  return {
-    tools: toolNames(literalBody(src, 'TOOLSETS', '\n} as const')).length,
-    write: toolNames(literalBody(src, 'WRITE_CAPABLE', '\n]);')).length,
-  };
-}
+const BLOCK_RE = /<!-- BEGIN GENERATED: tools-summary -->[\s\S]*?<!-- END GENERATED: tools-summary -->/;
+const HAND_TYPED = [
+  /\d+ write-capable/,
+  /\(\d+ of the \d+/,
+  /\d+ tools remain/,
+  /leaving \d+/,
+  /publishes \d+ tools/,
+  /\(\d+ tools, about/,
+  /\d+ exclusive ActualQL-powered/,
+  /ActualQL-powered \(\d+\)/,
+];
 
-// (a) The "N exclusive ActualQL-powered tools" bullet vs the "Exclusive ActualQL-powered (N)"
-// heading and the table rows under it. Returns mismatch labels naming both numbers.
-function actualqlMismatches(readme) {
-  const bullet = readme.match(/(\d+) exclusive ActualQL-powered/);
-  const heading = readme.match(/Exclusive ActualQL-powered \((\d+)\)/);
-  if (!bullet) return ['no "N exclusive ActualQL-powered" bullet found in README'];
-  if (!heading) return ['no "Exclusive ActualQL-powered (N)" heading found in README'];
-  const after = readme.slice(heading.index + heading[0].length);
-  const rows = (after.split(/\n\s*\n/)[1] || '').split('\n').filter((l) => /^\| `actual_/.test(l)).length;
+// Pure: the findings for one file's text. The README block is stripped first because it is
+// where those numbers legitimately live (generated).
+function handTypedCounts(file, text) {
+  const body = text.replace(BLOCK_RE, '');
   const out = [];
-  if (bullet[1] !== heading[1]) out.push(`ActualQL bullet says ${bullet[1]}, heading says ${heading[1]}`);
-  if (String(rows) !== heading[1]) out.push(`ActualQL heading says ${heading[1]}, table has ${rows} rows`);
-  return out;
-}
-
-// (b) The `### Reducing the tool surface` table: the Tools column must sum to the registry total.
-function toolsetTableMismatches(readme, registryTotal) {
-  const at = readme.indexOf('### Reducing the tool surface');
-  if (at < 0) return ['no "### Reducing the tool surface" section found in README'];
-  const section = readme.slice(at + 1);
-  const end = section.search(/\n#{2,3} /);
-  const rows = [...(end < 0 ? section : section.slice(0, end)).matchAll(/^\| `[a-z]+` \| (\d+) \|/gm)];
-  if (rows.length === 0) return ['no toolset table rows found in README'];
-  const sum = rows.reduce((n, m) => n + Number(m[1]), 0);
-  return sum === registryTotal ? [] : [`toolset table sums to ${sum}, registry has ${registryTotal}`];
-}
-
-// (c) The write-capable count: the "(N of the M, including ..., leaving K)" sentence and the
-// MCP_READ_ONLY row's "the N write-capable" against WRITE_CAPABLE (and the registry total).
-function writeCountMismatches(readme, writeCount, registryTotal) {
-  const out = [];
-  const bad = (n) => `write-capable count ${n}, WRITE_CAPABLE has ${writeCount}`;
-  const sentence = readme.match(/\((\d+) of the (\d+), including[^)]*\), leaving (\d+)/);
-  if (!sentence) out.push('no "(N of the M, including ..., leaving K)" write sentence found in README');
-  else {
-    if (Number(sentence[1]) !== writeCount) out.push(bad(sentence[1]));
-    if (Number(sentence[2]) !== registryTotal) out.push(`write sentence says ${sentence[2]} tools, registry has ${registryTotal}`);
-    if (Number(sentence[3]) !== registryTotal - writeCount) out.push(`write sentence leaves ${sentence[3]}, expected ${registryTotal - writeCount}`);
+  for (const re of HAND_TYPED) {
+    const m = body.match(re);
+    if (m) out.push(`hand-typed tool-surface count in ${file}: "${m[0]}" (the README tools-summary block owns it)`);
   }
-  const row = readme.match(/the (\d+) write-capable/);
-  if (!row) out.push('no "the N write-capable" MCP_READ_ONLY row found in README');
-  else if (Number(row[1]) !== writeCount) out.push(bad(row[1]));
   return out;
 }
+
+// The configuration reference, the security doc and the client setup page. #606 splits
+// AI_CLIENT_SETUP.md into docs/guides/clients/*.md: whichever of #603 and #606 lands second
+// swaps that entry for a glob over the directory.
+const COUNT_FILES = [
+  'README.md',
+  '.env.example',
+  'docs/reference/configuration.md',
+  'docs/explanation/security-and-privacy.md',
+  'docs/guides/AI_CLIENT_SETUP.md',
+  'unraid/actual-mcp-server.xml',
+];
 
 console.log('\n[readme-stats-sync]');
 
@@ -233,26 +205,14 @@ check('README prose carries no unguarded dependency-version literal (de-hardcode
 });
 
 
-check('(#601) the ActualQL bullet matches its heading and table', () => {
-  const bad = actualqlMismatches(README);
-  assert.strictEqual(bad.length, 0, bad.join('; '));
-});
-
-check('(#601) the toolset table sums to the TOOLSETS registry', () => {
-  const { tools } = registryCounts();
-  const bad = toolsetTableMismatches(README, tools);
-  assert.strictEqual(bad.length, 0, bad.join('; '));
-});
-
-check('(#601) the write-capable counts equal WRITE_CAPABLE', () => {
-  const { tools, write } = registryCounts();
-  const bad = writeCountMismatches(README, write, tools);
-  assert.strictEqual(bad.length, 0, bad.join('; '));
-});
-
-check('(#601) the registry parse counts mixed-case names (not a [a-z_] undercount)', () => {
-  const { tools, write } = registryCounts();
-  assert.ok(tools >= 84 && write >= 48, `registry parse looks undercounted: ${tools} tools, ${write} write-capable`);
+check('(#603) no hand-typed tool-surface count outside the generated block', () => {
+  const found = [];
+  for (const file of COUNT_FILES) {
+    let text;
+    try { text = read(file); } catch { assert.fail(`handTypedCounts: ${file} not found`); }
+    found.push(...handTypedCounts(file, text));
+  }
+  assert.deepStrictEqual(found, []);
 });
 
 // ----- NEGATIVE in-test fixtures: prove each comparator flags synthetic drift -----
@@ -298,41 +258,28 @@ check('POSITIVE: bare package-name mentions and the hyphenated badges are NOT fl
   assert.deepStrictEqual(hits, [], `comparator must not false-positive on bare names/badges, got ${JSON.stringify(hits)}`);
 });
 
-check('NEGATIVE: an ActualQL bullet that disagrees with its heading is detected', () => {
-  const fixture = '- **6 exclusive ActualQL-powered tools.** x\n\n**Exclusive ActualQL-powered (8)**, unique\n\n| Tool | D |\n|---|---|\n'
-    + Array.from({ length: 8 }, (_, i) => `| \`actual_t${i}\` | d |`).join('\n') + '\n';
-  assert.deepStrictEqual(actualqlMismatches(fixture), ['ActualQL bullet says 6, heading says 8']);
-});
+const FIXTURES = [
+  ['the 48 write-capable tools', '48 write-capable'],
+  ['hides (48 of the 84, including x)', '(48 of the 84'],
+  ['and 36 tools remain.', '36 tools remain'],
+  ['hides them, leaving 36.', 'leaving 36'],
+  ['the preset publishes 12 tools', 'publishes 12 tools'],
+  ['# (12 tools, about a quarter', '(12 tools, about'],
+  ['- **8 exclusive ActualQL-powered tools.**', '8 exclusive ActualQL-powered'],
+  ['**Exclusive ActualQL-powered (8)**', 'ActualQL-powered (8)'],
+];
+for (const [fixture, literal] of FIXTURES) {
+  check(`NEGATIVE: handTypedCounts flags "${literal}"`, () => {
+    assert.deepStrictEqual(handTypedCounts('.env.example', fixture), [
+      `hand-typed tool-surface count in .env.example: "${literal}" (the README tools-summary block owns it)`,
+    ]);
+  });
+}
 
-check('NEGATIVE: a toolset table that does not sum to the registry is detected', () => {
-  const fixture = '### Reducing the tool surface\n\n| Toolset | Tools | C |\n|---|---|---|\n| `context` | 40 | a |\n| `admin` | 43 | b |\n';
-  assert.deepStrictEqual(toolsetTableMismatches(fixture, 84), ['toolset table sums to 83, registry has 84']);
-});
-
-check('NEGATIVE: an ActualQL table with fewer rows than its heading is detected', () => {
-  const fixture = '- **8 exclusive ActualQL-powered tools.** x\n\n**Exclusive ActualQL-powered (8)**, u\n\n| Tool | D |\n|---|---|\n'
-    + Array.from({ length: 7 }, (_, i) => `| \`actual_t${i}\` | d |`).join('\n') + '\n';
-  assert.deepStrictEqual(actualqlMismatches(fixture), ['ActualQL heading says 8, table has 7 rows']);
-});
-
-check('NEGATIVE: a later table under another heading is not summed into the toolset table', () => {
-  const fixture = '### Reducing the tool surface\n\n| `a` | 40 |\n| `b` | 44 |\n\n## Other\n\n| `c` | 5 |\n';
-  assert.deepStrictEqual(toolsetTableMismatches(fixture, 84), []);
-});
-
-check('NEGATIVE: a stale write-capable count is detected', () => {
-  const fixture = '| `MCP_READ_ONLY` | x | No | `true` hides and refuses the 47 write-capable tools. |\n'
-    + 'hides every write-capable tool (47 of the 84, including `actual_bank_sync`), leaving 37.';
-  const bad = writeCountMismatches(fixture, 48, 84);
-  assert.ok(bad.includes('write-capable count 47, WRITE_CAPABLE has 48'), `got ${JSON.stringify(bad)}`);
-});
-
-check('POSITIVE: consistent ActualQL, toolset and write fixtures are not flagged', () => {
-  const ql = '- **8 exclusive ActualQL-powered tools.** x\n\n**Exclusive ActualQL-powered (8)**, u\n\n| Tool | D |\n|---|---|\n'
-    + Array.from({ length: 8 }, (_, i) => `| \`actual_t${i}\` | d |`).join('\n') + '\n';
-  assert.deepStrictEqual(actualqlMismatches(ql), []);
-  assert.deepStrictEqual(toolsetTableMismatches('### Reducing the tool surface\n\n| `a` | 40 |\n| `b` | 44 |\n', 84), []);
-  assert.deepStrictEqual(writeCountMismatches('the 48 write-capable tools; (48 of the 84, including `x`), leaving 36.', 48, 84), []);
+check('POSITIVE: the generated block is stripped before scanning', () => {
+  const text = 'x\n<!-- BEGIN GENERATED: tools-summary -->\nhides 48 write-capable tools and leaves 36\n<!-- END GENERATED: tools-summary -->\ny';
+  assert.deepStrictEqual(handTypedCounts('README.md', text), []);
+  assert.strictEqual(handTypedCounts('README.md', text + ' the 48 write-capable').length, 1);
 });
 
 console.log(`\n[readme-stats-sync] Results: ${passed} passed, ${failed} failed`);
