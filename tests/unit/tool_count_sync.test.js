@@ -40,8 +40,6 @@ const check = (cond, l, d = '') => cond ? pass(l) : fail(l, d);
   check(capturedFor('70/70 tools smoke-validated') === 70, 'total "N/N tools" (equal halves) matches');
   // Forms that carry no lowercase " tools" token (the #193-review misses, now anchored)
   check(capturedFor('63-tool smoke, schema validation') === 63, 'hyphenated "N-tool smoke" matches');
-  check(capturedFor('- **62 Implemented Tools** - coverage') === 62, 'docker "**N Implemented Tools**" matches');
-  check(capturedFor('## Available Tools (62 Total)') === 62, 'docker "Available Tools (N Total)" matches');
   check(capturedFor('per-tool | 70 + shape checks |') === 70, 'TESTING "| N + shape checks" matches');
   check(capturedFor('| 70/70 |') === 70, 'TESTING "| N/N |" coverage cell matches');
   // Subsets and fractions must NOT match (no corruption)

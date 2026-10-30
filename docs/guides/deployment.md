@@ -136,6 +136,37 @@ docker run -d \
 
 Verify after a few seconds with `curl http://localhost:3600/health`.
 
+### Native TLS (HTTPS) docker run
+
+The server can terminate TLS itself, which suits a single host with no reverse proxy (a client such as LibreChat that insists on HTTPS, for example). A reverse proxy is still preferred for production: see [HTTPS and reverse proxy](#https-and-reverse-proxy). Generate a self-signed certificate:
+
+```bash
+mkdir -p certs
+openssl req -x509 -newkey rsa:4096 -nodes \
+  -keyout certs/key.pem -out certs/cert.pem \
+  -days 365 -subj "/CN=YOUR_SERVER_IP" \
+  -addext "subjectAltName=IP:YOUR_SERVER_IP"
+```
+
+Then, with `.env` created as in the [Quick Start](#quick-start) above, start the server with TLS:
+
+<!-- runnable: docker-run-https -->
+```bash
+docker run -d \
+  --name actual-mcp-server \
+  -p 3600:3600 \
+  --add-host=host.docker.internal:host-gateway \
+  --env-file .env \
+  -e MCP_ENABLE_HTTPS=true \
+  -e MCP_HTTPS_CERT=/app/certs/cert.pem \
+  -e MCP_HTTPS_KEY=/app/certs/key.pem \
+  -v actual-mcp-data:/app/data \
+  -v "$PWD/certs:/app/certs:ro" \
+  agigante80/actual-mcp-server:latest
+```
+
+Clients then connect to `https://YOUR_SERVER_IP:3600/http` and must trust the certificate.
+
 ### Unraid and PUID/PGID (#227)
 
 The image starts as root, then an entrypoint aligns the runtime user to `PUID`/`PGID`,
@@ -150,6 +181,10 @@ host appdata directory owned by a different UID without `EACCES`.
 
 actual-mcp-server is published to the Unraid Community Applications catalog via
 `unraid/actual-mcp-server.xml`; see [docs/development/unraid-ca-publishing.md](../development/unraid-ca-publishing.md).
+To install it, open the **Apps** tab, search for `actual-mcp-server` and click **Install**
+([catalog page](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg)). Fill in the Actual
+server URL, password and Sync ID, keep `PUID=99` and `PGID=100`, start it, and point your MCP
+client at `http://[server-ip]:3600/http` with the Bearer token.
 Set a strong `MCP_SSE_AUTHORIZATION` token (`openssl rand -hex 32`) before exposing the port.
 Without a bearer token, per-client tokens (`MCP_STATIC_TOKENS`) or OIDC the server refuses to
 start on a non-loopback bind, unless `MCP_ALLOW_UNAUTHENTICATED=true` is set deliberately (then
@@ -162,7 +197,7 @@ OAuth metadata documents are public too.
 
 ## Method 3: Docker Compose
 
-The repository ships `docker-compose.yaml` with three profiles.
+The repository ships `docker-compose.yaml` with two profiles. It needs Docker Compose 2.24.0 or later (`docker compose version`). The README's Compose block creates `.env`, adds a generated token and starts the `production` profile in one step.
 
 ### Clone and configure
 

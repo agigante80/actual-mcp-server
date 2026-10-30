@@ -90,7 +90,7 @@ Then add `. ~/.config/actual-mcp/env` to `~/.bashrc` or `~/.zshrc`, and start th
 
 Claude Desktop through `mcp-remote`, Claude Code and Codex over HTTP, LibreChat and LobeChat all connect to a running server. Start it in Docker.
 
-First create `.env` with a generated token: run the step 1 block of the [README Docker quick start](../../../README.md#option-a-docker-recommended). It prints the token. Then fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. Inside the container `localhost` is the container itself, so use your Actual server's LAN address or domain, or `http://host.docker.internal:5006` when Actual runs on the Docker host. Then, in the directory that holds `.env`:
+First create `.env` with a generated token: run the step 1 block of the [README Docker quick start](../../../README.md#quick-start-docker-http). It prints the token. Then fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. Inside the container `localhost` is the container itself, so use your Actual server's LAN address or domain, or `http://host.docker.internal:5006` when Actual runs on the Docker host. Then, in the directory that holds `.env`:
 
 <!-- runnable: http-docker-run -->
 ```bash
@@ -138,6 +138,16 @@ curl -s -X POST http://localhost:3600/http \
 ```
 
 With every toolset published, the `tools/list` response should list 84 tools, and a connected client shows 84 tools loaded with the `actual_` prefix. A smaller number is expected when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set.
+
+For a stdio client, check the server by hand before blaming the client. From a shell that loaded the env file above, send one `initialize` request (`sleep` keeps stdin open long enough for the reply):
+
+```bash
+{ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1.0"}}}'; sleep 5; } \
+  | ACTUAL_SERVER_URL=http://localhost:5006 ACTUAL_BUDGET_SYNC_ID=your-sync-id MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+  npx -y actual-mcp-server --stdio 2>/dev/null
+```
+
+A JSON reply carrying `serverInfo` means the server starts and speaks MCP; logs go to stderr, which this command discards.
 
 Then, in the client, open a new conversation and ask:
 

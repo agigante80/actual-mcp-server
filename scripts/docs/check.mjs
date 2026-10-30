@@ -30,8 +30,9 @@ import * as markers from './markers.mjs';
 import * as configDrift from './config-drift.mjs';
 import * as docsIndex from './index.mjs';
 import * as tools from './tools.mjs';
+import * as readmeSize from './readme-size.mjs';
 
-const MODULES = [links, markers, configDrift, docsIndex, tools];
+const MODULES = [links, markers, configDrift, docsIndex, tools, readmeSize];
 
 /** GitHub sets CI=true in every job. "false" and "0" are treated as unset. */
 function ciIsSet(env) {

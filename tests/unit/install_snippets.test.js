@@ -49,9 +49,8 @@ function check(label, fn) {
 // moving one moves its row here.
 const REQUIRED_RUNNABLE = {
   'README.md': ['env-token', 'docker-run', 'compose-production', 'npx-http'],
-  'docs/guides/deployment.md': ['quick-start-docker-run', 'production-docker-run'],
+  'docs/guides/deployment.md': ['quick-start-docker-run', 'production-docker-run', 'docker-run-https'],
   'docs/guides/clients/README.md': ['http-docker-run'],
-  'docker/description/long.md': ['docker-run', 'docker-run-https'],
 };
 
 // Illustrative partial commands exempt from the image and --env-file rules ONLY (never from
@@ -79,7 +78,7 @@ function fragmentErrors(blocks, allowlist = FRAGMENT_ALLOWLIST) {
   return errors;
 }
 
-// Scan set: README.md, docs/**/*.md and the Docker Hub page. docs/plans/ and docs/audit/ are
+// Scan set: README.md and docs/**/*.md. docs/plans/ and docs/audit/ are
 // prose about the work, not instructions; tests/unit/fixtures/ is never under docs/.
 function walk(dir) {
   return readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((e) => {
@@ -89,7 +88,6 @@ function walk(dir) {
 }
 const SCAN_SET = [
   'README.md',
-  'docker/description/long.md',
   ...walk('docs').filter((f) => f.endsWith('.md') && !f.startsWith('docs/plans/') && !f.startsWith('docs/audit/')),
 ];
 
@@ -155,6 +153,14 @@ console.log('\n[install-snippets] negative fixtures');
 check('NEGATIVE: README without its docker-run marker fails with the missing-marker message', () => {
   const text = read('README.md').replace('<!-- runnable: docker-run -->\n', '');
   assert.throws(() => findRunnable(text, 'README.md', 'docker-run'), /missing runnable marker docker-run in README\.md/);
+});
+
+check('NEGATIVE: deployment.md without its docker-run-https marker fails with the missing-marker message (#607)', () => {
+  const file = 'docs/guides/deployment.md';
+  const real = read(file);
+  assert.ok(real.includes('<!-- runnable: docker-run-https -->\n'), 'the real page carries the marker');
+  const text = real.replace('<!-- runnable: docker-run-https -->\n', '');
+  assert.throws(() => findRunnable(text, file, 'docker-run-https'), /missing runnable marker docker-run-https in docs\/guides\/deployment\.md/);
 });
 
 check('NEGATIVE: a comment line inside a continuation is flagged with file and line', () => {

@@ -1059,14 +1059,17 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
           repository: ${{ env.DOCKER_IMAGE_NAME }}
           short-description: ${{ steps.get-desc.outputs.short }}
-          readme-filepath: ./docker/description/long.md
+          readme-filepath: ./README.md
+          # #607: rewrites the README's relative links to absolute GitHub URLs on upload.
+          # scripts/docs/readme-size.mjs keeps the upload under Docker Hub's 25,000 byte cap.
+          enable-url-completion: true
 
       - name: 📋 Docker Hub update summary
         run: |
           echo "### 🐳 Docker Hub Description Updated" >> $GITHUB_STEP_SUMMARY
           echo "- **Repository**: \`${{ env.DOCKER_IMAGE_NAME }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- **Short Description**: ${{ steps.get-desc.outputs.short }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Long Description**: Updated from docker/description/long.md" >> $GITHUB_STEP_SUMMARY
+          echo "- **Long Description**: Updated from README.md" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
   # Job 10: Deployment Test

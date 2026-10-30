@@ -33,7 +33,7 @@ export function getCanonicalCount() {
 const FILES = [
   'README.md', 'CLAUDE.md', '.github/copilot-instructions.md',
   'docs/explanation/architecture.md', 'docs/guides/clients/README.md', 'docs/guides/clients/librechat.md', 'docs/guides/clients/lobechat.md', 'docs/development/testing-and-reliability.md', 'docs/audit/FORK_ANALYSIS.md',
-  '.github/CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
+  '.github/CONTRIBUTING.md', 'docker/description/short.md', 'src/lib/constants.ts',
   'tests/manual/tests/sanity.js', 'tests/manual/runner.js', 'tests/e2e/README.md', 'tests/manual/README.md',
   'tests/e2e/docker-all-tools.e2e.spec.ts',
   // #601: the Unraid templates state the whole-server total in plain XML prose and sat at 71
@@ -96,7 +96,6 @@ export const TOTAL_PATTERNS = [
   // #601: the two Unraid XML phrasings (ca_profile.xml <Profile>, template <Overview> and <Description>).
   { re: /exposing (\d{2,3}) tools for/gi, label: 'exposing N tools for (Unraid XML)' },
   { re: /server with (\d{2,3}) tools for/gi, label: 'server with N tools for (Unraid XML)' },
-  { re: /(\d{2,3}) tools tested end-to-end/gi, label: 'N tools tested end-to-end' },
   { re: /(\d{2,3}) tools organized by category/gi, label: 'N tools organized by category' },
   { re: /(\d{2,3}) tools registered/gi, label: 'N tools registered' },
   { re: /Registers (\d{2,3}) tools/g, label: 'Registers N tools' },
@@ -122,12 +121,11 @@ export const TOTAL_PATTERNS = [
   { re: /across (\d{2,3}) tools/g, label: 'across N tools' },
   // TOTAL forms that carry no lowercase " tools" token, so neither the anchors above
   // nor the advisory scan caught them: a comparison-table cell, the hyphenated
-  // "N-tool smoke" phrasing, the Docker Hub description headings, and two TESTING
-  // table cells (a "+ shape checks" count and an "N/N" coverage cell without "tools").
+  // "N-tool smoke" phrasing, and two TESTING table cells (a "+ shape checks" count and
+  // an "N/N" coverage cell without "tools"). #607 removed the Docker Hub heading
+  // anchors with docker/description/long.md, the only file they matched.
   // All are whole-server totals; none can match a single-digit per-domain subset.
   { re: /(\d{2,3})-tool smoke/gi, label: 'N-tool smoke (hyphenated)' },
-  { re: /\*\*(\d{2,3}) Implemented Tools\*\*/g, label: '**N Implemented Tools** (docker)' },
-  { re: /Available Tools \((\d{2,3}) Total\)/g, label: 'Available Tools (N Total) (docker)' },
   { re: /\| (\d{2,3}) \+ shape checks/g, label: 'N + shape checks (TESTING cell)' },
   { re: /\| (\d{2,3})\/\1 \|/g, label: 'N/N table cell (no tools word)' },
   // Hyphenated TOTAL forms describing the SURFACE or the semver CONTRACT, plus the
