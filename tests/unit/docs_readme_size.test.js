@@ -87,13 +87,20 @@ await check('positive: 260 lines and 20,000 bytes pass (there is no line-count r
   assert.deepStrictEqual(await problemsFor(buildReadme({ fenceLine: 30, lines: 260, bytes: 20000 })), []);
 });
 
-await check('positive: absolute, mailto and same-page links do not count toward the projected size', async () => {
+await check('positive: absolute and mailto links do not count toward the projected size', async () => {
   const readme = buildReadme({
     fenceLine: 10,
     bytes: 24000,
-    set: { 3: '[a](https://example.com/a) [b](http://example.com/b) [c](mailto:) [d](#quick-start)' },
+    set: { 3: '[a](https://example.com/a) [b](http://example.com/b) [c](mailto:)' },
   });
   assert.deepStrictEqual(await problemsFor(readme), []);
+});
+
+await check('NEGATIVE: a same-page link counts, since completion rewrites it into a README.md URL', async () => {
+  const readme = buildReadme({ fenceLine: 10, bytes: 23901, set: { 3: '[d](#quick-start)' } });
+  assert.deepStrictEqual(await problemsFor(readme), [
+    'README.md uploads as 24001 bytes (23901 raw plus 1 relative links at 100 bytes each), over the 24000 byte limit',
+  ]);
 });
 
 await check('positive: the real README passes', async () => {

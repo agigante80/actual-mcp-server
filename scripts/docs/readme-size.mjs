@@ -35,9 +35,12 @@ const FIRST_BLOCK_BY = 40;
 
 const LINK_RE = /\]\(\s*<?([^)\s>]*)/g;
 
-/** A link target the completion would rewrite: not absolute, not mailto, not same-page. */
+/**
+ * A link target the completion would rewrite: anything not absolute and not mailto.
+ * A same-page `#anchor` counts too: the action rewrites it into a .../README.md#anchor URL.
+ */
 function isRelative(target) {
-  return target !== '' && !/^(?:https?:|mailto:|#)/i.test(target);
+  return target !== '' && !/^(?:https?:|mailto:)/i.test(target);
 }
 
 function relativeLinks(line) {
