@@ -26,12 +26,13 @@ First create a private `.env` with a generated token. It never overwrites a valu
 
 ```bash
 [ -f .env ] || install -m 600 /dev/null .env
+[ -z "$(tail -c 1 .env)" ] || printf '\n' >> .env
 for key in ACTUAL_SERVER_URL=http://YOUR-ACTUAL-HOST:5006 ACTUAL_PASSWORD= ACTUAL_BUDGET_SYNC_ID=; do
   grep -q "^${key%%=*}=" .env || printf '%s\n' "$key" >> .env
 done
 chmod 600 .env
 if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
-  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+  ( umask 077; install -m 600 /dev/null .env.new; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
 fi
 grep '^MCP_SSE_AUTHORIZATION=' .env
 ```

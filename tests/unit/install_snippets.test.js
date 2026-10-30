@@ -262,6 +262,9 @@ try {
           assert.ok(run.some((a) => IMAGE_RE.test(a)), run.join(' '));
           assert.ok(run.includes('--env-file'), run.join(' '));
           assert.ok(!run.some((a) => /MCP_SSE_AUTHORIZATION|ACTUAL_PASSWORD/.test(a)), run.join(' '));
+          // The docs offer ACTUAL_SERVER_URL=http://host.docker.internal:5006 for the same
+          // .env, and on Linux Docker Engine that name resolves only with this mapping.
+          assert.ok(run.includes('--add-host=host.docker.internal:host-gateway'), run.join(' '));
         }
       });
     }
@@ -292,6 +295,24 @@ try {
     const lines = tokenLines(c.env());
     assert.strictEqual(lines.length, 1);
     assert.match(lines[0], /^MCP_SSE_AUTHORIZATION=[0-9a-f]{64}$/);
+  });
+
+  check('NEGATIVE: a stale world-readable .env.new does not leak into .env', () => {
+    const c = runCase(envTokenBlock(), {
+      setup: (cwd) => writeFileSync(join(cwd, '.env.new'), 'stale\n', { mode: 0o644 }),
+    });
+    assert.strictEqual(c.r.status, 0, c.r.stderr);
+    assert.strictEqual(statSync(join(c.cwd, '.env')).mode & 0o777, 0o600);
+  });
+
+  check('NEGATIVE: a .env without a final newline keeps its last value', () => {
+    const c = runCase(envTokenBlock(), {
+      setup: (cwd) => writeFileSync(join(cwd, '.env'), 'ACTUAL_PASSWORD=secret', { mode: 0o600 }),
+    });
+    assert.strictEqual(c.r.status, 0, c.r.stderr);
+    const lines = c.env().split('\n');
+    assert.ok(lines.includes('ACTUAL_PASSWORD=secret'), c.env());
+    assert.ok(lines.includes('ACTUAL_SERVER_URL=http://YOUR-ACTUAL-HOST:5006'), c.env());
   });
 
   check('NEGATIVE: duplicate token lines collapse to one', () => {

@@ -208,10 +208,12 @@ services:
       # - SESSION_IDLE_TIMEOUT_MINUTES=5
       # - ACTUAL_API_CONCURRENCY=5
 
-      # Authentication: static Bearer token or OIDC (see README). #600: the token is
-      # required here; `up` fails with this message when .env has none. The README
-      # token snippet writes one.
-      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION:?MCP_SSE_AUTHORIZATION is required, run the token snippet}
+      # Authentication: static Bearer token or OIDC (see README). The README token
+      # snippet writes one. Deliberately NOT `:?`-required: Compose interpolates every
+      # service before it filters profiles, so that would abort `--profile dev` too and
+      # block AUTH_PROVIDER=oidc. With no token and no OIDC the server refuses this
+      # 0.0.0.0 bind itself (#242); `docker compose logs` shows the reason.
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION:-}
       # - AUTH_PROVIDER=none          # set to 'oidc' for JWKS JWT validation
       # - OIDC_ISSUER=${OIDC_ISSUER}  # required when AUTH_PROVIDER=oidc
       # - OIDC_RESOURCE=${OIDC_RESOURCE}

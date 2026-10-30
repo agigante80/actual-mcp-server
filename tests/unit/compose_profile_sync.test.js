@@ -187,8 +187,14 @@ function checkCompose(text, kind, file) {
     if (!entries.some((e) => e && e.path === '.env' && e.required === false)) {
       errors.push(`production env_file must be .env with required: false ${at(serviceLine('mcp-server-prod'))}`);
     }
-    if (!environmentOf(prod, lc).some((e) => e.key === 'MCP_SSE_AUTHORIZATION')) {
+    const token = environmentOf(prod, lc).find((e) => e.key === 'MCP_SSE_AUTHORIZATION');
+    if (!token) {
       errors.push(`production does not map MCP_SSE_AUTHORIZATION ${at(serviceLine('mcp-server-prod'))}`);
+    } else if (/\$\{MCP_SSE_AUTHORIZATION:?\?/.test(String(token.value))) {
+      // Compose interpolates every service before it filters profiles, so a required
+      // token here aborts `--profile dev` too, and blocks AUTH_PROVIDER=oidc setups. The
+      // server itself refuses an unauthenticated non-loopback bind (#242).
+      errors.push(`production token is required at interpolation ${at(token.line)}`);
     }
   }
   const dev = services.get('mcp-server-dev', true);
@@ -215,6 +221,7 @@ const fixture = (name) => read(`tests/unit/fixtures/compose/${name}`);
 const COMPOSE_NEGATIVES = [
   ['prod-no-namespace.yaml', 'main', 'production image has no registry namespace'],
   ['prod-token-commented.yaml', 'main', 'production does not map MCP_SSE_AUTHORIZATION'],
+  ['prod-token-required.yaml', 'main', 'production token is required at interpolation'],
   ['prod-no-env-file.yaml', 'main', 'production env_file must be .env with required: false'],
   ['dev-all-interfaces.yaml', 'main', 'dev publishes an unauthenticated server on all interfaces'],
   ['test-all-interfaces.yaml', 'test', 'test stack publishes a port on all interfaces'],

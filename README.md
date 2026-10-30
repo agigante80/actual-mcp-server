@@ -83,12 +83,13 @@ Most Actual Budget MCP implementations are simple stdio bridges designed for sin
 <!-- runnable: env-token -->
 ```bash
 [ -f .env ] || install -m 600 /dev/null .env
+[ -z "$(tail -c 1 .env)" ] || printf '\n' >> .env
 for key in ACTUAL_SERVER_URL=http://YOUR-ACTUAL-HOST:5006 ACTUAL_PASSWORD= ACTUAL_BUDGET_SYNC_ID=; do
   grep -q "^${key%%=*}=" .env || printf '%s\n' "$key" >> .env
 done
 chmod 600 .env
 if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
-  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+  ( umask 077; install -m 600 /dev/null .env.new; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
 fi
 grep '^MCP_SSE_AUTHORIZATION=' .env
 ```
@@ -158,13 +159,13 @@ Then create `.env` from the template (an existing `.env` is never overwritten), 
 [ -f .env ] || install -m 600 .env.example .env
 chmod 600 .env
 if [ "$(grep -c '^MCP_SSE_AUTHORIZATION=' .env)" != 1 ] || ! grep -Eq '^MCP_SSE_AUTHORIZATION=[^[:space:]]{32,}$' .env; then
-  ( umask 077; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
+  ( umask 077; install -m 600 /dev/null .env.new; { grep -v '^MCP_SSE_AUTHORIZATION=' .env; printf 'MCP_SSE_AUTHORIZATION=%s\n' "$(openssl rand -hex 32)"; } > .env.new ) && mv .env.new .env
 fi
 grep '^MCP_SSE_AUTHORIZATION=' .env
 docker compose --profile production up -d
 ```
 
-The printed line is your client's Bearer token. On a fresh `.env` the template values are placeholders: fill in `ACTUAL_SERVER_URL`, `ACTUAL_PASSWORD` and `ACTUAL_BUDGET_SYNC_ID` (the container `localhost` rule from Option A applies here too; `http://host.docker.internal:5006` reaches an Actual server on the Docker host), then run `docker compose --profile production up -d` again, which recreates the container with the new values. Without a `.env` at all, `up` stops with `ACTUAL_SERVER_URL is required`; without a token, with `MCP_SSE_AUTHORIZATION is required, run the token snippet`.
+The printed line is your client's Bearer token. On a fresh `.env` the template values are placeholders: fill in `ACTUAL_SERVER_URL`, `ACTUAL_PASSWORD` and `ACTUAL_BUDGET_SYNC_ID` (the container `localhost` rule from Option A applies here too; `http://host.docker.internal:5006` reaches an Actual server on the Docker host), then run `docker compose --profile production up -d` again, which recreates the container with the new values. Without a `.env` at all, `up` stops with `ACTUAL_SERVER_URL is required`. Without a token (and without OIDC) the container exits at startup, and `docker compose logs` shows `Refusing to start` with the fix.
 
 > The compose file defines only the `dev` and `production` profiles. The MCP server listens on `:3600` directly: there is no bundled reverse proxy and no bundled Actual Budget server, so point `ACTUAL_SERVER_URL` at your own Actual instance. For TLS, enable native HTTPS with `MCP_ENABLE_HTTPS=true` (plus `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY`), or front the server with your own reverse proxy.
 >

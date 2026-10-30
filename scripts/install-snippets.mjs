@@ -30,12 +30,12 @@ export const FRAGMENT_MARKER = '<!-- install-snippets: fragment -->';
 
 // Commands a marked block may use. Anything else fails before the block runs.
 export const COMMAND_ALLOWLIST = new Set([
-  'docker', 'npx', 'curl', 'openssl', 'grep', 'install', 'chmod', 'printf', 'mv', 'umask',
+  'docker', 'npx', 'curl', 'openssl', 'grep', 'install', 'chmod', 'printf', 'mv', 'umask', 'tail',
   '[', 'for', 'do', 'done', 'if', 'then', 'fi', '!',
 ]);
 
 // The real binaries a marked block may reach; docker, npx and curl are stubs in the unit test.
-export const REAL_TOOLS = ['bash', 'openssl', 'grep', 'install', 'chmod', 'printf', 'mv'];
+export const REAL_TOOLS = ['bash', 'openssl', 'grep', 'install', 'chmod', 'printf', 'mv', 'tail'];
 
 export const IMAGE_RE = /^(?:ghcr\.io\/agigante80\/actual-mcp-server|agigante80\/actual-mcp-server):[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 
