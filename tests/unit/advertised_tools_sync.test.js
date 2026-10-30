@@ -16,8 +16,10 @@
 // the section counts summed to 68 against a canonical 74. Both drifted together and
 // silently, because nothing looked in that direction. So this file now asserts:
 //
-//   1. forward:  every README-advertised name is registered  (the #234 guard)
-//   2. reverse:  every registered tool is advertised          (#339)
+//   1. forward:  every name advertised in README.md or docs/reference/tools.md is
+//                registered (the #234 guard)
+//   2. reverse:  every registered tool is documented in docs/reference/tools.md
+//                (#339; the catalogue moved there from README.md in #607)
 //   3. (retired by #603) the `### Domain (N)` heading sum: the headings carry no number
 //      any more, and the toolset sizes are generated from the registry (scripts/docs/tools.mjs)
 //
@@ -69,12 +71,18 @@ check('registry parsed completely (case-insensitive, no under-count)', () => {
   assert.ok(registry.size >= 74, `expected >= 74 registered tools, got ${registry.size}`);
 });
 
-check('every actual_<domain>_<action> name advertised in README is in IMPLEMENTED_TOOLS', () => {
-  const advertised = [...new Set(advertisedNames(read('README.md')))];
-  assert.ok(advertised.length > 0, 'no advertised tool names found in README (extractor broke?)');
-  const missing = advertised.filter((n) => !registry.has(n)).sort();
-  assert.strictEqual(missing.length, 0, `README advertises tool(s) not in IMPLEMENTED_TOOLS: ${missing.join(', ')}`);
-});
+// #607: the per-domain catalogue moved from README.md to docs/reference/tools.md. The
+// forward check scans BOTH, because the README still names tools in prose (the chat
+// preset list, the read-only examples) and a renamed tool there is the same defect.
+const ADVERTISING_FILES = ['README.md', 'docs/reference/tools.md'];
+for (const file of ADVERTISING_FILES) {
+  check(`every actual_<domain>_<action> name advertised in ${file} is in IMPLEMENTED_TOOLS`, () => {
+    const advertised = [...new Set(advertisedNames(read(file)))];
+    assert.ok(advertised.length > 0, `no advertised tool names found in ${file} (extractor broke?)`);
+    const missing = advertised.filter((n) => !registry.has(n)).sort();
+    assert.strictEqual(missing.length, 0, `${file} advertises tool(s) not in IMPLEMENTED_TOOLS: ${missing.join(', ')}`);
+  });
+}
 
 // NEGATIVE: prove the guard catches a documented-but-missing / renamed tool.
 check('NEGATIVE: an advertised phantom tool is detected by the same extractor + set-difference', () => {
@@ -93,14 +101,22 @@ check('NEGATIVE: an advertised phantom tool is detected by the same extractor + 
 // Requiring a backtick here would produce false failures and get the guard weakened.
 const undocumented = (readmeText, names) => [...names].filter((n) => !readmeText.includes(n)).sort();
 
-check('every tool in IMPLEMENTED_TOOLS appears in README (#339)', () => {
-  const missing = undocumented(read('README.md'), registry);
+// #607: the reverse check reads the tools reference page, which now owns the catalogue.
+check('every tool in IMPLEMENTED_TOOLS appears in docs/reference/tools.md (#339, #607)', () => {
+  const missing = undocumented(read('docs/reference/tools.md'), registry);
   assert.strictEqual(
     missing.length,
     0,
-    `README does not document ${missing.length} registered tool(s): ${missing.join(', ')}. ` +
-      'Add them to the Available Tools tables in README.md.',
+    `docs/reference/tools.md does not document ${missing.length} registered tool(s): ${missing.join(', ')}. ` +
+      'Add them to the tables in docs/reference/tools.md.',
   );
+});
+
+// #607 NEGATIVE on the REAL page: removing one tool from the actual reference text must
+// flag exactly that tool, which proves the reverse check reads the page it claims to.
+check('NEGATIVE: docs/reference/tools.md with actual_accounts_list removed flags exactly that tool (#607)', () => {
+  const text = read('docs/reference/tools.md').split('actual_accounts_list').join('');
+  assert.deepStrictEqual(undocumented(text, registry), ['actual_accounts_list']);
 });
 
 check('NEGATIVE: a registered-but-undocumented tool is detected', () => {

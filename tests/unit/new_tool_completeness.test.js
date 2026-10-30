@@ -59,9 +59,9 @@ const SURFACES = [
     find: (t) => (read('src/tools/index.ts') || '').includes(`as ${t.replace(/^actual_/, '')} `),
   },
   {
-    id: 'readme',
-    what: 'listed in the README Available Tools table',
-    find: (t) => (read('README.md') || '').includes(t),
+    id: 'tools-reference',
+    what: 'listed in docs/reference/tools.md',
+    find: (t) => (read('docs/reference/tools.md') || '').includes(t),
   },
   {
     id: 'e2e',

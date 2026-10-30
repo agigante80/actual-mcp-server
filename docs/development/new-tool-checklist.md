@@ -12,7 +12,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 
 > **This list is now ENFORCED, not just documented.** `tests/unit/new_tool_completeness.test.js`
 > (in the blocking `test:unit-js` chain) asserts that every tool in `IMPLEMENTED_TOOLS` reaches
-> the README table, the E2E spec, a `tests/manual/tests/*.js` module and a
+> the tools reference (`docs/reference/tools.md`), the E2E spec, a `tests/manual/tests/*.js` module and a
 > `tests/manual-prompt/prompt-*.txt` file, and that its own source file and index export exist.
 > A tool that skips one of those fails the build with the name of the missing surface.
 >
@@ -59,7 +59,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] `npm run test:e2e` passes
 
 ### Documentation
-- [ ] `README.md`: new tool row added in Available Tools table, then `npm run build && npm run docs:gen` (regenerates the tools-summary block)
+- [ ] `docs/reference/tools.md`: new tool row added in its domain table, then `npm run build && npm run docs:gen` (regenerates the README tools-summary block)
 - [ ] `docs/explanation/architecture.md`: tool listed in domain section (if relevant)
 - [ ] `docs/development/testing-and-reliability.md`: test file entries updated if new test module added
 - [ ] `npm run docs:sync` run to batch-update all **Tool Count:** markers
@@ -468,10 +468,10 @@ See [`tests/manual-prompt/README.md`](../../tests/manual-prompt/README.md) for u
 
 Run `npm run docs:sync` to update all `**Tool Count:**` markers across `README.md`, the top-level `docs/*.md` files (not nested ones), and `.github/copilot-instructions.md` in one pass. Do not edit these counts manually. A numeric marker anywhere else would never be updated, so `npm run docs:check` fails on one (#602).
 
-Then run `npm run tool-count -- --fix` to update the PROSE total-count literals that `docs:sync` does not touch: the "all N tools" phrasings, the docker descriptions (`long.md` / `short.md`), `src/lib/constants.ts`, the `EXPECTED_TOOL_COUNT` defaults, and the test-doc totals. This script keys off `IMPLEMENTED_TOOLS` (the same canonical source as `verify-tools`), and rewrites only allowlisted TOTAL anchors, so it never corrupts a per-domain subset count like `### Categories (4 tools)`. `npm run tool-count` (check mode) is enforced in CI via `tests/unit/tool_count_sync.test.js`, so a stale total will fail the build; running `--fix` here keeps the build green.
+Then run `npm run tool-count -- --fix` to update the PROSE total-count literals that `docs:sync` does not touch: the "all N tools" phrasings, the Docker Hub short description (`docker/description/short.md`), `src/lib/constants.ts`, the `EXPECTED_TOOL_COUNT` defaults, and the test-doc totals. This script keys off `IMPLEMENTED_TOOLS` (the same canonical source as `verify-tools`), and rewrites only allowlisted TOTAL anchors, so it never corrupts a per-domain subset count like `### Categories (4 tools)`. `npm run tool-count` (check mode) is enforced in CI via `tests/unit/tool_count_sync.test.js`, so a stale total will fail the build; running `--fix` here keeps the build green.
 
-#### `README.md`
-- Add a row for the new tool in the Available Tools table (tool name, description, key parameters), then run `npm run build && npm run docs:gen`
+#### `docs/reference/tools.md`
+- Add a row for the new tool in its domain table (tool name, description, caveats), then run `npm run build && npm run docs:gen` to regenerate the README tools-summary block
 
 #### `docs/explanation/architecture.md`
 - Add the tool to the domain section table if the domain section lists tools explicitly
@@ -516,7 +516,7 @@ git commit -m "feat(tools): add actual_<tool_name>
 - Tests: unit smoke + negative path in tests/unit/
 - Manual tests: positive + negative in tests/manual/tests/<module>.js
 - Prompt: tests/manual-prompt/prompt-{1|2|3}-*.txt Phase N updated + README total updated
-- Docs: README tool row added; docs:sync run
+- Docs: docs/reference/tools.md row added; docs:sync run
 - Total tools: N → N+1 (XX% API coverage)"
 ```
 
@@ -557,7 +557,7 @@ When implementing a new lookup tool, the `call` function should:
 | `tests/manual/README.md` | **Update** module table if new file added |
 | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
 | `tests/manual-prompt/README.md` | **Update** Phase Overview table total |
-| `README.md` | **Add** tool table row in Available Tools section, then run `npm run build && npm run docs:gen` |
+| `docs/reference/tools.md` | **Add** tool table row in its domain section, then run `npm run build && npm run docs:gen` |
 | `docs/explanation/architecture.md` | **Update** domain table if applicable |
 | `docs/development/testing-and-reliability.md` | **Update** if new test module added |
 | `README.md`, `docs/*.md`, `.github/copilot-instructions.md` | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers (docker/description/* carry no marker; update by hand) |

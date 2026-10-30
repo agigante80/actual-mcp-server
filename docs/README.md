@@ -22,6 +22,7 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 ## Reference: look something up
 
 - [reference/configuration.md](reference/configuration.md): every environment variable, with type, default and source.
+- [reference/tools.md](reference/tools.md): every tool, grouped by domain, with its description and caveats.
 
 ## Explanation: understand how it works
 
