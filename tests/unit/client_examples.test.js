@@ -166,7 +166,8 @@ function tomlFindings(label, text, baseLine = 1, withLine = false) {
       if (m) { out.push(withLine ? `${label}:${at}: ${m[1]} holds a literal secret` : `${label}: ${m[1]} holds a literal secret`); return; }
     } else if (section === 'server' && TOML_SERVER_SHAPES.some((re) => re.test(line))) {
       // command and args are the server's command line: the shape alone is not enough.
-      out.push(...commandLineFindings(label, [{ line: at, text: line }]));
+      // Only those two: env_http_headers names a header and a variable, not a command.
+      if (/^(command|args)\s*=/.test(line)) out.push(...commandLineFindings(label, [{ line: at, text: line }]));
       return;
     }
     out.push(`${label}:${at} is not an accepted line shape: ${line}`);
@@ -449,7 +450,7 @@ const TOML_OK = [
   'startup_timeout_sec = 30',
   'env_vars = ["ACTUAL_PASSWORD"]',
   'bearer_token_env_var = "ACTUAL_MCP_TOKEN"',
-  'env_http_headers = { "X-Example" = "ACTUAL_MCP_TOKEN" }',
+  'env_http_headers = { "Authorization" = "ACTUAL_MCP_TOKEN" }',
   '',
   '[mcp_servers.actual-budget.env]',
   'ACTUAL_SERVER_URL = "http://localhost:5006"',
