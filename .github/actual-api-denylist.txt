@@ -23,7 +23,7 @@
 # IMPORTANT: the train checks out `ref: main` and never reads develop, so ONLY
 # the copy of this file on main has any effect. A denylist entry that has not
 # reached main does not protect anything. See the rollback runbook in
-# docs/guides/DEPLOYMENT.md.
+# docs/guides/deployment.md.
 #
 # Deleting this file does NOT disable the control: a missing or unreadable
 # denylist fails the run RED, because an absent safety control is a failure and

@@ -236,7 +236,7 @@ Install it from the **Apps** tab (Community Applications):
 4. Leave **PUID=99** and **PGID=100** (`nobody:users`) so the container can write the appdata Data and Logs directories, then start it.
 5. Reach the health endpoint via the container's **WebUI** link (port `3600`); point your MCP client at `http://[server-ip]:3600/http` with the Bearer token.
 
-The Unraid template lives in [`unraid/actual-mcp-server.xml`](unraid/actual-mcp-server.xml). For the publishing workflow see [docs/UNRAID_CA_PUBLISHING.md](docs/UNRAID_CA_PUBLISHING.md).
+The Unraid template lives in [`unraid/actual-mcp-server.xml`](unraid/actual-mcp-server.xml). For the publishing workflow see [docs/development/unraid-ca-publishing.md](docs/development/unraid-ca-publishing.md).
 
 ### Connect an AI client
 
@@ -300,6 +300,8 @@ See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all
 ---
 
 ## Upgrading
+
+Requirements and the changes that can stop an upgraded server from starting are in [docs/guides/upgrading.md](docs/guides/upgrading.md).
 
 ### Docker (Option A)
 
@@ -555,7 +557,7 @@ All 84 tools are published by default. Chat clients with a small tool budget (Ge
 
 Each tool is in exactly one group. The `chat` preset cuts across them and publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_transactions_update_batch`, `actual_rules_create`, `actual_rules_create_batch`, `actual_budget_updates_batch`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`. Measured on the `tools/list` payload, all 84 tools are 108,164 bytes and the `chat` preset is 25,949 bytes (about 6.5k tokens saved, a 76% cut).
 
-`MCP_READ_ONLY=true` additionally hides and refuses the 48 write-capable tools (48 of the 84, including `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`), leaving 36. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/SECURITY_AND_PRIVACY.md#tool-surface-mcp_toolsets-and-mcp_read_only).
+`MCP_READ_ONLY=true` additionally hides and refuses the 48 write-capable tools (48 of the 84, including `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`), leaving 36. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/explanation/security-and-privacy.md#tool-surface-mcp_toolsets-and-mcp_read_only).
 
 Example: a chat assistant.
 
@@ -577,36 +579,7 @@ A configuration that resolves to zero tools refuses to start.
 
 ## Multi-Budget Switching
 
-Configure multiple Actual Budget files so the AI can switch between them at runtime using `actual_budgets_list_available` and `actual_budgets_switch`.
-
-`BUDGET_N_SERVER_URL` and `BUDGET_N_PASSWORD` fall back to `ACTUAL_SERVER_URL` / `ACTUAL_PASSWORD` when omitted.
-
-| Variable | Required | Fallback |
-|----------|----------|---------|
-| `BUDGET_DEFAULT_NAME` | No | `"Default"` |
-| `BUDGET_N_NAME` | Yes (enables group) | _(none)_ |
-| `BUDGET_N_SYNC_ID` | Yes | _(none)_ |
-| `BUDGET_N_SERVER_URL` | No | `ACTUAL_SERVER_URL` |
-| `BUDGET_N_PASSWORD` | No | `ACTUAL_PASSWORD` |
-| `BUDGET_N_ENCRYPTION_PASSWORD` | No | _(none)_ |
-
-```bash
-# Default budget
-ACTUAL_SERVER_URL=http://actual:5006
-ACTUAL_PASSWORD=my-password
-ACTUAL_BUDGET_SYNC_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-BUDGET_DEFAULT_NAME=Personal
-
-# Budget 1 (same server, same password)
-BUDGET_1_NAME=Family
-BUDGET_1_SYNC_ID=bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb
-
-# Budget 2 (different server)
-BUDGET_2_NAME=Business
-BUDGET_2_SERVER_URL=https://actual-office.example.com
-BUDGET_2_PASSWORD=office-password
-BUDGET_2_SYNC_ID=cccccccc-cccc-cccc-cccc-cccccccccccc
-```
+Configure multiple Actual Budget files so the AI can switch between them at runtime using `actual_budgets_list_available` and `actual_budgets_switch`. The variables, an example and the numbering rule are in [docs/guides/multiple-budgets.md](docs/guides/multiple-budgets.md).
 
 ---
 
@@ -745,13 +718,19 @@ See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md
 
 | Document | Contents |
 |---|---|
+| [docs/README.md](docs/README.md) | Index of every documentation page |
 | [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) | **Start here** to connect Claude Desktop, Cursor, VS Code (Copilot), Gemini CLI, or Claude Code |
 | [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) | LibreChat & LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC |
-| [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) | Docker, Docker Compose profiles, production config, Kubernetes |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Component layers, data flow, transport protocols |
-| [docs/SECURITY_AND_PRIVACY.md](docs/SECURITY_AND_PRIVACY.md) | Auth models, threat model, hardening |
-| [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md) | Test strategy, coverage, reliability patterns |
-| [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) | Step-by-step guide for adding a new MCP tool |
+| [docs/guides/deployment.md](docs/guides/deployment.md) | Docker, Docker Compose profiles, production config, Kubernetes |
+| [docs/guides/authentication.md](docs/guides/authentication.md) | HTTP auth modes and which budgets each one reaches |
+| [docs/guides/multiple-budgets.md](docs/guides/multiple-budgets.md) | Configuring and switching between several budgets |
+| [docs/guides/upgrading.md](docs/guides/upgrading.md) | Upgrade steps, requirements, breaking changes |
+| [docs/guides/troubleshooting.md](docs/guides/troubleshooting.md) | Common symptoms, causes and fixes |
+| [docs/reference/configuration.md](docs/reference/configuration.md) | Every environment variable |
+| [docs/explanation/architecture.md](docs/explanation/architecture.md) | Component layers, data flow, transport protocols |
+| [docs/explanation/security-and-privacy.md](docs/explanation/security-and-privacy.md) | Auth models, threat model, hardening |
+| [docs/development/testing-and-reliability.md](docs/development/testing-and-reliability.md) | Test strategy, coverage, reliability patterns |
+| [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) | Step-by-step guide for adding a new MCP tool |
 | [CONTRIBUTING.md](.github/CONTRIBUTING.md) | Development setup, code standards, PR process |
 | [.env.example](.env.example) | Fully annotated environment variable reference |
 
@@ -779,7 +758,7 @@ Quick flow:
 - **Transports**: Express + StreamableHTTP (`--http`) · `StdioServerTransport` (`--stdio`)
 - **Logging**: Winston with daily rotation (all output routed to stderr in stdio mode)
 
-Every Actual API call goes through the `withActualApi()` wrapper in `src/lib/actual-adapter.ts`, which handles init/shutdown lifecycle, retry (3 attempts, exponential backoff), and concurrency limiting. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full design documentation.
+Every Actual API call goes through the `withActualApi()` wrapper in `src/lib/actual-adapter.ts`, which handles init/shutdown lifecycle, retry (3 attempts, exponential backoff), and concurrency limiting. See [docs/explanation/architecture.md](docs/explanation/architecture.md) for full design documentation.
 
 ---
 

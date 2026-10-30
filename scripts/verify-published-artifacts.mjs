@@ -22,7 +22,7 @@
 // so a staged `next` publish would force a long-lived NPM_TOKEN back into an
 // unattended nightly lane: a large permanent risk traded for a small rare one.
 // Staging would not make a publish reversible anyway; the version is immutable
-// and public the instant it lands. See docs/guides/DEPLOYMENT.md.
+// and public the instant it lands. See docs/guides/deployment.md.
 
 import process from 'node:process';
 

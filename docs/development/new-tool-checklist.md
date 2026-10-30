@@ -59,8 +59,8 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 
 ### Documentation
 - [ ] `README.md`: new tool row added in Available Tools table
-- [ ] `docs/ARCHITECTURE.md`: tool listed in domain section (if relevant)
-- [ ] `docs/TESTING_AND_RELIABILITY.md`: test file entries updated if new test module added
+- [ ] `docs/explanation/architecture.md`: tool listed in domain section (if relevant)
+- [ ] `docs/development/testing-and-reliability.md`: test file entries updated if new test module added
 - [ ] `npm run docs:sync` run to batch-update all **Tool Count:** markers
 
 ### Final Validation
@@ -287,7 +287,7 @@ npm run test:unit-js
 
 Manual tests run against a **real, live Actual Budget instance** over HTTP. They live in `tests/manual/tests/`.
 
-> **Code quality reminder**: Before writing or editing any file under `tests/manual/`, read the **Technical Guidelines** section in [`tests/manual/README.md`](../tests/manual/README.md). Key rules that are easy to miss:
+> **Code quality reminder**: Before writing or editing any file under `tests/manual/`, read the **Technical Guidelines** section in [`tests/manual/README.md`](../../tests/manual/README.md). Key rules that are easy to miss:
 > - Hard limit of **400 lines per file** (evaluate a split before reaching 300)
 > - Each test file exports exactly **one primary function** `fooTests(client, context)`
 > - Always use `client.callTool()`; never call `fetch()` directly
@@ -433,7 +433,7 @@ If you added a **new test module file**, add it to the "Directory Layout" table.
 ### Step 6: Update the AI prompt test
 
 **Folder**: `tests/manual-prompt/` holds three sequentially-pasted prompt files.
-See [`tests/manual-prompt/README.md`](../tests/manual-prompt/README.md) for usage.
+See [`tests/manual-prompt/README.md`](../../tests/manual-prompt/README.md) for usage.
 
 **Which file to edit** (based on domain):
 
@@ -470,14 +470,14 @@ Then run `npm run tool-count -- --fix` to update the PROSE total-count literals 
 #### `README.md`
 - Add a row for the new tool in the Available Tools table (tool name, description, key parameters)
 
-#### `docs/ARCHITECTURE.md`
+#### `docs/explanation/architecture.md`
 - Add the tool to the domain section table if the domain section lists tools explicitly
 
 #### Planned-work tracking (GitHub issues)
 - If this tool closes a planned-capability issue, reference it in the commit (`(#N)`) so the release step closes it. The roadmap file does not list tickets, so it needs no edit; a new issue goes into a phase by setting its milestone (see `docs/roadmap.md`).
 - Every issue should carry an **area** label and a **priority** label (`P0` to `P3`, plus `icebox` for not-yet-committed ideas). Apply the priority on triage so the backlog is filterable.
 
-#### `docs/TESTING_AND_RELIABILITY.md`
+#### `docs/development/testing-and-reliability.md`
 - If you added a new test module file to `tests/manual/tests/`, add it to the test-file table
 
 ---
@@ -554,6 +554,6 @@ When implementing a new lookup tool, the `call` function should:
 | `tests/manual-prompt/prompt-{1\|2\|3}-*.txt` | **Add** tool to the correct phase; update phase count |
 | `tests/manual-prompt/README.md` | **Update** Phase Overview table total |
 | `README.md` | **Add** tool table row in Available Tools section |
-| `docs/ARCHITECTURE.md` | **Update** domain table if applicable |
-| `docs/TESTING_AND_RELIABILITY.md` | **Update** if new test module added |
+| `docs/explanation/architecture.md` | **Update** domain table if applicable |
+| `docs/development/testing-and-reliability.md` | **Update** if new test module added |
 | `README.md`, `docs/*.md`, `.github/copilot-instructions.md` | **Run** `npm run docs:sync` to batch-update all **Tool Count:** markers (docker/description/* carry no marker; update by hand) |

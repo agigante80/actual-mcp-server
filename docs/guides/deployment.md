@@ -149,7 +149,7 @@ host appdata directory owned by a different UID without `EACCES`.
   are ignored.
 
 actual-mcp-server is published to the Unraid Community Applications catalog via
-`unraid/actual-mcp-server.xml`; see [docs/UNRAID_CA_PUBLISHING.md](../UNRAID_CA_PUBLISHING.md).
+`unraid/actual-mcp-server.xml`; see [docs/development/unraid-ca-publishing.md](../development/unraid-ca-publishing.md).
 Set a strong `MCP_SSE_AUTHORIZATION` token (`openssl rand -hex 32`) before exposing the port.
 Without a bearer token, per-client tokens (`MCP_STATIC_TOKENS`) or OIDC the server refuses to
 start on a non-loopback bind, unless `MCP_ALLOW_UNAUTHENTICATED=true` is set deliberately (then

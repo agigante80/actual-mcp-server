@@ -85,4 +85,4 @@ When adding a new MCP tool, update the appropriate prompt file to include it:
 - Update the phase header tool count in the prompt file
 - Update the total tool count in this README (Phase Overview table above)
 
-See [`docs/NEW_TOOL_CHECKLIST.md`](../../docs/NEW_TOOL_CHECKLIST.md) Step 6 for the full process.
+See [`docs/development/new-tool-checklist.md`](../../docs/development/new-tool-checklist.md) Step 6 for the full process.

@@ -1,7 +1,6 @@
 # Testing & Reliability
 
 **Project:** Actual MCP Server  
-**Version:** 0.24.10  
 **Purpose:** Define testing philosophy, frameworks, and enforcement policies  
 **Last Updated:** 2026-06-07
 
@@ -1350,8 +1349,8 @@ npm run test:integration:cleanup
 
 ## 🔗 Related Documentation
 
-- [Architecture](./ARCHITECTURE.md) - System design and components
-- [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security testing policies
+- [Architecture](../explanation/architecture.md) - System design and components
+- [Security & Privacy](../explanation/security-and-privacy.md) - Security testing policies
 - Planned and future work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues)
 
 ---

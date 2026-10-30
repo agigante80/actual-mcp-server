@@ -13,17 +13,22 @@
 #   Forgejo/Gitea dir always outranks a stale retained .github one, uppercase before the
 #   legacy lowercase variant within each host (.forgejo/ISSUE_TEMPLATE, .forgejo/issue_template,
 #   .gitea/ISSUE_TEMPLATE, .gitea/issue_template, .github/ISSUE_TEMPLATE), warns when both
-#   casings of one host exist, and includes docs/guides/ticket-standards.md if present.
+#   casings of one host exist, and checks docs/development/ticket-standards.md as the
+#   canonical doc.
 #   An explicit ISSUE_TEMPLATE_DIR is honoured as-is (the tests pass an absolute fixture
 #   path); the canonical doc is then only checked when passed explicitly as $2, so unit
 #   tests stay hermetic and never pick up the real repo doc.
 #
-# The canonical doc is OPTIONAL by design: a downstream project can adopt this guard for
-# template lockstep without having adopted the canonical-doc pattern, so an absent doc is a
-# vacuous pass for the doc portion, not a failure.
+# Project adaptation: missing canonical doc fails (#605). Whenever a canonical doc is in play
+# (the no-arg default, or an explicit $2) and the file does not exist, the guard prints
+# "canonical doc not found: <path>" to stderr and exits 1. Before #605 an absent doc was
+# silently dropped from the lock, so a stale default path passed and unlocked the doc. A
+# downstream project that has not adopted the canonical-doc pattern opts out by passing only
+# the template dir ($1), which checks the templates alone.
 #
-# Exit: 0 locked (or nothing to lock), 1 drift, 2 the repository root could not be entered (fails
-# closed: running from the wrong directory would report "nothing to check" as a pass).
+# Exit: 0 locked (or nothing to lock), 1 drift or a missing canonical doc, 2 the repository root
+# could not be entered (fails closed: running from the wrong directory would report "nothing to
+# check" as a pass).
 #
 # Where this lives (#506): forge-adapt's templates mode copies it into a project's scripts/, so it is
 # shipped as an asset of forge-kit-adapt, which gives it the version marker above and lets drift see
@@ -76,7 +81,11 @@ fi
 # invocation; pass it explicitly as $2 to exercise it from a test.
 DOC="${2:-}"
 if [ "$#" -eq 0 ]; then
-  DOC="docs/guides/ticket-standards.md"
+  DOC="docs/development/ticket-standards.md"
+fi
+if [ -n "$DOC" ] && [ ! -f "$DOC" ]; then
+  echo "check-template-lockstep: canonical doc not found: $DOC" >&2
+  exit 1
 fi
 
 # First template-version marker per file (positional-first, matching the ver_of discipline
@@ -97,7 +106,7 @@ while IFS= read -r f; do
   seen=$((seen + 1))
 done < <(find "$DIR" -maxdepth 1 -type f \( -name '*.yml' -o -name '*.yaml' \) | sort)
 
-if [ -n "$DOC" ] && [ -f "$DOC" ]; then
+if [ -n "$DOC" ]; then
   dv=$(tver "$DOC")
   if [ -n "$dv" ]; then
     recs="$recs$dv$TAB$DOC$NL"

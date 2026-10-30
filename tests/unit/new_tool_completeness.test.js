@@ -1,6 +1,6 @@
 // tests/unit/new_tool_completeness.test.js
 //
-// #429 follow-up: adding a tool touches a dozen files, and docs/NEW_TOOL_CHECKLIST.md
+// #429 follow-up: adding a tool touches a dozen files, and docs/development/new-tool-checklist.md
 // lists them, but nothing ENFORCED the list. The existing guards each cover one edge:
 //   - verify-tools           : the tool is registered
 //   - advertised_tools_sync  : README -> IMPLEMENTED_TOOLS (a tool named in the README exists)
@@ -114,7 +114,7 @@ for (const surface of SURFACES) {
         `${missing.length} tool(s) missing from this surface:\n      ` +
         missing.join('\n      ') +
         `\n    Fix the file, or add "${surface.id}:<tool>": "<reason>" to EXCEPTIONS in this test.` +
-        `\n    See docs/NEW_TOOL_CHECKLIST.md.`,
+        `\n    See docs/development/new-tool-checklist.md.`,
       );
     }
   });

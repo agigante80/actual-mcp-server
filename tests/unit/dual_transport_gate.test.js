@@ -8,7 +8,7 @@
 //
 //   1. scripts/deploy-and-test.sh runs the suite with MCP_TEST_TRANSPORT=http AND =stdio,
 //      at the SAME level, and writes .release/dual-transport-report.json.
-//   2. docs/TESTING_AND_RELIABILITY.md states the hard rule AND the artifact-backed
+//   2. docs/development/testing-and-reliability.md states the hard rule AND the artifact-backed
 //      precondition. This is the TRACKED copy and the one CI can see.
 //   3. CLAUDE.md and the release skill restate them for the assistant. Both are untracked
 //      by class (the leak guard keeps assistant instruction files and .claude/ out of the
@@ -33,7 +33,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
 const DEPLOY = 'scripts/deploy-and-test.sh';
-const TESTING_DOC = 'docs/TESTING_AND_RELIABILITY.md';
+const TESTING_DOC = 'docs/development/testing-and-reliability.md';
 // Local-only restatements: checked where present, skipped loudly where absent.
 const CLAUDE = 'CLAUDE.md';
 const RELEASE_SKILL = '.claude/skills/release/SKILL.md';

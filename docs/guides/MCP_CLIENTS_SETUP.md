@@ -497,7 +497,7 @@ Or use [jsonlint.com](https://jsonlint.com/) in a browser.
 
 - **[Available tools](../../README.md#available-tools)**: complete list of what your AI can do with your budget
 - **[AI Client Setup Guide](AI_CLIENT_SETUP.md)**: LibreChat, LobeChat, Docker networking, HTTPS/TLS proxy, OIDC multi-user
-- **[Deployment Guide](DEPLOYMENT.md)**: Docker Compose profiles, production config
+- **[Deployment Guide](deployment.md)**: Docker Compose profiles, production config
 
 ---
 

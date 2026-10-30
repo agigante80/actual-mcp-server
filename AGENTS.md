@@ -6,7 +6,7 @@ Guidance for coding agents (and the humans driving them) working on this reposit
 
 Actual MCP Server exposes [Actual Budget](https://actualbudget.org/) to AI assistants over the Model Context Protocol. TypeScript (ESM, NodeNext) on Node.js 22+, `@actual-app/api`, `@modelcontextprotocol/sdk`, Express 5, Zod v4, Playwright. Two transports: HTTP (`--http`, multi-user) and stdio (`--stdio`, Claude Desktop and similar).
 
-Request path: transport (`src/server/httpServer.ts` or `src/server/stdioServer.ts`) to `src/lib/ActualMCPConnection.ts` to `src/actualToolsManager.ts` (tool registry, Zod dispatch) to `src/lib/actual-adapter.ts` (every Actual call) to `@actual-app/api`. Tools live in `src/tools/`. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Request path: transport (`src/server/httpServer.ts` or `src/server/stdioServer.ts`) to `src/lib/ActualMCPConnection.ts` to `src/actualToolsManager.ts` (tool registry, Zod dispatch) to `src/lib/actual-adapter.ts` (every Actual call) to `@actual-app/api`. Tools live in `src/tools/`. Details: [docs/explanation/architecture.md](docs/explanation/architecture.md).
 
 ## Setup
 
@@ -49,7 +49,7 @@ There is no `lint` or `format` script. If `test:adapter` or `test:unit-js` compl
 
 ## Adding or changing a tool
 
-Follow [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) end to end. New tools use `createTool()` from `src/lib/toolFactory.ts`, are named `actual_<domain>_<action>`, take ids from `CommonSchemas` (`src/lib/schemas/common.ts`), and are added to `IMPLEMENTED_TOOLS` and `src/tools/index.ts`. Path-scoped conventions live in [.github/instructions/](.github/instructions/).
+Follow [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) end to end. New tools use `createTool()` from `src/lib/toolFactory.ts`, are named `actual_<domain>_<action>`, take ids from `CommonSchemas` (`src/lib/schemas/common.ts`), and are added to `IMPLEMENTED_TOOLS` and `src/tools/index.ts`. Path-scoped conventions live in [.github/instructions/](.github/instructions/).
 
 ## Tests
 
@@ -57,14 +57,14 @@ Follow [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) end to end. New 
 - **E2E** coverage of the tool surface goes in `tests/e2e/docker-all-tools.e2e.spec.ts`, written against the provisioning fixtures in `tests/e2e/fixtures.ts`. It runs over HTTP and stdio. A new spec file is not collected unless a Playwright project matches it.
 - **Integration** modules live in `tests/manual/tests/` and need a live server.
 - **`npm run test:mcp-client`** starts the HTTP server and drives it as an MCP client. Past `initialize` it needs a live Actual server (a real `.env`), and `MCP_BRIDGE_PORT` (default 3600) must be free: another listener on that port answers instead.
-- Include a negative case for every positive one. Details: [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md) and [tests/e2e/README.md](tests/e2e/README.md).
+- Include a negative case for every positive one. Details: [docs/development/testing-and-reliability.md](docs/development/testing-and-reliability.md) and [tests/e2e/README.md](tests/e2e/README.md).
 
 ## Contributing a change
 
 - Target the **`develop`** branch. `main` only moves in a release.
 - An external PR may be reimplemented on `develop` by the maintainer and closed as superseded rather than merged; the author is kept as co-author on the commit and credited in the release notes.
 - Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/) and reference the issue: `feat(tools): add actual_x_y (#123)`.
-- Tickets follow [docs/guides/ticket-standards.md](docs/guides/ticket-standards.md).
+- Tickets follow [docs/development/ticket-standards.md](docs/development/ticket-standards.md).
 - Do not use em or en dash characters in docs, comments or commit messages; restructure with a colon, comma or parentheses.
 
 ## Do not edit
@@ -77,14 +77,14 @@ Follow [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) end to end. New 
 
 - Never commit `.env`, tokens, passwords or budget data.
 - Never commit paths from your own machine (home directories and similar); the `Leak guard` CI job rejects them.
-- Security reports go through [.github/SECURITY.md](.github/SECURITY.md), not public issues. The threat model is in [docs/SECURITY_AND_PRIVACY.md](docs/SECURITY_AND_PRIVACY.md).
+- Security reports go through [.github/SECURITY.md](.github/SECURITY.md), not public issues. The threat model is in [docs/explanation/security-and-privacy.md](docs/explanation/security-and-privacy.md).
 
 ## Precedence
 
 When two sources disagree, the higher one wins:
 
 1. The code and the checks CI enforces.
-2. The tracked doc this file links as canonical for a topic (for example [docs/reference/configuration.md](docs/reference/configuration.md), [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md), [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md)).
+2. The tracked doc this file links as canonical for a topic (for example [docs/reference/configuration.md](docs/reference/configuration.md), [docs/development/testing-and-reliability.md](docs/development/testing-and-reliability.md), [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md)).
 3. This file.
 4. The path-scoped files in [.github/instructions/](.github/instructions/), which add detail for their `applyTo` glob and must not contradict the three above.
 
@@ -94,10 +94,11 @@ If you find a disagreement, fix the lower source or open an issue; do not follow
 
 | Topic | Where |
 |-------|-------|
-| Components, transports, data flow | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Index of every documentation page | [docs/README.md](docs/README.md) |
+| Components, transports, data flow | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
 | Configuration inventory | [docs/reference/configuration.md](docs/reference/configuration.md) |
-| Testing layers and test-file inventory | [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md) |
-| Adding a tool | [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) |
-| Deployment and Docker | [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) |
+| Testing layers and test-file inventory | [docs/development/testing-and-reliability.md](docs/development/testing-and-reliability.md) |
+| Adding a tool | [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) |
+| Deployment and Docker | [docs/guides/deployment.md](docs/guides/deployment.md) |
 | Client setup (LibreChat, Claude Desktop and others) | [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md), [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) |
 | Scripts | [scripts/README.md](scripts/README.md) |

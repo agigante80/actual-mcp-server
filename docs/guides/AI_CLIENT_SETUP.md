@@ -4,7 +4,7 @@ This guide covers connecting AI clients (LibreChat, LobeChat, or any MCP-compati
 
 ## Prerequisites
 
-- Actual MCP Server running and reachable (see [Deployment Guide](DEPLOYMENT.md))
+- Actual MCP Server running and reachable (see [Deployment Guide](deployment.md))
 - Health check passing: `curl http://localhost:3600/health`
 - A Bearer token configured if auth is enabled (`MCP_SSE_AUTHORIZATION`, or one token per client with `MCP_STATIC_TOKENS`, see [One token per client](#one-token-per-client-mcp_static_tokens))
 
@@ -224,7 +224,7 @@ same way with one `mcpServers` entry per token.
 
 The server still holds one open budget at a time, so two clients working on different
 budgets take turns (each switch reloads the budget). See
-[SECURITY_AND_PRIVACY.md](../SECURITY_AND_PRIVACY.md) for the full model.
+[security-and-privacy.md](../explanation/security-and-privacy.md) for the full model.
 
 ---
 
@@ -337,7 +337,7 @@ When connecting Google Gemini's custom MCP connector to Actual MCP Server authen
 
 1. **Audience**: Cloudflare mints access token JWTs with the `aud` claim set to the OAuth client's redirect URI (`https://oauth-redirect.googleusercontent.com/r/...`), rather than the resource URL or SaaS application ID. Set `OIDC_ACCEPTED_AUDIENCES` to this redirect URI.
 2. **Scopes**: Cloudflare access token JWTs omit the `scope` claim. Set `OIDC_SCOPES=` (empty) so the server enforces no scope requirements.
-3. **Refresh Tokens**: Gemini requires a refresh token for account linking and will only request one if `offline_access` is advertised in `scopes_supported`. Set `OIDC_SCOPES_SUPPORTED=openid,email,profile,offline_access` so `offline_access` is advertised in discovery without causing `missing_required_scopes` errors. The refresh token this unlocks is long-lived and lives at the IdP: this server validates access tokens only and cannot revoke it, so a compromised client keeps minting access tokens until you revoke its refresh token in Cloudflare Access (or your IdP). Advertise `offline_access` only for clients that need it. See [Limiting a leaked refresh token](../SECURITY_AND_PRIVACY.md#limiting-a-leaked-refresh-token-488) for the token lifetimes to set at the IdP and the order of steps if a client is compromised.
+3. **Refresh Tokens**: Gemini requires a refresh token for account linking and will only request one if `offline_access` is advertised in `scopes_supported`. Set `OIDC_SCOPES_SUPPORTED=openid,email,profile,offline_access` so `offline_access` is advertised in discovery without causing `missing_required_scopes` errors. The refresh token this unlocks is long-lived and lives at the IdP: this server validates access tokens only and cannot revoke it, so a compromised client keeps minting access tokens until you revoke its refresh token in Cloudflare Access (or your IdP). Advertise `offline_access` only for clients that need it. See [Limiting a leaked refresh token](../explanation/security-and-privacy.md#limiting-a-leaked-refresh-token-488) for the token lifetimes to set at the IdP and the order of steps if a client is compromised.
 
 ```dotenv
 AUTH_PROVIDER=oidc

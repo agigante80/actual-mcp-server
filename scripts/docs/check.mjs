@@ -28,8 +28,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as links from './links.mjs';
 import * as markers from './markers.mjs';
 import * as configDrift from './config-drift.mjs';
+import * as docsIndex from './index.mjs';
 
-const MODULES = [links, markers, configDrift];
+const MODULES = [links, markers, configDrift, docsIndex];
 
 /** GitHub sets CI=true in every job. "false" and "0" are treated as unset. */
 function ciIsSet(env) {

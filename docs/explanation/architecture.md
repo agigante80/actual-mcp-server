@@ -1,7 +1,6 @@
 # Architecture
 
 **Project:** Actual MCP Server  
-**Version:** 0.24.10  
 **Last Updated:** 2026-06-07
 
 ---
@@ -500,7 +499,7 @@ npm run dev -- --http --test-mcp-client
 ### Environment Variables
 
 All configuration via environment variables. The canonical inventory of every
-variable (type, default, source, read site) is [docs/reference/configuration.md](reference/configuration.md);
+variable (type, default, source, read site) is [docs/reference/configuration.md](../reference/configuration.md);
 `.env.example` carries the same set with inline comments. A variable is canonical if it
 is a Zod schema key in `src/config.ts` OR an entry in `RAW_ENV_ALLOWLIST` in
 `src/lib/config-registry.ts`. The drift guard `scripts/config-drift.mjs` (run in CI via
@@ -747,6 +746,6 @@ Highlights: TypeScript (NodeNext/ESM) on Node 22+, `@actual-app/api` v26, `@mode
 ## Next Steps
 
 For more details:
-- [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Testing strategy
-- [Security & Privacy](./SECURITY_AND_PRIVACY.md) - Security policies
+- [Testing & Reliability](../development/testing-and-reliability.md) - Testing strategy
+- [Security & Privacy](./security-and-privacy.md) - Security policies
 - Planned and future work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues)

@@ -1,7 +1,6 @@
 # Security & Privacy
 
 **Project:** Actual MCP Server  
-**Version:** 0.24.10  
 **Purpose:** Define security policies, privacy practices, and incident response  
 **Last Updated:** 2026-06-07
 
@@ -1248,8 +1247,8 @@ docker run --env-file .env ...
 
 ## 🔗 Related Documentation
 
-- [Testing & Reliability](./TESTING_AND_RELIABILITY.md) - Security testing
-- [Architecture](./ARCHITECTURE.md) - Technical security design
+- [Testing & Reliability](../development/testing-and-reliability.md) - Security testing
+- [Architecture](./architecture.md) - Technical security design
 - Planned security work: tracked as [GitHub issues](https://github.com/agigante80/actual-mcp-server/issues) (see the `security` label)
 
 ---

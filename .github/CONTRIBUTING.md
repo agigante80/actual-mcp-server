@@ -103,7 +103,7 @@ actual-mcp-server/
 └── .github/                  # Workflows, issue and PR templates, path-scoped instructions
 ```
 
-The architecture and the rules that matter (every Actual call through the adapter, amounts in integer cents, dates as `YYYY-MM-DD`, no `console.*`) are in [AGENTS.md](../AGENTS.md). Adding a tool has its own checklist: [docs/NEW_TOOL_CHECKLIST.md](../docs/NEW_TOOL_CHECKLIST.md).
+The architecture and the rules that matter (every Actual call through the adapter, amounts in integer cents, dates as `YYYY-MM-DD`, no `console.*`) are in [AGENTS.md](../AGENTS.md). Adding a tool has its own checklist: [docs/development/new-tool-checklist.md](../docs/development/new-tool-checklist.md).
 
 ### Commit messages
 
@@ -137,7 +137,7 @@ There is no `lint` or `format` script: the TypeScript build is the type check, a
 - Every new behaviour needs a positive and a negative test.
 - After a documentation change, run `npm run docs:check` (broken links and anchors, frozen version markers). The link check needs [lychee](https://github.com/lycheeverse/lychee) 0.24.2 or later on your `PATH`; without it that part is skipped locally, never in CI.
 
-The test layers and every test file are described in [docs/TESTING_AND_RELIABILITY.md](../docs/TESTING_AND_RELIABILITY.md).
+The test layers and every test file are described in [docs/development/testing-and-reliability.md](../docs/development/testing-and-reliability.md).
 
 ## 📤 Submitting a Pull Request
 
@@ -158,7 +158,7 @@ The maintainer integrates every change through the same pipeline: a gated ticket
 
 ## 🆘 Getting Help
 
-See [SUPPORT.md](SUPPORT.md) for where to ask a question, report a bug or report a vulnerability. The documentation lives in the [docs/](../docs/) folder, starting from [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
+See [SUPPORT.md](SUPPORT.md) for where to ask a question, report a bug or report a vulnerability. The documentation lives in the [docs/](../docs/) folder, starting from the index, [docs/README.md](../docs/README.md).
 
 ## 📝 License
 

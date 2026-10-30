@@ -4,7 +4,7 @@ Pick the route that matches what you need.
 
 ## Questions and setup help
 
-Open an issue with the [question form](https://github.com/agigante80/actual-mcp-server/issues/new?template=question.yml). Before you do, check the [docs](../docs/ARCHITECTURE.md) and the [contributing guide](CONTRIBUTING.md).
+Open an issue with the [question form](https://github.com/agigante80/actual-mcp-server/issues/new?template=question.yml). Before you do, check the [docs](../docs/README.md) and the [contributing guide](CONTRIBUTING.md).
 
 ## Bugs and feature requests
 

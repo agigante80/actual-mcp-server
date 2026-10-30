@@ -49,7 +49,7 @@ function check(label, fn) {
 // moving one moves its row here.
 const REQUIRED_RUNNABLE = {
   'README.md': ['env-token', 'docker-run', 'compose-production', 'npx-http'],
-  'docs/guides/DEPLOYMENT.md': ['quick-start-docker-run', 'production-docker-run'],
+  'docs/guides/deployment.md': ['quick-start-docker-run', 'production-docker-run'],
   'docs/guides/MCP_CLIENTS_SETUP.md': ['http-docker-run'],
   'docker/description/long.md': ['docker-run', 'docker-run-https'],
 };
@@ -59,12 +59,12 @@ const REQUIRED_RUNNABLE = {
 // block's docker run lines rather than by line number: a line number drifts with every edit
 // above the block, and an allowlist that drifts gets widened instead of read.
 const FRAGMENT_ALLOWLIST = [
-  { file: 'docs/ARCHITECTURE.md', runs: ['docker run -e MCP_TRANSPORT_MODE=--http ...'] },
+  { file: 'docs/explanation/architecture.md', runs: ['docker run -e MCP_TRANSPORT_MODE=--http ...'] },
   {
-    file: 'docs/SECURITY_AND_PRIVACY.md',
+    file: 'docs/explanation/security-and-privacy.md',
     runs: ['docker run --read-only --tmpfs /tmp', 'docker run --memory=512m --cpus=1', 'docker run --cap-drop=ALL'],
   },
-  { file: 'docs/SECURITY_AND_PRIVACY.md', runs: ['docker run --env-file .env ...'] },
+  { file: 'docs/explanation/security-and-privacy.md', runs: ['docker run --env-file .env ...'] },
 ];
 
 const runsOf = (block) => dockerRunCommands(block).map((c) => c.map((w) => w.raw).join(' '));
@@ -190,8 +190,8 @@ check('POSITIVE: an upgrade block naming docker run only in a comment passes the
 });
 
 check('POSITIVE: the allowlisted ARCHITECTURE fragment reports no image or --env-file failure', () => {
-  const b = blocksOf('docs/ARCHITECTURE.md').find((x) => runsOf(x).length > 0);
-  assert.ok(b && b.fragment, 'docs/ARCHITECTURE.md docker run block must carry the fragment marker');
+  const b = blocksOf('docs/explanation/architecture.md').find((x) => runsOf(x).length > 0);
+  assert.ok(b && b.fragment, 'docs/explanation/architecture.md docker run block must carry the fragment marker');
   assert.deepStrictEqual(checkContent(b), []);
 });
 
