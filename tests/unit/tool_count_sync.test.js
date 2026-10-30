@@ -32,7 +32,9 @@ const check = (cond, l, d = '') => cond ? pass(l) : fail(l, d);
   };
   // Totals SHOULD match (with the right captured number)
   check(capturedFor('all 70 tools') === 70, 'total "all 70 tools" matches with capture 70');
-  check(capturedFor('70 tools, the most comprehensive') === 70, 'total "N tools, the most comprehensive" matches');
+  // #601: the two Unraid XML phrasings. A stale 71 is captured, so analyze() flags it against 84.
+  check(capturedFor('exposing 71 tools for conversational financial management') === 71, 'NEGATIVE: stale 71 in the Profile phrasing is captured');
+  check(capturedFor('MCP server with 71 tools for AI-driven financial management') === 71, 'NEGATIVE: stale 71 in the Description phrasing is captured');
   check(capturedFor('ALL 71 TOOLS') === 71, 'total "ALL N TOOLS" matches');
   check(capturedFor('Docker E2E (70 tools)') === 70, 'total "E2E (N tools)" matches');
   check(capturedFor('70/70 tools smoke-validated') === 70, 'total "N/N tools" (equal halves) matches');

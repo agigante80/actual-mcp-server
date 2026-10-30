@@ -8,13 +8,20 @@
 // it runs deterministically on any Node and never depends on installed node_modules.
 //
 // Canonical sources:
-//   - TypeScript / MCP / Node badges  -> the DECLARED package.json ranges
-//     (devDependencies.typescript, dependencies["@modelcontextprotocol/sdk"], engines.node)
+//   - TypeScript / Node badges        -> the DECLARED package.json ranges
+//     (devDependencies.typescript, engines.node)
 //   - "up to N concurrent sessions"   -> the .default('N') literal of MAX_CONCURRENT_SESSIONS
 //     in src/config.ts
 //   - "N attempts, exponential backoff" -> DEFAULT_RETRY_ATTEMPTS in src/lib/constants.ts
 //   - coverage claim                  -> de-hardcoded: the README must carry NO "NN% ... Actual
 //     Budget API" literal (a rotting percentage), the gaps are reported by check:coverage.
+//
+//   - (#601) ActualQL bullet          -> the README's own "Exclusive ActualQL-powered (N)" heading
+//     and the number of table rows under it
+//   - (#601) toolset table sum        -> the string entries of the TOOLSETS literal in
+//     src/lib/toolsets.ts
+//   - (#601) write-capable count      -> the string entries of the WRITE_CAPABLE literal
+//   #603 will generate these README numbers and retarget or retire the three #601 checks.
 //
 // Run: node tests/unit/readme_stats_sync.test.js
 
@@ -46,7 +53,6 @@ const major = (range) => versionSegments(range, 1);
 const pkg = JSON.parse(read('package.json'));
 const CANON = {
   ts: majorMinor(pkg.devDependencies.typescript),                       // "6.0"
-  mcp: majorMinor(pkg.dependencies['@modelcontextprotocol/sdk']),       // "1.29"
   node: major(pkg.engines.node),                                        // "22"
 };
 
@@ -76,10 +82,6 @@ function badgeMismatches(readme, canon) {
   const ts = readme.match(/TypeScript-([0-9.]+)-/);
   if (!ts) out.push('TypeScript badge not found');
   else if (ts[1] !== canon.ts) out.push(`TypeScript badge ${ts[1]} != package.json ${canon.ts}`);
-
-  const mcp = readme.match(/badge\/MCP-([0-9.]+)-/);
-  if (!mcp) out.push('MCP badge not found');
-  else if (mcp[1] !== canon.mcp) out.push(`MCP badge ${mcp[1]} != package.json ${canon.mcp}`);
 
   const node = readme.match(/node-%3E%3D([0-9]+)/);
   if (!node) out.push('Node badge not found');
@@ -119,7 +121,7 @@ function coveragePercentLiteral(readme) {
 
 // #241: the README prose must not hardcode a dependency version that drifts from package.json
 // (the guarded badges already convey them). Returns every unguarded dependency-version literal
-// found. The version-bearing badges use a hyphen ("TypeScript-6.0", "MCP-1.29"), and bare
+// found. The version-bearing badges use a hyphen ("TypeScript-6.0"), and bare
 // package-name mentions carry no version, so neither is matched here.
 function dependencyVersionLiterals(readme) {
   const patterns = [
@@ -132,11 +134,77 @@ function dependencyVersionLiterals(readme) {
   return hits;
 }
 
+// ----- #601: README counts pinned to their sources (a bridge until #603 generates them) -----
+
+// The text of the first `export const NAME ... = ` literal up to its closing bracket line. The
+// parse is bounded to ONE literal because PRESETS also holds `'actual_...'` strings, and names
+// carry capitals (`actual_budgets_getMonth`), so the class is [A-Za-z_], not [a-z_].
+function literalBody(src, name, close) {
+  const start = src.indexOf(`export const ${name}`);
+  assert(start >= 0, `could not find the ${name} literal in src/lib/toolsets.ts`);
+  const end = src.indexOf(close, start);
+  assert(end > start, `could not find the end of the ${name} literal`);
+  return src.slice(start, end);
+}
+const toolNames = (body) => [...body.matchAll(/'(actual_[A-Za-z_]+)'/g)].map((m) => m[1]);
+function registryCounts() {
+  const src = read('src/lib/toolsets.ts');
+  return {
+    tools: toolNames(literalBody(src, 'TOOLSETS', '\n} as const')).length,
+    write: toolNames(literalBody(src, 'WRITE_CAPABLE', '\n]);')).length,
+  };
+}
+
+// (a) The "N exclusive ActualQL-powered tools" bullet vs the "Exclusive ActualQL-powered (N)"
+// heading and the table rows under it. Returns mismatch labels naming both numbers.
+function actualqlMismatches(readme) {
+  const bullet = readme.match(/(\d+) exclusive ActualQL-powered/);
+  const heading = readme.match(/Exclusive ActualQL-powered \((\d+)\)/);
+  if (!bullet) return ['no "N exclusive ActualQL-powered" bullet found in README'];
+  if (!heading) return ['no "Exclusive ActualQL-powered (N)" heading found in README'];
+  const after = readme.slice(heading.index + heading[0].length);
+  const rows = (after.split(/\n\s*\n/)[1] || '').split('\n').filter((l) => /^\| `actual_/.test(l)).length;
+  const out = [];
+  if (bullet[1] !== heading[1]) out.push(`ActualQL bullet says ${bullet[1]}, heading says ${heading[1]}`);
+  if (String(rows) !== heading[1]) out.push(`ActualQL heading says ${heading[1]}, table has ${rows} rows`);
+  return out;
+}
+
+// (b) The `### Reducing the tool surface` table: the Tools column must sum to the registry total.
+function toolsetTableMismatches(readme, registryTotal) {
+  const at = readme.indexOf('### Reducing the tool surface');
+  if (at < 0) return ['no "### Reducing the tool surface" section found in README'];
+  const section = readme.slice(at + 1);
+  const end = section.search(/\n#{2,3} /);
+  const rows = [...(end < 0 ? section : section.slice(0, end)).matchAll(/^\| `[a-z]+` \| (\d+) \|/gm)];
+  if (rows.length === 0) return ['no toolset table rows found in README'];
+  const sum = rows.reduce((n, m) => n + Number(m[1]), 0);
+  return sum === registryTotal ? [] : [`toolset table sums to ${sum}, registry has ${registryTotal}`];
+}
+
+// (c) The write-capable count: the "(N of the M, including ..., leaving K)" sentence and the
+// MCP_READ_ONLY row's "the N write-capable" against WRITE_CAPABLE (and the registry total).
+function writeCountMismatches(readme, writeCount, registryTotal) {
+  const out = [];
+  const bad = (n) => `write-capable count ${n}, WRITE_CAPABLE has ${writeCount}`;
+  const sentence = readme.match(/\((\d+) of the (\d+), including[^)]*\), leaving (\d+)/);
+  if (!sentence) out.push('no "(N of the M, including ..., leaving K)" write sentence found in README');
+  else {
+    if (Number(sentence[1]) !== writeCount) out.push(bad(sentence[1]));
+    if (Number(sentence[2]) !== registryTotal) out.push(`write sentence says ${sentence[2]} tools, registry has ${registryTotal}`);
+    if (Number(sentence[3]) !== registryTotal - writeCount) out.push(`write sentence leaves ${sentence[3]}, expected ${registryTotal - writeCount}`);
+  }
+  const row = readme.match(/the (\d+) write-capable/);
+  if (!row) out.push('no "the N write-capable" MCP_READ_ONLY row found in README');
+  else if (Number(row[1]) !== writeCount) out.push(bad(row[1]));
+  return out;
+}
+
 console.log('\n[readme-stats-sync]');
 
 const README = read('README.md');
 
-check('TypeScript / MCP / Node badges match the declared package.json versions', () => {
+check('TypeScript / Node badges match the declared package.json versions', () => {
   const bad = badgeMismatches(README, CANON);
   assert.strictEqual(bad.length, 0, `badge drift: ${bad.join('; ')}`);
 });
@@ -164,11 +232,33 @@ check('README prose carries no unguarded dependency-version literal (de-hardcode
     `README hardcodes dependency version(s) that can drift from package.json: ${hits.join('; ')}`);
 });
 
+
+check('(#601) the ActualQL bullet matches its heading and table', () => {
+  const bad = actualqlMismatches(README);
+  assert.strictEqual(bad.length, 0, bad.join('; '));
+});
+
+check('(#601) the toolset table sums to the TOOLSETS registry', () => {
+  const { tools } = registryCounts();
+  const bad = toolsetTableMismatches(README, tools);
+  assert.strictEqual(bad.length, 0, bad.join('; '));
+});
+
+check('(#601) the write-capable counts equal WRITE_CAPABLE', () => {
+  const { tools, write } = registryCounts();
+  const bad = writeCountMismatches(README, write, tools);
+  assert.strictEqual(bad.length, 0, bad.join('; '));
+});
+
+check('(#601) the registry parse counts mixed-case names (not a [a-z_] undercount)', () => {
+  const { tools, write } = registryCounts();
+  assert.ok(tools >= 84 && write >= 48, `registry parse looks undercounted: ${tools} tools, ${write} write-capable`);
+});
+
 // ----- NEGATIVE in-test fixtures: prove each comparator flags synthetic drift -----
 
 check('NEGATIVE: a drifted TypeScript badge is detected by badgeMismatches', () => {
   const fixture = '[![TypeScript](https://img.shields.io/badge/TypeScript-4.0-blue)] '
-    + '[![MCP](https://img.shields.io/badge/MCP-1.29-orange)] '
     + '[![Node](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)]';
   const bad = badgeMismatches(fixture, CANON);
   assert.ok(
@@ -203,9 +293,46 @@ check('NEGATIVE: reintroduced unguarded dependency-version literals are detected
 
 check('POSITIVE: bare package-name mentions and the hyphenated badges are NOT flagged', () => {
   const hits = dependencyVersionLiterals(
-    'The `@actual-app/api` library downloads data. badge/TypeScript-6.0-blue badge/MCP-1.29-orange',
+    'The `@actual-app/api` library downloads data. badge/TypeScript-6.0-blue',
   );
   assert.deepStrictEqual(hits, [], `comparator must not false-positive on bare names/badges, got ${JSON.stringify(hits)}`);
+});
+
+check('NEGATIVE: an ActualQL bullet that disagrees with its heading is detected', () => {
+  const fixture = '- **6 exclusive ActualQL-powered tools.** x\n\n**Exclusive ActualQL-powered (8)**, unique\n\n| Tool | D |\n|---|---|\n'
+    + Array.from({ length: 8 }, (_, i) => `| \`actual_t${i}\` | d |`).join('\n') + '\n';
+  assert.deepStrictEqual(actualqlMismatches(fixture), ['ActualQL bullet says 6, heading says 8']);
+});
+
+check('NEGATIVE: a toolset table that does not sum to the registry is detected', () => {
+  const fixture = '### Reducing the tool surface\n\n| Toolset | Tools | C |\n|---|---|---|\n| `context` | 40 | a |\n| `admin` | 43 | b |\n';
+  assert.deepStrictEqual(toolsetTableMismatches(fixture, 84), ['toolset table sums to 83, registry has 84']);
+});
+
+check('NEGATIVE: an ActualQL table with fewer rows than its heading is detected', () => {
+  const fixture = '- **8 exclusive ActualQL-powered tools.** x\n\n**Exclusive ActualQL-powered (8)**, u\n\n| Tool | D |\n|---|---|\n'
+    + Array.from({ length: 7 }, (_, i) => `| \`actual_t${i}\` | d |`).join('\n') + '\n';
+  assert.deepStrictEqual(actualqlMismatches(fixture), ['ActualQL heading says 8, table has 7 rows']);
+});
+
+check('NEGATIVE: a later table under another heading is not summed into the toolset table', () => {
+  const fixture = '### Reducing the tool surface\n\n| `a` | 40 |\n| `b` | 44 |\n\n## Other\n\n| `c` | 5 |\n';
+  assert.deepStrictEqual(toolsetTableMismatches(fixture, 84), []);
+});
+
+check('NEGATIVE: a stale write-capable count is detected', () => {
+  const fixture = '| `MCP_READ_ONLY` | x | No | `true` hides and refuses the 47 write-capable tools. |\n'
+    + 'hides every write-capable tool (47 of the 84, including `actual_bank_sync`), leaving 37.';
+  const bad = writeCountMismatches(fixture, 48, 84);
+  assert.ok(bad.includes('write-capable count 47, WRITE_CAPABLE has 48'), `got ${JSON.stringify(bad)}`);
+});
+
+check('POSITIVE: consistent ActualQL, toolset and write fixtures are not flagged', () => {
+  const ql = '- **8 exclusive ActualQL-powered tools.** x\n\n**Exclusive ActualQL-powered (8)**, u\n\n| Tool | D |\n|---|---|\n'
+    + Array.from({ length: 8 }, (_, i) => `| \`actual_t${i}\` | d |`).join('\n') + '\n';
+  assert.deepStrictEqual(actualqlMismatches(ql), []);
+  assert.deepStrictEqual(toolsetTableMismatches('### Reducing the tool surface\n\n| `a` | 40 |\n| `b` | 44 |\n', 84), []);
+  assert.deepStrictEqual(writeCountMismatches('the 48 write-capable tools; (48 of the 84, including `x`), leaving 36.', 48, 84), []);
 });
 
 console.log(`\n[readme-stats-sync] Results: ${passed} passed, ${failed} failed`);

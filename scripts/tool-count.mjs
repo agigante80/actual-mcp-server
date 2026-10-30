@@ -36,6 +36,9 @@ const FILES = [
   '.github/CONTRIBUTING.md', 'docker/description/long.md', 'docker/description/short.md', 'src/lib/constants.ts',
   'tests/manual/tests/sanity.js', 'tests/manual/runner.js', 'tests/e2e/README.md', 'tests/manual/README.md',
   'tests/e2e/docker-all-tools.e2e.spec.ts',
+  // #601: the Unraid templates state the whole-server total in plain XML prose and sat at 71
+  // while IMPLEMENTED_TOOLS grew, because this scan could not see them. Both are tracked.
+  'unraid/actual-mcp-server.xml', 'ca_profile.xml',
   // Two more files that state the whole-server total in prose and drifted unseen because
   // the scan could not reach them: a header comment in the shared Zod schemas ("across
   // the N tool definitions") and the semver rationale comment in the train pre-flight
@@ -90,8 +93,9 @@ export const TOTAL_PATTERNS = [
   { re: /\*\*(\d{2,3}) tools\*\* listed/g, label: '**N tools** listed' },
   { re: /E2E \((\d{2,3}) tools\)/g, label: 'E2E (N tools)' },
   { re: /\b(\d{2,3})\/\1 tools\b/g, label: 'N/N tools (equal halves only)' },
-  { re: /(\d{2,3}) tools, the most comprehensive/gi, label: 'N tools, most comprehensive' },
-  { re: /\*\*(\d{2,3}) tools, the most comprehensive/gi, label: 'why-project bullet' },
+  // #601: the two Unraid XML phrasings (ca_profile.xml <Profile>, template <Overview> and <Description>).
+  { re: /exposing (\d{2,3}) tools for/gi, label: 'exposing N tools for (Unraid XML)' },
+  { re: /server with (\d{2,3}) tools for/gi, label: 'server with N tools for (Unraid XML)' },
   { re: /(\d{2,3}) tools tested end-to-end/gi, label: 'N tools tested end-to-end' },
   { re: /(\d{2,3}) tools organized by category/gi, label: 'N tools organized by category' },
   { re: /(\d{2,3}) tools registered/gi, label: 'N tools registered' },

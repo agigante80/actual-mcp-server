@@ -44,8 +44,12 @@ The CA scanner and the raw `<TemplateURL>`/`<Icon>` URLs read the GitHub DEFAULT
 
 ## Operator security note (baked into the template `<Description>`)
 
-A blank `MCP_SSE_AUTHORIZATION` disables ALL HTTP authentication: the server is then
-reachable unauthenticated on the LAN. The template requires the token and masks it, and the
-Description tells the operator to set a strong token (`openssl rand -hex 32`) and to use
-`MCP_ENABLE_HTTPS` or a reverse proxy for any non-loopback exposure (the bearer token is
-plaintext over HTTP). Making HTTP auth required-by-default is tracked as a follow-up.
+Without a bearer token, per-client tokens (`MCP_STATIC_TOKENS`) or OIDC, the server refuses
+to start on a non-loopback bind, unless `MCP_ALLOW_UNAUTHENTICATED=true` is set deliberately;
+with that opt-out every tool, writes included, is served to anyone who can reach the port. The
+template requires the token and masks it, and the Description tells the operator to set a
+strong token (`openssl rand -hex 32`) and to use `MCP_ENABLE_HTTPS` or a reverse proxy for any
+non-loopback exposure (the bearer token is plaintext over HTTP). A reverse proxy that does not
+authenticate does not replace the token. `/health`, `/metrics`, `/mcp-info` and
+`/mcp-info/http` are unauthenticated by design; with `AUTH_PROVIDER=oidc` the `/.well-known/`
+OAuth metadata documents are public too.

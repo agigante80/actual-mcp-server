@@ -76,9 +76,35 @@ check('the auth token is Required="true" (no silent open-by-default)', () => {
     'MCP_SSE_AUTHORIZATION must be Required="true"');
 });
 
-check('the Description warns about the blank-token open-by-default exposure', () => {
-  assert(/blank token disables|BLANK token disables|disables ALL HTTP authentication/i.test(TPL),
-    'the Description must warn that a blank MCP_SSE_AUTHORIZATION disables HTTP auth');
+// #601: since #242 a non-loopback bind with no token and no OIDC refuses to start, so the old
+// "a blank token disables all HTTP authentication" warning is false. Matched case-insensitively
+// because the live copies used both "ALL" and "all". The guard now pins the accurate posture.
+check('the Description states the refuse-to-start posture, not the stale blank-token warning', () => {
+  assert(!/blank (token|value) disables|disables all HTTP auth/i.test(TPL), 'stale blank-token warning');
+  assert(/openssl rand -hex 32/.test(TPL), 'missing openssl rand -hex 32');
+  assert(/refuses to start/i.test(TPL), 'missing refuses to start');
+  assert(/does not replace the token/i.test(TPL), 'missing does not replace the token');
+  assert(/MCP_ALLOW_UNAUTHENTICATED/.test(TPL), 'missing MCP_ALLOW_UNAUTHENTICATED');
+});
+
+check('the Description lists every unauthenticated endpoint', () => {
+  for (const ep of ['/health', '/metrics', '/mcp-info', '/mcp-info/http', '/.well-known/']) {
+    assert(TPL.includes(ep), `missing unauthenticated endpoint ${ep}`);
+  }
+});
+
+check('the port Config does not list /http as unauthenticated', () => {
+  const line = configLine(TPL, CANON_PORT);
+  assert(!/unauthenticated[^.]*\(\/http,/.test(line), '/http needs the token and is not an unauthenticated endpoint');
+  assert(/\/mcp-info\/http/.test(line), 'port Config must name /mcp-info and /mcp-info/http');
+});
+
+// NEGATIVE: the comparators flag the stale phrases and a dropped command (case-insensitive).
+const STALE = /blank (token|value) disables|disables all HTTP auth/i;
+check('NEGATIVE: the stale blank-token phrase is flagged in either case', () => {
+  assert(STALE.test('a BLANK value disables ALL HTTP authentication'));
+  assert(STALE.test('A blank token disables all HTTP authentication'));
+  assert(!STALE.test('the server refuses to start on a non-loopback bind'));
 });
 
 // NEGATIVE: a drifted port in a synthetic template line is detected by the same comparator.

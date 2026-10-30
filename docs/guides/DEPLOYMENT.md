@@ -147,8 +147,13 @@ host appdata directory owned by a different UID without `EACCES`.
 
 actual-mcp-server is published to the Unraid Community Applications catalog via
 `unraid/actual-mcp-server.xml`; see [docs/UNRAID_CA_PUBLISHING.md](../UNRAID_CA_PUBLISHING.md).
-Set a strong `MCP_SSE_AUTHORIZATION` token before exposing the port: a blank token disables
-all HTTP authentication.
+Set a strong `MCP_SSE_AUTHORIZATION` token (`openssl rand -hex 32`) before exposing the port.
+Without a bearer token, per-client tokens (`MCP_STATIC_TOKENS`) or OIDC the server refuses to
+start on a non-loopback bind, unless `MCP_ALLOW_UNAUTHENTICATED=true` is set deliberately (then
+every tool, writes included, is served to anyone who can reach the port). A reverse proxy that
+does not authenticate does not replace the token. `/health`, `/metrics`, `/mcp-info` and
+`/mcp-info/http` are unauthenticated by design; with `AUTH_PROVIDER=oidc` the `/.well-known/`
+OAuth metadata documents are public too.
 
 ---
 
@@ -275,7 +280,7 @@ curl -s -X POST http://localhost:3600/http \
   -H "Authorization: Bearer your_secret_token" \
   -H "Content-Type: application/json" \
   -H "Accept: application/json, text/event-stream" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"cli-test","version":"1.0"}}}' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"cli-test","version":"1.0"}}}' \
   | python3 -m json.tool
 ```
 
