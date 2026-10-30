@@ -32,22 +32,36 @@ function inScope(file) {
 
 /**
  * Every relative link target in the index, resolved to a repo-relative POSIX path.
- * Covers inline links `[text](target "title")`, `<target>` forms and reference
- * definitions `[id]: target`. Anchors and queries are stripped; URLs with a scheme,
+ * Covers inline links `[text](target "title")` (titles in double quotes, single
+ * quotes or parentheses), `<target>` forms (which may contain spaces) and reference
+ * definitions `[id]: target`. HTML comments are removed first, because a commented
+ * link does not render. Anchors and queries are stripped; URLs with a scheme,
  * protocol-relative URLs and pure anchors are ignored.
  */
 function indexTargets(text) {
+  const visible = text.replace(/<!--[\s\S]*?-->/g, '');
+  const title = String.raw`(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?`;
+  const inline = new RegExp(String.raw`\]\(\s*(?:<([^>\n]+)>|([^)\s<>]+))${title}\s*\)`, 'g');
   const raw = [];
-  for (const m of text.matchAll(/\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g)) raw.push(m[1]);
-  for (const m of text.matchAll(/^\s*\[[^\]]+\]:\s*<?(\S+?)>?(?:\s+.*)?$/gm)) raw.push(m[1]);
+  for (const m of visible.matchAll(inline)) raw.push(m[1] ?? m[2]);
+  for (const m of visible.matchAll(/^\s*\[[^\]]+\]:\s*(?:<([^>\n]+)>|(\S+))(?:\s+.*)?$/gm)) raw.push(m[1] ?? m[2]);
   const targets = new Set();
   for (const target of raw) {
     if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('//') || target.startsWith('#')) continue;
-    const path = decodeURIComponent(target.split('#')[0].split('?')[0]);
+    const path = safeDecode(target.split('#')[0].split('?')[0]);
     if (!path) continue;
     targets.add(posix.normalize(posix.join('docs', path)));
   }
   return targets;
+}
+
+/** Percent-decodes a target; a malformed escape such as a bare `%` is kept literally. */
+function safeDecode(target) {
+  try {
+    return decodeURIComponent(target);
+  } catch {
+    return target;
+  }
 }
 
 export async function check({ root }) {

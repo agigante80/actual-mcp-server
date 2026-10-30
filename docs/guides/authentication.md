@@ -9,7 +9,7 @@ How a client proves who it is to this server, and which budgets each mode lets i
 | stdio | stdio | nothing (the client launches the process) | the local user | every configured budget |
 | Shared token | HTTP | `MCP_SSE_AUTHORIZATION` | one principal, `static-bearer`, for every client | every configured budget |
 | One token per client | HTTP | `MCP_STATIC_TOKENS` plus one `MCP_TOKEN_*` per client | the JSON key of the matching entry | only the budgets in that entry's `budgets` list |
-| OIDC | HTTP | `AUTH_PROVIDER=oidc` plus `OIDC_ISSUER` and the other `OIDC_*` settings | the verified JWT subject | every budget when `AUTH_BUDGET_ACL` is unset, empty or `{}`; otherwise only what the ACL grants |
+| OIDC | HTTP | `AUTH_PROVIDER=oidc` plus `OIDC_ISSUER` and the other `OIDC_*` settings | the verified JWT subject | with the default `AUTH_BUDGET_ACL_SOURCE=static`, every budget when `AUTH_BUDGET_ACL` is unset, empty or `{}`, otherwise only what it grants; with `AUTH_BUDGET_ACL_SOURCE=actual`, the budgets Actual grants that user |
 | Opt-out | HTTP | `MCP_ALLOW_UNAUTHENTICATED=true` | one anonymous principal | every configured budget |
 
 stdio has no authentication: whoever can start the process already holds the `.env` credentials. The rest of this guide is about HTTP.
@@ -43,7 +43,7 @@ MCP_TOKEN_BOB=<openssl rand -hex 32>
 What `src/auth/static-tokens.ts` checks before the server binds (any violation refuses startup, and the message names the variable but never prints a token):
 
 - `budgets` is a non-empty array of registry names (`BUDGET_DEFAULT_NAME`, `BUDGET_n_NAME`), resolved to sync ids at startup. An unknown name refuses startup. `"*"` is not accepted: a static principal is always restricted.
-- `tokenEnv` starts with `MCP_TOKEN_`, so it cannot point at `ACTUAL_PASSWORD`.
+- `tokenEnv` must match `^MCP_TOKEN_[A-Z0-9_]+$` (upper case letters, digits and `_` after the prefix), so it cannot point at `ACTUAL_PASSWORD`. `MCP_TOKEN_alice` refuses startup.
 - The token it names is set, at least 32 characters, uses only RFC 6750 token characters, and is unique across all principals and `MCP_SSE_AUTHORIZATION`.
 - The principal name `static-bearer` is reserved for the shared token.
 - `MCP_STATIC_TOKENS` is refused together with `AUTH_PROVIDER=oidc`, where the verified JWT decides the principal.
@@ -54,12 +54,15 @@ A budget outside the list is refused on every operation, a switch to one returns
 
 Set `AUTH_PROVIDER=oidc` and the issuer settings. The client walkthrough, including Casdoor and LibreChat, is in [AI_CLIENT_SETUP.md](AI_CLIENT_SETUP.md); the model is under "OIDC / JWT Authentication" in [security-and-privacy.md](../explanation/security-and-privacy.md).
 
-Budget scope comes from `AUTH_BUDGET_ACL` (`src/auth/budget-acl.ts`):
+Budget scope depends on `AUTH_BUDGET_ACL_SOURCE` (`src/auth/budget-acl.ts`).
+
+With the default, `static`, it comes from `AUTH_BUDGET_ACL`:
 
 - **Unset, an empty string, or `{}` is open**: every authenticated user may reach every budget. This is fail-open by design, so configure the ACL before you rely on it to cut anyone off.
-- **A non-empty JSON object restricts.** It maps a principal (the JWT `sub`, the `email` claim, or `group:<name>` for an entry of the `groups` or `roles` claim) to an array of budget sync ids; `"*"` grants every budget. A user who matches nothing gets HTTP 403.
-- **An invalid value refuses startup** (#551), on HTTP and stdio alike, whatever `AUTH_PROVIDER` is set to.
-- **`AUTH_BUDGET_ACL_SOURCE=actual`** (default `static`) reads each budget's access list from the Actual server instead of the variable.
+- **A non-empty JSON object restricts.** It maps a principal to an array of budget sync ids; `"*"` grants every budget. The principals of a request are the JWT `sub`, the `email` claim, and `group:<name>` for each entry of the `groups` claim. The `roles` claim is read only when the token has no `groups` claim at all, and either claim counts only when it is a JSON array. A user who matches nothing gets HTTP 403.
+- **An invalid value refuses startup** (#551), on HTTP and stdio alike, whatever `AUTH_PROVIDER` or `AUTH_BUDGET_ACL_SOURCE` is set to.
+
+With **`AUTH_BUDGET_ACL_SOURCE=actual`**, `AUTH_BUDGET_ACL` is not consulted at all, not even when it is unset or `{}`: each request gets exactly the budgets whose access list on the Actual server includes that user. A user with none, or a lookup that fails, gets HTTP 403. The identity settings for this mode are in [configuration.md](../reference/configuration.md) and under "Identity matching for the dynamic ACL" in [security-and-privacy.md](../explanation/security-and-privacy.md).
 
 ## Running without authentication
 

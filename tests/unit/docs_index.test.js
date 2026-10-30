@@ -116,6 +116,48 @@ await check('a missing docs/README.md reports every page', async () => {
   assert.deepStrictEqual(problems, ['index missing: docs/README.md', 'not in index: docs/roadmap.md']);
 });
 
+await check('an angle-bracket destination with a space counts as a link', async () => {
+  const root = tree({
+    'docs/my notes.md': '# Notes\n',
+    'docs/README.md': '# Docs\n- [Notes](<my notes.md>)\n',
+  });
+  const { problems } = await checkIndex({ root });
+  assert.deepStrictEqual(problems, []);
+});
+
+await check("single-quoted and parenthesised link titles count as links", async () => {
+  const root = tree({
+    ...PAGES,
+    'docs/README.md': [
+      '# Docs',
+      "- [Roadmap](roadmap.md 'plan')",
+      '- [Upgrading](guides/upgrading.md (steps))',
+      '- [Configuration](reference/configuration.md "env")',
+      '',
+    ].join('\n'),
+  });
+  const { problems } = await checkIndex({ root });
+  assert.deepStrictEqual(problems, []);
+});
+
+await check('a bare % in a target is read literally, not thrown', async () => {
+  const root = tree({
+    'docs/100%.md': '# Pct\n',
+    'docs/README.md': '# Docs\n- [Pct](100%.md)\n',
+  });
+  const { problems } = await checkIndex({ root });
+  assert.deepStrictEqual(problems, []);
+});
+
+await check('a link inside an HTML comment does not count', async () => {
+  const root = tree({
+    'docs/roadmap.md': '# Roadmap\n',
+    'docs/README.md': '# Docs\n<!-- [Roadmap](roadmap.md) -->\n<!--\n[Roadmap](roadmap.md)\n-->\n',
+  });
+  const { problems } = await checkIndex({ root });
+  assert.deepStrictEqual(problems, ['not in index: docs/roadmap.md']);
+});
+
 await check('the real repo index links every page in scope', async () => {
   const { problems } = await checkIndex({ root: ROOT });
   assert.deepStrictEqual(problems, []);

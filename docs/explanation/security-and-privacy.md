@@ -251,8 +251,8 @@ References: RFC 9700 (OAuth 2.0 Security Best Current Practice) section 4.14 on 
 # Use "*" as the sync ID to grant wildcard (all-budget) access.
 AUTH_BUDGET_ACL={"alice@example.com":["aaa-bbb-ccc"],"group:admin":["*"]}
 ```
-Principals are matched against the JWT `sub` claim, the `email` claim, and each entry of the `groups` (or `roles`) claim, where group entries match as `group:<name>`.
-If `AUTH_BUDGET_ACL` is not set, all authenticated users access the single configured budget.
+Principals are matched against the JWT `sub` claim, the `email` claim, and each entry of the `groups` claim, where group entries match as `group:<name>`. The `roles` claim is used only when the token has no `groups` claim, and either counts only when it is a JSON array.
+If `AUTH_BUDGET_ACL` is unset, empty or `{}` (and `AUTH_BUDGET_ACL_SOURCE` is the default `static`), every authenticated user can reach every configured budget.
 
 **An invalid `AUTH_BUDGET_ACL` refuses startup** (#551). A set value must be a JSON object whose every value is an array of non-empty strings; invalid JSON (a trailing comma, for example), an array, a scalar, `null`, or an entry that is not such an array makes the server exit at startup with a message naming the variable and the problem class, on HTTP and on stdio alike. The check runs whatever `AUTH_PROVIDER` and `AUTH_BUDGET_ACL_SOURCE` are set to. Unset, an empty string, and `{}` keep the documented open behaviour. The error text never includes a principal or a sync id. Should the runtime parser ever see an invalid value anyway (it cannot from the environment once startup validation has passed), every principal is denied with a 403 and an `[ACL] Invalid AUTH_BUDGET_ACL: access denied` error line, never granted every budget.
 
@@ -299,7 +299,7 @@ ACTUAL_PASSWORD=your_actual_budget_password
 - Suitable for household or small-team deployments
 
 **Without `AUTH_BUDGET_ACL`**:
-- All authenticated users share the single configured budget
+- All authenticated users can reach every configured budget
 - Suitable for personal use
 
 #### Identity matching for the dynamic ACL, and what it inherits (#343)

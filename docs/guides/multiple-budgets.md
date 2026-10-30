@@ -41,6 +41,6 @@ Number budgets from 1 with no gaps. Enumeration stops at the first missing `BUDG
 
 ## Who can reach which budget
 
-On HTTP with `MCP_STATIC_TOKENS` each client's `budgets` list names budgets by these registry names, and with OIDC `AUTH_BUDGET_ACL` restricts by sync id. See [authentication.md](authentication.md).
+On HTTP with `MCP_STATIC_TOKENS` each client's `budgets` list names budgets by these registry names, and with OIDC `AUTH_BUDGET_ACL` restricts by sync id (or, with `AUTH_BUDGET_ACL_SOURCE=actual`, Actual's own per-budget access lists do). See [authentication.md](authentication.md).
 
 One budget is open per process. Two clients working on different budgets at the same time force a budget reload on every alternation, which serialises all sessions for the reload; for heavy concurrent use of different budgets run one server per budget (see "One static token per client" in [security-and-privacy.md](../explanation/security-and-privacy.md)).
