@@ -835,7 +835,7 @@ The software is provided **as-is**, without warranty of any kind. The author acc
 
 ## Support
 
-- **[GitHub Issues](https://github.com/agigante80/actual-mcp-server/issues)**: bug reports, feature requests, questions and ideas
+See [.github/SUPPORT.md](.github/SUPPORT.md) for where to ask a question, report a bug or report a vulnerability. Issues are tracked on [GitHub](https://github.com/agigante80/actual-mcp-server/issues).
 
 ---
 

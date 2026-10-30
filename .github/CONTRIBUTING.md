@@ -17,7 +17,7 @@ If you work with a coding agent (Codex, Copilot, Cursor, Claude Code, Gemini CLI
 
 ## 🤝 Code of Conduct
 
-Be respectful and inclusive, keep feedback constructive, and put the community's interests first.
+This project follows the [Code of Conduct](CODE_OF_CONDUCT.md). By taking part you agree to uphold it.
 
 ## 💡 Ways to Contribute
 
@@ -157,8 +157,7 @@ The maintainer integrates every change through the same pipeline: a gated ticket
 
 ## 🆘 Getting Help
 
-- **Questions, bugs and ideas**: open a [GitHub issue](https://github.com/agigante80/actual-mcp-server/issues).
-- **Documentation**: the [docs/](../docs/) folder, starting from [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
+See [SUPPORT.md](SUPPORT.md) for where to ask a question, report a bug or report a vulnerability. The documentation lives in the [docs/](../docs/) folder, starting from [docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md).
 
 ## 📝 License
 

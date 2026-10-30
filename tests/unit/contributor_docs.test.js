@@ -44,12 +44,20 @@ import { dirname, join, posix } from 'path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
-const DOCS = ['AGENTS.md', '.github/CONTRIBUTING.md', '.github/PULL_REQUEST_TEMPLATE.md'];
+const DOCS = [
+  'AGENTS.md',
+  '.github/CONTRIBUTING.md',
+  '.github/PULL_REQUEST_TEMPLATE.md',
+  '.github/SUPPORT.md',
+  '.github/CODE_OF_CONDUCT.md',
+];
 const INSTRUCTIONS_DIR = '.github/instructions';
 const INSTRUCTIONS = readdirSync(join(ROOT, INSTRUCTIONS_DIR))
   .filter((f) => f.endsWith('.instructions.md'))
   .map((f) => `${INSTRUCTIONS_DIR}/${f}`);
 const AGENTS_MAX_LINES = 150;
+// #609: the PR template is a short checklist that links the docs, not a copy of them.
+const PR_TEMPLATE_MAX_LINES = 40;
 // Identical in every instructions file, so it is matched literally.
 const DEFERENCE_FOOTER =
   'On conflict, follow the precedence in [AGENTS.md](../../AGENTS.md); this file adds detail for its applyTo glob and must not contradict it.';
@@ -185,6 +193,12 @@ check(`AGENTS.md stays a map: at most ${AGENTS_MAX_LINES} lines`, () => {
     `AGENTS.md has ${over} lines; link to a doc under docs/ instead of copying its content`);
 });
 
+check(`PR template stays a short checklist: at most ${PR_TEMPLATE_MAX_LINES} lines (#609)`, () => {
+  const over = overLineCap(read('.github/PULL_REQUEST_TEMPLATE.md'), PR_TEMPLATE_MAX_LINES);
+  assert.strictEqual(over, null,
+    `.github/PULL_REQUEST_TEMPLATE.md has ${over} lines; link to CONTRIBUTING.md or AGENTS.md instead of copying their content`);
+});
+
 const isTracked = trackedPredicate(TRACKED);
 for (const doc of [...DOCS, ...INSTRUCTIONS]) {
   check(`${doc}: every npm script it names exists in package.json`, () => {
@@ -234,6 +248,11 @@ check('NEGATIVE: a file over the line cap reports its line count', () => {
   assert.strictEqual(overLineCap(Array(151).fill('x').join('\n'), AGENTS_MAX_LINES), 151);
   assert.strictEqual(overLineCap(Array(150).fill('x').join('\n'), AGENTS_MAX_LINES), null);
   assert.strictEqual(overLineCap(`${Array(150).fill('x').join('\n')}\n`, AGENTS_MAX_LINES), null);
+});
+
+check('NEGATIVE (#609): a PR template over the cap reports 41; exactly 40 passes', () => {
+  assert.strictEqual(overLineCap(Array(41).fill('x').join('\n'), PR_TEMPLATE_MAX_LINES), 41);
+  assert.strictEqual(overLineCap(Array(40).fill('x').join('\n'), PR_TEMPLATE_MAX_LINES), null);
 });
 
 check('NEGATIVE: an instructions file citing CLAUDE.md without the footer reports both', () => {

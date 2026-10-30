@@ -17,11 +17,7 @@ We take the security of Actual MCP Server seriously. If you discover a security 
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please report security issues to:
-
-**Email**: security@example.com (replace with your actual email)
-
-Or use GitHub's private vulnerability reporting:
+Instead, use GitHub's private vulnerability reporting:
 
 1. Go to the repository's [Security tab](https://github.com/agigante80/actual-mcp-server/security)
 2. Click "Report a vulnerability"
@@ -240,10 +236,8 @@ We follow security best practices from:
 
 ## Security Contact
 
-For security-related questions (not vulnerability reports):
-
-- **GitHub Discussions**: [Security category](https://github.com/agigante80/actual-mcp-server/discussions/categories/security)
-- **Email**: security@example.com (replace with your actual email)
+- **Vulnerability reports**: the [private advisory form](https://github.com/agigante80/actual-mcp-server/security/advisories/new).
+- **Security-related questions (not vulnerability reports)**: open an issue with the [question form](https://github.com/agigante80/actual-mcp-server/issues/new?template=question.yml).
 
 ## Hall of Fame
 

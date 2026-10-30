@@ -1,0 +1,52 @@
+name: Question
+description: Ask a question or get help with setup
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Question
+        For bugs use the bug report, and for security vulnerabilities use the private advisory form instead. Never include passwords, tokens or budget data.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What are you trying to do, or what do you want to know?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: Commands, settings and docs you already followed, and what happened.
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Server version
+      description: Printed in the server's startup log, or the image tag you run.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - HTTP
+        - stdio
+        - Not sure
+    validations:
+      required: false
+
+  - type: input
+    id: client
+    attributes:
+      label: AI client
+      description: For example Claude Desktop, Claude Code, LibreChat or LobeChat.
+    validations:
+      required: false
