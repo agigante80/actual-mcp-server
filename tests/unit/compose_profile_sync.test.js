@@ -156,7 +156,7 @@ function environmentOf(service, lc) {
 }
 
 // kind: 'main' for docker-compose.yaml (keyed on mcp-server-prod and mcp-server-dev), 'test'
-// for docker-compose.test.yaml (every service, every port).
+// for tests/e2e/compose.yaml (every service, every port).
 function checkCompose(text, kind, file) {
   const lc = new LineCounter();
   const doc = parseDocument(text, { lineCounter: lc });
@@ -213,8 +213,8 @@ check('docker-compose.yaml: production pulls the GHCR image, reads .env, maps th
   assert.deepStrictEqual(checkCompose(read('docker-compose.yaml'), 'main', 'docker-compose.yaml'), []);
 });
 
-check('docker-compose.test.yaml: every published port binds 127.0.0.1', () => {
-  assert.deepStrictEqual(checkCompose(read('docker-compose.test.yaml'), 'test', 'docker-compose.test.yaml'), []);
+check('tests/e2e/compose.yaml: every published port binds 127.0.0.1', () => {
+  assert.deepStrictEqual(checkCompose(read('tests/e2e/compose.yaml'), 'test', 'tests/e2e/compose.yaml'), []);
 });
 
 const fixture = (name) => read(`tests/unit/fixtures/compose/${name}`);
@@ -232,6 +232,15 @@ for (const [name, kind, message] of COMPOSE_NEGATIVES) {
     assert.ok(errors.some((e) => e.startsWith(message)), `got: ${JSON.stringify(errors)}`);
   });
 }
+
+check('NEGATIVE: a tests/e2e/compose.yaml port without a 127.0.0.1 prefix names that label', () => {
+  const inMemory = 'services:\n  svc:\n    image: x\n    ports:\n      - "5007:5006"\n';
+  const errors = checkCompose(inMemory, 'test', 'tests/e2e/compose.yaml');
+  assert.ok(
+    errors.some((e) => e.startsWith('test stack publishes a port on all interfaces') && e.includes('tests/e2e/compose.yaml')),
+    `got: ${JSON.stringify(errors)}`,
+  );
+});
 
 console.log(`\n[compose-profile-sync] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

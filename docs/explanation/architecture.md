@@ -395,7 +395,7 @@ actual-mcp-server/
 ├── scripts/                      # Build and utility scripts (see scripts/README.md)
 │   ├── verify-tools.js           # Tool coverage verification
 │   ├── bootstrap-and-init.sh     # Docker: bootstrap Actual server + import test budget
-│   ├── import-test-budget.sh     # Upload test-data/*.zip to Actual server
+│   ├── import-test-budget.sh     # Upload test-data/*.zip to Actual server (inside the container; host copy in tests/fixtures/budgets/)
 │   ├── register-tsconfig-paths.js # Path alias resolver for dist/ runtime
 │   ├── list-actual-api-methods.mjs # API method coverage checker
 │   └── version-bump.js / version-check.js / version-dev.js  # Versioning

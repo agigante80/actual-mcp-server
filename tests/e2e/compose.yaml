@@ -1,6 +1,10 @@
 # Docker Compose configuration for E2E testing
 # This spins up a complete stack: Actual Budget server + MCP server + test runner
-# Usage: docker-compose -f docker-compose.test.yaml up --abort-on-container-exit
+# Usage: docker compose -f tests/e2e/compose.yaml up --abort-on-container-exit
+#
+# Relative paths below resolve from THIS file's directory (tests/e2e/), not the repo root.
+# `name:` pins the project name; without it Compose would derive "e2e" from the directory.
+name: actual-mcp-e2e
 
 services:
   # Actual Budget server for testing
@@ -19,7 +23,7 @@ services:
   # Bootstrap & init: Sets password and imports test budget with data
   actual-budget-bootstrap:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: actual-budget-bootstrap
     depends_on:
@@ -30,7 +34,9 @@ services:
     working_dir: /app
     volumes:
       - bootstrap-data:/tmp
-      - ./test-data:/app/test-data:ro
+      # Host dir tests/fixtures/budgets, in-container /app/test-data: the name split is deliberate
+      # (scripts/bootstrap-and-init.sh and scripts/import-test-budget.sh resolve test-data/ under /app).
+      - ../fixtures/budgets:/app/test-data:ro
     user: root
     entrypoint: [ "/bin/sh" ]
     command:
@@ -84,7 +90,7 @@ services:
   # open the HTTP leg's budget and the whole point of the separation would be lost.
   actual-budget-stdio-bootstrap:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: actual-budget-stdio-bootstrap
     depends_on:
@@ -95,7 +101,9 @@ services:
     working_dir: /app
     volumes:
       - bootstrap-stdio-data:/tmp
-      - ./test-data:/app/test-data:ro
+      # Host dir tests/fixtures/budgets, in-container /app/test-data: the name split is deliberate
+      # (scripts/bootstrap-and-init.sh and scripts/import-test-budget.sh resolve test-data/ under /app).
+      - ../fixtures/budgets:/app/test-data:ro
     user: root
     entrypoint: [ "/bin/sh" ]
     command:
@@ -119,7 +127,7 @@ services:
   # MCP server under test (built from current source)
   mcp-server-test:
     build:
-      context: .
+      context: ../..
       dockerfile: Dockerfile
     container_name: mcp-server-e2e-test
     ports:
@@ -217,7 +225,7 @@ services:
     # Ubuntu mirrors first, which hung 3 of 6 CI runs on 2026-10-26: no output for 18 minutes,
     # then the job was cancelled by its timeout (#593, where the stall is reproduced).
     #
-    # The runner never needs that build. Nothing under tests/e2e/ or playwright.config.docker.ts
+    # The runner never needs that build. Nothing under tests/e2e/ (the Playwright config included)
     # imports @actual-app/api, src/ or better-sqlite3; the specs talk to the server over HTTP
     # and the browsers ship in the image. better-sqlite3 is the only binding.gyp package in the
     # lockfile and nothing in it has hasInstallScript, so --ignore-scripts skips exactly that
@@ -228,7 +236,7 @@ services:
     command: >
       sh -c "
         npm ci --ignore-scripts &&
-        npx playwright test --config=playwright.config.docker.ts --project=$${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
+        npx playwright test --config=tests/e2e/playwright.config.docker.ts --project=$${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
       "
     environment:
       - MCP_SERVER_URL=http://mcp-server-test:3600
@@ -236,13 +244,14 @@ services:
       - CI=true
       - PLAYWRIGHT_PROJECT=${PLAYWRIGHT_PROJECT:-docker-e2e-smoke}
     volumes:
-      - ./tests:/workspace/tests
-      - ./playwright.config.docker.ts:/workspace/playwright.config.docker.ts
+      # Mounts tests/ (the parent of this file's directory), so the Playwright config sits at
+      # /workspace/tests/e2e/ in the container, exactly where it sits on the host.
+      - ..:/workspace/tests
       # Mounted READ-ONLY (#381). npm ci never writes them, so this costs nothing and
       # converts a future regression to `npm install` from a silent host-file rewrite into
       # an immediate, obvious container-side failure.
-      - ./package.json:/workspace/package.json:ro
-      - ./package-lock.json:/workspace/package-lock.json:ro
+      - ../../package.json:/workspace/package.json:ro
+      - ../../package-lock.json:/workspace/package-lock.json:ro
       - e2e-test-results:/workspace/test-results
     networks:
       - e2e-test-network

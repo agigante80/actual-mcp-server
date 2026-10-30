@@ -28,7 +28,7 @@ test.describe('Docker E2E - ALL 84 TOOLS', () => {
   });
 
   // #570 filters both budget listings for a RESTRICTED session. This stack runs without
-  // authentication (docker-compose.test.yaml), so its one principal is unrestricted and the
+  // authentication (tests/e2e/compose.yaml), so its one principal is unrestricted and the
   // listings must stay whole: every configured budget is listed, and each one's file is
   // visible in get_all. Per-token isolation (#572) is covered by the unit rows in
   // tests/unit/httpServer_static_tokens.test.js instead.
@@ -1281,7 +1281,7 @@ test.describe('Docker E2E - ALL 84 TOOLS', () => {
     // #278: back to 60s. This test was never slow, it was DEADLOCKED, and it was a
     // correct canary. #273 raised the timeout to 120s on the theory that the request
     // queued behind others on the api mutex "under the full parallel load". That cannot
-    // be: playwright.config.docker.ts sets `workers: 1` and `retries: 0`, so these tests
+    // be: tests/e2e/playwright.config.docker.ts sets `workers: 1` and `retries: 0`, so these tests
     // run serially and nothing contends for the mutex.
     //
     // The real cause was a lost wakeup in the adapter's write queue: this test fires its
@@ -2172,7 +2172,7 @@ test.describe('Docker E2E - ALL 84 TOOLS', () => {
   });
 
   // #514: the two transfer cases are SKIPPED here because this stack runs the server with
-  // NODE_ENV=test (docker-compose.test.yaml). In that mode upstream's scheduleFullSync AWAITS a
+  // NODE_ENV=test (tests/e2e/compose.yaml). In that mode upstream's scheduleFullSync AWAITS a
   // full sync after every write instead of debouncing it. A transfer merge issues concurrent
   // writes (setTransfers), the merkle check then forces a resync that receives messages, and
   // receiveMessages queues on runMutator, which the merge itself still holds: a deadlock that

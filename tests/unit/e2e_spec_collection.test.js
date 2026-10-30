@@ -22,15 +22,15 @@
 // Nothing could have caught it:
 //   - Playwright documents no mechanism for reporting a spec file no project collects, and
 //     does not warn. A file matched by nothing is simply absent from the run.
-//   - `knip.json` declares `tests/e2e/**/*.spec.ts` as an ENTRY pattern, so knip treats
+//   - `package.json#knip` declares `tests/e2e/**/*.spec.ts` as an ENTRY pattern, so knip treats
 //     every spec as a reachable root by definition and the blocking dead-code gate
 //     structurally cannot see this class.
 //
 // WHY A DEDICATED GUARD RATHER THAN NARROWING THE KNIP PATTERN, which was the first
-// instinct and is recorded here so it is not re-litigated. Narrowing `knip.json` to the
+// instinct and is recorded here so it is not re-litigated. Narrowing `package.json#knip` to the
 // collected specs would work, but it reports "unused file", which reads as "delete this"
 // rather than "no project collects this", and it produces a FALSE failure whenever someone
-// adds a spec AND wires it up correctly, until knip.json is also edited. This guard has
+// adds a spec AND wires it up correctly, until package.json#knip is also edited. This guard has
 // neither problem: it stays quiet when a spec is properly collected, and when it fires it
 // names the actual fix.
 //
@@ -42,7 +42,8 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
-const CONFIGS = ['playwright.config.ts', 'playwright.config.docker.ts'];
+const DOCKER_CONFIG = 'tests/e2e/playwright.config.docker.ts';
+const CONFIGS = ['playwright.config.ts', DOCKER_CONFIG];
 const SPEC_DIR = join(ROOT, 'tests', 'e2e');
 
 let passed = 0;
@@ -125,7 +126,7 @@ check('every tests/e2e/*.spec.ts is collected by at least one Playwright project
       `      These files are SILENTLY INERT: Playwright does not warn, and knip treats every\n` +
       `      *.spec.ts as an entry root so the dead-code gate cannot see them either.\n` +
       `      Fix by adding a project with a matching testMatch in playwright.config.ts or\n` +
-      `      playwright.config.docker.ts, by moving the assertions somewhere that runs (see\n` +
+      `      tests/e2e/playwright.config.docker.ts, by moving the assertions somewhere that runs (see\n` +
       `      tests/unit/entrypoint_invariants.test.js), or by deleting the file.`,
   );
 });
@@ -133,14 +134,14 @@ check('every tests/e2e/*.spec.ts is collected by at least one Playwright project
 // #384: which project does CI ACTUALLY run?
 //
 // The first version of this got it wrong in a way worth recording, because it is the same mistake
-// the ticket is about. It treated "defined in playwright.config.docker.ts" as "runs in CI", which
+// the ticket is about. It treated "defined in the docker config" as "runs in CI", which
 // made `docker.e2e.spec.ts` pass: the `docker-e2e-smoke` project is defined in that config and CI
 // never selects it. A guard that accepts a project nobody invokes is the defect, not the fix.
 //
 // So the chain is followed end to end, through the two files where the truth actually lives:
 //   workflows -> which `test:e2e:docker:<level>` script they run
 //   run-docker-e2e.sh -> which PLAYWRIGHT_PROJECT that level selects
-//   playwright.config.docker.ts -> which testMatch that project carries
+//   tests/e2e/playwright.config.docker.ts -> which testMatch that project carries
 const workflowDir = join(ROOT, '.github', 'workflows');
 const workflowSrc = readdirSync(workflowDir)
   .filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))
@@ -171,7 +172,7 @@ const ciProjects = [...new Set([
 ])];
 
 // project name -> testMatch, from the docker config only (the config the runner uses).
-const dockerCfg = configs.find((c) => c.name === 'playwright.config.docker.ts').src;
+const dockerCfg = configs.find((c) => c.name === DOCKER_CONFIG).src;
 const projectMatchers = new Map();
 for (const m of dockerCfg.matchAll(/name:\s*['"`]([A-Za-z0-9_-]+)['"`],\s*\n\s*testMatch:\s*([^,\n]+)/g)) {
   const raw = m[2].trim().replace(/,$/, '');
@@ -242,6 +243,61 @@ check('NEGATIVE: the CI project set really excludes the smoke project', () => {
     !ciProjects.includes('docker-e2e-smoke'),
     `CI project set unexpectedly includes the smoke project: ${ciProjects.join(', ')}`,
   );
+});
+
+// #608: the docker config moved from the repo root to tests/e2e/. Playwright resolves `testDir`
+// and `outputDir` against the CONFIG FILE's directory, so a value copied over unchanged
+// (`./tests/e2e`) silently becomes tests/e2e/tests/e2e: zero specs collected, no error.
+// `outputDir` must be explicit because the implicit default `test-results` would land beside
+// the config, inside the `..:/workspace/tests` bind mount in the runner container.
+function stringOption(src, key) {
+  const m = src.match(new RegExp(key + ':\\s*[\'"`]([^\'"`]+)[\'"`]'));
+  return m ? m[1] : null;
+}
+function resolveAgainst(configRel, value) {
+  return join(dirname(join(ROOT, configRel)), value);
+}
+function testDirProblem(src, configRel) {
+  const raw = stringOption(src, 'testDir');
+  if (raw === null) return 'testDir is missing';
+  const resolved = resolveAgainst(configRel, raw);
+  return resolved === SPEC_DIR ? null : `testDir resolves to ${resolved.replace(ROOT + '/', '')}, expected tests/e2e`;
+}
+function outputProblem(src, configRel) {
+  const out = stringOption(src, 'outputDir');
+  if (out === null) return 'outputDir is missing';
+  const expected = join(ROOT, 'test-results');
+  const resolved = resolveAgainst(configRel, out);
+  if (resolved !== expected) return `outputDir resolves to ${resolved.replace(ROOT + '/', '')}, expected test-results`;
+  const json = stringOption(src, 'outputFile');
+  if (json === null) return 'JSON reporter outputFile is missing';
+  const jsonResolved = resolveAgainst(configRel, json);
+  if (!jsonResolved.startsWith(expected + '/')) {
+    return `JSON reporter outputFile resolves to ${jsonResolved.replace(ROOT + '/', '')}, outside test-results`;
+  }
+  return null;
+}
+
+check('the docker config testDir resolves to tests/e2e and a CI project matches a spec under it', () => {
+  assert.strictEqual(testDirProblem(dockerCfg, DOCKER_CONFIG), null);
+  assert.ok(
+    specs.some((spec) => ciMatchers.some((re) => re.test(`tests/e2e/${spec}`) || re.test(spec))),
+    'no spec under tests/e2e matches a CI project testMatch',
+  );
+});
+
+check('NEGATIVE: a stale testDir (./tests/e2e) is flagged with the doubled path', () => {
+  const problem = testDirProblem("testDir: './tests/e2e',", DOCKER_CONFIG);
+  assert.ok(problem && problem.includes('tests/e2e/tests/e2e'), `got: ${problem}`);
+});
+
+check('the docker config pins outputDir and the JSON reporter to <root>/test-results', () => {
+  assert.strictEqual(outputProblem(dockerCfg, DOCKER_CONFIG), null);
+});
+
+check('NEGATIVE: a docker config without outputDir is flagged', () => {
+  const problem = outputProblem("testDir: '.',\nreporter: [['json', { outputFile: '../../test-results/x.json' }]]", DOCKER_CONFIG);
+  assert.ok(problem && problem.includes('outputDir is missing'), `got: ${problem}`);
 });
 
 // NEGATIVE fixture: prove the comparator catches an orphan rather than passing vacuously.

@@ -53,18 +53,31 @@ check('no dead chown of a non-canonical dir remains in the Dockerfile', () => {
   }
 });
 
+function checkComposeDataDir(name, text) {
+  let n = 0;
+  for (const e of text.matchAll(/MCP_BRIDGE_DATA_DIR=(\S+)/g)) {
+    n++;
+    assert.strictEqual(e[1], CANON, `${name} MCP_BRIDGE_DATA_DIR=${e[1]} != ${CANON}`);
+  }
+  return n;
+}
+
 check('every compose MCP_BRIDGE_DATA_DIR env matches canonical (incl. CI compose)', () => {
   // Only the MCP service defines MCP_BRIDGE_DATA_DIR, so scanning both compose
   // files is safe (the upstream actual-server service has no such var). Including
-  // docker-compose.test.yaml stops the CI stack from silently drifting.
+  // tests/e2e/compose.yaml stops the CI stack from silently drifting.
   let total = 0;
-  for (const f of ['docker-compose.yaml', 'docker-compose.test.yaml']) {
-    for (const e of read(f).matchAll(/MCP_BRIDGE_DATA_DIR=(\S+)/g)) {
-      total++;
-      assert.strictEqual(e[1], CANON, `${f} MCP_BRIDGE_DATA_DIR=${e[1]} != ${CANON}`);
-    }
+  for (const f of ['docker-compose.yaml', 'tests/e2e/compose.yaml']) {
+    total += checkComposeDataDir(f, read(f));
   }
   assert(total > 0, 'no MCP_BRIDGE_DATA_DIR env found in any compose file');
+});
+
+check('NEGATIVE: a wrong MCP_BRIDGE_DATA_DIR in tests/e2e/compose.yaml is reported under that name', () => {
+  assert.throws(
+    () => checkComposeDataDir('tests/e2e/compose.yaml', '      - MCP_BRIDGE_DATA_DIR=/wrong\n'),
+    (err) => err.message.startsWith('tests/e2e/compose.yaml'),
+  );
 });
 
 check('every compose data-volume mount target matches canonical', () => {

@@ -1,6 +1,6 @@
 // tests/unit/knip_config.test.js
 //
-// #234: knip.json must parse, and every `entry` glob root must resolve to a real path
+// #234: package.json#knip (formerly knip.json, #608) must exist, and every `entry` glob root must resolve to a real path
 // on disk. A typo in an entry pattern silently drops live code from Knip's reachable
 // set and re-introduces false positives, so this guard catches it. Mirrors the
 // text-parsing guard pattern (port_alignment / config_drift / compose_profile_sync).
@@ -8,7 +8,8 @@
 // Run: node tests/unit/knip_config.test.js
 
 import assert from 'assert';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, mkdtempSync, writeFileSync, rmSync } from 'fs';
+import { tmpdir } from 'os';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -40,15 +41,54 @@ function missingEntryRoots(config, root = ROOT) {
 
 console.log('\n[knip-config]');
 
-check('knip.json parses as JSON with an entry array', () => {
-  const cfg = JSON.parse(readFileSync(join(ROOT, 'knip.json'), 'utf8'));
-  assert.ok(Array.isArray(cfg.entry) && cfg.entry.length > 0, 'knip.json must declare a non-empty entry array');
+// #608: the config lives in package.json#knip. knip reads any root config file ahead of
+// package.json#knip (its KNIP_CONFIG_LOCATIONS), so a stale one would silently win.
+const SHADOWING_CONFIGS = [
+  'knip.json', 'knip.jsonc', '.knip.json', '.knip.jsonc',
+  'knip.ts', 'knip.js', 'knip.config.ts', 'knip.config.js',
+];
+function knipConfigProblem(pkg) {
+  const cfg = pkg && pkg.knip;
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) return 'package.json#knip must exist and be an object';
+  if (!Array.isArray(cfg.entry) || cfg.entry.length === 0) return 'package.json#knip must declare a non-empty entry array';
+  return null;
+}
+function shadowingConfig(root) {
+  const found = SHADOWING_CONFIGS.find((f) => existsSync(join(root, f)));
+  return found ? `a root knip config file must not exist: ${found}` : null;
+}
+const loadPkg = () => JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+
+check('package.json#knip exists with a non-empty entry array', () => {
+  assert.strictEqual(knipConfigProblem(loadPkg()), null);
 });
 
-check('every committed knip.json entry glob root exists on disk', () => {
-  const cfg = JSON.parse(readFileSync(join(ROOT, 'knip.json'), 'utf8'));
-  const missing = missingEntryRoots(cfg);
-  assert.strictEqual(missing.length, 0, `knip.json entry roots not found on disk: ${missing.join(', ')}`);
+check('every package.json#knip entry glob root exists on disk', () => {
+  const missing = missingEntryRoots(loadPkg().knip);
+  assert.strictEqual(missing.length, 0, `package.json#knip entry roots not found on disk: ${missing.join(', ')}`);
+});
+
+check('package.json#knip entry covers the moved docker Playwright config and keeps ignoreBinaries lychee', () => {
+  const cfg = loadPkg().knip;
+  assert.ok(cfg.entry.includes('tests/e2e/playwright.config.docker.ts'), 'entry must name tests/e2e/playwright.config.docker.ts');
+  assert.ok(Array.isArray(cfg.ignoreBinaries) && cfg.ignoreBinaries.includes('lychee'), 'ignoreBinaries must contain lychee (#602)');
+});
+
+check('no root knip config file shadows package.json#knip', () => {
+  assert.strictEqual(shadowingConfig(ROOT), null);
+});
+
+check('NEGATIVE: a package.json without a knip key is flagged, naming package.json#knip', () => {
+  const problem = knipConfigProblem({ name: 'x' });
+  assert.ok(problem && problem.includes('package.json#knip'), `got: ${problem}`);
+});
+
+check('NEGATIVE: a root knip.json is flagged as shadowing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'knip-shadow-'));
+  try {
+    writeFileSync(join(dir, 'knip.json'), '{}');
+    assert.strictEqual(shadowingConfig(dir), 'a root knip config file must not exist: knip.json');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
 // NEGATIVE: a fixture config (inline, NOT the committed file) with a bad entry root is

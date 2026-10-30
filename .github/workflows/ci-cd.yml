@@ -450,14 +450,14 @@ jobs:
 
       # Playwright browsers are NOT installed on the host: tests run inside the
       # mcr.microsoft.com/playwright:v1.64.1-jammy Docker container (e2e-test-runner
-      # service in docker-compose.test.yaml) which already has Playwright pre-installed.
+      # service in tests/e2e/compose.yaml) which already has Playwright pre-installed.
 
       - name: 🗄️ Restore Docker image cache
         id: docker-cache
         uses: actions/cache@v6
         with:
           path: /tmp/docker-image-cache
-          key: docker-e2e-images-${{ runner.os }}-${{ hashFiles('docker-compose.test.yaml') }}
+          key: docker-e2e-images-${{ runner.os }}-${{ hashFiles('tests/e2e/compose.yaml') }}
           restore-keys: docker-e2e-images-${{ runner.os }}-
 
       - name: 🐳 Load cached Docker images
@@ -492,11 +492,11 @@ jobs:
         run: |
           if [ "${{ steps.e2e.outcome }}" != "success" ]; then
             echo "::group::Service container logs (last 200 lines each; empty when the script already tore down)"
-            docker compose -f docker-compose.test.yaml logs --no-color --tail=200 \
+            docker compose -f tests/e2e/compose.yaml logs --no-color --tail=200 \
               mcp-server-test actual-budget-test actual-budget-stdio-test || true
             echo "::endgroup::"
           fi
-          docker compose -f docker-compose.test.yaml down -v
+          docker compose -f tests/e2e/compose.yaml down -v
 
       - name: 🐳 Save Docker images to cache
         if: always()

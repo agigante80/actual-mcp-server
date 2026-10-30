@@ -297,16 +297,16 @@ jobs:
           # The Docker E2E step above tears its stack down, so bring the two
           # services this needs back up. Only the server and its Actual backend,
           # not the Playwright runner.
-          docker compose -f docker-compose.test.yaml up -d --wait actual-budget-test mcp-server-test
+          docker compose -f tests/e2e/compose.yaml up -d --wait actual-budget-test mcp-server-test
           node scripts/stdio-framing-check.mjs
 
       - name: 🧹 Cleanup stdio framing stack
         if: steps.versions.outputs.update_needed == 'true' && always()
-        run: docker compose -f docker-compose.test.yaml down -v --remove-orphans
+        run: docker compose -f tests/e2e/compose.yaml down -v --remove-orphans
 
       - name: 🧹 Cleanup Docker containers
         if: steps.versions.outputs.update_needed == 'true' && always()
-        run: docker compose -f docker-compose.test.yaml down -v --remove-orphans
+        run: docker compose -f tests/e2e/compose.yaml down -v --remove-orphans
 
       # -----------------------------------------------------------------------
       # 8. All green: bump version and commit

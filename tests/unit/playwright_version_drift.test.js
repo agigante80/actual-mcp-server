@@ -52,7 +52,8 @@ function fixture({ locked, composeTag, workflowTag }) {
   writeFileSync(join(dir, 'package-lock.json'), JSON.stringify({
     packages: { 'node_modules/@playwright/test': { version: locked } },
   }));
-  writeFileSync(join(dir, 'docker-compose.test.yaml'),
+  mkdirSync(join(dir, 'tests', 'e2e'), { recursive: true });
+  writeFileSync(join(dir, 'tests', 'e2e', 'compose.yaml'),
     composeTag ? `services:\n  e2e-test-runner:\n    image: mcr.microsoft.com/playwright:${composeTag}\n` : 'services: {}\n');
   if (workflowTag) {
     mkdirSync(join(dir, '.github', 'workflows'), { recursive: true });
@@ -74,10 +75,10 @@ check('the real tree pins the image at exactly the lockfile version', () => {
   // (for instance a scan that found no sites) cannot also make this pass.
   const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8'));
   const locked = lock.packages['node_modules/@playwright/test'].version;
-  const compose = readFileSync(join(ROOT, 'docker-compose.test.yaml'), 'utf8');
+  const compose = readFileSync(join(ROOT, 'tests', 'e2e', 'compose.yaml'), 'utf8');
   assert.ok(
     compose.includes(`mcr.microsoft.com/playwright:v${locked}-`),
-    `docker-compose.test.yaml does not pin v${locked}`,
+    `tests/e2e/compose.yaml does not pin v${locked}`,
   );
 });
 
@@ -90,7 +91,7 @@ check('the real tree pins the image at exactly the lockfile version', () => {
 // below can mutate a copy; the real file is checked last.
 function checkRunnerCommand(compose) {
   const start = compose.indexOf('e2e-test-runner:');
-  assert.ok(start !== -1, 'docker-compose.test.yaml no longer defines e2e-test-runner');
+  assert.ok(start !== -1, 'tests/e2e/compose.yaml no longer defines e2e-test-runner');
   const runner = compose.slice(start);
   // The `command:` block is the folded scalar after `command: >`: every following line indented
   // deeper than the key. Scoped to it so the service's comment may mention apt in prose. The
@@ -105,7 +106,7 @@ function checkRunnerCommand(compose) {
   assert.ok(!/\bapt-get\b/.test(command), 'e2e-test-runner must not call apt-get (#593)');
 }
 
-const REAL_COMPOSE = readFileSync(join(ROOT, 'docker-compose.test.yaml'), 'utf8');
+const REAL_COMPOSE = readFileSync(join(ROOT, 'tests', 'e2e', 'compose.yaml'), 'utf8');
 
 check('CATCHES a runner command that lost --ignore-scripts (#593)', () => {
   // replaceAll: the service comment also quotes the flag, and a first-occurrence replace would
@@ -178,6 +179,17 @@ check('FAILS rather than passing vacuously when no image reference exists', () =
     const { code, out } = run(dir);
     assert.strictEqual(code, 1, 'guard passed with nothing to check');
     assert.ok(/stale|no mcr/i.test(out), `message does not say the scan found nothing:\n${out}`);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('FAILS when the compose file is missing, naming tests/e2e/compose.yaml', () => {
+  // A missing compose file must not silently drop its pin from the check.
+  const dir = fixture({ locked: '1.62.1', composeTag: 'v1.62.1-jammy', workflowTag: 'v1.62.1-jammy' });
+  try {
+    rmSync(join(dir, 'tests', 'e2e', 'compose.yaml'));
+    const { code, out } = run(dir);
+    assert.strictEqual(code, 1, 'guard passed with the compose file missing');
+    assert.ok(/tests\/e2e\/compose\.yaml/.test(out), `message does not name the compose file:\n${out}`);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

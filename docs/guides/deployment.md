@@ -182,7 +182,7 @@ cp .env.example .env
 | `dev` | MCP server, mounts `src/` for hot-reload | Local development |
 | `production` | MCP server only (resource limits, env-based config) | Production, single host |
 
-There is no bundled reverse proxy or Actual Budget server in `docker-compose.yaml`. For a stack that also runs Actual Budget (used by the Docker E2E tests), see `docker-compose.test.yaml`. For a reverse proxy, a commented Traefik example is included near the bottom of `docker-compose.yaml`.
+There is no bundled reverse proxy or Actual Budget server in `docker-compose.yaml`. For a stack that also runs Actual Budget (used by the Docker E2E tests), see `tests/e2e/compose.yaml`. For a reverse proxy, a commented Traefik example is included near the bottom of `docker-compose.yaml`.
 
 ```bash
 # Development (hot-reload source, unauthenticated, bound to 127.0.0.1 only)

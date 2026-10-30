@@ -108,5 +108,29 @@
     "finance",
     "ai"
   ],
-  "author": "agigante80"
+  "author": "agigante80",
+  "knip": {
+    "entry": [
+      "src/tools/index.ts",
+      "src/server/httpServer.ts",
+      "src/server/stdioServer.ts",
+      "src/tests_adapter_runner.ts",
+      "src/tests/testMcpClient.ts",
+      "src/prompts/showLargeTransactions.ts",
+      "src/resources/accountsSummary.ts",
+      "scripts/**/*.{js,mjs}",
+      "tests/unit/**/*.test.js",
+      "tests/e2e/**/*.spec.ts",
+      "tests/manual/tests/**/*.js",
+      "tests/manual/*.mjs",
+      "tests/e2e/playwright.config.docker.ts"
+    ],
+    "project": [
+      "src/**/*.ts"
+    ],
+    "ignoreExportsUsedInFile": true,
+    "ignoreBinaries": [
+      "lychee"
+    ]
+  }
 }

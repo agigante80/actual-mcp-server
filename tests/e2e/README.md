@@ -66,7 +66,7 @@ logs before tearing the stack down.
 
 | Context | Config file |
 |---------|------------|
-| Inside Docker network (CI) | `playwright.config.docker.ts` |
+| Inside Docker network (CI) | `tests/e2e/playwright.config.docker.ts` |
 | Host machine (rare, manual) | `playwright.config.ts` |
 
 ---
@@ -142,7 +142,7 @@ streaming, and session lifecycle.
 
 - Every test is **self-provisioning** (#375): it asks `fixtures.ts` for what it needs, and
   everything it creates is removed in fixture teardown, which runs even when the test fails
-- Any single test can be run alone. `npx playwright test --config playwright.config.docker.ts
+- Any single test can be run alone. `npx playwright test --config tests/e2e/playwright.config.docker.ts
   --grep 'actual_accounts_get_balance'` passes rather than skipping
 - Tests share one MCP session per worker (cached in `fixtures.ts`), but no test depends on
   DATA another test created. The file documents its one exception: the export/import round
@@ -159,7 +159,7 @@ streaming, and session lifecycle.
   templates and two agent definitions all started naming it as the place to add E2E
   coverage, so tests written there were silently inert. The directory was removed and every
   pointer now names this spec. Add E2E coverage here, and confirm it is collected with
-  `npx playwright test --list --config playwright.config.docker.ts`.
+  `npx playwright test --list --config tests/e2e/playwright.config.docker.ts`.
 
 ---
 
@@ -249,7 +249,7 @@ These rules apply to everyone adding or modifying tests in this directory.
 ### Retry behaviour
 
 - Do not add manual retry loops inside tests — Playwright's `retries: 2` (configured in both
-  `playwright.config.ts` and `playwright.config.docker.ts`) handles transient flakiness.
+  `playwright.config.ts` and `tests/e2e/playwright.config.docker.ts`) handles transient flakiness.
 - Use `retryRequest()` only for `fetch`/`request` calls, not for Playwright `test` assertions.
 
 ### Cleanup and read-back
@@ -283,7 +283,7 @@ These rules apply to everyone adding or modifying tests in this directory.
 4. If the tool creates an entity no factory covers, either add a factory to `fixtures.ts` or
    register `cleanup.add(...)` in the test itself.
 5. Confirm the test is collected AND runs alone:
-   `npx playwright test --list --config playwright.config.docker.ts`, then the same command
+   `npx playwright test --list --config tests/e2e/playwright.config.docker.ts`, then the same command
    with `--grep 'your test name'`. A test that skips when run alone has a hidden dependency.
 6. Run `npm run typecheck:e2e`. Playwright transpiles specs without typechecking them.
 

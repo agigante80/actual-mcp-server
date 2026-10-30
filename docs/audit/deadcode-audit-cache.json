@@ -7,14 +7,14 @@
       "lastSeen": "2026-07-11",
       "status": "allowlisted",
       "ticket": null,
-      "notes": "Intentional unshipped MCP prompt scaffolding; server advertises prompts:false. Declared as an entry in knip.json."
+      "notes": "Intentional unshipped MCP prompt scaffolding; server advertises prompts:false. Declared as an entry in package.json#knip."
     },
     "unused-file:src/resources/accountsSummary.ts:": {
       "firstSeen": "2026-06-12",
       "lastSeen": "2026-07-11",
       "status": "allowlisted",
       "ticket": null,
-      "notes": "Intentional unshipped MCP resource scaffolding; server advertises resources:false. Declared as an entry in knip.json."
+      "notes": "Intentional unshipped MCP resource scaffolding; server advertises resources:false. Declared as an entry in package.json#knip."
     },
     "unused-export:src/lib/constants.ts:DEFAULT_HTTP_PORT": {
       "firstSeen": "2026-06-12",

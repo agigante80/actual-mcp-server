@@ -68,18 +68,31 @@ check('.env.example MCP_BRIDGE_PORT matches canonical', () => {
   assert.strictEqual(m[1], CANON, `.env.example ${m[1]} != ${CANON}`);
 });
 
+function checkComposePort(name, text) {
+  let n = 0;
+  for (const e of text.matchAll(/MCP_BRIDGE_PORT=(\d+)/g)) {
+    n++;
+    assert.strictEqual(e[1], CANON, `${name} MCP_BRIDGE_PORT=${e[1]} != ${CANON}`);
+  }
+  return n;
+}
+
 check('every compose MCP_BRIDGE_PORT env matches canonical (incl. CI compose)', () => {
   // Only the MCP service defines MCP_BRIDGE_PORT, so this is safe to scan across
   // both compose files without tripping on the upstream actual-server service.
-  // docker-compose.test.yaml is included so the CI stack cannot silently drift.
+  // tests/e2e/compose.yaml is included so the CI stack cannot silently drift.
   let total = 0;
-  for (const f of ['docker-compose.yaml', 'docker-compose.test.yaml']) {
-    for (const e of read(f).matchAll(/MCP_BRIDGE_PORT=(\d+)/g)) {
-      total++;
-      assert.strictEqual(e[1], CANON, `${f} MCP_BRIDGE_PORT=${e[1]} != ${CANON}`);
-    }
+  for (const f of ['docker-compose.yaml', 'tests/e2e/compose.yaml']) {
+    total += checkComposePort(f, read(f));
   }
   assert(total > 0, 'no MCP_BRIDGE_PORT env found in any compose file');
+});
+
+check('NEGATIVE: a wrong MCP_BRIDGE_PORT in tests/e2e/compose.yaml is reported under that name', () => {
+  assert.throws(
+    () => checkComposePort('tests/e2e/compose.yaml', '      - MCP_BRIDGE_PORT=3999\n'),
+    (err) => err.message.startsWith('tests/e2e/compose.yaml'),
+  );
 });
 
 check('every docker-compose.yaml port mapping matches canonical', () => {

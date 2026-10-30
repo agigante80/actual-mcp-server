@@ -2,7 +2,7 @@
 //
 // #279: resurrected from src/tests/observability.smoke.test.ts, which was dead code.
 //
-// It was imported by nothing, referenced by no npm script, and was not a knip.json
+// It was imported by nothing, referenced by no npm script, and was not a package.json#knip
 // entry, yet `project: ["src/**/*.ts"]` meant tsc compiled it into dist/ and
 // `files: ["dist/"]` meant it SHIPPED to users in the npm tarball. knip 6.17.1 missed
 // it; 6.25.0 flagged it, correctly. Rather than silence the finding with an ignore, the

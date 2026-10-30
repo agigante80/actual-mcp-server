@@ -34,7 +34,7 @@ export const STDIO_CONTAINER = process.env.MCP_STDIO_CONTAINER || 'mcp-server-e2
 /**
  * Its own budget cache, never the one the HTTP server is using. See the header.
  *
- * It is its OWN named volume (`mcp-test-stdio-data`), declared in docker-compose.test.yaml, and
+ * It is its OWN named volume (`mcp-test-stdio-data`), declared in tests/e2e/compose.yaml, and
  * both halves of that are forced. It cannot live under /app/data because that is the HTTP
  * server's cache and the whole point is not to share one. It cannot live under /tmp either:
  * this image's root filesystem is read-only, which is exactly how the first attempt failed, with
@@ -91,7 +91,7 @@ export async function openStdioSession(): Promise<StdioSession> {
     const detail = (err as { stderr?: Buffer }).stderr?.toString().trim() || (err as Error).message;
     throw new Error(
       `could not prepare the stdio data dir ${DATA_DIR} in "${STDIO_CONTAINER}": ${detail}\n` +
-      `It must exist and be writable by uid 1001. docker-compose.test.yaml mounts the named ` +
+      `It must exist and be writable by uid 1001. tests/e2e/compose.yaml mounts the named ` +
       `volume mcp-test-stdio-data there for exactly this; if you are pointing at a different ` +
       `stack, give it a writable mount and set MCP_STDIO_DATA_DIR. Or the container is not running.`,
     );

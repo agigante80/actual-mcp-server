@@ -3,16 +3,25 @@ import { defineConfig } from '@playwright/test';
 /**
  * Playwright configuration for Docker-based E2E tests.
  *
- * Used exclusively by the `e2e-test-runner` service in docker-compose.test.yaml.
+ * Used exclusively by the `e2e-test-runner` service in tests/e2e/compose.yaml.
  * Tests run inside a container against the full Actual Budget + MCP server stack.
  *
  * Note: Both docker spec files read process.env.MCP_SERVER_URL directly for the
  * MCP server URL. They are API-only tests (no browser), so browser-oriented
  * settings (baseURL, screenshot, video, navigationTimeout, actionTimeout) are
  * intentionally absent here.
+ *
+ * Location (#608): this file lives in tests/e2e/ on the host and at /workspace/tests/e2e/ in the
+ * runner container, so one set of config-relative paths serves both. Playwright resolves
+ * `testDir`, `outputDir` and reporter paths against THIS file's directory.
  */
 export default defineConfig({
-  testDir: './tests/e2e',
+  testDir: '.',
+
+  // Explicit, because the implicit default `test-results` would now land in tests/e2e/, which in
+  // the container is inside the `..:/workspace/tests` bind mount. This keeps results at
+  // <root>/test-results on the host and at /workspace/test-results (the e2e-test-results volume).
+  outputDir: '../../test-results',
 
   // Longer timeout for Docker-based tests (service startup, network latency)
   timeout: 120000,
@@ -31,8 +40,8 @@ export default defineConfig({
     // because the reporter clears its directory before writing and would delete the
     // traces and attachments sitting beside it. That refusal is what kept the stdio
     // leg from running at all.
-    ['html', { outputFolder: 'playwright-report/docker-e2e', open: 'never' }],
-    ['json', { outputFile: 'test-results/docker-e2e-results.json' }],
+    ['html', { outputFolder: '../../playwright-report/docker-e2e', open: 'never' }],
+    ['json', { outputFile: '../../test-results/docker-e2e-results.json' }],
   ],
 
   use: {

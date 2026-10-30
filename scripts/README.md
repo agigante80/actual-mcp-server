@@ -57,8 +57,8 @@ bash scripts/deploy-and-test.sh full
 
 | Script | Called by | Purpose |
 |---|---|---|
-| `bootstrap-and-init.sh` | `docker-compose.test.yaml` | Waits for the Actual Budget server to be healthy, bootstraps the password via HTTP, then calls `import-test-budget.sh`. |
-| `import-test-budget.sh` | `bootstrap-and-init.sh` | POSTs `test-data/2026-01-08-Test Budget.zip` (or a custom path via `$1`) to the Actual server's import endpoint. |
+| `bootstrap-and-init.sh` | `tests/e2e/compose.yaml` | Waits for the Actual Budget server to be healthy, bootstraps the password via HTTP, then calls `import-test-budget.sh`. |
+| `import-test-budget.sh` | `bootstrap-and-init.sh` | POSTs `test-data/2026-01-08-Test Budget.zip` (inside the container; host copy in `tests/fixtures/budgets/`) (or a custom path via `$1`) to the Actual server's import endpoint. |
 
 ## Direct Actual Budget connectivity testing
 

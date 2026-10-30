@@ -451,7 +451,7 @@ It does **not** use the SDK's `StdioClientTransport`. That transport consumes st
 
 **Two CI mechanics that are easy to get wrong, both encoded as tests:**
 
-1. **The sync id does not cross the `docker exec` boundary.** `docker-compose.test.yaml` does not carry `ACTUAL_BUDGET_SYNC_ID` in its `environment:` block. The service entrypoint reads `/tmp/actual-sync-id.txt` and `export`s it, so it lives in PID 1's runtime environment, and `docker exec` builds a new process's environment from container **config**, not from PID 1. It arrives empty. The framing check reads the same file the entrypoint reads.
+1. **The sync id does not cross the `docker exec` boundary.** `tests/e2e/compose.yaml` does not carry `ACTUAL_BUDGET_SYNC_ID` in its `environment:` block. The service entrypoint reads `/tmp/actual-sync-id.txt` and `export`s it, so it lives in PID 1's runtime environment, and `docker exec` builds a new process's environment from container **config**, not from PID 1. It arrives empty. The framing check reads the same file the entrypoint reads.
 2. **The stdio data dir must be writable and must be neither `/tmp` nor `/app/data`.** `/tmp` is mounted `bootstrap-data:/tmp:ro`, so a `mkdir` there fails, and it fails inside a bare `catch {}` that resurfaces later as an ENOENT during adapter init. `/app/data` is the HTTP server's own directory, and #280 established that two `@actual-app/api` instances must never share one budget cache.
 
 ---
@@ -568,7 +568,7 @@ npm audit
 ### Code Health & Dead-Code Detection (#234)
 
 Dead/unused code (unused files, exports, types, orphaned modules) is detected by **Knip**
-via the committed `knip.json`:
+via the `knip` key of `package.json`:
 
 ```bash
 npm run knip            # blocking since #237: exits nonzero on any dead code
@@ -579,7 +579,7 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   new dead code cannot merge. `tests/unit/knip_config.test.js` guards that `scripts.knip`
   stays failing-mode (no `--no-exit-code`).
 - **Guard tests** (in `test:unit-js`, fail CI on drift): `tests/unit/knip_config.test.js`
-  (every `knip.json` entry root exists on disk) and `tests/unit/advertised_tools_sync.test.js`
+  (every `package.json#knip` entry root exists on disk) and `tests/unit/advertised_tools_sync.test.js`
   (every `actual_<domain>_<action>` tool name advertised in `README.md` resolves to
   `IMPLEMENTED_TOOLS`, catching documented-but-missing/renamed tools). These join the existing
   doc-to-code drift guards: `tool_count_sync`, `config_drift`, `port_alignment`,

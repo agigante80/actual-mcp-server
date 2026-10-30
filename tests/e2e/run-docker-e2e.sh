@@ -13,7 +13,7 @@ set -e  # Exit on error
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-COMPOSE_FILE="$PROJECT_ROOT/docker-compose.test.yaml"
+COMPOSE_FILE="$PROJECT_ROOT/tests/e2e/compose.yaml"
 
 # Parse arguments
 NO_CLEANUP=false
@@ -108,7 +108,7 @@ cleanup() {
     log_success "Cleanup complete"
   else
     log_warn "Skipping cleanup (--no-cleanup flag set)"
-    log_info "To manually cleanup: cd $PROJECT_ROOT && docker compose -f docker-compose.test.yaml down -v"
+    log_info "To manually cleanup: cd $PROJECT_ROOT && docker compose -f tests/e2e/compose.yaml down -v"
   fi
 }
 
@@ -363,7 +363,7 @@ if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${RUN_STDIO_E2E
   # set -e is active, so capture the exit through an `if` (a bare `cmd; rc=$?` would exit the
   # script the moment playwright fails, before the advisory check below ever runs).
   if MCP_TEST_TRANSPORT=stdio npx playwright test \
-    --config=playwright.config.docker.ts --project=docker-e2e-full-stdio; then
+    --config=tests/e2e/playwright.config.docker.ts --project=docker-e2e-full-stdio; then
     STDIO_EXIT_CODE=0
   else
     STDIO_EXIT_CODE=$?
@@ -376,7 +376,7 @@ if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${RUN_STDIO_E2E
       log_error "STDIO transport FAILED (the HTTP transport passed)."
       log_info "Re-run just it with:"
       log_info "  MCP_STDIO_SERVER_URL=http://actual-budget-stdio-test:5006 MCP_STDIO_SYNC_ID_FILE=/tmp-stdio/actual-sync-id.txt \\"
-      log_info "  MCP_TEST_TRANSPORT=stdio npx playwright test --config=playwright.config.docker.ts --project=docker-e2e-full-stdio"
+      log_info "  MCP_TEST_TRANSPORT=stdio npx playwright test --config=tests/e2e/playwright.config.docker.ts --project=docker-e2e-full-stdio"
       TEST_EXIT_CODE=$STDIO_EXIT_CODE
     else
       log_warn "STDIO transport had failures (advisory: STDIO_E2E_GATING=false)."

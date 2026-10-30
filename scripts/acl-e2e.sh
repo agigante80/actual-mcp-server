@@ -286,7 +286,7 @@ echo "    IdP serving discovery"
 # ---------------------------------------------------------------------------
 info "5/6 Import two budgets and grant one to each user"
 # ---------------------------------------------------------------------------
-ZIP="$ROOT/test-data/2026-01-08-Test Budget.zip"
+ZIP="$ROOT/tests/fixtures/budgets/2026-01-08-Test Budget.zip"
 [ -f "$ZIP" ] || die "missing test budget zip at $ZIP"
 
 IMPORT_JS="$(mktemp "$ROOT/.acl-e2e-import-XXXX.mjs")"

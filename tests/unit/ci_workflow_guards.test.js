@@ -10,7 +10,7 @@
 // no YAML dependency in the unit runner.
 // Run: node tests/unit/ci_workflow_guards.test.js
 
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -93,6 +93,33 @@ check('npm-publish does NOT do an in-place `npm install -g npm@latest`', () => {
 check('npm-publish still publishes with provenance', () => {
   const s = jobBlock('npm-publish');
   return /npm publish --provenance/.test(s);
+});
+
+// #608: `hashFiles('<path>')` of a path that does not exist evaluates to an empty string and does
+// not fail, so a cache key naming a moved file silently stops tracking it. Every literal
+// argument must exist on disk. Glob arguments are skipped (they may legitimately match nothing).
+function missingHashFilesPaths(text) {
+  const missing = [];
+  for (const m of text.matchAll(/hashFiles\(([^)]*)\)/g)) {
+    for (const lit of m[1].matchAll(/'([^']+)'/g)) {
+      if (/[*?{[]/.test(lit[1])) continue;
+      if (!existsSync(join(ROOT, lit[1]))) missing.push(lit[1]);
+    }
+  }
+  return missing;
+}
+check('every literal hashFiles() path in the workflows exists on disk (#608)', () => {
+  const dir = join(ROOT, '.github', 'workflows');
+  const bad = [];
+  for (const f of readdirSync(dir).filter((n) => /\.ya?ml$/.test(n))) {
+    for (const p of missingHashFilesPaths(readFileSync(join(dir, f), 'utf8'))) bad.push(`${f}: ${p}`);
+  }
+  if (bad.length) throw new Error(`hashFiles of a missing path is silently empty: ${bad.join(', ')}`);
+  return true;
+});
+check('NEGATIVE: a hashFiles() path that does not exist is reported (#608)', () => {
+  const missing = missingHashFilesPaths("key: x-${{ hashFiles('no-such-dir/compose.yaml') }}");
+  return missing.length === 1 && missing[0] === 'no-such-dir/compose.yaml';
 });
 
 console.log('');

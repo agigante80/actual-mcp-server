@@ -53,7 +53,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Both a positive scenario and a not-found/negative scenario described in the prompt instructions
 
 ### E2E Tests
-- [ ] Tool's happy-path call added to `tests/e2e/docker-all-tools.e2e.spec.ts`, and confirmed collected with `npx playwright test --list --config playwright.config.docker.ts` (#366: the old `tests/e2e/suites/` path never executed)
+- [ ] Tool's happy-path call added to `tests/e2e/docker-all-tools.e2e.spec.ts`, and confirmed collected with `npx playwright test --list --config tests/e2e/playwright.config.docker.ts` (#366: the old `tests/e2e/suites/` path never executed)
 - [ ] `EXPECTED_TOOL_COUNT` default bumped in `tests/manual/tests/sanity.js` (the only place that asserts an exact tool count)
 - [ ] `describe('Docker E2E - ALL <N> TOOLS', ...)` block-name count updated in `tests/e2e/docker-all-tools.e2e.spec.ts` (cosmetic label only; the spec does not assert a count, and `mcp-client.playwright.spec.ts` only checks `tools.length > 0`)
 - [ ] `npm run test:e2e` passes

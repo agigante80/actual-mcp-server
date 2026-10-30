@@ -22,7 +22,7 @@ Key rules:
   factories from `tests/e2e/fixtures.ts`, instead of defining helpers locally in spec files
 - These are **API-only** tests (HTTP JSON-RPC). Do not use `page.*` or any browser APIs
 - Do NOT add `baseURL` interaction patterns — specs call `MCP_SERVER_URL` directly
-- Retry logic (`retries: 2`) is configured in `playwright.config.ts` / `playwright.config.docker.ts` — don't add manual retry loops
+- Retry logic (`retries: 2`) is configured in `playwright.config.ts` / `tests/e2e/playwright.config.docker.ts`, so do not add manual retry loops
 - **Every test provisions its own data** (#375). Ask the fixtures in `tests/e2e/fixtures.ts`
   (`async ({ mcp, makeAccount }) => ...`); never read an id another test wrote, and never add a
   shared mutable context. A test must pass when run alone with `--grep`
@@ -35,6 +35,6 @@ Key rules:
 
 ### Config files
 - Local testing: `playwright.config.ts`
-- Docker CI stack: `playwright.config.docker.ts`
+- Docker CI stack: `tests/e2e/playwright.config.docker.ts`
 
 > On conflict, follow the precedence in [AGENTS.md](../../AGENTS.md); this file adds detail for its applyTo glob and must not contradict it.

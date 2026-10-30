@@ -35,6 +35,9 @@ const ROOT = rootFlag === -1
   ? join(dirname(fileURLToPath(import.meta.url)), '..')
   : argv[rootFlag + 1];
 
+/** The E2E stack's compose file. Required: a missing file is a failure, never a silent skip. */
+const COMPOSE_REL = 'tests/e2e/compose.yaml';
+
 /** Every `mcr.microsoft.com/playwright:v<version>-<base>` reference, wherever it appears. */
 const IMAGE_RE = /mcr\.microsoft\.com\/playwright:v(\d+\.\d+\.\d+)-([a-z]+)/g;
 
@@ -44,7 +47,7 @@ const IMAGE_RE = /mcr\.microsoft\.com\/playwright:v(\d+\.\d+\.\d+)-([a-z]+)/g;
  * that knew about only one of them would go green on a half-done bump.
  */
 function pinSites(root) {
-  const files = [join(root, 'docker-compose.test.yaml')];
+  const files = [join(root, COMPOSE_REL)];
   const wfDir = join(root, '.github', 'workflows');
   if (existsSync(wfDir)) {
     for (const f of readdirSync(wfDir)) {
@@ -78,6 +81,10 @@ export function checkPlaywrightDrift(root = ROOT) {
   const errors = [];
   const locked = lockedVersion(root);
   const sites = pinSites(root);
+
+  if (!existsSync(join(root, COMPOSE_REL))) {
+    errors.push(`${COMPOSE_REL} not found; the compose pin cannot be checked`);
+  }
 
   // A guard that finds nothing to check must say so rather than passing. This is how
   // node-version-drift's siblings avoid going quietly vacuous when a file is renamed.
