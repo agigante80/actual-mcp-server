@@ -72,13 +72,18 @@ export function renderToolsSummary({ toolsets, chat, writeCapable, scopes }) {
   ].join('\n');
 }
 
-/** Pure. Swaps the marked block in `text`, or throws the marker error. */
+/**
+ * Pure. Swaps the marked block in `text`, or throws the marker error. The block is
+ * written with the line ending `text` already uses, so a CRLF checkout (Windows,
+ * core.autocrlf) is neither reported stale nor left with mixed endings.
+ */
 export function replaceBlock(text, block) {
   const count = (needle) => text.split(needle).length - 1;
   const start = text.indexOf(BEGIN);
   const end = text.indexOf(END);
   if (count(BEGIN) !== 1 || count(END) !== 1 || end < start) throw new Error(MARKER_ERR);
-  return text.slice(0, start) + block + text.slice(end + END.length);
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  return text.slice(0, start) + block.replace(/\r?\n/g, eol) + text.slice(end + END.length);
 }
 
 async function loadRegistry(root) {

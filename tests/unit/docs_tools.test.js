@@ -99,8 +99,12 @@ await check('NEGATIVE: replaceBlock refuses a duplicate BEGIN, a missing END, a 
   }
 });
 
-await check('importing the module leaves process.env untouched', () => {
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(process.env)), envBefore);
+await check('a CRLF README is regenerated in CRLF and then checks clean', async () => {
+  const root = tempRoot({ readme: wrap('stale').replace(/\n/g, '\r\n') });
+  assert.deepStrictEqual(await tools.generate({ root, scopes: stubScopes }), ['README.md']);
+  const text = readFileSync(join(root, 'README.md'), 'utf8');
+  assert.ok(!/[^\r]\n/.test(text), 'README has a bare LF after generate');
+  assert.deepStrictEqual((await tools.check({ root, scopes: stubScopes })).problems, []);
 });
 
 await check('generate is idempotent and check is clean afterwards', async () => {
@@ -177,6 +181,11 @@ await check('real registry: the rendered block equals the README block and carri
     assert.strictEqual(new RegExp(re.source, re.flags).test(block), false, `block matches total pattern: ${label}`);
   }
   assert.ok(!block.includes('**Version:**') && !block.includes('**Tool Count:**'));
+});
+
+await check('loading the registry through check() leaves process.env untouched', async () => {
+  await tools.check({ root: ROOT });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(process.env)), envBefore);
 });
 
 for (const d of dirs) rmSync(d, { recursive: true, force: true });
