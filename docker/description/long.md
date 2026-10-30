@@ -265,7 +265,7 @@ docker logs actual-mcp-server
 
 - **GitHub Repository**: https://github.com/agigante80/actual-mcp-server
 - **Full README + Setup Guides**: https://github.com/agigante80/actual-mcp-server/blob/main/README.md
-- **AI Clients Setup (Claude Desktop, Cursor, VS Code, Gemini CLI)**: https://github.com/agigante80/actual-mcp-server/blob/main/docs/guides/MCP_CLIENTS_SETUP.md
+- **AI Clients Setup (Claude Desktop, Cursor, VS Code, Gemini CLI)**: https://github.com/agigante80/actual-mcp-server/blob/main/docs/guides/clients/README.md
 - **Actual Budget**: https://actualbudget.org
 
 ## 🔒 Security

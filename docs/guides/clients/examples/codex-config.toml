@@ -1,0 +1,36 @@
+# OpenAI Codex MCP configuration: ~/.codex/config.toml (user level).
+# This file holds no secret. Codex forwards ACTUAL_PASSWORD by name from the
+# environment it was started in (env_vars below), so set it in that shell
+# first, from a user-only file such as ~/.config/actual-mcp/env (mode 600).
+# Because it holds no secret, the same content may also go in a project's
+# .codex/config.toml; never add a password or token to either file.
+#
+# CLI equivalent (non-secret values only; then add the env_vars line by hand):
+#
+#   codex mcp add actual-budget \
+#     --env ACTUAL_SERVER_URL=http://localhost:5006 \
+#     --env ACTUAL_BUDGET_SYNC_ID=your-sync-id-here \
+#     --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+#     -- npx -y actual-mcp-server --stdio
+#
+# Linux with NVM: Codex does not load your shell profile, so a bare npx may
+# resolve to an older system Node. Use the absolute path instead, found with
+# `which actual-mcp-server` after `npm install -g actual-mcp-server`, for example
+# /home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server
+
+[mcp_servers.actual-budget]
+command = "npx"
+args = ["-y", "actual-mcp-server", "--stdio"]
+startup_timeout_sec = 30
+env_vars = ["ACTUAL_PASSWORD"]
+
+[mcp_servers.actual-budget.env]
+ACTUAL_SERVER_URL = "http://localhost:5006"
+ACTUAL_BUDGET_SYNC_ID = "your-sync-id-here"
+MCP_BRIDGE_DATA_DIR = "/absolute/path/to/data-dir"
+
+# NVM fallback (uncomment and replace command and args above):
+# [mcp_servers.actual-budget]
+# command = "/home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server"
+# args = ["--stdio"]
+# startup_timeout_sec = 30

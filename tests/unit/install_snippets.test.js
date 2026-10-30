@@ -50,7 +50,7 @@ function check(label, fn) {
 const REQUIRED_RUNNABLE = {
   'README.md': ['env-token', 'docker-run', 'compose-production', 'npx-http'],
   'docs/guides/deployment.md': ['quick-start-docker-run', 'production-docker-run'],
-  'docs/guides/MCP_CLIENTS_SETUP.md': ['http-docker-run'],
+  'docs/guides/clients/README.md': ['http-docker-run'],
   'docker/description/long.md': ['docker-run', 'docker-run-https'],
 };
 

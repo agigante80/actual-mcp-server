@@ -1,11 +1,20 @@
 {
-  "mcpServers": {
+  "inputs": [
+    {
+      "type": "promptString",
+      "id": "actual-password",
+      "description": "Actual Budget server password",
+      "password": true
+    }
+  ],
+  "servers": {
     "actual-budget": {
+      "type": "stdio",
       "command": "npx",
       "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
-        "ACTUAL_PASSWORD": "your_actual_password",
+        "ACTUAL_PASSWORD": "${input:actual-password}",
         "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
         "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       }

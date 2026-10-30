@@ -4,8 +4,15 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 
 ## Guides: get something done
 
-- [guides/MCP_CLIENTS_SETUP.md](guides/MCP_CLIENTS_SETUP.md): start here to connect Claude Desktop, Cursor, VS Code, Gemini CLI or Claude Code.
-- [guides/AI_CLIENT_SETUP.md](guides/AI_CLIENT_SETUP.md): LibreChat and LobeChat, Docker networking, HTTPS behind a proxy, OIDC.
+- [guides/clients/README.md](guides/clients/README.md): start here to connect a client: pick a transport, keep secrets out of config files, verify.
+  - [guides/clients/claude-desktop.md](guides/clients/claude-desktop.md): Claude Desktop, over stdio or HTTP.
+  - [guides/clients/claude-code.md](guides/clients/claude-code.md): Claude Code.
+  - [guides/clients/cursor.md](guides/clients/cursor.md): Cursor.
+  - [guides/clients/vscode-copilot.md](guides/clients/vscode-copilot.md): VS Code with GitHub Copilot.
+  - [guides/clients/gemini-cli.md](guides/clients/gemini-cli.md): Gemini CLI.
+  - [guides/clients/codex.md](guides/clients/codex.md): OpenAI Codex CLI.
+  - [guides/clients/librechat.md](guides/clients/librechat.md): LibreChat.
+  - [guides/clients/lobechat.md](guides/clients/lobechat.md): LobeChat.
 - [guides/deployment.md](guides/deployment.md): Docker, Compose profiles, production configuration.
 - [guides/authentication.md](guides/authentication.md): choose an HTTP auth mode and see which budgets each one reaches.
 - [guides/multiple-budgets.md](guides/multiple-budgets.md): configure several budgets and switch between them.

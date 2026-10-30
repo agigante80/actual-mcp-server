@@ -199,7 +199,7 @@ Server starts at `http://localhost:3600/http` by default (the listen port is `MC
 
 The stdio transport runs the MCP server as a child process. Claude Desktop spawns it directly and communicates over stdin/stdout. No network port, no auth token, no Docker required. No cloning needed: `npx` downloads and caches the package automatically.
 
-Add to `claude_desktop_config.json` (see [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for config file location and all client options):
+Add to `claude_desktop_config.json` (see [docs/guides/clients/claude-desktop.md](docs/guides/clients/claude-desktop.md) for the config file location, and [docs/guides/clients/](docs/guides/clients/README.md) for every other client):
 
 ```json
 {
@@ -255,7 +255,7 @@ mcpServers:
     timeout: 600000
 ```
 
-See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full LibreChat, LobeChat, network, and HTTPS/TLS proxy setup.
+See [LibreChat](docs/guides/clients/librechat.md), [LobeChat](docs/guides/clients/lobechat.md), [Connecting another container](docs/guides/deployment.md#connecting-another-container-docker-network) and [HTTPS and reverse proxy](docs/guides/deployment.md#https-and-reverse-proxy) for the full setup.
 
 **Claude Desktop via HTTP** (when the server is already running as a Docker container):
 
@@ -295,7 +295,7 @@ See [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) for full Li
 }
 ```
 
-See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all options (including Cursor, VS Code, Gemini CLI), Linux/NVM path fixes, and troubleshooting.
+See [docs/guides/clients/](docs/guides/clients/README.md) for every client (including Cursor, VS Code, Gemini CLI), Linux/NVM path fixes, and troubleshooting.
 
 ---
 
@@ -652,7 +652,7 @@ Send a test request (keep stdin open with `sleep`):
 
 > **Path must be absolute.** Claude Desktop does not inherit shell `PATH`, so `node` must also be absolute if you use NVM or a non-standard install: `/home/youruser/.nvm/versions/node/v22.x.x/bin/node`.
 
-See [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) for all connection options (stdio native, mcp-remote via HTTP/HTTPS), other clients (Cursor, VS Code, Gemini CLI, Claude Code), Linux path fixes, and troubleshooting.
+See [docs/guides/clients/claude-desktop.md](docs/guides/clients/claude-desktop.md) for all connection options (stdio native, mcp-remote via HTTP/HTTPS), and [docs/guides/clients/](docs/guides/clients/README.md) for other clients (Cursor, VS Code, Gemini CLI, Claude Code), Linux path fixes, and troubleshooting.
 
 ### HTTP transport
 
@@ -699,7 +699,7 @@ Three things to know before enabling it:
 
 It is opt-in and fails closed: if the budget list cannot be read, or the principal matches no file, access is denied rather than granted.
 
-See [AI Client Setup, OIDC](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user) for `AUTH_BUDGET_ACL` format, Casdoor notes, and the Cloudflare Access for SaaS + Gemini recipe.
+See [OIDC multi-user setup](docs/guides/authentication.md#oidc-multi-user-setup) for `AUTH_BUDGET_ACL` format, Casdoor notes, and the Cloudflare Access for SaaS + Gemini recipe.
 
 ---
 
@@ -726,8 +726,7 @@ See [`tests/manual/README.md`](tests/manual/README.md) and [`tests/e2e/README.md
 | Document | Contents |
 |---|---|
 | [docs/README.md](docs/README.md) | Index of every documentation page |
-| [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) | **Start here** to connect Claude Desktop, Cursor, VS Code (Copilot), Gemini CLI, or Claude Code |
-| [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md) | LibreChat & LobeChat setup, Docker networking, HTTPS/TLS proxy, OIDC |
+| [docs/guides/clients/README.md](docs/guides/clients/README.md) | **Start here** to connect a client: one page each for Claude Desktop, Claude Code, Cursor, VS Code (Copilot), Gemini CLI, Codex, LibreChat and LobeChat |
 | [docs/guides/deployment.md](docs/guides/deployment.md) | Docker, Docker Compose profiles, production config, Kubernetes |
 | [docs/guides/authentication.md](docs/guides/authentication.md) | HTTP auth modes and which budgets each one reaches |
 | [docs/guides/multiple-budgets.md](docs/guides/multiple-budgets.md) | Configuring and switching between several budgets |

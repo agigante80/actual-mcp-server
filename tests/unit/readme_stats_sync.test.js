@@ -26,7 +26,7 @@
 // Run: node tests/unit/readme_stats_sync.test.js
 
 import assert from 'assert';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -160,16 +160,18 @@ function handTypedCounts(file, text) {
   return out;
 }
 
-// The configuration reference, the security doc and the client setup page. #606 splits
-// AI_CLIENT_SETUP.md into docs/guides/clients/*.md: whichever of #603 and #606 lands second
-// swaps that entry for a glob over the directory.
+// The configuration reference, the security doc and every client page (#606), listed from the
+// directory so a new client page is scanned without editing this list.
 const COUNT_FILES = [
   'README.md',
   '.env.example',
   'docs/reference/configuration.md',
   'docs/explanation/security-and-privacy.md',
-  'docs/guides/AI_CLIENT_SETUP.md',
   'unraid/actual-mcp-server.xml',
+  ...readdirSync(join(ROOT, 'docs/guides/clients'))
+    .filter((f) => f.endsWith('.md'))
+    .sort()
+    .map((f) => `docs/guides/clients/${f}`),
 ];
 
 console.log('\n[readme-stats-sync]');

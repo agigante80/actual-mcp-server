@@ -100,5 +100,5 @@ If you find a disagreement, fix the lower source or open an issue; do not follow
 | Testing layers and test-file inventory | [docs/development/testing-and-reliability.md](docs/development/testing-and-reliability.md) |
 | Adding a tool | [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) |
 | Deployment and Docker | [docs/guides/deployment.md](docs/guides/deployment.md) |
-| Client setup (LibreChat, Claude Desktop and others) | [docs/guides/AI_CLIENT_SETUP.md](docs/guides/AI_CLIENT_SETUP.md), [docs/guides/MCP_CLIENTS_SETUP.md](docs/guides/MCP_CLIENTS_SETUP.md) |
+| Client setup (LibreChat, Claude Desktop and others) | [docs/guides/clients/README.md](docs/guides/clients/README.md), one page per client |
 | Scripts | [scripts/README.md](scripts/README.md) |

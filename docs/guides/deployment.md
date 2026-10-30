@@ -296,6 +296,99 @@ Replace `your_secret_token` with whatever you set in `MCP_SSE_AUTHORIZATION`.
 
 ---
 
+## Connecting another container (Docker network)
+
+When an AI client (LibreChat, LobeChat) and the MCP server both run in Docker, point the client at the server's internal container hostname, not a host IP address:
+
+| | URL |
+|---|---|
+| Use | `http://actual-mcp-server-backend:3600/http` |
+| Avoid | `http://192.168.1.x:3600/http` |
+
+Internal hostnames give direct container-to-container traffic with no host bridge hop, survive host IP changes, need no external exposure, and add less latency. Both containers must share one Docker network:
+
+```yaml
+# docker-compose.yml
+networks:
+  ai-network:
+    driver: bridge
+
+services:
+  librechat:           # or lobe-chat
+    networks:
+      - ai-network
+
+  actual-mcp-server-backend:
+    image: ghcr.io/agigante80/actual-mcp-server:latest
+    networks:
+      - ai-network
+    environment:
+      - ACTUAL_SERVER_URL=http://actual-server:5006
+      - ACTUAL_PASSWORD=${ACTUAL_PASSWORD}
+      - ACTUAL_BUDGET_SYNC_ID=${ACTUAL_BUDGET_SYNC_ID}
+      - MCP_SSE_AUTHORIZATION=${MCP_SSE_AUTHORIZATION}
+    volumes:
+      - actual-mcp-data:/app/data
+```
+
+Verify connectivity from the AI client container:
+
+```bash
+docker exec <ai-container> wget -qO- http://actual-mcp-server-backend:3600/health
+# Expected: {"status":"ok","initialized":true,...}
+```
+
+Plain HTTP on this network still needs the bearer token. The client pages ([LibreChat](clients/librechat.md), [LobeChat](clients/lobechat.md)) show the client side.
+
+---
+
+## HTTPS and reverse proxy
+
+HTTPS is not required for traffic that stays on an internal Docker network. Use it when the client reaches the server from outside that network, when the server is exposed to the internet, or when compliance requires encryption. Native TLS (`MCP_ENABLE_HTTPS`, `MCP_HTTPS_CERT`, `MCP_HTTPS_KEY`) is documented under [HTTPS/TLS](../explanation/security-and-privacy.md#httpstls); for several domains or certificate rotation a reverse proxy is still preferred.
+
+### Option A: internal Docker network (no HTTPS needed)
+
+If both containers share a Docker network, HTTP is enough: the traffic does not leave the host machine.
+
+### Option B: reverse proxy with TLS (external access)
+
+Run any reverse proxy (nginx, Caddy, Traefik) to terminate TLS and forward to the server's HTTP port.
+
+Caddy:
+
+```
+actual-mcp.yourdomain.com {
+    reverse_proxy localhost:3600
+}
+```
+
+nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name actual-mcp.yourdomain.com;
+    ssl_certificate     /etc/letsencrypt/live/actual-mcp.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/actual-mcp.yourdomain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://localhost:3600;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+Set `MCP_BRIDGE_USE_TLS=true` in `.env` so the server advertises `https://` in its URL when TLS is terminated upstream, then point the client at the `https://` URL (for LibreChat, `url: "https://actual-mcp.yourdomain.com/http"`).
+
+### Option C: Let's Encrypt certificate
+
+```bash
+sudo certbot certonly --standalone -d actual-mcp.yourdomain.com
+```
+
+---
+
 
 ## Release rollback runbook (#324)
 

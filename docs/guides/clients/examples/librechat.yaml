@@ -1,0 +1,12 @@
+# LibreChat: the mcpServers entry for librechat.yaml.
+# LibreChat replaces ${ACTUAL_MCP_TOKEN} with the value from its own .env file,
+# so this file holds no token and is safe to commit.
+# Plain HTTP is for a Docker-internal network or loopback only; it never replaces the token.
+mcpServers:
+  actual-mcp:
+    type: "streamable-http"
+    url: "http://actual-mcp-server-backend:3600/http"
+    headers:
+      Authorization: "Bearer ${ACTUAL_MCP_TOKEN}"
+    serverInstructions: true
+    timeout: 600000

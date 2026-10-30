@@ -9,6 +9,20 @@
         "ACTUAL_BUDGET_SYNC_ID": "your-sync-id-here",
         "MCP_BRIDGE_DATA_DIR": "/absolute/path/to/data-dir"
       }
+    },
+    "actual-budget-http": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "http://localhost:3600/http",
+        "--allow-http",
+        "--header",
+        "Authorization:${AUTH_HEADER}"
+      ],
+      "env": {
+        "AUTH_HEADER": "Bearer your_secret_token"
+      }
     }
   }
 }

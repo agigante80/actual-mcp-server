@@ -448,7 +448,7 @@ await check('every tool named in a documented MCP_TOOLS example is registered', 
   // A wrong name in the copy-paste example stops startup for whoever copies it (#483 review).
   // Window: the line naming MCP_TOOLS and the two after it, which covers the .env.example
   // comment block where the example sits on the following line.
-  const files = ['README.md', '.env.example', 'unraid/actual-mcp-server.xml', 'docs/reference/configuration.md', 'docs/guides/AI_CLIENT_SETUP.md'];
+  const files = ['README.md', '.env.example', 'unraid/actual-mcp-server.xml', 'docs/reference/configuration.md', 'docs/guides/clients/librechat.md'];
   let seen = 0;
   for (const f of files) {
     const lines = read(f).split('\n');
