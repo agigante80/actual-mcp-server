@@ -798,7 +798,7 @@ See [.github/SUPPORT.md](.github/SUPPORT.md) for where to ask a question, report
 
 ---
 
-**Version:** 0.24.11 | **Tool Count:** 84 (verified LibreChat-compatible)
+**Version:** 0.24.12 | **Tool Count:** 84 (verified LibreChat-compatible)
 
 ## Sponsor
 
