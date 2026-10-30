@@ -165,6 +165,8 @@ function tomlFindings(label, text, baseLine = 1, withLine = false) {
       if (m && !isSecretBearing({ key: m[1], value: line })) return;
       if (m) { out.push(withLine ? `${label}:${at}: ${m[1]} holds a literal secret` : `${label}: ${m[1]} holds a literal secret`); return; }
     } else if (section === 'server' && TOML_SERVER_SHAPES.some((re) => re.test(line))) {
+      // command and args are the server's command line: the shape alone is not enough.
+      out.push(...commandLineFindings(label, [{ line: at, text: line }]));
       return;
     }
     out.push(`${label}:${at} is not an accepted line shape: ${line}`);
@@ -467,6 +469,16 @@ check('NEGATIVE: an unknown Codex line shape is named', () => {
   const head = TOML_OK.split('\n').slice(0, 9).join('\n');
   assert.deepStrictEqual(tomlFindings('codex-config.toml', `${head}\nhttp_headers = { "Authorization" = "Bearer x" }`),
     ['codex-config.toml:10 is not an accepted line shape: http_headers = { "Authorization" = "Bearer x" }']);
+});
+
+check('NEGATIVE: a secret inside Codex args or command is a command line and fails', () => {
+  const head = TOML_OK.split('\n').slice(0, 9).join('\n');
+  const bearer = 'args = ["-y", "mcp-remote", "http://localhost:3600/http", "--header", "Authorization: Bearer abc123"]';
+  assert.deepStrictEqual(tomlFindings('codex-config.toml', `${head}\n${bearer}`),
+    ['codex-config.toml:10 puts Authorization on a command line']);
+  const assign = 'command = "env ACTUAL_PASSWORD=hunter2 npx"';
+  assert.deepStrictEqual(tomlFindings('codex-config.toml', `${head}\n${assign}`),
+    ['codex-config.toml:10 puts ACTUAL_PASSWORD on a command line']);
 });
 
 check('NEGATIVE: a password on a Codex comment command line', () => {

@@ -29,8 +29,7 @@ ACTUAL_SERVER_URL = "http://localhost:5006"
 ACTUAL_BUDGET_SYNC_ID = "your-sync-id-here"
 MCP_BRIDGE_DATA_DIR = "/absolute/path/to/data-dir"
 
-# NVM fallback (uncomment and replace command and args above):
-# [mcp_servers.actual-budget]
+# NVM fallback: replace the command and args lines above with these two lines
+# (keep the single [mcp_servers.actual-budget] header; a second one breaks the file):
 # command = "/home/YOUR_USER/.nvm/versions/node/v22.22.2/bin/actual-mcp-server"
 # args = ["--stdio"]
-# startup_timeout_sec = 30

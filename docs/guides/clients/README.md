@@ -68,7 +68,7 @@ If the budget file is end-to-end encrypted, a fourth value, `ACTUAL_BUDGET_PASSW
 
 ### Keep secrets in a user-only env file
 
-The stdio pages that support environment references (Claude Code, Cursor, Gemini CLI, Codex) read the password from your environment. Keep it in one file only your user can read, and load it from your shell profile:
+The stdio pages that support environment references (Claude Code, Cursor, Gemini CLI, Codex) read the password from your environment, and the HTTP pages and the [Verify](#verify) step read the bearer token from it. Keep both in one file only your user can read, and load it from your shell profile:
 
 ```bash
 install -d -m 700 ~/.config/actual-mcp
@@ -81,6 +81,8 @@ Open `~/.config/actual-mcp/env` in an editor and add the values:
 export ACTUAL_PASSWORD=your_actual_password
 export ACTUAL_MCP_TOKEN=your_mcp_bearer_token
 ```
+
+`ACTUAL_MCP_TOKEN` is the token the server checks: the `MCP_SSE_AUTHORIZATION` value from the server's `.env` (see [Run the server over HTTP](#run-the-server-over-http)), or this client's own `MCP_TOKEN_*` value when you [pick one token per client](#pick-a-token). A stdio-only setup can leave that line out.
 
 Then add `. ~/.config/actual-mcp/env` to `~/.bashrc` or `~/.zshrc`, and start the client from a new shell. Never commit this file or paste it into an issue.
 
