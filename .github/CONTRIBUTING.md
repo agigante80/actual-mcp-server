@@ -135,6 +135,7 @@ There is no `lint` or `format` script: the TypeScript build is the type check, a
 - **Unit tests** are plain Node scripts in `tests/unit/`. Add a new file to the `test:unit-js` chain in `package.json`, or it never runs.
 - **End-to-end tests** for the tool surface go in `tests/e2e/docker-all-tools.e2e.spec.ts`, using the fixtures in `tests/e2e/fixtures.ts`. Run them with `npm run test:e2e:docker:full` (needs Docker).
 - Every new behaviour needs a positive and a negative test.
+- After a documentation change, run `npm run docs:check` (broken links and anchors, frozen version markers). The link check needs [lychee](https://github.com/lycheeverse/lychee) 0.24.2 or later on your `PATH`; without it that part is skipped locally, never in CI.
 
 The test layers and every test file are described in [docs/TESTING_AND_RELIABILITY.md](../docs/TESTING_AND_RELIABILITY.md).
 

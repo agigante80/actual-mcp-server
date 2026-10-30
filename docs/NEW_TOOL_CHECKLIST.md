@@ -463,7 +463,7 @@ See [`tests/manual-prompt/README.md`](../tests/manual-prompt/README.md) for usag
 
 #### Tool counts: batch update with `docs:sync`
 
-Run `npm run docs:sync` to update all `**Tool Count:**` markers across `README.md`, every file under `docs/`, and `.github/copilot-instructions.md` in one pass. Do not edit these counts manually.
+Run `npm run docs:sync` to update all `**Tool Count:**` markers across `README.md`, the top-level `docs/*.md` files (not nested ones), and `.github/copilot-instructions.md` in one pass. Do not edit these counts manually. A numeric marker anywhere else would never be updated, so `npm run docs:check` fails on one (#602).
 
 Then run `npm run tool-count -- --fix` to update the PROSE total-count literals that `docs:sync` does not touch: the "all N tools" phrasings, the docker descriptions (`long.md` / `short.md`), `src/lib/constants.ts`, the `EXPECTED_TOOL_COUNT` defaults, and the test-doc totals. This script keys off `IMPLEMENTED_TOOLS` (the same canonical source as `verify-tools`), and rewrites only allowlisted TOTAL anchors, so it never corrupts a per-domain subset count like `### Categories (4 tools)`. `npm run tool-count` (check mode) is enforced in CI via `tests/unit/tool_count_sync.test.js`, so a stale total will fail the build; running `--fix` here keeps the build green.
 

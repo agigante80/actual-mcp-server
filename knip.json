@@ -18,5 +18,8 @@
   "project": [
     "src/**/*.ts"
   ],
-  "ignoreExportsUsedInFile": true
+  "ignoreExportsUsedInFile": true,
+  "ignoreBinaries": [
+    "lychee"
+  ]
 }

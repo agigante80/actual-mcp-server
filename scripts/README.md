@@ -72,6 +72,14 @@ bash scripts/deploy-and-test.sh full
 |--------|-----------|---------|
 | `check-write-effect-audit.mjs` | `npm run audit:write-effect` | Reports when `docs/audit/write-effect-audit.md` was taken against an older `@actual-app/api` than the one installed, and names the dispositions that depend on upstream continuing to throw. **Exits 0 in every path, deliberately.** It runs in the NON-BLOCKING `api-surface-drift` lane and must never gate a build: a check whose result changes with no commit is exactly what killed the release train in #321. |
 
+## Documentation checks (#602)
+
+| Script | npm script | Purpose |
+|---|---|---|
+| `docs/check.mjs` | `npm run docs:check` / `npm run docs:gen` | The one orchestrator for documentation checks. Awaits an explicit module list (no directory scan), prints `<module>: <problem>` per problem and exits 1 on any. A module that needs a missing tool returns `skipped: { tool, reason }`: locally that prints `skip: <module>: <reason>`, and when `CI` is set it FAILS as `<module>: <tool> required but not found`. `--gen` (`docs:gen`) awaits each module's optional `generate()`; no module defines one yet. Run `npm run docs:check` after any doc change. Exports `run({ root, modules, env })` for `tests/unit/docs_check.test.js`. |
+| `docs/links.mjs` | (module of `docs:check`) | Runs lychee `--offline --include-fragments` over every markdown file the markers enumerator lists, excluding the negative fixture `tests/fixtures/lychee/`. Reports `<file>:<line> <url> (<reason>)`. Without `--include-fragments` a link to a deleted heading passes; `tests/unit/docs_links_fixture.test.js` proves it. Skips (loudly) without `lychee` on `PATH`; CI installs lychee v0.24.2 in the `Docs check` job. |
+| `docs/markers.mjs` | (module of `docs:check`) | Fails on a numeric `**Version:**` or `**Tool Count:**` marker in any markdown file OUTSIDE the set `version-bump.js` rewrites (root `README.md`, top-level `docs/*.md`, `.github/copilot-instructions.md`), because there it freezes silently. Lists files with `git ls-files` when the root is a checkout's toplevel, and with a recursive walk otherwise (test temp trees). |
+
 ## Versioning
 
 | Script | npm script | Purpose |

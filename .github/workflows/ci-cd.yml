@@ -201,6 +201,65 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
+  # #602: documentation checks (`npm run docs:check`): an offline link and anchor
+  # check run by lychee, and the recursive version-marker guard.
+  # --------------------------------------------------------------------------
+  docs-check:
+    name: Docs check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: version
+    # Least privilege, as in the lint job: this job downloads lychee at runtime.
+    # lychee runs with --offline, so no repository content leaves the runner.
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v7
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      # Installed from the release tarball and checked against a pinned sha256, as
+      # actionlint is (#328): a moved action tag or a replaced asset fails here
+      # instead of running unverified code that could report every link as fine.
+      # scripts/docs/links.mjs parses lychee's JSON report and needs 0.24 or later.
+      - name: 🔗 Install lychee
+        env:
+          LYCHEE_VERSION: v0.24.2
+          LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+        run: |
+          dir="$RUNNER_TEMP/lychee"
+          mkdir -p "$dir"
+          tarball="lychee-x86_64-unknown-linux-gnu.tar.gz"
+          curl -sfL -o "$dir/$tarball" "https://github.com/lycheeverse/lychee/releases/download/lychee-${LYCHEE_VERSION}/$tarball"
+          echo "$LYCHEE_SHA256  $dir/$tarball" | sha256sum -c -
+          tar -xzf "$dir/$tarball" -C "$dir"
+          bin="$(dirname "$(find "$dir" -type f -name lychee | head -1)")"
+          "$bin/lychee" --version
+          echo "$bin" >> "$GITHUB_PATH"
+
+      # CI is set, so a missing lychee fails here as `links: lychee required but
+      # not found` instead of skipping.
+      - name: 📚 Check docs (links, anchors, version markers)
+        run: npm run docs:check
+
+      # The fixture test also runs in the `test` job, where there is no lychee and
+      # it skips. Here the opt-in makes a missing lychee a failure, so the negative
+      # fixture (three broken links, plus the without-fragments control) is proven
+      # against the pinned lychee on every run.
+      - name: 🧪 Prove the link check catches the negative fixture
+        env:
+          DOCS_CHECK_REQUIRE_LYCHEE: '1'
+        run: node tests/unit/docs_links_fixture.test.js
+
+  # --------------------------------------------------------------------------
   # Job 3: Run Tests (Unit & Smoke)
   # --------------------------------------------------------------------------
   # #275: prove the Node floor guard actually fires on an unsupported interpreter.
@@ -1158,7 +1217,7 @@ jobs:
     name: Pipeline Summary
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [version, lint, test, node-version-guard, docker-e2e, validate-short-description,
+    needs: [version, lint, docs-check, test, node-version-guard, docker-e2e, validate-short-description,
             docker-build, docker-publish, npm-publish, security-scan, deployment-test, release]
     if: always()
     steps:
@@ -1170,6 +1229,7 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Version Generation | ${{ needs.version.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Lint | ${{ needs.lint.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Docs check | ${{ needs.docs-check.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Test | ${{ needs.test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker E2E | ${{ needs.docker-e2e.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Validate Description | ${{ needs.validate-short-description.result }} |" >> $GITHUB_STEP_SUMMARY
