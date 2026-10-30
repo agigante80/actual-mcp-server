@@ -97,6 +97,12 @@ Concurrent initializes can exceed MAX_CONCURRENT_SESSIONS because admission is c
 
 Outcome (2026-10-21): done. Shipped in v0.24.0 after two consecutive green full dual-transport runs with zero residue. #581 reproduced first (6 parallel initializes at a cap of 2 all admitted on the old code) and now reserves a slot synchronously at initialize, released on every exit path. #577 added the opt-in `MAX_SESSIONS_PER_PRINCIPAL` on top of that reservation: it counts OIDC subjects and named static tokens, exempts the legacy shared token and unauthenticated requests by auth method, and its 503 names only the caller's own cap and count. No ticket appeared that the plan did not expect, nothing was skipped, and no ticket moved. The #581 gate hit the bad-fix trip wire after 3 rounds; the #577 review found one medium (a wrong variable name in the docs) and two lows, all fixed before the commit.
 
+## Phase: Docs and README restructure
+state: open
+plan: docs/plans/docs-and-readme-restructure.md
+
+The README has documented install paths that fail when pasted, hand-typed counts that drifted from the registry, and a tool catalogue and env table that duplicate docs/. The docs tree mixes how-to, reference and contributor material, and the root holds test-only files. #599 collected the findings; this phase splits it into tickets that each leave CI green, in dependency order, with a link check and a marker guard landing before any file moves. It opens ahead of Actual API 26.11 adoption because that phase cannot start until upstream publishes 26.11.0.
+
 ## Phase: Actual API 26.11 adoption
 state: planned
 plan:
