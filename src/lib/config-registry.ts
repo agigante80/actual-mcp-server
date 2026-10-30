@@ -21,7 +21,7 @@ export interface RawEnvVar {
   name: string;
   /** Why it is read raw rather than through the validated config object. */
   reason: string;
-  /** Where it is read, for the read-site map in docs/CONFIGURATION.md. */
+  /** Where it is read, for the read-site map in docs/reference/configuration.md. */
   readSite: string;
   /** True if the value is sensitive (secret/credential). */
   secret?: boolean;
@@ -113,7 +113,7 @@ export function canonicalConfigVars(schemaKeys: readonly string[]): Set<string> 
 
 /**
  * The subset of canonical vars that MUST appear in the user-facing docs
- * (.env.example and the README env table): every schema key, plus every allowlist
+ * (.env.example and docs/reference/configuration.md): every schema key, plus every allowlist
  * entry not flagged `documented: false`. Internal vars (build arg, CLI-flag mirror)
  * are accounted for by the enumeration but exempt from the docs.
  */

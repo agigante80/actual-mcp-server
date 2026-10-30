@@ -120,7 +120,7 @@ export async function resolveIdentityFromUserInfo(
     // trusted-hosts list while the startup call passes
     // buildTrustedJwksHosts(OIDC_JWKS_TRUSTED_HOSTS). A deployment with a
     // legitimately cross-origin jwks_uri (Google: issuer accounts.google.com, keys
-    // on www.googleapis.com, the case docs/CONFIGURATION.md documents) would then
+    // on www.googleapis.com, the case docs/reference/configuration.md documents) would then
     // throw inside resolveJwksUri, be caught below, and deny EVERY request while
     // the log blamed the UserInfo endpoint. That is #343's shape exactly: a total
     // silent denial with a diagnostic pointing at the wrong subsystem.

@@ -518,83 +518,24 @@ Four tools take many items in one call, for clients that allow only a few tool c
 
 All configuration is via environment variables. Copy `.env.example` to `.env` to get started.
 
-### Complete Environment Variables Reference
+### Environment variables
 
-| Variable | Default | Required | Description |
-|----------|---------|----------|-------------|
-| **Actual Budget Connection** ||||
-| `ACTUAL_SERVER_URL` | _(none)_ | Yes | URL of your Actual Budget server, as seen from where the MCP server runs: `http://192.168.1.x:5006` (network), `https://actual.yourdomain.com` (domain), `http://actual:5006` (container name on a shared Docker network), or `http://host.docker.internal:5006` (Actual on the Docker host). `http://localhost:5006` works only for npx, node and stdio runs: inside a container `localhost` is the container itself |
-| `ACTUAL_PASSWORD` | _(none)_ | Yes | Login password for your Actual Budget **server**, the one you type on its own login screen. Not the same as `ACTUAL_BUDGET_PASSWORD` (which decrypts an E2E-encrypted budget) and unrelated to `AUTH_PROVIDER=oidc` (which controls how MCP *clients* authenticate to this server, not how this server authenticates to Actual). This server always signs in to Actual with a password, so upstream password login must stay enabled |
-| `ACTUAL_BUDGET_SYNC_ID` | _(none)_ | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
-| `ACTUAL_BUDGET_PASSWORD` | _(none)_ | No | Optional encryption password for encrypted budgets |
-| `ALLOW_INSECURE_UPSTREAM` | `false` | No | Allow an `http://` upstream even when `ACTUAL_BUDGET_PASSWORD` is set (#161). Off by default so a plaintext upstream plus an encryption password is refused |
-| `ACTUAL_OP_TIMEOUT_MS` | `30000` | No | Per-operation timeout (ms) for every upstream Actual API call (init, budget download, sync, and each tool operation). A stalled call rejects after this bound so it cannot hold the global API mutex forever and hang subsequent tool calls (#270). Set to `0` to disable |
-| `ACTUAL_IMPORT_TIMEOUT_MS` | `600000` | No | Separate, larger timeout (ms) for a budget import, which is legitimately long rather than stalled. An import is a tracked load, so every other session waits on it; bounding it at the general operation timeout turned one tenant's large import into a process-wide stall (#407). Set to `0` to disable |
-| **MCP Server Settings** ||||
-| `MCP_BRIDGE_PORT` | `3600` | No | Port for MCP server to listen on |
-| `MCP_BRIDGE_BIND_HOST` | `0.0.0.0` | No | Host address to bind server to (`0.0.0.0` = all interfaces) |
-| `MCP_BRIDGE_DATA_DIR` | `./actual-data` | No | Directory to store Actual Budget local data (SQLite). **Required to be a persistent path.** The `@actual-app/api` library downloads a local copy of your budget here to run queries; use a volume mount in Docker to persist it across restarts |
-| `ACTUAL_EXPORT_DIR` | (unset) | No | Directory where `actual_budgets_export` writes budget `.zip` files. Unset means `<MCP_BRIDGE_DATA_DIR>/exports`, which is writable and persisted in the Docker image. Must be writable by the runtime user |
-| `MCP_BRIDGE_PUBLIC_HOST` | auto-detected | No | Public hostname/IP for server (shown in logs) |
-| `MCP_BRIDGE_PUBLIC_SCHEME` | auto-detected | No | Public scheme (`http` or `https`) |
-| `MCP_BRIDGE_USE_TLS` | `false` | No | Set to `true` to advertise `https://` in the server URL (for reverse-proxy setups where TLS is terminated upstream) |
-| **Transport Configuration** ||||
-| `MCP_TRANSPORT_MODE` | `--http` | No | Transport mode. Only `--http` is a valid value; stdio is selected via the `--stdio` CLI flag, not this var |
-| `MCP_HTTP_PATH` | `/http` | No | HTTP endpoint routing path |
-| `MCP_BRIDGE_HTTP_PATH` | same as `MCP_HTTP_PATH` | No | Advertised HTTP path shown to clients (set when a reverse proxy rewrites the path) |
-| `MCP_HTTP_BODY_LIMIT` | `512kb` | No | Maximum accepted JSON-RPC request body size (e.g. `512kb`, `1mb`, `1048576`). Validated at startup: an invalid, zero or overflowing size refuses to start naming the variable (#466) |
-| **Tool Surface** ||||
-| `MCP_TOOLSETS` | `all` | No | Comma-separated toolset groups (`context`, `transactions`, `analysis`, `budget`, `rules`, `schedules`, `structure`, `query`, `admin`) and presets (`chat`) to publish; `all` publishes every tool. Unknown names refuse to start. See [Reducing the tool surface](#reducing-the-tool-surface) |
-| `MCP_TOOLS` | _(empty)_ | No | Extra tools to add on top of `MCP_TOOLSETS`, by full registered name (e.g. `actual_accounts_list`). Unknown names refuse to start |
-| `MCP_READ_ONLY` | `false` | No | `true` hides and refuses the 48 write-capable tools. Only `true` or `false` (case-insensitive) are accepted; any other value refuses to start |
-| **Session Management** ||||
-| `USE_CONNECTION_POOL` | `true` | No | Enable session-based connection pooling |
-| `MAX_CONCURRENT_SESSIONS` | `15` | No | Maximum concurrent MCP sessions allowed |
-| `MAX_SESSIONS_PER_PRINCIPAL` | unset | No | Maximum concurrent sessions per OIDC subject or named `MCP_STATIC_TOKENS` entry; unset means no per-principal cap. The legacy token and unauthenticated requests are not capped |
-| `SESSION_IDLE_TIMEOUT_MINUTES` | `5` | No | Minutes before idle session cleanup |
-| **Security & Authentication** ||||
-| `AUTH_PROVIDER` | `none` | No | Auth mode: `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
-| `MCP_SSE_AUTHORIZATION` | _(none)_ | No | Static Bearer token (`AUTH_PROVIDER=none`; highly recommended in production) |
-| `MCP_STATIC_TOKENS` | _(none)_ | No | Several static Bearer tokens, one per client, each with its own principal and budget allow-list (#572). JSON keyed by principal: `{"alice":{"tokenEnv":"MCP_TOKEN_ALICE","budgets":["Home"]}}`. Budgets are registry names. Can coexist with `MCP_SSE_AUTHORIZATION` (which stays unrestricted); refused with `AUTH_PROVIDER=oidc`. See [Security](docs/SECURITY_AND_PRIVACY.md) |
-| `MCP_TOKEN_*` | _(none)_ | If named | The token values `MCP_STATIC_TOKENS` points at, one variable per principal (`MCP_TOKEN_ALICE`). At least 32 characters (`openssl rand -hex 32`), unique, RFC 6750 characters only; a bad one refuses to start |
-| `MCP_ALLOW_UNAUTHENTICATED` | `false` | No | Opt-out for required-by-default HTTP auth (#242). On a non-loopback bind with no token and no OIDC the server refuses to start; set to `true` to run open deliberately (e.g. behind your own proxy) |
-| `OIDC_ISSUER` | _(none)_ | If OIDC | OIDC issuer URL (e.g., `https://sso.example.com`) |
-| `OIDC_ALLOW_INSECURE_ISSUER` | `false` | No | Allow a plaintext (http) OIDC issuer on a trusted network (#244). Off by default (http issuer refused at startup); set `true` only for local/LAN testing |
-| `OIDC_RESOURCE` | _(none)_ | If OIDC | This server's canonical URL, the RFC 9728 resource identifier and the expected `aud` (#461). Use the full public MCP endpoint URL, e.g. `https://actual-mcp.example.com/http`, no trailing slash. Must be an absolute http(s) URL (a bare client id refuses to start); put a client-id `aud` in `OIDC_ACCEPTED_AUDIENCES` instead |
-| `OIDC_ACCEPTED_AUDIENCES` | _(none)_ | No | Extra accepted `aud` values beyond `OIDC_RESOURCE`, comma-separated (#245). For IdPs that put the client-id in `aud` (e.g. Authentik) or the OAuth client's redirect URI (Cloudflare Access for SaaS). Strict allowlist, never a wildcard |
-| `OIDC_JWKS_TRUSTED_HOSTS` | _(none)_ | No | Opt-in cross-origin JWKS hosts, comma-separated `host` or `host:port` (#254). For IdPs whose `jwks_uri` lives on another host, e.g. Google needs `www.googleapis.com`. Exact match, no wildcards; empty default keeps same-origin-only |
-| `OIDC_JWKS_URI` | _(none)_ | No | Direct JWKS URL that bypasses OpenID discovery (#462), for issuers with no discovery document (Cloudflare Access: `https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`). Same https, credentials and origin-or-trusted-host rules as a discovered `jwks_uri`, plus no query or fragment. When set, `/.well-known/oauth-authorization-server` is not served and `AUTH_BUDGET_ACL_IDENTITY_SOURCE=userinfo` is refused |
-| `OIDC_TOKEN_SOURCE` | `authorization` | No | Where the bearer JWT is read from (#462): `authorization` (default) or `cf-access-jwt-assertion` for an MCP server behind Cloudflare Access with Managed OAuth (the edge forwards the signed Access JWT in that header; `Authorization` is then never consulted, `OIDC_SCOPES` must be empty, `OIDC_SCOPES_SUPPORTED` is allowed, and the origin must be reachable only via Cloudflare). See the Cloudflare recipe in `docs/guides/AI_CLIENT_SETUP.md` |
-| `OIDC_SCOPES` | _(none)_ | No | Comma-separated required (enforced) scopes, also advertised. Leave empty when the IdP's JWTs carry no `scope` claim (Cloudflare Access for SaaS, or Casdoor when the client requests no scope) |
-| `OIDC_SCOPES_SUPPORTED` | _(none)_ | No | Comma-separated scopes advertised in `scopes_supported` but not enforced. Use when the IdP's JWTs carry no `scope` claim but the client needs a scope such as `offline_access` advertised (e.g. Gemini with Cloudflare Access for SaaS). Required scopes from `OIDC_SCOPES` are always advertised too. Advertising `offline_access` unlocks a refresh token this server cannot revoke: see [Limiting a leaked refresh token](docs/SECURITY_AND_PRIVACY.md#limiting-a-leaked-refresh-token-488) |
-| `AUTH_BUDGET_ACL` | _(none)_ | No | Per-user budget ACL; see [AI Client Setup](docs/guides/AI_CLIENT_SETUP.md#oidc-authentication-multi-user). Validated at startup: a value that is not a JSON object of string arrays refuses to start (#551). Unset or `{}` means no restrictions |
-| `AUTH_BUDGET_ACL_SOURCE` | `static` | No | `static` uses the `AUTH_BUDGET_ACL` map above. `actual` derives the ACL from the Actual server's own per-file access list, so revoking someone in Actual takes effect here without a config edit. Requires a multi-user (OpenID) Actual server that was password-bootstrapped first |
-| `AUTH_BUDGET_ACL_CLAIM` | `auto` | No | Which token claim identifies the principal when the source is `actual`. `auto` mirrors Actual's own precedence (`preferred_username`, `login`, `email`, `id`, `sub`) and matches the result against Actual's `userName`. Set a single claim name to pin one instead |
-| `AUTH_BUDGET_ACL_IDENTITY_MAP` | _(empty)_ | No | Explicit `<sub>=<Actual userName>` bindings, comma separated, used when the source is `actual`. Consulted before the claim precedence and authoritative: a bound `sub` whose target matches no budget file is denied rather than falling back to a claim. Use it when your access token does not carry the claim Actual stored, or after an IdP-side rename |
-| `AUTH_BUDGET_ACL_IDENTITY_SOURCE` | `token` | No | Where the ACL reads identity claims from when the source is `actual`. `token` uses the verified access token (no network call). `userinfo` calls the IdP's UserInfo endpoint, which is the same document Actual derives `userName` from, and fixes deployments where the access token lacks the claim Actual stored. Opt-in because it makes the IdP a hard dependency of authorization |
-| `AUTH_BUDGET_ACL_USERINFO_TIMEOUT_MS` | `5000` | No | Timeout for the UserInfo request, clamped to 250ms to 60s. No disable value: an unbounded call on the auth path turns a slow IdP into an outage |
-| `MCP_ENABLE_HTTPS` | `false` | No | Enable native TLS. Requires `MCP_HTTPS_CERT` and `MCP_HTTPS_KEY` |
-| `MCP_HTTPS_CERT` | _(none)_ | No | Path to PEM certificate file (required when `MCP_ENABLE_HTTPS=true`) |
-| `MCP_HTTPS_KEY` | _(none)_ | No | Path to PEM private key file (required when `MCP_ENABLE_HTTPS=true`) |
-| **Logging Configuration** ||||
-| `MCP_BRIDGE_STORE_LOGS` | `false` | No | Enable file logging (vs console only) |
-| `MCP_BRIDGE_LOG_DIR` | `app/logs` (beside the install) | No | Directory for log files (if `STORE_LOGS=true`). `.env.example` and Docker set it explicitly (e.g. `./logs`, `/app/logs`) |
-| `MCP_BRIDGE_LOG_LEVEL` | `debug` (dev) / `info` (prod) | No | Log level: `error`, `warn`, `info`, `debug` |
-| `LOG_FORMAT` | auto | No | Log output format: `json` or `pretty`. Precedence: explicit `LOG_FORMAT` wins, else `NODE_ENV=production` selects `json`, else `pretty` |
-| `MCP_SERVICE_NAME` | `actual-mcp-server` | No | Service name stamped on every structured (json) log record |
-| **Log Rotation** (when `MCP_BRIDGE_STORE_LOGS=true`) ||||
-| `MCP_BRIDGE_MAX_FILES` | `14d` | No | Keep rotated logs for N days (e.g., `14d`, `30d`) |
-| `MCP_BRIDGE_MAX_LOG_SIZE` | `20m` | No | Rotate when file reaches size (e.g., `20m`, `100m`) |
-| `MCP_BRIDGE_ROTATE_DATEPATTERN` | `YYYY-MM-DD` | No | Date pattern for rotated log filenames |
-| **Development & Debugging** ||||
-| `DEBUG` | _(none)_ | No | Enable debug mode (verbose logging) when set to any truthy value |
-| `LOG_LEVEL` | _(none)_ | No | Debug-detection toggle: set to `debug` to enable extra transport debug output. Distinct from `MCP_BRIDGE_LOG_LEVEL` (the winston level); has no default and is not itself a log level |
-| `MCP_BRIDGE_DEBUG_TRANSPORT` | `false` | No | Enable transport-level debug logging |
-| **Advanced/Internal** ||||
-| `ACTUAL_API_CONCURRENCY` | `5` | No | Max concurrent Actual API operations |
-| `NODE_ENV` | _(none)_ / `production` | No | Node environment. No app default; the Docker image sets `production`, which selects json logs and hides stack traces in error responses |
-| `VERSION` | auto-detected | No | Server version (auto-set by build/Docker) |
-| `TZ` | `UTC` | No | Timezone for timestamps (e.g., `America/New_York`) |
+The three required variables and the common optional ones:
+
+<!-- env-summary:start -->
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ACTUAL_SERVER_URL` | Yes | URL of your Actual Budget server, as seen from where the MCP server runs. Inside a container `localhost` is the container itself: use the host's address, the container name on a shared Docker network, or `http://host.docker.internal:5006` |
+| `ACTUAL_PASSWORD` | Yes | Login password for your Actual Budget **server** (not the budget encryption password) |
+| `ACTUAL_BUDGET_SYNC_ID` | Yes | Budget Sync ID from Actual (Settings then Sync ID) |
+| `ACTUAL_BUDGET_PASSWORD` | No | Encryption password for an end-to-end encrypted budget |
+| `MCP_BRIDGE_PORT` | No | Port the MCP server listens on |
+| `MCP_SSE_AUTHORIZATION` | No | Static Bearer token clients must send (the raw token, not `Bearer ...`); highly recommended in production |
+| `AUTH_PROVIDER` | No | `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
+| `MCP_TOOLSETS` | No | Toolset groups and presets to publish; see [Reducing the tool surface](#reducing-the-tool-surface) |
+<!-- env-summary:end -->
+
+Every variable, with its type, default, whether it is secret, and where it is read, is in the configuration reference: [docs/reference/configuration.md](docs/reference/configuration.md).
 
 ### Reducing the tool surface
 
@@ -614,7 +555,7 @@ All 84 tools are published by default. Chat clients with a small tool budget (Ge
 
 Each tool is in exactly one group. The `chat` preset cuts across them and publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_transactions_update_batch`, `actual_rules_create`, `actual_rules_create_batch`, `actual_budget_updates_batch`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`. Measured on the `tools/list` payload, all 84 tools are 108,164 bytes and the `chat` preset is 25,949 bytes (about 6.5k tokens saved, a 76% cut).
 
-`MCP_READ_ONLY=true` additionally hides and refuses every write-capable tool (48 of the 84, including `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`), leaving 36. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/SECURITY_AND_PRIVACY.md#tool-surface-mcp_toolsets-and-mcp_read_only).
+`MCP_READ_ONLY=true` additionally hides and refuses the 48 write-capable tools (48 of the 84, including `actual_bank_sync`, `actual_budgets_export`, `actual_budgets_switch` and `actual_session_close`), leaving 36. `actual_session_list` stays available under read-only. See [Security and Privacy](docs/SECURITY_AND_PRIVACY.md#tool-surface-mcp_toolsets-and-mcp_read_only).
 
 Example: a chat assistant.
 

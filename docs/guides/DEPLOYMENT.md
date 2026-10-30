@@ -234,7 +234,7 @@ curl http://localhost:3600/health
 | `ACTUAL_PASSWORD` | Actual Budget server password |
 | `ACTUAL_BUDGET_SYNC_ID` | Budget Sync ID (Settings → Sync ID in Actual) |
 
-All other variables are optional. See [Configuration Reference](../../README.md#complete-environment-variables-reference) in the README for the full table.
+All other variables are optional. See the [configuration reference](../reference/configuration.md) for the full table.
 
 ---
 

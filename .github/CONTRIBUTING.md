@@ -59,7 +59,7 @@ cp .env.example .env
 # Set ACTUAL_SERVER_URL, ACTUAL_PASSWORD and ACTUAL_BUDGET_SYNC_ID (Actual: Settings, Advanced, Sync ID).
 ```
 
-Every variable is documented in [docs/CONFIGURATION.md](../docs/CONFIGURATION.md).
+Every variable is documented in [docs/reference/configuration.md](../docs/reference/configuration.md).
 
 ### 4. Run
 

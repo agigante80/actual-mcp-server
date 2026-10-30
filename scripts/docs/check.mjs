@@ -27,8 +27,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import * as links from './links.mjs';
 import * as markers from './markers.mjs';
+import * as configDrift from './config-drift.mjs';
 
-const MODULES = [links, markers];
+const MODULES = [links, markers, configDrift];
 
 /** GitHub sets CI=true in every job. "false" and "0" are treated as unset. */
 function ciIsSet(env) {
@@ -77,7 +78,7 @@ export async function run({ root, modules = MODULES, env = {} }) {
   return { exitCode, lines };
 }
 
-/** Run every module's optional generate(). No module defines one yet (#603, #604 add theirs). */
+/** Run every module's optional generate(). No module defines one yet (#603 adds the first; config-drift, #604, has none). */
 export async function generate({ root, modules = MODULES }) {
   const lines = [];
   for (const mod of modules) {

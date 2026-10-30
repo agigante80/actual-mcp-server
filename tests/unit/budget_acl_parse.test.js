@@ -148,7 +148,7 @@ for (const raw of LEAKY_INPUTS) {
   check(`the issue message carries no key or value for ${JSON.stringify(raw)}`, () => noSecret(refusedOn({ ...oidc, AUTH_BUDGET_ACL: raw }).message, 'issue'));
 }
 check('the issue message tells the operator the expected shape and where to read', () =>
-  refusedOn({ ...oidc, AUTH_BUDGET_ACL: '{bad' }, 'JSON object', 'docs/CONFIGURATION.md'));
+  refusedOn({ ...oidc, AUTH_BUDGET_ACL: '{bad' }, 'JSON object', 'docs/reference/configuration.md'));
 
 check('POSITIVE CONTROL: a valid map parses and is kept as the raw string', () =>
   assert.strictEqual(parses({ ...oidc, AUTH_BUDGET_ACL: '{"alice@example.com":["b1"],"group:admin":["*"]}' }).AUTH_BUDGET_ACL, '{"alice@example.com":["b1"],"group:admin":["*"]}'));

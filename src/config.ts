@@ -250,7 +250,7 @@ export const configSchema = z.object({
           message:
             `AUTH_BUDGET_ACL is malformed (${reason}). ` +
             'Expected a JSON object mapping each principal to an array of budget sync ids, for example ' +
-            '{"<email or sub>":["<sync id>"],"group:<name>":["*"]}. See docs/CONFIGURATION.md.',
+            '{"<email or sub>":["<sync id>"],"group:<name>":["*"]}. See docs/reference/configuration.md.',
         });
       }
     }),
@@ -326,7 +326,7 @@ export const configSchema = z.object({
           message:
             `AUTH_BUDGET_ACL_IDENTITY_MAP is malformed: ${reason}. ` +
             'Expected "<sub>=<actual userName>" entries separated by commas, for example ' +
-            '"a1b2c3=jdoe,d4e5f6=asmith". See docs/CONFIGURATION.md.',
+            '"a1b2c3=jdoe,d4e5f6=asmith". See docs/reference/configuration.md.',
         });
       }
     }),

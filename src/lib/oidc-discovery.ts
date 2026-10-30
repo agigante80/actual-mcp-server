@@ -398,7 +398,7 @@ export function resolveUserInfoUri(
  * an outbound discovery fetch; and it passed no `trustedHosts`, so a deployment
  * whose `jwks_uri` is legitimately cross-origin (Google: issuer
  * accounts.google.com, keys on www.googleapis.com, exactly the case documented in
- * docs/CONFIGURATION.md) threw inside the ACL and denied EVERY request, while the
+ * docs/reference/configuration.md) threw inside the ACL and denied EVERY request, while the
  * log blamed the UserInfo endpoint. That is the #343 failure shape again: a total
  * silent denial with a misleading diagnostic.
  *

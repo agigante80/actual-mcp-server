@@ -11,9 +11,12 @@
 
 import assert from 'node:assert';
 import { spawnSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { run } from '../../scripts/docs/check.mjs';
+import * as configDrift from '../../scripts/docs/config-drift.mjs';
 
 let passed = 0;
 let failed = 0;
@@ -111,6 +114,58 @@ await check('the CLI entry exits 1 in CI when lychee is not on PATH', async () =
   });
   assert.strictEqual(r.status, 1, `stdout: ${r.stdout} stderr: ${r.stderr}`);
   assert.ok(r.stdout.split('\n').includes('links: lychee required but not found'), `stdout: ${r.stdout}`);
+});
+
+// #604: the config-drift module spawns scripts/config-drift.mjs against a root. These
+// cases run it for real: against the repo (needs dist/, which the test job builds),
+// and against a temp root holding copies of the three documents.
+const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const REFERENCE = 'docs/reference/configuration.md';
+
+/** A temp root with copies of the reference, README and .env.example; optional dist link. */
+function tempRoot({ withDist, editReference = (s) => s }) {
+  const tmp = mkdtempSync(join(tmpdir(), 'docs-config-drift-'));
+  mkdirSync(join(tmp, 'docs', 'reference'), { recursive: true });
+  writeFileSync(join(tmp, REFERENCE), editReference(readFileSync(join(REPO, REFERENCE), 'utf8')));
+  copyFileSync(join(REPO, 'README.md'), join(tmp, 'README.md'));
+  copyFileSync(join(REPO, '.env.example'), join(tmp, '.env.example'));
+  if (withDist) symlinkSync(join(REPO, 'dist'), join(tmp, 'dist'), 'dir');
+  return tmp;
+}
+
+await check('P5: the config-drift module is clean on the repo', async () => {
+  const { exitCode, lines } = await run({ root: REPO, modules: [configDrift], env: {} });
+  assert.deepStrictEqual(lines, []);
+  assert.strictEqual(exitCode, 0);
+});
+
+await check('N10: without dist/ the module skips locally and fails in CI', async () => {
+  const tmp = tempRoot({ withDist: false });
+  try {
+    const ci = await run({ root: tmp, modules: [configDrift], env: { CI: 'true' } });
+    assert.strictEqual(ci.exitCode, 1);
+    assert.deepStrictEqual(ci.lines, ['config-drift: dist required: dist/ not built (run npm run build)']);
+    const local = await run({ root: tmp, modules: [configDrift], env: {} });
+    assert.strictEqual(local.exitCode, 0);
+    assert.deepStrictEqual(local.lines, ['skip: config-drift: dist/ not built (run npm run build)']);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+await check('N11: a drift problem from the CLI becomes a config-drift problem line', async () => {
+  const row = '| `MCP_NOT_A_VAR` | string | (none) | No | no | schema | config | not real |';
+  const tmp = tempRoot({
+    withDist: true,
+    editReference: (s) => s.replace(/^(\| `MCP_BRIDGE_PORT` \|.*)$/m, `$1\n${row}`),
+  });
+  try {
+    const { exitCode, lines } = await run({ root: tmp, modules: [configDrift], env: {} });
+    assert.strictEqual(exitCode, 1);
+    assert.deepStrictEqual(lines, [`config-drift: In ${REFERENCE} but not a known config var: MCP_NOT_A_VAR`]);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 console.log(`\n[docs check orchestrator] Results: ${passed} passed, ${failed} failed`);

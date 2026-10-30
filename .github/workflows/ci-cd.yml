@@ -202,7 +202,8 @@ jobs:
 
   # --------------------------------------------------------------------------
   # #602: documentation checks (`npm run docs:check`): an offline link and anchor
-  # check run by lychee, and the recursive version-marker guard.
+  # check run by lychee, the recursive version-marker guard, and (#604) the
+  # config-drift guard, which needs the build step below.
   # --------------------------------------------------------------------------
   docs-check:
     name: Docs check
@@ -226,6 +227,11 @@ jobs:
       - name: 📦 Install dependencies
         run: npm ci
 
+      # #604: the config-drift module reads the compiled schema and registry under
+      # dist/. Without this build it would skip, which CI turns into a failure.
+      - name: 🏗️ Build
+        run: npm run build
+
       # Installed from the release tarball and checked against a pinned sha256, as
       # actionlint is (#328): a moved action tag or a replaced asset fails here
       # instead of running unverified code that could report every link as fine.
@@ -247,7 +253,7 @@ jobs:
 
       # CI is set, so a missing lychee fails here as `links: lychee required but
       # not found` instead of skipping.
-      - name: 📚 Check docs (links, anchors, version markers)
+      - name: 📚 Check docs (links, anchors, version markers, config drift)
         run: npm run docs:check
 
       # The fixture test also runs in the `test` job, where there is no lychee and

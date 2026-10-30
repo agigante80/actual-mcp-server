@@ -16,7 +16,7 @@ cp .env.example .env   # only needed to run against a real Actual server
 npm run build
 ```
 
-Every config variable is documented in [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and [.env.example](.env.example).
+Every config variable is documented in [docs/reference/configuration.md](docs/reference/configuration.md) and [.env.example](.env.example).
 
 ## Validate before you commit
 
@@ -44,7 +44,7 @@ There is no `lint` or `format` script. If `test:adapter` or `test:unit-js` compl
 - **Amounts are integer cents** (`5000` is $50.00, negative is an outflow). **Dates are `YYYY-MM-DD` strings.**
 - **Refusals are typed.** Throw `NotFoundRefusal` or `OutOfRangeRefusal` and test with `isPreflightRefusal` (`src/lib/errors.ts`); never decide by matching message text.
 - **Never write to stdout** in server code, and never call `console.*`. Under stdio, stdout is the JSON-RPC channel. Use `createModuleLogger('MODULE')` from `src/lib/loggerFactory.ts` with structured metadata.
-- **Config is validated in one place**: add a variable to `src/config.ts` (or `RAW_ENV_ALLOWLIST` in `src/lib/config-registry.ts`), `.env.example` and the README env table together; `npm run config-drift` checks all three.
+- **Config is validated in one place**: add a variable to `src/config.ts` (or `RAW_ENV_ALLOWLIST` in `src/lib/config-registry.ts`), `.env.example` and `docs/reference/configuration.md` together; `npm run config-drift` checks all three, and that the reference shows each Zod default.
 - **Tool annotations are hints**, never an authorisation or safety decision. Nothing in `src/` may branch on them.
 
 ## Adding or changing a tool
@@ -84,7 +84,7 @@ Follow [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) end to end. New 
 When two sources disagree, the higher one wins:
 
 1. The code and the checks CI enforces.
-2. The tracked doc this file links as canonical for a topic (for example [docs/CONFIGURATION.md](docs/CONFIGURATION.md), [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md), [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md)).
+2. The tracked doc this file links as canonical for a topic (for example [docs/reference/configuration.md](docs/reference/configuration.md), [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md), [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md)).
 3. This file.
 4. The path-scoped files in [.github/instructions/](.github/instructions/), which add detail for their `applyTo` glob and must not contradict the three above.
 
@@ -95,7 +95,7 @@ If you find a disagreement, fix the lower source or open an issue; do not follow
 | Topic | Where |
 |-------|-------|
 | Components, transports, data flow | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| Configuration inventory | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |
+| Configuration inventory | [docs/reference/configuration.md](docs/reference/configuration.md) |
 | Testing layers and test-file inventory | [docs/TESTING_AND_RELIABILITY.md](docs/TESTING_AND_RELIABILITY.md) |
 | Adding a tool | [docs/NEW_TOOL_CHECKLIST.md](docs/NEW_TOOL_CHECKLIST.md) |
 | Deployment and Docker | [docs/guides/DEPLOYMENT.md](docs/guides/DEPLOYMENT.md) |

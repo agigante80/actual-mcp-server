@@ -7,7 +7,7 @@ Make `MAX_CONCURRENT_SESSIONS` a hard bound on the HTTP server, then let an oper
 ## Done looks like
 
 - #581 reproduced first. If it reproduces: admission reserves a slot synchronously (no `await` between the count and the reservation), every exit path (init failure, timeout, close, idle eviction) releases it, and a unit row with 6 parallel initializes against a cap of 2 admits exactly 2. The row is red on the old code and green on the new. If it does not reproduce, #581 is closed with the evidence, and #577 is re-scoped onto whatever the real admission path is.
-- #577: an optional `MAX_SESSIONS_PER_PRINCIPAL`, unset keeps today's behaviour. With it set to 2, alice's third session is refused while bob still gets in, and alice's 6 parallel initializes admit exactly 2. The 503 names only the caller's own cap and count. Config, `.env.example`, README and `docs/CONFIGURATION.md` move together, and `docs/SECURITY_AND_PRIVACY.md` replaces its "session pool is shared" limitation.
+- #577: an optional `MAX_SESSIONS_PER_PRINCIPAL`, unset keeps today's behaviour. With it set to 2, alice's third session is refused while bob still gets in, and alice's 6 parallel initializes admit exactly 2. The 503 names only the caller's own cap and count. Config, `.env.example`, README and `docs/reference/configuration.md` move together, and `docs/SECURITY_AND_PRIVACY.md` replaces its "session pool is shared" limitation.
 - One commit per ticket on `develop`. #577 adds an opt-in capability, so the release is a minor bump (v0.24.0). The phase ends with two green `bash scripts/deploy-and-test.sh full` runs over HTTP and stdio with zero residue, then a release to `main`.
 
 ## Fails if
