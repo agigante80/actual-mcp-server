@@ -1128,7 +1128,10 @@ check('NEGATIVE (v): each verification invariant fails on its counter-fixture', 
   assert.strictEqual(verifyJobIsReadOnlyAndCredentialFree(elevated), false,
     'giving the verifier write access must fail (v2)');
 
-  const ungated = cicd.replace(', verify-published-artifacts]', ']');
+  // Target the release job's own needs line: the #610 registry publish job also
+  // needs verify-published-artifacts and comes first in the file.
+  const ungated = cicd.replace(/(needs: \[version, docker-publish, npm-publish, [^\]\n]*), verify-published-artifacts\]/, '$1]');
+  assert.notStrictEqual(ungated, cicd, 'the fixture must actually change the workflow');
   assert.strictEqual(releaseNeedsVerification(ungated), false,
     'removing the release gate must fail (v3)');
 });

@@ -7,6 +7,9 @@ COPY . ./
 RUN npm run build
 
 FROM node:22-alpine AS runtime
+# MCP Registry ownership check (#610): the registry reads this label from the
+# published image, so it must be in the runtime stage, not the build stage.
+LABEL io.modelcontextprotocol.server.name="io.github.agigante80/actual-mcp-server"
 WORKDIR /app
 ENV NODE_ENV=production
 # Accept VERSION as build argument and set as environment variable

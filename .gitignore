@@ -209,3 +209,6 @@ env/
 *.swo
 Thumbs.db
 # --- end leak-guard baseline ---
+
+# MCP Registry: CI stamps a versioned copy of server.json (#610)
+server.stamped.json

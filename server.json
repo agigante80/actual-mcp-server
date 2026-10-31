@@ -1,0 +1,120 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.agigante80/actual-mcp-server",
+  "title": "Actual Budget MCP Server",
+  "description": "Manage Actual Budget accounts, transactions, budgets, rules and reports from an AI assistant.",
+  "websiteUrl": "https://github.com/agigante80/actual-mcp-server",
+  "repository": {
+    "url": "https://github.com/agigante80/actual-mcp-server",
+    "source": "github"
+  },
+  "version": "0.0.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "actual-mcp-server",
+      "version": "0.0.0",
+      "runtimeHint": "npx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "--stdio"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "ACTUAL_SERVER_URL",
+          "description": "URL of the Actual Budget server, for example https://actual.example.com",
+          "isRequired": true
+        },
+        {
+          "name": "ACTUAL_PASSWORD",
+          "description": "Actual Budget server login password",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ACTUAL_BUDGET_SYNC_ID",
+          "description": "Sync ID of the budget (Actual: Settings, Advanced settings)",
+          "isRequired": true
+        },
+        {
+          "name": "ACTUAL_BUDGET_PASSWORD",
+          "description": "End-to-end encryption password, for an encrypted budget only. Requires an https:// ACTUAL_SERVER_URL",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "MCP_BRIDGE_DATA_DIR",
+          "description": "Absolute path of a user-private directory for the local budget cache",
+          "isRequired": false
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "identifier": "docker.io/agigante80/actual-mcp-server:0.0.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "http://localhost:3600/http",
+        "headers": [
+          {
+            "name": "Authorization",
+            "value": "Bearer {token}",
+            "description": "The same raw value as MCP_SSE_AUTHORIZATION",
+            "isRequired": true,
+            "isSecret": true,
+            "variables": {
+              "token": {
+                "description": "The same raw value as MCP_SSE_AUTHORIZATION: raw token, no Bearer prefix",
+                "isRequired": true,
+                "isSecret": true
+              }
+            }
+          }
+        ]
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "-p",
+          "value": "127.0.0.1:3600:3600"
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "ACTUAL_SERVER_URL",
+          "description": "URL of the Actual Budget server; must be reachable from inside the container",
+          "isRequired": true
+        },
+        {
+          "name": "ACTUAL_PASSWORD",
+          "description": "Actual Budget server login password",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "ACTUAL_BUDGET_SYNC_ID",
+          "description": "Sync ID of the budget (Actual: Settings, Advanced settings)",
+          "isRequired": true
+        },
+        {
+          "name": "ACTUAL_BUDGET_PASSWORD",
+          "description": "End-to-end encryption password, for an encrypted budget only. Requires an https:// ACTUAL_SERVER_URL",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "MCP_SSE_AUTHORIZATION",
+          "description": "Bearer token clients must send: raw token, no Bearer prefix; generate with openssl rand -hex 32",
+          "isRequired": true,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

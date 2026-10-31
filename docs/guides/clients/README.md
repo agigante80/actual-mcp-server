@@ -2,6 +2,8 @@
 
 Pick your client, then follow its page. Every page has the same sections: prerequisites, configure, verify, troubleshooting, and where the secret lives. The steps every client shares are below the table, written once.
 
+A client that installs servers from the official [MCP Registry](https://registry.modelcontextprotocol.io/) can find this one as `io.github.agigante80/actual-mcp-server`. The registry entry declares the same variables as the pages below; the client prompts for them, and the steps after configuring are the same.
+
 > **New to Actual Budget?** Set it up first at [actualbudget.org](https://actualbudget.org/) before continuing.
 
 | Client | Transport | Auth to this server | Page |

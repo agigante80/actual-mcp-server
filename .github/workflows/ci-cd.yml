@@ -912,6 +912,143 @@ jobs:
         run: node scripts/verify-published-artifacts.mjs
 
   # --------------------------------------------------------------------------
+  # Job 7b2: MCP Registry (#610)
+  #
+  # server.json is committed with 0.0.0 in its version slots; both jobs stamp a
+  # copy with the package version. The publisher binary is pinned, its sigstore
+  # bundle verified against the registry's own release workflow, and its hash
+  # checked before it runs. Both jobs hold job-level permissions only, so the
+  # downloaded binary never inherits the workflow-level write scopes.
+  #
+  # Both jobs are continue-on-error: the registry is a preview service, and
+  # validate and publish both talk to it, so an outage would otherwise turn the
+  # run red, which blocks the develop-to-main promotion and makes the dependency
+  # train report a released tag as failed. A failure instead ends in a warning
+  # annotation and a "failure" row in the Pipeline Summary (from the job's
+  # `outcome` output: needs.<job>.result reads success under continue-on-error).
+  # The content of server.json is still gated by tests/unit/mcp_server_json.test.js.
+  #
+  # validate: every push and PR.
+  #
+  # publish: tag-only, after the npm and image read-back, because the registry
+  # checks mcpName in the PUBLISHED npm tarball and the OCI label in the
+  # published image. NOT in release.needs: a registry failure must never fail a
+  # release whose npm and Docker artifacts are already public. The release
+  # skill checks the registry listing after every tag. Recovery: re-run this job
+  # only. Registry versions are immutable, so never re-tag.
+  # --------------------------------------------------------------------------
+  mcp-registry-validate:
+    name: MCP Registry Validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    outputs:
+      outcome: ${{ steps.outcome.outputs.outcome }}
+    needs: version
+    permissions:
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.7
+      MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 🔏 Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: 📦 Install mcp-publisher (pinned, signature and hash verified)
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          ASSET=mcp-publisher_linux_amd64.tar.gz
+          curl -fsSLO "${BASE}/${ASSET}"
+          curl -fsSLO "${BASE}/${ASSET}.sigstore.json"
+          cosign verify-blob "${ASSET}" --bundle "${ASSET}.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          echo "${MCP_PUBLISHER_SHA256}  ${ASSET}" | sha256sum -c
+          tar -xzf "${ASSET}" mcp-publisher
+          ./mcp-publisher --version
+
+      - name: 🏷️ Stamp server.json
+        run: node scripts/mcp-server-json.mjs stamp --out server.stamped.json
+
+      - name: ✅ Validate server.json
+        run: ./mcp-publisher validate server.stamped.json
+
+      - name: 📝 Record outcome
+        id: outcome
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          echo "outcome=${JOB_STATUS}" >> "$GITHUB_OUTPUT"
+          if [ "${JOB_STATUS}" != success ]; then
+            echo "::warning::MCP Registry validate ${JOB_STATUS}; re-run this job once the registry is reachable"
+          fi
+
+  mcp-registry-publish:
+    name: MCP Registry Publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    continue-on-error: true
+    outputs:
+      outcome: ${{ steps.outcome.outputs.outcome }}
+    needs: [version, verify-published-artifacts]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.7
+      MCP_PUBLISHER_SHA256: 00b21004149a4ce66f0782508ae4a2bce67d1bea395a8da0bd8028159fb59579
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: 🔏 Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: 📦 Install mcp-publisher (pinned, signature and hash verified)
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          ASSET=mcp-publisher_linux_amd64.tar.gz
+          curl -fsSLO "${BASE}/${ASSET}"
+          curl -fsSLO "${BASE}/${ASSET}.sigstore.json"
+          cosign verify-blob "${ASSET}" --bundle "${ASSET}.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          echo "${MCP_PUBLISHER_SHA256}  ${ASSET}" | sha256sum -c
+          tar -xzf "${ASSET}" mcp-publisher
+          ./mcp-publisher --version
+
+      - name: 🏷️ Stamp server.json (tag, VERSION and package.json must agree)
+        run: node scripts/mcp-server-json.mjs stamp --out server.stamped.json --expect-version "${GITHUB_REF_NAME#v}"
+
+      - name: 🔑 Log in to the MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: 🚀 Publish to the MCP Registry
+        run: ./mcp-publisher publish server.stamped.json
+
+      - name: 📝 Record outcome
+        id: outcome
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          echo "outcome=${JOB_STATUS}" >> "$GITHUB_OUTPUT"
+          if [ "${JOB_STATUS}" != success ]; then
+            echo "::warning::MCP Registry publish ${JOB_STATUS}; re-run this job once the registry is reachable"
+          fi
+
+  # --------------------------------------------------------------------------
   # Job 7c: Train liveness (#327)
   #
   # #325 reports a train that FAILED. It cannot report one that never RAN: no
@@ -1250,7 +1387,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: [version, lint, docs-check, test, node-version-guard, docker-e2e, validate-short-description,
-            docker-build, docker-publish, npm-publish, security-scan, deployment-test, release]
+            docker-build, docker-publish, npm-publish, security-scan, deployment-test, release,
+            mcp-registry-validate, mcp-registry-publish]
     if: always()
     steps:
       - name: 📊 Generate pipeline summary
@@ -1270,6 +1408,8 @@ jobs:
           echo "| Security Scan | ${{ needs.security-scan.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Deployment Test | ${{ needs.deployment-test.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Release | ${{ needs.release.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP Registry Validate | ${{ needs.mcp-registry-validate.outputs.outcome || needs.mcp-registry-validate.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| MCP Registry Publish | ${{ needs.mcp-registry-publish.outputs.outcome || needs.mcp-registry-publish.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 

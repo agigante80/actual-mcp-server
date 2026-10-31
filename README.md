@@ -21,6 +21,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that lets an
 
 - **Claude Desktop, Claude Code, Cursor, VS Code or another local client:** run it over stdio with `npx`, no server to keep running. Follow your client's page in [docs/guides/clients/](docs/guides/clients/README.md), for example [Claude Desktop](docs/guides/clients/claude-desktop.md) or [Claude Code](docs/guides/clients/claude-code.md).
 - **A chat UI such as LibreChat or LobeChat, or several users:** run it over HTTP in Docker with the quick start below, then follow [LibreChat](docs/guides/clients/librechat.md) or [LobeChat](docs/guides/clients/lobechat.md).
+- **A client that installs from the official [MCP Registry](https://registry.modelcontextprotocol.io/):** it is listed as `io.github.agigante80/actual-mcp-server`, with the npm package (stdio) and the Docker image (HTTP); the client asks for the same settings as the pages above.
 - **Unraid:** install it from [Community Applications](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg); see [Unraid](docs/guides/deployment.md#unraid-and-puidpgid-227).
 
 ## Quick start (Docker, HTTP)
