@@ -93,15 +93,34 @@ export function findWeakTokenVars(
 const LOOPBACK_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
 
 /**
+ * The hostname the SDK compares for `host` (a bind address or advertised name):
+ * lowercased, IPv6 bracketed and canonical. `undefined` for an empty or wildcard
+ * value, which names no single host.
+ */
+function canonicalHostname(host: string | undefined): string | undefined {
+  const h = host?.trim().toLowerCase();
+  if (!h || h === '0.0.0.0' || h === '::' || h === '[::]') return undefined;
+  const bracketed = h.includes(':') && !h.startsWith('[') ? `[${h}]` : h;
+  // The SDK compares the URL-parsed Host, which is the canonical form
+  // ([2001:db8:0:0::5] arrives as [2001:db8::5]), so store the same form.
+  try { return new URL(`http://${bracketed}`).hostname; } catch { return bracketed; }
+}
+
+/**
  * #612: the Host (and, in open mode, Origin) hostnames the HTTP server accepts, or
  * `null` to skip the check. DNS rebinding protection: a hostile page can rebind its
  * own name to 127.0.0.1, but cannot make the browser send a Host it does not own.
  *
- * - Open mode (no bearer token, no OIDC): the loopback names, `allowedHosts`, and the
+ * - Open mode (no bearer token, no OIDC): the loopback names, `allowedHosts`, the
  *   bind address itself when it is a concrete, non-wildcard address (an IP-literal
- *   Host cannot come out of rebinding). An IPv6 bind is added bracketed and canonical.
+ *   Host cannot come out of rebinding), and (#615) the advertised host, the address
+ *   the server prints as its own URL (MCP_BRIDGE_PUBLIC_HOST or the detected LAN
+ *   IP): an operator-controlled name or an IP literal, never one a hostile page can
+ *   make the browser send. Not on a loopback bind, which the LAN cannot reach.
+ *   IPv6 values are added bracketed and canonical.
  * - Authenticated: `null` when `allowedHosts` is empty (unchanged behaviour), else
- *   `allowedHosts` plus the loopback names.
+ *   `allowedHosts` plus the loopback names. The bind and advertised hosts are not
+ *   added: an operator list stays exact.
  *
  * Pure: `allowedHosts` is the already-validated MCP_ALLOWED_HOSTS list.
  */
@@ -109,22 +128,21 @@ export function resolveAllowedHosts({
   openMode,
   allowedHosts,
   bindHost,
+  advertisedHost,
 }: {
   openMode: boolean;
   allowedHosts: readonly string[];
   bindHost: string | undefined;
+  advertisedHost?: string;
 }): string[] | null {
   if (!openMode && allowedHosts.length === 0) return null;
   const hosts = new Set([...LOOPBACK_HOSTNAMES, ...allowedHosts]);
-  if (openMode && bindHost) {
-    const h = bindHost.trim().toLowerCase();
-    if (h && h !== '0.0.0.0' && h !== '::' && h !== '[::]') {
-      const bracketed = h.includes(':') && !h.startsWith('[') ? `[${h}]` : h;
-      // The SDK compares the URL-parsed Host, which is the canonical form
-      // ([2001:db8:0:0::5] arrives as [2001:db8::5]), so store the same form.
-      let canonical = bracketed;
-      try { canonical = new URL(`http://${bracketed}`).hostname; } catch { /* keep as typed */ }
-      hosts.add(canonical);
+  if (openMode) {
+    // A loopback bind is unreachable from the LAN, so the advertised (LAN) host is
+    // left out there: adding it would only widen which Origins may call localhost.
+    const advertised = isLoopbackHost(bindHost) ? undefined : advertisedHost;
+    for (const h of [canonicalHostname(bindHost), canonicalHostname(advertised)]) {
+      if (h) hosts.add(h);
     }
   }
   return [...hosts];

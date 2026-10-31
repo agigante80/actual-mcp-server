@@ -112,7 +112,18 @@ export async function startHttpServer(
   // #612: DNS rebinding protection, mounted first so it covers every route (/health,
   // /metrics, /.well-known/* and OPTIONS included). It reads req.headers.host only,
   // never X-Forwarded-Host or req.hostname, so a proxy header cannot bypass it.
-  const allowedHosts = resolveAllowedHosts({ openMode, allowedHosts: config.MCP_ALLOWED_HOSTS, bindHost });
+  // #615: the host this server prints as its own URL is accepted too (open mode only).
+  let advertisedHost: string | undefined;
+  try { advertisedHost = advertisedUrl ? new URL(advertisedUrl).hostname : undefined; } catch {
+    logger.warn(`[HTTP] Advertised URL ${advertisedUrl} does not parse; its host is not accepted. Check MCP_BRIDGE_PUBLIC_HOST (a bare host or IP, no scheme or port).`);
+  }
+  // MCP_BRIDGE_PUBLIC_HOST=https://nas.lan parses to the hostname "https": say so rather than
+  // accept it silently. A scheme or path always carries a "/"; a port already fails the parse.
+  const publicHost = process.env.MCP_BRIDGE_PUBLIC_HOST?.trim().toLowerCase();
+  if (advertisedHost && publicHost?.includes('/')) {
+    logger.warn(`[HTTP] MCP_BRIDGE_PUBLIC_HOST (${publicHost}) did not parse to a host name (got ${advertisedHost}). Set a bare host or IP, no scheme or port.`);
+  }
+  const allowedHosts = resolveAllowedHosts({ openMode, allowedHosts: config.MCP_ALLOWED_HOSTS, bindHost, advertisedHost });
   if (allowedHosts) {
     const rejectHost = (req: Request, reason: 'host' | 'origin', value: string) =>
       logger.warn('[HTTP] Rejected request: hostname not allowed (DNS rebinding protection, #612)', {

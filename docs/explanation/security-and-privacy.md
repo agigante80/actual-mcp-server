@@ -751,11 +751,19 @@ browser still sends that domain as `Host`, so the server checks it.
 
 In open mode every HTTP route (the MCP path, `/health`, `/metrics`, `/mcp-info`) accepts only
 these `Host` names: `localhost`, `127.0.0.1`, `[::1]`, the bind address when it is a concrete
-address rather than `0.0.0.0` or `::`, and any name listed in `MCP_ALLOWED_HOSTS`. Anything
+address rather than `0.0.0.0` or `::`, the advertised host (#615: the host of the URL the
+server prints at startup, `MCP_BRIDGE_PUBLIC_HOST` or the detected LAN IP), and any name
+listed in `MCP_ALLOWED_HOSTS`. Anything
 else gets 403 with `Invalid Host: <hostname>` before a route runs. Only the `Host` header is
 read: `X-Forwarded-Host` cannot bypass it. A browser `Origin`, when present, must be one of the
 same names; `Origin: null` or a foreign origin gets 403 `Invalid Origin: ...`. A request with no
 `Origin` (every non-browser MCP client) passes. `/.well-known/*` is exempt from the Origin check.
+
+The advertised host is safe to accept: an IP literal cannot come out of DNS rebinding, and
+`MCP_BRIDGE_PUBLIC_HOST` is a name you control. For a page aimed at that host the Origin
+check is the cross-site defence, and it compares hostnames only (not scheme or port), so any
+other web app served under the same name counts as a trusted Origin. Set
+`MCP_BRIDGE_PUBLIC_HOST` only to a name whose DNS you own.
 
 With a token or OIDC configured nothing changes unless `MCP_ALLOWED_HOSTS` is set; then the
 listed names plus the loopback names are enforced as `Host` (no Origin check). stdio is

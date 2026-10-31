@@ -164,6 +164,9 @@ services:
       # #612: an open-mode server accepts only localhost, 127.0.0.1 and [::1] as Host
       # (DNS rebinding protection). The Playwright runner reaches it by service name.
       - MCP_ALLOWED_HOSTS=mcp-server-test
+      # #615: the advertised host is accepted in open mode without being listed above.
+      # Keep it OUT of MCP_ALLOWED_HOSTS, or the advertised-host E2E row passes without the fix.
+      - MCP_BRIDGE_PUBLIC_HOST=mcp-advertised
     volumes:
       - mcp-test-data:/app/data
       # #383: a SEPARATE writable volume for the stdio pass's budget cache.
@@ -199,7 +202,13 @@ services:
       retries: 10
       start_period: 15s
     networks:
-      - e2e-test-network
+      e2e-test-network:
+        # #615: two extra names for the HTTP-only Host check in docker-all-tools.
+        # mcp-advertised is MCP_BRIDGE_PUBLIC_HOST (accepted without being listed);
+        # mcp-unlisted is in neither list, so it must get 403.
+        aliases:
+          - mcp-advertised
+          - mcp-unlisted
 
   # Playwright test runner
   e2e-test-runner:

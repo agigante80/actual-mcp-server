@@ -54,6 +54,27 @@ check('open mode, undefined bind: loopback names only', () =>
 check('open mode, list set: additive, no duplicates', () =>
   assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: ['mcp-server-test', 'localhost'], bindHost: '127.0.0.1' }), [...LOOP, 'mcp-server-test']));
 
+console.log('\n[#615] resolveAllowedHosts: the advertised host');
+check('open mode, wildcard bind: the advertised LAN IP is accepted (the URL the banner prints)', () =>
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '0.0.0.0', advertisedHost: '192.168.1.5' }), [...LOOP, '192.168.1.5']));
+check('open mode: an advertised MCP_BRIDGE_PUBLIC_HOST name is accepted, lowercased', () =>
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '0.0.0.0', advertisedHost: 'MCP.Lan' }), [...LOOP, 'mcp.lan']));
+check('open mode: an advertised IPv6 address is stored bracketed and canonical', () =>
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '::', advertisedHost: '2001:db8:0:0::7' }), [...LOOP, '[2001:db8::7]']));
+check('open mode: an advertised localhost adds no duplicate', () =>
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '0.0.0.0', advertisedHost: 'localhost' }), LOOP));
+check('authenticated, list set: the advertised host is NOT added (the operator list is exact)', () =>
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: false, allowedHosts: ['a.example'], bindHost: '0.0.0.0', advertisedHost: '192.168.1.5' }), [...LOOP, 'a.example']));
+check('authenticated, list unset: still null with an advertised host', () =>
+  assert.strictEqual(resolveAllowedHosts({ openMode: false, allowedHosts: [], bindHost: '0.0.0.0', advertisedHost: '192.168.1.5' }), null));
+check('open mode: a wildcard advertised host (0.0.0.0, ::) adds nothing', () => {
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '0.0.0.0', advertisedHost: '0.0.0.0' }), LOOP);
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '0.0.0.0', advertisedHost: '[::]' }), LOOP);
+});
+
+check('open mode, loopback bind: the advertised LAN host is NOT added (the LAN cannot reach it)', () =>
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '127.0.0.1', advertisedHost: '192.168.1.5' }), LOOP));
+
 console.log('\n[#612] MCP_ALLOWED_HOSTS schema');
 // configSchema is exported, but importing config.js also parses process.env at load:
 // give it the dummy Actual settings so that parse succeeds and only our rows matter.
@@ -104,7 +125,7 @@ connectionPool.getConnection = async (sid) => {
 const mcp = { executeTool: async () => ({ ok: true }) };
 const { startHttpServer } = await import('./dist/src/server/httpServer.js');
 const bind = process.env.TEST_BIND;
-const { listener } = await startHttpServer(mcp, 0, '/http', {}, ['actual_accounts_list'], 'desc', 'instr', {}, 'test', bind, undefined);
+const { listener } = await startHttpServer(mcp, 0, '/http', {}, ['actual_accounts_list'], 'desc', 'instr', {}, 'test', bind, process.env.TEST_ADVERTISED || undefined);
 if (!listener.listening) await new Promise((res, rej) => { listener.once('listening', res); listener.once('error', rej); });
 const port = listener.address().port;
 
@@ -192,6 +213,37 @@ check('the startup info line names the accepted hosts and MCP_ALLOWED_HOSTS', ()
   assert.ok(/Accepting Host localhost, 127\.0\.0\.1, \[::1\] only.*MCP_ALLOWED_HOSTS/.test(wild.out), wild.out.slice(-1500)));
 check('a rejection logs a warn naming the hostname', () =>
   assert.ok(/hostname not allowed \(DNS rebinding protection, #612\)/.test(wild.out) && /evil\.example/.test(wild.out), wild.out.slice(-1500)));
+
+console.log('\n[#615 http] open mode, wildcard bind, advertised https://192.168.1.5:3600/http');
+const adv = run('open-advertised', { MCP_BRIDGE_PUBLIC_HOST: '192.168.1.5', TEST_ADVERTISED: 'https://192.168.1.5:3600/http' }, '0.0.0.0',
+  { advertised: { host: '192.168.1.5:3600' }, advOrigin: { host: '192.168.1.5:3600', origin: 'https://192.168.1.5:3080' },
+    other: { host: '192.168.1.6:3600' }, evil: { host: 'evil.example' },
+    advEvilOrigin: { host: '192.168.1.5:3600', origin: 'https://evil.example' } });
+check('Host 192.168.1.5:3600 (the advertised URL) reaches the MCP handler', () => handled(adv.r.advertised));
+check('an Origin on the advertised host reaches the MCP handler', () => handled(adv.r.advOrigin));
+check('another LAN address is still refused', () => is403(adv.r.other, 'Invalid Host: 192.168.1.6'));
+check('Host evil.example is still refused', () => is403(adv.r.evil, 'Invalid Host: evil.example'));
+// The Host check passes here, so the Origin check is the only cross-site defence left.
+check('a foreign Origin on the advertised Host is refused: 403 Invalid Origin: evil.example', () =>
+  is403(adv.r.advEvilOrigin, 'Invalid Origin: evil.example'));
+check('the startup info line names the advertised host', () =>
+  assert.ok(/Accepting Host localhost, 127\.0\.0\.1, \[::1\], 192\.168\.1\.5 only/.test(adv.out), adv.out.slice(-1500)));
+
+console.log('\n[#615 http] open mode, wildcard bind, an unparsable advertised URL');
+const badAdv = run('open-advertised-bad', { TEST_ADVERTISED: 'http://[not a host/http' }, '0.0.0.0',
+  { local: { host: 'localhost:3600' }, other: { host: '192.168.1.5:3600' } });
+check('the server still starts and serves loopback', () => handled(badAdv.r.local));
+check('the unparsable URL adds nothing: a LAN Host is refused', () => is403(badAdv.r.other, 'Invalid Host: 192.168.1.5'));
+check('the unparsable URL is logged as a warning', () =>
+  assert.ok(/Advertised URL .* does not parse/.test(badAdv.out), badAdv.out.slice(-1500)));
+
+console.log('\n[#615 http] open mode, MCP_BRIDGE_PUBLIC_HOST with a scheme (parses to hostname "https")');
+const schemeAdv = run('open-advertised-scheme', { MCP_BRIDGE_PUBLIC_HOST: 'https://nas.lan', TEST_ADVERTISED: 'http://https://nas.lan:3600/http' }, '0.0.0.0',
+  { local: { host: 'localhost:3600' } });
+check('the misparsed MCP_BRIDGE_PUBLIC_HOST is logged as a warning', () =>
+  assert.ok(/MCP_BRIDGE_PUBLIC_HOST \(https:\/\/nas\.lan\) did not parse to a host name \(got https\)/.test(schemeAdv.out), schemeAdv.out.slice(-1500)));
+check('a well-formed MCP_BRIDGE_PUBLIC_HOST logs no such warning', () =>
+  assert.ok(!/did not parse to a host name/.test(adv.out)));
 
 console.log('\n[#612 http] open mode, wildcard bind, MCP_ALLOWED_HOSTS=mcp-server-test');
 const svc = run('open-allowlisted', { MCP_ALLOWED_HOSTS: 'mcp-server-test' }, '0.0.0.0',

@@ -118,6 +118,22 @@ test.describe('Docker E2E - ALL 84 TOOLS', () => {
     expect(typeof data).toBe('object');
   });
 
+  test('DNS rebinding guard: the advertised host is accepted, an unlisted name is 403', async ({ request }) => {
+    // #615: HTTP-only, Host is a transport header. compose.yaml gives the server the network
+    // aliases mcp-advertised (its MCP_BRIDGE_PUBLIC_HOST, not in MCP_ALLOWED_HOSTS) and
+    // mcp-unlisted (in neither), so the runner sends each as a real Host header.
+    test.skip(isStdio, 'Host validation is an HTTP transport check; stdio has no Host header');
+    test.skip(new URL(DEFAULT_MCP_SERVER_URL).hostname !== 'mcp-server-test',
+      'needs the compose network aliases, reachable only from inside tests/e2e/compose.yaml');
+    const port = new URL(DEFAULT_MCP_SERVER_URL).port || '3600';
+    const advertised = await request.get(`http://mcp-advertised:${port}/health`);
+    expect(advertised.status()).toBe(200);
+
+    const unlisted = await request.get(`http://mcp-unlisted:${port}/health`);
+    expect(unlisted.status()).toBe(403);
+    expect(JSON.stringify(await unlisted.json())).toContain('Invalid Host: mcp-unlisted');
+  });
+
   test('HTTP DELETE ends a session; the next call on its id is refused, and an unknown id is 404', async ({ request }) => {
     // #563: HTTP-only, the method is the transport's (stdio ends a session by closing stdin).
     // Uses a session of its own: deleting the shared one would break every later test.
