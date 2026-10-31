@@ -1,7 +1,7 @@
 {
   "name": "actual-mcp-server",
   "displayName": "Actual MCP Server",
-  "version": "0.25.0",
+  "version": "0.25.1",
   "mcpName": "io.github.agigante80/actual-mcp-server",
   "engines": {
     "node": ">=22.0.0",
