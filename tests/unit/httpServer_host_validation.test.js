@@ -45,6 +45,10 @@ check('open mode, concrete bind 192.168.1.5: the bind address is added (--test-m
   assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '192.168.1.5' }), [...LOOP, '192.168.1.5']));
 check('open mode, IPv6 bind: added bracketed', () =>
   assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: 'fd00::5' }), [...LOOP, '[fd00::5]']));
+check('open mode, a non-canonical IPv6 bind is stored as the SDK sees the Host (canonical form)', () => {
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '2001:db8:0:0::5' }), [...LOOP, '[2001:db8::5]']);
+  assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: '::ffff:192.168.1.5' }), [...LOOP, '[::ffff:c0a8:105]']);
+});
 check('open mode, undefined bind: loopback names only', () =>
   assert.deepStrictEqual(resolveAllowedHosts({ openMode: true, allowedHosts: [], bindHost: undefined }), LOOP));
 check('open mode, list set: additive, no duplicates', () =>
@@ -72,6 +76,23 @@ for (const bad of ['mcp.example.org:3600', '*.example.org', 'https://mcp.example
 // ---- wiring: the real server in a child process ----
 const child = `
 const http = await import('node:http');
+// OIDC rows: stub the issuer's discovery and JWKS, so startup needs no network.
+const issuer = process.env.OIDC_ISSUER;
+if (issuer) {
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (input, init) => {
+    const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    if (u.startsWith(issuer + '/')) {
+      if (u.endsWith('/.well-known/openid-configuration')) {
+        return Response.json({ issuer, jwks_uri: issuer + '/jwks', authorization_endpoint: issuer + '/authorize',
+          token_endpoint: issuer + '/token', response_types_supported: ['code'] });
+      }
+      if (u.endsWith('/jwks')) return Response.json({ keys: [] });
+      return new Response('not stubbed', { status: 404 });
+    }
+    return realFetch(input, init);
+  };
+}
 const { connectionPool } = await import('./dist/src/lib/ActualConnectionPool.js');
 connectionPool.getConnection = async (sid) => {
   connectionPool.connections.set(sid, {
@@ -190,6 +211,23 @@ const authSet = run('auth-set', { MCP_SSE_AUTHORIZATION: TOKEN, MCP_ALLOWED_HOST
 check('MCP_ALLOWED_HOSTS set: Host other.example gets 403 Invalid Host: other.example', () => is403(authSet.r.other, 'Invalid Host: other.example'));
 check('MCP_ALLOWED_HOSTS set: the listed name is handled', () => handled(authSet.r.listed));
 check('authenticated: a foreign Origin is not checked (the Origin guard is open mode only)', () => handled(authSet.r.listedOrigin));
+
+console.log('\n[#612 http] OIDC, wildcard bind: authenticated, so no guard unless MCP_ALLOWED_HOSTS is set');
+const OIDC = { AUTH_PROVIDER: 'oidc', OIDC_ISSUER: 'https://idp.test', OIDC_RESOURCE: 'https://mcp.example.org/http' };
+const META = '/.well-known/oauth-protected-resource/http';
+const oidcUnset = run('oidc-unset', OIDC, '0.0.0.0',
+  { foreign: { host: 'mcp.example.org', origin: 'https://client.example' } },
+  { meta: [META, { host: 'mcp.example.org', origin: 'https://client.example' }] });
+check('OIDC, MCP_ALLOWED_HOSTS unset: the public metadata is readable cross-origin (200)', () =>
+  assert.strictEqual(oidcUnset.r.meta.status, 200, oidcUnset.r.meta.body));
+check('OIDC, MCP_ALLOWED_HOSTS unset: a public Host and foreign Origin reach auth (401), not the guard (403)', () =>
+  assert.strictEqual(oidcUnset.r.foreign.status, 401, oidcUnset.r.foreign.body));
+const oidcSet = run('oidc-set', { ...OIDC, MCP_ALLOWED_HOSTS: 'mcp.example.org' }, '0.0.0.0',
+  { other: { host: 'other.example' } },
+  { meta: [META, { host: 'mcp.example.org', origin: 'https://client.example' }] });
+check('OIDC, MCP_ALLOWED_HOSTS set: Host other.example gets 403 Invalid Host: other.example', () => is403(oidcSet.r.other, 'Invalid Host: other.example'));
+check('OIDC, MCP_ALLOWED_HOSTS set: the metadata on the listed name stays readable cross-origin', () =>
+  assert.strictEqual(oidcSet.r.meta.status, 200, oidcSet.r.meta.body));
 
 console.log('\n[#612 http] an invalid MCP_ALLOWED_HOSTS refuses startup');
 for (const bad of ['mcp.example.org:3600', '*.example.org']) {

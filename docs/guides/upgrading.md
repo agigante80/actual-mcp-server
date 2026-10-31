@@ -68,6 +68,14 @@ An existing HTTP deployment on a non-loopback bind with no token and no OIDC tha
 
 Before #551 an invalid value was logged once and then treated as "no ACL", so every authenticated user could reach every budget. A deployment whose value was silently invalid will refuse its first restart after upgrading, including one with `AUTH_PROVIDER=none` or `AUTH_BUDGET_ACL_SOURCE=actual`, where the variable was previously ignored. The fix is to correct the JSON or unset the variable.
 
+### A short or example token refuses an exposed bind (#611)
+
+An HTTP deployment on `0.0.0.0` whose `MCP_SSE_AUTHORIZATION` is shorter than 32 characters, or is one of the example values from our docs, now refuses to start. Publishing the container port on `127.0.0.1` does not help, because the container itself still binds `0.0.0.0`. Generate a real token with `openssl rand -hex 32`.
+
+### An open server answers only loopback names (#612)
+
+An HTTP server running without a token or OIDC now accepts only `localhost`, `127.0.0.1`, `[::1]`, its concrete bind address and the names in `MCP_ALLOWED_HOSTS` as the `Host` header; any other name gets 403 `Invalid Host: <name>`. That includes a container reaching it by service name and a reverse proxy that forwards the public host (Caddy does by default, the nginx example sets `proxy_set_header Host $host`). Add the name to `MCP_ALLOWED_HOSTS`, or better, configure a token. The built-in `--test-mcp-client` self-test with native TLS (`MCP_ENABLE_HTTPS=true`) on a wildcard bind connects by the advertised host, so it needs that host in `MCP_ALLOWED_HOSTS` too.
+
 ### Old logs can hold budget data (v0.22.38)
 
 Logs written by earlier versions can contain budget data (tool results at `info`, failed-call arguments at `error`). Purge them or let rotation remove them, including copies held by a log shipper or in Claude Desktop's MCP log files.

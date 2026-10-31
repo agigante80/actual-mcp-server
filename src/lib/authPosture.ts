@@ -99,7 +99,7 @@ const LOOPBACK_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
  *
  * - Open mode (no bearer token, no OIDC): the loopback names, `allowedHosts`, and the
  *   bind address itself when it is a concrete, non-wildcard address (an IP-literal
- *   Host cannot come out of rebinding). An IPv6 bind is added bracketed.
+ *   Host cannot come out of rebinding). An IPv6 bind is added bracketed and canonical.
  * - Authenticated: `null` when `allowedHosts` is empty (unchanged behaviour), else
  *   `allowedHosts` plus the loopback names.
  *
@@ -119,7 +119,12 @@ export function resolveAllowedHosts({
   if (openMode && bindHost) {
     const h = bindHost.trim().toLowerCase();
     if (h && h !== '0.0.0.0' && h !== '::' && h !== '[::]') {
-      hosts.add(h.includes(':') && !h.startsWith('[') ? `[${h}]` : h);
+      const bracketed = h.includes(':') && !h.startsWith('[') ? `[${h}]` : h;
+      // The SDK compares the URL-parsed Host, which is the canonical form
+      // ([2001:db8:0:0::5] arrives as [2001:db8::5]), so store the same form.
+      let canonical = bracketed;
+      try { canonical = new URL(`http://${bracketed}`).hostname; } catch { /* keep as typed */ }
+      hosts.add(canonical);
     }
   }
   return [...hosts];

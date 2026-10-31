@@ -186,7 +186,7 @@ On HTTP the server refuses to start when it would be exposed with nothing config
 3. `MCP_ALLOW_UNAUTHENTICATED=true`: the server starts open and logs a loud warning on every boot. Only the exact string `true` enables it (`src/config.ts`).
 4. Otherwise it logs an error naming the fixes and exits with status 1.
 
-So the opt-out changes nothing on a loopback bind, and on any other bind it turns the refusal into an open server that every caller reaches as the same anonymous principal, with every budget. Use it only behind your own reverse proxy that authenticates every request. A proxy that only forwards, or a network you consider trusted, is not a substitute: anyone who can reach the port can read and write every budget.
+So the opt-out changes nothing on a loopback bind, and on any other bind it turns the refusal into an open server that every caller reaches as the same anonymous principal, with every budget. Use it only behind your own reverse proxy that authenticates every request. That proxy forwards the public name as `Host`, which an open server refuses (#612): list it in `MCP_ALLOWED_HOSTS`. A proxy that only forwards, or a network you consider trusted, is not a substitute: anyone who can reach the port can read and write every budget.
 
 ## Related
 

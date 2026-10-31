@@ -389,6 +389,8 @@ If both containers share a Docker network, HTTP is enough: the traffic does not 
 
 Run any reverse proxy (nginx, Caddy, Traefik) to terminate TLS and forward to the server's HTTP port.
 
+The proxy forwards the public name as `Host`. With a token or OIDC that is fine. A server running open behind a proxy that authenticates for it (#612) accepts only loopback names, so add the public name: `MCP_ALLOWED_HOSTS=actual-mcp.yourdomain.com`, or it answers 403 `Invalid Host`.
+
 Caddy:
 
 ```
