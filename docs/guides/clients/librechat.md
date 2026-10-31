@@ -26,6 +26,8 @@ mcpServers:
 
 Plain HTTP is for a Docker-internal network or loopback only, and it does not replace the token. Over any other network, use the `https://` URL ([HTTPS and reverse proxy](../deployment.md#https-and-reverse-proxy)).
 
+Running the server without a token on a private network? It then answers only requests addressed to `localhost`, `127.0.0.1` or `[::1]` (DNS rebinding protection, #612), so a request to `actual-mcp-server-backend` gets HTTP 403 `Invalid Host`. Set `MCP_ALLOWED_HOSTS=actual-mcp-server-backend` on the server, or configure a token.
+
 `serverInstructions: true` makes LibreChat add the server's `initialize` instructions to the system prompt. LibreChat leaves them out by default. The text is short and is built from the tools the server actually publishes, so it tracks `MCP_TOOLSETS`, `MCP_TOOLS` and `MCP_READ_ONLY`: call `actual_get_context` first and use the ids it returns, amounts are integer cents, dates are `YYYY-MM-DD`, and filter `actual_query_run` on id columns.
 
 **Recommended for LibreChat:** set `MCP_TOOLSETS=chat` on the MCP server. LibreChat works better with a small tool list; the `chat` preset publishes a small set (about a quarter of the `tools/list` payload) and covers everyday transaction, rule and budget work. Add specific tools with `MCP_TOOLS` if you need them. See [Reducing the tool surface](../../../README.md#reducing-the-tool-surface).

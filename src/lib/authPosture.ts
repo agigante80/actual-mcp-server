@@ -89,6 +89,42 @@ export function findWeakTokenVars(
   return weak;
 }
 
+/** #612: the hostnames every open-mode server accepts, in the SDK's bracketed form. */
+const LOOPBACK_HOSTNAMES = ['localhost', '127.0.0.1', '[::1]'];
+
+/**
+ * #612: the Host (and, in open mode, Origin) hostnames the HTTP server accepts, or
+ * `null` to skip the check. DNS rebinding protection: a hostile page can rebind its
+ * own name to 127.0.0.1, but cannot make the browser send a Host it does not own.
+ *
+ * - Open mode (no bearer token, no OIDC): the loopback names, `allowedHosts`, and the
+ *   bind address itself when it is a concrete, non-wildcard address (an IP-literal
+ *   Host cannot come out of rebinding). An IPv6 bind is added bracketed.
+ * - Authenticated: `null` when `allowedHosts` is empty (unchanged behaviour), else
+ *   `allowedHosts` plus the loopback names.
+ *
+ * Pure: `allowedHosts` is the already-validated MCP_ALLOWED_HOSTS list.
+ */
+export function resolveAllowedHosts({
+  openMode,
+  allowedHosts,
+  bindHost,
+}: {
+  openMode: boolean;
+  allowedHosts: readonly string[];
+  bindHost: string | undefined;
+}): string[] | null {
+  if (!openMode && allowedHosts.length === 0) return null;
+  const hosts = new Set([...LOOPBACK_HOSTNAMES, ...allowedHosts]);
+  if (openMode && bindHost) {
+    const h = bindHost.trim().toLowerCase();
+    if (h && h !== '0.0.0.0' && h !== '::' && h !== '[::]') {
+      hosts.add(h.includes(':') && !h.startsWith('[') ? `[${h}]` : h);
+    }
+  }
+  return [...hosts];
+}
+
 export interface HttpAuthPostureInput {
   /** The interface the server will bind (e.g. process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0'). */
   bindHost: string | undefined;

@@ -23,6 +23,8 @@ In the LobeChat UI:
 
 Plain HTTP is for a Docker-internal network or loopback only, and it does not replace the token. Over any other network, use the `https://` URL ([HTTPS and reverse proxy](../deployment.md#https-and-reverse-proxy)).
 
+Running the server without a token on a private network? It then answers only requests addressed to `localhost`, `127.0.0.1` or `[::1]` (DNS rebinding protection, #612), so a request to `actual-mcp-server-backend` gets HTTP 403 `Invalid Host`. Set `MCP_ALLOWED_HOSTS=actual-mcp-server-backend` on the server, or configure a token.
+
 **One plugin per assistant.** With `MCP_STATIC_TOKENS`, add the plugin once per assistant with that assistant's token in **Authorization** (the `MCP_TOKEN_HOUSEHOLD` value for the household assistant, the `MCP_TOKEN_BUSINESS` value for the business one). Each assistant then sees and switches only its own budgets; asking for another one is refused. The server still holds one open budget at a time, so two assistants working on different budgets take turns (each switch reloads the budget).
 
 ## Verify

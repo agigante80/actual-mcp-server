@@ -3,6 +3,11 @@ import { parseIdentityMap } from './auth/identity-map.js';
 import { parseBudgetAcl } from './auth/budget-acl-parse.js';
 import { parseStaticTokensConfig, staticTokensConfigured } from './auth/static-tokens.js';
 
+/** #612: MCP_ALLOWED_HOSTS as a list: comma-separated, trimmed, lowercased, empties dropped. */
+export function parseAllowedHostsList(value: string | undefined): string[] {
+  return (value ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+}
+
 // #466: the byte count body-parser will ACTUALLY enforce for MCP_HTTP_BODY_LIMIT, or
 // null when the value must be refused. Mirrors `bytes.parse` (what body-parser uses)
 // without importing that transitive package: floor(number * unit), units b and kb
@@ -122,6 +127,30 @@ export const configSchema = z.object({
   // so a typo like 'yes'/'1' cannot silently leave the server open.
   MCP_ALLOW_UNAUTHENTICATED: z.string().optional().transform(val => val === 'true'),
   MCP_ENABLE_HTTPS: z.string().optional().transform(val => val === 'true'),
+  // #612: extra hostnames the HTTP server accepts as Host (and as Origin in open
+  // mode), comma-separated, additive to localhost, 127.0.0.1 and [::1]. Each entry
+  // must already be in the form new URL() normalises a hostname to: no port, path,
+  // scheme or wildcard, IPv6 bracketed, IPv4 dotted. Parsed to a lowercased array.
+  MCP_ALLOWED_HOSTS: z
+    .string()
+    .optional()
+    .superRefine((v: string | undefined, ctx: z.RefinementCtx) => {
+      for (const entry of parseAllowedHostsList(v)) {
+        let normalised: string | null = null;
+        try {
+          normalised = new URL(`http://${entry}`).hostname;
+        } catch {
+          // reported below
+        }
+        if (entry.includes('*') || normalised !== entry) {
+          ctx.addIssue({
+            code: 'custom',
+            message: `MCP_ALLOWED_HOSTS entry "${entry}" is not a bare hostname (no port, path, scheme or wildcard; IPv6 in brackets)`,
+          });
+        }
+      }
+    })
+    .transform(parseAllowedHostsList),
   MCP_HTTPS_CERT: z.string().optional(),
   MCP_HTTPS_KEY: z.string().optional(),
   // Explicit cap on incoming JSON request bodies (#168). Passed to

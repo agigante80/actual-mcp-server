@@ -30,6 +30,8 @@ import { parseScopeList } from '../lib/oidc-scopes.js';
 import { budgetAclMiddleware } from '../auth/budget-acl.js';
 import { resolveStaticTokens, matchBearerToken, LEGACY_STATIC_PRINCIPAL } from '../auth/static-tokens.js';
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
+import { hostHeaderValidation } from '@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js';
+import { resolveAllowedHosts } from '../lib/authPosture.js';
 import * as https from 'node:https';
 import { finished } from 'node:stream';
 import * as fs from 'node:fs';
@@ -102,7 +104,49 @@ export async function startHttpServer(
     : resolveStaticTokens(config.MCP_STATIC_TOKENS, process.env, getBudgetRegistry(), config.MCP_SSE_AUTHORIZATION);
   const staticPrincipals = bearerEntries.filter((e) => e.allowedBudgets);
 
+  // #612: the ONE open-mode predicate, shared by the Host/Origin guard below and
+  // checkAuth's no-token branch, so the two can never disagree.
+  const openMode = config.AUTH_PROVIDER !== 'oidc' && bearerEntries.length === 0;
+
   const app = express();
+  // #612: DNS rebinding protection, mounted first so it covers every route (/health,
+  // /metrics, /.well-known/* and OPTIONS included). It reads req.headers.host only,
+  // never X-Forwarded-Host or req.hostname, so a proxy header cannot bypass it.
+  const allowedHosts = resolveAllowedHosts({ openMode, allowedHosts: config.MCP_ALLOWED_HOSTS, bindHost });
+  if (allowedHosts) {
+    const rejectHost = (req: Request, reason: 'host' | 'origin', value: string) =>
+      logger.warn('[HTTP] Rejected request: hostname not allowed (DNS rebinding protection, #612)', {
+        header: reason, hostname: value.slice(0, 253), path: req.path,
+      });
+    const sdkHostCheck = hostHeaderValidation(allowedHosts);
+    app.use((req, res, next) => {
+      let passed = false;
+      sdkHostCheck(req, res, () => { passed = true; });
+      if (passed) { next(); return; }
+      // The SDK middleware is synchronous: it already answered 403.
+      let hostname = String(req.headers.host ?? '');
+      try { hostname = new URL(`http://${hostname}`).hostname; } catch { /* log the raw value */ }
+      rejectHost(req, 'host', hostname);
+    });
+    if (openMode) {
+      // The SDK checks Host only. In open mode a browser Origin must also be an allowed
+      // hostname; an absent Origin (non-browser clients) passes. Comparing Origin to Host
+      // would not help: under rebinding both carry the attacker's name. /.well-known/* is
+      // exempt because mcp-auth serves it with cors() for public cross-origin reads.
+      app.use((req, res, next) => {
+        const origin = req.headers.origin;
+        if (origin === undefined || req.path.startsWith('/.well-known/')) { next(); return; }
+        let hostname: string | null = null;
+        try { hostname = origin === 'null' ? null : new URL(origin).hostname; } catch { hostname = null; }
+        if (hostname !== null && allowedHosts.includes(hostname)) { next(); return; }
+        rejectHost(req, 'origin', hostname ?? 'null');
+        res.status(403).json({ jsonrpc: '2.0', error: { code: -32000, message: `Invalid Origin: ${hostname ?? 'null'}` }, id: null });
+      });
+    }
+    if (openMode && config.MCP_ALLOWED_HOSTS.length === 0 && (bindHost === '0.0.0.0' || bindHost === '::')) {
+      logger.info(`[HTTP] Accepting Host ${allowedHosts.join(', ')} only (DNS rebinding protection, #612). Reach this server by another name? Add it to MCP_ALLOWED_HOSTS.`);
+    }
+  }
   // Explicit body-size cap (#168). An oversized payload is rejected with HTTP 413
   // rather than buffered unbounded. Tunable via MCP_HTTP_BODY_LIMIT (default 512kb).
   app.use(express.json({ limit: config.MCP_HTTP_BODY_LIMIT }));
@@ -391,7 +435,7 @@ export async function startHttpServer(
     // (#572). Only when NEITHER is configured is every request allowed. Static tokens are
     // authentication, so MCP_ALLOW_UNAUTHENTICATED (a posture opt-out for the no-auth
     // case) does not relax this.
-    if (bearerEntries.length === 0) {
+    if (openMode) {
       return true;
     }
 

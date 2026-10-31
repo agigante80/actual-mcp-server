@@ -2,6 +2,8 @@
 # LibreChat replaces ${ACTUAL_MCP_TOKEN} with the value from its own .env file,
 # so this file holds no token and is safe to commit.
 # Plain HTTP is for a Docker-internal network or loopback only; it never replaces the token.
+# A server run WITHOUT a token accepts only localhost as Host (#612): it then needs
+# MCP_ALLOWED_HOSTS=actual-mcp-server-backend, or the request gets 403 Invalid Host.
 mcpServers:
   actual-mcp:
     type: "streamable-http"

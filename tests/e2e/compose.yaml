@@ -161,6 +161,9 @@ services:
       # server refuses to start.
       - MCP_SSE_AUTHORIZATION=
       - MCP_ALLOW_UNAUTHENTICATED=true
+      # #612: an open-mode server accepts only localhost, 127.0.0.1 and [::1] as Host
+      # (DNS rebinding protection). The Playwright runner reaches it by service name.
+      - MCP_ALLOWED_HOSTS=mcp-server-test
     volumes:
       - mcp-test-data:/app/data
       # #383: a SEPARATE writable volume for the stdio pass's budget cache.
