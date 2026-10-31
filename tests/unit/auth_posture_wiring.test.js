@@ -114,5 +114,32 @@ console.log('\n[auth-posture-wiring] #572 index.ts counts MCP_STATIC_TOKENS as a
   });
 }
 
+console.log('\n[auth-posture-wiring] #611 index.ts refuses a placeholder token on an exposed bind');
+{
+  const { spawnSync } = await import('node:child_process');
+  const { mkdtempSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, dirname } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+  const c = spawnSync(process.execPath, ['dist/src/index.js', '--http'], {
+    cwd: root, encoding: 'utf8', timeout: 30000,
+    env: {
+      PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production',
+      ACTUAL_SERVER_URL: 'http://127.0.0.1:5999', ACTUAL_PASSWORD: 'dummy', ACTUAL_BUDGET_SYNC_ID: 'alpha-sync',
+      MCP_BRIDGE_PORT: '3655', MCP_BRIDGE_BIND_HOST: '0.0.0.0',
+      MCP_BRIDGE_DATA_DIR: mkdtempSync(join(tmpdir(), 'unit611w-')),
+      MCP_SSE_AUTHORIZATION: 'replace-with-openssl-rand-hex-32',
+    },
+  });
+  const out = (c.stdout || '') + (c.stderr || '');
+  check('placeholder MCP_SSE_AUTHORIZATION on 0.0.0.0: exits 1 on its own, refusal printed, never listens', () => {
+    assert.strictEqual(c.signal, null, `killed by ${c.signal} (timeout?)`);
+    assert.strictEqual(c.status, 1, out.slice(-1500));
+    assert.ok(/Refusing to start: weak token on a non-loopback bind/.test(out), out.slice(-1500));
+    assert.ok(!/listening on/.test(out), out.slice(-1500));
+  });
+}
+
 console.log(`\n[auth-posture-wiring] Results: ${failed === 0 ? 'all passed' : failed + ' failed'}`);
 process.exit(failed > 0 ? 1 : 0);

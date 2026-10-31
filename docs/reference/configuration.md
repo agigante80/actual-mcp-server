@@ -85,7 +85,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | Variable | Type | Default | Required | Secret | Source | Read site(s) | Notes |
 |----------|------|---------|----------|--------|--------|--------------|-------|
 | `AUTH_PROVIDER` | enum | `none` | No | no | schema | config | `none` (static Bearer) or `oidc` (JWKS-validated JWT) |
-| `MCP_SSE_AUTHORIZATION` | string | (none) | No | yes | schema | config | Static Bearer token (raw token, not `Bearer ...`) for `AUTH_PROVIDER=none`; highly recommended in production |
+| `MCP_SSE_AUTHORIZATION` | string | (none) | No | yes | schema | config | Static Bearer token (raw token, not `Bearer ...`) for `AUTH_PROVIDER=none`; highly recommended in production. #611: on a non-loopback bind a value shorter than 32 characters or an example placeholder refuses to start (a warning on loopback); empty means no token |
 | `MCP_STATIC_TOKENS` | JSON string | (none) | No | no | schema | config (shape), `httpServer.ts` (resolved before bind) | #572 several static Bearer tokens: `{"<principal>":{"tokenEnv":"MCP_TOKEN_<X>","budgets":["<registry name>", ...]}}`. Principal: letters, digits, `. _ -`, at most 64, not `static-bearer`. Shape errors refuse to start on both transports; an unset, short (under 32), non-RFC 6750 or duplicate token and an unknown budget name refuse HTTP startup. Refused with `AUTH_PROVIDER=oidc`. Can coexist with `MCP_SSE_AUTHORIZATION`, which stays unrestricted. Blank means off. See [Security and Privacy](../explanation/security-and-privacy.md) |
 | `MCP_ALLOW_UNAUTHENTICATED` | bool string | `false` | No | no | schema | `index.ts` | #242 opt-out: only `true` lets HTTP serve unauthenticated on a non-loopback bind; otherwise the server refuses to start. Set it to run open deliberately, for example behind your own proxy |
 | `OIDC_ISSUER` | url string | (none) | If oidc | no | schema | config | OIDC issuer URL (for example `https://sso.example.com`) |
@@ -153,7 +153,7 @@ and the logger scrubs every value of the family from log output.
 
 | Variable | Type | Default | Required | Secret | Source | Notes |
 |----------|------|---------|----------|--------|--------|-------|
-| `MCP_TOKEN_*` | string | (none) | When named by `MCP_STATIC_TOKENS` | yes | dynamic | At least 32 characters, unique across all principals and `MCP_SSE_AUTHORIZATION`, RFC 6750 characters only |
+| `MCP_TOKEN_*` | string | (none) | When named by `MCP_STATIC_TOKENS` | yes | dynamic | At least 32 characters, unique across all principals and `MCP_SSE_AUTHORIZATION`, RFC 6750 characters only. #611: an example placeholder value refuses a non-loopback bind |
 
 ## OS / runtime and internal
 

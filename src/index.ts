@@ -219,7 +219,7 @@ export {};
   const [
     { startHttpServer },
     { startStdioServer },
-    { enforceHttpAuthPosture },
+    { enforceHttpAuthPosture, findWeakTokenVars },
     loggerModule,
     utilsModule,
     actualToolsManagerModule,
@@ -362,13 +362,16 @@ export {};
     // explicit opt-out this refuses startup (exit 1) rather than silently serving
     // financial data open on the LAN. stdio mode never reaches this check.
     if (useHttp || useTestMcpClient) {
+      const oidcEnabled = process.env.AUTH_PROVIDER === 'oidc';
       const decision = enforceHttpAuthPosture({
         bindHost,
         // #572: MCP_STATIC_TOKENS is authentication too. A set-but-unresolvable value
         // still counts here: startHttpServer refuses it before binding.
         hasStaticToken: !!process.env.MCP_SSE_AUTHORIZATION || !!process.env.MCP_STATIC_TOKENS?.trim(),
-        oidcEnabled: process.env.AUTH_PROVIDER === 'oidc',
+        oidcEnabled,
         allowUnauthenticated: process.env.MCP_ALLOW_UNAUTHENTICATED === 'true',
+        // #611: a short or placeholder token refuses a non-loopback bind.
+        weakTokenVars: findWeakTokenVars(process.env, { oidcEnabled }),
       });
       // enforceHttpAuthPosture already called process.exit(1) on 'refuse'. This
       // explicit return makes the open-start path structurally unreachable even

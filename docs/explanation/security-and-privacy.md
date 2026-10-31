@@ -723,6 +723,25 @@ token and no OIDC that previously started open will now refuse to start. The sta
 the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or
 `AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior.
 
+#### Weak tokens refuse an exposed bind (#611)
+
+A token that is set but weak is treated like no token on a non-loopback bind. Weak means
+`MCP_SSE_AUTHORIZATION` shorter than 32 characters after trimming (whitespace-only included), or
+equal to one of the example values in our docs (`your-secure-token-here`,
+`replace-with-openssl-rand-hex-32`, `changeme`; compared trimmed and case-insensitive). A
+`MCP_TOKEN_*` value is checked the same way for the placeholders; its 32-character minimum was
+already enforced on every bind by #572.
+
+On a non-loopback bind the server exits non-zero before binding and names the variable, never
+its value. `MCP_ALLOW_UNAUTHENTICATED=true` does not rescue a weak token, so the message does
+not offer it. On a loopback bind the server starts and logs one warning per weak variable. An
+empty `MCP_SSE_AUTHORIZATION` is not weak: it is the no-token path above. Under
+`AUTH_PROVIDER=oidc` no bearer token is in use and nothing is checked.
+
+**Upgrade note (behavior change)**: an HTTP deployment on `0.0.0.0` with a short or example
+token now refuses to start. A Docker publish to `127.0.0.1` on the host does not help, because
+the container itself still binds `0.0.0.0`. Generate a real token with `openssl rand -hex 32`.
+
 ---
 
 ## 🔒 Secure Coding Practices

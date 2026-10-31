@@ -1,4 +1,5 @@
 import { createModuleLogger, type ModuleLogger } from './loggerFactory.js';
+import { MIN_TOKEN_LENGTH, parseStaticTokensConfig } from '../auth/static-tokens.js';
 
 /**
  * Auth posture gate (#242): make HTTP authentication required-by-default.
@@ -39,6 +40,55 @@ export function isLoopbackHost(host: string | undefined): boolean {
   return false;
 }
 
+/**
+ * #611: example values shipped in our docs and .env.example. A token equal to one
+ * of these (trimmed, case-insensitive) is weak whatever its length:
+ * `replace-with-openssl-rand-hex-32` is exactly 32 characters.
+ */
+const PLACEHOLDER_TOKENS = new Set(['your-secure-token-here', 'replace-with-openssl-rand-hex-32', 'changeme']);
+
+function isPlaceholder(value: string): boolean {
+  return PLACEHOLDER_TOKENS.has(value.trim().toLowerCase());
+}
+
+/**
+ * #611: the names (never the values) of the configured bearer-token variables that
+ * are weak. Pure: reads only the `env` it is given.
+ *
+ * - Under OIDC nothing is checked: httpServer.ts builds no bearer entries there, so
+ *   a stale MCP_SSE_AUTHORIZATION is not a credential.
+ * - MCP_SSE_AUTHORIZATION: weak when set, non-empty and shorter than
+ *   MIN_TOKEN_LENGTH after trimming (whitespace-only included), or a placeholder.
+ *   EMPTY stays the no-auth path (tests/e2e/compose.yaml runs open on it).
+ * - MCP_TOKEN_*: resolveStaticTokens already refuses a short value on any bind, so
+ *   only placeholders are added here. An unparsable MCP_STATIC_TOKENS is left to
+ *   resolveStaticTokens, which refuses it with its own message.
+ */
+export function findWeakTokenVars(
+  env: Record<string, string | undefined>,
+  { oidcEnabled }: { oidcEnabled: boolean },
+): string[] {
+  if (oidcEnabled) return [];
+  const weak: string[] = [];
+
+  const legacy = env.MCP_SSE_AUTHORIZATION;
+  if (legacy && (legacy.trim().length < MIN_TOKEN_LENGTH || isPlaceholder(legacy))) {
+    weak.push('MCP_SSE_AUTHORIZATION');
+  }
+
+  let principals: ReturnType<typeof parseStaticTokensConfig> = {};
+  try {
+    principals = parseStaticTokensConfig(env.MCP_STATIC_TOKENS);
+  } catch {
+    // Refused later by resolveStaticTokens, before bind.
+  }
+  for (const { tokenEnv } of Object.values(principals)) {
+    const value = env[tokenEnv];
+    if (value && isPlaceholder(value) && !weak.includes(tokenEnv)) weak.push(tokenEnv);
+  }
+  return weak;
+}
+
 export interface HttpAuthPostureInput {
   /** The interface the server will bind (e.g. process.env.MCP_BRIDGE_BIND_HOST || '0.0.0.0'). */
   bindHost: string | undefined;
@@ -48,6 +98,8 @@ export interface HttpAuthPostureInput {
   oidcEnabled: boolean;
   /** The explicit open opt-out (MCP_ALLOW_UNAUTHENTICATED === true). */
   allowUnauthenticated: boolean;
+  /** #611: names from findWeakTokenVars. Omitted means none. */
+  weakTokenVars?: readonly string[];
 }
 
 export type HttpAuthPostureDecision = 'serve' | 'serve-open-warn' | 'refuse';
@@ -55,16 +107,31 @@ export type HttpAuthPostureDecision = 'serve' | 'serve-open-warn' | 'refuse';
 export interface HttpAuthPostureResult {
   decision: HttpAuthPostureDecision;
   reason: string;
+  /** #611: set when the decision is driven by weak token variables (their names). */
+  weakTokenVars?: readonly string[];
 }
 
 /**
  * Pure decision function (no side effects) so it is exhaustively unit-testable
- * without booting a server. Precedence: configured auth serves; otherwise a
- * loopback bind serves; otherwise the explicit opt-out serves (with a warning);
- * otherwise refuse.
+ * without booting a server. Precedence: a weak token refuses a non-loopback bind
+ * (#611, before and regardless of the opt-out, which cannot make a weak token
+ * safe) and serves with a warning on loopback; then configured auth serves;
+ * otherwise a loopback bind serves; otherwise the explicit opt-out serves (with a
+ * warning); otherwise refuse.
  */
 export function evaluateHttpAuthPosture(input: HttpAuthPostureInput): HttpAuthPostureResult {
-  const { bindHost, hasStaticToken, oidcEnabled, allowUnauthenticated } = input;
+  const { bindHost, hasStaticToken, oidcEnabled, allowUnauthenticated, weakTokenVars = [] } = input;
+
+  if (weakTokenVars.length > 0) {
+    if (isLoopbackHost(bindHost)) {
+      return { decision: 'serve', reason: `loopback bind (${bindHost}) with a weak token`, weakTokenVars };
+    }
+    return {
+      decision: 'refuse',
+      reason: `weak token on a non-loopback bind (${bindHost ?? '0.0.0.0'})`,
+      weakTokenVars,
+    };
+  }
 
   if (hasStaticToken || oidcEnabled) {
     return { decision: 'serve', reason: 'authentication is configured' };
@@ -96,7 +163,28 @@ export function enforceHttpAuthPosture(
   log: Pick<ModuleLogger, 'error' | 'warn'> = logger,
   exit: (code: number) => never = process.exit,
 ): HttpAuthPostureDecision {
-  const { decision, reason } = evaluateHttpAuthPosture(input);
+  const { decision, reason, weakTokenVars } = evaluateHttpAuthPosture(input);
+
+  if (weakTokenVars) {
+    // #611: names only, never values. A separate message from the no-auth refusal:
+    // MCP_ALLOW_UNAUTHENTICATED cannot rescue a weak token, so it is not offered.
+    if (decision === 'refuse') {
+      log.error(
+        `Refusing to start: ${reason}. ${weakTokenVars.join(', ')} is shorter than ${MIN_TOKEN_LENGTH} ` +
+          'characters or an example placeholder. Generate a token with openssl rand -hex 32.',
+      );
+      exit(1);
+    } else {
+      for (const name of weakTokenVars) {
+        log.warn(
+          `${name} is shorter than ${MIN_TOKEN_LENGTH} characters or an example placeholder. ` +
+            'Allowed only on a loopback bind; a non-loopback bind refuses to start. ' +
+            'Generate a token with openssl rand -hex 32.',
+        );
+      }
+    }
+    return decision;
+  }
 
   if (decision === 'refuse') {
     log.error(
