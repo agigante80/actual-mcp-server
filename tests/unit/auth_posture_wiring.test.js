@@ -139,6 +139,27 @@ console.log('\n[auth-posture-wiring] #611 index.ts refuses a placeholder token o
     assert.ok(/Refusing to start: weak token on a non-loopback bind/.test(out), out.slice(-1500));
     assert.ok(!/listening on/.test(out), out.slice(-1500));
   });
+
+  // Under OIDC a stale weak MCP_SSE_AUTHORIZATION is not a credential, so index.ts must pass
+  // oidcEnabled through. The run then stops later on the plaintext issuer (#244); reaching the
+  // OIDC setup line is the proof that the posture check let it through.
+  const o = spawnSync(process.execPath, ['dist/src/index.js', '--http'], {
+    cwd: root, encoding: 'utf8', timeout: 30000,
+    env: {
+      PATH: process.env.PATH, HOME: process.env.HOME, NODE_ENV: 'production',
+      ACTUAL_SERVER_URL: 'http://127.0.0.1:5999', ACTUAL_PASSWORD: 'dummy', ACTUAL_BUDGET_SYNC_ID: 'alpha-sync',
+      MCP_BRIDGE_PORT: '3655', MCP_BRIDGE_BIND_HOST: '0.0.0.0',
+      MCP_BRIDGE_DATA_DIR: mkdtempSync(join(tmpdir(), 'unit611o-')),
+      MCP_SSE_AUTHORIZATION: 'changeme',
+      AUTH_PROVIDER: 'oidc', OIDC_ISSUER: 'http://oidc.example', OIDC_RESOURCE: 'http://mcp.example/http',
+    },
+  });
+  const oOut = (o.stdout || '') + (o.stderr || '');
+  check('OIDC on 0.0.0.0 with a stale weak MCP_SSE_AUTHORIZATION: no weak-token refusal, reaches OIDC setup', () => {
+    assert.strictEqual(o.signal, null, `killed by ${o.signal} (timeout?)`);
+    assert.ok(!/weak token/.test(oOut), oOut.slice(-1500));
+    assert.ok(/\[OIDC\] Configuring mcp-auth/.test(oOut), oOut.slice(-1500));
+  });
 }
 
 console.log(`\n[auth-posture-wiring] Results: ${failed === 0 ? 'all passed' : failed + ' failed'}`);
