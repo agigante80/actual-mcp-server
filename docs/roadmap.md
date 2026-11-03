@@ -106,10 +106,12 @@ The README has documented install paths that fail when pasted, hand-typed counts
 Outcome (2026-10-30): done. All ten planned tickets (T1 to T10 as #600 to #609) shipped one per commit and patch bump in v0.24.6 to v0.24.15, released together as v0.24.15 with dual-transport evidence. The order followed the plan: #602 (docs:check with link check and marker guard) landed before any file moved. One ticket appeared during the work and was placed in Backlog rather than extending the phase: #610 (publish to the official MCP Registry). The template lockstep guard's silent pass on a marker-less canonical doc was filed upstream as agigante80/forge-kit#576. No planned work was skipped.
 
 ## Phase: Actual API 26.11 adoption
-state: open
+state: done
 plan: docs/plans/actual-api-26-11-adoption.md
 
 Adopts stable @actual-app/api 26.11.0, which carries the upstream fixes we contributed (actual#9020 for #479, actual#8998 for #548). 26.11.0 was published on 2026-11-02 and no Dependabot PR appeared, so the bump is #618; preparing it showed the local gates had run Actual server 26.7.0 since July, which #618 also fixes. #617 (getScheduleDates uncovered) is closed by #479. It sits after Residue check integrity and Session admission hardening so the API bump is verified by a gate whose zero-residue claim is true. If 26.11.0 lands earlier, it waits for the open phase to close rather than interleaving.
+
+Outcome (2026-11-03): re-shaped. #618, #479 and #548 shipped one commit each and were released together as v0.26.0 after a green Docker E2E full run and a green full dual-transport run with zero residue on the final HEAD; #617 closed with #479. One planned item did not land: the live #548 replay against a bank-linked account, because GoCardless returned 503 on both attempts. It moved to #619 (Backlog), which appeared during the work for a separate reason: an all-accounts sync on 26.11 is awaited and can outlast the shared operation timeout, so it needs its own bound. The full run also showed that upstream refuses `completed` in updateSchedule, so the completed-schedule dates case became a unit test; `actual_schedules_update` still advertises that field, noted but not filed.
 
 ## Phase: Backlog
 state: backlog
