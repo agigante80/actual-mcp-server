@@ -6,7 +6,7 @@ import { fail } from '../assert.js';
  *
  * Covers:
  *   positive: next three dates of a last-day schedule from next_date, truncated
- *             weekend move over fixed 2024 dates • completed schedule still expands
+ *             weekend move over fixed 2024 dates (completed: unit test only)
  *             one-off listed in its window
  *   negative: end before start refused (OutOfRangeRefusal wording)
  *             one-off after its window returns an empty list
@@ -93,15 +93,8 @@ export async function scheduleDatesTests(client, _context) {
       fail(`weekend move: expected ${want.join(', ')}, got ${JSON.stringify(wr).slice(0, 240)}`);
     }
 
-    // upstream ignores `completed`: a completed schedule still lists its dates
-    await callTool('actual_schedules_update', { id: weekendId, completed: true });
-    const c = await callTool('actual_schedules_dates', { schedule_id: weekendId, start: '2024-06-01', count: 2 });
-    const cr = c?.result ?? c;
-    if (JSON.stringify(cr?.dates) === JSON.stringify(want.slice(0, 2)) && cr?.truncated === true) {
-      console.log(`  ✓ completed schedule: ${cr.dates.join(', ')}`);
-    } else {
-      fail(`completed schedule: expected ${want.slice(0, 2).join(', ')}, got ${JSON.stringify(cr).slice(0, 240)}`);
-    }
+    // The "completed schedule still expands" case lives in tests/unit/schedules_dates.test.js:
+    // upstream updateSchedule refuses `completed` as system-managed, so no MCP call can set it.
 
     const oneOff = await callTool('actual_schedules_create', {
       name: `MCP-Schedule-DatesOneOff-${timestamp}`,

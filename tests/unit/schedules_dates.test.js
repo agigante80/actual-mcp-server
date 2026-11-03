@@ -93,6 +93,18 @@ const days = (n) => Array.from({ length: n }, (_, i) => new Date(Date.UTC(2027, 
     check(r?.count === 3 && r?.truncated === true, '3 returned, truncated true because a 4th exists', JSON.stringify(r));
   }
 
+  // Unit only: upstream updateSchedule refuses `completed` ("system-managed"), so no MCP call can
+  // mark a schedule completed and the integration suite cannot build this case.
+  console.log('\n[#479] positive: a completed schedule still expands (completed is not consulted)');
+  {
+    reset();
+    schedules = [{ id: SCHED_ID, name: 'Rent', completed: true, date: RECUR }];
+    datesImpl = async () => ['2024-06-03', '2024-07-01', '2024-08-01'];
+    const r = (await tool.call({ schedule_id: SCHED_ID, start: '2024-06-01', count: 2 }))?.result;
+    check(datesCalls.length === 1 && datesCalls[0]?.date === RECUR, 'getScheduleDates called with the recurrence despite completed');
+    check(JSON.stringify(r?.dates) === '["2024-06-03","2024-07-01"]' && r?.truncated === true, 'two dates, truncated', JSON.stringify(r));
+  }
+
   console.log('\n[#479] positive: a one-off date passes through as a string');
   {
     reset();
