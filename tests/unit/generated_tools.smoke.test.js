@@ -143,7 +143,8 @@ console.log('Running generated tools smoke tests');
     // adapter pre-flight (an existing split of -300). Extra fields are harmless to
     // actual_query_run and the #212 existence checks (they only read row count).
     runQuery: [{ id: 'result1', value: 100, is_parent: true, amount: -300 }],
-    runBankSync: null,
+    // #548: runBankSync reports what it imported; the tool caps and counts each list.
+    runBankSync: { newTransactions: ['t1'], matchedTransactions: [], updatedAccounts: ['acct_1'] },
     getBudgets: [{ name: 'My Budget', cloudFileId: '00000000-0000-0000-0000-000000000001', hasKey: false, state: 'remote' }],
     switchBudget: { name: 'My Budget', syncId: '00000000-0000-0000-0000-000000000001', serverUrl: 'http://localhost:5006' },
     getBudgetRegistry: [{ name: 'My Budget', syncId: '00000000-0000-0000-0000-000000000001', serverUrl: 'http://localhost:5006', hasEncryption: false }],
@@ -322,6 +323,14 @@ console.log('Running generated tools smoke tests');
         if (!Array.isArray(r?.payees)) shapeErr('expected payees array');
         if (typeof r?.payeesTruncated !== 'boolean') shapeErr('expected payeesTruncated boolean');
         if (typeof r?.payeeTotal !== 'number') shapeErr('expected payeeTotal number');
+      }
+
+      if (n === 'bank_sync') {
+        for (const k of ['newTransactions', 'matchedTransactions', 'updatedAccounts']) {
+          if (typeof res?.[k]?.count !== 'number' || !Array.isArray(res?.[k]?.ids)) shapeErr(`expected ${k} as { count, ids }`);
+        }
+        if (res.newTransactions.count !== 1 || res.newTransactions.ids[0] !== 't1') shapeErr('expected the stubbed new transaction');
+        if (typeof res?.truncated !== 'boolean') shapeErr('expected truncated boolean');
       }
 
       // Mutate / delete tools that return { success: true }

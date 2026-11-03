@@ -274,7 +274,7 @@ export async function advancedTests(client, context, opts = {}) {
   }
 
   // Bank sync: opt-in only (set MCP_TEST_BANK_SYNC=true to enable).
-  // Skipped by default: takes 30-90s per account, requires GoCardless/SimpleFIN.
+  // Skipped by default: reaches a real provider, requires GoCardless/SimpleFIN.
   if (opts.bankSync) {
     console.log("\nBank sync: negative-path tests...");
     try {
@@ -314,13 +314,18 @@ export async function advancedTests(client, context, opts = {}) {
           const syncResult = syncText
             ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })()
             : raw;
-          const msg = syncResult?.result ?? JSON.stringify(syncResult).slice(0, 80);
-          console.log(`  ✓ ${label}: ${msg}`);
-          syncOk++;
+          // #548: the report shape; ids are capped, counts are not.
+          const lists = ["newTransactions", "matchedTransactions", "updatedAccounts"].map((k) => syncResult?.[k]);
+          if (!lists.every((l) => Number.isInteger(l?.count) && Array.isArray(l?.ids) && l.ids.length <= l.count) || typeof syncResult?.truncated !== "boolean") {
+            fail(`${label}: unexpected bank sync report: ${JSON.stringify(syncResult).slice(0, 120)}`);
+          } else {
+            console.log(`  ✓ ${label}: ${lists.map((l) => l.count).join(" new / ")} (new / matched / updated accounts)`);
+            syncOk++;
+          }
         } catch (err) {
           const msg = err.message || String(err);
-          if (/local account|not configured/i.test(msg)) {
-            console.log(`  ✓ ${label}: correctly identified as local account`);
+          if (/local account|not configured|is closed/i.test(msg)) {
+            console.log(`  ✓ ${label}: correctly refused (local or closed account)`);
           } else {
             // #387: genuinely tolerated. Bank sync is opt-in and reaches a THIRD PARTY, so a
             // real link can be rate-limited or need re-auth for reasons that are not this

@@ -39,15 +39,11 @@ export const DEFAULT_CONCURRENCY_LIMIT = 5;
 // ============================================================================
 
 /**
- * How long (ms) to wait after calling rawRunBankSync for the SDK's background
- * promise to surface a BankSyncError as an unhandledRejection.
- *
- * Bank provider errors (GoCardless RATE_LIMIT_EXCEEDED, auth failures, etc.)
- * arrive as HTTP responses. Fast banks respond within 1-3 seconds; slower
- * institutions can take considerably longer. 30 seconds gives a comfortable
- * margin while keeping the tool's wall-clock time acceptable for MCP clients.
+ * How many ids each list of an `actual_bank_sync` report carries (#548). The counts are
+ * always the full lengths; only the id lists are cut, so a first sync of a large account
+ * cannot flood the client's context. The tool sets `truncated` when any list was cut.
  */
-export const BANK_SYNC_SETTLE_MS = 30_000;
+export const BANK_SYNC_IDS_CAP = 100;
 
 /**
  * How long (ms) to wait for additional queued writes before closing the

@@ -219,7 +219,8 @@ async function syncAccount(api, account, timeoutMs, logger) {
     const timeoutPromise = new Promise((_, reject) =>
       setTimeout(() => reject(new Error(`Timeout after ${timeoutMs / 1000}s`)), timeoutMs)
     );
-    await Promise.race([syncPromise, timeoutPromise]);
+    // Since @actual-app/api 26.11 the sync resolves with what it reconciled (#548).
+    const report = await Promise.race([syncPromise, timeoutPromise]);
 
     // Small delay for SDK background operations (pattern from Actual-sync)
     await new Promise(resolve => setTimeout(resolve, 600));
@@ -230,7 +231,16 @@ async function syncAccount(api, account, timeoutMs, logger) {
     }
 
     result.status = 'success';
-    await logger.info(`  ✓ Bank sync completed`, { account: account.name });
+    const count = (k) => (Array.isArray(report?.[k]) ? report[k].length : 0);
+    result.newTransactions = count('newTransactions');
+    result.matchedTransactions = count('matchedTransactions');
+    result.updatedAccounts = count('updatedAccounts');
+    await logger.info(`  ✓ Bank sync completed`, {
+      account: account.name,
+      newTransactions: result.newTransactions,
+      matchedTransactions: result.matchedTransactions,
+      updatedAccounts: result.updatedAccounts,
+    });
   } catch (err) {
     const msg = err?.message || String(err);
     const category = err?.category || '';

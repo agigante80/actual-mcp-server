@@ -48,13 +48,13 @@ const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
  * `tests/unit/tool_annotations.test.js`, which resolves each tool's `adapter.*` calls and
  * fails if one of these reaches `queueWriteOperation`.
  *
- * Claimed only where it is certain. Three read-path tools are deliberately absent because
+ * Claimed only where it is certain. Three tools are deliberately absent because
  * "does not modify its environment" is false for them, and a wrong `true` here is worse
  * than no annotation at all:
  *
- *   actual_bank_sync       runs through `withActualApi` (the read path) but IMPORTS
- *                          transactions, so the call graph says read and reality says
- *                          write. Reality wins.
+ *   actual_bank_sync       IMPORTS transactions through `withActualApiWrite` (one
+ *                          upstream call, not the write queue, #548), so a queue-based
+ *                          reading of the call graph misses it.
  *   actual_budgets_export  writes a zip into the server's data directory.
  *   actual_budgets_switch  changes the session's active budget and persists a preference.
  *   actual_session_close   closes a pooled connection: server state, not budget data.

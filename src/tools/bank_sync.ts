@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { BANK_SYNC_IDS_CAP } from '../lib/constants.js';
 
 const InputSchema = z.object({
   accountId: z.string().nullable().optional().describe('Optional account ID to sync a specific account. If omitted, syncs all linked accounts.'),
@@ -9,7 +10,13 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_bank_sync',
-  description: 'Trigger 3rd party bank sync (GoCardless, SimpleFIN) for linked bank accounts. Returns immediately with an error if no bank-linked accounts are found. When bank-linked accounts exist, waits up to 30 seconds for the provider to confirm the operation and surfaces errors such as rate limits or auth failures that occur within that window. Successful syncs may take a few additional moments for transactions to appear in Actual Budget.',
+  description:
+    'Run 3rd party bank sync (GoCardless, SimpleFIN) for one linked account, or for every linked open account when accountId is omitted. ' +
+    'Refuses at once for a local, closed, half-linked or unknown account, or when no open account is linked. ' +
+    'Reports what Actual reconciled: newTransactions (imported), matchedTransactions (existing ones updated) and updatedAccounts (accounts that received new transactions), ' +
+    `each as { count, ids } with up to ${BANK_SYNC_IDS_CAP} ids (count is always the full total; truncated is true when any list was cut). ` +
+    'Never retried. A sync that runs past the server operation timeout reports "timed out" and may still have imported, so re-list transactions before retrying. ' +
+    'An all-accounts sync that fails on one account may still have imported the others; those imports reach the Actual server with the next write in this session or when it closes, so other clients may not see them yet.',
 
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
@@ -22,13 +29,20 @@ const tool: ToolDefinition = {
     if (input.accountId) {
       await adapter.resolveFilterId('account', input.accountId, { verifyExists: true });
     }
-    try {
-      await adapter.runBankSync(input.accountId ?? undefined);
-      return { result: 'Bank sync initiated successfully' };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(msg);
-    }
+    // #548: rethrow the adapter's error as is, so a typed refusal keeps its brand.
+    const report = await adapter.runBankSync(input.accountId ?? undefined);
+    let truncated = false;
+    const capped = (ids: string[]) => {
+      if (ids.length > BANK_SYNC_IDS_CAP) truncated = true;
+      return { count: ids.length, ids: ids.slice(0, BANK_SYNC_IDS_CAP) };
+    };
+    return {
+      result: 'Bank sync completed',
+      newTransactions: capped(report.newTransactions),
+      matchedTransactions: capped(report.matchedTransactions),
+      updatedAccounts: capped(report.updatedAccounts),
+      truncated,
+    };
   },
 };
 

@@ -77,7 +77,7 @@ import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
 import { markInitFailure } from './init-failure.js';
-import { NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields } from './errors.js';
+import { NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 import { amountOpMismatch } from './schemas/schedule-amount.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
@@ -1060,7 +1060,7 @@ async function shutdownActualApi(opts?: { forceFullShutdown?: boolean }): Promis
   }
 }
 
-import { BANK_SYNC_SETTLE_MS, SCHEDULE_DATES_CAP, SPLIT_VERIFY_INTERVAL_MS, SPLIT_VERIFY_TIMEOUT_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { SCHEDULE_DATES_CAP, SPLIT_VERIFY_INTERVAL_MS, SPLIT_VERIFY_TIMEOUT_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 // Concurrency limiter extracted to ./actual-adapter/concurrency.ts (#166).
 // Imported for internal use (every method wraps its raw call in withConcurrency)
@@ -4581,85 +4581,106 @@ export async function getFinancialAnalysisSnapshot(params: {
 // Imported for internal use by runQuery and re-exported (unit-tested directly).
 import { parseWhereClause, nameConditionLookups, nameConditionHintLines } from './actual-adapter/query.js';
 export { parseWhereClause };
-export async function runBankSync(accountId?: string): Promise<void> {
+/**
+ * What `api.runBankSync` resolves with since @actual-app/api 26.11.0 (#548): transaction ids,
+ * transaction ids and account ids. Declared here because the upstream type lives in
+ * `@actual-app/core`, which tsconfig redirects to the do-not-modify stub in `types/`.
+ * `updatedAccounts` lists only accounts that received NEW transactions; `matchedTransactions`
+ * are existing transactions the sync reconciled, not new ones.
+ */
+export interface BankSyncReport {
+  newTransactions: string[];
+  matchedTransactions: string[];
+  updatedAccounts: string[];
+}
+
+function normaliseBankSyncReport(raw: unknown): BankSyncReport {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const list = (v: unknown): string[] => (Array.isArray(v) ? v.map(String) : []);
+  return {
+    newTransactions: list(r.newTransactions),
+    matchedTransactions: list(r.matchedTransactions),
+    updatedAccounts: list(r.updatedAccounts),
+  };
+}
+
+const BANK_SYNC_SETUP_HINT =
+  'To use bank sync, link your account(s) with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ' +
+  'See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.';
+
+export async function runBankSync(accountId?: string): Promise<BankSyncReport> {
   try {
-    return await withActualApi(async () => {
+    // #548: a write, so the import and the bank_sync_status row reach the server. In pooled
+    // mode withActualApiWrite pushes once after a RESOLVED sync and never in a rejection path;
+    // on the fallback (init/op/shutdown) path, shutdown still syncs whatever a partial
+    // all-accounts run imported before it failed. Not queueWriteOperation: bank sync is one
+    // upstream call, and the queue's per-call bound has no env knob, which #619 owns.
+    return await withActualApiWrite(async () => {
       observability.incrementToolCall('actual.bank.sync').catch(() => {});
-      // Bank sync must NOT be retried — retrying could import duplicate transactions.
+      // Bank sync must NOT be retried: retrying could import duplicate transactions.
       // Pass { accountId } for a specific account, or {} to sync all linked accounts.
       const args = accountId != null ? { accountId } : {};
 
-      // Pre-check: verify bank-linked accounts exist before calling rawRunBankSync.
-      // The SDK silently resolves void for local accounts (account_sync_source: null),
-      // which would otherwise be misreported as success and cause an unnecessary 30s wait.
+      // Pre-check: upstream resolves silently for a local account and skips a closed one,
+      // which would read as an empty but successful sync. Refusals are typed (#377).
       if (accountId != null) {
-        // Per-account check: verify the specified account is bank-linked.
         const { data: acctRows } = await rawRunQuery(
           (api as any).q('accounts')
-            .select(['account_sync_source', 'name'])
+            .select(['account_sync_source', 'account_id', 'name', 'closed'])
             .filter({ id: accountId, tombstone: false })
-        ) as { data: Array<{ account_sync_source: string | null; name: string }> };
+        ) as { data: Array<{ account_sync_source: string | null; account_id: string | null; name: string; closed: boolean | number }> };
 
         const acct = acctRows?.[0];
         if (!acct) {
-          throw new Error(`Bank sync failed: Account not found (id: ${accountId})`);
+          // Only reachable on a race: the tool resolves the id with verifyExists first (#388).
+          throw new NotFoundRefusal('Account', accountId, 'actual_accounts_list');
         }
         if (!acct.account_sync_source) {
-          throw new Error(
-            `Bank sync failed: Account "${acct.name}" is a local account — not configured for bank sync. ` +
-            `To use bank sync, link your account with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ` +
-            `See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`
+          throw new OutOfRangeRefusal(
+            `Bank sync failed: Account "${acct.name}" is a local account, not configured for bank sync. ${BANK_SYNC_SETUP_HINT}`,
+            accountId,
+          );
+        }
+        if (acct.closed) {
+          throw new OutOfRangeRefusal(
+            `Bank sync failed: Account "${acct.name}" is closed; Actual skips closed accounts in bank sync. Reopen it in Actual to sync it.`,
+            accountId,
+          );
+        }
+        // Upstream also skips an account without a provider account id (and one without a bank
+        // row, which AQL does not expose, so that rarer half-link still reads as an empty sync).
+        if (!acct.account_id) {
+          throw new OutOfRangeRefusal(
+            `Bank sync failed: Account "${acct.name}" has a ${acct.account_sync_source} link with no provider account; Actual skips it in bank sync. Re-link it in the Actual Budget UI.`,
+            accountId,
           );
         }
       } else {
-        // Global check: verify at least one bank-linked account exists across the budget.
         const { data: allAccounts } = await rawRunQuery(
           (api as any).q('accounts')
-            .select(['account_sync_source'])
+            .select(['account_sync_source', 'account_id', 'closed'])
             .filter({ tombstone: false })
-        ) as { data: Array<{ account_sync_source: string | null }> };
+        ) as { data: Array<{ account_sync_source: string | null; account_id: string | null; closed: boolean | number }> };
 
-        const linkedCount = allAccounts?.filter(a => a.account_sync_source).length ?? 0;
-        if (linkedCount === 0) {
-          throw new Error(
-            `Bank sync failed: No accounts are configured for bank sync. ` +
-            `To use bank sync, link your account(s) with a supported provider (GoCardless or SimpleFIN) in the Actual Budget UI. ` +
-            `See https://actualbudget.org/docs/advanced/bank-sync for setup instructions.`
+        const linked = (allAccounts ?? []).filter(a => a.account_sync_source && a.account_id);
+        if (!linked.some(a => !a.closed)) {
+          throw new OutOfRangeRefusal(
+            linked.length > 0
+              ? 'Bank sync failed: Every bank-linked account is closed; Actual skips closed accounts in bank sync. Reopen one in Actual to sync it.'
+              : `Bank sync failed: No accounts are configured for bank sync. ${BANK_SYNC_SETUP_HINT}`,
+            'all',
           );
         }
       }
 
-      // rawRunBankSync returns void immediately; the actual provider call runs on
-      // a background promise inside the SDK and surfaces errors as unhandledRejection.
-      // We install a temporary listener to capture any BankSyncError and re-throw.
-      let capturedRejection: any = null;
-      const rejectionHandler = (reason: any) => {
-        const msg: string = reason?.message || String(reason);
-        if (
-          reason?.type === 'BankSyncError' ||
-          msg.includes('BankSyncError') ||
-          msg.includes('NORDIGEN_ERROR') ||
-          msg.includes('Rate limit exceeded') ||
-          msg.includes('Failed syncing account') ||
-          msg.includes('GoCardless') ||
-          msg.includes('SimpleFIN')
-        ) {
-          capturedRejection = reason;
-        }
-      };
-      process.on('unhandledRejection', rejectionHandler);
-      try {
-        await rawRunBankSync(args) as unknown as void;
-        // Wait for the SDK's background promise to resolve/reject.
-        // Provider errors (rate limits, auth failures) arrive in < 3s in practice;
-        // BANK_SYNC_SETTLE_MS gives a comfortable margin to catch them.
-        await new Promise(resolve => setTimeout(resolve, BANK_SYNC_SETTLE_MS));
-        if (capturedRejection !== null) throw capturedRejection;
-      } finally {
-        process.off('unhandledRejection', rejectionHandler);
-      }
+      // Since 26.11 upstream awaits the provider and rejects this call itself, so the old
+      // settle sleep and the process-wide unhandledRejection listener are gone (#548).
+      return normaliseBankSyncReport(await rawRunBankSync(args as any));
     });
   } catch (error: any) {
+    // A typed refusal is already the caller-facing answer; the text mapping below would
+    // rewrite "not configured" into a generic message and lose the brand.
+    if (isPreflightRefusal(error)) throw error;
     const errorMsg = error?.message || String(error);
 
     // Network / connectivity errors (includes "fetch failed" from Node.js native fetch)
@@ -4691,28 +4712,18 @@ export async function runBankSync(accountId?: string): Promise<void> {
       );
     }
 
-    // GoCardless / SimpleFIN provider-level errors
-    // BankSyncError objects (from @actual-app/api) may have { type, category, code, message }
-    const bankSyncCategory = (error as any)?.category || '';
-    if (
-      errorMsg.includes('Rate limit exceeded') ||
-      errorMsg.includes('RATE_LIMIT_EXCEEDED') ||
-      bankSyncCategory === 'RATE_LIMIT_EXCEEDED'
-    ) {
-      const reset = (error as any)?.details?.rateLimitHeaders?.http_x_ratelimit_account_success_reset;
-      const retryIn = reset ? ` Retry in ~${Math.ceil(Number(reset) / 60)} minute(s).` : '';
+    // Provider errors. Since 26.11 the rejection is a plain Error with `.code` only (no
+    // category, type or details), so the upstream message is the one rate-limit signal.
+    if (errorMsg.includes('Rate limit exceeded')) {
       throw new Error(
-        `Bank sync failed: GoCardless rate limit exceeded for this account.${retryIn} ` +
+        `Bank sync failed: GoCardless rate limit exceeded for this account. ` +
         `(NORDIGEN RATE_LIMIT_EXCEEDED: account success quota exhausted)`
       );
     }
-    if (
-      (error as any)?.type === 'BankSyncError' ||
-      errorMsg.includes('BankSyncError') ||
-      errorMsg.includes('NORDIGEN_ERROR') ||
-      errorMsg.includes('Failed syncing account')
-    ) {
-      throw new Error(`Bank sync failed: Provider error: ${errorMsg}`, { cause: error });
+    if (errorMsg.includes('Failed syncing account')) {
+      // The message names only the account; `.code` is the one hint at why (re-link or retry).
+      const code = typeof error?.code === 'string' && error.code ? ` (code ${error.code})` : '';
+      throw new Error(`Bank sync failed: Provider error: ${errorMsg}${code}`, { cause: error });
     }
 
     throw new Error(`Bank sync failed: ${errorMsg}`, { cause: error });   // #452: keep the brand

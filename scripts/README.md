@@ -30,7 +30,7 @@ bash scripts/deploy-and-test.sh full
 
 **What happens when `MCP_TEST_BANK_SYNC=true`:**
 - Negative path tests (non-existent UUID) always run
-- Per-account iteration tests run (30-90s per bank-linked account)
+- Per-account iteration tests run, one provider call per bank-linked account
 - Local accounts: validates immediate rejection without provider call
 - Bank-linked accounts: tests actual sync with GoCardless/SimpleFIN
 - Rate limit/auth failures are logged but don't fail the test run

@@ -155,7 +155,7 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 - actual_bank_sync
   Input: { account: "{txn_acct_id}" }
   If no bank connection: report ✓ informational "no bank connection": NOT a failure
-  If bank connected: expect sync initiated successfully
+  If bank connected: expect result "Bank sync completed" with newTransactions, matchedTransactions and updatedAccounts as { count, ids }, and truncated
 
 - actual_query_run
   Run these 3 queries sequentially (each unsupported syntax → ✓ informational, not ✗ failure):

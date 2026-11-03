@@ -39,7 +39,7 @@ function check(label, fn) {
  * this list is what stops the guard from demanding they be marked read-only.
  */
 const NON_QUEUE_MUTATORS = {
-  actual_bank_sync: 'runs through withActualApi (the read path) but IMPORTS transactions',
+  actual_bank_sync: 'runs through withActualApiWrite (one upstream call, not the queue) and IMPORTS transactions',
   actual_budgets_export: 'writes a zip into the server data directory',
   actual_budgets_switch: "changes the session's active budget and persists a preference",
   actual_session_close: 'closes a pooled connection: server state, not budget data',

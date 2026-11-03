@@ -102,7 +102,7 @@ Variables are loaded from the project root `.env` automatically.
 ### Bank Sync Testing (Optional)
 
 The `actual_bank_sync` tool tests are **skipped by default** because they:
-- Take 30-90 seconds per bank-linked account (real provider API calls)
+- Make real provider API calls (a GoCardless account has a small daily quota)
 - Require real GoCardless or SimpleFIN credentials configured
 - Will fail immediately for budgets with only local accounts
 
@@ -121,13 +121,14 @@ MCP_TEST_BANK_SYNC=true node tests/manual/index.js http://localhost:3601/http "$
 1. **Negative path** — non-existent account UUID returns actionable error
 2. **Per-account validation** — iterates all accounts:
    - Local accounts: validates immediate error with "local account" message
-   - Bank-linked accounts: attempts sync, allows up to 90s per account
+   - Bank-linked accounts: attempts sync and checks the report (`newTransactions`, `matchedTransactions`, `updatedAccounts` as `{ count, ids }`, plus `truncated`)
+   - Closed accounts: validates the immediate "is closed" refusal
    - Rate limit/auth failures: logged but don't fail the test run
 
 **Pre-checks (always tested, even when MCP_TEST_BANK_SYNC=false):**
 - Global sync (no accountId) immediately rejects when no bank-linked accounts exist
 - Per-account sync immediately rejects local accounts before attempting provider call
-- Both validated in E2E tests ([tests/e2e/docker-all-tools.e2e.spec.ts](../e2e/docker-all-tools.e2e.spec.ts#L1002-L1065))
+- Both validated in E2E tests ([tests/e2e/docker-all-tools.e2e.spec.ts](../e2e/docker-all-tools.e2e.spec.ts#L1578-L1620))
 
 **Tip:** Use `scripts/direct-sync/bank-sync-direct.mjs` to test bank connectivity outside the MCP layer (see [scripts/README.md](../../scripts/README.md)).
 

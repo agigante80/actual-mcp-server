@@ -179,7 +179,7 @@ export const PRESET_NAMES = Object.keys(PRESETS) as PresetName[];
  *
  * Derived by hand from the adapter call graph: the 43 tools whose adapter path reaches
  * queueWriteOperation, plus the four that mutate WITHOUT the write queue (bank_sync imports
- * transactions through the read path, budgets_export writes a zip to ACTUAL_EXPORT_DIR,
+ * transactions through withActualApiWrite, budgets_export writes a zip to ACTUAL_EXPORT_DIR,
  * budgets_switch changes the active budget, session_close closes a pooled connection).
  * Never derive this from tool annotations.
  *
