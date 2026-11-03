@@ -179,7 +179,13 @@ fi
 
 # Step 2: Start Actual Budget server and bootstrap
 log_info "Step 2/5: Starting Actual Budget server..."
+# #618: compose never pulls a tag it already has, so a local run kept testing whatever
+# actual-server:latest was cached (26.7.0 while 26.11.0 was out). CI starts clean either way.
+# Offline, a failed pull falls back to the cached image instead of aborting the run.
+docker compose -f "$COMPOSE_FILE" pull --quiet actual-budget-test \
+  || log_warn "Could not pull actual-server:latest, testing the cached image"
 docker compose -f "$COMPOSE_FILE" up -d actual-budget-test
+log_info "Actual Budget server $(docker compose -f "$COMPOSE_FILE" exec -T actual-budget-test node -p "require('/app/package.json').version" 2>/dev/null || echo 'version unknown')"
 
 log_info "Step 3/5: Waiting for Actual Budget to be ready..."
 sleep 3

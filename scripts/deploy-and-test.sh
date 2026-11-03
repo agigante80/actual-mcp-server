@@ -144,6 +144,21 @@ pull_image "ghcr.io/danny-avila/librechat:latest"                   "LibreChat"
 pull_image "ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest"  "LibreChat RAG API"
 pull_image "lobehub/lobe-chat-database:latest"                      "LobeChat"
 
+# #618: a pull alone never reached the running Actual server, so it stayed on 26.7.0
+# while the image tag moved to 26.11.0 and every gate tested against the old server.
+# Without --force-recreate compose replaces the container only when its image changed.
+docker compose -f "$DOCKER_DIR/Finance-actual-budget/docker-compose.yml" up -d actual-main
+for i in $(seq 1 "$HEALTH_RETRIES"); do
+  curl -sf http://127.0.0.1:5006/health >/dev/null 2>&1 && break
+  if [ "$i" -eq "$HEALTH_RETRIES" ]; then
+    err "Actual Budget (port 5006) did not become healthy after $((HEALTH_RETRIES * 3))s, aborting"
+    docker logs --tail 30 finance-actual-budget-main >&2
+    exit 1
+  fi
+  sleep 3
+done
+ok "Actual Budget server running $(docker exec finance-actual-budget-main node -p "require('/app/package.json').version" 2>/dev/null || echo 'unknown version')"
+
 # ── 3. Recreate MCP server containers ─────────────────────────────────────
 info "Step 3/9: Recreating both MCP server containers (OIDC:3600 + Bearer:3601)..."
 docker compose \
