@@ -100,6 +100,7 @@ export const API_TO_TOOL = {
   updateNote: 'actual_notes_update',
   // schedules
   getSchedules: 'actual_schedules_get',
+  getScheduleDates: 'actual_schedules_dates',
   createSchedule: 'actual_schedules_create',
   updateSchedule: 'actual_schedules_update',
   deleteSchedule: 'actual_schedules_delete',

@@ -20,9 +20,10 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.e
 
 // Raising either ceiling is a deliberate edit. Change the number AND replace the reason below
 // in the same commit; a reviewer should be able to see why the list got heavier.
-//   Total: 101,827 bytes after the #486 trim (83 tools), plus about 5% headroom.
+//   Total: 101,827 bytes after the #486 trim (83 tools), plus about 5% headroom; raised for
+//   #479 (actual_schedules_dates, the 85th tool) from 106,900 at 108,317 bytes, plus about 5%.
 //   Per tool: the heaviest entry after the #486 trim is 3,327 bytes (actual_rules_create_batch).
-const TOTAL_CEILING = 106900;
+const TOTAL_CEILING = 113700;
 const PER_TOOL_CEILING = 3600;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));

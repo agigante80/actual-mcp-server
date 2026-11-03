@@ -23,7 +23,7 @@ WHAT IT TESTS
   Phase 5:   Rules                           (4 tools)
   Phase 5b:  Batch, Uncategorized, Upsert    (4 tools)
   Phase 6:   Transactions                   (12 tools)
-  Phase 6b:  Schedules                       (4 tools)
+  Phase 6b:  Schedules                       (5 tools)
   Phase 6c:  Tags                            (4 tools)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
@@ -350,7 +350,7 @@ NEGATIVE for this phase:
   Expect: a validation or refusal error naming the problem, NOT a success and NOT a
           self-transfer that has to be cleaned up afterwards
 
-**Phase 6b: Schedules (4 tools):**
+**Phase 6b: Schedules (5 tools):**
 
 - actual_schedules_get
   Expect: schedules array (possibly empty), no error
@@ -358,7 +358,7 @@ NEGATIVE for this phase:
 
 - actual_schedules_create
   Input: one-off schedule:
-    { name: "MCP-Schedule-{TS}", next_date: "2026-06-15", account: "{txn_acct_id}", amount: -2000, payee_name: "MCP-Sched-Payee-{TS}" }
+    { name: "MCP-Schedule-{TS}", date: "2026-06-15", account: "{txn_acct_id}", amount: -2000 }
   Expect: created with id
   Save as `{sched_id}`
   Verify: actual_schedules_get returns count = {sched_count_before} + 1
@@ -367,6 +367,14 @@ NEGATIVE for this phase:
   Input: { id: "{sched_id}", name: "MCP-Schedule-{TS}-Updated" }
   Expect: success
   Verify: updated name visible in actual_schedules_get
+
+- actual_schedules_dates
+  Input: { schedule_id: "{sched_id}", start: "2026-06-01", count: 3 }
+  Expect: dates = ["2026-06-15"] (a one-off schedule falls on one date), count = 1,
+          truncated = false
+  NEGATIVE: Input { schedule_id: "{sched_id}", start: "2026-07-01", end: "2026-06-01" }
+  Expect: an error that says end is before start and tells you to check start and end,
+          NOT a success with an empty list
 
 - actual_schedules_delete
   Input: { id: "{sched_id}" }
@@ -427,9 +435,9 @@ Phase 4  Payees:           X / 6
 Phase 5  Rules:            X / 4
 Phase 5b Batch/Upsert:     X / 4
 Phase 6  Transactions:     X / 12
-Phase 6b Schedules:        X / 4
+Phase 6b Schedules:        X / 5
 Phase 6c Tags:             X / 4
-Total:                     X / 50
+Total:                     X / 51
 Failed:        X
 Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}

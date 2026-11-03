@@ -134,6 +134,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 | Tool | Description |
 |------|-------------|
 | `actual_schedules_get` | List scheduled transactions, with their next occurrence date |
+| `actual_schedules_dates` | List the dates one schedule falls on, computed by Actual (weekend moves, patterns and intervals included); optional `start`, `end` and `count`, at most 366 dates with a `truncated` flag |
 | `actual_schedules_create` | Create a schedule (one-off or recurring); recurrence is a typed config, see `src/lib/schemas/recur.ts` |
 | `actual_schedules_update` | Update an existing schedule's amount, payee, account, or recurrence |
 | `actual_schedules_delete` | Delete a schedule |

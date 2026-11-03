@@ -43,14 +43,14 @@
 tests/
 ├── unit/                    # Unit tests (fast, isolated, offline)
 │   ├── transactions_create.test.js        # Zod schema validation (transactions_create)
-│   ├── generated_tools.smoke.test.js      # All 84 tools: stub adapter + correctness assertions
+│   ├── generated_tools.smoke.test.js      # All 85 tools: stub adapter + correctness assertions
 │   ├── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
 │   ├── schema_json_openai_compat.test.js  # Published schemas OpenAI/ECMA-262 regex-compatible (#293)
 │   └── schema_published_parity.test.js    # Zod and the SDK Ajv validator accept the same inputs; no regex flags (#588)
 ├── e2e/                     # End-to-end tests
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
 │   ├── docker.e2e.spec.ts                 # Docker smoke integration (full stack)
-│   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (84 tools)
+│   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (85 tools)
 │   └── run-docker-e2e.sh                  # Docker test orchestrator
 └── manual/                  # Live integration tests (real Actual Budget)
     ├── index.js              # Entry point, level-gated execution
@@ -132,7 +132,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 **What Docker E2E tests verify:**
 - ✅ Docker build works correctly
 - ✅ Container networking (MCP ↔ Actual Budget)
-- ✅ Real tool execution (**all 84 tools at 100% coverage**)
+- ✅ Real tool execution (**all 85 tools at 100% coverage**)
 - ✅ Session management and persistence
 - ✅ Production-like deployment
 - ✅ Error handling and validation (15+ error scenarios)
@@ -140,7 +140,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 
 **Test Suites:**
 - **docker.e2e.spec.ts**: Basic smoke tests (11 tests)
-- **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (84 tools, 80+ test cases)
+- **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (85 tools, 80+ test cases)
 
 ### Multi-user ACL E2E (`scripts/acl-e2e.sh`)
 
@@ -276,7 +276,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | File | What it tests |
 |---|---|
 | `transactions_create.test.js` | Zod schema: valid input accepted, empty input rejected |
-| `generated_tools.smoke.test.js` | All 84 tools: stub adapter, call succeeds, response shape correct |
+| `generated_tools.smoke.test.js` | All 85 tools: stub adapter, call succeeds, response shape correct |
 | `schema_validation.test.js` | Negative-path schemas: `rules_create`, `budget_updates_batch`, `budgets_transfer`, `budgets_setAmount` |
 | `budget_updates_batch.test.js` | `actual_budget_updates_batch` through the real tool and adapter with raw api stubs: per-item `succeeded`/`failed`, all-items-failing is a normal result, exact Zod messages, whole-call failure propagates, no raw import or `console.*` in the tool (#516) |
 | `rules_create.test.js` | `actual_rules_create` characterisation (#485): the imperative rejections and their exact messages, what is deliberately not rejected, stubbing `adapter.createRule` at the tool boundary so it is unchanged by the schema extraction and the adapter guard |
@@ -294,6 +294,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `rules_update_schedules_schema.test.js` | #486: input schemas of `rules_update` (`op` required), `schedules_create` and `schedules_update` keep their Zod rejections (code and path) after the description trim; #527: the `{ num1, num2 }` range amount and its `amountOp` refusals; #478: monthly `patterns`, their refusals, the strict recur config and the optional `endMode`, on both tools and in `tools/list` |
 | `schedules_update_amount_guard.test.js` | #527: `adapter.updateSchedule` reads the stored row in the same drain when only one of `amount` / `amountOp` is sent, and refuses a pair that cannot match before the write |
 | `schedules_dead_conditions.test.js` | #547: `adapter.createSchedule` and `adapter.updateSchedule` drop a payee or account rule condition that can never match (omitted field stored as `"undefined"`, cleared one as `"null"`) inside the same drain as the schedule write, with a bounded rule poll; a schedule with both fields set triggers no rule read |
+| `schedules_dates.test.js` | #479: `adapter.getScheduleDates` lists the schedules and expands the row's `date` field in ONE session (intruder witness, with a teeth case that goes red on two sessions); asks upstream for one date past the limit so `truncated` means more dates exist; caps at 366; typed refusals for an unknown id, `end` before `start` and a weekend skip without `weekendSolveMode`; other upstream errors pass through; Zod rejects a bad count, id or date |
 | `source_text_helper.test.js` | #532: `helpers/source-text.js` comment strippers: `stripTsComments` keeps strings, templates (`${}` scanned as code) and regex literals (`/^http:\/\//i` is not a comment) intact, removes `//` and block comments, keeps CR/LF; `stripHashComments` for shell, YAML and `.env`; newline count preserved over every `src/**/*.ts`, `.sh`, workflow and `.env.example`; the C2 anchor check prints `skip:` when absent |
 | `transport_onerror.test.js` | `server.onerror` is wired at both `new Server(` sites (HTTP and stdio) before `connect`; the logged record has a constant message and a sanitized `detail` (payload echoes cut, `%`, control, C1 and bidi characters stripped, 200 code point cap, no stack or cause); the handler chains a prior `onerror` and never throws; one per-process 50 per 60 s limiter spans all sessions and reports `suppressed`; under stdio the record goes to stderr and stdout stays empty (#504); #536: a window that ends with suppressed calls and no later allowed call reports the count once through a flush scheduled for the window end (delay clamped to one window so a backward clock step cannot overflow the timer; `unref`'d so it never holds the process open, so a shutdown inside the window drops the pending count; never reported twice; a throwing reporter or timer never escapes `take()` or the timer callback; the next suppression after a flush schedules a fresh one), the summary is logged outside the request context so it carries no `sessionId` or `requestId`, and under stdio it goes to stderr |
 | `httpServer_batch_cap.test.js` | A JSON-RPC batch of more than 100 messages on a session-bearing HTTP POST is refused with 400/-32600 by `@modelcontextprotocol/sdk` 1.30.1, and exactly 100 is not; the POST paths still hand the SDK `req.body` and a session-less array is refused by our own handler, both checked on comment-stripped source with mutation fixtures proving each guard can fail (#503); installed and declared SDK are at least 1.30.1 (#500) |
@@ -321,7 +322,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 npm run test:unit-js   # runs the full unit chain (~52 files) sequentially
 ```
 
-**Coverage**: 84/84 tools smoke-validated (offline, stub adapter). 60+ negative-path assertions across 11+ tool schemas.
+**Coverage**: 85/85 tools smoke-validated (offline, stub adapter). 60+ negative-path assertions across 11+ tool schemas.
 
 ### 2. Adapter Tests
 
@@ -350,7 +351,7 @@ npm run test:adapter
 
 **Scenarios**:
 - MCP client connects to server
-- LibreChat loads all 84 tools
+- LibreChat loads all 85 tools
 - User performs complete workflow via chat
 
 **Run**:
@@ -358,7 +359,7 @@ npm run test:adapter
 npm run test:e2e
 ```
 
-**Status**: Fully operational. `docker-all-tools.e2e.spec.ts` covers all 84 tools end-to-end.
+**Status**: Fully operational. `docker-all-tools.e2e.spec.ts` covers all 85 tools end-to-end.
 
 ### 4. Connection Tests
 
@@ -379,7 +380,7 @@ npm run dev -- --test-actual-connection
 
 ### 5. Tool Tests (deprecated path; use unit tests instead)
 
-**Purpose**: Smoke test all 84 tools
+**Purpose**: Smoke test all 85 tools
 
 **Command**:
 ```bash
@@ -676,10 +677,10 @@ Planned integrations:
 
 ### Current Coverage
 
-- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 84 tools
+- **Unit Tests**: schema/shape smoke tests + 23 negative-path assertions across 85 tools
 - **Adapter Tests**: Infrastructure smoke (retry, concurrency, lifecycle), not per-tool
 - **Docker E2E**: 68/70 tools with named tests (real Actual Budget server); 2 tools excluded (`budgets_list_available` and `budgets_switch` require ≥2 budgets, and the CI stack has 1). All 6 delete tools are named tests with list-absence assertions; `afterAll` is a safety fallback only.
-- **Live Integration**: 84/84 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
+- **Live Integration**: 85/85 tools called against real budget (all delete tools are named tests in `tests/manual/tests/`)
 
 ### Coverage Goals
 
@@ -687,8 +688,8 @@ Planned integrations:
 |-----------|---------|--------|----------|
 | Unit Tests | 80% | 90% | High |
 | Adapter Tests | 100% | 100% | Maintain |
-| Integration Tests | 84/84 tools (live) | Maintain | Medium |
-| E2E Tests | All 84 tools (Docker) | Maintain | Medium |
+| Integration Tests | 85/85 tools (live) | Maintain | Medium |
+| E2E Tests | All 85 tools (Docker) | Maintain | Medium |
 
 ### Measuring Coverage
 
@@ -915,7 +916,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
                       /         \
                     /             \
                   /   Level 5:      \
-                /   Full E2E Tests    \    ← All 84 tools + Error scenarios
+                /   Full E2E Tests    \    ← All 85 tools + Error scenarios
               /     (Docker Stack)      \
             /                              \
           /        Level 4: Protocol E2E    \  ← MCP protocol compliance
@@ -940,14 +941,14 @@ This project follows a comprehensive testing strategy with multiple levels, from
 **Command:** `npm run test:adapter`
 
 **Coverage:**
-- ✅ All 84 tools registered correctly
+- ✅ All 85 tools registered correctly
 - ✅ Tool schemas valid (Zod validation)
 - ✅ Tool descriptions present
 - ✅ Basic tool invocation works
 
 **Test Files:**
 - `src/tests_adapter_runner.ts` - Main adapter test runner
-- `tests/unit/generated_tools.smoke.test.js` - All 84 tools smoke validation
+- `tests/unit/generated_tools.smoke.test.js` - All 85 tools smoke validation
 
 **Success Criteria:**
 - All tools found in registry
@@ -972,7 +973,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | File | What it tests | Assertions |
 |---|---|---|
 | `transactions_create.test.js` | Zod schema for `transactions_create`: valid input accepted, empty rejected | 2 |
-| `generated_tools.smoke.test.js` | All 84 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 84 + shape checks |
+| `generated_tools.smoke.test.js` | All 85 tools: stub adapter, `call()` succeeds, response shape verified per-tool | 85 + shape checks |
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
 | `contributor_docs.test.js` | Contributor docs (AGENTS.md, CONTRIBUTING.md, PR template, SUPPORT.md, CODE_OF_CONDUCT.md): real scripts, tracked links, `AGENTS.md` required and short, PR template at most 40 lines, instructions files defer to it (#496, #609) | 20+ |
 | `toolsets.test.js` | Toolset policy: partition, preset, read-only set and its call-graph guard, refusal, fail-closed (#483) | 53 |
@@ -981,6 +982,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `rules_update_schedules_schema.test.js` | Schema rejections for `rules_update`, `schedules_create`, `schedules_update` (#486); range amounts and `amountOp` refusals (#527); recur `patterns` and strictness (#478) | 90+ |
 | `schedules_update_amount_guard.test.js` | Adapter read-then-write guard for a one-field `amount` / `amountOp` schedule update (#527) | 38 |
 | `schedules_dead_conditions.test.js` | Adapter strip of dead payee / account schedule rule conditions on create and clear, same drain, bounded poll (#547) | 35 |
+| `schedules_dates.test.js` | `actual_schedules_dates`: one-session expansion, the 366 cap, `truncated`, typed refusals (#479) | 40 |
 | `schema_json_openai_compat.test.js` | Walks all 71 published `z.toJSONSchema()` outputs; asserts no `\p{...}` escape and every `pattern` compiles without the `u` flag, so no tool schema is rejected by OpenAI's Responses validator (#293) | 71 schemas |
 | `schema_published_parity.test.js` | Walks every tool's Zod schema down to its regex leaves; asserts every published UUID `pattern` accepts `2E1F5BDB-209B-43F9-AF2C-3CE28E380C00`, that no regex check carries a flag, and that the Zod verdict equals the `AjvJsonSchemaValidator` verdict on a shared fixture set, with negative fixtures proving each detector fires (#588) | 84 tools, 51 id sites |
 | `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
@@ -1005,7 +1007,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `bot_target_branch.test.js` | #265: every dependabot update block carries target-branch develop and the inert renovate config's baseBranches includes develop with the activation warning; a bot PR against fast-forward-only main is structurally unmergeable | 2 + 2 negative |
 
 **Coverage:**
-- ✅ All 84 tools: stub invocation + response-shape assertion
+- ✅ All 85 tools: stub invocation + response-shape assertion
 - ✅ Schema parse rejection for empty/invalid inputs (11+ tools, 60+ cases)
 - ✅ Runtime guard rejection: `amount ≤ 0`, `fromId === toId` in `budgets_transfer`
 - ✅ Schema correctness: parse errors with provided examples surface as test failures
@@ -1038,7 +1040,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | Test | Success Case | Error Case |
 |------|-------------|------------|
 | Initialize | ✅ Valid protocol version | ❌ Unsupported version |
-| List Tools | ✅ Returns 84 tools | ❌ Timeout |
+| List Tools | ✅ Returns 85 tools | ❌ Timeout |
 | Call Tool | ✅ Executes tool | ❌ Tool not found |
 | Session Persistence | ✅ Same session across calls | ❌ Session expired |
 | Health Check | ✅ Status: ok | ❌ Status: not-initialized |
@@ -1067,7 +1069,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 - ✅ Docker build correctness
 - ✅ Container networking
 - ✅ Real Actual Budget integration
-- ✅ **ALL 84 tools execution (100% coverage)**
+- ✅ **ALL 85 tools execution (100% coverage)**
 - ✅ Session management (including `actual_session_close`)
 - ✅ Error handling (15+ error scenarios)
 - ✅ Regression tests (strict validation, large batches, edge cases)
@@ -1078,7 +1080,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 |---|-----------|-----------------|-----------------|
 | 1 | Initialize MCP session | ✅ Session created | ❌ Auth failure, timeout |
 | 2 | Verify services healthy | ✅ Status: ok | ❌ Not initialized, Actual unreachable |
-| 3 | List all tools | ✅ 84 tools returned | ❌ Timeout, server error |
+| 3 | List all tools | ✅ 85 tools returned | ❌ Timeout, server error |
 | 4 | Execute actual_server_info | ✅ Server version returned | ❌ Connection refused |
 | 5 | List accounts | ✅ Account array returned | ❌ Database error |
 | 6 | Create test account | ✅ Account ID returned | ❌ Duplicate name, validation error |
@@ -1090,10 +1092,10 @@ This project follows a comprehensive testing strategy with multiple levels, from
 
 **Comprehensive All-Tools Tests (docker-all-tools.e2e.spec.ts - 80+ tests, ~120s):**
 
-The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block `Docker E2E - ALL 84 TOOLS`): it exercises all 84 tools plus error scenarios. The per-category counts are not duplicated here, because a hand-maintained copy drifts.
+The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.spec.ts` (describe block `Docker E2E - ALL 85 TOOLS`): it exercises all 85 tools plus error scenarios. The per-category counts are not duplicated here, because a hand-maintained copy drifts.
 
 **Success Criteria:**
-- All 84 tools execute successfully
+- All 85 tools execute successfully
 - Error scenarios handled gracefully
 - Docker containers healthy
 - No data corruption
@@ -1135,8 +1137,8 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 
 ### Level 6: Manual Integration Tests 🧪 (Comprehensive: ~60s)
 
-**Purpose:** Test all 84 tools with real Actual Budget data  
-**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (15 domain modules)  
+**Purpose:** Test all 85 tools with real Actual Budget data  
+**Location:** `tests/manual/index.js` (entry point), `tests/manual/tests/` (16 domain modules)  
 **Command:** `npm run test:integration:full`
 
 > **`tags.js` is self-contained (#451).** The four tags tools touch no account, category or
@@ -1173,7 +1175,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 - ❌ Delete non-existent account
 - ❌ Reopen already-open account
 
-#### FULL Level (84 tools, 100% coverage)
+#### FULL Level (85 tools, 100% coverage)
 
 **Account Tools (7):**
 - ✅ All NORMAL account tests
@@ -1254,7 +1256,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 - ❌ Close invalid session ID
 
 **Success Criteria:**
-- All 84 tools execute successfully
+- All 85 tools execute successfully
 - Error scenarios handled gracefully
 - Test data cleaned up properly
 - No data corruption
@@ -1307,7 +1309,7 @@ npm run test:all                 # All automated tests (90s)
 
 **Pre-Release (Manual):**
 ```bash
-# Full manual integration test with all 84 tools
+# Full manual integration test with all 85 tools
 npm run test:integration:full
 
 # Cleanup only (remove leftover MCP-* test data)
@@ -1321,11 +1323,11 @@ npm run test:integration:cleanup
 | Test Level | Current Coverage | Target Coverage | Priority |
 |------------|-----------------|-----------------|----------|
 | **Level 1:** Adapter Smoke | 100% (adapter infra) | 100% | ✅ Maintain |
-| **Level 2:** Unit Tests | 84/84 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
-| **Level 3:** Live Integration | 84/84 tools called | 84/84 | ✅ Maintain |
+| **Level 2:** Unit Tests | 85/85 tools (stub), 23 schema assertions | Maintain + grow | ✅ Good |
+| **Level 3:** Live Integration | 85/85 tools called | 85/85 | ✅ Maintain |
 | **Level 4:** Protocol E2E | 100% (MCP compliance) | 100% | ✅ Maintain |
 | **Level 5:** Docker E2E | **68/70 tools** (100% named; 2 excluded for single-budget CI) | 100% | ✅ Maintain |
-| **Level 6:** Manual Full | 100% (84/84 tools) | 100% | ✅ Maintain |
+| **Level 6:** Manual Full | 100% (85/85 tools) | 100% | ✅ Maintain |
 | **Error Scenarios** | ~70% | 90% | 🟡 Medium |
 
 ---
@@ -1334,7 +1336,7 @@ npm run test:integration:cleanup
 
 **High Priority:**
 1. ✅ **Completed:** Docker E2E tests with 68/70 tools named (2 excluded: `budgets_list_available`, `budgets_switch` due to single-budget CI constraint)
-2. ✅ **Completed:** Unit test suite (~52 files), 84-tool smoke, 23 negative-path assertions
+2. ✅ **Completed:** Unit test suite (~52 files), 85-tool smoke, 23 negative-path assertions
 3. ✅ **Completed:** All 6 delete tools promoted to named E2E tests with list-absence assertions; `afterAll` is now fallback-only
 4. ✅ **Completed:** Shared `tests/shared/mcp-protocol.js` utility (MCP envelope parsing, reused across E2E and integration tests)
 5. ⏳ **TODO:** Add business logic error tests (duplicate accounts, insufficient funds)

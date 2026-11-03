@@ -55,7 +55,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 5 | Prompt 2 | 4 | Rules CRUD |
 | 5b | Prompt 2 | 4 | Batch update, uncategorized, rules upsert, rules batch (#485) |
 | 6 | Prompt 2 | 12 | Transaction CRUD + search + splits (#305) + transfers (#451) |
-| 6b | Prompt 2 | 4 | Schedule CRUD |
+| 6b | Prompt 2 | 5 | Schedule CRUD + upcoming dates (#479) |
 | 6c | Prompt 2 | 4 | Tag CRUD (#184, covered here since #451) |
 | 7 | Prompt 3 | 5 | Transaction summaries, aggregate, account flow, recurring expenses (#451) |
 | 8 | Prompt 3 | 11 | Budget management |
@@ -67,7 +67,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 84 tools across 3 prompts**
+**Total: 85 tools across 3 prompts**
 
 ---
 

@@ -81,6 +81,7 @@ const READ_ONLY = new Set<string>([
   'actual_preferences_get',
   'actual_query_run',
   'actual_rules_get',
+  'actual_schedules_dates',
   'actual_schedules_get',
   'actual_server_get_version',
   'actual_server_info',

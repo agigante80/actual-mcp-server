@@ -153,6 +153,7 @@ console.log('Running generated tools smoke tests');
     createSchedule: '00000000-0000-0000-0000-000000000099',
     updateSchedule: null,
     deleteSchedule: null,
+    getScheduleDates: { schedule_id: '00000000-0000-0000-0000-000000000099', name: 'Rent', dates: ['2026-04-01'], count: 1, truncated: false },
     createTransfer: { success: true, from_id: '00000000-0000-0000-0000-000000000003', to_id: null },
     getTags: [{ id: '00000000-0000-0000-0000-0000000000aa', tag: 'groceries' }],
     getAccountGroups: [{ id: '00000000-0000-0000-0000-0000000000bb', name: 'Savings', sort_order: 0 }],
@@ -273,6 +274,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('schedules_create')) inputExample.date = '2026-06-01';
   if (name.includes('schedules_update')) inputExample.id = '00000000-0000-0000-0000-000000000099';
   if (name.includes('schedules_delete')) inputExample.id = '00000000-0000-0000-0000-000000000099';
+  if (name.includes('schedules_dates')) inputExample.schedule_id = '00000000-0000-0000-0000-000000000099';
   if (name.includes('transfers_create')) inputExample.from_account = '11111111-1111-1111-1111-111111111111', inputExample.to_account = '22222222-2222-2222-2222-222222222222', inputExample.amount = 5000, inputExample.date = '2025-01-15';
   if (name.includes('tags_create')) inputExample.tag = 'groceries';
   if (name.includes('tags_update')) inputExample.id = '00000000-0000-0000-0000-0000000000aa', inputExample.tag = 'food';
@@ -360,6 +362,11 @@ console.log('Running generated tools smoke tests');
       if (n === 'schedules_get') {
         if (!Array.isArray(res?.schedules)) shapeErr(`expected schedules array`);
         if (typeof res?.count !== 'number') shapeErr(`expected count number`);
+      }
+      if (n === 'schedules_dates') {
+        const d = res?.result; // createTool wraps its return value in { result }
+        if (!Array.isArray(d?.dates)) shapeErr('expected result.dates array');
+        if (typeof d?.truncated !== 'boolean') shapeErr('expected result.truncated boolean');
       }
       if (n === 'schedules_create') {
         if (typeof res?.id !== 'string') shapeErr(`expected id string`);

@@ -54,7 +54,7 @@ This entry sets `serverInstructions: false`, which turns the server's instructio
 
 ## Verify
 
-With every toolset published, the LibreChat UI shows **84 tools** listed under the MCP server entry (fewer when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set). Then ask `List my Actual Budget accounts and their balances.` The [shared verify step](README.md#verify) checks the server with `curl`.
+With every toolset published, the LibreChat UI shows **85 tools** listed under the MCP server entry (fewer when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set). Then ask `List my Actual Budget accounts and their balances.` The [shared verify step](README.md#verify) checks the server with `curl`.
 
 ## Troubleshooting
 

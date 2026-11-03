@@ -8,12 +8,12 @@
  * Writes to context:   (none)
  *
  * Environment:
- *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 84)
+ *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 85)
  */
 
 import { noteTolerated } from '../assert.js';
 
-const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '84', 10);
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '85', 10);
 
 /**
  * @param {{ listTools: Function, callTool: Function }} client

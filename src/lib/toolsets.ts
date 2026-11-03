@@ -96,6 +96,7 @@ export const TOOLSETS = {
   ],
   schedules: [
     'actual_schedules_get',
+    'actual_schedules_dates',
     'actual_schedules_create',
     'actual_schedules_update',
     'actual_schedules_delete',

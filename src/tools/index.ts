@@ -52,6 +52,7 @@ export { default as rules_delete } from './rules_delete.js';
 export { default as rules_get } from './rules_get.js';
 export { default as rules_update } from './rules_update.js';
 export { default as schedules_create } from './schedules_create.js';
+export { default as schedules_dates } from './schedules_dates.js';
 export { default as schedules_delete } from './schedules_delete.js';
 export { default as schedules_get } from './schedules_get.js';
 export { default as schedules_update } from './schedules_update.js';

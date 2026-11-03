@@ -1,5 +1,5 @@
 /**
- * Comprehensive Docker E2E Tests - ALL 84 TOOLS
+ * Comprehensive Docker E2E Tests - ALL 85 TOOLS
  *
  * Tests every tool with success and error scenarios.
  *
@@ -15,7 +15,7 @@
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 import { DEFAULT_MCP_SERVER_URL, HTTP_PATH } from '../shared/e2e-helpers.js';
 
-test.describe('Docker E2E - ALL 84 TOOLS', () => {
+test.describe('Docker E2E - ALL 85 TOOLS', () => {
   // ==================== SERVER INFO ====================
   test('actual_server_info - should return server info', async ({ mcp }) => {
     const data = await mcp.call('actual_server_info');
@@ -2061,6 +2061,46 @@ test.describe('Docker E2E - ALL 84 TOOLS', () => {
     const row = await readSchedule(mcp, schedule.id);
     expect(row?.date?.frequency).toBe('monthly');
     expect(row?.date?.patterns).toEqual(patterns);
+  });
+
+  test('actual_schedules_dates - should list a last-day schedule\'s next dates from next_date (#479)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule({ date: { frequency: 'monthly', start: nextMonth.ymd(3), endMode: 'never', patterns: [{ type: 'day', value: -1 }] } });
+    const row = await readSchedule(mcp, schedule.id);
+
+    const data = await mcp.call('actual_schedules_dates', { schedule_id: schedule.id, start: row?.next_date, count: 3 });
+    const r = data?.result ?? data;
+    expect(r?.schedule_id).toBe(schedule.id);
+    expect(r?.count).toBe(3);
+    // open-ended: a fourth date exists, so the list is marked truncated
+    expect(r?.truncated).toBe(true);
+    expect(r?.dates?.[0]).toBe(row?.next_date);
+    for (let i = 0; i < 3; i++) {
+      const [y, m, d] = String(r?.dates?.[i]).split('-').map(Number);
+      expect(d).toBe(new Date(y, m, 0).getDate());
+      if (i > 0) expect(String(r?.dates?.[i]) > String(r?.dates?.[i - 1])).toBe(true);
+    }
+  });
+
+  test('actual_schedules_dates - should refuse an unknown id and an end before start (#479)', async ({ mcp }) => {
+    await expect(
+      mcp.call('actual_schedules_dates', { schedule_id: '00000000-0000-4000-8000-0000000004f9' }),
+    ).rejects.toThrow(/actual_schedules_get/);
+
+    // Our preflight runs before the id lookup, so an unknown id still gets the range refusal.
+    // Match only our wording: upstream's own error also says "is before start".
+    await expect(
+      mcp.call('actual_schedules_dates', { schedule_id: '00000000-0000-4000-8000-0000000004f9', start: nextMonth.ymd(20), end: nextMonth.ymd(10) }),
+    ).rejects.toThrow(/must be on or after start/);
+  });
+
+  test('actual_schedules_dates - should refuse a stored skipWeekend without weekendSolveMode (#479)', async ({ mcp, makeSchedule }) => {
+    // actual_schedules_create accepts the pair separately, so this row is reachable from our own tools.
+    // Weekly from a Monday: upstream computes next_date at create and throws if it lands on a
+    // weekend with no weekendSolveMode, so a monthly fixture would fail on some run days.
+    const schedule = await makeSchedule({ date: { frequency: 'weekly', start: '2024-01-01', endMode: 'never', skipWeekend: true } });
+    await expect(
+      mcp.call('actual_schedules_dates', { schedule_id: schedule.id, start: nextMonth.ymd(1), count: 2 }),
+    ).rejects.toThrow(/weekendSolveMode[\s\S]*actual_schedules_update|actual_schedules_update[\s\S]*weekendSolveMode/);
   });
 
   test('actual_schedules_delete - should delete schedule and verify gone', async ({ mcp, makeSchedule }) => {

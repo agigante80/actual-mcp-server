@@ -81,6 +81,9 @@ console.log('\n[coverage analysis: frozen API surface]');
     `no mapping errors (every mapped tool exists in IMPLEMENTED_TOOLS); got ${JSON.stringify(mappingErrors)}`);
   assert(covered.some(c => c.method === 'getSchedules' && c.tool === 'actual_schedules_get'),
     'a known-covered method (getSchedules) is in the covered bucket');
+  // #479/#617: the 26.11 getScheduleDates method is mapped to its tool
+  assert(API_TO_TOOL.getScheduleDates === 'actual_schedules_dates',
+    'getScheduleDates is mapped to actual_schedules_dates');
   assert(internal.includes('init') && internal.includes('shutdown'),
     'known lifecycle methods (init, shutdown) are in the internal bucket');
   assert(!gaps.includes('getSchedules') && !gaps.includes('createTag'),

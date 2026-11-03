@@ -30,6 +30,7 @@ tests/manual/
     ├── budget.js              ← budget: list/switch budgets, amounts, carryover, hold, transfer, batch
     ├── rules.js               ← rules: create (with/without op), update, delete, verify absence
     ├── schedule.js            ← schedules: get, create (one-off + recurring), update, delete, negative UUID test
+    ├── schedule_dates.js      ← schedule dates (#479): next dates, weekend move, completed, one-off, refusals
     ├── notes.js               ← notes: round-trip set/get, clear, budget-month template, orphan id guard
     ├── batch_uncategorized_rules_upsert.js
     │                          ← uncategorized txns · update_batch · rules_create_or_update (idempotency)
@@ -93,7 +94,7 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 | `MCP_AUTH_TOKEN` | Bearer token |
 | `MCP_TEST_LEVEL` | Test level |
 | `ACTUAL_SERVER_URL` | Shown in cleanup prompt (default `http://localhost:5006`) |
-| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `84`) |
+| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `85`) |
 | `MCP_TEST_BANK_SYNC` | Enable bank sync tests (default `false`, set to `true` to enable) |
 
 Variables are loaded from the project root `.env` automatically.

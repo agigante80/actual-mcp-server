@@ -15,7 +15,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that lets an
 
 **What you can ask it:** "How much did I spend on groceries last month, by payee?", "Add a $47.50 grocery transaction at Whole Foods to my checking account.", "Move $200 from Dining Out to Emergency Fund for this month."
 
-**84 tools** across accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
+**85 tools** across accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
 
 ## Pick your path
 
@@ -98,7 +98,7 @@ Every tool, with its description and caveats, is in the [tools reference](docs/r
 
 ### Reducing the tool surface
 
-All 84 tools are published by default. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer. A tool that is not published is also refused if a client calls it by name.
+All 85 tools are published by default. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer. A tool that is not published is also refused if a client calls it by name.
 
 <!-- BEGIN GENERATED: tools-summary -->
 <!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->
@@ -109,14 +109,14 @@ All 84 tools are published by default. Chat clients with a small tool budget (Ge
 | `analysis` | 7 | Summaries, aggregates and balances |
 | `budget` | 10 | Budget months, amounts, carryover, holds, transfers, batch updates and notes |
 | `rules` | 7 | Rules and payee rules, including `actual_rules_create_batch` |
-| `schedules` | 4 | Scheduled transactions |
+| `schedules` | 5 | Scheduled transactions |
 | `structure` | 21 | Accounts, account groups, categories, category groups, payees and tags |
 | `query` | 1 | `actual_query_run` (SELECT only) |
 | `admin` | 6 | Budget switching, import, export, bank sync and session management |
 
 The `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`.
 
-`MCP_READ_ONLY=true` hides and refuses 48 write-capable tools and leaves 36 published.
+`MCP_READ_ONLY=true` hides and refuses 48 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->
 
 Example: a chat assistant with two extra tools.

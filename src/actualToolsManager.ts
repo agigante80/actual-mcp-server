@@ -62,6 +62,7 @@ const IMPLEMENTED_TOOLS = [
   'actual_rules_get',
   'actual_rules_update',
   'actual_schedules_create',
+  'actual_schedules_dates',
   'actual_schedules_delete',
   'actual_schedules_get',
   'actual_schedules_update',

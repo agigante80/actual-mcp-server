@@ -53,6 +53,7 @@ const {
   getIDByName: rawGetIDByName,
   getServerVersion: rawGetServerVersion,
   getSchedules: rawGetSchedules,
+  getScheduleDates: rawGetScheduleDates,
   createSchedule: rawCreateSchedule,
   updateSchedule: rawUpdateSchedule,
   deleteSchedule: rawDeleteSchedule,
@@ -1059,7 +1060,7 @@ async function shutdownActualApi(opts?: { forceFullShutdown?: boolean }): Promis
   }
 }
 
-import { BANK_SYNC_SETTLE_MS, SPLIT_VERIFY_INTERVAL_MS, SPLIT_VERIFY_TIMEOUT_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
+import { BANK_SYNC_SETTLE_MS, SCHEDULE_DATES_CAP, SPLIT_VERIFY_INTERVAL_MS, SPLIT_VERIFY_TIMEOUT_MS, WRITE_SESSION_DELAY_MS } from './constants.js';
 
 // Concurrency limiter extracted to ./actual-adapter/concurrency.ts (#166).
 // Imported for internal use (every method wraps its raw call in withConcurrency)
@@ -3412,6 +3413,69 @@ export async function getSchedules(): Promise<unknown[]> {
   });
 }
 /**
+ * #479: the dates a schedule falls on, expanded by Actual itself (`api.getScheduleDates`, new in
+ * 26.11.0), so month ends, patterns, intervals and the weekend move match the Actual UI.
+ *
+ * One session: the schedule listing and the expansion run inside the same withActualApi, never
+ * through adapter.getSchedules (the api lock is not reentrant). Upstream takes the schedule row's
+ * `date` field (`scheduleModel.toExternal` maps it from `_date`), a single date or a RecurConfig.
+ * A count is ALWAYS sent, one above what is returned, so an open-ended recurrence returns its next
+ * dates instead of upstream's "needs an end or a count" error, and the extra date is how
+ * `truncated` knows that more dates exist after the last one returned. With both `end` and
+ * `count`, upstream stops at whichever comes first.
+ *
+ * The two refusals a caller can fix are typed and checked BEFORE the upstream call, never chosen
+ * by matching upstream message text: an `end` before `start` (only when both are given; with
+ * `start` omitted upstream uses its own today and its error passes through), and a stored
+ * `skipWeekend` without `weekendSolveMode`. Any other upstream error passes through unchanged.
+ */
+export async function getScheduleDates(
+  scheduleId: string,
+  opts: { start?: string; end?: string; count?: number } = {},
+): Promise<{ schedule_id: string; name: string | null; dates: string[]; count: number; truncated: boolean }> {
+  if (opts.start !== undefined && opts.end !== undefined && opts.end < opts.start) {
+    throw new OutOfRangeRefusal(
+      `end (${opts.end}) is before start (${opts.start}); end must be on or after start.`,
+      opts.end,
+    );
+  }
+  return withActualApi(async () => {
+    observability.incrementToolCall('actual.schedules.dates').catch(() => {});
+    const schedules = await withConcurrency(() =>
+      retry(() => rawGetSchedules() as Promise<Array<{ id?: string; name?: string | null; date?: unknown }>>, { retries: 2, backoffMs: 200 })
+    );
+    const schedule = Array.isArray(schedules) ? schedules.find((s) => s?.id === scheduleId) : undefined;
+    if (!schedule) {
+      throw new NotFoundRefusal('Schedule', scheduleId, 'actual_schedules_get');
+    }
+    const recur = schedule.date as { skipWeekend?: unknown; weekendSolveMode?: unknown } | null;
+    if (recur && typeof recur === 'object' && recur.skipWeekend && !recur.weekendSolveMode) {
+      throw new OutOfRangeRefusal(
+        `Schedule ${scheduleId} has skipWeekend set without weekendSolveMode, so its dates cannot be ` +
+          "computed. Set weekendSolveMode to 'before' or 'after' with actual_schedules_update.",
+        'weekendSolveMode',
+      );
+    }
+    const limit = Math.min(opts.count ?? SCHEDULE_DATES_CAP, SCHEDULE_DATES_CAP);
+    const raw = await withConcurrency(() =>
+      rawGetScheduleDates(schedule.date, {
+        ...(opts.start !== undefined ? { start: opts.start } : {}),
+        ...(opts.end !== undefined ? { end: opts.end } : {}),
+        count: limit + 1,
+      }) as Promise<unknown>
+    );
+    const all = Array.isArray(raw) ? (raw as string[]) : [];
+    const dates = all.slice(0, limit);
+    return {
+      schedule_id: scheduleId,
+      name: typeof schedule.name === 'string' ? schedule.name : null,
+      dates,
+      count: dates.length,
+      truncated: all.length > limit,
+    };
+  });
+}
+/**
  * #547: upstream builds a schedule's rule with one `is` condition per field and STRINGIFIES the
  * value on create (`scheduleModel.fromExternal` in loot-core/src/server/api-models.ts), so an
  * OMITTED payee or account becomes the literal string "undefined". On update
@@ -5334,6 +5398,7 @@ export default {
   getIDByName,
   getServerVersion,
   getSchedules,
+  getScheduleDates,
   createSchedule,
   updateSchedule,
   deleteSchedule,

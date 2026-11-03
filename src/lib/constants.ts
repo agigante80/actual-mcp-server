@@ -95,6 +95,11 @@ export const DEFAULT_HTTP_PORT = 3600;
 // ============================================================================
 
 /**
+ * #479: the most dates actual_schedules_dates returns, so a daily schedule cannot flood the context.
+ */
+export const SCHEDULE_DATES_CAP = 366;
+
+/**
  * Maximum length for name fields (accounts, categories, payees)
  */
 export const MAX_NAME_LENGTH = 255;
