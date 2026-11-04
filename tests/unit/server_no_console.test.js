@@ -57,6 +57,9 @@ check('the listen record goes through the HTTP module logger with port, endpoint
   const text = stripped.get('httpServer.ts');
   assert.ok(text.includes("createModuleLogger('HTTP')"), 'httpServer.ts must create the HTTP module logger');
   assert.match(text, /httpLog\.info\([^\n]*listening on[^\n]*\{ port, endpoint: advertised, health \}\)/);
+  // The manual mcp-client spec scrapes `MCP endpoint:\s*(\S+)` from this line; the
+  // trailing space keeps the captured URL bare.
+  assert.match(text, /httpLog\.info\([^\n]*MCP endpoint: \$\{advertised\} [^\n]*\)/);
 });
 
 console.log(`\n[server-no-console] Results: ${passed} passed, ${failed} failed`);
