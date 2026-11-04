@@ -7,9 +7,10 @@
  *
  * INVARIANT: this module MUST remain side-effect-free.
  *
- * src/index.ts registers the process.on('unhandledRejection', ...) handler
- * AFTER importing this module (ESM static imports are evaluated before the
- * top-level body runs). Any side effect introduced here, e.g. importing a
+ * src/lib/processHandlersInstall.ts (the second import of src/index.ts, #622)
+ * registers the process.on('unhandledRejection', ...) handler AFTER importing
+ * this module through processHandlers.ts (ESM static imports are evaluated
+ * before the top-level body runs). Any side effect introduced here, e.g. importing a
  * logger that performs winston/file-handle init, importing dotenv, or any
  * code that runs at module load, opens a window during ESM evaluation in
  * which an unhandled rejection bypasses this allow-list and crashes the

@@ -5,10 +5,13 @@
 // guard cannot live in bin/ alone. It is a side-effect import: the module's top-level
 // `enforceNodeVersion()` fires here, exactly once.
 import './lib/node-version-guard.js';
+// #622: MUST be the second import. Registers the unhandledRejection and uncaughtException
+// handlers before any other module evaluates. They write gated records only (no reason,
+// message or stack) and get the logger later through attachProcessLogger below.
+import { attachProcessLogger } from './lib/processHandlersInstall.js';
 import { getMcpServerVersion } from './lib/mcp-version.js';
 import path from 'node:path';
 import { z } from 'zod';
-import { isKnownBenignRejection } from './lib/rejection-allowlist.js';
 import { buildServerInstructions } from './lib/serverInstructions.js';
 import { format } from 'node:util';
 
@@ -23,62 +26,6 @@ import { format } from 'node:util';
  * ignored `VERSION`, so a Docker image built as `X-dev-abc` printed plain `X` from
  * `--version` while clients saw `X-dev-abc`. One reader means one string.
  */
-
-// Add global error handlers
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('=== UNHANDLED REJECTION ===');
-  console.error('Promise:', promise);
-  console.error('Reason:', reason);
-  if (reason instanceof Error) {
-    console.error('Stack:', reason.stack);
-  }
-  console.error('===========================');
-
-  // #275 backstop. The guard above catches both entry points, but a consumer that
-  // imports this package as a library reaches neither. Import attributes are the one
-  // construct here that fails on an under-floor Node, and it fails asynchronously,
-  // so name the real cause rather than letting the reader chase a packaging bug.
-  if ((reason as { code?: string } | undefined)?.code === 'ERR_IMPORT_ASSERTION_TYPE_MISSING') {
-    console.error(`⚠️  This almost certainly means Node ${process.version} is too old.`);
-    console.error('⚠️  actual-mcp-server requires the Node version in package.json "engines".');
-    console.error('⚠️  Import attributes (`with { type: "json" }`) need Node 22 or newer.');
-  }
-
-  if (isKnownBenignRejection(reason)) {
-    console.error('⚠️  Known Actual API domain error escaped to unhandledRejection:');
-    console.error('⚠️  ' + String(reason));
-    console.error('⚠️  Server will continue running. The caller received an error response.');
-    return;
-  }
-
-  process.exit(1);
-});
-
-process.on('uncaughtException', (error) => {
-  const errMsg = String((error as any)?.message || error);
-  const errType = (error as any)?.type;
-  // Bank sync errors from GoCardless/SimpleFIN can surface as uncaughtException
-  // from within the @actual-app/api SDK when the provider API returns an error
-  // asynchronously (e.g. RATE_LIMIT_EXCEEDED from GoCardless/Nordigen).
-  // These are non-fatal — the server should survive and continue serving requests.
-  if (
-    errType === 'BankSyncError' ||
-    errMsg.includes('BankSyncError') ||
-    errMsg.includes('NORDIGEN_ERROR') ||
-    errMsg.includes('RATE_LIMIT_EXCEEDED') ||
-    errMsg.includes('Rate limit exceeded') ||
-    errMsg.includes('Failed syncing account') ||
-    errMsg.includes('GoCardless') ||
-    errMsg.includes('SimpleFIN')
-  ) {
-    console.error('⚠️  [BANK SYNC] Non-fatal bank sync error surfaced as uncaughtException (server continues):');
-    console.error('⚠️  ' + errMsg);
-    return;
-  }
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
-});
 
 // Minimal early help handling before any side-effectful modules (prevents dotenv from running on --help)
 const argsEarly = process.argv.slice(2);
@@ -233,6 +180,9 @@ export {};
   ]);
 
   const logger = (loggerModule as unknown as { default: typeof console }).default;
+  // #622: the process handlers log survivable events through the logger from here on.
+  const { createModuleLogger } = await import('./lib/loggerFactory.js');
+  attachProcessLogger(createModuleLogger('PROCESS'));
   const { getLocalIp } = (utilsModule as unknown as { getLocalIp: () => string });
   const actualToolsManager = (actualToolsManagerModule as unknown as { default: any }).default;
 

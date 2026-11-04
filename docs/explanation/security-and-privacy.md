@@ -605,6 +605,24 @@ runtime Actual session token, which the #220 scrub does not mask (upstream outpu
 pre-stringified, so only configured secret values are scrubbed, not key names). `--debug`,
 `npm run dev` and `MCP_BRIDGE_LOG_LEVEL=debug` do not turn it on.
 
+**Process-level crash records carry gated fields only (#622).** The `unhandledRejection` and
+`uncaughtException` handlers (`src/lib/processHandlers.ts`, installed second in `src/index.ts`
+right after the Node version guard) never log the rejection reason, its message, its stack or an
+upstream `.type`. A reason can carry a request object with an `Authorization` header, and upstream
+text can quote account or payee names. Each record holds `{ type, code?, httpStatus?, category,
+safeMessage }`: the class name, a gated system error code, an integer HTTP status, a category
+from a closed table, and either the throw site's log-safe text or a fixed sentence. A fatal event
+is one `sys_crash` JSON line written synchronously to stderr before `exit(1)`, never also through
+winston. A survivable one (an allow-listed rejection, a bank sync failure) is one `warn` record.
+Residual: `main().catch` in `src/index.ts` still logs a STARTUP failure's `err.message`, because
+that text is usually the operator's only clue to a config or connection error. It is interpolated
+into the message string with no meta, so only the configured secret VALUE scrub applies, not
+#220 key name masking, and the line can be lost because `process.exit(1)` follows an
+asynchronous winston write. **Operator note:** logs stored before this fix
+(`MCP_BRIDGE_STORE_LOGS=true`, the `mcp-logs` volume in `docker-compose.yaml`) may hold dumped
+rejection reasons with request headers. Review or purge them, and rotate the Actual server
+password if a token may have been captured.
+
 **Tool error messages are never logged (#559).** An error's message is for the client and can
 quote what the caller sent (a category name, a query, a rule value) or upstream text we do not
 control, so the `[TOOL ERROR]` record and the `createTool` failure log carry `errorClass`, a

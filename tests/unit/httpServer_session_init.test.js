@@ -101,7 +101,8 @@ async function runTests() {
 
   describe('Case 3 — index.ts allow-list classifies "Authentication failed:" as known/non-fatal');
   {
-    // Source the allow-list logic by replicating the predicates added in src/index.ts:39-46.
+    // Source the allow-list logic by replicating the predicates of isKnownBenignRejection (src/lib/rejection-allowlist.ts), which
+    // src/lib/processHandlers.ts consults (#622).
     // (We test the classification, not the full unhandledRejection handler — that
     // path calls process.exit and cannot be exercised in-process.)
     function isKnownDomainError(reason) {
