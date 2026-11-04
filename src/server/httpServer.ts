@@ -16,7 +16,7 @@ import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, admitSession, releaseAdmission, isConnectionPoolEnabled } from '../actualConnection.js';
 import { connectionPool, type EvictionReason } from '../lib/ActualConnectionPool.js';
-import { clearSessionBudgetState, setSessionLivenessCheck, initialBudgetForSession, getBudgetRegistry } from '../lib/actual-adapter.js';
+import { clearSessionBudgetState, setSessionLivenessCheck, initialBudgetForSession, getBudgetRegistry, awaitWritesIdle } from '../lib/actual-adapter.js';
 import { errorLogFields } from '../lib/errors.js';
 import observability from '../observability.js';
 import config from '../config.js';
@@ -45,6 +45,7 @@ import * as fs from 'node:fs';
 // Re-exported here for backward compatibility with any callers that imported
 // `requestContext` from this module.
 import { requestContext } from '../lib/requestContext.js';
+import { createShutdownGate, createShutdownHandler } from './shutdown.js';
 import { recordSessionOwner, forgetSessionOwner, sessionOwnerMatches } from '../lib/session-owners.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
 
@@ -92,6 +93,12 @@ function capPrincipal(req: Request): string | undefined {
 /** Idle keep-alive for the HTTP listener, in milliseconds. */
 export const HTTP_KEEP_ALIVE_TIMEOUT_MS = 65000;
 
+/**
+ * #632: a SIGTERM or SIGINT shutdown that has not finished by then exits 1. Under Docker's
+ * default 10s stop grace, so the process ends itself before the SIGKILL.
+ */
+const SHUTDOWN_DEADLINE_MS = 8000;
+
 export async function startHttpServer(
   mcp: ActualMCPConnection,
   port: number,
@@ -119,7 +126,27 @@ export async function startHttpServer(
   // checkAuth's no-token branch, so the two can never disagree.
   const openMode = config.AUTH_PROVIDER !== 'oidc' && bearerEntries.length === 0;
 
+  // #632: the signal handler (registered at the end of this function). Created here so the 503
+  // gate below can read it; `listener` and `cleanup` are defined later and only read at signal time.
+  const shutdownHandler = createShutdownHandler({
+    closeListener: () => { listener.close(); listener.closeIdleConnections(); },
+    awaitInFlight: async () => {
+      while (shutdownGate.inFlight() > 0) await new Promise((r) => setTimeout(r, 25));
+      await awaitWritesIdle();
+    },
+    cleanup: () => cleanup(),
+    exit: (code) => process.exit(code),
+    logger,
+    deadlineMs: SHUTDOWN_DEADLINE_MS,
+  });
+
+  const shutdownGate = createShutdownGate(shutdownHandler, httpPath);
+
   const app = express();
+  // #632: once a shutdown starts, every new request gets 503 and its connection is closed, so no
+  // request starts after its session is gone. Mounted first to cover every route; the requests it
+  // admits are counted so the shutdown waits for them.
+  app.use(shutdownGate.middleware);
   // #612: DNS rebinding protection, mounted first so it covers every route (/health,
   // /metrics, /.well-known/* and OPTIONS included). It reads req.headers.host only,
   // never X-Forwarded-Host or req.hostname, so a proxy header cannot bypass it.
@@ -171,7 +198,12 @@ export async function startHttpServer(
   }
   // Explicit body-size cap (#168). An oversized payload is rejected with HTTP 413
   // rather than buffered unbounded. Tunable via MCP_HTTP_BODY_LIMIT (default 512kb).
-  app.use(express.json({ limit: config.MCP_HTTP_BODY_LIMIT }));
+  // GHSA-27r3-jxmh-p828 (#633): body-parser below 2.4.0 can crash the process on trailing
+  // bytes after a compressed body. No MCP client sends compressed request bodies, so
+  // `inflate: false` refuses them with 415 before any decompression stream exists. Kept after
+  // body-parser 2.4.0 too: decompression is attack surface no client uses. `inflate` stays after
+  // `limit`, which the #168 source test anchors on.
+  app.use(express.json({ limit: config.MCP_HTTP_BODY_LIMIT, inflate: false }));
   const scheme = config.MCP_ENABLE_HTTPS ? 'https' : 'http';
 
   // --- OIDC / mcp-auth (CF-5) ---
@@ -1232,8 +1264,12 @@ export async function startHttpServer(
     await shutdownActual();
   };
 
-  process.on('SIGTERM', cleanup);
-  process.on('SIGINT', cleanup);
+  // #632: see src/server/shutdown.ts for the order and why. `cleanup` itself stays exit-free for
+  // in-process callers; only the signal path exits.
+  const shutdown = (signal: NodeJS.Signals) => { void shutdownHandler.shutdown(signal); };
+
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
 
   return { app, listener, cleanup };
 }

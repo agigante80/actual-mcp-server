@@ -43,10 +43,10 @@ body:
       label: Priority
       description: "On triage a maintainer also applies the matching P0 to P3 label (and `icebox` if not committed), so priority is filterable: gh issue list --label P1"
       options:
-        - P0 — Critical (blocks users or breaks existing tools)
-        - P1 — High (important for current release)
-        - P2 — Medium (should do, not blocking)
-        - P3 — Low (nice to have)
+        - P0: Critical (blocks users or breaks existing tools)
+        - P1: High (important for current release)
+        - P2: Medium (should do, not blocking)
+        - P3: Low (nice to have)
     validations:
       required: true
 
@@ -56,10 +56,10 @@ body:
       label: Files to create / modify
       description: List specific files that will be created or changed. Helps scope the work.
       placeholder: |
-        - **Create** `src/tools/domain_action.ts` — tool definition
-        - **Edit** `src/tools/index.ts` — add export
-        - **Edit** `src/actualToolsManager.ts` — add to IMPLEMENTED_TOOLS
-        - **Edit** `src/lib/actual-adapter.ts` — add adapter method if needed
+        - **Create** `src/tools/domain_action.ts`: tool definition
+        - **Edit** `src/tools/index.ts`: add export
+        - **Edit** `src/actualToolsManager.ts`: add to IMPLEMENTED_TOOLS
+        - **Edit** `src/lib/actual-adapter.ts`: add adapter method if needed
     validations:
       required: false
 
@@ -135,17 +135,18 @@ body:
     attributes:
       label: Test scenarios (Given / When / Then)
       description: |
-        One positive ✅ and one negative ❌ scenario per condition or acceptance criterion.
+        One positive and one negative scenario per condition or acceptance criterion.
         When a feature covers multiple independent conditions, repeat the block for each.
+        Label each with **Positive:** or **Negative:**, use one When per scenario, and name the exact error a negative expects.
       placeholder: |
         **Condition: [name of the condition or feature aspect]**
 
-        ✅ Positive
+        **Positive:** [name of the case]
         - Given: [valid starting state]
         - When: [action is performed]
         - Then: [expected correct result]
 
-        ❌ Negative
+        **Negative:** [name of the case]
         - Given: [invalid or edge-case state]
         - When: [action is performed]
         - Then: [expected rejection / error message]
@@ -158,8 +159,8 @@ body:
       label: Unit tests
       description: Specific cases for `tests/unit/`. State file, input, and expected output.
       placeholder: |
-        - [ ] Positive: `[test file]` — call with [valid input] → [expected output / field]
-        - [ ] Negative: `[test file]` — call with [bad input] → ZodError / error contains "[text]"
+        - [ ] Positive (`[test file]`): call with [valid input] → [expected output / field]
+        - [ ] Negative (`[test file]`): call with [bad input] → ZodError / error contains "[text]"
         - [ ] Smoke entry added to `tests/unit/generated_tools.smoke.test.js` (new tools only)
         - [ ] `npm run build && npm run test:unit-js` passes
     validations:
@@ -173,8 +174,8 @@ body:
         Specific cases for `tests/e2e/docker-all-tools.e2e.spec.ts` (the only E2E file that runs). One positive and one negative per condition.
         Also note if an integration test in `tests/manual/tests/` is needed.
       placeholder: |
-        - [ ] Positive: `[suite file]` — [setup] → call tool → assert [field] equals [value]
-        - [ ] Negative: `[suite file]` — [bad state] → call tool → response contains error
+        - [ ] Positive (`[suite file]`): [setup] → call tool → assert [field] equals [value]
+        - [ ] Negative (`[suite file]`): [bad state] → call tool → response contains error
         - [ ] Manual integration test added to `tests/manual/tests/<module>.js` if live-server behaviour must be verified
     validations:
       required: false

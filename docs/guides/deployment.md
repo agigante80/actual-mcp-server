@@ -584,6 +584,8 @@ docker compose pull
 docker compose --profile production up -d
 ```
 
+On SIGTERM (what `docker stop` sends) or SIGINT the HTTP server answers every new request with 503, stops accepting connections, closes idle keep-alive sockets, waits for requests and writes already in progress, shuts down its Actual sessions and exits 0. A request still running after 6 seconds no longer holds the shutdown: the sessions are closed anyway and the exit code is 1, because that request's write may have been cut. A shutdown still running after 8 seconds exits 1, inside Docker's default 10 second grace, so the container is never SIGKILLed. A second signal during shutdown exits at once. Before v0.27.1 the server ignored the signal until the SIGKILL (#632).
+
 **From v0.22.39:** `.env.example` no longer pins `MCP_BRIDGE_LOG_LEVEL=debug`. A `.env` copied from an older example still does, which keeps a `NODE_ENV=production` run (for example `docker run --env-file .env`) at debug level. Remove that line so the production default (`info`) applies.
 
 ---

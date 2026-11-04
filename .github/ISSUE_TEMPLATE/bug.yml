@@ -171,19 +171,20 @@ body:
     attributes:
       label: Test scenarios (Given / When / Then)
       description: |
-        One positive ✅ and one negative ❌ scenario per condition being fixed or reviewed.
+        One positive and one negative scenario per condition being fixed or reviewed.
         For bugs fixing multiple conditions: repeat the block for each condition.
-        For revisiting existing code: scenarios must cover the *current correct* behaviour —
-        do NOT write scenarios for the new fix code itself.
+        For revisiting existing code: scenarios must cover the *current correct* behaviour.
+        Do NOT write scenarios for the new fix code itself.
+        Label each with **Positive:** or **Negative:**, use one When per scenario, and name the exact error a negative expects.
       placeholder: |
         **Condition: [name of the condition]**
 
-        ✅ Positive
+        **Positive:** [name of the case]
         - Given: [valid starting state]
         - When: [action is performed]
         - Then: [expected correct result]
 
-        ❌ Negative
+        **Negative:** [name of the case]
         - Given: [invalid or edge-case state]
         - When: [action is performed]
         - Then: [expected rejection / error message]
@@ -199,10 +200,10 @@ body:
         For revisiting existing code: confirm which existing unit tests cover the correct
         behaviour and identify any gaps to fill.
       placeholder: |
-        - [ ] Positive: `[test file]` — call with [valid input] → [expected output / field value]
-        - [ ] Negative: `[test file]` — call with [bad input] → ZodError / error message contains "[text]"
-        - [ ] Existing coverage check: `[test file]` cases [N–M] already cover [behaviour] ✅
-        - [ ] Gap found: case for [behaviour] missing — add to `[test file]`
+        - [ ] Positive (`[test file]`): call with [valid input] → [expected output / field value]
+        - [ ] Negative (`[test file]`): call with [bad input] → ZodError / error message contains "[text]"
+        - [ ] Existing coverage check: `[test file]` cases [N to M] already cover [behaviour] ✅
+        - [ ] Gap found: case for [behaviour] missing, add to `[test file]`
         - [ ] `npm run build && npm run test:unit-js` passes
     validations:
       required: false
@@ -218,10 +219,10 @@ body:
         For revisiting existing code: confirm existing E2E tests cover the correct behaviour
         and add any missing coverage.
       placeholder: |
-        - [ ] Positive: `[suite file]` — create [entity] with valid input → appears in [list call]
-        - [ ] Negative: `[suite file]` — call with [bad ID / missing field] → response contains error
+        - [ ] Positive (`[suite file]`): create [entity] with valid input → appears in [list call]
+        - [ ] Negative (`[suite file]`): call with [bad ID / missing field] → response contains error
         - [ ] Existing coverage check: `[suite file]` test "[name]" covers [behaviour] ✅
-        - [ ] Gap found: E2E for [behaviour] missing — add to `[suite file]`
+        - [ ] Gap found: E2E for [behaviour] missing, add to `[suite file]`
     validations:
       required: false
 

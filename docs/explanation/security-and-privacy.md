@@ -850,6 +850,14 @@ git commit -m "Added config"
 
 ### Input Validation
 
+#### Request bodies (#168, #633)
+
+A JSON request body larger than `MCP_HTTP_BODY_LIMIT` (default `512kb`) is refused with
+HTTP 413 rather than buffered. A body sent with a `Content-Encoding` other than `identity`
+(gzip, deflate, br) is refused with HTTP 415 before any decompression starts. No MCP client
+compresses request bodies, and refusing them removes the decompression path that
+GHSA-27r3-jxmh-p828 (body-parser below 2.4.0) can crash on. Responses are unaffected.
+
 #### All User Inputs Must Be Validated
 
 **Using Zod schemas**:

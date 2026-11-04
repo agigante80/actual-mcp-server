@@ -1821,6 +1821,17 @@ function queueWriteOperation<T>(
   });
 }
 
+/**
+ * #632: resolve once no write is queued or draining. The shutdown path awaits this before it
+ * closes sessions, so a write still inside its WRITE_SESSION_DELAY_MS window is sent rather than
+ * cut by the exit. Unbounded on purpose: the caller's shutdown deadline is the bound.
+ */
+export async function awaitWritesIdle(pollMs = 25): Promise<void> {
+  while (writeQueue.length > 0 || isProcessingWrites) {
+    await new Promise((r) => setTimeout(r, pollMs));
+  }
+}
+
 /** #278 test hook: batches dispatched by processWriteQueue. Pins the coalescing property. */
 export function _getWriteQueueBatchCountForTests(): number {
   return writeQueueBatchCount;

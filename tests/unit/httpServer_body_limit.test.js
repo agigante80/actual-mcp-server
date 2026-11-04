@@ -58,6 +58,7 @@ const configSrc = readFileSync(resolve(here, '../../src/config.ts'), 'utf8');
 console.log('\n[httpServer-body-limit] wiring');
 check('httpServer passes a limit to express.json', /express\.json\(\{\s*limit:/.test(httpServerSrc));
 check('the limit is config.MCP_HTTP_BODY_LIMIT (not a bare literal)', /express\.json\(\{\s*limit:\s*config\.MCP_HTTP_BODY_LIMIT/.test(httpServerSrc));
+check('#633: express.json refuses compressed bodies (inflate: false, after limit)', /express\.json\(\{\s*limit:\s*config\.MCP_HTTP_BODY_LIMIT,\s*inflate:\s*false\s*\}\)/.test(httpServerSrc));
 check('config defines MCP_HTTP_BODY_LIMIT with a default', /MCP_HTTP_BODY_LIMIT:\s*z\.string\(\)\.default\(/.test(configSrc));
 check('#466: the field is validated by a .refine( chained after the default', /MCP_HTTP_BODY_LIMIT:\s*z\.string\(\)\.default\([^)]*\)\.refine\(/.test(configSrc));
 

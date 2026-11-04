@@ -55,10 +55,10 @@ body:
       label: Priority
       description: "On triage a maintainer also applies the matching P0 to P3 label (and `icebox` if not committed), so priority is filterable: gh issue list --label P1"
       options:
-        - P0 — Critical (active exploit, server won't start)
-        - P1 — High (security risk, blocking CI)
-        - P2 — Medium (dependency health, address within 2 sprints)
-        - P3 — Low (minor drift, nice to fix)
+        - P0: Critical (active exploit, server won't start)
+        - P1: High (security risk, blocking CI)
+        - P2: Medium (dependency health, address within 2 sprints)
+        - P3: Low (minor drift, nice to fix)
     validations:
       required: true
 
@@ -66,7 +66,7 @@ body:
     id: details
     attributes:
       label: Details
-      description: Full findings — CVE ID, versions, dependency path, alternatives considered, effort estimate.
+      description: Full findings (CVE ID, versions, dependency path, alternatives considered, effort estimate).
     validations:
       required: true
 
@@ -75,7 +75,7 @@ body:
     attributes:
       label: Files to create / modify
       placeholder: |
-        - `package.json` — upgrade `express` to v5.x
+        - `package.json`: upgrade `express` to v5.x
         - `.github/workflows/ci-cd.yml`
     validations:
       required: false
@@ -121,14 +121,15 @@ body:
       description: |
         Required when the change can be verified programmatically (e.g. a dependency
         version change, a CI step, a config value). One positive and one negative per
-        condition. For pure documentation-only changes, write "N/A — docs only".
+        condition. For pure documentation-only changes, write "N/A: docs only".
+        Label each with **Positive:** or **Negative:**, use one When per scenario, and name the exact error a negative expects.
       placeholder: |
-        ✅ Positive
+        **Positive:** [name of the case]
         - Given: server starts with updated dependency
         - When: `npm run build && npm audit --audit-level=moderate` run
         - Then: zero vulnerabilities reported, build succeeds
 
-        ❌ Negative
+        **Negative:** [name of the case]
         - Given: old vulnerable version is pinned
         - When: `npm audit --audit-level=moderate` run
         - Then: audit reports the CVE

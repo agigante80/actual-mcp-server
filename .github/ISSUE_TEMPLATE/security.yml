@@ -56,7 +56,7 @@ body:
       label: Affected endpoints / files
       description: Which routes, tools, or files are vulnerable?
       placeholder: |
-        - `src/server/httpServer.ts` — Bearer token comparison
+        - `src/server/httpServer.ts`: Bearer token comparison
         - `src/tools/transactions_create.ts`
     validations:
       required: true
@@ -122,17 +122,18 @@ body:
     attributes:
       label: Test scenarios (Given / When / Then)
       description: |
-        One positive ✅ (fix works) and one negative ❌ (attack/misuse is blocked) scenario
+        One positive (fix works) and one negative (attack or misuse is blocked) scenario
         per vulnerability being addressed.
+        Label each with **Positive:** or **Negative:**, use one When per scenario, and name the exact error a negative expects.
       placeholder: |
         **Condition: [vulnerability name]**
 
-        ✅ Positive (legitimate use works)
+        **Positive:** [name of the case] (legitimate use works)
         - Given: [valid, authorised request]
         - When: [action is performed]
         - Then: [expected correct result, no data leak]
 
-        ❌ Negative (attack is blocked)
+        **Negative:** [name of the case] (attack is blocked)
         - Given: [malicious or unauthorised input]
         - When: [action is performed]
         - Then: [request rejected / error returned / no sensitive data exposed]
@@ -145,8 +146,8 @@ body:
       label: Unit tests
       description: Specific unit test cases with inputs and expected outputs.
       placeholder: |
-        - [ ] Positive: [test file] — authorised call with [input] → [expected safe result]
-        - [ ] Negative: [test file] — unauthorised/malicious [input] → error / rejection
+        - [ ] Positive ([test file]): authorised call with [input] → [expected safe result]
+        - [ ] Negative ([test file]): unauthorised/malicious [input] → error / rejection
         - [ ] `npm run build && npm run test:unit-js` passes
     validations:
       required: true
@@ -157,8 +158,8 @@ body:
       label: E2E tests
       description: End-to-end verification that the fix holds against a running server.
       placeholder: |
-        - [ ] Positive: [suite file] — legitimate request succeeds
-        - [ ] Negative: [suite file] — attack vector rejected with correct error
+        - [ ] Positive ([suite file]): legitimate request succeeds
+        - [ ] Negative ([suite file]): attack vector rejected with correct error
     validations:
       required: true
 

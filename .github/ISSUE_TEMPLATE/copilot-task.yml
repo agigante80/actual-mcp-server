@@ -42,12 +42,12 @@ body:
       label: Files to Add / Modify
       description: List specific files Copilot should touch (helps it scope the work correctly).
       placeholder: |
-        - **Create** `src/tools/foo_bar.ts` — tool definition
-        - **Edit** `src/tools/index.ts` — add export
-        - **Edit** `src/actualToolsManager.ts` — add to IMPLEMENTED_TOOLS
-        - **Edit** `src/lib/actual-adapter.ts` — add adapter method if needed
-        - **Edit** `tests/unit/generated_tools.smoke.test.js` — update EXPECTED_TOOL_COUNT
-        - **Edit** `tests/unit/schema_validation.test.js` — add negative paths
+        - **Create** `src/tools/foo_bar.ts`: tool definition
+        - **Edit** `src/tools/index.ts`: add export
+        - **Edit** `src/actualToolsManager.ts`: add to IMPLEMENTED_TOOLS
+        - **Edit** `src/lib/actual-adapter.ts`: add adapter method if needed
+        - **Edit** `tests/unit/generated_tools.smoke.test.js`: update EXPECTED_TOOL_COUNT
+        - **Edit** `tests/unit/schema_validation.test.js`: add negative paths
     validations:
       required: true
 
@@ -65,17 +65,18 @@ body:
     attributes:
       label: Test scenarios (Given / When / Then)
       description: |
-        One positive ✅ and one negative ❌ scenario per acceptance criterion.
+        One positive and one negative scenario per acceptance criterion.
         Copilot uses these to write and verify tests.
+        Label each with **Positive:** or **Negative:**, use one When per scenario, and name the exact error a negative expects.
       placeholder: |
         **Condition: [criterion name]**
 
-        ✅ Positive
+        **Positive:** [name of the case]
         - Given: [valid state]
         - When: [tool is called with valid input]
         - Then: [expected correct output]
 
-        ❌ Negative
+        **Negative:** [name of the case]
         - Given: [invalid or missing input]
         - When: [tool is called]
         - Then: [ZodError / error message containing "..."]
@@ -88,8 +89,8 @@ body:
       label: Unit tests
       description: Specific cases Copilot must implement in `tests/unit/`.
       placeholder: |
-        - [ ] Positive: `[test file]` — [valid input] → [expected output]
-        - [ ] Negative: `[test file]` — [bad input] → error contains "[text]"
+        - [ ] Positive (`[test file]`): [valid input] → [expected output]
+        - [ ] Negative (`[test file]`): [bad input] → error contains "[text]"
         - [ ] `npm run test:unit-js` passes
     validations:
       required: true
@@ -100,8 +101,8 @@ body:
       label: E2E tests
       description: Specific cases Copilot must implement in `tests/e2e/docker-all-tools.e2e.spec.ts`.
       placeholder: |
-        - [ ] Positive: `[suite file]` — [setup + valid call] → [assertion]
-        - [ ] Negative: `[suite file]` — [bad state + call] → error response
+        - [ ] Positive (`[suite file]`): [setup + valid call] → [assertion]
+        - [ ] Negative (`[suite file]`): [bad state + call] → error response
     validations:
       required: false
 
@@ -112,7 +113,7 @@ body:
       description: How complex is this task?
       options:
         - Small (≤ 2 files, straightforward logic)
-        - Medium (3–6 files, some domain knowledge needed)
-        - Large (7+ files — consider splitting into sub-issues)
+        - Medium (3 to 6 files, some domain knowledge needed)
+        - Large (7+ files, consider splitting into sub-issues)
     validations:
       required: true
