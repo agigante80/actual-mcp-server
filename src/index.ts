@@ -219,7 +219,7 @@ export {};
   const [
     { startHttpServer },
     { startStdioServer },
-    { enforceHttpAuthPosture, findWeakTokenVars },
+    { enforceHttpAuthPosture, findWeakTokenVars, describeAuthMode },
     loggerModule,
     utilsModule,
     actualToolsManagerModule,
@@ -431,7 +431,16 @@ export {};
       logger.info('---------');
       logger.info('🟡 MCP SERVER INFO');
       logger.info(`• Server Description:   ${SERVER_DESCRIPTION}`);
-      logger.info(`• OAuth Required:       false`);
+      // #626: the real mode, computed with the same blank-means-off rules as the
+      // posture check. MCP_SSE_AUTHORIZATION stays untrimmed: a whitespace-only
+      // value is still a live credential there.
+      const { staticTokensConfigured } = await import('./auth/static-tokens.js');
+      const authMode = describeAuthMode({
+        oidcEnabled: process.env.AUTH_PROVIDER === 'oidc',
+        hasStaticTokens: staticTokensConfigured(process.env.MCP_STATIC_TOKENS),
+        hasSseAuthorization: !!process.env.MCP_SSE_AUTHORIZATION,
+      });
+      logger.info(`• Auth mode:            ${authMode}`);
       logger.info(`• Capabilities:         ${Object.keys(capabilities).join(', ')}`);
       logger.info(`• Tools:                ${implementedTools.join(', ') || 'none'}`);
       logger.info(`• Server Instructions:  ${serverInstructionsText}`);

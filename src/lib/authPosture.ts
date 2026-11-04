@@ -265,3 +265,25 @@ export function enforceHttpAuthPosture(
 
   return decision;
 }
+
+/** Inputs for describeAuthMode, each computed with the server's own blank-means-off rule. */
+export interface AuthModeInput {
+  oidcEnabled: boolean;
+  hasStaticTokens: boolean;
+  hasSseAuthorization: boolean;
+}
+
+/**
+ * One word naming the HTTP auth mode for the startup banner (#626). Precedence
+ * mirrors the listen callback's posture lines in httpServer.ts: OIDC, then the
+ * static token map, then the single shared bearer token, then none. With both
+ * token variables set this reports `static`, as the ticket specifies; the
+ * listen callback still names the extra unrestricted token, and #623 replaces
+ * the banner. Never prints an issuer, token or principal.
+ */
+export function describeAuthMode(input: AuthModeInput): 'oidc' | 'static' | 'bearer' | 'none' {
+  if (input.oidcEnabled) return 'oidc';
+  if (input.hasStaticTokens) return 'static';
+  if (input.hasSseAuthorization) return 'bearer';
+  return 'none';
+}
