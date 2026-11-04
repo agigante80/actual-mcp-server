@@ -5,6 +5,7 @@ import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprot
 import { randomUUID } from 'node:crypto';
 import logger from '../logger.js';
 import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
+import { SERVER_NAME } from '../lib/mcp-version.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { requestContext } from '../lib/requestContext.js';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
@@ -93,7 +94,8 @@ export async function startStdioServer(
   mcp: ActualMCPConnection,
   capabilities: Record<string, object>,
   implementedTools: string[],
-  serverDescription: string,
+  // #624: no longer the serverInfo name; kept so the positional signature matches HTTP.
+  _serverDescription: string,
   instructions: string,
   toolSchemas: Record<string, unknown>,
   version: string,
@@ -123,7 +125,7 @@ export async function startStdioServer(
   logger.debug(`[STDIO] session id ${stdioSessionId}`);
 
   const server = new Server(
-    { name: serverDescription || 'actual-mcp-server', version: version || '0.1.0' },
+    { name: SERVER_NAME, version: version || '0.1.0' },
     { capabilities, instructions }
   );
   attachTransportErrorLogger(server, 'stdio');

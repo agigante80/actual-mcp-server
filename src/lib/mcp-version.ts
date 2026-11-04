@@ -5,6 +5,13 @@ import { fileURLToPath } from 'node:url';
 import { findRootPackageJson } from './node-version-guard.js';
 
 /**
+ * #624: the MCP initialize `serverInfo.name` on both transports. It equals the package.json
+ * name (tests/unit/server_identity.test.js pins that), so a client shows the server under the
+ * name it was installed as, never a description sentence.
+ */
+export const SERVER_NAME = 'actual-mcp-server';
+
+/**
  * #541: the single source of this server's own version, shared by the MCP initialize
  * `serverInfo.version` (src/index.ts) and the `actual_server_info` tool.
  *

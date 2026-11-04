@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import logger, { resolveRequestId } from '../logger.js';
 import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
+import { SERVER_NAME } from '../lib/mcp-version.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
@@ -506,7 +507,7 @@ export async function startHttpServer(
 
     const server = new Server(
       {
-        name: serverDescription || "actual-mcp-server",
+        name: SERVER_NAME,
         version: version || "0.1.0",
       },
       serverOptions

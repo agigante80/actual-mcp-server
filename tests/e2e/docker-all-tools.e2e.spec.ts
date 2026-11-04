@@ -178,11 +178,13 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
 
   test('initialize - instructions are the full-registry text and name only published tools', async ({ request, stdioSession }) => {
     let instructions: unknown;
+    let serverName: unknown;
     let initResult: Record<string, unknown> = {};
     let toolNames: string[];
     if (isStdio) {
       const session = stdioSession as NonNullable<typeof stdioSession>;
       instructions = session.instructions();
+      serverName = session.serverInfo()?.name;
       toolNames = await session.listToolNames();
     } else {
       // A session of its own, ended with DELETE, so the shared one is untouched.
@@ -199,6 +201,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
       try {
         initResult = (await init.json()).result ?? {};
         instructions = initResult.instructions;
+        serverName = (initResult.serverInfo as { name?: unknown } | undefined)?.name;
         const list = await request.post(url, {
           data: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
           headers: { ...headers, 'mcp-session-id': sid },
@@ -209,6 +212,9 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
       }
     }
     expect(instructions).toBe(FULL_REGISTRY_INSTRUCTIONS);
+    // #624: serverInfo.name is the package name on both legs, never the old description sentence.
+    expect(serverName).toBe('actual-mcp-server');
+    expect(String(serverName)).not.toMatch(/LibreChat/i);
     // HTTP only: the SDK Client parses the initialize result and exposes no raw object, so a
     // stdio check here would test an empty placeholder. Unit check 7 and the source scan in
     // server_instructions.test.js cover the legacy key for the shared Server construction.

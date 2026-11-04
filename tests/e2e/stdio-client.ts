@@ -61,6 +61,8 @@ export type StdioSession = {
   call(tool: string, args?: Record<string, unknown>): Promise<any>;
   /** #560: the `instructions` string the server returned from `initialize`. */
   instructions(): string | undefined;
+  /** #624: the `serverInfo` the server returned from `initialize`. */
+  serverInfo(): { name: string; version: string } | undefined;
   /** #560: the tool names this server publishes, from `tools/list`. */
   listToolNames(): Promise<string[]>;
   close(): Promise<void>;
@@ -147,6 +149,7 @@ export async function openStdioSession(): Promise<StdioSession> {
     raw,
     call: async (tool, args = {}) => extractResult(await raw(tool, args)),
     instructions: () => client.getInstructions(),
+    serverInfo: () => client.getServerVersion(),
     listToolNames: async () => (await client.listTools()).tools.map((t) => t.name),
     close,
   };

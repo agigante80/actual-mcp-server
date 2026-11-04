@@ -202,7 +202,7 @@ export {};
   const useTestActualConnection = args.includes('--test-actual-connection');
   const useTestMcpClient = args.includes('--test-mcp-client');
 
-  const SERVER_DESCRIPTION = 'Bridge MCP server exposing Actual finance API to LibreChat.';
+  const SERVER_DESCRIPTION = 'Actual Budget over the Model Context Protocol';
 
   async function main() {
     // Mutual exclusion — stdio and http are incompatible transports

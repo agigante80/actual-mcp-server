@@ -74,6 +74,8 @@ try {
   // #560: instructions is the spec's plain string (the one passed in), never the old object.
   check('GET /mcp-info instructions is the passed string', body && body.instructions === 'instr');
   check('GET /mcp-info has no serverInstructions key', body && !('serverInstructions' in body));
+  // #624: the description still feeds /mcp-info, even though it no longer names the server.
+  check('GET /mcp-info description is the passed string', body && body.description === 'desc');
 
   // The /http variant mirrors it.
   const infoHttp = await fetch(`${base}/mcp-info/http`);
