@@ -4796,6 +4796,9 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     );
   };
   if (!found) throw notFound();
+  // #628: tool results show the server origin only, never a userinfo credential, path or query.
+  // `found` keeps the raw URL, which the login below still needs.
+  const shownServerUrl = logSafeOrigin(found.serverUrl);
 
   // ACL enforcement: the target budget must be in this session's allowedBudgets.
   // OIDC mode: explicit ACL required. #572: any mode whose request carries a
@@ -4861,7 +4864,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     logger.info(
       `[ADAPTER] switchBudget no-op for session ${sessionId}: already on "${found.name}" (${found.syncId})`,
     );
-    return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+    return { name: found.name, syncId: found.syncId, serverUrl: shownServerUrl };
   }
 
   if (sameAuth) {
@@ -4888,7 +4891,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     logger.info(
       `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
     );
-    return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+    return { name: found.name, syncId: found.syncId, serverUrl: shownServerUrl };
   }
 
   // #581: hold this session's slot across the window between releasing the old entry and
@@ -4964,7 +4967,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   logger.info(
     `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
   );
-  return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
+  return { name: found.name, syncId: found.syncId, serverUrl: shownServerUrl };
 }
 
 /**
@@ -4987,7 +4990,8 @@ export function getBudgetRegistry(): Array<{ name: string; syncId: string; serve
   return [...budgetRegistry.values()].filter(b => !allowed || allowed.includes(b.syncId)).map(b => ({
     name: b.name,
     syncId: b.syncId,
-    serverUrl: b.serverUrl,
+    // #628: origin only; the registry entry itself keeps the raw URL for the login.
+    serverUrl: logSafeOrigin(b.serverUrl),
     hasEncryption: !!b.encryptionPassword,
   }));
 }

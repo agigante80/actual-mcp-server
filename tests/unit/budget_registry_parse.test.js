@@ -260,17 +260,30 @@ check('#621: every serverUrl interpolation goes through logSafeOrigin, multi-lin
   assert.ok(total >= 5, `expected at least 5 serverUrl interpolations, found ${total}`);
 });
 
+// #628 adds two display sites outside an interpolation: the tool-result value in switchBudget
+// (`const shownServerUrl = ...`) and the `serverUrl:` property in getBudgetRegistry. Both are
+// allowed by their exact text; anything else (an origin fed to a login) still fails here.
+const DISPLAY_SITES = ['const shownServerUrl = ', 'serverUrl: '];
 check('#621: logSafeOrigin only ever appears inside an interpolation in the adapter', () => {
   const text = SOURCES[0][1];
   let count = 0;
+  let display = 0;
   for (const m of text.matchAll(/logSafeOrigin\(/g)) {
     if (text.slice(Math.max(0, m.index - 80), m.index).includes('import {')) continue;
+    if (DISPLAY_SITES.some((d) => text.slice(m.index - d.length, m.index) === d)) { display++; continue; }
     count++;
     const open = text.lastIndexOf('${', m.index);
     const close = text.lastIndexOf('}', m.index);
     assert.ok(open !== -1 && open > close, `logSafeOrigin( at offset ${m.index} is not inside \${...}`);
   }
   assert.ok(count >= 4, `expected at least 4 adapter call sites, found ${count}`);
+  assert.strictEqual(display, 2, `expected exactly 2 #628 display sites, found ${display}`);
+});
+
+check('#628: the switch display value is only ever returned, never passed on', () => {
+  const uses = [...SOURCES[0][1].matchAll(/shownServerUrl/g)].map((m) => SOURCES[0][1].slice(m.index - 11, m.index));
+  assert.strictEqual(uses.length, 4, `expected 1 declaration and 3 returns, found ${uses.length}`);
+  assert.strictEqual(uses.filter((u) => u === 'serverUrl: ').length, 3, uses.join(' | '));
 });
 
 console.log(`\n[budget-registry-parse] Results: ${passed} passed, ${failed} failed`);

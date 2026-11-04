@@ -38,7 +38,8 @@ export interface BudgetConfig {
  * #621: a server URL as it may appear in a log line: scheme, host and port only. URL userinfo
  * (a reverse-proxy credential), path and query are dropped. Never throws; an unparseable URL
  * or one with a `null` origin (a non-special scheme such as a schemeless `user:pass@host`
- * typo) becomes `<invalid url>`. Log text only: the login itself must keep the full URL.
+ * typo) becomes `<invalid url>`. Display text only, for log lines and tool results (#628):
+ * its output is never used to connect, and the login itself must keep the full URL.
  */
 export function logSafeOrigin(url: string): string {
   try {

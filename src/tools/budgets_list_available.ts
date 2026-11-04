@@ -8,7 +8,7 @@ const tool: ToolDefinition = {
   name: 'actual_budgets_list_available',
   description:
     'List the pre-configured budgets this session may switch to (a session limited to some budgets sees only those). ' +
-    'Each entry shows the budget name, sync ID, server URL, and whether it uses E2E encryption. ' +
+    'Each entry shows the budget name, sync ID, server origin, and whether it uses E2E encryption. ' +
     'Budgets are configured via BUDGET_n_NAME / BUDGET_n_SYNC_ID / BUDGET_n_SERVER_URL env vars. ' +
     'Pass the budget name to actual_budgets_switch to change the active budget.',
   inputSchema: InputSchema,

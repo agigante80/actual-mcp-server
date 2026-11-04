@@ -583,6 +583,7 @@ chown $USER:$USER ./actual-data
 - ✅ Tool arguments and results are never written to the logs (#556), at any level
 - ✅ Tool error messages are never written to the logs (#559); the failure record carries the error class
 - ✅ The startup budget registry line carries counts and schemes only (#621); the adapter's login, operation and budget-switch lines print a server URL as its origin (no userinfo, path or query) but still name the budget involved. Login error messages still keep the URL path and query (userinfo is stripped). Logs written by earlier versions keep the old line until rotated
+- ✅ `actual_budgets_list_available` and `actual_budgets_switch` show a budget's server as its origin only (#628), so a reverse-proxy credential written into `BUDGET_n_SERVER_URL` or `ACTUAL_SERVER_URL` never reaches the client or its model provider. A server under a subpath shows as its host
 
 **Tool content is never logged (#556).** Tool arguments and results are the user's budget data:
 amounts, payee names, notes, balances. The server logs a content-free record per call instead,
