@@ -1982,6 +1982,18 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(row?.amount).toBe(-5000);
   });
 
+  test('actual_schedules_update - should refuse completed before any write (#627)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule();
+
+    await expect(
+      mcp.call('actual_schedules_update', { id: schedule.id, completed: true }),
+    ).rejects.toThrow(/unexpected field\(s\): completed/);
+
+    const row = await readSchedule(mcp, schedule.id);
+    expect(row).toBeDefined();
+    expect(row?.completed ?? false).toBe(false);
+  });
+
   // #478: monthly patterns. Upstream computes next_date from max(today, start), so every date
   // here is relative to the month after the current one rather than a literal that goes stale.
   const nextMonth = (() => {

@@ -261,6 +261,30 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(schedules_update_tool,
     { id: '00000000-0000-0000-0000-000000000001', name: 'Rent', resetNextDate: true },
     'valid update with name + resetNextDate')) fail();
+  // #627: upstream refuses completed and next_date as system-managed, so the strict schema
+  // refuses them (and any unknown key) before the write queue, naming the reason.
+  const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
+  for (const key of ['completed', 'next_date']) {
+    const r = schedules_update_tool.inputSchema.safeParse({ id: '00000000-0000-0000-0000-000000000001', [key]: key === 'completed' ? true : '2026-01-01' });
+    const msg = r.success ? '' : formatZodError(r.error, schedules_update_tool.inputSchema);
+    if (r.success || !msg.includes(`unexpected field(s): ${key}`)) {
+      console.error(`  ✗ ${key} on update must be refused naming the reason, got: ${r.success ? 'success' : msg}`);
+      fail();
+    } else {
+      console.log(`  ✓ ${key} on update refused: ${msg}`);
+    }
+  }
+  if (!expectParseError(schedules_update_tool,
+    { id: '00000000-0000-0000-0000-000000000001', nmae: 'typo' },
+    'an unknown key is refused, not silently stripped (#627)')) fail();
+  if (!/managed by Actual/.test(schedules_update_tool.description)) {
+    console.error('  ✗ the actual_schedules_update description must say completion is managed by Actual (#627)');
+    fail();
+  }
+  if ('completed' in schedules_update_tool.inputSchema.shape) {
+    console.error('  ✗ completed must not be advertised on actual_schedules_update (#627)');
+    fail();
+  }
   // #225: date now accepts a one-off date string OR a typed RecurConfig (shared schema).
   if (!expectParseOk(schedules_update_tool,
     { id: '00000000-0000-0000-0000-000000000001', date: '2026-06-15', resetNextDate: true },

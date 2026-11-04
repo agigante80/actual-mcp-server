@@ -5,7 +5,7 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 import { RecurConfigSchema } from '../lib/schemas/recur.js';
 import { ScheduleAmountSchema, amountOpMismatch } from '../lib/schemas/schedule-amount.js';
 
-const InputSchema = z.object({
+const InputSchema = z.strictObject({
   id: CommonSchemas.scheduleId.describe('Schedule UUID'),
   name: z.string().optional()
     .describe('New display name'),
@@ -26,10 +26,12 @@ const InputSchema = z.object({
     .describe('New YYYY-MM-DD date or RecurConfig object'),
   posts_transaction: z.boolean().optional()
     .describe('Auto-post a transaction on each occurrence'),
-  completed: z.boolean().optional()
-    .describe('true marks it completed, false reactivates it'),
   resetNextDate: z.boolean().optional().default(false)
     .describe('Recalculate next_date'),
+  // #627: strict, because upstream updateSchedule refuses `completed` and `next_date` as
+  // system-managed. A stripped key would return success while changing nothing; an advertised
+  // one failed upstream after the write queue. Either is refused here, before any write, as
+  // "unexpected field(s): completed" (formatZodError sanitises the key); the description says why.
 }).superRefine((input, ctx) => {
   // #527: with both fields supplied the input alone decides. With only one, the answer
   // depends on the stored schedule, so adapter.updateSchedule checks it inside the write queue.
@@ -40,7 +42,7 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_schedules_update',
-  description: `Update a schedule; supply only the fields to change. A new date replaces the stored recurrence, patterns included. Set resetNextDate: true when changing the date or recurrence.`,
+  description: `Update a schedule; supply only the fields to change. A new date replaces the stored recurrence, patterns included. Set resetNextDate: true when changing the date or recurrence. Completion and next_date are managed by Actual and cannot be set.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
