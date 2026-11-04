@@ -34,6 +34,8 @@ import { resolveStaticTokens, matchBearerToken, LEGACY_STATIC_PRINCIPAL } from '
 import { runAclPreflight } from '../auth/budget-acl-dynamic.js';
 import { hostHeaderValidation } from '@modelcontextprotocol/sdk/server/middleware/hostHeaderValidation.js';
 import { resolveAllowedHosts } from '../lib/authPosture.js';
+import { logSafeOrigin } from '../lib/budget-registry.js';
+import type { HttpListenerFacts } from '../lib/startupRecord.js';
 import * as https from 'node:https';
 import { finished } from 'node:stream';
 import * as fs from 'node:fs';
@@ -87,6 +89,9 @@ function capPrincipal(req: Request): string | undefined {
   return (req as Request & { staticPrincipal?: string }).staticPrincipal;
 }
 
+/** Idle keep-alive for the HTTP listener, in milliseconds. */
+export const HTTP_KEEP_ALIVE_TIMEOUT_MS = 65000;
+
 export async function startHttpServer(
   mcp: ActualMCPConnection,
   port: number,
@@ -98,7 +103,8 @@ export async function startHttpServer(
   toolSchemas: Record<string, unknown>,              // was passed by index.ts
   version: string,                               // server version from package.json
   bindHost = 'localhost',                        // #239: interface to bind; forwarded to listen()
-  advertisedUrl?: string
+  advertisedUrl?: string,
+  onListening?: (facts: HttpListenerFacts) => void, // #623: index.ts logs sys_startup from here
 ) {
   // #572: resolve MCP_STATIC_TOKENS (token variables, budget names) before anything
   // binds, so a bad entry refuses startup like an unreadable TLS key. The registry is
@@ -331,7 +337,7 @@ export async function startHttpServer(
         }),
         budgetAclMiddleware as express.RequestHandler,
       );
-      logger.info(`[OIDC] JWT authentication enabled. Issuer: ${config.OIDC_ISSUER}`);
+      logger.info(`[OIDC] JWT authentication enabled. Issuer: ${logSafeOrigin(config.OIDC_ISSUER ?? '')}`);
       // #462 audit line: which header carries the JWT and where the keys come from.
       logger.info('[OIDC] token source and JWKS mode', {
         tokenSource: config.OIDC_TOKEN_SOURCE,
@@ -1159,7 +1165,13 @@ export async function startHttpServer(
     }
   }
 
-  const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, bindHost, () => {
+  const listener = (tlsOptions ? https.createServer(tlsOptions, app) : app).listen(port, bindHost, (err?: Error) => {
+    // #623: Express 5's app.listen also registers this callback as the server's 'error'
+    // handler, so a taken port (EADDRINUSE) lands HERE with the error. Without this rethrow it
+    // logged "listening", emitted sys_startup, and the process drained out with exit 0. The
+    // rethrow reaches the uncaughtException handler (sys_crash, exit 1), the same path the
+    // https.createServer branch takes, which has no error listener at all.
+    if (err) throw err;
     const advertised = advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`;
     // #239: when bound to a specific (non all-interfaces) host the server is NOT on
     // loopback, so point the health hint at the actual bind host instead of localhost.
@@ -1168,7 +1180,7 @@ export async function startHttpServer(
     // #625: one structured record through the module logger instead of three console.info lines.
     httpLog.info(`MCP Streamable HTTP Server listening on ${port}; MCP endpoint: ${advertised} (health: ${health})`, { port, endpoint: advertised, health });
     if (config.AUTH_PROVIDER === 'oidc') {
-      logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required; issuer: ${config.OIDC_ISSUER})`);
+      logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required; issuer: ${logSafeOrigin(config.OIDC_ISSUER ?? '')})`);
       // #345: name the userNames the ACL can match, once, at boot. Deliberately
       // fire-and-forget INSIDE the listen callback: the server is already
       // accepting connections, so a slow or unreachable Actual delays nothing,
@@ -1187,12 +1199,22 @@ export async function startHttpServer(
     } else {
       logger.warn(`⚠️  HTTP authentication disabled (no MCP_SSE_AUTHORIZATION, MCP_STATIC_TOKENS or OIDC configured)`);
     }
+    // #623: keepAliveTimeout is assigned below, synchronously after listen() returns, so it is
+    // already set when this callback fires. A throw from the record must never take down a
+    // server that is already accepting connections.
+    if (onListening) {
+      try {
+        onListening({ port, scheme, keepAliveMs: listener.keepAliveTimeout });
+      } catch (err) {
+        logger.warn('sys_startup record failed', { error: err instanceof Error ? err.name : 'unknown' });
+      }
+    }
   });
 
   // Configure keep-alive to maintain persistent connections
-  listener.keepAliveTimeout = 65000; // 65 seconds (slightly higher than typical client timeout)
-  listener.headersTimeout = 66000;   // 66 seconds (must be higher than keepAliveTimeout)
-  logger.info(`⏱️  HTTP keep-alive enabled (timeout: ${listener.keepAliveTimeout}ms)`);
+  // #623: the value is reported in the sys_startup record (limits.keepAliveMs), not its own line.
+  listener.keepAliveTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS; // slightly higher than typical client timeout
+  listener.headersTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS + 1000; // must be higher than keepAliveTimeout
 
   // Cleanup on server shutdown
   const cleanup = async () => {

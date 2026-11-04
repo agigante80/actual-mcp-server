@@ -15,6 +15,7 @@ import { z } from 'zod';
 import { buildServerInstructions } from './lib/serverInstructions.js';
 import { format } from 'node:util';
 import { writeSync } from 'node:fs';
+import type { StartupTransport } from './lib/startupRecord.js';
 
 /*
  * #277 / #541: this module's version comes from `getMcpServerVersion()` (src/lib/mcp-version.ts),
@@ -167,7 +168,7 @@ export {};
   const [
     { startHttpServer },
     { startStdioServer },
-    { enforceHttpAuthPosture, findWeakTokenVars, describeAuthMode },
+    { enforceHttpAuthPosture, findWeakTokenVars },
     loggerModule,
     utilsModule,
     actualToolsManagerModule,
@@ -312,6 +313,8 @@ export {};
     // the configured posture is safe. On a non-loopback bind with no auth and no
     // explicit opt-out this refuses startup (exit 1) rather than silently serving
     // financial data open on the LAN. stdio mode never reaches this check.
+    // #623: kept for the sys_startup record; 'n/a' on stdio, which has no posture.
+    let posture: 'serve' | 'serve-open-warn' | 'n/a' = 'n/a';
     if (useHttp || useTestMcpClient) {
       const oidcEnabled = process.env.AUTH_PROVIDER === 'oidc';
       const decision = enforceHttpAuthPosture({
@@ -328,6 +331,7 @@ export {};
       // explicit return makes the open-start path structurally unreachable even
       // if process.exit were ever non-terminal, so we never bind on a refuse.
       if (decision === 'refuse') return;
+      posture = decision;
     }
 
     // If requested, run the MCP client-side tests now that all variables are ready
@@ -377,30 +381,54 @@ export {};
       }
     }
 
-    // Startup banner — skip in stdio mode (stdout writes corrupt JSON-RPC framing)
-    if (!useStdio) {
-      logger.info('---------');
-      logger.info('🟡 MCP SERVER INFO');
-      logger.info(`• Server Description:   ${SERVER_DESCRIPTION}`);
-      // #626: the real mode, computed with the same blank-means-off rules as the
-      // posture check. MCP_SSE_AUTHORIZATION stays untrimmed: a whitespace-only
-      // value is still a live credential there.
-      const { staticTokensConfigured } = await import('./auth/static-tokens.js');
-      const authMode = describeAuthMode({
-        oidcEnabled: process.env.AUTH_PROVIDER === 'oidc',
-        hasStaticTokens: staticTokensConfigured(process.env.MCP_STATIC_TOKENS),
-        hasSseAuthorization: !!process.env.MCP_SSE_AUTHORIZATION,
-      });
-      logger.info(`• Auth mode:            ${authMode}`);
-      logger.info(`• Capabilities:         ${Object.keys(capabilities).join(', ')}`);
-      logger.info(`• Tools:                ${implementedTools.join(', ') || 'none'}`);
-      logger.info(`• Server Instructions:  ${serverInstructionsText}`);
-      logger.info(`• MCP endpoint (advertised): ${advertisedUrl}`);
-      logger.info('---------');
-    }
+    // #623: the one structured startup record, logged only once the transport is really up
+    // (never on a posture refusal, a port clash or --test-mcp-client). It replaces the old
+    // banner, which printed every tool name and the instructions text. Failure isolated: a
+    // throw here logs one warn line with the error name and never stops a started server.
+    const emitStartupRecord = async (transport: StartupTransport) => {
+      try {
+        const [{ buildStartupRecord }, { resolveLogConfig }, { default: config }, { connectionPool }, { getBudgetRegistrySummary }, { existsSync }] =
+          await Promise.all([
+            import('./lib/startupRecord.js'),
+            import('./logger.js'),
+            import('./config.js'),
+            import('./lib/ActualConnectionPool.js'),
+            import('./lib/actual-adapter.js'),
+            import('node:fs'),
+          ]);
+        const policy = actualToolsManager.getToolPolicy();
+        const record = buildStartupRecord({
+          env: process.env,
+          logConfig: resolveLogConfig(process.env),
+          budgets: getBudgetRegistrySummary(),
+          tools: {
+            published: actualToolsManager.getPublishedToolNames().length,
+            registered: actualToolsManager.getRegisteredToolCount(),
+            policy: { toolsets: policy.toolsets, readOnly: policy.readOnly },
+          },
+          posture,
+          actualApiVerbose: config.ACTUAL_API_VERBOSE,
+          // From the pool, not config: an empty config value parses to NaN (#623 gate).
+          limits: {
+            opTimeoutMs: config.ACTUAL_OP_TIMEOUT_MS,
+            maxSessions: connectionPool.getStats().maxConcurrent,
+            idleTimeoutMs: connectionPool.getIdleTimeoutMinutes() * 60000,
+          },
+          runtime: {
+            container: existsSync('/.dockerenv') || !!process.env.container,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            utcOffsetMinutes: -new Date().getTimezoneOffset(),
+          },
+          transport,
+        });
+        logger.info('sys_startup', record);
+      } catch (err) {
+        logger.warn('sys_startup record failed', { error: err instanceof Error ? err.name : 'unknown' });
+      }
+    };
 
     if (useHttp) {
-      logger.info('Mode: HTTP');
+      // The listen callback is synchronous; the record is fire-and-forget from there.
       await startHttpServer(
         mcp,
         PORT,
@@ -414,7 +442,10 @@ export {};
         // bind host (ensure server accepts connections on that interface)
         bindHost,
         // advertised URL shown to clients
-        advertisedUrl
+        advertisedUrl,
+        (listener) => {
+          void emitStartupRecord({ kind: 'http', bindHost, path: HTTP_PATH, advertisedUrl, listener });
+        },
       );
     } else if (useStdio) {
       logger.debug('Mode: stdio');
@@ -427,6 +458,7 @@ export {};
         toolSchemas,
         version,
       );
+      await emitStartupRecord({ kind: 'stdio' });
     } else {
       logger.error('❌ Please specify a transport mode: --http or --stdio');
       process.exit(1);

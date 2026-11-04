@@ -50,14 +50,22 @@ export function logSafeOrigin(url: string): string {
   }
 }
 
+/** #623: what the startup record and the registry line may say about the budgets. */
+export interface BudgetRegistrySummary {
+  count: number;
+  distinctServers: number;
+  /** Sorted, each one of http, https, other or invalid. */
+  schemes: string[];
+}
+
 /**
- * #621: the startup registry line, counts and schemes only, so no budget name, host or
- * credential reaches the log. Servers are counted by the same [serverUrl, password] key
+ * #621 / #623: counts and schemes only, from PARSED URLs, so no budget name, host or credential
+ * can leave through it. Servers are counted by the same [serverUrl, password] key
  * setLoginsSpanServers uses, so the two can never disagree. Never throws.
  */
-export function formatBudgetRegistrySummary(registry: Map<string, BudgetConfig>): string {
+export function summarizeBudgetRegistry(registry: Map<string, BudgetConfig>): BudgetRegistrySummary {
   const budgets = [...registry.values()];
-  const servers = new Set(budgets.map((b) => JSON.stringify([b.serverUrl, b.password || '']))).size;
+  const distinctServers = new Set(budgets.map((b) => JSON.stringify([b.serverUrl, b.password || '']))).size;
   const schemes = new Set<string>();
   for (const b of budgets) {
     let scheme: string;
@@ -69,7 +77,13 @@ export function formatBudgetRegistrySummary(registry: Map<string, BudgetConfig>)
     }
     schemes.add(scheme);
   }
-  return `Budget registry: ${budgets.length} budget(s) across ${servers} server(s) (${[...schemes].sort().join(', ')})`;
+  return { count: budgets.length, distinctServers, schemes: [...schemes].sort() };
+}
+
+/** #621: the startup registry line, built from summarizeBudgetRegistry. Never throws. */
+export function formatBudgetRegistrySummary(registry: Map<string, BudgetConfig>): string {
+  const { count, distinctServers, schemes } = summarizeBudgetRegistry(registry);
+  return `Budget registry: ${count} budget(s) across ${distinctServers} server(s) (${schemes.join(', ')})`;
 }
 
 /**

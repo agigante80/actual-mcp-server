@@ -212,6 +212,11 @@ class ActualToolsManager {
     return { toolsets: [...toolsets], tools: [...tools], readOnly };
   }
 
+  /** How many tools exist, published or not, for the sys_startup record (#623). */
+  getRegisteredToolCount(): number {
+    return this.tools.size;
+  }
+
   getToolNames(): string[] {
     return Array.from(this.tools.keys());
   }

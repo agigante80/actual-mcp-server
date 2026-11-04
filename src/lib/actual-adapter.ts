@@ -83,7 +83,7 @@ import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
 import { checkServerVersionOnce } from './server-version-guard.js';
 import config from '../config.js';
-import { formatBudgetRegistrySummary, logSafeOrigin, parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
+import { formatBudgetRegistrySummary, logSafeOrigin, parseBudgetRegistry, summarizeBudgetRegistry, type BudgetConfig, type BudgetRegistrySummary } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
@@ -109,6 +109,11 @@ setLoginsSpanServers(
 
 // #621: counts and schemes only; budget names and server hosts stay out of the startup log.
 logger.info(`[ADAPTER] ${formatBudgetRegistrySummary(budgetRegistry)}`);
+
+/** #623: the registry's counts and schemes for the startup record. Reads config only, never Actual. */
+export function getBudgetRegistrySummary(): BudgetRegistrySummary {
+  return summarizeBudgetRegistry(budgetRegistry);
+}
 
 /**
  * Per-session active budget. Map from sessionId to lowercased budget key

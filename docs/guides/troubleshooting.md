@@ -19,6 +19,12 @@ Since #447 the SSE stream (a GET on the MCP path) is checked too, so a client th
 
 It is exposed with no authentication configured and refuses to run open (#242). Configure a token or OIDC, bind to loopback, or opt out deliberately; [authentication.md](authentication.md) explains each option. A message naming `AUTH_BUDGET_ACL` means its JSON is invalid (#551); fix it or unset it.
 
+A port already in use stops the server too: since #623 it exits 1 with a `sys_crash` line on stderr instead of logging "listening" and exiting 0. Free the port or set `MCP_BRIDGE_PORT`.
+
+## What to paste in a bug report
+
+The `sys_startup` line the server logs once it has started: versions, transport, auth mode, tool and budget counts and limits, with no secrets or names ([reference/configuration.md](../reference/configuration.md#startup-record-sys_startup-623) lists every field). Check `advertisedOrigin` before posting: without `MCP_BRIDGE_PUBLIC_HOST` it holds your LAN IP. A server that failed to start logs no record; paste its `sys_crash` or `Refusing to start` line instead.
+
 ## A call stalls for 30 seconds, then `Actual API operation timed out`
 
 Every upstream call is bounded by `ACTUAL_OP_TIMEOUT_MS` (default 30000, `src/lib/opTimeout.ts`) so a stall cannot hold the API lock forever. A timeout means the Actual server did not answer in time: check that it is reachable from the MCP server and not overloaded. If the Actual server is reachable but slow, raise `ACTUAL_OP_TIMEOUT_MS` (see [reference/configuration.md](../reference/configuration.md)); a client may also need its own request timeout raised (for example `timeout` in a [LibreChat](clients/librechat.md) entry).

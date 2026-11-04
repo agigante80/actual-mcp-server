@@ -4,13 +4,7 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import actualToolsManager from '../actualToolsManager.js';
-import { INSTALLED_API_VERSION, resolveInstalledVersion } from '../lib/installed-api-version.js';
-import { getMcpServerVersion } from '../lib/mcp-version.js';
-
-/** Resolved once at module load, not per call: the walk does blocking file reads
- *  and this tool can be called in a loop. The SDK exports no root path, so the
- *  resolvable subpath is passed explicitly (#445). */
-const MCP_SDK_RESOLVED = resolveInstalledVersion('@modelcontextprotocol/sdk', '@modelcontextprotocol/sdk/server/index.js');
+import { collectVersionAndToolFacts } from '../lib/startupRecord.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -46,16 +40,23 @@ Use this to check server status, verify version compatibility, or debug issues.`
   call: async (_args: unknown, _meta?: unknown) => {
     const uptime = process.uptime();
     const uptimeFormatted = `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m ${Math.floor(uptime % 60)}s`;
-    
+    const policy = actualToolsManager.getToolPolicy();
+    // #623: the same resolved versions and counts the sys_startup record logs.
+    const facts = collectVersionAndToolFacts({
+      published: actualToolsManager.getPublishedToolNames().length,
+      registered: actualToolsManager.getToolNames().length,
+      policy,
+    });
+
     return {
       server: {
         name: packageInfo.name,
-        version: getMcpServerVersion(),
+        version: facts.versions.server,
         description: packageInfo.description,
         transport: process.env.MCP_STDIO_MODE === 'true' ? 'stdio' : 'http',
       },
       runtime: {
-        node: process.version,
+        node: facts.versions.node,
         platform: process.platform,
         arch: process.arch,
       },
@@ -72,8 +73,8 @@ Use this to check server status, verify version compatibility, or debug issues.`
       dependencies: {
         mcpSdk: packageInfo.dependencies?.['@modelcontextprotocol/sdk'] ?? 'unknown',
         actualApi: packageInfo.dependencies?.['@actual-app/api'] ?? 'unknown',
-        ...(MCP_SDK_RESOLVED ? { mcpSdkResolved: MCP_SDK_RESOLVED } : {}),
-        ...(INSTALLED_API_VERSION ? { actualApiResolved: INSTALLED_API_VERSION } : {}),
+        ...(facts.versions.mcpSdk ? { mcpSdkResolved: facts.versions.mcpSdk } : {}),
+        ...(facts.versions.actualApi ? { actualApiResolved: facts.versions.actualApi } : {}),
       },
       status: {
         uptime: uptimeFormatted,
@@ -86,9 +87,9 @@ Use this to check server status, verify version compatibility, or debug issues.`
       tools: {
         // total is what this process PUBLISHES; registered is what exists. They differ
         // when MCP_TOOLSETS, MCP_TOOLS or MCP_READ_ONLY narrows the surface (#483).
-        total: actualToolsManager.getPublishedToolNames().length,
-        registered: actualToolsManager.getToolNames().length,
-        policy: actualToolsManager.getToolPolicy(),
+        total: facts.tools.total,
+        registered: facts.tools.registered,
+        policy,
       },
     };
   },

@@ -124,6 +124,25 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `ACTUAL_API_VERBOSE` | bool string | `false` | No | no | schema | config | Upstream `@actual-app/api` verbose logging (#620). Off by default; only `true` enables it. When on, the log holds every principal's reconciled transactions and possibly the runtime session token, so keep it to a short debugging window. Some upstream failure diagnostics (budget download, file list, API call failures) appear only when it is on. Not implied by `--debug` or `MCP_BRIDGE_LOG_LEVEL=debug` |
 | `MCP_BRIDGE_DEBUG_TRANSPORT` | bool string | `false` | No | no | raw | `index.ts`, `utils.ts` | Transport debug output |
 
+### Startup record (`sys_startup`, #623)
+
+Once the server has really started (stdio connected, or the HTTP listener bound), it logs one info record whose message is `sys_startup`. With `LOG_FORMAT=json` the fields are under `context`; with `pretty` they follow as indented JSON. Under stdio it goes to stderr like every log line. It is built from a fixed allowlist (`STARTUP_RECORD_KEYS` in `src/lib/startupRecord.ts`), so no other field can appear:
+
+| Group | Fields |
+|-------|--------|
+| `versions` | `server`, `node`, `actualApi`, `mcpSdk` (resolved installed versions, the same values `actual_server_info` reports) |
+| `runtime` | `platform`, `arch`, `container`, `nodeEnv`, `timezone`, `utcOffsetMinutes` |
+| `logging` | `level`, `format`, `fileSink` |
+| `privacy` | `actualApiVerbose` |
+| `paths` | `logDirCustom`, `dataDirCustom` (booleans: whether the variable is set, never the path) |
+| `transport` | `kind`; on HTTP also `bindScope` (`loopback`, `all-interfaces` or `specific`), `port`, `path`, `scheme`, `advertisedOrigin` |
+| `auth` | `mode` (`oidc`, `static`, `bearer` or `none`), `posture` (`serve`, `serve-open-warn`, or `n/a` on stdio), `sharedBearerAccepted`, `staticPrincipals` (a count); under OIDC also `issuerOrigin` |
+| `tools` | `total` (published), `registered`, `readOnly`, `toolsets` |
+| `budgets` | `count`, `distinctServers`, `schemes` |
+| `limits` | `opTimeoutMs`, `maxSessions`, `idleTimeoutMs`; on HTTP also `keepAliveMs` |
+
+It never holds a token, password, budget or principal name, bind address or machine hostname, URL query, or any URL path other than the configured MCP endpoint (`transport.path`, so a secret path is visible): origins go through the same reduction as the budget registry line. One caveat: `advertisedOrigin` is the address clients are told to use, so when `MCP_BRIDGE_PUBLIC_HOST` is unset it holds the detected LAN IP. A start that fails (refused posture, port in use) logs no record; paste the `sys_crash` or `Refusing to start` line instead. The startup line that names static principals (`static principals: ...`) is separate from this record and still logs their names.
+
 ## Multi-budget (dynamic family)
 
 `BUDGET_n_*` variables (n = 1, 2, 3, ...) are enumerated at runtime by

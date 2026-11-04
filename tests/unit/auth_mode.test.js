@@ -1,6 +1,6 @@
-// #626: the startup banner names the real HTTP auth mode instead of a hardcoded
+// #626: startup names the real HTTP auth mode instead of a hardcoded
 // "OAuth Required: false". Pure table over describeAuthMode plus source guards on
-// src/index.ts. Imports from dist/, so `npm run build` must run first.
+// src/index.ts and, since #623, the sys_startup builder in src/lib/startupRecord.ts. Imports from dist/, so `npm run build` must run first.
 import assert from 'assert';
 import { readFileSync } from 'node:fs';
 import { stripTsComments } from './helpers/source-text.js';
@@ -32,23 +32,24 @@ for (const [label, input, want] of rows) {
   check(label, () => assert.strictEqual(describeAuthMode(input), want));
 }
 
-console.log('\n[auth-mode] banner wiring in src/index.ts');
+console.log('\n[auth-mode] wiring in src/index.ts and src/lib/startupRecord.ts');
 const index = stripTsComments(readFileSync(new URL('../../src/index.ts', import.meta.url), 'utf8'));
+// #623: the banner became the sys_startup record, so the mode is computed in the record builder.
+const record = stripTsComments(readFileSync(new URL('../../src/lib/startupRecord.ts', import.meta.url), 'utf8'));
 
 check('the hardcoded OAuth Required literal is gone', () => {
   assert.ok(!index.includes('OAuth Required'), 'src/index.ts still contains "OAuth Required"');
 });
 
-check('the banner prints describeAuthMode', () => {
-  assert.match(index, /const authMode = describeAuthMode\(/);
-  assert.match(index, /logger\.info\(`• Auth mode:\s+\$\{authMode\}`\)/);
+check('the startup record reports describeAuthMode', () => {
+  assert.match(record, /mode: describeAuthMode\(/);
 });
 
 check('inputs use the blank-means-off rules (static trimmed, bearer untrimmed)', () => {
-  assert.match(index, /hasStaticTokens: staticTokensConfigured\(process\.env\.MCP_STATIC_TOKENS\)/);
+  assert.match(record, /hasStaticTokens: staticTokensConfigured\(env\.MCP_STATIC_TOKENS\)/);
   // A whitespace-only MCP_SSE_AUTHORIZATION is a live credential, so it reports bearer.
-  assert.match(index, /hasSseAuthorization: !!process\.env\.MCP_SSE_AUTHORIZATION,/);
-  assert.match(index, /oidcEnabled: process\.env\.AUTH_PROVIDER === 'oidc',\n\s*hasStaticTokens/);
+  assert.match(record, /hasSseAuthorization: !!env\.MCP_SSE_AUTHORIZATION,/);
+  assert.match(record, /oidcEnabled: env\.AUTH_PROVIDER === 'oidc',\n\s*hasStaticTokens/);
 });
 
 console.log(`\n[auth-mode] Results: ${passed} passed, ${failed} failed`);
