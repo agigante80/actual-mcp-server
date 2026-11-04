@@ -623,6 +623,10 @@ npm run knip            # blocking since #237: exits nonzero on any dead code
   real adapter with raw api stubs at `debug` and asserts a failed category create and a rejected
   query keep their sentinel out of the write queue, retry and query error lines, which log
   `errorLogFields` (class, refusal kind, system error code, log-safe text) instead.
+- **Server console guard** (#625): `tests/unit/server_no_console.test.js` strips comments from
+  every `src/server/*.ts` and fails on any `console.` reference, so server code logs through
+  `createModuleLogger`. It also pins the listen record: one `HTTP` module log line carrying `port`,
+  `endpoint` and `health`, whose text still holds `MCP endpoint: <url>` for the E2E scrape.
 - **Server instructions guard** (#560): `tests/unit/server_instructions.test.js` checks that the
   `initialize` instructions text, built from the published tools, names only published tools in
   every preset and toolset, in both read-only modes, and stays at most 512 characters. A

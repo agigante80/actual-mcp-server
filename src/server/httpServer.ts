@@ -10,6 +10,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import logger, { resolveRequestId } from '../logger.js';
 import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
+import { createModuleLogger } from '../lib/loggerFactory.js';
 import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, admitSession, releaseAdmission, isConnectionPoolEnabled } from '../actualConnection.js';
@@ -49,8 +50,11 @@ import { buildToolListEntries } from '../lib/tool-list-entry.js';
 // unchanged so existing importers and tests are unaffected.
 import { classifyInitFailure, type InitFailureCause } from '../lib/init-failure.js';
 import { createHttpErrorHandler } from './httpErrorHandler.js';
+
 export { classifyInitFailure };
 export type { InitFailureCause };
+
+const httpLog = createModuleLogger('HTTP');
 
 export { requestContext };
 
@@ -1159,9 +1163,9 @@ export async function startHttpServer(
     // #239: when bound to a specific (non all-interfaces) host the server is NOT on
     // loopback, so point the health hint at the actual bind host instead of localhost.
     const healthHost = (!bindHost || bindHost === '0.0.0.0' || bindHost === '::') ? 'localhost' : bindHost;
-    console.info(`MCP Streamable HTTP Server listening on ${port}`);
-    console.info(`📨 MCP endpoint: ${advertised}`);
-    console.info(`❤️ Health check: ${scheme}://${healthHost}:${port}/health`);
+    const health = `${scheme}://${healthHost}:${port}/health`;
+    // #625: one structured record through the module logger instead of three console.info lines.
+    httpLog.info(`MCP Streamable HTTP Server listening on ${port}; MCP endpoint: ${advertised} (health: ${health})`, { port, endpoint: advertised, health });
     if (config.AUTH_PROVIDER === 'oidc') {
       logger.info(`🔒 OIDC authentication enabled (JWT Bearer token required; issuer: ${config.OIDC_ISSUER})`);
       // #345: name the userNames the ACL can match, once, at boot. Deliberately
