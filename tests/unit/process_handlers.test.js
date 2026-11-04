@@ -269,6 +269,34 @@ check('neither new module imports the logger or the logger factory', () => {
   }
 });
 
+// The logger reads MCP_STDIO_MODE when winston is built, so nothing these modules pull in at
+// load time, at any depth, may import it: walk the static relative imports transitively.
+function staticImportClosure(entryRel) {
+  const seen = new Set();
+  const queue = [new URL(entryRel, import.meta.url)];
+  while (queue.length) {
+    const url = queue.pop();
+    if (seen.has(url.href)) continue;
+    seen.add(url.href);
+    const src = stripTsComments(readFileSync(url, 'utf8'));
+    for (const m of src.matchAll(/^\s*import\s+(?:[^'"]*?\s+from\s+)?'(\.{1,2}\/[^']+)\.js';/gm)) {
+      queue.push(new URL(`${m[1]}.ts`, url));
+    }
+  }
+  return [...seen].map((h) => h.slice(h.lastIndexOf('/src/') + 1));
+}
+
+check('no module in the static import closure of the handler install is the logger', () => {
+  const closure = staticImportClosure('../../src/lib/processHandlersInstall.ts');
+  assert.ok(closure.includes('src/lib/errors.ts'), `closure misses errors.ts: ${closure.join(', ')}`);
+  const bad = closure.filter((f) => /\/(logger|loggerFactory)\.ts$/.test(f));
+  assert.deepStrictEqual(bad, []);
+});
+
+check('src/index.ts catches a failure of the startup prelude, not only of main()', () => {
+  assert.match(indexSrc, /\}\)\(\)\.catch\(\(err\) => \{\s*writeSync\(2, `Failed to start Actual MCP bridge: /);
+});
+
 check('src/index.ts imports the Node guard first and the handler install second', () => {
   const imports = [...indexSrc.matchAll(/^import [^\n]*$/gm)].map((m) => m[0]);
   assert.strictEqual(imports[0], "import './lib/node-version-guard.js';");

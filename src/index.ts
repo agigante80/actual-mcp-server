@@ -14,6 +14,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { buildServerInstructions } from './lib/serverInstructions.js';
 import { format } from 'node:util';
+import { writeSync } from 'node:fs';
 
 /*
  * #277 / #541: this module's version comes from `getMcpServerVersion()` (src/lib/mcp-version.ts),
@@ -439,4 +440,12 @@ export {};
     logger.error(`Failed to start Actual MCP bridge: ${err?.message || String(err)}`);
     process.exit(1);
   });
-})();
+})().catch((err) => {
+  // #622: the prelude above (dotenv, the dynamic imports, the logger) runs before main(), so
+  // its failures never reach main().catch. Without this catch they escape as an
+  // unhandledRejection, whose gated record drops the message: a missing package or a broken
+  // build would name no module. Same residual as main().catch: startup text only. The logger
+  // may not exist yet, so this writes synchronously to stderr, never stdout.
+  writeSync(2, `Failed to start Actual MCP bridge: ${err?.message || String(err)}\n`);
+  process.exit(1);
+});

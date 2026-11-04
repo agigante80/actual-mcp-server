@@ -614,7 +614,8 @@ safeMessage }`: the class name, a gated system error code, an integer HTTP statu
 from a closed table, and either the throw site's log-safe text or a fixed sentence. A fatal event
 is one `sys_crash` JSON line written synchronously to stderr before `exit(1)`, never also through
 winston. A survivable one (an allow-listed rejection, a bank sync failure) is one `warn` record.
-Residual: `main().catch` in `src/index.ts` still logs a STARTUP failure's `err.message`, because
+Residual: `main().catch` in `src/index.ts`, and the `.catch` on the startup prelude that runs before
+`main()`, still log a STARTUP failure's `err.message`, because
 that text is usually the operator's only clue to a config or connection error. It is interpolated
 into the message string with no meta, so only the configured secret VALUE scrub applies, not
 #220 key name masking, and the line can be lost because `process.exit(1)` follows an
