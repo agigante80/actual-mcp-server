@@ -12,7 +12,11 @@
 // Run: node tests/unit/budget_registry_parse.test.js
 
 import assert from 'node:assert';
-import { parseBudgetRegistry, MAX_BUDGET_SCAN } from '../../dist/src/lib/budget-registry.js';
+import { readFileSync } from 'node:fs';
+import {
+  parseBudgetRegistry, MAX_BUDGET_SCAN, formatBudgetRegistrySummary, logSafeOrigin,
+} from '../../dist/src/lib/budget-registry.js';
+import { stripTsComments } from './helpers/source-text.js';
 
 const DEFAULTS = { serverUrl: 'https://actual.example.com', password: 'defpass', syncId: 'default-sync', encryptionPassword: undefined };
 
@@ -27,11 +31,12 @@ function withExitSpy(fn) {
   const origWarn = console.warn;
   let exitedCode = null;
   const warns = [];
+  const errors = [];
   process.exit = (code) => { exitedCode = code ?? 0; throw new ExitSignal(exitedCode); };
-  console.error = () => {};
+  console.error = (...a) => { errors.push(a.join(' ')); };
   console.warn = (...a) => { warns.push(a.join(' ')); };
-  try { const value = fn(); return { value, exitedCode, warns }; }
-  catch (e) { if (e instanceof ExitSignal) return { value: undefined, exitedCode, warns }; throw e; }
+  try { const value = fn(); return { value, exitedCode, warns, errors }; }
+  catch (e) { if (e instanceof ExitSignal) return { value: undefined, exitedCode, warns, errors }; throw e; }
   finally { process.exit = orig; console.error = origErr; console.warn = origWarn; }
 }
 
@@ -164,6 +169,108 @@ check('#161: an extra budget with an encryption password over http:// exits(1) u
   assert.strictEqual(exitedCode, 1, 'refuses encryption password over plaintext upstream');
   const { exitedCode: allowed } = withExitSpy(() => parseBudgetRegistry({ ...env, ALLOW_INSECURE_UPSTREAM: 'true' }, DEFAULTS));
   assert.strictEqual(allowed, null, 'ALLOW_INSECURE_UPSTREAM=true overrides');
+});
+
+console.log('\n[budget-registry-parse] #621 log-safe server URLs');
+
+const reg = (...entries) => new Map(entries.map(([name, serverUrl, password = 'pw']) =>
+  [name.toLowerCase(), { name, serverUrl, password, syncId: `${name}-sync` }]));
+
+check('#621: summary counts a default and a userinfo budget as two servers, https only', () => {
+  const r = reg(['Default', 'https://actual.example'], ['Household', 'https://proxyuser:proxypass@actual.example']);
+  const text = formatBudgetRegistrySummary(r);
+  assert.strictEqual(text, 'Budget registry: 2 budget(s) across 2 server(s) (https)');
+  for (const leak of ['Default', 'Household', 'actual.example', 'proxyuser', 'proxypass']) {
+    assert.ok(!text.includes(leak), `summary must not contain ${leak}`);
+  }
+});
+
+check('#621: summary for one budget', () => {
+  assert.strictEqual(formatBudgetRegistrySummary(reg(['Default', 'https://actual.example'])),
+    'Budget registry: 1 budget(s) across 1 server(s) (https)');
+});
+
+check('#621: two budgets on one server with one password count once', () => {
+  assert.strictEqual(formatBudgetRegistrySummary(reg(['Default', 'http://actual:5006'], ['Office', 'http://actual:5006'])),
+    'Budget registry: 2 budget(s) across 1 server(s) (http)');
+});
+
+check('#621: mixed schemes are sorted and joined', () => {
+  assert.strictEqual(formatBudgetRegistrySummary(reg(['Default', 'https://a.example'], ['Office', 'http://b.example'])),
+    'Budget registry: 2 budget(s) across 2 server(s) (http, https)');
+});
+
+check('#621: a malformed server URL renders as invalid and does not throw', () => {
+  assert.strictEqual(formatBudgetRegistrySummary(reg(['Default', 'https://a.example'], ['Broken', 'not a url'])),
+    'Budget registry: 2 budget(s) across 2 server(s) (https, invalid)');
+});
+
+check('#621: a schemeless userinfo URL renders as other, leaking nothing', () => {
+  const text = formatBudgetRegistrySummary(reg(['Default', 'https://a.example'], ['Typo', 'proxyuser:proxypass@actual.example']));
+  assert.strictEqual(text, 'Budget registry: 2 budget(s) across 2 server(s) (https, other)');
+  for (const leak of ['proxyuser', 'proxypass', 'actual.example']) assert.ok(!text.includes(leak), leak);
+});
+
+check('#621: a schemeless host:port renders as other, leaking nothing', () => {
+  const text = formatBudgetRegistrySummary(reg(['Default', 'https://a.example'], ['Typo', 'actual.example:5006']));
+  assert.strictEqual(text, 'Budget registry: 2 budget(s) across 2 server(s) (https, other)');
+  assert.ok(!text.includes('actual.example'));
+});
+
+check('#621: logSafeOrigin maps a null origin to the invalid marker', () => {
+  assert.strictEqual(logSafeOrigin('proxyuser:proxypass@actual.example'), '<invalid url>');
+});
+
+check('#621: logSafeOrigin strips userinfo and path', () => {
+  assert.strictEqual(logSafeOrigin('https://u:p@actual.example:5006/path'), 'https://actual.example:5006');
+});
+
+check('#621: logSafeOrigin drops a query-string credential', () => {
+  const out = logSafeOrigin('https://actual.example/?token=abc123');
+  assert.strictEqual(out, 'https://actual.example');
+  assert.ok(!out.includes('abc123'));
+});
+
+check('#621: registry parsing keeps the login URL credential', () => {
+  const env = { BUDGET_1_NAME: 'Household', BUDGET_1_SYNC_ID: 'b', BUDGET_1_SERVER_URL: 'https://proxyuser:proxypass@actual.example' };
+  const { value } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  assert.strictEqual(value.get('household').serverUrl, 'https://proxyuser:proxypass@actual.example');
+});
+
+check('#621: the http exit message prints the origin, not the userinfo', () => {
+  const env = { BUDGET_1_NAME: 'Office', BUDGET_1_SYNC_ID: 'x', BUDGET_1_ENCRYPTION_PASSWORD: 'x', BUDGET_1_SERVER_URL: 'http://u:p@host:5006' };
+  const { exitedCode, errors } = withExitSpy(() => parseBudgetRegistry(env, DEFAULTS));
+  assert.strictEqual(exitedCode, 1);
+  const text = errors.join('\n');
+  assert.ok(text.includes('http://host:5006'), text);
+  assert.ok(!text.includes('u:p'), text);
+});
+
+const SOURCES = ['src/lib/actual-adapter.ts', 'src/lib/budget-registry.ts'].map((f) => [f, stripTsComments(readFileSync(f, 'utf8'))]);
+
+check('#621: every serverUrl interpolation goes through logSafeOrigin, multi-line calls included', () => {
+  let total = 0;
+  for (const [file, text] of SOURCES) {
+    // Whole-file scan, never per line: several log calls span lines.
+    for (const m of text.match(/\$\{[^}]*[sS]erverUrl[^}]*\}/g) ?? []) {
+      total++;
+      assert.ok(m.includes('logSafeOrigin('), `${file}: raw serverUrl interpolation ${m}`);
+    }
+  }
+  assert.ok(total >= 5, `expected at least 5 serverUrl interpolations, found ${total}`);
+});
+
+check('#621: logSafeOrigin only ever appears inside an interpolation in the adapter', () => {
+  const text = SOURCES[0][1];
+  let count = 0;
+  for (const m of text.matchAll(/logSafeOrigin\(/g)) {
+    if (text.slice(Math.max(0, m.index - 80), m.index).includes('import {')) continue;
+    count++;
+    const open = text.lastIndexOf('${', m.index);
+    const close = text.lastIndexOf('}', m.index);
+    assert.ok(open !== -1 && open > close, `logSafeOrigin( at offset ${m.index} is not inside \${...}`);
+  }
+  assert.ok(count >= 4, `expected at least 4 adapter call sites, found ${count}`);
 });
 
 console.log(`\n[budget-registry-parse] Results: ${passed} passed, ${failed} failed`);

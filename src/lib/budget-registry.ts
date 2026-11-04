@@ -35,6 +35,43 @@ export interface BudgetConfig {
 }
 
 /**
+ * #621: a server URL as it may appear in a log line: scheme, host and port only. URL userinfo
+ * (a reverse-proxy credential), path and query are dropped. Never throws; an unparseable URL
+ * or one with a `null` origin (a non-special scheme such as a schemeless `user:pass@host`
+ * typo) becomes `<invalid url>`. Log text only: the login itself must keep the full URL.
+ */
+export function logSafeOrigin(url: string): string {
+  try {
+    const origin = new URL(url).origin;
+    return origin === 'null' ? '<invalid url>' : origin;
+  } catch {
+    return '<invalid url>';
+  }
+}
+
+/**
+ * #621: the startup registry line, counts and schemes only, so no budget name, host or
+ * credential reaches the log. Servers are counted by the same [serverUrl, password] key
+ * setLoginsSpanServers uses, so the two can never disagree. Never throws.
+ */
+export function formatBudgetRegistrySummary(registry: Map<string, BudgetConfig>): string {
+  const budgets = [...registry.values()];
+  const servers = new Set(budgets.map((b) => JSON.stringify([b.serverUrl, b.password || '']))).size;
+  const schemes = new Set<string>();
+  for (const b of budgets) {
+    let scheme: string;
+    try {
+      const protocol = new URL(b.serverUrl).protocol;
+      scheme = protocol === 'http:' ? 'http' : protocol === 'https:' ? 'https' : 'other';
+    } catch {
+      scheme = 'invalid';
+    }
+    schemes.add(scheme);
+  }
+  return `Budget registry: ${budgets.length} budget(s) across ${servers} server(s) (${[...schemes].sort().join(', ')})`;
+}
+
+/**
  * Parse the budget registry from environment variables.
  * Always includes the default budget from the provided defaults (ACTUAL_* vars).
  * Additional budgets are read from sequential BUDGET_n_* groups.
@@ -80,7 +117,7 @@ export function parseBudgetRegistry(
     // password over an http:// upstream unless ALLOW_INSECURE_UPSTREAM is set.
     if (encryptionPassword && env.ALLOW_INSECURE_UPSTREAM !== 'true' && /^http:\/\//i.test(serverUrl)) {
       console.error(
-        `[CONFIG] BUDGET_${i}_ENCRYPTION_PASSWORD is set but the upstream URL is http:// (${serverUrl}). ` +
+        `[CONFIG] BUDGET_${i}_ENCRYPTION_PASSWORD is set but the upstream URL is http:// (${logSafeOrigin(serverUrl)}). ` +
         `Refusing to send the encryption password over plaintext (#161). ` +
         `Use https:// or set ALLOW_INSECURE_UPSTREAM=true to override.`,
       );

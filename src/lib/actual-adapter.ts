@@ -83,7 +83,7 @@ import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
 import { checkServerVersionOnce } from './server-version-guard.js';
 import config from '../config.js';
-import { parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
+import { formatBudgetRegistrySummary, logSafeOrigin, parseBudgetRegistry, type BudgetConfig } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
 import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
@@ -107,10 +107,8 @@ setLoginsSpanServers(
   new Set([...budgetRegistry.values()].map((b) => JSON.stringify([b.serverUrl, b.password || '']))).size > 1,
 );
 
-logger.info(
-  `[ADAPTER] Budget registry: ${budgetRegistry.size} budget(s) — ` +
-  [...budgetRegistry.values()].map(b => `"${b.name}" (${b.serverUrl})`).join(', '),
-);
+// #621: counts and schemes only; budget names and server hosts stay out of the startup log.
+logger.info(`[ADAPTER] ${formatBudgetRegistrySummary(budgetRegistry)}`);
 
 /**
  * Per-session active budget. Map from sessionId to lowercased budget key
@@ -365,7 +363,7 @@ function loginOf(budget: BudgetConfig): { serverUrl: string; password: string } 
 async function loadBudgetOnItsServer(budget: BudgetConfig): Promise<void> {
   const login = loginOf(budget);
   if (!isApiLoggedInTo(login)) {
-    logger.info(`[ADAPTER] logging the api in to ${budget.serverUrl} before loading "${budget.name}"`);
+    logger.info(`[ADAPTER] logging the api in to ${logSafeOrigin(budget.serverUrl)} before loading "${budget.name}"`);
     await withAuthRetry(() => initApiLoggedIn(config.MCP_BRIDGE_DATA_DIR, login, 'init'));
   }
   await loadBudgetTracked(budget.syncId, budget.encryptionPassword);
@@ -964,7 +962,7 @@ async function initActualApiForOperation(): Promise<void> {
     const budget = getActiveBudgetConfig();
     const DATA_DIR = config.MCP_BRIDGE_DATA_DIR;
 
-    logger.debug(`[ADAPTER] Initializing Actual API for operation (budget: "${budget.name}", server: ${budget.serverUrl})`);
+    logger.debug(`[ADAPTER] Initializing Actual API for operation (budget: "${budget.name}", server: ${logSafeOrigin(budget.serverUrl)})`);
 
     // Wrap api.init in auth-rate-limit retry so a transient too-many-requests
     // doesn't surface to the caller (and doesn't trigger #132's crash path).
@@ -4888,7 +4886,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
     logger.info(
-      `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
+      `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
     );
     return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
   }
@@ -4964,7 +4962,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   }
 
   logger.info(
-    `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${found.serverUrl}`,
+    `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
   );
   return { name: found.name, syncId: found.syncId, serverUrl: found.serverUrl };
 }

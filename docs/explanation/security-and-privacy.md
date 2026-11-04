@@ -582,6 +582,7 @@ chown $USER:$USER ./actual-data
 - ✅ Log rotation with retention limits
 - ✅ Tool arguments and results are never written to the logs (#556), at any level
 - ✅ Tool error messages are never written to the logs (#559); the failure record carries the error class
+- ✅ The startup budget registry line carries counts and schemes only (#621); the adapter's login, operation and budget-switch lines print a server URL as its origin (no userinfo, path or query) but still name the budget involved. Login error messages still keep the URL path and query (userinfo is stripped). Logs written by earlier versions keep the old line until rotated
 
 **Tool content is never logged (#556).** Tool arguments and results are the user's budget data:
 amounts, payee names, notes, balances. The server logs a content-free record per call instead,
