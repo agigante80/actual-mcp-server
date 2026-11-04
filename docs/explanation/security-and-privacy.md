@@ -592,6 +592,18 @@ single place content could be logged, so any future opt-in for debugging (#557) 
 The #220 redaction does not cover this: it masks secret key names and configured secret values,
 not budget content. `tests/unit/tool_content_logging.test.js` guards the rule at `debug` level.
 
+**Upstream verbose output is off by default (#620).** `@actual-app/api` has its own verbose
+logging, on unless told otherwise, and on every import and bank sync it prints each reconciled
+transaction (date, amount, notes, account row). The server starts it with `verbose: false`, so
+none of that reaches the log. Upstream warnings and errors still do, but some upstream failure
+diagnostics are verbose-only (a failed budget download such as a wrong sync id, file list and
+file info errors, `API call failed` lines). `ACTUAL_API_VERBOSE=true` turns it all back on for a
+debugging window, and then the log holds transaction contents for EVERY
+principal (the mode is process-global), and upstream's failed-request logging can write the
+runtime Actual session token, which the #220 scrub does not mask (upstream output is
+pre-stringified, so only configured secret values are scrubbed, not key names). `--debug`,
+`npm run dev` and `MCP_BRIDGE_LOG_LEVEL=debug` do not turn it on.
+
 **Tool error messages are never logged (#559).** An error's message is for the client and can
 quote what the caller sent (a category name, a query, a rule value) or upstream text we do not
 control, so the `[TOOL ERROR]` record and the `createTool` failure log carry `errorClass`, a

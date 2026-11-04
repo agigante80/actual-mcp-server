@@ -14,6 +14,8 @@ process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL || 'http://127.0.0
 process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD || 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID || '00000000-0000-0000-0000-000000000000';
 process.env.ACTUAL_OP_TIMEOUT_MS = '300';
+// #620: row (6) asserts the default, so a shell that exported the opt-in must not leak in.
+delete process.env.ACTUAL_API_VERBOSE;
 
 let passed = 0, failed = 0;
 const log = (m) => process.stderr.write(`${m}\n`);
@@ -241,6 +243,8 @@ describe('(6) control: a one-login deployment keeps upstream\'s own login and ne
   await initApiLoggedIn('/tmp/unused', LOGIN, 'login');
   check(requests.length === 0, `no /account/login fetch (got ${requests.length})`);
   check(inits.length === 1 && inits[0].password === SENTINEL_PW, 'api.init carried the password');
+  // #620: ACTUAL_API_VERBOSE is unset here, so upstream's verbose mode is turned off explicitly.
+  check('verbose' in inits[0] && inits[0].verbose === false, `one login: api.init got verbose false (${JSON.stringify(inits[0]?.verbose)})`);
 
   // Positive control: with several logins the same call fetches, and api.init gets no credential.
   inits.length = 0;
@@ -249,6 +253,7 @@ describe('(6) control: a one-login deployment keeps upstream\'s own login and ne
   await initApiLoggedIn('/tmp/unused', LOGIN, 'login');
   check(requests.length === 1 && inits.length === 1 && inits[0].password === '',
     `several logins: one fetch, then a credential-less init (${requests.length} fetches, password ${JSON.stringify(inits[0]?.password)})`);
+  check('verbose' in inits[0] && inits[0].verbose === false, `several logins: api.init got verbose false (${JSON.stringify(inits[0]?.verbose)})`);
   setLoginsSpanServers(false);
 }
 

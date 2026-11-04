@@ -1,9 +1,14 @@
-import api from '@actual-app/api';
+import api, { type InitOptions } from '@actual-app/api';
+import config from '../config.js';
 import { withOpTimeout } from './opTimeout.js';
 import { setApiLogin, setLoadedBudgetSyncId, registerBudgetLoad, loginsSpanServers, type ApiLogin } from './apiState.js';
 import { createModuleLogger } from './loggerFactory.js';
 
 const log = createModuleLogger('API-LOGIN');
+
+// Upstream's init accepts `verbose` (#620); the local declaration in types/actual-api.d.ts predates
+// it and is in the do-not-modify tier, so the option is widened here instead.
+type InitWithVerbose = InitOptions & { verbose: boolean };
 
 type UpstreamLib = { send: (name: string, args?: unknown) => Promise<unknown> };
 
@@ -43,6 +48,10 @@ let upstreamLib: UpstreamLib | null = null;
  *     entries are still valid.
  *  3. log in, then record the login.
  *
+ * Every init passes `verbose` explicitly (#620): upstream only sets its process-global verbose
+ * mode when the key is present, and its default is on, which writes reconciled transactions into
+ * our log through `wireConsoleAndDebug`.
+ *
  * Bounded by the op timeout (#270). Callers that retry on the auth rate limit wrap this whole
  * call in `withAuthRetry`, so each attempt is bounded on its own.
  *
@@ -77,7 +86,8 @@ export async function initApiLoggedIn(dataDir: string, login: ApiLogin, label: s
     dataDir,
     serverURL: login.serverUrl,
     password: login.password,
-  }) as Promise<UpstreamLib | undefined>;
+    verbose: config.ACTUAL_API_VERBOSE,
+  } as InitWithVerbose) as Promise<UpstreamLib | undefined>;
   const lib = await withOpTimeout(() => loggingIn, label);
   if (lib && typeof lib.send === 'function') upstreamLib = lib;
   setApiLogin(login);
@@ -113,7 +123,7 @@ async function initOverFetchedLogin(dataDir: string, login: ApiLogin, label: str
     }
   }
   // `password: ''` is upstream's no-credential init (it signs in only on a truthy password).
-  const pointing = api.init({ dataDir, serverURL: login.serverUrl, password: '' }) as Promise<UpstreamLib | undefined>;
+  const pointing = api.init({ dataDir, serverURL: login.serverUrl, password: '', verbose: config.ACTUAL_API_VERBOSE } as InitWithVerbose) as Promise<UpstreamLib | undefined>;
   registerBudgetLoad(pointing);
   const lib = await withOpTimeout(() => pointing, label);
   if (!lib || typeof lib.send !== 'function') throw new Error(`Actual API ${label}: upstream init returned no handle`);

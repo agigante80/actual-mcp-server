@@ -87,6 +87,10 @@ export const configSchema = z.object({
   // password is set (e.g. an isolated Docker network where the hop is trusted).
   // Off by default so a plaintext upstream + encryption password is refused.
   ALLOW_INSECURE_UPSTREAM: z.string().optional().transform(val => val === 'true'),
+  // #620: upstream @actual-app/api logs at its own info/debug level (sync chatter, and on every
+  // import or bank sync a dump of each reconciled transaction) unless init is told otherwise.
+  // Off by default; `=== 'true'` fails safe, since turning it on is what carries the risk.
+  ACTUAL_API_VERBOSE: z.string().optional().transform(val => val === 'true'),
   MCP_BRIDGE_DATA_DIR: z.string().default('./actual-data'),
   // #332: where actual_budgets_export writes budget zips. A budget export is
   // megabytes of binary, so the tool returns a PATH plus metadata rather than

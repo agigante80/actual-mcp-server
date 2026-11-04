@@ -121,6 +121,7 @@ Legend for **Source**: `schema` = validated Zod key; `raw` = read directly from
 | `MCP_BRIDGE_MAX_FILES` | string | `14d` | No | no | raw | `logger.ts:23` | Log retention, when `MCP_BRIDGE_STORE_LOGS=true` (for example `14d`, `30d`) |
 | `MCP_BRIDGE_MAX_LOG_SIZE` | string | `20m` | No | no | raw | `logger.ts:22` | Rotate-at size (for example `20m`, `100m`) |
 | `MCP_BRIDGE_ROTATE_DATEPATTERN` | string | `YYYY-MM-DD` | No | no | raw | `logger.ts:21` | Rotated filename pattern |
+| `ACTUAL_API_VERBOSE` | bool string | `false` | No | no | schema | config | Upstream `@actual-app/api` verbose logging (#620). Off by default; only `true` enables it. When on, the log holds every principal's reconciled transactions and possibly the runtime session token, so keep it to a short debugging window. Some upstream failure diagnostics (budget download, file list, API call failures) appear only when it is on. Not implied by `--debug` or `MCP_BRIDGE_LOG_LEVEL=debug` |
 | `MCP_BRIDGE_DEBUG_TRANSPORT` | bool string | `false` | No | no | raw | `index.ts`, `utils.ts` | Transport debug output |
 
 ## Multi-budget (dynamic family)
