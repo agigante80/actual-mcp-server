@@ -16,7 +16,7 @@
 //     (MCP_BRIDGE_HTTP_PATH without a leading slash) is an advisory, not a refusal.
 //
 // ONE CHILD PROCESS PER VARIANT, deliberately. src/config.ts parses process.env once at
-// module load and src/auth/setup.ts memoises the MCPAuth instance with no reset export,
+// module load and src/auth/setup.ts memoises the auth instance with no reset export,
 // so a second boot in the same process would silently reuse the FIRST resource: every
 // variant would pass for the wrong reason. Pattern: server_version_guard.test.js.
 //
@@ -163,7 +163,7 @@ console.log('\n[oidc-resource-metadata] #461 scenarios 1 and 2: endpoint form (#
     assert.strictEqual(r.result.metaRoot.cors, r.result.metaPath.cors);
   });
   // The query's PRESERVATION is pinned by rootMetadataRewriteUrl's unit cases in
-  // oidc_resource_identifier.test.js: mcp-auth ignores the query, so a 200 here cannot
+  // oidc_resource_identifier.test.js: the metadata route ignores the query, so a 200 here cannot
   // tell a kept query from a dropped one. This only proves a query does not break it.
   check('a root request with a query string is still served (#473)', () => {
     assert.strictEqual(r.result.metaQuery.status, 200);
@@ -234,7 +234,7 @@ console.log('\n[oidc-resource-metadata] #461 scenario 4: the README recipe is re
   check('the failure names OIDC_RESOURCE and "absolute URL", and is NOT the library TypeError', () => {
     const out = r.stdout + r.stderr;
     assert.ok(out.includes('OIDC_RESOURCE') && out.includes('absolute URL'), out.slice(-600));
-    assert.ok(!out.includes('Invalid resource identifier URI'), 'the mcp-auth TypeError surfaced instead of ours');
+    assert.ok(!out.includes('Invalid resource identifier URI'), 'the bearer.ts TypeError surfaced instead of ours');
   });
 }
 

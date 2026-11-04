@@ -158,7 +158,7 @@ console.log('\n[auth-posture-wiring] #611 index.ts refuses a placeholder token o
   check('OIDC on 0.0.0.0 with a stale weak MCP_SSE_AUTHORIZATION: no weak-token refusal, reaches OIDC setup', () => {
     assert.strictEqual(o.signal, null, `killed by ${o.signal} (timeout?)`);
     assert.ok(!/weak token/.test(oOut), oOut.slice(-1500));
-    assert.ok(/\[OIDC\] Configuring mcp-auth/.test(oOut), oOut.slice(-1500));
+    assert.ok(/\[OIDC\] Configuring bearer auth/.test(oOut), oOut.slice(-1500));
   });
 }
 

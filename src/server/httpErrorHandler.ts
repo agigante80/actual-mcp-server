@@ -15,7 +15,7 @@
 //   - next(err) is NEVER called: app.handle wires finalhandler with onerror: logerror, which
 //     is the console.error(err) path this module exists to close.
 //
-// The handler also absorbs any non-MCPAuth error that mcp-auth's bearerAuth rethrows, with
+// The handler also absorbs any non-auth error the bearer middleware passes to next(err), with
 // the same fixed 500 and the same allowlisted log.
 
 import { STATUS_CODES } from 'node:http';

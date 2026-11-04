@@ -3,7 +3,7 @@
 // #163 (OWASP A07): authenticateRequest() returned true for ANY request whenever
 // AUTH_PROVIDER=oidc, inferring authentication from configuration instead of
 // verifying the request principal. The fix requires req.auth.subject (the field
-// the mcp-auth verifier and budget-acl.ts use) and rejects with 401 otherwise.
+// the bearer verifier and budget-acl.ts use) and rejects with 401 otherwise.
 //
 // authenticateRequest is a closure inside startHttpServer, so we (1) behaviourally
 // test the principal predicate the fix relies on, and (2) source-assert the real

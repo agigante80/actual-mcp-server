@@ -8,14 +8,14 @@
 // Cf-Access-Jwt-Assertion (iss = the team domain, aud = the application's AUD tag,
 // keys at <team>/cdn-cgi/access/certs); "the MCP server must validate the Access JWT
 // sent in the Cf-Access-Jwt-Assertion header". Two things stood in the way here:
-// mcp-auth reads only Authorization, and JWKS resolution required an OpenID discovery
+// the bearer middleware reads only Authorization, and JWKS resolution required an OpenID discovery
 // document the team domain does not publish. This file proves both are solved and,
 // above all, that the mode widens NOTHING: the assertion is verified exactly like any
 // bearer JWT (signature, issuer, closed audience allowlist, sub), the header is ignored
 // when the mode is off, and a bad assertion is a 401.
 //
 // One child process per variant (config.ts parses env once, setup.ts memoises the
-// MCPAuth instance); URL-dispatching fetch stub that serves the JWKS at OIDC_JWKS_URI
+// auth instance); URL-dispatching fetch stub that serves the JWKS at OIDC_JWKS_URI
 // and records whether discovery was ever requested; sentinel line on stdout because
 // winston owns console.* and writes every level to stdout in HTTP mode.
 //

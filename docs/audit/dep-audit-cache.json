@@ -51,13 +51,6 @@
       "weeklyDownloads": 64471098,
       "notes": "Direct dependency (^6.2.3), now at latest range. Issue #115 closed. Healthy."
     },
-    "mcp-auth": {
-      "lastChecked": "2026-07-11",
-      "status": "maintained",
-      "lastPublish": "2026-01-21",
-      "weeklyDownloads": 24386,
-      "notes": "0.2.0 current and latest, published <6mo ago. Downloads 24K/wk (above 10K warning threshold). Healthy but small ecosystem; monitor."
-    },
     "prom-client": {
       "lastChecked": "2026-07-11",
       "status": "maintained",

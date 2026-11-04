@@ -3,7 +3,7 @@
 // #463: stripJoseCause keeps the operator-useful fields of a jose verification error
 // (code, claim, reason, message) and drops everything else, above all `payload`, the
 // decoded token that JWTClaimValidationFailed and JWTExpired carry as an own enumerable
-// property and that mcp-auth would otherwise serialise into the 401 body.
+// property and that the bearer middleware would otherwise serialise into the 401 body.
 //
 // Plain objects shaped like the jose classes, no jose import: the helper is structural
 // by design, so this file proves the shape contract rather than a class list.
@@ -24,7 +24,7 @@ function check(label, fn) {
   catch (err) { console.error(`  FAIL: ${label} -> ${err.message}`); failed++; }
 }
 const ownKeys = (e) => Object.keys(e).sort();
-const wire = (e) => JSON.parse(JSON.stringify(e)); // what mcp-auth's toJson(true) emits for an Error cause
+const wire = (e) => JSON.parse(JSON.stringify(e)); // what bearer.ts toJson(true) emits for an Error cause
 
 console.log('\n[oidc-error-cause] #463');
 

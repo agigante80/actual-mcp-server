@@ -5,13 +5,13 @@
 // unit-testable without a server boot; the composition root (`httpServer.ts`) logs what
 // `oidcResourceStartupWarnings` returns and does nothing else with it.
 //
-// WHY THE IDENTIFIER MUST BE A URL. `mcp-auth` derives the RFC 9728 well-known route
+// WHY THE IDENTIFIER MUST BE A URL. The bearer module (#634) derives the RFC 9728 well-known route
 // from `new URL(resource).pathname` (a resource with a path such as `https://host/http`
 // is served at `/.well-known/oauth-protected-resource/http`, RFC 9728 section 3.1) and
 // echoes the configured string verbatim as the document's `resource` value (section 3.3
 // requires it to be identical to what the client inserted the suffix into). A bare
-// client id therefore throws inside the library at startup. Four of our own recipes
-// recommended exactly that value; this validator turns the library's TypeError into a
+// client id therefore throws a bare TypeError at startup. Four of our own recipes
+// recommended exactly that value; this validator turns that TypeError into a
 // message that names the variable and the fix.
 //
 // WHY http: IS ACCEPTED WITH A WARNING, NOT REFUSED. Unlike OIDC_ISSUER (#244), where a
@@ -20,7 +20,7 @@
 // transit is protected by MCP_ENABLE_HTTPS or the reverse proxy. Refusing would break
 // working LAN deployments to enforce nothing.
 //
-// WHY THE RAW STRING STILL REACHES mcp-auth. `url.href` appends a trailing slash to the
+// WHY THE RAW STRING STILL REACHES THE ROUTER. `url.href` appends a trailing slash to the
 // origin form (`https://host` becomes `https://host/`), which would make the metadata
 // `resource`, the `WWW-Authenticate` `resource_metadata` and the accepted-audience set
 // three different strings. The validator returns the URL for checks and for log lines;
@@ -77,7 +77,7 @@ export function validateOidcResource(raw: string | undefined): URL {
 
 /**
  * Advisories about an ACCEPTED identifier: plaintext scheme on a non-loopback host, and a
- * query component (RFC 8707 section 2 SHOULD NOT; mcp-auth publishes it verbatim and it
+ * query component (RFC 8707 section 2 SHOULD NOT; the metadata document publishes it verbatim and it
  * becomes part of the expected `aud`).
  */
 export function resourceSchemeAdvisories(url: URL): string[] {
@@ -126,10 +126,10 @@ export function advertisedPathFrom(
 const METADATA_ROOT = '/.well-known/oauth-protected-resource';
 
 /**
- * The route mcp-auth 0.2.0 serves the RFC 9728 document under for `resource` (#473), or
+ * The route the metadata router serves the RFC 9728 document under for `resource` (#473), or
  * null for the origin form, where it serves the root itself. This copies the rule in
- * mcp-auth's `create-resource-metadata-endpoint.js` exactly, raw pathname included: it
- * must NOT use `stripped()` below, because mcp-auth registers the route under the
+ * the bearer module's `resourceMetadataEndpoint` (itself mcp-auth 0.2.0's, #634) exactly, raw
+ * pathname included: it must NOT use `stripped()` below, because the router registers the route under the
  * pathname as given, trailing slash and all, and a rewrite aimed anywhere else 404s.
  */
 export function resourceMetadataPath(resource: string): string | null {
@@ -140,7 +140,7 @@ export function resourceMetadataPath(resource: string): string | null {
 /**
  * The request URL a root metadata request is rewritten to (#473): the fixed target plus
  * the original query string, verbatim from the first `?`. Pure so the query handling is
- * testable: mcp-auth's route ignores the query, so a served 200 cannot tell a kept query
+ * testable: the metadata route ignores the query, so a served 200 cannot tell a kept query
  * from a dropped one.
  */
 export function rootMetadataRewriteUrl(url: string, target: string): string {
@@ -151,7 +151,7 @@ export function rootMetadataRewriteUrl(url: string, target: string): string {
 /**
  * True for a request the root rewrite applies to (#473). Exact lowercase path, with or
  * without one trailing slash: Express 5's default non-strict routing already serves
- * mcp-auth's own path-specific route both ways, so the root behaves the same, but it is
+ * the router's own path-specific route both ways, so the root behaves the same, but it is
  * two exact comparisons rather than a prefix, so no deeper path is ever rewritten. Only
  * GET, HEAD (Express answers it through GET routes) and the OPTIONS CORS preflight.
  */
@@ -164,7 +164,7 @@ export function isRootMetadataRequest(method: string, path: string): boolean {
 
 /**
  * Null when the identifier's path equals the advertised MCP path (the form under which
- * mcp-auth serves the path-specific RFC 9728 document a strict client looks for);
+ * the router serves the path-specific RFC 9728 document a strict client looks for);
  * otherwise one line that names the variable and recommends `<origin><advertisedPath>`.
  */
 export function resourceMetadataWarning(opts: { resource: string; advertisedPath: string }): string | null {

@@ -4,8 +4,8 @@
 // decoded claims.
 //
 // customJwtVerify wraps a failed jose verification as
-// MCPAuthTokenVerificationError('invalid_token', cause). Outside NODE_ENV=production the
-// server passes showErrorDetails=true and mcp-auth serialises that cause into the 401
+// TokenVerificationError('invalid_token', cause). Outside NODE_ENV=production the
+// server passes showErrorDetails=true and the bearer middleware serialises that cause into the 401
 // body with JSON.stringify, which emits every OWN ENUMERABLE property. jose's
 // JWTClaimValidationFailed and JWTExpired both carry `payload`, the decoded token, as
 // exactly such a property, so the body reflected `sub`, `email` and `aud` back to the

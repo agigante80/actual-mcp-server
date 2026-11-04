@@ -216,8 +216,8 @@ export const configSchema = z.object({
       return z.NEVER;
     }),
 
-  // --- OIDC / mcp-auth (CF-5) ---
-  // Set AUTH_PROVIDER=oidc to enable JWT validation via mcp-auth.
+  // --- OIDC bearer auth (CF-5) ---
+  // Set AUTH_PROVIDER=oidc to enable JWT validation (src/auth/bearer.ts).
   // When 'none' (default), the legacy MCP_SSE_AUTHORIZATION static Bearer token is used.
   AUTH_PROVIDER: z.enum(['none', 'oidc']).default('none'),
   // OIDC issuer URL (e.g. https://auth.example.com/realms/myrealm). Required when AUTH_PROVIDER=oidc.
@@ -431,7 +431,7 @@ export const configSchema = z.object({
     },
   )
   // #462: the Access application token carries no `scope` claim, so any required
-  // scope would make mcp-auth answer 403 missing_required_scopes on EVERY request,
+  // scope would make the bearer middleware answer 403 missing_required_scopes on EVERY request,
   // invisibly to the 401 tests. Refuse the pairing rather than ship a dead deployment.
   .refine(
     (cfg) => cfg.OIDC_TOKEN_SOURCE !== 'cf-access-jwt-assertion' || !(cfg.OIDC_SCOPES ?? '').trim(),

@@ -4,7 +4,7 @@
 // The contract: in assertion mode the value written to Authorization is
 // `Bearer <assertion>` from Cf-Access-Jwt-Assertion, and ANY doubt (missing, empty,
 // non-string, whitespace, duplicates joined by Node with ", ") deletes Authorization so
-// mcp-auth answers 401 rather than a value being guessed. With the default source the
+// the bearer middleware answers 401 rather than a value being guessed. With the default source the
 // middleware is the identity function.
 //
 // Run: node tests/unit/oidc_token_source.test.js
@@ -69,7 +69,7 @@ check('assertion mode: Authorization is overwritten IN PLACE and the opaque bear
   assert.strictEqual(req.headers.authorization, `Bearer ${JWS}`);
   assert.ok(!JSON.stringify(req.headers.authorization).includes('oauth:opaque'));
 });
-check('assertion mode without the header: Authorization is DELETED (mcp-auth then answers missing_auth_header)', () => {
+check('assertion mode without the header: Authorization is DELETED (the bearer middleware then answers missing_auth_header)', () => {
   const req = run(SRC, { authorization: 'Bearer oauth:opaque' });
   assert.ok(!('authorization' in req.headers), JSON.stringify(req.headers));
 });

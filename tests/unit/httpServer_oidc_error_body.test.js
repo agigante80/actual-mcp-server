@@ -3,9 +3,9 @@
 // #463: a 401 from the OIDC bearer middleware must not reflect the presented token's
 // own claims back to the caller.
 //
-// customJwtVerify wraps a failed jwtVerify as MCPAuthTokenVerificationError('invalid_token',
+// customJwtVerify wraps a failed jwtVerify as TokenVerificationError('invalid_token',
 // joseError). Outside NODE_ENV=production the server passes showErrorDetails=true, and
-// mcp-auth then serialises the cause into the 401 body. jose's JWTClaimValidationFailed
+// the bearer middleware then serialises the cause into the 401 body. jose's JWTClaimValidationFailed
 // carries the DECODED PAYLOAD of the token it rejected, so the body used to contain
 // `cause.payload` with `sub`, `email` and `aud`. Self-disclosure only (the caller holds
 // the token), but response bodies are routinely captured by proxies and client logs.
@@ -16,7 +16,7 @@
 // NODE_ENV=production, the body carries no cause at all (unchanged behaviour).
 //
 // One child process per NODE_ENV value, for the same reason as the #461 harness:
-// config.ts parses env once and setup.ts memoises the MCPAuth instance. Same fetch stub,
+// config.ts parses env once and setup.ts memoises the auth instance. Same fetch stub,
 // same sentinel line (winston owns console.* and writes every level to stdout).
 //
 // Run: node tests/unit/httpServer_oidc_error_body.test.js

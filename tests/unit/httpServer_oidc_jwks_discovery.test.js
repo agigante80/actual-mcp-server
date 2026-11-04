@@ -14,8 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import express from 'express';
 import { generateKeyPair, SignJWT, jwtVerify, exportJWK, createLocalJWKSet } from 'jose';
-import { MCPAuthTokenVerificationError } from 'mcp-auth';
-import { handleBearerAuth } from 'mcp-auth/handlers/handle-bearer-auth.js';
+import { TokenVerificationError, bearerAuthMiddleware } from '../../dist/src/auth/bearer.js';
 
 const { resolveJwksUri, assertSecureIssuer, isLoopbackHost, buildTrustedJwksHosts } = await import('../../dist/src/lib/oidc-discovery.js');
 const { configSchema } = await import('../../dist/src/config.js');
@@ -142,16 +141,16 @@ const jwk = await exportJWK(publicKey); jwk.alg = 'RS256'; jwk.kid = 'k1';
 const jwks = createLocalJWKSet({ keys: [jwk] });
 const ISS = 'https://idp.example.com', AUD = 'client-1', RESOURCE = 'https://mcp.example.com';
 
-// Mirror httpServer.ts customJwtVerify: wrap jose failures in MCPAuthTokenVerificationError.
+// Mirror httpServer.ts customJwtVerify: wrap jose failures in TokenVerificationError.
 const customJwtVerify = async (token) => {
   let payload;
   try {
     ({ payload } = await jwtVerify(token, jwks, { issuer: ISS, audience: AUD }));
   } catch (err) {
-    throw new MCPAuthTokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
+    throw new TokenVerificationError('invalid_token', err instanceof Error ? err : undefined);
   }
   if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
-    throw new MCPAuthTokenVerificationError('invalid_token');
+    throw new TokenVerificationError('invalid_token');
   }
   const rawAud = payload.aud; const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
   return { token, subject: payload.sub, issuer: payload.iss ?? ISS, clientId: audience[0] ?? '', audience, scopes: [], expiresAt: payload.exp, claims: payload };
@@ -159,7 +158,7 @@ const customJwtVerify = async (token) => {
 
 const app = express();
 let lastAuthSubject = null;
-app.use('/http', handleBearerAuth({ verifyAccessToken: customJwtVerify, issuer: ISS, audience: AUD, requiredScopes: [], resource: RESOURCE, showErrorDetails: true }));
+app.use('/http', bearerAuthMiddleware(customJwtVerify, { issuers: [ISS], audience: AUD, requiredScopes: [], resource: RESOURCE, showErrorDetails: true }));
 app.post('/http', (req, res) => { lastAuthSubject = req.auth?.subject ?? null; res.status(200).json({ ok: true }); });
 
 let sawUnhandled = false;
@@ -234,11 +233,11 @@ check('the oauth-authorization-server route is registered ONLY inside the AUTH_P
   // Exactly one registration, so no accidental un-gated duplicate exists.
   assert.strictEqual(src.split("app.get('/.well-known/oauth-authorization-server'").length - 1, 1, 'expected exactly one oauth-authorization-server registration');
 });
-check('httpServer maps verify failures to MCPAuthTokenVerificationError', () => {
-  assert.ok(/catch\s*\(err\)[\s\S]{0,160}MCPAuthTokenVerificationError\('invalid_token'/.test(src), 'expected 401 mapping in customJwtVerify');
+check('httpServer maps verify failures to TokenVerificationError', () => {
+  assert.ok(/catch\s*\(err\)[\s\S]{0,160}TokenVerificationError\('invalid_token'/.test(src), 'expected 401 mapping in customJwtVerify');
 });
 check('httpServer rejects a token with no usable sub (invalid_token)', () => {
-  assert.ok(/payload\.sub[\s\S]{0,120}MCPAuthTokenVerificationError\('invalid_token'\)/.test(src), 'expected a missing-sub rejection');
+  assert.ok(/payload\.sub[\s\S]{0,120}TokenVerificationError\('invalid_token'\)/.test(src), 'expected a missing-sub rejection');
   assert.ok(src.includes('subject: payload.sub,'), 'expected subject populated from payload.sub');
 });
 

@@ -4,7 +4,7 @@
 // server behind Access with Managed OAuth: the client sends an OPAQUE access token as
 // the bearer, Cloudflare resolves it at the edge and forwards a signed JWT in
 // `Cf-Access-Jwt-Assertion`, and "the MCP server must validate the Access JWT sent in
-// the Cf-Access-Jwt-Assertion header". mcp-auth reads only `headers.authorization`, so
+// the Cf-Access-Jwt-Assertion header". The bearer middleware reads only `headers.authorization`, so
 // this module promotes the assertion into that slot BEFORE `bearerAuth` runs, and
 // everything downstream (signature, issuer, closed audience allowlist, non-empty sub,
 // budget ACL) is the code that already verifies any bearer JWT.
@@ -12,7 +12,7 @@
 // ONE token source per mode, ONE verification per request, no fallback (gate decision
 // D4): in assertion mode `Authorization` is never consulted. A missing, empty,
 // whitespace-containing or duplicate assertion header deletes `authorization`, so
-// mcp-auth answers 401 `missing_auth_header`. That is what makes the mode a narrowing
+// the bearer middleware answers 401 `missing_auth_header`. That is what makes the mode a narrowing
 // and never a widening: a valid JWT arriving as a bearer at the origin with no
 // assertion is the captured-assertion-direct-to-origin case and is refused.
 //

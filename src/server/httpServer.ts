@@ -21,7 +21,7 @@ import { errorLogFields } from '../lib/errors.js';
 import observability from '../observability.js';
 import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { MCPAuthTokenVerificationError } from 'mcp-auth';
+import { TokenVerificationError } from '../auth/bearer.js';
 import { createMcpAuth } from '../auth/setup.js';
 import { resolveJwksSource, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
 import { createAssertionPromotionMiddleware } from '../lib/oidc-token-source.js';
@@ -181,7 +181,7 @@ export async function startHttpServer(
       // The SDK checks Host only. In open mode a browser Origin must also be an allowed
       // hostname; an absent Origin (non-browser clients) passes. Comparing Origin to Host
       // would not help: under rebinding both carry the attacker's name. /.well-known/* is
-      // exempt because mcp-auth serves it with cors() for public cross-origin reads.
+      // exempt because the metadata router serves it with open CORS for public reads.
       app.use((req, res, next) => {
         const origin = req.headers.origin;
         if (origin === undefined || req.path.startsWith('/.well-known/')) { next(); return; }
@@ -206,7 +206,7 @@ export async function startHttpServer(
   app.use(express.json({ limit: config.MCP_HTTP_BODY_LIMIT, inflate: false }));
   const scheme = config.MCP_ENABLE_HTTPS ? 'https' : 'http';
 
-  // --- OIDC / mcp-auth (CF-5) ---
+  // --- OIDC bearer auth (CF-5; built in since #634) ---
   // When AUTH_PROVIDER=oidc, validate JWTs and enforce budget ACL.
   // When AUTH_PROVIDER=none (default), the existing static Bearer token check applies.
   let mcpAuth: ReturnType<typeof createMcpAuth> = null;
@@ -219,7 +219,7 @@ export async function startHttpServer(
     if (mcpAuth) {
       // #473: clients that skip the path-specific RFC 9728 discovery URL (e.g. Google Gemini)
       // fetch /.well-known/oauth-protected-resource at the root. When OIDC_RESOURCE has a path,
-      // rewrite those requests onto the path-specific route so mcp-auth serves the identical
+      // rewrite those requests onto the path-specific route so the router serves the identical
       // document and CORS headers in-process. The target is fixed at startup from
       // OIDC_RESOURCE, never taken from the request; the match rule is isRootMetadataRequest.
       // Mounted inside `if (mcpAuth)` and before the router, so `none` mode never gets it and
@@ -253,9 +253,9 @@ export async function startHttpServer(
         );
       }
 
-      // Custom jose-based JWT verifier that bypasses mcp-auth's strict PKCE/discovery
-      // validation that fails when the IdP (e.g. Casdoor before v2.316.1) doesn't advertise
-      // code_challenge_methods_supported in its discovery document.
+      // Our own jose-based JWT verifier. It predates #634: mcp-auth's built-in verifier ran a
+      // strict PKCE/discovery validation that failed when the IdP (e.g. Casdoor before v2.316.1)
+      // did not advertise code_challenge_methods_supported in its discovery document.
       // #244: resolve the JWKS URI from the issuer's OpenID discovery document
       // instead of a hardcoded `${OIDC_ISSUER}/.well-known/jwks` (which 404s for
       // most IdPs). discoverJwksUri fetches discovery once at startup and fails
@@ -310,8 +310,8 @@ export async function startHttpServer(
         // or out-of-set aud.
         //
         // #244: map a jose verification failure (expired, malformed, wrong aud,
-        // bad signature) to MCPAuthTokenVerificationError so mcp-auth's bearer
-        // handler returns a clean 401 with a WWW-Authenticate header instead of
+        // bad signature) to TokenVerificationError so the bearer
+        // middleware (src/auth/bearer.ts) returns a clean 401 with a WWW-Authenticate header instead of
         // re-throwing the raw jose error as a 500. #463: pass a STRIPPED cause
         // (code, claim, reason only), never the jose error itself: outside
         // production showErrorDetails serialises the cause into the 401 body, and
@@ -325,14 +325,14 @@ export async function startHttpServer(
             audience: acceptedAudiences,
           }));
         } catch (err) {
-          throw new MCPAuthTokenVerificationError('invalid_token', stripJoseCause(err));
+          throw new TokenVerificationError('invalid_token', stripJoseCause(err));
         }
         // #244: require a usable `sub`. authenticateRequest (#163) and budget-acl
         // key authorization on req.auth.subject, so a token with no string `sub`
         // cannot be mapped to a principal. Reject it here as an invalid token (a
         // clean 401) rather than letting it through to a downstream subject check.
         if (typeof payload.sub !== 'string' || payload.sub.length === 0) {
-          throw new MCPAuthTokenVerificationError('invalid_token');
+          throw new TokenVerificationError('invalid_token');
         }
         const rawAud = payload.aud;
         const audience = Array.isArray(rawAud) ? rawAud : (rawAud ? [rawAud] : []);
@@ -340,7 +340,7 @@ export async function startHttpServer(
         return {
           token,
           // #244: populate subject from the JWT `sub` claim (guaranteed a non-empty
-          // string by the check above). mcp-auth sets req.auth to exactly this
+          // string by the check above). The bearer middleware sets req.auth to exactly this
           // object, and authenticateRequest (#163) plus budget-acl.ts key off
           // req.auth.subject; without it OIDC mode rejects every request.
           subject: payload.sub,
@@ -473,7 +473,7 @@ export async function startHttpServer(
   // Authentication middleware
   const authenticateRequest = (req: Request, res: Response): boolean => {
     // OIDC mode: verify the request principal directly rather than inferring auth
-    // from configuration (#163, OWASP A07). The mcp-auth bearerAuth() middleware
+    // from configuration (#163, OWASP A07). The bearerAuth() middleware (src/auth/bearer.ts)
     // populates req.auth.subject on a verified request; if it is absent the
     // request was NOT authenticated (middleware skipped/unmounted/null-auth), so
     // we must reject instead of trusting that "config says OIDC".

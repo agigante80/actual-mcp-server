@@ -150,7 +150,7 @@ export function canAccessBudget(req: Request, budgetSyncId: string): boolean {
  * - Attaches `req.allowedBudgets` for downstream use (multi-budget tools).
  * - Returns HTTP 403 if the authenticated user has no permitted budgets.
  *
- * Must be mounted AFTER mcp-auth's `bearerAuth()` middleware so `req.auth`
+ * Must be mounted AFTER the bearer middleware (`bearerAuth()`, src/auth/bearer.ts) so `req.auth`
  * is already populated.
  */
 export function budgetAclMiddleware(req: Request, res: Response, next: NextFunction): void {

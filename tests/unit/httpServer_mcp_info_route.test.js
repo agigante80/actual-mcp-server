@@ -15,7 +15,7 @@
 // handler, /mcp-info is, and the OIDC-mode RFC 9728 router is untouched (scenario 2).
 //
 // OIDC-mode /.well-known/oauth-protected-resource (mcpAuth.protectedResourceMetadataRouter)
-// is NOT booted here: it needs a live IdP via the global fetch at startup and is mcp-auth's
+// is NOT booted here: it needs a live IdP via the global fetch at startup and is the bearer module's
 // own tested code. The source assertion that its registration is unchanged is the
 // offline-checkable guarantee that OIDC-mode serving is preserved.
 //
@@ -101,7 +101,7 @@ check('OIDC-mode RFC 9728 router is untouched (scenario 2): protectedResourceMet
 
 {
   // #473: the root metadata rewrite must sit inside `if (mcpAuth)` (so `none` mode never
-  // gets it) and before the router it feeds (so the rewritten URL reaches mcp-auth).
+  // gets it) and before the router it feeds (so the rewritten URL reaches the metadata router).
   const guard = src.indexOf('if (mcpAuth) {');
   const rewrite = src.indexOf('isRootMetadataRequest(req.method, req.path)');
   const router = src.indexOf('app.use(mcpAuth.protectedResourceMetadataRouter())');

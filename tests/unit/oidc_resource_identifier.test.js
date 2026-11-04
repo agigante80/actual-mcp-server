@@ -1,12 +1,12 @@
 // tests/unit/oidc_resource_identifier.test.js
 //
-// #461: OIDC_RESOURCE must be an absolute http(s) URL, because mcp-auth derives the
+// #461: OIDC_RESOURCE must be an absolute http(s) URL, because src/auth/bearer.ts derives the
 // RFC 9728 well-known route from its pathname and echoes it verbatim as the metadata
 // `resource`. Four of our own recipes said `OIDC_RESOURCE=your-client-id`, which dies
 // inside the library at startup. This file covers the PURE module: the validator, the
 // scheme and query advisories, the advertised-path derivation (with its fallback for an
 // advertised URL that does not parse) and the metadata warning. It also proves, against
-// the REAL mcp-auth, that the route follows the identifier's path. The server-boot
+// the REAL router, that the route follows the identifier's path. The server-boot
 // assertions live in httpServer_oidc_resource_metadata.test.js.
 //
 // Every positive assertion is paired with a mutated fixture that must FAIL, so a
@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import express from 'express';
-import { MCPAuth } from 'mcp-auth';
+import { resourceMetadataRouter } from '../../dist/src/auth/bearer.js';
 import {
   validateOidcResource,
   resourceSchemeAdvisories,
@@ -80,7 +80,7 @@ check('embedded credentials are rejected and the secret is NOT echoed', () => {
   const msg = throwsWith(() => validateOidcResource('https://u:s3cr3t@host/http'), 'OIDC_RESOURCE', 'credentials');
   assert.ok(!msg.includes('s3cr3t'), `secret leaked into the message: ${msg}`);
 });
-check('surrounding whitespace is rejected (mcp-auth would echo the padded string verbatim)', () => {
+check('surrounding whitespace is rejected (the router would echo the padded string verbatim)', () => {
   throwsWith(() => validateOidcResource(' https://host/http '), 'OIDC_RESOURCE', 'whitespace');
 });
 check('a query component is accepted with one advisory that does not echo the query', () => {
@@ -169,13 +169,10 @@ check('origin form: buildAcceptedAudiences holds exactly the configured string',
   assert.deepStrictEqual(buildAcceptedAudiences('https://host', undefined), ['https://host']);
 });
 
-console.log('\n[oidc-resource] #461 route derivation against the real mcp-auth');
+console.log('\n[oidc-resource] #461 route derivation against the real router');
 
 async function metadataFor(resource) {
-  const mcpAuth = new MCPAuth({
-    protectedResources: [{ metadata: { resource, authorizationServers: [{ issuer: 'https://idp.example.com', type: 'oidc' }], scopesSupported: [] } }],
-  });
-  const router = mcpAuth.protectedResourceMetadataRouter();
+  const router = resourceMetadataRouter({ resource, issuer: 'https://idp.example.com', scopesSupported: [] });
   const routes = router.stack.filter((l) => l.route).map((l) => l.route.path);
   const app = express();
   app.use(router);
@@ -202,11 +199,10 @@ async function metadataFor(resource) {
     assert.deepStrictEqual(origin.routes, ['/.well-known/oauth-protected-resource']);
     assert.strictEqual(origin.bodies['/.well-known/oauth-protected-resource'].resource, 'https://host');
   });
-  check('MUTATION: a bare client id makes the real library throw (the failure this ticket makes legible)', () => {
+  check('MUTATION: a bare client id makes the real router throw (the failure this ticket makes legible)', () => {
     let msg = null;
     try {
-      new MCPAuth({ protectedResources: [{ metadata: { resource: 'my-client-id', authorizationServers: [{ issuer: 'https://idp.example.com', type: 'oidc' }], scopesSupported: [] } }] })
-        .protectedResourceMetadataRouter();
+      resourceMetadataRouter({ resource: 'my-client-id', issuer: 'https://idp.example.com', scopesSupported: [] });
     } catch (e) { msg = e.message; }
     assert.ok(msg && msg.includes('Invalid resource identifier URI'), String(msg));
   });
@@ -214,7 +210,7 @@ async function metadataFor(resource) {
 
 console.log('\n[oidc-resource] #473 root metadata rewrite helpers');
 
-check('resourceMetadataPath mirrors mcp-auth: raw pathname, no slash normalisation, null for the origin form', () => {
+check('resourceMetadataPath mirrors resourceMetadataEndpoint: raw pathname, no slash normalisation, null for the origin form', () => {
   assert.strictEqual(resourceMetadataPath('https://host/http'), '/.well-known/oauth-protected-resource/http');
   assert.strictEqual(resourceMetadataPath('https://host/http/'), '/.well-known/oauth-protected-resource/http/');
   assert.strictEqual(resourceMetadataPath('https://host'), null);

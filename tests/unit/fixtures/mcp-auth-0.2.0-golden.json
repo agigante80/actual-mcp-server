@@ -1,0 +1,1614 @@
+{
+  "capturedFrom": "mcp-auth@0.2.0",
+  "issuer": "https://idp.example",
+  "scopesSupported": [
+    "budget:read",
+    "openid"
+  ],
+  "middleware": [
+    {
+      "name": "no-header/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {},
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_auth_header\", error_description=\"Missing `Authorization` header. Please provide a valid bearer token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "122",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_auth_header",
+          "error_description": "Missing `Authorization` header. Please provide a valid bearer token."
+        }
+      }
+    },
+    {
+      "name": "wrong-scheme/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Basic abc"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_auth_header_format\", error_description=\"Invalid `Authorization` header format. Expected \"Bearer <token>\".\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "128",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_auth_header_format",
+          "error_description": "Invalid `Authorization` header format. Expected \"Bearer <token>\"."
+        }
+      }
+    },
+    {
+      "name": "extra-parts/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer a b"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_auth_header_format\", error_description=\"Invalid `Authorization` header format. Expected \"Bearer <token>\".\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "128",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_auth_header_format",
+          "error_description": "Invalid `Authorization` header format. Expected \"Bearer <token>\"."
+        }
+      }
+    },
+    {
+      "name": "empty-token/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer "
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_bearer_token\", error_description=\"Missing bearer token in `Authorization` header. Please provide a valid token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "132",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_bearer_token",
+          "error_description": "Missing bearer token in `Authorization` header. Please provide a valid token."
+        }
+      }
+    },
+    {
+      "name": "lowercase-scheme/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "bearer tok"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "237",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "reached": true,
+          "auth": {
+            "token": "t",
+            "subject": "user-1",
+            "issuer": "https://idp.example",
+            "clientId": "https://mcp.example/mcp",
+            "audience": [
+              "https://mcp.example/mcp"
+            ],
+            "scopes": [
+              "budget:read"
+            ],
+            "expiresAt": 4102444800,
+            "claims": {
+              "sub": "user-1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "tveWithCause/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "tveWithCause",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"The provided token is invalid or malformed.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "180",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_token",
+          "error_description": "The provided token is invalid or malformed.",
+          "cause": {
+            "code": "ERR_JWT_CLAIM_VALIDATION_FAILED",
+            "claim": "aud",
+            "reason": "check_failed"
+          }
+        }
+      }
+    },
+    {
+      "name": "tveNoCause/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "tveNoCause",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"The provided token is invalid or malformed.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "91",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_token",
+          "error_description": "The provided token is invalid or malformed."
+        }
+      }
+    },
+    {
+      "name": "tveFailed/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "tveFailed",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"token_verification_failed\", error_description=\"Token verification failed due to an error.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "102",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "token_verification_failed",
+          "error_description": "Token verification failed due to an error."
+        }
+      }
+    },
+    {
+      "name": "wrongIssuer/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "wrongIssuer",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_issuer\", error_description=\"The token issuer does not match the expected issuer.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "177",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_issuer",
+          "error_description": "The token issuer does not match the expected issuer.",
+          "cause": {
+            "expected": "https://idp.example",
+            "actual": "https://other.example"
+          }
+        }
+      }
+    },
+    {
+      "name": "boom/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "boom",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 599,
+        "headers": {
+          "content-length": "21",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "handlerGot": "boom"
+        }
+      }
+    },
+    {
+      "name": "valid/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "237",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "reached": true,
+          "auth": {
+            "token": "t",
+            "subject": "user-1",
+            "issuer": "https://idp.example",
+            "clientId": "https://mcp.example/mcp",
+            "audience": [
+              "https://mcp.example/mcp"
+            ],
+            "scopes": [
+              "budget:read"
+            ],
+            "expiresAt": 4102444800,
+            "claims": {
+              "sub": "user-1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "missingScope/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "noScopes",
+      "opts": {
+        "requiredScopes": [
+          "budget:read"
+        ],
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_required_scopes\", error_description=\"The token does not contain the necessary scopes for this request.\"",
+          "content-length": "199",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_required_scopes",
+          "error_description": "The token does not contain the necessary scopes for this request.",
+          "cause": {
+            "missing_scopes": [
+              "budget:read"
+            ]
+          },
+          "missing_scopes": [
+            "budget:read"
+          ]
+        }
+      }
+    },
+    {
+      "name": "wrongAudience/details=true",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "wrongAudience",
+      "opts": {
+        "requiredScopes": [],
+        "audience": "aud-1",
+        "showErrorDetails": true
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_audience\", error_description=\"The token audience does not match the expected audience.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "155",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_audience",
+          "error_description": "The token audience does not match the expected audience.",
+          "cause": {
+            "expected": "aud-1",
+            "actual": [
+              "aud-2"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "no-header/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {},
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_auth_header\", error_description=\"Missing `Authorization` header. Please provide a valid bearer token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "122",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_auth_header",
+          "error_description": "Missing `Authorization` header. Please provide a valid bearer token."
+        }
+      }
+    },
+    {
+      "name": "wrong-scheme/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Basic abc"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_auth_header_format\", error_description=\"Invalid `Authorization` header format. Expected \"Bearer <token>\".\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "128",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_auth_header_format",
+          "error_description": "Invalid `Authorization` header format. Expected \"Bearer <token>\"."
+        }
+      }
+    },
+    {
+      "name": "extra-parts/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer a b"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_auth_header_format\", error_description=\"Invalid `Authorization` header format. Expected \"Bearer <token>\".\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "128",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_auth_header_format",
+          "error_description": "Invalid `Authorization` header format. Expected \"Bearer <token>\"."
+        }
+      }
+    },
+    {
+      "name": "empty-token/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer "
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_bearer_token\", error_description=\"Missing bearer token in `Authorization` header. Please provide a valid token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "132",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_bearer_token",
+          "error_description": "Missing bearer token in `Authorization` header. Please provide a valid token."
+        }
+      }
+    },
+    {
+      "name": "lowercase-scheme/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "bearer tok"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "237",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "reached": true,
+          "auth": {
+            "token": "t",
+            "subject": "user-1",
+            "issuer": "https://idp.example",
+            "clientId": "https://mcp.example/mcp",
+            "audience": [
+              "https://mcp.example/mcp"
+            ],
+            "scopes": [
+              "budget:read"
+            ],
+            "expiresAt": 4102444800,
+            "claims": {
+              "sub": "user-1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "tveWithCause/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "tveWithCause",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"The provided token is invalid or malformed.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "91",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_token",
+          "error_description": "The provided token is invalid or malformed."
+        }
+      }
+    },
+    {
+      "name": "tveNoCause/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "tveNoCause",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_token\", error_description=\"The provided token is invalid or malformed.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "91",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_token",
+          "error_description": "The provided token is invalid or malformed."
+        }
+      }
+    },
+    {
+      "name": "tveFailed/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "tveFailed",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"token_verification_failed\", error_description=\"Token verification failed due to an error.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "102",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "token_verification_failed",
+          "error_description": "Token verification failed due to an error."
+        }
+      }
+    },
+    {
+      "name": "wrongIssuer/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "wrongIssuer",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_issuer\", error_description=\"The token issuer does not match the expected issuer.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "101",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_issuer",
+          "error_description": "The token issuer does not match the expected issuer."
+        }
+      }
+    },
+    {
+      "name": "boom/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "boom",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 599,
+        "headers": {
+          "content-length": "21",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "handlerGot": "boom"
+        }
+      }
+    },
+    {
+      "name": "valid/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-length": "237",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "reached": true,
+          "auth": {
+            "token": "t",
+            "subject": "user-1",
+            "issuer": "https://idp.example",
+            "clientId": "https://mcp.example/mcp",
+            "audience": [
+              "https://mcp.example/mcp"
+            ],
+            "scopes": [
+              "budget:read"
+            ],
+            "expiresAt": 4102444800,
+            "claims": {
+              "sub": "user-1"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "missingScope/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "noScopes",
+      "opts": {
+        "requiredScopes": [
+          "budget:read"
+        ],
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 403,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_required_scopes\", error_description=\"The token does not contain the necessary scopes for this request.\"",
+          "content-length": "156",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_required_scopes",
+          "error_description": "The token does not contain the necessary scopes for this request.",
+          "missing_scopes": [
+            "budget:read"
+          ]
+        }
+      }
+    },
+    {
+      "name": "wrongAudience/details=false",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp",
+      "verify": "wrongAudience",
+      "opts": {
+        "requiredScopes": [],
+        "audience": "aud-1",
+        "showErrorDetails": false
+      },
+      "headers": {
+        "authorization": "Bearer tok"
+      },
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"invalid_audience\", error_description=\"The token audience does not match the expected audience.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "107",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "invalid_audience",
+          "error_description": "The token audience does not match the expected audience."
+        }
+      }
+    },
+    {
+      "name": "no-header/resource=https://mcp.example",
+      "kind": "middleware",
+      "resource": "https://mcp.example",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {},
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_auth_header\", error_description=\"Missing `Authorization` header. Please provide a valid bearer token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource\"",
+          "content-length": "122",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_auth_header",
+          "error_description": "Missing `Authorization` header. Please provide a valid bearer token."
+        }
+      }
+    },
+    {
+      "name": "no-header/resource=https://mcp.example/",
+      "kind": "middleware",
+      "resource": "https://mcp.example/",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {},
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_auth_header\", error_description=\"Missing `Authorization` header. Please provide a valid bearer token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource\"",
+          "content-length": "122",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_auth_header",
+          "error_description": "Missing `Authorization` header. Please provide a valid bearer token."
+        }
+      }
+    },
+    {
+      "name": "no-header/resource=https://mcp.example/mcp?x=1",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp?x=1",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {},
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_auth_header\", error_description=\"Missing `Authorization` header. Please provide a valid bearer token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp\"",
+          "content-length": "122",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_auth_header",
+          "error_description": "Missing `Authorization` header. Please provide a valid bearer token."
+        }
+      }
+    },
+    {
+      "name": "no-header/resource=https://mcp.example/mcp/",
+      "kind": "middleware",
+      "resource": "https://mcp.example/mcp/",
+      "verify": "valid",
+      "opts": {
+        "requiredScopes": [],
+        "showErrorDetails": true
+      },
+      "headers": {},
+      "response": {
+        "status": 401,
+        "headers": {
+          "www-authenticate": "Bearer error=\"missing_auth_header\", error_description=\"Missing `Authorization` header. Please provide a valid bearer token.\", resource_metadata=\"https://mcp.example/.well-known/oauth-protected-resource/mcp/\"",
+          "content-length": "122",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "error": "missing_auth_header",
+          "error_description": "Missing `Authorization` header. Please provide a valid bearer token."
+        }
+      }
+    }
+  ],
+  "metadata": [
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "130",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/mcp",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "HEAD",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "130",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "access-control-allow-headers": "authorization",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "POST",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "180",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /.well-known/oauth-protected-resource/mcp</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "requestHeaders": {
+        "origin": "https://client.example"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "130",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/mcp",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp",
+      "path": "/.well-known/oauth-protected-resource/mcp/x",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "181",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /.well-known/oauth-protected-resource/mcp/x</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "126",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "HEAD",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "126",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "access-control-allow-headers": "authorization",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "POST",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "176",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /.well-known/oauth-protected-resource</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "GET",
+      "requestHeaders": {
+        "origin": "https://client.example"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "126",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example",
+      "path": "/.well-known/oauth-protected-resource/x",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "177",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /.well-known/oauth-protected-resource/x</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "127",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "HEAD",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "127",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "access-control-allow-headers": "authorization",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "POST",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "176",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /.well-known/oauth-protected-resource</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource",
+      "method": "GET",
+      "requestHeaders": {
+        "origin": "https://client.example"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "127",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/",
+      "path": "/.well-known/oauth-protected-resource/x",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "177",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /.well-known/oauth-protected-resource/x</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "134",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/mcp?x=1",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "HEAD",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "134",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "access-control-allow-headers": "authorization",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "POST",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "180",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /.well-known/oauth-protected-resource/mcp</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp",
+      "method": "GET",
+      "requestHeaders": {
+        "origin": "https://client.example"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "134",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/mcp?x=1",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp?x=1",
+      "path": "/.well-known/oauth-protected-resource/mcp/x",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "181",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /.well-known/oauth-protected-resource/mcp/x</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "131",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/mcp/",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/",
+      "method": "HEAD",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "131",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "access-control-allow-headers": "authorization",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/",
+      "method": "OPTIONS",
+      "requestHeaders": {
+        "origin": "https://client.example",
+        "access-control-request-method": "GET"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 204,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "access-control-allow-methods": "GET,HEAD,PUT,PATCH,POST,DELETE",
+          "vary": "Access-Control-Request-Headers",
+          "content-length": "0"
+        },
+        "body": ""
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/",
+      "method": "POST",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "181",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot POST /.well-known/oauth-protected-resource/mcp/</pre>\n</body>\n</html>\n"
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/",
+      "method": "GET",
+      "requestHeaders": {
+        "origin": "https://client.example"
+      },
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 200,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "131",
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": {
+          "resource": "https://mcp.example/mcp/",
+          "scopes_supported": [
+            "budget:read",
+            "openid"
+          ],
+          "authorization_servers": [
+            "https://idp.example"
+          ]
+        }
+      }
+    },
+    {
+      "resource": "https://mcp.example/mcp/",
+      "path": "/.well-known/oauth-protected-resource/mcp/x",
+      "method": "GET",
+      "requestHeaders": {},
+      "routePaths": [
+        "/.well-known/oauth-protected-resource/mcp/"
+      ],
+      "response": {
+        "status": 404,
+        "headers": {
+          "access-control-allow-origin": "*",
+          "content-length": "181",
+          "content-type": "text/html; charset=utf-8"
+        },
+        "body": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<title>Error</title>\n</head>\n<body>\n<pre>Cannot GET /.well-known/oauth-protected-resource/mcp/x</pre>\n</body>\n</html>\n"
+      }
+    }
+  ]
+}
