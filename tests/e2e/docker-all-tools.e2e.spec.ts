@@ -94,6 +94,22 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(ann('actual_rules_create_or_update')?.idempotentHint).toBe(true);
   });
 
+  // ==================== TOOL TITLES (#641) ====================
+  // Runs on BOTH transports, unlike the annotations case above: `mcp.listTools` reads the
+  // published entries through each transport's own client, so a title that reached HTTP but
+  // not stdio (the #379 failure shape) fails here.
+  test('tools/list - every tool publishes a title', async ({ mcp }) => {
+    const tools = await mcp.listTools();
+    expect(tools.length).toBeGreaterThan(70);
+    const untitled = tools
+      .filter((t: any) => typeof t.title !== 'string' || t.title.trim() === '' || t.title === t.name)
+      .map((t: any) => t.name);
+    expect(untitled).toEqual([]);
+    const byName = new Map(tools.map((t: any) => [t.name, t]));
+    expect(byName.get('actual_transactions_create')?.title).toBe('Create transaction');
+    expect(new Set(tools.map((t: any) => t.title)).size).toBe(tools.length);
+  });
+
   // ==================== SESSION MANAGEMENT ====================
   test('actual_session_list - should list active sessions', async ({ mcp }) => {
     // #383: HTTP-only, because the CONCEPT is. stdio has one implicit session for the life of

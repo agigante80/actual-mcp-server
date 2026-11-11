@@ -27,7 +27,9 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.e
 //   descriptions on the schedule amount range and recur patterns added 254 bytes to
 //   actual_schedules_update, now 3,824 bytes, plus about 2%. The #639 total is 111,333 bytes
 //   (2,546 added), under the unchanged total ceiling.
-const TOTAL_CEILING = 113700;
+//   Total raised for #641 (a display `title` on every tool, a Glama TDQS input) from 113,700:
+//   85 titles added 2,469 bytes, so the list is 113,802 bytes, plus about 2%.
+const TOTAL_CEILING = 116100;
 const PER_TOOL_CEILING = 3900;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));

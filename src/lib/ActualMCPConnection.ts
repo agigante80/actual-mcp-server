@@ -55,14 +55,12 @@ export class ActualMCPConnection extends EventEmitter {
         if (!tool) {
           throw new Error(`Tool not found: ${name}`);
         }
-        // Add examples if present on the tool
-        return {
-          ...buildToolListEntries([tool.name], () => ({
-            description: tool.description,
-            schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : undefined,
-          }))[0],
-          title: tool.name,
-        };
+        // The title comes from the shared builder (#641); overriding it here with the
+        // programmatic name would undo that for every client of this path.
+        return buildToolListEntries([tool.name], () => ({
+          description: tool.description,
+          schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : undefined,
+        }))[0];
       });
     } catch (e) {
       // fallback to demo tools

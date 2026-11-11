@@ -65,6 +65,8 @@ export type StdioSession = {
   serverInfo(): { name: string; version: string } | undefined;
   /** #560: the tool names this server publishes, from `tools/list`. */
   listToolNames(): Promise<string[]>;
+  /** #641: the full tools/list entries (title, annotations, schemas), parsed by the SDK. */
+  listTools(): Promise<any[]>;
   close(): Promise<void>;
 };
 
@@ -151,6 +153,7 @@ export async function openStdioSession(): Promise<StdioSession> {
     instructions: () => client.getInstructions(),
     serverInfo: () => client.getServerVersion(),
     listToolNames: async () => (await client.listTools()).tools.map((t) => t.name),
+    listTools: async () => (await client.listTools()).tools,
     close,
   };
 }

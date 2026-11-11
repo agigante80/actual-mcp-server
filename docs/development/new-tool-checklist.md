@@ -26,6 +26,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 - [ ] Added to `IMPLEMENTED_TOOLS` in `src/actualToolsManager.ts`
 - [ ] **Added to the toolsets** (#603): Add the tool to exactly one `TOOLSETS` array in `src/lib/toolsets.ts`, and to `WRITE_CAPABLE` if it writes; then `npm run build && npm run docs:gen`. `tests/unit/toolsets.test.js` ("every registered tool belongs to exactly one toolset") fails if you skip it, and `docs:check` reports the README tools-summary block stale.
 - [ ] **Classified in `src/lib/tool-annotations.ts`** (#379): put it in exactly one of `READ_ONLY`, `DESTRUCTIVE` or `ADDITIVE`, and if it writes, decide idempotence. `npm run build && node tests/unit/tool_annotations.test.js` FAILS if you skip this (the guard reads `dist/`, so build first), and it checks the read-only claim against the adapter call graph
+- [ ] **Titled in `src/lib/tool-titles.ts`** (#641): add a sentence-case display title of 2 to 5 words, unique, with no leading "Actual", whose first word is a read verb (Get, List, Search...) exactly when the tool is read-only. `npm run build && node tests/unit/tool_titles.test.js` FAILS naming the tool if you skip this
 - [ ] Adapter function(s) exist (or created) in `src/lib/actual-adapter.ts`
 - [ ] `npm run build` passes with zero errors
 
@@ -172,6 +173,14 @@ calling it.
 **Do not make any code in `src/` branch on an annotation.** The MCP spec says clients must
 treat annotations as untrusted, so they can never carry an authorisation or safety decision.
 Keep those in `budget-acl.ts` and the adapter guards.
+
+Then give the tool a display title in `src/lib/tool-titles.ts` (#641). Clients show it
+instead of `actual_x_y`, and Glama's quality score reads it.
+
+- [ ] Sentence case, 2 to 5 words, no leading "Actual", not used by any other tool.
+- [ ] The first word is a read verb (Get, List, Search, Summarize...) if and only if the
+      tool is in `READ_ONLY`.
+- [ ] Run `npm run build && node tests/unit/tool_titles.test.js`.
 
 ---
 

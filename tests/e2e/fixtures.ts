@@ -114,6 +114,8 @@ export type McpClient = {
   raw(tool: string, args?: Record<string, unknown>): Promise<any>;
   /** Post an arbitrary JSON-RPC payload and return the HTTP response, for error-envelope tests. */
   post(payload: unknown): Promise<APIResponse>;
+  /** #641: the published tools/list entries, on either transport. */
+  listTools(): Promise<any[]>;
 };
 
 export type AccountRef = { id: string; name: string };
@@ -236,6 +238,21 @@ function makeClient(request: APIRequestContext, sessionId: string): McpClient {
         data: JSON.stringify(payload),
         headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
       }),
+    listTools: async () => {
+      const res = await request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
+        data: JSON.stringify({ jsonrpc: '2.0', id: 4641, method: 'tools/list', params: {} }),
+        headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
+      });
+      // Name the real cause (a 404 session, a JSON-RPC error) instead of returning [] and
+      // failing later on a tool count.
+      const text = await res.text();
+      let body: any;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      if (!res.ok() || !Array.isArray(body?.result?.tools)) {
+        throw new Error(`tools/list failed: HTTP ${res.status()} ${text.slice(0, 300)}`);
+      }
+      return body.result.tools;
+    },
   };
 }
 
@@ -303,6 +320,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         sessionId: 'stdio',
         raw: session.raw,
         call: session.call,
+        listTools: session.listTools,
         // stdio has no HTTP envelope to inspect. The two callers of `post` assert on the raw
         // JSON-RPC error shape, which the SDK surfaces as a thrown exception instead, so they
         // are scoped to HTTP rather than asserted differently here. Throwing names the reason.

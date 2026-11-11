@@ -14,10 +14,13 @@
  */
 
 import { annotationsFor } from './tool-annotations.js';
+import { titleFor } from './tool-titles.js';
 
 /** A tool as published to clients. Deliberately minimal: what the MCP spec defines. */
 export interface ToolListEntry {
   name: string;
+  /** Human-readable display name (#641). Omitted, never undefined, when a tool has none. */
+  title?: string;
   description: string;
   inputSchema: unknown;
   annotations: ReturnType<typeof annotationsFor>;
@@ -42,8 +45,11 @@ export function buildToolListEntries(
     const { description, schema } = resolve(name);
     const inputSchema =
       schema && typeof schema === 'object' && Object.keys(schema).length > 0 ? schema : EMPTY_SCHEMA;
+    const title = titleFor(name);
     return {
       name,
+      // Display metadata only (#641); omitted rather than set to undefined when absent.
+      ...(title !== undefined ? { title } : {}),
       description: description || `Tool ${name}`,
       inputSchema,
       // Advisory metadata for clients, never a guard: the MCP spec says clients must treat
