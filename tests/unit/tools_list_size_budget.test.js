@@ -29,6 +29,8 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.e
 //   (2,546 added), under the unchanged total ceiling.
 //   Total raised for #641 (a display `title` on every tool, a Glama TDQS input) from 113,700:
 //   85 titles added 2,469 bytes, so the list is 113,802 bytes, plus about 2%.
+//   #642 (outputSchema on two tools) added 1,326 bytes, so the list is 115,128 bytes and the
+//   heaviest entry 3,850: both still under the ceilings, so neither was raised.
 const TOTAL_CEILING = 116100;
 const PER_TOOL_CEILING = 3900;
 
@@ -61,6 +63,7 @@ async function check(label, fn) {
 console.log('\n[#486] tools/list size budget');
 
 const { buildToolListEntries } = await import('../../dist/src/lib/tool-list-entry.js');
+const { outputJsonSchema } = await import('../../dist/src/lib/tool-output.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 const { z } = await import('zod');
 const { getCanonicalCount } = await import('../../scripts/tool-count.mjs');
@@ -70,9 +73,11 @@ const registered = manager.getToolNames();
 const names = manager.getPublishedToolNames();
 const entries = buildToolListEntries(names, (name) => {
   const tool = manager.getTool(name);
-  return { description: tool.description, schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema) : undefined };
+  // #642: the published list carries the output schema of a covered tool, so it is measured.
+  return { description: tool.description, schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema) : undefined, outputSchema: outputJsonSchema(tool) };
 });
 const realTotal = sizeOf(entries);
+console.log(`  measured: total ${realTotal} bytes, heaviest ${Math.max(...entries.map(sizeOf))} bytes`);
 
 await check('the measured list is the full registry (published === registered === IMPLEMENTED_TOOLS)', () => {
   const canonical = getCanonicalCount();

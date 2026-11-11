@@ -48,6 +48,7 @@ import { requestContext } from '../lib/requestContext.js';
 import { createShutdownGate, createShutdownHandler } from './shutdown.js';
 import { recordSessionOwner, forgetSessionOwner, sessionOwnerMatches } from '../lib/session-owners.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
+import { executeAndFrame } from '../lib/tool-output.js';
 
 // #438 / #452: the init-failure classifier now lives in src/lib/init-failure.ts so BOTH
 // transports can reach it (stdio could not, which was the whole of #452). Re-exported here
@@ -112,6 +113,7 @@ export async function startHttpServer(
   bindHost = 'localhost',                        // #239: interface to bind; forwarded to listen()
   advertisedUrl?: string,
   onListening?: (facts: HttpListenerFacts) => void, // #623: index.ts logs sys_startup from here
+  outputSchemas: Record<string, unknown> = {},       // #642: published outputSchema per covered tool
 ) {
   // #572: resolve MCP_STATIC_TOKENS (token variables, budget names) before anything
   // binds, so a bad entry refuses startup like an unreadable TLS key. The registry is
@@ -436,6 +438,7 @@ export async function startHttpServer(
     schema:
       (toolSchemas && toolSchemas[name]) ||
       (actualToolsManager as unknown as { getToolSchema?: (n: string) => unknown })?.getToolSchema?.(name),
+    outputSchema: Object.hasOwn(outputSchemas, name) ? outputSchemas[name] : undefined,
   });
 
   // Session liveness and idle timing are owned solely by the connection pool
@@ -576,10 +579,8 @@ export async function startHttpServer(
       logger.debug(`[TOOL CALL] ${name}`);
       // Prefer ActualMCPConnection executor if provided
       if (typeof (mcp as unknown as { executeTool?: Function }).executeTool === 'function') {
-        const result = await (mcp as unknown as { executeTool?: (n: string, a?: unknown) => Promise<unknown> }).executeTool!(name, args ?? {});
-        return {
-          content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result) }],
-        };
+        // #642: shared framing; the verdict reaches here so structuredContent is not dropped.
+        return await executeAndFrame(mcp, name, args ?? {});
       }
       // There is deliberately no second dispatch path here (#483): actualToolsManager has
       // no `invoke`, and every call must go through callTool, which refuses unpublished tools.

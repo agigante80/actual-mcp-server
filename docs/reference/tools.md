@@ -6,6 +6,8 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 
 ## Accounts
 
+`actual_accounts_list` and `actual_accounts_get_balance` publish an MCP `outputSchema` (a root `type: "object"` JSON Schema in `tools/list`) and return `structuredContent` equal to the parsed text block, alongside the unchanged text block, over HTTP and stdio. Clients that do not read `structuredContent` see exactly what they saw before. If a result ever fails its own schema, the call returns the text block with `isError: true` and no `structuredContent`, and the server logs the tool name and the failing paths (never values). Every other tool still returns the text block only.
+
 | Tool | Description |
 |------|-------------|
 | `actual_accounts_list` | List all accounts |

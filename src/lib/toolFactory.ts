@@ -14,7 +14,7 @@
  */
 
 import { z } from 'zod';
-import type { ToolDefinition } from '../../types/tool.d.js';
+import type { ToolDefinitionWithOutput } from './tool-output.js';
 import { createModuleLogger } from './loggerFactory.js';
 import observability from '../observability.js';
 import { errorLogFields } from './errors.js';
@@ -52,6 +52,12 @@ export interface ToolConfig<TInput = any, TOutput = any> {
    * @returns Tool result (any serializable value)
    */
   handler: (input: TInput, meta?: unknown) => Promise<TOutput>;
+
+  /**
+   * Optional output schema (#642). The result is `{ result }`, so the schema describes that
+   * object. Must be a top-level `z.object(...).loose()`; see src/lib/tool-output.ts.
+   */
+  outputSchema?: z.ZodTypeAny;
 
   /**
    * Optional examples for documentation
@@ -94,8 +100,8 @@ export interface ToolConfig<TInput = any, TOutput = any> {
  */
 export function createTool<TInput = any, TOutput = any>(
   config: ToolConfig<TInput, TOutput>
-): ToolDefinition {
-  const { name, description, schema, handler, examples } = config;
+): ToolDefinitionWithOutput {
+  const { name, description, schema, handler, examples, outputSchema } = config;
 
   return {
     name,
@@ -105,6 +111,7 @@ export function createTool<TInput = any, TOutput = any>(
         ).join('\n')}`
       : description,
     inputSchema: schema,
+    ...(outputSchema ? { outputSchema } : {}),
     call: async (args: unknown, meta?: unknown) => {
       const startTime = Date.now();
       

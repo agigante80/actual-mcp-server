@@ -5,6 +5,7 @@ import actualToolsManager from '../actualToolsManager.js';
 import adapter from './actual-adapter.js';
 import { z } from 'zod';
 import { buildToolListEntries } from './tool-list-entry.js';
+import { outputJsonSchema, type CheckedToolResult } from './tool-output.js';
 
 
 /**
@@ -60,6 +61,7 @@ export class ActualMCPConnection extends EventEmitter {
         return buildToolListEntries([tool.name], () => ({
           description: tool.description,
           schema: tool.inputSchema ? z.toJSONSchema(tool.inputSchema as any) : undefined,
+          outputSchema: outputJsonSchema(tool),
         }))[0];
       });
     } catch (e) {
@@ -129,6 +131,14 @@ export class ActualMCPConnection extends EventEmitter {
       default:
         throw new Error(`Unknown tool: ${toolName}`);
     }
+  }
+
+  /** executeTool plus the outputSchema verdict (#642); the transports frame the result from it. */
+  async executeToolChecked(toolName: string, params: unknown): Promise<CheckedToolResult> {
+    if (actualToolsManager && typeof actualToolsManager.callToolChecked === 'function') {
+      return await actualToolsManager.callToolChecked(toolName, params);
+    }
+    return { value: await this.executeTool(toolName, params) };
   }
 
   /** Optional shutdown logic */

@@ -110,6 +110,94 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(new Set(tools.map((t: any) => t.title)).size).toBe(tools.length);
   });
 
+  // ==================== STRUCTURED RESULTS (#642) ====================
+  // Exactly two tools publish an outputSchema. `mcp.raw` is used because `mcp.call` returns only
+  // the parsed text block. On stdio the SDK Client also validates structuredContent against the
+  // published schema itself and throws on a mismatch, so a stdio pass includes that check.
+  // The HTTP-leg assertions are the named guard that the HTTP call handler (a closure inside
+  // createServerInstance, unreachable by unit tests) does not drop the verdict.
+  const JSON_TYPES: Record<string, (v: unknown) => boolean> = {
+    object: (v) => typeof v === 'object' && v !== null && !Array.isArray(v),
+    array: (v) => Array.isArray(v),
+    string: (v) => typeof v === 'string',
+    boolean: (v) => typeof v === 'boolean',
+    integer: (v) => Number.isInteger(v),
+    number: (v) => typeof v === 'number',
+    null: (v) => v === null,
+  };
+  /** A small structural check: root and nested `type`, `required` and `properties`. */
+  function conforms(schema: any, value: unknown): boolean {
+    if (!schema || typeof schema !== 'object') return true;
+    const types: string[] = schema.type === undefined ? [] : [].concat(schema.type);
+    if (schema.anyOf) return schema.anyOf.some((s: any) => conforms(s, value));
+    if (types.length > 0 && !types.some((t) => JSON_TYPES[t]?.(value))) return false;
+    if (JSON_TYPES.object(value)) {
+      const obj = value as Record<string, unknown>;
+      for (const key of schema.required ?? []) if (!(key in obj)) return false;
+      for (const [key, sub] of Object.entries(schema.properties ?? {})) {
+        if (key in obj && !conforms(sub, obj[key])) return false;
+      }
+    }
+    if (Array.isArray(value) && schema.items) return value.every((v) => conforms(schema.items, v));
+    return true;
+  }
+
+  test('tools/list - the two covered tools publish a root object outputSchema, no other tool does', async ({ mcp }) => {
+    const tools = await mcp.listTools();
+    const withOutput = tools.filter((t: any) => t.outputSchema !== undefined).map((t: any) => t.name).sort();
+    expect(withOutput).toEqual(['actual_accounts_get_balance', 'actual_accounts_list']);
+    for (const t of tools.filter((x: any) => x.outputSchema)) {
+      expect(t.outputSchema.type).toBe('object');
+      expect(t.outputSchema.additionalProperties).not.toBe(false);
+    }
+  });
+
+  test('actual_accounts_list - structuredContent validates and equals the text block', async ({ mcp, makeAccount }) => {
+    await makeAccount();
+    const schema = (await mcp.listTools()).find((t: any) => t.name === 'actual_accounts_list').outputSchema;
+    const res = await mcp.raw('actual_accounts_list');
+    expect(res.isError).toBeFalsy();
+    expect(res.structuredContent).toBeTruthy();
+    expect(res.structuredContent).toEqual(JSON.parse(res.content[0].text));
+    expect(conforms(schema, res.structuredContent)).toBe(true);
+    expect(res.structuredContent.result.length).toBeGreaterThan(0);
+  });
+
+  test('actual_accounts_get_balance - structuredContent for an existing account, absent error', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const schema = (await mcp.listTools()).find((t: any) => t.name === 'actual_accounts_get_balance').outputSchema;
+    const res = await mcp.raw('actual_accounts_get_balance', { id: account.id });
+    expect(res.isError).toBeFalsy();
+    expect(Number.isInteger(res.structuredContent.balance)).toBe(true);
+    expect(res.structuredContent.accountName).toBe(account.name);
+    expect('error' in res.structuredContent).toBe(false);
+    expect(res.structuredContent).toEqual(JSON.parse(res.content[0].text));
+    expect(conforms(schema, res.structuredContent)).toBe(true);
+  });
+
+  test('actual_accounts_get_balance - a missing account is a valid { error, balance: null } result, not isError', async ({ mcp }) => {
+    const schema = (await mcp.listTools()).find((t: any) => t.name === 'actual_accounts_get_balance').outputSchema;
+    const res = await mcp.raw('actual_accounts_get_balance', { id: '00000000-0000-4000-8000-000000000000' });
+    expect(res.isError).toBeFalsy();
+    expect(res.structuredContent.balance).toBeNull();
+    expect(typeof res.structuredContent.error).toBe('string');
+    expect(res.structuredContent).toEqual(JSON.parse(res.content[0].text));
+    expect(conforms(schema, res.structuredContent)).toBe(true);
+  });
+
+  test('conforms() can fail: a wrong-typed balance and a missing required key are rejected', async ({ mcp }) => {
+    const schema = (await mcp.listTools()).find((t: any) => t.name === 'actual_accounts_get_balance').outputSchema;
+    expect(conforms(schema, { balance: 'x' })).toBe(false);
+    expect(conforms(schema, { accountName: 'a' })).toBe(false);
+  });
+
+  test('an uncovered tool (actual_payees_get) returns no structuredContent', async ({ mcp }) => {
+    const res = await mcp.raw('actual_payees_get');
+    expect(res.structuredContent).toBeUndefined();
+    expect(Array.isArray(res.content)).toBe(true);
+    expect(res.content[0].type).toBe('text');
+  });
+
   // ==================== SESSION MANAGEMENT ====================
   test('actual_session_list - should list active sessions', async ({ mcp }) => {
     // #383: HTTP-only, because the CONCEPT is. stdio has one implicit session for the life of

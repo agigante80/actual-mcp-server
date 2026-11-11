@@ -45,7 +45,7 @@ tests/
 │   ├── transactions_create.test.js        # Zod schema validation (transactions_create)
 │   ├── generated_tools.smoke.test.js      # All 85 tools: stub adapter + correctness assertions
 │   ├── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
-│   ├── schema_json_openai_compat.test.js  # Published schemas OpenAI/ECMA-262 regex-compatible (#293)
+│   ├── schema_json_openai_compat.test.js  # Published input and output schemas OpenAI/ECMA-262 regex-compatible (#293, #642)
 │   └── schema_published_parity.test.js    # Zod and the SDK Ajv validator accept the same inputs; no regex flags (#588)
 ├── e2e/                     # End-to-end tests
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
@@ -301,6 +301,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `tools_list_size_budget.test.js` | #486: the full `tools/list` (all tools, built as the server builds it) stays under a committed total ceiling and a uniform per-tool ceiling; built-in fixtures prove a padded description and a total 1 byte too low are reported by name. Raising a ceiling is a deliberate edit with a comment stating why |
 | `tool_param_descriptions.test.js` | #639: every input property every tool publishes in `tools/list` carries a description, at any depth (union branches, array items, `$ref` targets), with the checked tool count equal to the canonical count; in-file fixtures prove an undescribed top-level, union-branch and array-item field are each reported by full path, and two pins prove the descriptions added no validation |
 | `tool_titles.test.js` | #641: every published tool carries a display title from `src/lib/tool-titles.ts`: the table covers exactly `IMPLEMENTED_TOOLS`, titles are unique, sentence case, 2 to 5 words, never start with "Actual", and start with a read verb exactly when the tool is read-only; the shared builder and `fetchCapabilities` publish the table title (no `title: tool.name` override); in-file fixtures prove each rule can fail |
+| `tool_output_schema.test.js` | #642: `outputSchema` + `structuredContent` for exactly `actual_accounts_list` and `actual_accounts_get_balance`: `frameToolResult` (byte-identical without a verdict, `isError` and no `structuredContent` on a mismatch), `callToolChecked` verdicts and the `output_mismatch` log outcome (tool name and issue paths only, no values), unlisted upstream fields survive, an uncovered tool is unchanged, published schemas are root `type: "object"`, loose, non-empty, SDK `ListToolsResultSchema`-parsable (a `z.union` fixture built with `io: 'output'` fails it), and the real HTTP and stdio call handlers keep the verdict |
 | `rules_update_schedules_schema.test.js` | #486: input schemas of `rules_update` (`op` required), `schedules_create` and `schedules_update` keep their Zod rejections (code and path) after the description trim; #527: the `{ num1, num2 }` range amount and its `amountOp` refusals; #478: monthly `patterns`, their refusals, the strict recur config and the optional `endMode`, on both tools and in `tools/list` |
 | `schedules_update_amount_guard.test.js` | #527: `adapter.updateSchedule` reads the stored row in the same drain when only one of `amount` / `amountOp` is sent, and refuses a pair that cannot match before the write |
 | `schedules_dead_conditions.test.js` | #547: `adapter.createSchedule` and `adapter.updateSchedule` drop a payee or account rule condition that can never match (omitted field stored as `"undefined"`, cleared one as `"null"`) inside the same drain as the schedule write, with a bounded rule poll; a schedule with both fields set triggers no rule read |
@@ -1002,6 +1003,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `tools_list_size_budget.test.js` | tools/list size budget: total and per-tool ceilings, padded-description and 1-byte-under fixtures (#486) | 5 |
 | `tool_param_descriptions.test.js` | Every published input property is described at any depth; fixture self-test and no-validation-change pins (#639) | 10 |
 | `tool_titles.test.js` | Every published tool has a unique, well-formed title that agrees with its read-only hint (#641) | 27 |
+| `tool_output_schema.test.js` | outputSchema and structuredContent for two tools: framing, verdict, log outcome, SDK parse, both transports (#642) | 23 |
 | `rules_update_schedules_schema.test.js` | Schema rejections for `rules_update`, `schedules_create`, `schedules_update` (#486); range amounts and `amountOp` refusals (#527); recur `patterns` and strictness (#478) | 90+ |
 | `schedules_update_amount_guard.test.js` | Adapter read-then-write guard for a one-field `amount` / `amountOp` schedule update (#527) | 38 |
 | `schedules_dead_conditions.test.js` | Adapter strip of dead payee / account schedule rule conditions on create and clear, same drain, bounded poll (#547) | 35 |

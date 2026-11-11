@@ -2,7 +2,7 @@
 import logger from './logger.js';
 import { z } from 'zod';
 
-import type { ToolDefinition } from '../types/tool.d.js';
+import { checkToolOutput, type CheckedToolResult, type ToolDefinitionWithOutput } from './lib/tool-output.js';
 import { formatZodError } from './lib/zod-error-format.js';
 import { errorLogFields } from './lib/errors.js';
 import config from './config.js';
@@ -10,6 +10,7 @@ import { createModuleLogger } from './lib/loggerFactory.js';
 import { resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
 
 const toolsetLog = createModuleLogger('TOOLSETS');
+const outputLog = createModuleLogger('TOOL_OUTPUT');
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -151,7 +152,7 @@ const API_TOOL_MAP: Record<string, string> = {
 };
 
 class ActualToolsManager {
-  private tools: Map<string, ToolDefinition> = new Map();
+  private tools: Map<string, ToolDefinitionWithOutput> = new Map();
   // Resolved ONCE in initialize() (#483) and never recomputed. Null before that, and every
   // accessor below throws rather than fall back to "all tools", so a caller that runs
   // before initialize() fails closed instead of publishing a surface the operator hid.
@@ -174,7 +175,7 @@ class ActualToolsManager {
     for (const [_key, tool] of Object.entries(toolModules)) {
       const t = tool as unknown as { name?: string };
       if (t && t.name) {
-        this.tools.set(t.name, tool as unknown as ToolDefinition);
+        this.tools.set(t.name, tool as unknown as ToolDefinitionWithOutput);
         count++;
       }
     }
@@ -221,11 +222,19 @@ class ActualToolsManager {
     return Array.from(this.tools.keys());
   }
 
-  getTool(name: string): ToolDefinition | undefined {
+  getTool(name: string): ToolDefinitionWithOutput | undefined {
     return this.tools.get(name);
   }
 
   async callTool(name: string, args: unknown): Promise<unknown> {
+    return (await this.callToolChecked(name, args)).value;
+  }
+
+  /**
+   * callTool plus the outputSchema verdict (#642). The verdict is computed against the
+   * JSON-safe value, the same one the text block serialises, so the transports only frame.
+   */
+  async callToolChecked(name: string, args: unknown): Promise<CheckedToolResult> {
     const policy = this.requirePolicy();
     // Registration is checked BEFORE publication: an unregistered name stays "not found".
     const tool = this.getTool(name);
@@ -250,8 +259,14 @@ class ActualToolsManager {
       // data and never reach the logs. This record is the one place content COULD be
       // logged, so an opt-in for debugging (#557) belongs here and nowhere else.
       // `durationMs`, not `ms`: the logger reserves a top-level `ms` key (src/logger.ts).
-      logger.info('[TOOL RESULT]', { tool: name, durationMs: Date.now() - startTime, outcome: 'ok', bytes: Buffer.byteLength(json, 'utf8') });
-      return safe;
+      const verdict = checkToolOutput(tool, safe);
+      const mismatch = verdict?.check === 'mismatch';
+      logger.info('[TOOL RESULT]', { tool: name, durationMs: Date.now() - startTime, outcome: mismatch ? 'output_mismatch' : 'ok', bytes: Buffer.byteLength(json, 'utf8') });
+      if (mismatch) {
+        // Tool name and Zod issue paths only: the values are budget data (#556).
+        outputLog.warn('Tool result does not match its outputSchema; returning it as an error', { tool: name, issuePaths: verdict?.issuePaths });
+      }
+      return { value: safe, ...(verdict ? { check: verdict.check, ...(mismatch ? { issuePaths: verdict.issuePaths } : {}) } : {}) };
     } catch (err: unknown) {
       // Format Zod validation errors into one actionable, consistent message (#206).
       // Duck-type on `.issues` so any structurally-compatible ZodError is handled.

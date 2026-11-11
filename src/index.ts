@@ -12,6 +12,7 @@ import { attachProcessLogger } from './lib/processHandlersInstall.js';
 import { getMcpServerVersion } from './lib/mcp-version.js';
 import path from 'node:path';
 import { z } from 'zod';
+import { outputJsonSchema } from './lib/tool-output.js';
 import { buildServerInstructions } from './lib/serverInstructions.js';
 import { format } from 'node:util';
 import { writeSync } from 'node:fs';
@@ -249,6 +250,14 @@ export {};
       }
     }
 
+    // #642: published outputSchema per covered tool, computed once and handed to BOTH
+    // transports through one parameter so they cannot be wired differently.
+    const outputSchemas: Record<string, unknown> = {};
+    for (const toolName of implementedTools) {
+      const published = outputJsonSchema(actualToolsManager.getTool(toolName));
+      if (published !== undefined) outputSchemas[toolName] = published;
+    }
+
     // Capabilities object with your fixed capabilities values
     const rawCapabilities = {
       tools: true,
@@ -349,7 +358,9 @@ export {};
         toolSchemas,
         version,
         bindHost,
-        advertisedUrl
+        advertisedUrl,
+        undefined,
+        outputSchemas,
       );
 
       // dynamic import to avoid circular at top
@@ -446,6 +457,7 @@ export {};
         (listener) => {
           void emitStartupRecord({ kind: 'http', bindHost, path: HTTP_PATH, advertisedUrl, listener });
         },
+        outputSchemas,
       );
     } else if (useStdio) {
       logger.debug('Mode: stdio');
@@ -457,6 +469,7 @@ export {};
         serverInstructionsText,
         toolSchemas,
         version,
+        outputSchemas,
       );
       await emitStartupRecord({ kind: 'stdio' });
     } else {
