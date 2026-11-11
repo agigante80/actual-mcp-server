@@ -14,7 +14,8 @@ import { summarizeAccountFlow, type FinancialAnalysisSnapshot } from '../lib/fin
 const InputSchema = z.object({
   startDate: CommonSchemas.date,
   endDate: CommonSchemas.date,
-  accountIds: z.array(z.string().min(1)).min(1, 'Select at least one account').max(100),
+  accountIds: z.array(z.string().min(1)).min(1, 'Select at least one account').max(100)
+    .describe('Account ids (1 to 100) to explain together, from actual_accounts_list; a name is refused with the id it matches'),
 }).strict().superRefine((input, ctx) => {
   if (input.startDate > input.endDate) {
     ctx.addIssue({ code: 'custom', path: ['endDate'], message: 'endDate must be on or after startDate' });

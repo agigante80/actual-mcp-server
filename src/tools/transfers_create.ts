@@ -20,7 +20,7 @@ export default createTool({
   schema: z.object({
     from_account: CommonSchemas.accountId.describe('UUID of the source account (money leaves this account)'),
     to_account:   CommonSchemas.accountId.describe('UUID of the destination account (money enters this account)'),
-    amount: positiveAmountCents,
+    amount: positiveAmountCents.describe('Positive integer cents; from_account and to_account set the direction'),
     date:   CommonSchemas.date,
     notes:  z.string().max(1000).optional().describe('Optional memo visible on both sides of the transfer'),
   }),

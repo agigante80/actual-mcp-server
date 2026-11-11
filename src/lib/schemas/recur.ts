@@ -9,8 +9,9 @@ import { z } from 'zod';
 // `day` maps to a day of the month, a weekday to the nth weekday; upstream honours them only
 // for frequency 'monthly'.
 const RecurPatternSchema = z.object({
-  type: z.enum(['day', 'SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA']),
-  value: z.number().int(),
+  type: z.enum(['day', 'SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'])
+    .describe("'day' for a day of the month, or a weekday code"),
+  value: z.number().int().describe('Day 1 to 31, or week 1 to 5 of the month; -1 is the last'),
 }).strict();
 
 export const PATTERNS_NEED_MONTHLY =

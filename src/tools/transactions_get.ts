@@ -2,7 +2,12 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({ accountId: z.string().optional(), startDate: z.string().optional(), endDate: z.string().optional() });
+const InputSchema = z.object({
+  accountId: z.string().optional()
+    .describe('Account id from actual_accounts_list; a name is refused with the id it matches. Omit for every account'),
+  startDate: z.string().optional().describe('First day, YYYY-MM-DD, inclusive. Omit for no lower bound'),
+  endDate: z.string().optional().describe('Last day, YYYY-MM-DD, inclusive. Omit for no upper bound'),
+});
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_get',

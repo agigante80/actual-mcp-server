@@ -22,9 +22,13 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.e
 // in the same commit; a reviewer should be able to see why the list got heavier.
 //   Total: 101,827 bytes after the #486 trim (83 tools), plus about 5% headroom; raised for
 //   #479 (actual_schedules_dates, the 85th tool) from 106,900 at 108,317 bytes, plus about 5%.
-//   Per tool: the heaviest entry after the #486 trim is 3,327 bytes (actual_rules_create_batch).
+//   Per tool: the heaviest entry after the #486 trim was 3,327 bytes (actual_rules_create_batch).
+//   Raised for #639 (parameter descriptions, a Glama TDQS input) from 3,600: the nested
+//   descriptions on the schedule amount range and recur patterns added 254 bytes to
+//   actual_schedules_update, now 3,824 bytes, plus about 2%. The #639 total is 111,333 bytes
+//   (2,546 added), under the unchanged total ceiling.
 const TOTAL_CEILING = 113700;
-const PER_TOOL_CEILING = 3600;
+const PER_TOOL_CEILING = 3900;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

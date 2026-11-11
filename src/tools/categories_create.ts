@@ -7,7 +7,8 @@ import { withLogMessage } from '../lib/errors.js';
 const InputSchema = z.object({ 
   name: CommonSchemas.name, 
   group_id: CommonSchemas.categoryGroupId,
-  is_income: z.boolean().nullable().optional(),
+  is_income: z.boolean().nullable().optional()
+    .describe('true for an income category; omitted or null means an expense category'),
 }).passthrough(); // Allow other fields to pass through
 
 // RESPONSE_TYPE: string

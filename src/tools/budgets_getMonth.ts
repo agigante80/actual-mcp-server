@@ -2,7 +2,12 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
-const InputSchema = z.object({ month: z.string().optional() });
+// month stays optional in the schema (#639 adds a description only), but it must be supplied:
+// upstream calls month.match() on it, so an omitted month fails.
+const InputSchema = z.object({
+  month: z.string().optional()
+    .describe('Month as YYYY-MM, one the budget has (see actual_budgets_getMonths). Required in practice: always supply it'),
+});
 
 // RESPONSE_TYPE: BudgetMonth
 

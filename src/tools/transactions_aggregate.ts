@@ -23,13 +23,20 @@ const IdArray = z.array(z.string().min(1)).min(1).max(100);
 const InputSchema = z.object({
   startDate: CommonSchemas.date,
   endDate: CommonSchemas.date,
-  groupBy: z.union([GroupDimensionSchema, z.array(GroupDimensionSchema).min(1).max(5)]),
-  accountIds: IdArray.optional(),
-  categoryIds: IdArray.optional(),
-  categoryGroupIds: IdArray.optional(),
-  payeeIds: IdArray.optional(),
-  includeIncome: z.boolean().optional().default(false),
-  excludeTransfers: z.boolean().optional().default(true),
+  groupBy: z.union([GroupDimensionSchema, z.array(GroupDimensionSchema).min(1).max(5)])
+    .describe('One dimension, or an ordered list of up to 5 for nested groups'),
+  accountIds: IdArray.optional()
+    .describe('Only these accounts: ids from actual_accounts_list; a name is refused with the id it matches. Omit for all'),
+  categoryIds: IdArray.optional()
+    .describe('Only these categories: ids from actual_categories_get; a name is refused with the id it matches. Omit for all'),
+  categoryGroupIds: IdArray.optional()
+    .describe('Only these category groups: ids from actual_category_groups_get; a name is refused with the id it matches. Omit for all'),
+  payeeIds: IdArray.optional()
+    .describe('Only these payees: ids from actual_payees_get; a name is refused with the id it matches. Omit for all'),
+  includeIncome: z.boolean().optional().default(false)
+    .describe('true also counts transactions in income categories. Default false'),
+  excludeTransfers: z.boolean().optional().default(true)
+    .describe('true leaves out transfers between your own accounts. Default true'),
 }).strict().superRefine((input, ctx) => {
   if (input.startDate > input.endDate) {
     ctx.addIssue({ code: 'custom', path: ['endDate'], message: 'endDate must be on or after startDate' });

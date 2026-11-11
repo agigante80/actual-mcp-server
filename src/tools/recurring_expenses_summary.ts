@@ -30,10 +30,14 @@ function startFromMonths(endDate: string, months: number): string {
 const InputSchema = z.object({
   startDate: CommonSchemas.date.optional(),
   endDate: CommonSchemas.date.optional(),
-  months: z.number().int().min(1).max(60).optional(),
-  accountIds: z.array(z.string().min(1)).min(1).max(100).optional(),
-  minOccurrences: z.number().int().min(2).max(100).default(3),
-  includeInactive: z.boolean().default(false),
+  months: z.number().int().min(1).max(60).optional()
+    .describe('Lookback in months (1 to 60) ending at endDate; not with startDate. Default 18'),
+  accountIds: z.array(z.string().min(1)).min(1).max(100).optional()
+    .describe('Account ids to limit the scan to, from actual_accounts_list; a name is refused with the id it matches. Omit for all accounts'),
+  minOccurrences: z.number().int().min(2).max(100).default(3)
+    .describe('Fewest posted occurrences (2 to 100) for a series to count. Default 3'),
+  includeInactive: z.boolean().default(false)
+    .describe('true also lists series that have stopped (missed two expected dates). Default false'),
 }).strict().superRefine((input, ctx) => {
   if (input.startDate && input.months) {
     ctx.addIssue({ code: 'custom', path: ['months'], message: 'Use startDate or months, not both' });

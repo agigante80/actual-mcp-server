@@ -8,9 +8,11 @@ const InputSchema = z.object({
   // #361: this was a bare z.string().min(1), so 'banana' parsed and reached the API. The
   // regex matches actual_budgets_holdForNextMonth and the other month-taking tools; the
   // adapter additionally checks the month is one this budget actually has.
-  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format'),
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format')
+    .describe('Month as YYYY-MM, one the budget has (see actual_budgets_getMonths)'),
   categoryId: CommonSchemas.categoryId,
-  amount: z.number().int('amount must be an integer (cents)'),
+  amount: z.number().int('amount must be an integer (cents)')
+    .describe('Budgeted amount for the category in that month, integer cents (5000 is $50.00)'),
 });
 
 const tool: ToolDefinition = {

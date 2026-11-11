@@ -10,8 +10,8 @@ import { z } from 'zod';
 // call amountOpMismatch, so the three cannot drift apart in what they refuse or how they say it.
 
 export const AmountRangeSchema = z.object({
-  num1: z.number().int(),
-  num2: z.number().int(),
+  num1: z.number().int().describe('Range bound, integer cents (negative is an outflow)'),
+  num2: z.number().int().describe('Other range bound, integer cents'),
 }).strict();
 
 // A bare union failure reads "Invalid input", which tells a caller nothing; the custom
