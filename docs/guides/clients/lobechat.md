@@ -29,7 +29,7 @@ Running the server without a token on a private network? It then answers only re
 
 ## Verify
 
-LobeChat discovers the tools when you save: with every toolset published it lists 84 tools (fewer when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set). Then ask `List my Actual Budget accounts and their balances.` The [shared verify step](README.md#verify) checks the server with `curl`.
+LobeChat discovers the tools when you save: with every toolset published it lists 85 tools (fewer when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set). Then ask `List my Actual Budget accounts and their balances.` The [shared verify step](README.md#verify) checks the server with `curl`.
 
 ## Troubleshooting
 
