@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_category_groups_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('Create a new category group in Actual Budget') and it distinguishes itself from actual_categories_create by clarifying groups are containers for categories."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Implies the workflow ('After creating a group, you can move categories into it') but names no alternatives or when-not conditions versus update/delete siblings."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations already cover the non-destructive, non-idempotent profile; the description adds useful context on what groups are and the follow-up of moving categories in, but says nothing about duplicate names or whether the new group id is returned."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100%, so name/is_income/hidden are already documented; the description adds no extra meaning beyond restating the organizational role of groups."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three sentences, front-loaded with the action; the parenthetical examples are mildly padded but not wasteful."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "A create tool with no output schema should say what comes back (e.g. new group id) to enable follow-up calls; that is missing, though annotations and full schema cover the rest."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear purpose and good domain context, but lacks sibling differentiation, return info, and any parameter meaning beyond the fully-described schema."
+  },
+  {
+    "tool": "actual_category_groups_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource, clearly the deletion counterpart to create/update/get siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "No explicit when/when-not or alternative (e.g. update or delete categories separately); usage is only implied."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds real behavioral detail beyond the annotations: categories inside are moved to a default group or ungrouped, and the operation is irreversible."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Single id parameter is fully documented in the schema at 100% coverage; the description adds no further semantics."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three tight sentences, each carrying distinct information with no waste."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Covers the destructive side effects and irreversibility thoroughly; a return value is not described but is not essential for a delete."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong, concise delete description that supplements the destructive annotation with concrete child-object behavior and irreversibility."
+  },
+  {
+    "tool": "actual_category_groups_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('List all category groups') and the title matches, making the retrieval role unambiguous."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is only implied; unlike actual_entities_search it offers no guidance on when to prefer this versus actual_get_context or a targeted lookup."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Read-only property is already in annotations; the description adds a light return sketch ('Each group has an ID, name, and optional properties') but omits pagination or full field detail."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4; nothing to compensate for."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three sentences, front-loaded; the illustrative example is helpful though slightly expendable."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema, and the return shape is only loosely described (id, name, optional properties) rather than enumerating actual fields."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate list tool description with a useful example, but thin on return shape and on when to choose it over other context tools."
+  },
+  {
+    "tool": "actual_category_groups_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource and it enumerates the mutable aspects (rename, income flag, hide/show), clearly separating it from create/delete siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "No explicit when-to-use or alternatives; the reader must infer it applies to existing groups only."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations cover non-destructive/idempotent safety; the description restates the fields but does not clarify partial-update semantics (whether omitted fields are preserved)."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the nested fields object is fully described; the description merely echoes the fields with no added semantics."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two direct sentences with no filler."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "For an update tool with a nested fields object, the missing clarification of partial-update behavior is a notable gap, and return values are undocumented."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear and concise, but the update semantics (partial vs full replacement) and return value are left implicit despite the fully-described schema."
+  },
+  {
+    "tool": "actual_entities_search",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource with scope ('Find accounts, categories, or payees by a name pattern') that clearly distinguishes it from actual_get_id_by_name's exact lookup."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicit use case ('resolve a partial or mistyped name... the fix for payee not found') and an explicit fallback ('retry with a broader matchType such as fuzzy')."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses no-match behavior ('returns { matches: [], count: 0 } (not an error)'), case-insensitivity, fuzzy typo tolerance, and any-of array matching\u2014rich detail beyond the read-only annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema already fully documents matchType and query; the description's examples with concrete matchType/limit combos add practical meaning beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and well-structured, but matchType semantics and examples partly duplicate the schema, making it longer than strictly needed."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers matching modes, no-match outcome, retry strategy, and return behavior despite having no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An exemplary description: explicit alternatives, no-match behavior, and worked examples that make the tool immediately invokable."
+  },
+  {
+    "tool": "actual_get_context",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('Read the budget structure and entity UUIDs') with an explicit bootstrap framing that distinguishes it from individual list tools."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicit direction ('Call this first to bootstrap context... without several list calls') gives clear when-to-use and positions it against the many list siblings."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds substantive behavior beyond read-only annotations: excluded sections are omitted rather than returned empty, and examples show the include flags in action."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and describes each flag, but the examples show Input: {} while the schema marks all five parameters required\u2014this mismatch muddies parameter expectations rather than clarifying them."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense but well organized with a leading purpose sentence and examples; slightly long due to duplication of the schema's flag descriptions."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Very complete on behavior and orchestration, but the required-vs-example inconsistency for parameters leaves a residual ambiguity."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong bootstrap-oriented description with excellent usage guidance and omission semantics, slightly undermined by examples that conflict with the required parameter list."
+  },
+  {
+    "tool": "actual_get_id_by_name",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource ('Resolve an entity name to its UUID'), though the exact-name scope that distinguishes it from actual_entities_search is only conveyed through the schema's 'Exact name' wording."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "States the useful context ('when you know the human-readable name but need the ID') but names no alternative such as actual_entities_search for partial or mistyped names."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Describes the return (UUID string) and that annotations cover read-only, but omits what happens on no match or ambiguous names\u2014key behavior for a resolver."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already defines the type enum and exact-name semantics; the description only restates 'Allowed types' with no added meaning."
+      },
+      "conciseness_structure": {
+        "score": 3,
+        "justification": "The four example bullets all illustrate the same shape and the 'Allowed types' line repeats the enum, adding bulk without new information."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and the failure/no-match behavior is undescribed, so an agent cannot predict what happens when the name does not exist."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Functional and understandable, but repetitive examples and missing no-match behavior leave it weaker than its entities_search sibling."
+  },
+  {
+    "tool": "actual_notes_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('Get the note attached to an entity') that clearly pairs with actual_notes_update."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is implied only; there is no stated guidance on when to use this versus listing entities or calling get_context."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds meaning beyond the read-only annotation: returns note text when present and a clear 'no note' result rather than null, which pre-empts a common agent confusion."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already explains both the UUID and budget-YYYY-MM forms; the description restates this with an example but adds little extra semantics."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and clear; the two examples are short and useful, though somewhat duplicative of the schema text."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Covers id formats and no-note handling well; a fuller statement of the return shape would perfect it, but it is sufficient for a single-field read."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Solid, purpose-clear read tool that usefully documents the no-note outcome; only missing broader usage guidance and a richer return description."
+  },
+  {
+    "tool": "actual_notes_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('Set or clear the note attached to an entity') that clearly distinguishes it from actual_notes_get."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains operational usage well (pass an empty string to clear, unknown ids rejected) but does not explicitly compare against alternatives."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses upsert behavior, clearing via empty string, orphan-prevention id validation, and budget-month template directives\u2014substantial behavior beyond the idempotent/non-destructive annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema fully documents both fields; the description adds real meaning via the #template/#goal directive hint for budget-month notes beyond the raw schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Well structured with purpose first and three targeted examples; longer than average but the content earns it."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Upsert semantics, validation, clearing, and directive support make it fully actionable without an output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Rich, behavior-forward update description covering upsert, clearing, validation, and template directives\u2014only minor gap is lack of explicit alternative guidance."
+  },
+  {
+    "tool": "actual_payee_rules_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Specific verb+resource ('Get all payee rules associated with a specific payee') that scopes it to one payee, though the relation to actual_rules_get is not spelled out."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is only implied by naming the required payee; no when-to-use or alternative (e.g. actual_rules_create/update) is mentioned."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Read-only is already in annotations; the description notes it returns PayeeRule objects showing conditions and actions, but does not detail their fields or empty results."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Single payeeId parameter is fully documented at 100% coverage; the description adds no extra semantics."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two compact sentences with no waste."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and PayeeRule structure is only gestured at ('conditions and actions'), so the return shape is under-specified for a list tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Concise and clear on intent, but thin on return structure and lacking any guidance distinguishing it from the broader rules tools."
+  }
+]

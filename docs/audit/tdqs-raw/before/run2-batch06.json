@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_rules_create_batch",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb, resource and scope: `Create 1 to 50 budget rules in one call`, explicitly tying each item to the input of actual_rules_create, which cleanly distinguishes it from the single-rule sibling."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains the batch context and, crucially, a failure-recovery procedure: read back with actual_rules_get before retrying any item. Does not explicitly contrast batch vs single create, but the intent is clear."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Goes well beyond the annotations: non-atomic with no rollback, partial successes persist, link-schedule ids unchecked, no automatic retry, and all-failing is a normal result rather than a tool error."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and richly nested, so the schema carries parameter meaning. The description mainly restates the 1-50 bound and defers item shape to actual_rules_create, adding only modest value."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with purpose then failure behavior then return shape; long but each block is load-bearing. Slightly verbose recovery paragraph."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "For a complex batch mutation it covers partial-failure semantics, retry safety, and a full return shape despite no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent batch-mutation definition: clear scope, explicit non-atomic behavior and a safe retry procedure, with return shape documented. Parameter detail is delegated to the sibling schema, which is acceptable given full schema coverage."
+  },
+  {
+    "tool": "actual_rules_create_or_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`Create a rule, or update the existing rule with the same conditions. Prevents duplicates.` names the exact verb and resource and distinguishes itself as an upsert-by-conditions."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Defines the match rule (same conditions field/op/value plus conditionsOp, any order), which tells the agent when it will update versus create. Does not directly contrast with actual_rules_update."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses mutation semantics beyond annotations: actions are REPLACED, stage replaced only if supplied, new rules get null stage, and the created boolean return. Rich behavioral context."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "Adds substantial meaning beyond the 100%-covered schema: per-field operator lists for text, id, amount and date conditions, plus stage omission semantics on update."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense but organized into purpose, matching, mutation, operators and return. The operator inventory is long yet useful."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers upsert matching, mutation behavior, valid operators and return shape; complete for a mutation with no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong upsert definition that clearly explains matching, replacement semantics and per-field operators, with a documented return. Well matched to its idempotent annotation."
+  },
+  {
+    "tool": "actual_rules_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`Delete a budget rule from Actual Budget` is a specific verb plus resource, unambiguously distinct from create/update/get siblings."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Notes the effect on new and existing transactions and the important when-not case: schedule-owned rules are refused with the schedule tool named. No mention of fetching ids via actual_rules_get."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already flag destructive and idempotent; the description adds irreversibility and the schedule-rule refusal with a pointer to the alternative tool, useful extra context."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "One parameter at full schema coverage; the schema already says `Rule ID to delete` and the description adds no further parameter meaning."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three tight sentences, each carrying distinct and useful information."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Simple destructive tool with good annotations; description covers effect, irreversibility and the schedule edge case. Does not document the response."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear and appropriately scoped delete definition. Adds the valuable schedule-rule caveat beyond annotations; only the missing id-source hint and response detail keep it from top marks."
+  },
+  {
+    "tool": "actual_rules_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`List all budget rules in Actual Budget` is a specific verb and resource, clearly the read counterpart to create/update/delete siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Explains the domain concept but offers no explicit when-to-use or that it is the source of rule ids for update/delete. Usage is only implied."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations already declare a safe read; the description adds conceptual context (conditions and actions with examples) but does not describe the returned container or fields."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4; nothing is needed or missing on parameter meaning."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three sentences; the domain explanation is helpful though slightly tutorial in tone."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "A no-arg list tool with strong read annotations; conceptual structure is conveyed, though the concrete return array and its id field are not specified."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate read definition that explains what rules are but omits return structure and the practical use as an id source for update/delete. Fine, with clear room to improve chaining guidance."
+  },
+  {
+    "tool": "actual_rules_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`Update an existing budget rule by ID` states a precise verb, resource and identifier requirement, distinct from create_or_update."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Advises supplying only the fields to change and warns not to pass `default` for stage. Helpful constraints, though no explicit contrast with create_or_update."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover idempotency; the description adds partial-update semantics, stage omission/null/pre/post rules and the Actual rejection of `default`, all useful extra context."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "Adds significant meaning beyond the 100%-covered schema: the full operator list per field and the stage omission versus null behavior."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the key rule, then operators and stage guidance. The operator inventory is long but valuable."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Covers mutation, operator and stage semantics well; the response shape is undocumented and no output schema exists."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Solid update definition with valuable operator and stage guidance beyond the schema. The missing return shape is the main gap."
+  },
+  {
+    "tool": "actual_schedules_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`Create a schedule, one-off (YYYY-MM-DD date) or recurring (RecurConfig object ...)` names the verb, resource and the two creation modes distinctly."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Explains the two date forms and the cents convention, but gives no when-to-use versus alternatives and no exclusions or prerequisites."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations cover safety; the description largely restates schema details (cents, negative expense, recurrence fields) rather than disclosing side effects like posts_transaction behavior or response."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Seven parameters at 100% schema coverage; the description mostly echoes what the schema already documents, adding little extra parameter meaning."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "A single dense sentence that conveys the essentials efficiently, though it lumps many concepts together."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "Complex create tool with rich schema but no output schema; the description omits required fields, defaults, posts_transaction effect and the return value."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear one-line overview but thin beyond the schema, reading more like a summary of the RecurConfig shape than behavioral guidance. Adequate minimum, with notable gaps on defaults, side effects and return."
+  },
+  {
+    "tool": "actual_schedules_dates",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`List the dates one schedule falls on, computed by Actual itself` is highly specific about verb, resource and the notable fact that Actual computes it."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly says `Use this instead of expanding a schedule's recurrence yourself`, points to actual_schedules_get for ids, and clarifies start/end/count interactions."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Beyond annotations it discloses UI-matching computation, the 366-date cap, truncated semantics and how end plus count resolve, plus a full return shape."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "Adds real meaning beyond the schema: start defaults to today, must pass start when passing end, and count/end interact by whichever comes first."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and well structured; the two worked examples aid use but add length, slightly reducing conciseness."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents return shape, truncation continuation strategy and parameter interactions despite no output schema; complete for this tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Exemplary definition: explicit alternative guidance, full return shape, truncation/pagination semantics and worked examples. Among the strongest of the set."
+  },
+  {
+    "tool": "actual_schedules_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`Permanently delete a schedule from Actual Budget` is a precise verb and resource, distinct from the rule-delete sibling."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Notes a side effect (rule removed) but provides no when-to-use versus alternatives, prerequisites, or when-not guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover destructive and idempotent; the description adds irreversibility and the non-obvious cascading removal of the underlying rule."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "One parameter at full coverage; the schema already documents the id and even its source, so the description adds nothing parameter-specific."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two short sentences, both load-bearing and front-loaded."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Simple destructive tool with strong annotations; description covers irreversibility and the cascade. Response undocumented."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Concise and informative for a simple delete, notably disclosing the cascading rule removal. Usage guidance and response detail are the only gaps."
+  },
+  {
+    "tool": "actual_schedules_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`List all schedules in Actual Budget` is a specific verb and resource, clearly the read counterpart to create/update/delete siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Explains what schedules are but gives no explicit when-to-use, and does not point to actual_schedules_dates for expanded occurrences. Usage is only implied."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover the safe read; the description adds useful return-adjacent context: each schedule has a date rule, optional payee/account/amount, and a next_date field showing when it fires next."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so baseline 4; nothing is required or missing on parameter meaning."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three sentences with the domain and field context up front; efficient."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description conveys the key returned fields including next_date. Lacks the container shape and an id-source note."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Good list definition that surfaces the meaningful next_date field. Missing explicit guidance to actual_schedules_dates and the id-source role keeps it from higher marks."
+  },
+  {
+    "tool": "actual_schedules_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "`Update a schedule; supply only the fields to change` gives a precise verb and resource with the partial-update scope stated up front."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Offers actionable conditionals: set resetNextDate true when changing date or recurrence, and notes completion/next_date are managed by Actual. No contrast with sibling create."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover idempotency; the description adds that a new date replaces the stored recurrence including patterns, the resetNextDate requirement, and that managed fields cannot be set."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Nine parameters at full coverage; the description adds the crucial when-to-set meaning for resetNextDate and replacement semantics for date, beyond the terse schema descriptions."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three compact sentences, each rule-oriented and front-loaded, with no filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Covers the tricky reset and replacement behavior well; the return value is undocumented and no output schema exists."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-targeted update definition that clarifies the non-obvious resetNextDate and date-replacement behavior. Strong and concise, with only response detail missing."
+  }
+]

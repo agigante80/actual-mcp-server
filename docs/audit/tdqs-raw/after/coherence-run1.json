@@ -1,0 +1,22 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 3,
+      "justification": "Core entity CRUD is cleanly separated, but the transaction read surface is crowded: filter, get, search_by_amount/category/month/payee, uncategorized, aggregate, summary_by_category/payee and query_run all return or summarize overlapping rows. The descriptions do draw boundaries (id vs name, month vs range, totals vs rows), which keeps it usable, but choosing among them still takes careful reading."
+    },
+    "naming_consistency": {
+      "score": 3,
+      "justification": "A strong and predictable actual_<resource>_<action> prefix runs throughout, which makes discovery easy. However the action segment mixes conventions: camelCase budget operations (getMonth, setAmount, holdForNextMonth) sit beside snake_case ones (get_all, updates_batch, list_available), and get_balance coexists with get_balance-style calls under a different casing scheme."
+    },
+    "tool_count_appropriateness": {
+      "score": 2,
+      "justification": "At 85 tools this is well past the heavy range. The domain is genuinely broad, but the count is inflated by redundant read paths and parallel single/batch variants rather than a proportionally wide feature set."
+    },
+    "completeness": {
+      "score": 5,
+      "justification": "Coverage is extensive: accounts, groups, transactions, transfers, splits, categories, payees, rules, schedules, budgets, tags, notes, preferences, bank sync, export/import, search and session management. Lifecycle operations (create, read, update, delete, batch, merge) exist for nearly every entity, leaving few dead ends."
+    }
+  },
+  "shadowing_risks": [],
+  "summary": "This is a broad, largely complete Actual Budget control surface with disciplined resource-scoped naming and thorough CRUD, but it is oversized at 85 tools and its transaction and budget read paths overlap heavily. The supplied shadow pairs mostly join unrelated resources (account groups against budgets, transfers, rules), so no genuine coverage-and-cost shadowing was found; the only near-miss, aggregate vs account_flow_summary, differs because the cheaper tool offers no groupBy breakdown."
+}

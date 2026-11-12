@@ -18,7 +18,10 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_filter',
-  description: 'Get transactions with advanced filtering. Supports filtering by amount range, category, payee, notes, and status. Returns filtered transactions matching all specified criteria.',
+  description:
+    'Find transactions matching every filter given (AND): account, category and payee ids (not names), a YYYY-MM-DD date range, an amount range in integer cents, a case-insensitive notes substring, cleared, reconciled. Without accountId all accounts are searched. ' +
+    'Read-only; off-budget accounts are excluded; no row limit. A name where an id belongs is refused, naming the matching id if any. ' +
+    'To search by payee or category name use actual_transactions_search_by_payee or actual_transactions_search_by_category; for totals use actual_transactions_aggregate. Returns { result: [transactions] }.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

@@ -5,7 +5,10 @@ import adapter from '../lib/actual-adapter.js';
 
 export default createTool({
   name: 'actual_accounts_create',
-  description: 'Create a new account in Actual Budget',
+  description:
+    'Create a new on-budget account in Actual Budget. It cannot make an off-budget account; for one, create it with no balance, set offbudget with actual_accounts_update, then add the opening balance with actual_transactions_create. ' +
+    'The optional balance (integer cents, negative for debt) is recorded as a Starting Balance transaction. ' +
+    'Not idempotent: repeating the call creates another account. Returns { result: <new account id> }.',
   schema: z.object({ 
     // #380: the `id` field was REMOVED rather than tightened. Upstream ignores it:
     // `handlers['api/account-create']` destructures only name, offbudget, closed and the

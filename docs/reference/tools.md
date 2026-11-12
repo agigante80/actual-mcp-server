@@ -11,7 +11,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 | Tool | Description |
 |------|-------------|
 | `actual_accounts_list` | List all accounts |
-| `actual_accounts_create` | Create new account |
+| `actual_accounts_create` | Create a new on-budget account, optionally with an opening balance in integer cents |
 | `actual_accounts_update` | Update account details. An id that does not exist is refused rather than creating a partial record |
 | `actual_accounts_delete` | Permanently delete account |
 | `actual_accounts_close` | Close account. An account with NO transactions is REMOVED by Actual, not closed |

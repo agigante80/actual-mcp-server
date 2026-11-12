@@ -1,0 +1,28 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 3,
+      "justification": "The per-tool descriptions are unusually strong, but the read surface is crowded: transactions_get, transactions_filter, transactions_search_by_amount/category/month/payee, two summary tools and transactions_aggregate all answer overlapping transaction questions, while get_context, get_id_by_name and entities_search all resolve ids. Descriptions help but an agent can still plausibly pick the wrong lookup or summary tool. Boundaries exist but are not enforceable without reading carefully."
+    },
+    "naming_consistency": {
+      "score": 3,
+      "justification": "Most tools follow actual_<domain>_<verb> in snake_case, but the budget family breaks pattern with camelCase verbs (holdForNextMonth, resetHold, getMonth, getMonths, setAmount, setCarryover) mixed with snake_case elsewhere (list_available, get_all). The convention is readable and mostly predictable, yet the mixing is visible enough to count as only mixed consistency."
+    },
+    "tool_count_appropriateness": {
+      "score": 2,
+      "justification": "Eighty-five tools is far past any reasonable scoped surface and the rubric treats 26+ as too many. Some breadth is justified by a genuinely large domain, but the four search-by-* tools, two summary-by-* tools and duplicate update/summary paths show consolidation was skipped."
+    },
+    "completeness": {
+      "score": 5,
+      "justification": "Coverage is essentially full: create/read/update/delete across accounts, account groups, categories, category groups, payees, rules, schedules, tags, budgets and transactions, plus transfers, notes, preferences, batch variants, import/export, and session/server diagnostics. There are no obvious dead ends in the lifecycle for any major resource."
+    }
+  },
+  "shadowing_risks": [
+    {
+      "tool": "actual_transactions_aggregate",
+      "cheaper_sibling": "actual_account_flow_summary",
+      "justification": "Both total flows over an inclusive date range in cents, and for questions that resolve to a per-account or overall expense/income total, the cheaper flow summary yields a comparable answer without the groupBy and transfer machinery. Aggregate only clearly wins when a category, category_group or payee breakdown is required."
+    }
+  ],
+  "summary": "This is a broad, competently described server whose individual tool docs are better than most, but the set is bloated and the read-side overlaps (four transaction searches, three id lookups, multiple summaries) make tool selection harder than the descriptions suggest. Completeness is excellent; naming drifts into camelCase in the budget family and 85 tools is well past appropriate scope."
+}

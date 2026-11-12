@@ -1,0 +1,28 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 2,
+      "justification": "Several clusters have unclear boundaries: the transaction search family (search_by_amount, search_by_category, search_by_month, search_by_payee, filter, get, uncategorized) plus aggregate, summary_by_category/payee and query_run all answer overlapping spending questions. Budget mutation is split across setAmount, transfer, holdForNextMonth and updates_batch, and account closure is reachable both via accounts_close and accounts_update with closed. Descriptions are detailed but do not draw enforceable boundaries between many sibling tools."
+    },
+    "naming_consistency": {
+      "score": 4,
+      "justification": "The dominant pattern is actual_<domain>_<verb_noun> (actual_accounts_create, actual_budgets_setAmount, actual_transactions_update_batch), applied consistently across domains. A handful deviate with the verb first or no domain segment (actual_get_context, actual_get_id_by_name, actual_query_run, actual_bank_sync, actual_server_info, actual_session_close), but the convention is still highly readable."
+    },
+    "tool_count_appropriateness": {
+      "score": 2,
+      "justification": "85 tools is far past the 26+ threshold and forces an agent to triage a very large surface for routine work. The domain is genuinely broad (accounts, budgets, transactions, rules, schedules, payees, categories, groups, tags, notes, sessions), which explains the count, but many capabilities are spread across near-duplicate search and summary variants rather than consolidated."
+    },
+    "completeness": {
+      "score": 4,
+      "justification": "Coverage is unusually thorough: full CRUD for accounts, categories, groups, payees, tags, rules, schedules and transactions, plus transfers, splits, budget export/import, notes, recurring detection and session management. Minor gaps remain, such as no single-transaction get-by-id and no batch delete, but agents can work around them with the existing reads."
+    }
+  },
+  "shadowing_risks": [
+    {
+      "tool": "actual_transactions_aggregate",
+      "cheaper_sibling": "actual_account_flow_summary",
+      "justification": "For a plain question like total income or expense over a date range, the cheaper flow summary already returns separated expense outflow and income totals in integer cents, so an agent can often answer without the dearer aggregate; the aggregate's groupBy dimensions (category, payee, group) are the only capability flow summary lacks."
+    }
+  ],
+  "summary": "A large but functionally rich Actual Budget server whose detailed descriptions partly compensate for a crowded, overlapping tool surface. Disambiguation and count are the weak points, driven by many near-duplicate transaction search/summary tools and budget mutation paths, while naming and CRUD completeness are strong. Only one supplied shadow candidate shows real semantic overlap, limited to ungrouped income/expense totals."
+}

@@ -3,19 +3,22 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  payeeName: z.string().optional().describe('Name of the payee/vendor to search for (optional for smoke tests)'),
-  startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
-  endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
-  accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
-  categoryName: z.string().optional().describe('Optional: Filter by category name'),
-  minAmount: z.number().optional().describe('Optional: Minimum amount in cents'),
-  maxAmount: z.number().optional().describe('Optional: Maximum amount in cents'),
-  limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
+  payeeName: z.string().optional().describe('Name of the payee/vendor to search for'),
+  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+  endDate: z.string().optional().describe('End date in YYYY-MM-DD format'),
+  accountId: z.string().optional().describe('Filter by specific account ID'),
+  categoryName: z.string().optional().describe('Filter by category name'),
+  minAmount: z.number().optional().describe('Minimum amount in cents'),
+  maxAmount: z.number().optional().describe('Maximum amount in cents'),
+  limit: z.number().optional().default(100).describe('Maximum number of transactions to return'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_payee',
-  description: 'Search transactions by payee name. Returns all transactions for a specific payee with optional date range, category, and amount filters. Useful for analyzing spending patterns with specific vendors or service providers.',
+  description:
+    'Search transactions by payee name (case-insensitive exact match, e.g. "Amazon"), optionally narrowed by a YYYY-MM-DD date range, accountId, categoryName and an amount range in integer cents. Read-only; off-budget accounts are included. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, payeeName }, each row with accountName; count and totalAmount cover only the returned rows. ' +
+    'An unknown payee or category name returns an empty list with an error field. With a payee id use actual_transactions_filter; for per-payee totals use actual_transactions_aggregate.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

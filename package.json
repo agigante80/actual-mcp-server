@@ -130,7 +130,9 @@
     ],
     "ignoreExportsUsedInFile": true,
     "ignoreBinaries": [
-      "lychee"
+      "lychee",
+      "agy",
+      "grok"
     ]
   }
 }

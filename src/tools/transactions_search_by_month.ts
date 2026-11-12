@@ -3,18 +3,21 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  month: z.string().optional().describe('Month to search in YYYY-MM format (e.g., "2025-01" for January 2025) - defaults to current month'),
-  accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
-  categoryName: z.string().optional().describe('Optional: Filter by category name (e.g., "Food", "Rent")'),
-  payeeName: z.string().optional().describe('Optional: Filter by payee name'),
-  minAmount: z.number().optional().describe('Optional: Minimum amount in cents (use negative for expenses)'),
-  maxAmount: z.number().optional().describe('Optional: Maximum amount in cents'),
-  limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
+  month: z.string().optional().describe('Month to search in YYYY-MM format, e.g. "2025-01" (default: the current month)'),
+  accountId: z.string().optional().describe('Filter by specific account ID'),
+  categoryName: z.string().optional().describe('Filter by category name (e.g., "Food", "Rent")'),
+  payeeName: z.string().optional().describe('Filter by payee name'),
+  minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses)'),
+  maxAmount: z.number().optional().describe('Maximum amount in cents'),
+  limit: z.number().optional().default(100).describe('Maximum number of transactions to return'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
-  description: 'Search transactions for a specific month. Returns all transactions matching the month and optional filters (account, category, payee, amount range). Efficiently queries by date range.',
+  description:
+    'Search the transactions of one calendar month (month as YYYY-MM, default the current month), optionally narrowed by accountId, categoryName, payeeName (case-insensitive exact names) and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. ' +
+    'An unknown category or payee name returns an empty list with an error field. For other date ranges or aggregation use actual_query_run.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

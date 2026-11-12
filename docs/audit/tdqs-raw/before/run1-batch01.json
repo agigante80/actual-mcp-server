@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_account_flow_summary",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: explains the exact balance change across selected accounts over an inclusive date range in integer cents. It delineates the categories separated (income, expenses, transfers) and thus distinguishes the tool from simpler listing or aggregation siblings."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "States the scope clearly (selected accounts, inclusive range) and the key semantic rule that transfers are never spending or income. No explicit alternative tool is named, so it stops short of full when/when-not guidance."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds substantial behavioral detail beyond the read-only annotations: transfers are detected from transfer_id, openingBalance is just before startDate, closingBalance at end of the inclusive endDate, and reconciliation.difference is exact with balancesAvailable. It also explains transfersByAccount counterparties."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already documents date format and the accountIds source. The description repeats the cents unit and date format but adds little parameter meaning beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the core purpose and semantic rules, then an example. Dense and mostly waste-free, though somewhat long."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema is provided, but the description names the key return fields (openingBalance, closingBalance, reconciliation.difference, transfersByAccount), giving enough of the return shape for correct use."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A rich, well-scoped description that explains transfer semantics and reconciliation precisely. Its main weakness is some redundancy with the schema and a large example, but it is highly usable."
+  },
+  {
+    "tool": "actual_account_groups_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: creates a custom account group for sidebar organisation and returns the new id. It distinguishes the create step from assigning accounts, naming actual_accounts_update."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains that assigning accounts is a separate step and notes the server version prerequisite. Lacks explicit when-not-to-use guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already state this is a non-read-only, non-destructive, non-idempotent write. The description adds that the id is returned, assignment requires a separate call, and the server must be 26.9.0 or newer."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and documents name and sort_order semantics. The description adds no parameter detail beyond what the schema and examples show."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Short, front-loaded, and every sentence carries useful information; examples are compact."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description states an id is returned. Complete enough for a simple create, though the exact return field is not named."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A clean, focused description that correctly frames creation as distinct from account assignment and notes the version requirement. Minor gap is the absence of an explicit alternative."
+  },
+  {
+    "tool": "actual_account_groups_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: deletes a custom account group. It immediately clarifies that member accounts are not deleted, only ungrouped."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Clear prerequisites and failure behavior (not-found writes nothing). Does not name an alternative deletion path, but the context is well framed."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Goes well beyond the destructive annotation: accounts survive and become ungrouped, upstream clears member references best-effort under sync, a concurrent assignment can survive, and dangling references should be treated as ungrouped. Also states the not-found refusal."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and its id description already points to actual_account_groups_list. The description adds no new parameter semantics."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense but well-structured, leading with the destructive effect and the important sync caveat. Slightly long but justified by the concurrency nuance."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but for a delete with a simple outcome the behavioral coverage is sufficient; return information is not described."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An unusually thorough delete description that surfaces the non-obvious sync and dangling-reference behavior. Only the parameter and return detail are thin, as expected for a one-id tool."
+  },
+  {
+    "tool": "actual_account_groups_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: lists custom account groups used to organise accounts in the sidebar, and names the returned fields (id, name, sort order)."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains why a dangling account_group_id is expected and not an error, plus the server version prerequisite. No explicit alternative tool is named."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover read-only safety. The description adds that dangling member references are expected due to best-effort sync and states the return fields and version requirement."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so there is nothing to document; the baseline of 4 applies."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Compact and front-loaded with the purpose, then the return fields and the dangling-reference note."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description documents the returned fields and the dangling-reference interpretation, which is adequate for a parameterless list."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A well-scoped list description that adds the important dangling-reference interpretation. Adequate everywhere and concise."
+  },
+  {
+    "tool": "actual_account_groups_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: renames a custom account group or changes its sidebar position. It explicitly states it does not change membership."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly directs the agent to actual_accounts_update to move an account between groups, and documents the not-found refusal."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations state a non-destructive, non-idempotent write. The description adds that membership is untouched and that a missing group writes nothing; no return or version caveat beyond the server requirement."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and documents id, name, and sort_order. The description adds no meaning beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Short, front-loaded, and each sentence earns its place; one compact example."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the operations and failure mode are fully described; return shape is not specified, which is acceptable for this simple update."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A strong update description that clearly scopes what it does not do and points to the sibling for membership changes. Concise and complete."
+  },
+  {
+    "tool": "actual_accounts_close",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: marks an account closed, with the important distinction that a transactionless account is removed rather than closed."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Clear prerequisites: transferAccountId is required for a non-zero balance, and error recovery requires re-reading with actual_accounts_list. No direct alternative for closing is named."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds significant behavior beyond the destructive/idempotent annotations: empty accounts are removed and unreopenable, balances move as a dated 'Closing account' transaction, already-closed accounts are reported, and state is verified after the write so a verification failure may mask success."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already documents that transferAccountId is required for a non-zero balance and that transferCategoryId pairs with it. The description repeats this rather than adding parameter detail."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "A dense block with no examples, but it is front-loaded and every clause conveys operational consequence. Could be split for readability."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema or examples, but the behavioral edge cases and error semantics are thoroughly covered; the return value is not described."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An operationally excellent description that reveals dangerous edge cases (removal, unreopenable, post-write verification). The only gap is that parameter detail largely mirrors the schema."
+  },
+  {
+    "tool": "actual_accounts_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource: creates a new account in Actual Budget. It does not differentiate from sibling creation tools beyond the resource name."
+      },
+      "usage_guidelines": {
+        "score": 2,
+        "justification": "No guidance on when to use this versus alternatives, no prerequisites, and no behavioral caveats beyond two examples."
+      },
+      "behavioral_transparency": {
+        "score": 2,
+        "justification": "Annotations cover the write/safety profile, but the description itself says nothing about what the balance parameter creates (for example a starting balance transaction), permissions, or the return value. No output schema compounds the gap."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already documents name and balance in cents. The examples reinforce that cents are used but add no new semantics."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Very short and front-loaded, though its brevity reflects under-specification rather than density."
+      },
+      "contextual_completeness": {
+        "score": 2,
+        "justification": "A mutation tool with no output schema and no description of the return, prerequisites, or side effects of the initial balance. The description is minimal for what an agent needs."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A terse description that only names the operation and gives two examples. It leaves side effects, return values, and usage guidance entirely to the schema and annotations."
+  },
+  {
+    "tool": "actual_accounts_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: deletes an account. It clearly states the destructive consequences and the restriction on closed accounts."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Documents the important prerequisite that closed accounts cannot be deleted and must be reopened with actual_accounts_reopen first. Lacks a broader when-not-to-use discussion."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Substantially exceeds the destructive annotation: transactions are deleted, paired transfers unlinked, the transfer payee removed, the action is irreversible, closed accounts are silently ignored, and deleting a nonexistent account reports success."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the single id parameter is fully documented; the description adds no parameter meaning."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Tight, front-loaded with DESTRUCTIVE, and every sentence adds an operational consequence; no wasted example."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but a delete with these clearly stated effects needs little return detail; the return is not described at all."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An excellent destructive-operation description that exposes cascade effects, irreversibility, and the closed-account quirk. Only return information is absent."
+  },
+  {
+    "tool": "actual_accounts_get_balance",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource: gets the current balance of a specific account, with an optional cutoff date. It does not distinguish itself from sibling balance-related tools."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Implied usage through the required id and optional cutoff, but no explicit when-to-use guidance or alternatives are offered."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations already declare a read-only, idempotent read. The description restates the parameters and mentions an error when the account is missing, but the rich output schema already documents the null/error return."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and documents id and cutoff. The description largely repeats the same required/optional framing without adding meaning beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and short, though the Required/Optional list duplicates the schema and the example is mostly redundant."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "The output schema documents balance, accountName, and error, so the description need not explain the return. Coverage is adequate, with only usage guidance thin."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An adequate read description whose main weakness is duplication of schema details rather than adding value. The strong output schema compensates for the bare return description."
+  },
+  {
+    "tool": "actual_accounts_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: lists all accounts, enumerating account types and the returned fields (id, name, balance, budget status, open/closed state)."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is implied as the general account enumeration, but there is no explicit when-to-use or when-to-prefer-a-filtered-sibling guidance."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations cover the read-only safety profile. The description lists return fields, but the output schema already documents them, so it adds little behavioral context such as ordering or filtering behavior."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so there is nothing to document; the baseline of 4 applies."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Two compact sentences, front-loaded and waste-free, though the field list duplicates the output schema."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "The output schema fully documents the return fields, so the description is complete enough for a parameterless list, with only usage guidance missing."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A clear and concise list description that mirrors the output schema. It is adequate but adds little beyond structured fields."
+  }
+]

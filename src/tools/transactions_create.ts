@@ -44,7 +44,11 @@ const InputSchema = z
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_create',
-  description: 'Create a new transaction in Actual Budget. Amount should be in cents (negative for expenses, positive for income).',
+  description:
+    'Create one transaction in an existing account. Amount is integer cents (negative for expenses); date is YYYY-MM-DD. ' +
+    'Pass payee (id) or payee_name; an unknown payee_name may create a new payee. For a split, pass subtransactions that sum to amount and put categories on the children. ' +
+    'Not for account-to-account transfers. To edit transactions use actual_transactions_update (one) or actual_transactions_update_batch (many). ' +
+    'Returns { success, id }; id is null with the current Actual API, so find the new row with actual_query_run. An unknown account returns success false with nothing written.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

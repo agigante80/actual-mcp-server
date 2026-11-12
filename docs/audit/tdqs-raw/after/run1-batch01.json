@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_accounts_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource (create an on-budget account in Actual Budget) with the key constraint that off-budget creation is impossible, distinguished from actual_accounts_update. The Starting Balance behavior further sharpens what is actually created."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explicitly states the off-budget path requires a follow-up call to actual_accounts_update, and gives worked examples. No guidance on checking for existing accounts first, so not a full 5."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds substantive context beyond annotations: balance is booked as a Starting Balance transaction and repeating the call creates a duplicate account with the failure mode spelled out. The return shape is documented despite no output schema."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100%, so the baseline is 3, but the description adds that balance is in integer cents, negative means debt, and it becomes a Starting Balance transaction. That meaning is not inferable from the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the purpose and caveats, then two compact examples that clarify the cents convention. Slightly padded by the examples but they carry real information."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Covers purpose, constraint, return shape and non-idempotency for a 2-param mutation tool. A little more on what happens to budget state on account creation would complete it."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A strong creation definition: it names the off-budget limitation, warns against duplicate calls, and documents the Starting Balance side effect and return value. Only minor gaps around existing-account checks."
+  },
+  {
+    "tool": "actual_accounts_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Names the exact updatable fields (name, offbudget, closed) and clarifies that fields must go inside the fields object. It is clearly separated from create and from the close/reopen siblings."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly directs users to actual_accounts_close or actual_accounts_reopen for closing because those handle the remaining balance, and points to actual_accounts_list for unknown ids. Clear when-to-use and when-to-prefer-another-tool guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Discloses that only passed fields change, at least one is required, a closed account can still be updated, and unknown ids produce a not-found refusal. These go beyond the idempotent/read-only annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), but the description adds the requirement that at least one field be supplied and explains partial-update semantics that the schema does not enforce or state."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "One dense paragraph that orders purpose, field semantics, preferred alternatives, failure behavior and return value. No wasted sentences."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Nearly complete for a nested-parameter mutation, including error behavior and return shape. Only the effect of the offbudget flag on budgets is left implicit."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-differentiated update definition that steers callers to close/reopen for lifecycle changes and documents partial-update and error behavior. Nested fields and return shape are both covered."
+  },
+  {
+    "tool": "actual_categories_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Enumerates every operation the tool performs (rename, move group, set is_income, hide/show) and is clearly distinct from create and delete. Passed-fields-only semantics are stated."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Recommends hidden true to retire a category and contrasts it with actual_categories_delete, and points to actual_categories_get for unknown ids. Explicit alternative and exclusion guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds that only supplied fields change, hidden categories are still found, and unknown ids get a not-found refusal, which is more than the annotations convey. Return shape ({ success: true }) is documented."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100%, so baseline 3, but the description clarifies that each field name maps to a discrete operation and that group_id moves the category rather than copying it."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Single front-loaded paragraph covering purpose, precedence, errors and return value with no filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Complete enough for a 2-param nested update with no output schema. It omits what happens to budgeted amounts when a category moves groups, a minor gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear, well-scoped category update that names each operation, prefers hiding over deletion, and documents error and return behavior. Solid on all dimensions with only a small omission about budget impact."
+  },
+  {
+    "tool": "actual_payees_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States it creates a payee for transactions and rules to reference, which captures both the action and the role of the entity. Clearly distinct from update, merge and get."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Warns to check actual_payees_get first, notes that creating a transaction with payee_name can also create a payee, and routes editing and deduplication to actual_payees_update and actual_payees_merge. Rich alternative guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Explicitly flags non-idempotency with the consequence (duplicate payees) and documents the return shape despite no output schema. Adds real context beyond the annotations."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the description only repeats the name and adds a notes example; it adds little semantic meaning (for example, name uniqueness or trimming) beyond the schema fields."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Efficient prose plus two short examples. The examples mostly restate obvious usage but cost little space."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Adequate for a simple two-field creation tool, covering idempotency, alternatives and return. Uniqueness rules or duplicate outcomes are the only notable omission."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong purpose and guideline coverage that actively prevents duplicate payees and points to the right related tools. Parameter notes are the weakest part because the schema already carries the field detail."
+  },
+  {
+    "tool": "actual_rules_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States it lists every rule in the open budget with no input, which is precise and distinguishes it from actual_payee_rules_get and actual_rules_create."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains its main use is finding a rule id for actual_rules_update or actual_rules_delete, and names actual_payee_rules_get and actual_rules_create as siblings. Good context but no explicit when-not-to-use."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Describes the rule object structure (id, stage, conditionsOp, conditions, actions), clarifies values are ids not names, and specifies the return shape including empty results. Adds significant context beyond the read-only annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4. The description appropriately explains the returned object structure instead of fabricating parameter detail."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Compact single paragraph that front-loads the action and then covers structure, use and return. Every sentence adds value."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Complete for a no-arg read tool: it documents the returned fields, their value types, the empty case and its role in the edit/delete workflow."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent read tool definition that explains the rule object model and return shape, which matters because no output schema exists. Clear routing to the update/delete siblings."
+  },
+  {
+    "tool": "actual_transactions_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Names the verb and resource plus the required context (existing account), and defines amount sign and date format. It is clearly distinguished from update and batch-update siblings."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly excludes account-to-account transfers and directs callers to actual_transactions_update or actual_transactions_update_batch instead. Strong when-to-use and when-not guidance."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses non-obvious side effects and edge cases: unknown payee_name may create a payee, id can be null, and an unknown account returns success false with nothing written. This is far beyond what the annotations convey."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), but the description adds the split rule that subtransactions must sum to amount and that categories belong on the children, which the schema does not state."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense but well ordered: core semantics, payee options, split rule, exclusions, alternatives, return. Slightly crowded for one paragraph but nothing is wasted."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Thorough for a 10-param mutation with no output schema, covering split behavior, partial success, and side effects. The description compensates fully for the absent output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A model creation definition: split semantics, payee auto-creation, and failure modes are all disclosed, and the transfer exclusion routes callers correctly. The only weak spot is that field details are already in the schema."
+  },
+  {
+    "tool": "actual_transactions_filter",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States it finds transactions matching every filter with AND semantics and enumerates the filter dimensions. Clearly distinct from the name-based search and aggregate siblings."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explains that name-based searches should use the payee/category search tools and totals should use actual_transactions_aggregate. It also tells callers to pass ids, not names, and warns that names are refused."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses key behavior beyond the annotations: off-budget accounts are excluded, there is no row limit, and a name where an id belongs is refused with the matching id named. These are meaningful operational facts."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), but the description adds that filters combine with AND, dates are YYYY-MM-DD, amounts are integer cents, and notes matching is case-insensitive. Useful semantics beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "One dense paragraph covering filters, defaults, exclusions, error behavior and alternatives. It is information-rich but slightly packed."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Complete for a multi-filter read with no output schema; it specifies scope (all accounts by default), off-budget exclusion, absence of pagination, and the return wrapper."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Very strong filter definition that specifies AND semantics, id-vs-name handling, off-budget exclusion and the lack of a row limit. It correctly routes name-based and aggregation use cases to siblings."
+  },
+  {
+    "tool": "actual_transactions_search_by_category",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States it searches by category name with case-insensitive exact matching and lists the optional narrowing filters. Clearly separate from the id-based filter and the aggregate tool."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Directs id-based lookups to actual_transactions_filter and per-category totals to actual_transactions_aggregate. Explicit alternatives with clear rationale."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses off-budget exclusion, default limit of 100, newest-first ordering, the full return object including per-row accountName, and that count/totalAmount only cover returned rows. An unknown category returns an empty list plus an error field. Far beyond annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), but the description clarifies the case-insensitive exact-match semantics and the limit behavior, which the schema does not convey."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Efficient single paragraph that front-loads the search semantics and then covers narrowing, scope, return shape and alternatives. Slightly long but every clause informs."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Complete for a 7-param search with no output schema: return fields, the limited-total caveat, error behavior and row ordering are all documented."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Thorough search definition that documents the exact-match rule, the limited count/total caveat, off-budget exclusion and the error case. Correctly points id-based and aggregate needs elsewhere."
+  },
+  {
+    "tool": "actual_transactions_search_by_month",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States it searches one calendar month (YYYY-MM, default current month) with optional name-based and amount filters. Distinct from the date-range and query tools."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly says to use actual_query_run for other date ranges or aggregation, and notes the limit must be raised for a full total. Clear alternative and caveat guidance."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Documents off-budget exclusion, default 100-row limit, newest-first ordering, the return object, and that count/totalAmount cover only returned rows, plus the unknown-name error field. Substantially beyond annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), but the description adds the default-to-current-month behavior and the case-insensitive exact-match semantics for names, which the schema does not state."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded paragraph moving from scope to filters to return and alternatives. Compact and purposeful, though dense."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Complete for this search tool: month defaulting, filter semantics, off-budget exclusion, limited totals caveat, ordering and error behavior are all covered."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-rounded month-scoped search that explains defaulting, the partial-total caveat, and off-budget exclusion, and routes other ranges to actual_query_run. Only parameter repetition of the schema is minor."
+  },
+  {
+    "tool": "actual_transactions_search_by_payee",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States it searches by payee name with case-insensitive exact matching and lists the optional narrowing filters. Clearly distinct from the id-based filter and aggregate siblings."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Directs payee-id lookups to actual_transactions_filter and per-payee totals to actual_transactions_aggregate. Explicit, actionable alternatives."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses off-budget inclusion, default 100-row limit, newest-first ordering, return object with accountName, the limited count/totalAmount caveat, and the unknown-name error. This notably differs from the category search behavior, which is valuable to state."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), but the description adds the case-insensitive exact-match rule and limit behavior beyond the schema descriptions."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Single paragraph with a clear progression from match semantics to filters, scope, return and alternatives. Dense but no filler."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Complete for an 8-param search with no output schema: return fields, partial-total caveat, ordering, scope and error behavior are all documented."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong payee search definition that correctly states off-budget accounts are included (unlike the category search), documents the limited count/total caveat, and routes id and aggregate cases to siblings."
+  }
+]

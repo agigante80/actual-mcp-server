@@ -1,0 +1,157 @@
+[
+  {
+    "tool": "actual_transactions_summary_by_payee",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource: groups spending by payee via ActualQL aggregation and returns total amount plus count. It states scope and ordering, but does not explicitly differentiate itself from siblings like summary_by_category or search_by_payee."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "The line about identifying top vendors and analyzing merchant spending patterns implies usage, but there are no when-not rules, prerequisites, or named alternatives among the many sibling summaries and searches."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations already declare the read-only, idempotent, closed-world profile. The description usefully adds ordering by total amount descending and the returned fields, but does not discuss pagination or how payee grouping handles null payees."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent, so baseline is 3. The description restates the date range and ordering already documented in the schema and adds no format or edge-case meaning beyond it."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Four short sentences, front-loaded with the core behavior and return shape. The merchant-pattern sentence is mild filler but nothing is redundant."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema exists, but the description documents the return fields and ordering. With annotations covering safety and schema covering parameters, it is nearly complete, missing only pagination and edge-case behavior."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A solid read-only aggregation tool with clear return shape and ordering. Weakest on sibling differentiation and usage guidance, and thin on pagination or null-payee behavior."
+  },
+  {
+    "tool": "actual_transactions_uncategorized",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: retrieves uncategorized transactions as a summary and optional paginated list. The default response shape and the includeTransactions switch make the exact scope unambiguous."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains when to pass includeTransactions, the pagination defaults, date-range defaults, and which entries are excluded. It stops short of naming a sibling alternative such as transactions_filter."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses a great deal beyond the read-only annotations: exact default response shape, exclusions for transfers, split parents, opening balances, off-budget and closed accounts, account scoping, and the removed legacy summary.totalAmount field."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent so baseline is 3. The description adds real meaning for includeTransactions, its effect on limit and offset, and how accountId rescopes all fields, going beyond the schema entries."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Long but dense and front-loaded with the default response. Every clause carries operational value, though the single sprawling sentence about the response shape could be split for readability."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema is provided, but the description documents both the default and extended return shapes in detail, plus exclusions, scoping, and defaults, fully compensating for the missing schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An unusually complete read-only definition that documents return shape, exclusions, scoping, and pagination. Minor gaps are only the absence of a named sibling alternative and sentence length."
+  },
+  {
+    "tool": "actual_transactions_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource: updates an existing transaction by id and fields, with an explicit account of in-place splitting. It does not distinguish itself from the batch sibling, so differentiation is only implicit."
+      },
+      "usage_guidelines": {
+        "score": 2,
+        "justification": "No guidance on when to use this versus update_batch, no prerequisites, and no error or read-back advice. The only usage-like content is the mechanics of splitting, not decision criteria."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover the destructive, non-idempotent, closed-world write profile. The description adds valuable split semantics: split in place, id and import fields kept, parent category cleared, unnamed child inherits, result lists child ids."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent and the nested subtransactions field is already described. The description supplements it with the parent-category-cleared and child-inheritance rules that the schema does not state."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three tight sentences, front-loaded with the core update action and then the split special case. Little waste, though the split detail dominates the description."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema exists and the description only hints that the result lists new child ids; the general return shape is undocumented. With annotations present and params complete, the mutation behavior is covered but the response contract is not."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong on split mechanics and parameter detail, but offers no usage guidance against the batch sibling and leaves the return shape mostly undocumented."
+  },
+  {
+    "tool": "actual_transactions_update_batch",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: updates multiple transactions in one call in {id, fields} pairs. It explicitly points to actual_transactions_update for editing split children, cleanly separating it from the single-update sibling."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicit when-then guidance: non-atomic partial application, per-item failures, read-back-before-retry after call failures or not-attempted items, and direction to actual_transactions_update for splits rather than batch."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Excellent beyond-annotation disclosure: items are applied independently and non-atomically, prior items stay applied after a failure, failed items are reported per id, and errors name already-applied ids. No contradiction with the idempotent and non-destructive hints."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent, so baseline is 3. The description adds the 50-item cap rationale, the exact return structure of succeeded and failed arrays, and the fact that subtransactions are ignored in batch."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Long but every sentence carries operational or recovery value, with the most important caveats first, an explicit return shape, and a concrete example at the end."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "With no output schema, the description still supplies the full return contract and retry procedure, and annotations plus 100 percent schema coverage handle the rest. Complete for a partial-failure mutation tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A model definition for a risky batch mutation: non-atomicity, partial failure, retry safety, and return shape are all spelled out, with the split-unsupported limit and sibling alternative named."
+  },
+  {
+    "tool": "actual_transfers_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: creates a paired transfer with a debit and credit linked by transfer_id. Equating it to the Make Transfer UI result and to a transaction-pair outcome distinguishes it from plain transaction creation."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "States prerequisites (both accounts must be open) and an alternative for looking up account UUIDs via actual_accounts_list. It adds a useful duplicate caveat but does not give an explicit when-not rule."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Beyond the write annotations it discloses that two linked transactions are created, the amount must be positive cents with direction set by the accounts, both accounts must be open, and GoCardless sync can create duplicates if sides settle on different dates."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent and already enforces the UUID patterns, positive amount, and date format. The description only reinforces positive integer cents and account-based direction, adding little new meaning."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the pairing behavior and constraints, followed by a concrete example. The example block is slightly malformed but the prose itself stays lean."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Covers behavior, preconditions, and the sync duplicate risk well, but with no output schema it never states what the call returns, such as the created ids, leaving that contract implicit."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A helpful definition that explains the paired-debit-and-credit model, preconditions, and a real sync duplicate hazard. The main gap is the undocumented return value and the largely schema-redundant parameter prose."
+  }
+]

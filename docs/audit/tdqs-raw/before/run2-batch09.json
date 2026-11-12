@@ -1,0 +1,157 @@
+[
+  {
+    "tool": "actual_transactions_summary_by_payee",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Specific verb and resource: gets spending summary grouped by payee, names the aggregation and ordering. Does not explicitly differentiate from sibling summary_by_category or search_by_payee, so short of a 5."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Says it is useful for identifying top vendors and analyzing merchant spending patterns, which implies a use case but gives no when-not guidance and names no alternative sibling tools."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already cover the read-only safety profile. Description adds meaningful behavior: result ordering highest-first, per-payee total and count, and implicit default date scoping carried by the schema."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema description coverage is 100 percent, so the schema documents all four parameters. The description only reiterates date range and ordering; it adds no syntax or format detail beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Four sentences, front-loaded with purpose and return shape. The vendor-analysis sentence is mildly filler but still earns a place as usage guidance."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description documents the return contents and ordering. It omits error behavior and pagination nuances, leaving a small gap for a read summary tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A clear, well-scoped aggregation tool with documented return fields and ordering. It loses points for not naming alternative sibling tools and for repeating schema-level defaults rather than adding new parameter meaning."
+  },
+  {
+    "tool": "actual_transactions_uncategorized",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Precise verb and resource: lists uncategorized transactions with summary and optional rows. The exclusions and default behavior make the scope unmistakable."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Clearly explains the default summary-only mode, how to opt into rows with includeTransactions, how to paginate, and which entries are excluded. It stops short of naming a sibling alternative, so not a 5."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Beyond the read-only annotations, it discloses exclusions such as transfers, split parents, opening balances, off-budget and closed accounts, default all-time date range, account scoping of all fields, and the removed legacy field. This is rich behavioral context."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent, so baseline is 3. The description adds real meaning: accountId scopes all returned fields, includeTransactions gates the rows, and date defaults are all-time rather than the schema implied."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense but front-loaded, moving from return shape to options to exclusions. A few phrases repeat schema defaults, but the legacy-field note earns its space."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema exists, yet the description fully documents the response shape in both modes, pagination fields, exclusions, and date scoping. An agent has enough to invoke and interpret results correctly."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "The strongest of the batch: it compensates for the missing output schema by documenting both response modes and all filtering boundaries. Only the absence of named alternatives keeps usage guidance below the top."
+  },
+  {
+    "tool": "actual_transactions_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource: updates an existing transaction by ID with selected fields. It does not explicitly contrast with actual_transactions_update_batch, so sibling differentiation is implicit."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Explains the id-plus-fields pattern and the in-place split behavior, but gives no explicit when-to-use versus the batch sibling and no prerequisites or exclusions."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations declare a destructive, non-idempotent write. The description adds valuable split semantics: splitting in place, keeping id and import fields, clearing the parent category, and child inheritance. It does not discuss reversibility or failure behavior."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent, so baseline is 3. The description adds meaning beyond the schema by explaining that subtransactions must sum to the transaction amount and what happens to the parent category."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three compact sentences, front-loaded with the operation and then the non-obvious split case. No wasted prose."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema; the description mentions child ids only for the split case and says nothing about the normal update response or errors. Adequate for a rich-schema mutation but with a clear gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Good purpose and unusually useful split documentation, but thin on when to prefer the batch tool and silent on the standard return and error behavior."
+  },
+  {
+    "tool": "actual_transactions_update_batch",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource with a clear scope: update multiple transactions in one call, capped at 50 pairs. It is unmistakably the bulk variant of the single-update sibling."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly states non-atomic semantics, per-item failure behavior, retry procedure, that splits are unsupported, and names actual_transactions_update as the tool to use for split children. This is exactly the when and when-not guidance wanted."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations cover safety hints, but the description goes much further: partial application, the failed array, call-level failure naming applied ids, the not-attempted case, and read-back-before-retry guidance. It also contradicts nothing in the annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "One parameter with 100 percent schema coverage, so baseline is 3. The description adds the 50-item cap rationale and the individual item shape semantics, including that subtransactions are ignored."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Long but every paragraph addresses a distinct risk: atomicity, failures, retries, splits, return shape. Dense yet front-loaded and justified."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema, yet the description documents the exact return object, all counters, and the failure cases. It also supplies retry protocol and an example payload, leaving little ambiguity."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An excellent operational description that turns a risky bulk mutation into predictable behavior. Non-atomicity and retry semantics are spelled out precisely, with the single-update alternative named."
+  },
+  {
+    "tool": "actual_transfers_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: creates a paired transfer between accounts, with debit/credit linkage by shared transfer_id. It also states equivalence to the Actual UI make-transfer result."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Provides prerequisites such as both accounts being open and points to actual_accounts_list for UUID lookup, plus a sync duplicate warning. It does not explicitly contrast with transactions_create or transfers elsewhere."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations are modest, but the description discloses the paired-write nature, positive-amount convention, open-account requirement, UI equivalence, and the GoCardless duplicate-on-sync risk. That is strong beyond-annotation context."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent, so baseline is 3. The description reinforces that amount is a positive integer in cents and that direction is determined by from_account and to_account, adding clarity over the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded explanation followed by a concrete example. Slightly long, but the example and the duplicate warning each earn their place."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and the description never states what is returned, such as the created transaction ids or transfer_id. For a create mutation that is a meaningful gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong purpose, prerequisites, and a valuable sync-duplication warning, plus a helpful example. The main shortfall is the complete absence of return-value documentation for a create operation."
+  }
+]

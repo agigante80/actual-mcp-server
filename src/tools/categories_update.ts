@@ -16,7 +16,9 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_categories_update',
-  description: 'Update an existing category in Actual Budget. You can rename the category, move it to a different group, or change its properties.',
+  description:
+    'Update an existing category: rename it (name), move it to another group (group_id), set is_income, or hide or show it (hidden). Only the fields you pass change. ' +
+    'Prefer hidden: true to retire a category; actual_categories_delete removes it. Fails with a not-found refusal for an unknown id (see actual_categories_get); a hidden category is still found. Idempotent. Returns { success: true }.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

@@ -31,7 +31,10 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.e
 //   85 titles added 2,469 bytes, so the list is 113,802 bytes, plus about 2%.
 //   #642 (outputSchema on two tools) added 1,326 bytes, so the list is 115,128 bytes and the
 //   heaviest entry 3,850: both still under the ceilings, so neither was raised.
-const TOTAL_CEILING = 116100;
+//   Total raised for #640 (the 10 lowest TDQS descriptions rewritten) from 116,100: the
+//   rewrites added 2,997 bytes net (the ticket caps them at 3,000), so the list is 118,125
+//   bytes, plus about 2%. The heaviest entry is unchanged, so the per-tool ceiling is too.
+const TOTAL_CEILING = 120500;
 const PER_TOOL_CEILING = 3900;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));

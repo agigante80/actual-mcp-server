@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_server_get_version",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('Get the version of the Actual Budget server') with explicit scope clarification that it is the self-hosted Actual server, not the MCP server. It also names the sibling to use for the other case."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly says to use 'actual_server_info' for MCP server details and this tool for compatibility or diagnostics. Clear when-to-use and a named alternative."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already declare read-only, idempotent, closed-world. The description adds the important distinction between Actual server version and MCP server version plus the success/error return shapes, though it does not discuss failure causes."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4. There is nothing to document and the description correctly implies a no-argument call."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the core answer, then usage and returns. Minor redundancy between the first and second sentences, but no wasted content."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "A trivial no-param read tool; the description documents both success and error return shapes, so the absence of an output schema is not a gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A well-scoped, tightly written diagnostic tool description that distinguishes itself from its closest sibling and documents its return shapes. Only slight redundancy keeps it from perfect marks."
+  },
+  {
+    "tool": "actual_server_info",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource ('Get MCP server version and system information') with an enumerated list of returned fields. It does not explicitly name actual_server_get_version as the alternative for the Actual server version."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "States clear contexts for use: check server status, verify version compatibility, or debug issues. No explicit exclusions or sibling alternative named."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover the safe read-only profile; the description adds the concrete field list (Node.js, SDK, API version, tool count, uptime) which helps the agent know what it gets back."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4; no argument semantics are needed."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Short and front-loaded, with a clean bulleted return list. The field list is useful rather than filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description enumerates the returned fields. It stops short of describing value formats or error behavior, a small gap for a diagnostic tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A clear, efficient diagnostic description with a helpful return-field list. It could improve by explicitly contrasting with actual_server_get_version."
+  },
+  {
+    "tool": "actual_session_close",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource ('Close one of your idle MCP sessions to free up connection slots') with scoping that only your own sessions other than the current one are affected."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly names the triggering conditions ('Max concurrent sessions reached', 'Max sessions per principal reached') and the ownership constraint, so the agent knows exactly when this applies."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations declare destructive and non-idempotent. The description adds the crucial scoping that only sessions you opened and not the current one can be closed, which the annotations do not convey."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the description's default behavior ('closes your oldest idle session') largely restates the parameter description. It adds little beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three tight sentences, each carrying distinct information (action, trigger, guardrail). No waste."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema and the description never states what is returned on success or failure. For a single-param mutation this is a modest gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong on purpose and triggering guidance with a useful ownership guardrail. The main gaps are return-value documentation and slight parameter restatement."
+  },
+  {
+    "tool": "actual_session_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource ('List your active MCP sessions with their activity status'). The scoping to your own sessions is stated, though differentiation from other list tools is generic."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Gives clear contexts: diagnosing connection issues or seeing which sessions can be closed, implicitly pointing at actual_session_close. No explicit exclusions."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already declare a safe read. The description adds the non-obvious detail that pool totals cover all sessions while the list shows only yours, which annotations cannot express."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4; nothing needs documenting."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two sentences, both informative, front-loaded with the action and purpose."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema; the description mentions activity status and pool totals but does not enumerate return fields. Adequate but not fully complete."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A concise, useful description that clarifies the scope difference between pool totals and your own sessions. Return shape remains somewhat under-documented."
+  },
+  {
+    "tool": "actual_tags_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource ('Create a new tag in Actual Budget') with specifics on the tag format. Sibling differentiation from tags_update is only implicit via the upsert note."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Provides worked examples and explains upsert behavior, which implies usage, but never explicitly states when to use create versus update or how it relates to other tag tools."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Goes well beyond the idempotent/non-destructive annotations by disclosing that the operation is an upsert on the tag word, that previously deleted tags are matched, and that the same name always yields the same id."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), and the description adds real value: the no-#-prefix rule, the CSS-hex color convention, and the explicit note that no color format is enforced."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loads the action and critical upsert behavior, then gives two compact examples. Slightly long due to examples but they earn their place."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description states the id is returned. It omits the full return shape and error cases, a minor gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Rich behavioral disclosure around upsert semantics and tag formatting make this a strong definition. Explicit when-to-use guidance versus tags_update is the main missing piece."
+  },
+  {
+    "tool": "actual_tags_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Specific verb+resource ('Delete a tag from Actual Budget by its UUID'). Clear, though it does not explicitly contrast with other delete tools."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Points to actual_tags_list as the source of valid UUIDs, giving a clear prerequisite. No explicit when-not guidance, but the context is sufficient."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses non-obvious behavior beyond the destructive/idempotent annotations: the tag is soft-deleted (tombstoned), disappears from listing, and a nonexistent id returns a not-found error."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already documents the UUID pattern; the description adds only the sourcing hint (use actual_tags_list), so baseline 3 fits."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Compact and front-loaded, with the example adding concrete format without bloat."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema and the description does not state what a successful call returns. Otherwise complete for a single-id mutation."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A solid description whose soft-delete and error-behavior disclosures add genuine value. Return-value documentation is the only notable gap."
+  },
+  {
+    "tool": "actual_tags_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource ('List all tags defined in Actual Budget'). Specific enough, though it does not distinguish itself from other list tools beyond the resource."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "No explicit when-to-use, exclusions, or named alternatives; usage is only implied by the description and a bare example."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover the safe read profile. The description adds the useful storage detail that tags carry no leading # and enumerates returned fields (id, tag, color, description)."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4; no argument semantics are needed."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two short sentences plus a trivial example; fully front-loaded with no filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description names the returned fields, which largely compensates. Types and edge cases are not covered."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Concise and informative about the tag format and return fields, but it offers essentially no guidance on when to use it versus other lookup tools."
+  },
+  {
+    "tool": "actual_tags_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb+resource ('Update an existing tag in Actual Budget') with the required-field constraint stated. It does not explicitly contrast with tags_create's upsert behavior."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "States that at least one of tag/color/description must be provided and that the id must come from actual_tags_list, plus examples. No explicit when-not guidance."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds substantial non-obvious behavior beyond the idempotent annotation: a not-found error is returned because the tool adds a pre-flight guard the underlying API lacks, and the tag word excludes the # prefix."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), and the description adds the cross-field 'at least one of' constraint and the UUID provenance and # prefix rules."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loads action and constraints, then two focused examples. Efficient, though the examples make it longer than strictly necessary."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema and the description never states the return value. Behavior and parameters are otherwise well covered."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong transparency about the pre-flight existence guard and cross-field constraint. It lacks explicit differentiation from the upserting create tool and return-value documentation."
+  },
+  {
+    "tool": "actual_transactions_aggregate",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Very specific verb+resource with semantics spelled out: deterministic aggregation of posted transactions over an inclusive date range in integer cents. Clearly distinct from search/summary siblings."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains defaults (includeIncome false, excludeTransfers true) and what happens when transfers are kept, plus two worked examples. It stops short of explicitly naming alternative summary tools."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses rich behavior beyond the read-only annotations: split parents excluded and children counted once, transfers identified only by transfer_id, credit/uncategorizedInflow handling, and cents/date formats."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3); the description adds aggregation semantics for groupBy, includeIncome, and excludeTransfers, including the transferInflow/transferOutflow fields, going beyond the schema's terse notes."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense but front-loaded, with rules stated before examples. Long by necessity for a complex tool, and most sentences carry distinct semantics."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema; the description mentions some result fields (transferInflow, transferOutflow, uncategorizedInflows) but does not fully specify the aggregate result shape. A notable gap for a complex analytical tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An unusually thorough definition that makes aggregation semantics and edge-case handling clear. The remaining weakness is incomplete documentation of the aggregate return shape."
+  },
+  {
+    "tool": "actual_transactions_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Specific verb+resource ('Create a new transaction in Actual Budget'), but it does not distinguish itself from siblings like import, update, or transfers_create."
+      },
+      "usage_guidelines": {
+        "score": 2,
+        "justification": "No when-to-use guidance, no exclusions, and no named alternatives; it does not clarify when to use this versus importing or creating a transfer."
+      },
+      "behavioral_transparency": {
+        "score": 2,
+        "justification": "Annotations only declare non-read-only, non-destructive, non-idempotent. The description adds nothing about duplicate handling, required-field semantics, split behavior, or effects, so it fails to carry the burden for a 10-param mutation."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100%, so baseline 3. The description's only parameter note (amount in cents, sign convention) is already in the schema and adds nothing."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Two sentences and front-loaded, but the brevity reflects under-specification rather than efficiency."
+      },
+      "contextual_completeness": {
+        "score": 2,
+        "justification": "A 10-parameter tool with nested subtransactions and no output schema, yet the description omits return values, split rules, and error cases. Far too thin for the tool's complexity."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "The weakest definition in the batch: minimal purpose statement and no behavioral or usage guidance for a complex creation tool with splits and many optional fields. The schema does most of the work here."
+  }
+]

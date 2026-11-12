@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_accounts_reopen",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource (reopen a previously closed account) with the concrete effect spelled out (becomes active, visible in all views, history intact). Distinguished from sibling close and create by explaining the no-transaction removal case."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains when it applies and when it cannot (account removed because it had no transactions), and an explicit retry procedure after an error. Does not contrast with setting closed=false via actual_accounts_update, so one sibling overlap is unaddressed."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds substantial context beyond the annotations: refuses a non-account id, distinguishes already-open no-op with no write, and warns that state is verified after the write so a verification-read failure can be reported despite success."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the UUID pattern is documented, so the schema does the heavy lifting. The description adds only the semantic requirement that the id be an actual account."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the core effect and dense with useful caveats. Long, but every sentence covers a distinct failure mode rather than padding."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but outcomes, refusals, and the verification caveat are all described, making it sufficient. Minor gap: no explicit return payload shape."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong, behavior-rich definition that survives the annotation bar by describing refusal cases, no-op semantics, and post-write verification. Only weakness is the missing contrast with the update tool that can also set the closed flag."
+  },
+  {
+    "tool": "actual_accounts_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb plus resource and an enumeration of updatable fields. It does not distinguish itself from siblings such as actual_accounts_close, which overlaps via the closed flag."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "The field list implies usage but there is no explicit when-to-use, when-not, or alternative. It never says whether to prefer close/reopen over setting closed here."
+      },
+      "behavioral_transparency": {
+        "score": 2,
+        "justification": "Annotations already declare mutation, non-destructive, idempotent. The description adds essentially nothing new: the field list and length limits are already in the schema, and it omits partial-update semantics and what happens to unlisted fields or to validation failures."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100%, so baseline 3 applies. The description restates the same fields without adding syntax, constraints, or semantics beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 3,
+        "justification": "The fields list duplicates the schema and the example largely mirrors it, so a chunk of the text does not earn its place. Still short and readable."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and the description does not explain the response or partial-update behavior. Adequate for a simple update but leaves real gaps."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Serviceable but mostly a restatement of the schema. It lacks sibling differentiation (especially versus close/reopen) and adds little behavioral context that the annotations and schema do not already provide."
+  },
+  {
+    "tool": "actual_bank_sync",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource and provider scope (third-party bank sync via GoCardless or SimpleFIN), with per-account vs all-open-account scope stated up front."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Gives explicit refresh/retry guidance (re-list transactions before retrying after a timeout, be aware of partial all-account failures). Does not contrast with actual_transactions_import, so one alternative is unaddressed."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations cover destructive, non-idempotent, open-world. The description adds refusal conditions, the full report shape with count/ids/truncation, timeout semantics, and cross-client visibility of unwritten imports \u2014 far beyond structured fields."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Coverage is 100% and the schema already says omitting accountId syncs all linked accounts. The description repeats this without adding format or constraint detail."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "One dense paragraph, front-loaded with the core action, then failure and reporting caveats. Long but each clause carries distinct information."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the return is described in prose including truncation. Covers failure and visibility behavior well; only the exact response envelope is left implicit."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent behavioral disclosure for a risky, non-idempotent external sync, including partial-failure and timeout semantics. Main gap is the missing contrast with transaction import."
+  },
+  {
+    "tool": "actual_budget_updates_batch",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource and scope: sets amounts and/or carryover flags across many month/category pairs in one call, with the 1 to 100 bound stated."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains how to rebalance (read with actual_budgets_getMonth then send absolute amounts) and to read back affected months before retrying after a timeout. No explicit when-not or contrast with the single-value setAmount/setCarryover siblings."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations say non-destructive, idempotent. The description adds the critical non-atomicity and partial-application rules, per-item failure isolation, amount-applied-before-carryover-failure caveat, and last-one-wins for duplicate targets."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 100%, but the description adds a real constraint the schema does not enforce: each operation needs at least one of amount or carryover. It also clarifies integer cents and the per-item independence."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Well structured but long, with a return-shape block and an example. Nearly every element is functional, though the example is somewhat redundant with the field list."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Return shape and failure semantics are described in prose despite no output schema, including that all-items-failing is a normal result. Good coverage; only the exact JSON envelope outside the summarized shape is left open."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A model definition for a batched mutation: it surfaces non-atomic partial application, per-item errors, and retry hazards that annotations alone cannot convey. Slightly verbose but high value."
+  },
+  {
+    "tool": "actual_budgets_export",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource (export the active budget as a .zip) and the destination is named. Clear about producing a file rather than changing budget data."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explicit practical guidance to use it before any bulk or destructive change as a backup, and notes the file can be restored via actual_budgets_import. No when-not or alternative named."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds that the response returns path, size and sha256 rather than contents, that the file lands in ACTUAL_EXPORT_DIR, and that it can be restored or downloaded. Does not address whether an existing file with the same name is overwritten despite the destructive annotation."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Coverage is 100% and the schema already says no directory part and a .zip suffix is appended. The description adds only that a timestamped default name is used."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the key point that contents are not inlined. The two input examples are somewhat verbose for a one-parameter tool but still illustrative."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "The return values are described even without an output schema. Missing only an explicit note on overwrite behavior and error cases."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear and useful, especially the explanation that only a path and digest are returned. The destructive annotation is not fully reconciled since overwrite behavior of the target file is never stated."
+  },
+  {
+    "tool": "actual_budgets_getMonth",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb plus resource (get budget data for a specific month) and names the returned content: categories with budgeted, spent, and available amounts. No explicit contrast with getMonths or get_all."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is implied by the input and the pointer to actual_budgets_getMonths for valid months. There is no explicit when-to-use versus when to list months or use the all-budgets variant."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "The read-only annotations already carry safety. The description adds the return contents, which is useful, but says nothing about missing months, errors, or ordering."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100%, but the schema leaves the parameter optional while the description states it is required in practice and points to getMonths for valid values. That is genuine added meaning about validation."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three compact sentences with no waste: what it does, the format, and what comes back."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "The return shape is described in prose, making an output schema less necessary, and the format is clear. Missing behavior for an invalid or empty month."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate, well-sized read tool description. Its strongest contribution is flagging that month is required in practice despite the schema marking it optional; otherwise it mostly describes return contents."
+  },
+  {
+    "tool": "actual_budgets_getMonths",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb plus resource (list all available budget months) and states the summary fields returned. It does not explicitly distinguish itself from getMonth or get_all."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Offers a use context (viewing budget history and trends over time) but no explicit when-not or named alternative for a single month's detail."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Read-only annotations cover safety; the description states the returned summaries. It does not address ordering, scope, or whether months without data are included."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "No parameters, so the baseline of 4 applies. There is nothing the schema could document that the description omits."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two sentences, front-loaded with the action and followed by the return contents. No filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "For a zero-parameter read tool this is complete enough, with the return fields named. Only ambiguity versus the similarly named get_all is unresolved."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Concise and adequate for a simple list tool, with the return summaries named. Thin on differentiation from the other budget listing tools."
+  },
+  {
+    "tool": "actual_budgets_get_all",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "The description rescues an ambiguous name by saying it returns the budget files on the server that this session may use. However it does not distinguish itself from actual_budgets_list_available, which appears to overlap."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Gives a use context (multi-budget management and discovering available budgets) but never says when to choose it over list_available or switch."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Read-only annotations carry the safety profile. The description adds that results are limited to budgets this session may use, which is useful, but nothing about returned fields or ordering."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "No parameters, so baseline 4 applies; the description has nothing to omit on inputs."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two short sentences with no waste, front-loading the resource and then the use case."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "The output is only vaguely described as budget files with no field detail and no output schema, and the overlap with list_available leaves the agent guessing which to call."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Brief and readable, but the near-duplicate list_available sibling is not addressed and the return contents are left vague. Minimum viable rather than helpful."
+  },
+  {
+    "tool": "actual_budgets_holdForNextMonth",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource with the scope clarified: hold an amount from this month into next, and it explicitly states it operates on the month as a whole, not a category."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains that Actual may hold less than requested and gives a concrete retry procedure (re-read the month before retrying). No named alternative for per-category budgeting."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations say non-destructive and NOT idempotent. The description explains why: Actual ADDSS to the existing buffer, so blind retries double the hold. It also discloses clamping, zero/negative handling, partial-hold flagging, and post-write verification."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 100% and the schema already enforces an exclusive minimum on amount. The description adds the semantic that the value is in cents and that the actual held amount may differ due to clamping."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Longer than typical but organized as effect, caveat, and retry note. Almost every sentence covers a distinct behavior; the note line about month scope could have been folded in."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Even without an output schema, it covers the reported actual-held amount, partial-hold flagging, and the post-write verification caveat. Complete for the tool's risk profile."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Very strong: it justifies the non-idempotent annotation by explaining the additive behavior and gives precise retry guidance. Clamping and partial-hold reporting are disclosed clearly."
+  },
+  {
+    "tool": "actual_budgets_import",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource and accepted formats (Actual .zip or YNAB4/YNAB5). The destructive replace semantics are stated in the first lines."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicit when-not (never call to just look at a file), requires user confirmation before overwriting real data, and explains the follow-up with actual_budgets_list_available and actual_budgets_switch to recover the active budget."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations flag destructive and non-idempotent. The description adds that the budget id comes from the archive so re-import replaces the local copy, that the result is uploaded as a new server file, and that the active budget for the session changes."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 100%, but the schema does not enforce the mutual exclusivity that the description states: exactly one of path or base64. It also clarifies filename is only meaningful with base64."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with the destructive warning, which is correct prioritization. The two examples are somewhat redundant given the clear field descriptions but remain illustrative of the two input modes."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers input modes, format enum, side effects on the active budget, and recovery. No output schema, but the important outcomes are all described."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An exemplary destructive-tool definition: it leads with the danger, states the replace semantics, requires user confirmation, and explains recovery. Adds the path/base64 exclusivity the schema fails to enforce."
+  }
+]

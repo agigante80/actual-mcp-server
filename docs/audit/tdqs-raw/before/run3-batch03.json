@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_budgets_list_available",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource ('List the pre-configured budgets this session may switch to') and explicitly scoped for the session's allowed budgets."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Names the exact follow-up action: pass the budget name to actual_budgets_switch. This makes the tool's role in the workflow explicit."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already cover read-only/idempotent safety, and the description adds return fields (name, sync ID, server origin, E2E flag) plus the session-limiting behavior and env var source."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so the baseline is 4; the description accurately conveys that names are the consumable output without inventing params."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three tight sentences, front-loaded with the action, then return shape, then next step. No filler."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema, but the description documents the entry fields, the session scoping, and the config source, which is complete for a zero-arg listing tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong, well-scoped description that documents return contents, session scoping, and the handoff to actual_budgets_switch. Nearly complete despite lacking an output schema."
+  },
+  {
+    "tool": "actual_budgets_resetHold",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource ('Reset the budget hold for a month') clearly distinguish it from sibling mutation tools."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "References the inverse operation holdBudgetForNextMonth, implying context, but does not state when-not to use it or name alternatives explicitly."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations establish non-destructive idempotent behavior; the description adds that the held amount is released, useful mutation context beyond annotations."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the single month param is fully described there; the description adds no format or constraint detail beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "One efficient sentence that conveys the action and its effect with no waste."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Single-param mutation with good annotations is adequately documented, though there is no output schema or statement of permissions/errors."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear, concise mutation tool description that adds release semantics and links to its inverse sibling. Adequate but light on edge cases and return behavior."
+  },
+  {
+    "tool": "actual_budgets_setAmount",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource plus the purpose (allocating money to spending categories) and units, clearly distinguished from setCarryover and transfer."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "States when to use it ('to allocate money to spending categories for budget planning') and names actual_budgets_getMonths as the way to find valid months."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover non-destructive/idempotent; the description adds the important month-range constraint (three months back to twelve ahead), real behavioral context."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100%, but the description adds the cents convention with an example and the valid-month range, going beyond the schema on the month param."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Front-loaded action, then units, then usage, then constraint. Every sentence earns its place."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "For a three-param mutation with no output schema, the description supplies units, valid-range constraints, and the discovery tool, leaving no important gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-structured description that adds units, valid-month range, and a discovery sibling reference. One of the stronger mutation definitions in the set."
+  },
+  {
+    "tool": "actual_budgets_setCarryover",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource ('Set carryover behavior for a category in a specific month') with clear scope distinguishing it from setAmount."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains when disabled is useful ('fixed monthly expenses') but does not name alternatives or when-not to use the tool."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover non-destructive/idempotent, and the description adds meaningful effect semantics for true/false beyond what annotations state."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100%, but the description adds the behavioral meaning of the flag (rollover vs fresh start) that the schema does not convey."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Mostly efficient, but the closing 'Essential for flexible budget management' is promotional filler that does not add actionable information."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Mutational behavior and flag meaning are well covered; still no output schema or error/permission context, a minor gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Good semantic explanation of the carryover flag, with only a trailing filler sentence. Adequate transparency for a non-destructive mutation."
+  },
+  {
+    "tool": "actual_budgets_switch",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource with session-wide scope ('Switch to a different pre-configured budget for all subsequent operations'), clearly separate from per-budget data tools."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly instructs to call actual_budgets_list_available first and notes the switch affects subsequent operations, giving clear procedural guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover non-destructive/idempotent; the description adds per-session scope, immediate effect, and no-restart behavior, genuinely useful context."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the schema already documents exact, case-insensitive matching; the description mostly repeats that rather than adding semantics."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Front-loaded purpose then prerequisites then behavior in four efficient sentences, all informative."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Session semantics and prerequisite are documented; absence of output schema or failure behavior (unknown name) leaves a small gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear session-switching tool with explicit prerequisite and effect scope. Parameter description largely duplicates the schema but overall strong."
+  },
+  {
+    "tool": "actual_budgets_transfer",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus resource and directionality ('Transfer budget amount between categories'), distinguishing it from setAmount and setCarryover."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is only implied by the verb; it names no alternatives and gives no when/when-not guidance versus setAmount."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations flag it as non-idempotent and non-destructive; the description clarifies that source decreases and target increases, adding effect detail beyond annotations."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and already documents source/target and cents; the description restates the direction without adding constraints or edge cases."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two dense sentences that fully explain the operation with zero filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Effect semantics are well covered for a four-param mutation, but no output schema and no mention of insufficient-budget behavior leaves a gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Accurate, concise description of the transfer effect. Lacks usage guidance versus alternatives and does not address negative-balance edge cases."
+  },
+  {
+    "tool": "actual_categories_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource ('Create a category'), though it does not distinguish itself from other create tools beyond the noun."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Gives a clear prerequisite: use actual_category_groups_get to find groups, which frames when this tool applies. No when-not guidance."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations cover non-destructive/non-idempotent; the description only lists fields and defaults, not what happens on duplicate names or failure."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100%, and the description highlights group_id and is_income but omits the required name param, slightly under-compensating."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Short and front-loaded, though the 'REQUIRED/Optional' listing style reads as schema echo rather than value-add."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "The description omits the required name parameter and gives no output/error context, leaving meaningful gaps for a create operation."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Functional description with a helpful sibling reference, but it omits the required name param and gives no duplicate/failure behavior. Adequate but incomplete."
+  },
+  {
+    "tool": "actual_categories_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource ('Delete a category from Actual Budget') that clearly separates it from get/update siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Consequence notes imply caution, but no alternatives or explicit when/when-not guidance are given."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations mark it destructive, and the description adds concrete consequences: transactions must be recategorized and the operation cannot be undone."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Single param with 100% schema coverage; the description adds no syntax or constraint beyond what the schema provides."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three sentences, each adding necessary information about action, side effects, and irreversibility."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "For a destructive single-param tool, the description covers consequence and irreversibility well, matching what a caller needs before committing."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent destructive-action disclosure that pairs with the annotation and warns about recategorization and irreversibility. Weak only on alternatives."
+  },
+  {
+    "tool": "actual_categories_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource ('List all budget categories organized by category groups'), distinguished from the singular get-by-id patterns."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is implied by the listing nature, but no alternatives or when-not guidance are stated."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Read-only annotations set the safety profile; the description adds that it returns both grouped and flat views with IDs, names, and group assignments."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so baseline 4 applies; the description uses the space to describe output structure instead."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three sentences; the middle definitional sentence ('spending/income buckets') is helpful but somewhat verbose."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description documents the return shape (grouped plus flat list with fields), covering the key completeness concern."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Good zero-arg listing description that documents both return views and key fields. Lacks usage guidance against related listing tools."
+  },
+  {
+    "tool": "actual_categories_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource ('Update an existing category'), but 'change its properties' is vague about scope."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "No alternatives or when-not guidance; the verb alone implies usage."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations cover non-destructive/idempotent; the description only summarizes field changes without stating effects, permissions, or failure behavior."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and nested fields are documented; the description restates rename/move but adds nothing new or does not mention hidden."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Two short sentences, front-loaded, though the second is a low-value restatement of schema fields."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and only a shallow field summary; missing behavior for invalid IDs or partial updates leaves clear gaps."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate update description that echoes the schema but adds little semantic value. No guidance on partial updates, hidden field, or errors."
+  }
+]

@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_payees_common_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource with scope baked in (top 10, last ~12 weeks, non-transfer only). It explicitly distinguishes itself from actual_payees_get, which lists all payees without recency or frequency filtering."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Names the sibling alternative and the exact difference, so an agent can choose between this and actual_payees_get. It also clarifies that an empty list is a normal success, preventing a retry loop on a valid empty result."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already declare readOnly and idempotent, so the bar is lower, but the description still adds the recency window, top-10 cap, transfer exclusion, and empty-result semantics. It also gives the item shape { id, name, transfer_acct? } despite having no output schema."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "The tool takes zero parameters, which sets the baseline at 4. There is no parameter surface to explain, and the description correctly shows an empty input example."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Front-loaded purpose sentence, then differentiation, then result semantics and shape. Two short paragraphs plus one example, with no wasted text."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "For a zero-param read with full annotations, the description covers scope, exclusions, empty-result behavior, and return shape. No output schema exists, but the field shape is documented inline, leaving little gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A genuinely strong definition: precise scope, explicit sibling differentiation, and empty-result semantics that prevent misfires. Only minor gap is absence of pagination or ordering details, which are unlikely to matter for a top-10 list."
+  },
+  {
+    "tool": "actual_payees_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb plus resource ('Create a new payee in Actual Budget'). It does not differentiate from siblings such as actual_payees_update or actual_payees_merge, but the action itself is unambiguous."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Two examples show typical inputs but give no guidance on when to use create versus update or merge, nor any duplicate-handling advice. Usage is only implied by example."
+      },
+      "behavioral_transparency": {
+        "score": 2,
+        "justification": "Annotations already state non-read-only and non-idempotent. The description adds nothing about duplicate-name behavior, validation failures, or what is returned, so it does not extend the annotation profile."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent, and the schema already documents the 1-255 char name and 1000 char notes limits. The examples restate ordinary usage without adding format or constraint detail beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Short and front-loaded, though the two examples mostly duplicate what the schema already communicates. Still efficient overall."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "A two-parameter create with full schema coverage is mostly self-documenting, but the description omits duplicate handling, error behavior, and return value. Adequate but with clear gaps."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear and inoffensive but thin: it tells the agent what creation is and shows inputs, yet adds little beyond schema and annotations. The main missing piece is duplicate and error behavior for a non-idempotent create."
+  },
+  {
+    "tool": "actual_payees_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource, plus the consequence (transactions using the payee have it removed). This is much more informative than a bare delete label."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "It names the alternative path for transfer payees, pointing at actual_accounts_delete when deletion is refused. It does not otherwise discuss when deletion is preferable to merging, keeping it just short of a 5."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations declare destructive and idempotent, but the description adds what actually happens to associated transactions and that the operation cannot be undone. It also discloses the transfer-payee refusal case, which is real behavioral context beyond the annotations."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent and the single id parameter is fully described with a UUID pattern. The description adds no additional meaning to the id itself, so the baseline 3 applies."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three tight sentences covering effect, irreversibility, and the special case. No filler and front-loaded."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "For a one-parameter destructive tool, the description covers side effects, reversibility, refusal behavior, and an alternative tool. No output schema exists but none is needed for a delete confirmation."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An excellent destructive-tool definition: it discloses side effects, irreversibility, and a special refusal path with a redirect. Little is left for an agent to guess."
+  },
+  {
+    "tool": "actual_payees_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource ('List all payees') and it explains what a payee represents. It does not name actual_payees_common_list as the filtered alternative, so sibling differentiation is missing."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is implied by describing payees, but there is no when-to-use versus the frequency-filtered sibling or any other payee tool. No exclusions or alternatives are stated."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover read-only and idempotent, but the description usefully discloses the return shape (payee ID, name, optional transfer account) with no output schema present. It stops short of noting ordering or volume."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters sets the baseline at 4. There is no parameter surface, so no further semantic burden exists."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two sentences, front-loaded, each adding distinct information about what payees are and what is returned."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "The description explains the domain concept and return fields for a simple list tool. Ordering and size of the returned list are unstated, a minor gap given full annotations."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A solid, readable list definition that explains the domain concept and return shape. Its main weakness is not differentiating itself from actual_payees_common_list, which could cause a less optimal choice."
+  },
+  {
+    "tool": "actual_payees_merge",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Precise verb and resource plus the consolidation model: duplicates merged into a target that retains its name, with transactions reassigned. The target-versus-merged direction is unambiguous."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "It explains that transfer payees cannot be merged in either direction and are refused, and it tells the agent how to verify results. It lacks an explicit when-to-merge versus update decision, keeping it at 4."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Rich beyond annotations: refusal rather than silent no-op for transfer payees, the response is the accepted de-duplicated ids rather than a post-write read, and the 1 to 50 id limit with split-across-calls guidance. This is exactly the behavioral detail annotations do not carry."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent and already sets minItems 1 and maxItems 50 plus target retention. The description still adds that an empty array is an error rather than a no-op and that larger consolidations must be split."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense and front-loaded, with each sentence carrying distinct information. It is a little long, but almost nothing is redundant given the number of caveats."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers consolidation semantics, special-case refusals, response interpretation, verification path, and batch limits. Complete for a destructive merge with no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Thorough and trustworthy: it explains the merge model, the response's non-verifying nature, and the transfer-payee refusal. Among the best definitions in the batch for behavioral disclosure."
+  },
+  {
+    "tool": "actual_payees_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Clear verb and resource, and it enumerates the updatable fields (name, transfer_acct, category) so the scope is explicit. Sibling tools like merge and create are not contrasted, but the purpose stands on its own."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Examples show field updates and the null-to-clear case, but there is no guidance on when to update versus merge or create. Usage is implied rather than stated."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations declare non-destructive and idempotent. The description adds that only recognized fields are allowed and that category null clears the default, which is meaningful field behavior beyond the schema."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent and documents the nested fields, but the description adds the semantic that null clears category and enumerates the updatable set. This is useful beyond the schema's field-level text."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded purpose followed by a compact field list and two examples. The examples are somewhat verbose relative to the schema but remain useful and non-redundant."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Explains fields, clearing behavior, and typical calls for a nested-object update tool. It omits error behavior for unknown fields and return value, a modest gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-structured update definition that lists and explains its fields, including the null-clears-category semantic. It could better contrast itself with merge or create and state validation behavior."
+  },
+  {
+    "tool": "actual_preferences_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource with the content enumerated: number format, date format, currency, first day of week. It is clearly distinct from generic server or budget tools."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "It states a clear use case: format amounts and dates the way this budget is configured. There is no explicit when-not guidance, but the purpose naturally scopes usage."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations already declare read-only and idempotent, yet the description adds the crucial caveat that these are display preferences only and all amounts remain integer cents. That is high-value context an agent would otherwise get wrong."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters sets the baseline at 4, and the empty input example confirms the call shape. There is nothing further to document."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two compact sentences plus one example. The warning is front-loaded where it matters, with no waste."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers what is returned, why it matters, and a critical cross-cutting caveat about units. Complete for a zero-parameter read with no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent: it goes beyond listing preference fields to warn that amounts remain integer cents, which is the exact misunderstanding this tool invites. Concise and high-value."
+  },
+  {
+    "tool": "actual_query_run",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Clearly states it runs a read-only SQL query against budget data and even covers the bare-table-name shortcut. The resource and operation are unmistakable."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "It says to prefer SQL and gives the query form, implying this is the general-purpose query path. It does not explicitly contrast with actual_transactions_filter or other specialized search tools, so it stops at 4."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Strong disclosure beyond annotations: unsupported OR, REGEXP, NOT IN and parentheses return errors rather than silently running unfiltered, split-inline mode requires is_parent false, and empty results may carry a hint. These are exactly the traps an agent needs."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "With one parameter at full schema coverage, the schema only calls it an ActualQL query string. The description supplies the entire dialect semantics: operators, join dot notation, cents units, date format, and available tables and fields."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Long but well-organized with a form line, capability list, and table reference. Every section is useful, though the volume is near the upper bound for scanability."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents query syntax, supported and unsupported constructs, unit conventions, join paths, hint behavior, and the table schema. This is complete enough that an agent can build a correct query without trial and error."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A model query-tool definition: it carries the full dialect burden the schema cannot, and proactively documents error-on-unsupported behavior. Long, but the length is justified by the precision it buys."
+  },
+  {
+    "tool": "actual_recurring_expenses_summary",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource (detect recurring expenses from posted history) and it distinguishes itself from schedules explicitly by saying it does not rely on them. Scope and output theme are clear."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "It states defaults (18-month lookback, three occurrences, active only) and describes what includeInactive controls, effectively guiding typical use. It does not contrast with a sibling alternative such as schedules, keeping it at 4."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses many non-obvious rules beyond annotations: transfer/income/starting-balance exclusion, date drift tolerance, separate amount lanes, price-change detection, the two-miss inactivity rule, and exact annualization multipliers. This is substantial behavioral context."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100 percent with rich per-parameter descriptions, so the baseline is offset. The description adds algorithm-level meaning such as the two-miss rule and integer multipliers that the schema alone does not convey."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded purpose then a dense block of rules, followed by an example. It is information-heavy but each clause adds real behavior, though it borders on overwhelming."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Explains detection logic, exclusions, inactivity, annualization, defaults, and units. Complete for a complex analytical tool with no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Very strong on behavioral transparency: it documents the detection heuristics, exclusions, and annualization rules an agent cannot infer. Dense but each detail earns its place."
+  },
+  {
+    "tool": "actual_rules_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Clear verb and resource (create a budget rule), immediately followed by field-specific operator mappings that define the rule model. It is unmistakably distinct from actual_rules_update and actual_rules_create_or_update."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "It gives explicit stage guidance (omit for normal, do not pass default, use pre or post only to out-rank or defer) and warns ids must exist. It does not discuss when to use create versus create_or_update, so it stays at 4."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds important semantics beyond annotations: referential validation refuses the whole call with a not-found error and creates nothing, while link-schedule ids are unchecked. This atomicity and partial-validation detail is high-value."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "Although schema coverage is 100 percent, the schema only says 'Operator, e.g.' and gives loose hints. The description supplies the authoritative operator list per field type, which is essential meaning absent from the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Organized as purpose, operator table, stage guidance, and validation note. It is compact for the complexity, though the operator block is dense to parse."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers rule model, valid operators per field, stage semantics, id validation and atomic failure, and the link-schedule exception. Complete for a nested, multi-part create tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A high-value definition that compensates for a permissive schema by stating the operator-per-field matrix and the atomic validation behavior. Essential for correct rule creation."
+  }
+]

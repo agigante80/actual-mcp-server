@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_server_get_version",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: gets the version of the Actual Budget server, and explicitly distinguishes it from the MCP server version. Also names the sibling actual_server_info as the place for MCP details."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly says when to use it (compatibility or diagnostics) and names the alternative for MCP server details. Clear when/when-not split between the two server tools."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations already declare it read-only and idempotent. The description adds useful context beyond them: which server the version belongs to and the exact success and error return shapes."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, so baseline is 4. No parameter guidance is needed and none is missing."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Front-loaded purpose sentence, then return shape and sibling pointer. No filler."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Simple zero-param read tool; description documents both return variants and the distinction an agent needs. Nothing further is required."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong, well-differentiated description that names the sibling tool and documents return shapes. Only minor gap is that no output schema exists, but the description covers the shape well."
+  },
+  {
+    "tool": "actual_server_info",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific: gets MCP server version and system information, and lists the concrete fields. Distinguished from actual_server_get_version by explicitly being the MCP server side."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Gives clear use cases (check status, verify compatibility, debug issues) but does not explicitly name actual_server_get_version as the alternative for the Actual server version."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover the read-only safety profile. The description adds a concrete enumeration of returned fields (Node.js, SDK, API version, uptime), which is useful beyond annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, baseline 4. No parameter semantics needed."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Short, front-loaded, and the return list is scannable. Every line earns its place."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Zero-param diagnostic tool with return fields enumerated; fully sufficient without an output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear and complete diagnostic tool description. Minor improvement would be naming actual_server_get_version as the alternative for Actual server details."
+  },
+  {
+    "tool": "actual_session_close",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: closes one of your idle MCP sessions to free connection slots. Scope constraints (own sessions, not current) are stated."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicit trigger given: useful when hitting Max concurrent sessions or Max sessions per principal errors. States exclusions: only your sessions, never the current one."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations mark it destructive, and the description adds what is destroyed and the safety constraints (only your idle sessions, not current). Also explains the default targeting behavior."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% and the schema already documents partial matching and the oldest-idle-session default. The description adds little parameter meaning beyond that."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two dense sentences, front-loaded with purpose then trigger. No waste."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "For a single-param destructive tool with good annotations, the description covers trigger, scope, and default behavior. No output schema but none is essential here."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent usage-driven description for a destructive tool: it names the exact error condition and the safety boundaries. Only parameter details rely on the already-complete schema."
+  },
+  {
+    "tool": "actual_session_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific: lists your active MCP sessions with their activity status. Scope nuance (pool totals vs only your sessions) is explained."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Names concrete use cases (diagnose connection issues, see which sessions can be closed) and implicitly points at actual_session_close, but does not explicitly name that sibling."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover read-only safety. The description adds a non-obvious behavioral detail: pool totals include every session while the list shows only yours."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, baseline 4. Nothing missing."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Three tight sentences, each adding information. Well front-loaded."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Good enough for a zero-param list tool, though the exact return fields (session ids, statuses, totals) are only loosely described."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear description with a useful scope caveat about pool totals versus owned sessions. Could name actual_session_close explicitly and detail return fields."
+  },
+  {
+    "tool": "actual_tags_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: creates a tag in Actual Budget. The upsert nature is called out explicitly rather than left as a plain create."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explains key behavior (upsert on tag word, deleted tags resurrected) but does not explicitly contrast with actual_tags_update or say when to prefer one over the other."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations mark it idempotent, and the description substantiates this with specifics: same name returns the same id, deleted tags are matched, and color format is unenforced convention."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100%, so baseline is 3. The description adds the no-hash rule and color convention, though both also appear in the schema, plus upsert implications for the tag field."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Purpose and warnings are front-loaded, but two full example inputs add bulk that mostly restates the schema."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers the surprising upsert semantics, the hash-prefix pitfall, and color conventions. Complete for a three-param create tool with no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Rich description whose main value is disclosing upsert semantics and the hash-prefix pitfall. Examples are somewhat verbose but the critical behavioral warnings are present."
+  },
+  {
+    "tool": "actual_tags_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource+identifier: deletes a tag by UUID. Immediately clarifies that deletion is a soft delete."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Says to use actual_tags_list to find valid UUIDs and describes the not-found error. No explicit when-not guidance, but usage is unambiguous."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations mark it destructive and idempotent; the description adds the crucial detail that it is a tombstone soft delete and disappears from listing, plus the not-found behavior."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100% with a UUID pattern already enforced. The description only adds the pointer to actual_tags_list for obtaining ids."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Short and front-loaded; the single example is minimal and consistent with the schema."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Explains soft delete, listing impact, and error behavior, which is exactly what is missing from the annotations and schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-targeted description that surfaces the non-obvious soft-delete semantics. Parameter guidance leans on the complete schema, which is acceptable."
+  },
+  {
+    "tool": "actual_tags_list",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: lists all tags defined in Actual Budget. Scope is unambiguous."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Implied usage only; it does not say when to use this versus other lookups or point at actual_tags_update/delete as consumers of the returned ids."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Annotations cover read-only safety. The description adds the useful storage detail that tags lack a leading hash and enumerates the returned fields."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Zero parameters, baseline 4. No semantics needed."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Two short sentences plus a trivial empty-input example. No filler of consequence."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "Return fields are named (id, tag, color, description), which compensates for the absent output schema. Adequate for a zero-param list tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate list description that documents the hash-prefix convention and return fields. Usage guidance is thin, and it could point to update/delete as id consumers."
+  },
+  {
+    "tool": "actual_tags_update",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: updates an existing tag. The at-least-one-field requirement and UUID sourcing are stated up front."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Clear prerequisites: at least one field, id must come from actual_tags_list. Does not explicitly contrast with actual_tags_create's upsert behavior."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Annotations mark it idempotent. The description adds a genuinely useful behavioral detail: the underlying API silently no-ops on a missing id, but this tool adds a pre-flight guard returning not-found."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3). The description reinforces the at-least-one-field rule and the no-hash tag convention, adding some meaning beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Core rules are front-loaded, but two verbose example inputs repeat what the schema already expresses."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents the pre-flight guard, required-field constraint, id source, and tag format. Complete for a four-param update tool without an output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong description highlighting the pre-flight guard that differs from raw API behavior. Examples are bulky, but the behavioral disclosures are valuable."
+  },
+  {
+    "tool": "actual_transactions_aggregate",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Highly specific: deterministically aggregates posted transactions over an inclusive date range using integer cents, with clear grouping dimensions."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Spells out defaults, exclusions, and alternatives via two worked examples covering different grouping and transfer settings. Clear about what counts as spending versus income."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses many non-obvious rules beyond annotations: split parents excluded, split children counted once, transfers identified only by transfer_id, credits definition, and separate uncategorizedInflows reporting."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 100% (baseline 3), and the description adds real semantics: groupBy accepts one or an array of up to five, includeIncome and excludeTransfers defaults and effects, and cents units."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense and information-rich, front-loaded with the key rules. Somewhat long, but nearly every clause carries distinct semantics; the examples add modest repetition."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Despite no output schema, the description defines the computation rules and reporting categories thoroughly, which is the critical context for trusting the output."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "The strongest description in the batch: it documents aggregation rules, edge cases, and defaults that no schema or annotation could convey. Length is justified by genuine semantic density."
+  },
+  {
+    "tool": "actual_transactions_create",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb+resource: creates a new transaction in Actual Budget, with the amount sign convention stated."
+      },
+      "usage_guidelines": {
+        "score": 2,
+        "justification": "No when-to-use guidance, no alternatives (e.g. actual_transactions_import or actual_transfers_create), no prerequisites such as needing account/payee ids from other tools."
+      },
+      "behavioral_transparency": {
+        "score": 2,
+        "justification": "Annotations only declare it non-read-only and non-idempotent. The description adds the cents sign convention, but says nothing about side effects, required ids, split behavior, or what is returned for a ten-param create tool."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100%, so baseline 3. The description restates the amount-in-cents rule already present in the schema and adds nothing for the other nine parameters."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Very short and front-loaded, though the brevity reflects under-specification rather than disciplined editing."
+      },
+      "contextual_completeness": {
+        "score": 2,
+        "justification": "A ten-parameter create tool with splits, payee-by-name versus payee-id, and no output schema is badly under-described by two sentences. The schema carries nearly all the burden."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear purpose but minimal guidance for a complex create tool. It leans almost entirely on the schema and omits usage, side effects, split semantics, and return behavior."
+  }
+]

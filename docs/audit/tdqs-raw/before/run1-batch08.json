@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "actual_transactions_delete",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States a specific verb and resource (delete a transaction by ID) and scoping that separates it from account or category deletion siblings."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Clear context for when this applies and a stated precondition behavior (nonexistent id yields a not-found error), but no alternatives such as updating or merging are named."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Goes well beyond the destructive annotation by disclosing the existence pre-check, the actionable error on missing ids, balance updates, and irreversibility."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent and the id pattern is fully documented there, so the description adds little beyond what the schema already shows."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Four compact sentences, front-loaded, with only mild redundancy between permanently removes and cannot be undone."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema exists, but a delete returning nothing meaningful is adequately covered by the behavioral detail provided."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong destructive-tool description that clarifies error behavior and irreversibility beyond the annotations. Only the parameter layer leans entirely on the schema."
+  },
+  {
+    "tool": "actual_transactions_filter",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource with the filterable fields listed, but it does not distinguish itself from the several search_by_* and get siblings it overlaps with."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is only implied; there is no explicit guidance on when to prefer this over search_by_month, search_by_category, or actual_transactions_get."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations already declare read-only safety; the description adds the useful AND-semantics of criteria but omits pagination, limits, and result shape."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "All 10 parameters have full schema descriptions, so the baseline of 3 applies; the description only summarizes the fields already documented."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three efficient sentences with the field list up front and no wasted phrasing."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and no returned-field description, and the tool lacks any limit or pagination parameter, leaving result volume behavior unclear."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate read-only filter tool whose main gap is sibling differentiation and return-shape disclosure. Schema handles parameter meaning well."
+  },
+  {
+    "tool": "actual_transactions_get",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Specific verb, resource, and scope (all transactions for an account in a date range), though it does not explicitly separate itself from the search_by_* and filter siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Offers context via `Perfect for account reconciliation and spending analysis` but gives no when-not or alternative guidance."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds value beyond the read-only annotations by documenting the returned fields (date, cents amount, payee, category, notes, cleared) and the date format."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Full schema coverage with rich per-parameter guidance (name refused with matching id, omit for every account), so the description adds little extra semantics."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Four tight sentences with purpose, return content, and format stated up front."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description compensates by enumerating the returned fields and date conventions."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-scoped list tool that documents its return fields despite lacking an output schema. Its weakness is weak differentiation from the many overlapping search siblings."
+  },
+  {
+    "tool": "actual_transactions_import",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb plus bulk scope and mechanism (dedupe via imported_id, rule application) that clearly separates it from create and update_batch."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Explicitly names ideal scenarios (bank statements, CSV files, external sync) but offers no exclusions or comparison to transactions_create."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Explains duplicate detection and automatic rule application beyond the annotations, though it omits what happens to skipped duplicates and whether imports are partial or atomic."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent and documents the nested tx fields thoroughly, so the description largely restates the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Four sentences, all relevant, front-loaded with the bulk and dedupe behavior."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and no description of what the import returns (inserted count, skipped ids), and the dedupe wording sits in mild tension with idempotentHint false."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear and useful bulk-import description with good dedupe and rules disclosure. Missing return-shape information and the idempotency wording is slightly at odds with the annotation."
+  },
+  {
+    "tool": "actual_transactions_merge",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource with stated preconditions (same account and amount, no split children) that distinguish it from delete or update."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Gives an explicit prerequisite (`Read both with actual_transactions_get first`), the dedupe use case, constraints, and a concrete example."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses the keep/delete tiebreak rules, irreversibility, field-fill semantics, transfer cascade behavior, and return values, far beyond the destructive annotation."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema documents the two-id requirement at 100 percent, and the description adds which id wins in ties, which is genuine semantic value."
+      },
+      "conciseness_structure": {
+        "score": 3,
+        "justification": "Information-dense and front-loaded, but the opening paragraph is a run-on wall of edge cases that taxes scanning despite every detail being relevant."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents return values, tiebreak rules, transfer and split edge cases, and preconditions, fully compensating for the absent output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Exceptionally thorough description that covers invariants, edge cases, and return values for a genuinely complex operation. Slightly long and run-on but content justifies it."
+  },
+  {
+    "tool": "actual_transactions_search_by_amount",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource with an explicit two-mode scope (signed range vs absolute magnitude) that is distinctive versus the other search siblings."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Gives clear mode-selection guidance including the `amount 50` interpretation rule, but does not compare against filter or other search tools."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Read-only annotations are already present; the description mainly explains mode precedence rather than new behavior, and omits result shape and how limit truncation behaves."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Full schema coverage already explains absoluteAmount ignoring min/max and the cents conventions, so the description mostly repeats it, adding only phrasing guidance."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three clearly ordered sentences that front-load the two modes and keep the disambiguation rule prominent."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema and no returned-field detail, and the required-limit versus optional description quirk blurs whether limit must be supplied."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Good disambiguation of signed versus absolute amount search makes it usable despite overlap with filter. Return shape and result-volume behavior remain undocumented."
+  },
+  {
+    "tool": "actual_transactions_search_by_category",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource keyed on category name with optional filters, but it does not distinguish itself from filter or the other search_by_* siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Implied usage through `Perfect for analyzing spending in budget categories`, with no when-not or alternative guidance."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations cover read-only safety; the description adds only a thin usage context and no matching semantics (exact vs partial name), ordering, or limits behavior."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "All seven parameters are fully described in the schema, so the baseline 3 applies and the description adds no new parameter meaning."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three short sentences, no filler, purpose stated first."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema or return description, and it omits how categoryName matching works and how limit interacts with results."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Minimum-viable search description that repeats the schema summary and offers little beyond it. Matching semantics and return shape are the notable gaps."
+  },
+  {
+    "tool": "actual_transactions_search_by_month",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource scoped to a specific month with optional filters, but no explicit separation from get or filter which can also constrain dates."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Usage is only implied by `Efficiently queries by date range`; no when-to-use versus alternative tools."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Read-only annotations carry the safety profile; the description adds little, and default-to-current-month is already in the schema rather than new information."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Full schema coverage documents month format and all filters, so the description merely repeats the summary at baseline."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Two concise sentences with the month focus stated first and no wasted text."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema or return description, and truncation by limit is left entirely to the schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Adequate month-scoped search with clean structure but minimal added value over the schema. Return shape and sibling differentiation are absent."
+  },
+  {
+    "tool": "actual_transactions_search_by_payee",
+    "scores": {
+      "purpose_clarity": {
+        "score": 4,
+        "justification": "Clear verb and resource keyed on payee with optional filters, though it does not distinguish itself from filter or other search siblings."
+      },
+      "usage_guidelines": {
+        "score": 3,
+        "justification": "Context is implied via `Useful for analyzing spending patterns with specific vendors`, with no exclusions or named alternatives."
+      },
+      "behavioral_transparency": {
+        "score": 3,
+        "justification": "Annotations already declare read-only; the description adds only a light analytical framing and no match semantics, ordering, or return detail."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "All eight parameters are documented in the schema, so the baseline 3 holds and the description adds nothing new about them."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three tidy sentences with purpose and filters stated up front."
+      },
+      "contextual_completeness": {
+        "score": 3,
+        "justification": "No output schema or return-field description, and payee name matching behavior is left unexplained."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Standard minimum-viable search description that mirrors the schema. Usable but adds little differentiation or return-shape context."
+  },
+  {
+    "tool": "actual_transactions_summary_by_category",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific aggregation verb plus resource and grouping key that clearly separates it from raw listing and the summary_by_payee sibling."
+      },
+      "usage_guidelines": {
+        "score": 4,
+        "justification": "Names the analysis scenario (`budget analysis and expense tracking`) and states the income-exclusion default, but does not compare to aggregate or summary_by_payee."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Beyond the read-only annotations, it discloses the return content (total and count per category) and the income-exclusion default with how to override it."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Schema coverage is 100 percent and already documents the includeIncome default and date defaults, so the description restates rather than extends it."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Three compact sentences, front-loaded with what is returned, no filler."
+      },
+      "contextual_completeness": {
+        "score": 4,
+        "justification": "No output schema, but the description documents the return shape (amount and count grouped by category), which largely fills the gap."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Clear aggregation tool description that names its output fields and default income handling. Main remaining gap is comparison to the payee summary and aggregate siblings."
+  }
+]

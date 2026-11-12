@@ -14,21 +14,10 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_accounts_update',
-  description: `Update an account's properties in Actual Budget.
-
-Updatable fields:
-- name: Account name (1-255 chars)
-- offbudget: Exclude from budget (true/false)
-- closed: Mark as closed (true/false)
-
-Example: Update account name and offbudget status:
-{
-  "id": "<account-uuid>",
-  "fields": {
-    "name": "Checking Account",
-    "offbudget": false
-  }
-}`,
+  description:
+    'Update an account\'s name, offbudget flag or closed flag. Pass them inside fields; only those change, and at least one is required. ' +
+    'To close or reopen an account prefer actual_accounts_close or actual_accounts_reopen: close handles the remaining balance. ' +
+    'Fails with a not-found refusal for an unknown account id (see actual_accounts_list); a closed account can still be updated. Idempotent. Returns { success, accountId, updatedFields }.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206);

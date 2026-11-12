@@ -3,18 +3,21 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
-  categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation") - optional for smoke tests'),
-  startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
-  endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
-  accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
-  minAmount: z.number().optional().describe('Optional: Minimum amount in cents (use negative for expenses)'),
-  maxAmount: z.number().optional().describe('Optional: Maximum amount in cents'),
-  limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),
+  categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation")'),
+  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format'),
+  endDate: z.string().optional().describe('End date in YYYY-MM-DD format'),
+  accountId: z.string().optional().describe('Filter by specific account ID'),
+  minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses)'),
+  maxAmount: z.number().optional().describe('Maximum amount in cents'),
+  limit: z.number().optional().default(100).describe('Maximum number of transactions to return'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_category',
-  description: 'Search transactions by category name. Returns all transactions in a specific category with optional date range, account, and amount filters. Perfect for analyzing spending in budget categories.',
+  description:
+    'Search transactions by category name (case-insensitive exact match, e.g. "Groceries"), optionally narrowed by a YYYY-MM-DD date range, accountId and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, categoryName }, each row with accountName; count and totalAmount cover only the returned rows. ' +
+    'An unknown category name returns an empty list with an error field. With a category id use actual_transactions_filter; for per-category totals use actual_transactions_aggregate.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
