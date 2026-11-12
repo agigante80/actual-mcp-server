@@ -15,7 +15,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_categories_create',
-  description: "Create a category. REQUIRED: group_id (category group UUID). Use actual_category_groups_get to find available groups. Optional: is_income (boolean, defaults to false for expense categories).",
+  description:
+    "Create a category inside a category group (group_id; find one with actual_category_groups_get). is_income true makes an income category, otherwise it is an expense category. A name already used in that group is refused. Not idempotent. Returns { success: true, categoryId, message } with the new category id.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206).

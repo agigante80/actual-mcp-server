@@ -55,6 +55,31 @@ The ticket's negative scenarios rest on existing guards: an amount of `12.5` is 
 - **Next weakest tools.** After the rewrites the minimum is `schedules_get` at 3.5, then `budgets_get_all`, `categories_create`, `category_groups_create`, `payees_get` and `schedules_create` at 3.6. Because the minimum carries 40% of description quality, raising those six lifts the overall more than polishing tools already above 4.5.
 - **Coherence is the ceiling.** Coherence did not measurably move (one after run scored 3.3, the baseline median is 3) and holds 30% of the overall. The scorer marks disambiguation and tool count lowest: it flags overlapping tools (for example `transactions_aggregate` against `account_flow_summary`) and the sheer number of tools. Description rewrites barely move it; fewer or clearly separated tools would.
 
+## Increment: Glama's own scores (#650)
+
+After v0.27.1 Glama published its own TDQS for this server: average 4.0, minimum 2.9. #650 took the 14 weakest tools on Glama's list that #640 had not rewritten, read from Glama's score page on 2026-11-12:
+
+| Tool | Glama score (v0.27.1) |
+| :--- | ---: |
+| `actual_transactions_get` | 3.2 |
+| `actual_category_groups_get` | 3.3 |
+| `actual_budgets_getMonth` | 3.5 |
+| `actual_categories_delete` | 3.5 |
+| `actual_category_groups_create` | 3.5 |
+| `actual_category_groups_update` | 3.5 |
+| `actual_budgets_resetHold` | 3.6 |
+| `actual_budgets_transfer` | 3.6 |
+| `actual_categories_create` | 3.6 |
+| `actual_payee_rules_get` | 3.6 |
+| `actual_payees_update` | 3.6 |
+| `actual_schedules_create` | 3.6 |
+| `actual_schedules_delete` | 3.6 |
+| `actual_transactions_import` | 3.6 |
+
+Each was rewritten to the same rules as the #640 ten, with every claim checked against the adapter or the upstream source: deleting a schedule also deletes its rule, deleting a category moves none of its transactions, `actual_category_groups_get` returns each group with its categories, and an import always runs the rules. `actual_accounts_create` (a #640 tool) lost its "in Actual Budget." phrase. The 15 edits add 2,217 bytes net to `tools/list` (118,125 to 120,342, 158 bytes under the total ceiling), inside the unchanged ceilings, so neither ceiling was raised.
+
+**Measurement.** Glama is the measurement: its after-scores appear once it builds a release containing #650. The local DeepSeek re-score did not run, because the free opencode endpoint still timed out on 2026-11-12 (a one-word probe got no answer in 90 seconds). The mechanical guard is `tests/unit/tool_description_checklist.test.js`: each of the 24 rewritten descriptions has a sentence starting `Returns`, names at least one other published tool, and carries none of "in Actual Budget.", "Perfect for" or "Ideal for". Before the rewrites it failed on all 14 tools plus `actual_accounts_create`.
+
 ## Per-tool baseline
 
 | Tool | Purpose | Guidelines | Transparency | Params | Concise | Complete | TDQS | Tier |

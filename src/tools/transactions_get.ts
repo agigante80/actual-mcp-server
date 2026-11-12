@@ -11,7 +11,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_get',
-  description: "Get all transactions for a specific account within a date range. Returns transaction details including date, amount (cents), payee, category, notes, and cleared status. Dates in YYYY-MM-DD format. Perfect for account reconciliation and spending analysis.",
+  description:
+    "List the transactions of one account, or of every account when accountId is omitted, optionally limited to startDate through endDate (YYYY-MM-DD, inclusive). Read-only. To filter by payee, category, amount or notes use actual_transactions_filter; for totals use actual_transactions_aggregate. Returns { result: [transaction] }, each with id, date, amount (integer cents, negative for an outflow), payee, category, notes and cleared.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

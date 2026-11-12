@@ -15,28 +15,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_payees_update',
-  description: `Update an existing payee in Actual Budget.
-
-Updatable fields:
-- name: Payee name (1-255 chars)
-- transfer_acct: Transfer account ID if this payee represents an account transfer (optional)
-- category: Default category ID to auto-assign to transactions from this payee (optional, null to clear)
-
-Example: Update payee name:
-{
-  "id": "<payee-uuid>",
-  "fields": {
-    "name": "Grocery Store"
-  }
-}
-
-Example: Mark payee as transfer account:
-{
-  "id": "<payee-uuid>",
-  "fields": {
-    "transfer_acct": "<account-uuid>"
-  }
-}`,
+  description:
+    "Change one payee by id. fields takes name, transfer_acct (the account id, when this payee stands for a transfer to that account) or category (a default category for its transactions, null to clear); at least one is required. category is stored as a payee rule, not on the payee: a value creates or edits the first rule naming this payee with a set-category action, and null deletes that whole rule, its other actions included. That rule may also cover other payees, which change too (see actual_payee_rules_get). Find the id with actual_payees_get; to combine duplicates use actual_payees_merge. Returns { success: true, payeeId, updatedFields }.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206);

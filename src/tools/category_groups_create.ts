@@ -10,7 +10,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_category_groups_create',
-  description: `Create a new category group in Actual Budget. Category groups help organize categories into logical sections (e.g., "Fixed Expenses", "Variable Expenses", "Savings Goals"). After creating a group, you can move categories into it.`,
+  description:
+    "Create a category group, the heading that categories sit under. Not idempotent: repeating the call creates a second group. Add categories to it with actual_categories_create (its group_id); rename or hide it later with actual_category_groups_update. Returns { id, success: true } with the new group id.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

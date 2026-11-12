@@ -35,7 +35,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_transactions_import',
   description:
-    "Bulk import transactions with automatic reconciliation and duplicate detection. Matches against existing transactions using imported_id to prevent duplicates. Ideal for importing bank statements, CSV files, or syncing from external sources. Automatically applies budget rules.",
+    "Import a batch of transactions into one account (accountId) the way a bank file is imported: rules are applied, and each row is matched against the account's transactions so a match is not duplicated: by imported_id, else by the same amount within 7 days (two rows that both carry an imported_id never match this way). A match keeps the payee, category and notes it has and only fills blanks, so re-importing does not correct a row. For a few hand-entered rows use actual_transactions_create. Returns { result: { added, updated, errors } }, the ids added and updated.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const parsed = InputSchema.parse(args || {});

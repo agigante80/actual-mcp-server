@@ -8,7 +8,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_resetHold',
-  description: `Reset the budget hold for a month, releasing any amount previously held for next month via holdBudgetForNextMonth.`,
+  description:
+    "Release the amount held for next month in one month (YYYY-MM), undoing actual_budgets_holdForNextMonth: the held amount goes back to that month's to-budget. Safe to repeat; a month with no hold is left as it is. Returns { success: true }.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

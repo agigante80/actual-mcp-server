@@ -13,7 +13,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_getMonth',
-  description: "Get budget data for a specific month in YYYY-MM format (e.g., '2025-12'). Returns all categories with their budgeted amounts, actual spending, and available balances for the month.",
+  description:
+    "Read the budget of one month (YYYY-MM): what was budgeted, spent and left in every category. Read-only; always pass month, the call fails without it. For several months at once use actual_budgets_getMonths; to change an amount use actual_budgets_setAmount or actual_budgets_transfer. Returns { result } with totals (totalIncome, totalBudgeted, totalSpent, toBudget, forNextMonth, totalBalance) and categoryGroups; an expense category carries budgeted, spent and balance, an income category received. Amounts in integer cents.",
   inputSchema: InputSchema,
     call: async (args: unknown, _meta?: unknown) => {
       const input = InputSchema.parse(args || {});

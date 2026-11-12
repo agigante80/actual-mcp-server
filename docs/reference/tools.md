@@ -29,7 +29,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 
 | Tool | Description |
 |------|-------------|
-| `actual_transactions_get` | Get transactions for an account |
+| `actual_transactions_get` | List the transactions of one account, or of all accounts, optionally by date range |
 | `actual_transactions_filter` | Filter with advanced criteria |
 | `actual_transactions_create` | Create new transaction(s), including splits (pass a `subtransactions` array) |
 | `actual_transactions_import` | Import and reconcile transactions |
@@ -118,7 +118,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 | `actual_budgets_transfer` | Transfer amount between categories |
 | `actual_budgets_setCarryover` | Enable/disable carryover |
 | `actual_budgets_holdForNextMonth` | Hold funds for next month. Actual clamps the hold to what is left to budget, so the response reports the amount actually held |
-| `actual_budgets_resetHold` | Reset hold status |
+| `actual_budgets_resetHold` | Release the amount held for next month (undoes `actual_budgets_holdForNextMonth`) |
 | `actual_budgets_export` | Export the active budget as a `.zip` into `ACTUAL_EXPORT_DIR`; returns path, byte size and sha256, never the file contents |
 | `actual_budgets_import` | Restore a budget from an Actual `.zip` or a YNAB4/YNAB5 export. **Destructive:** the budget id comes from the archive, so re-importing an export *replaces* that budget's data rather than making a copy. Also loads the imported budget, changing the session's active budget |
 
@@ -139,7 +139,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 | `actual_schedules_dates` | List the dates one schedule falls on, computed by Actual (weekend moves, patterns and intervals included); optional `start`, `end` and `count`, at most 366 dates with a `truncated` flag |
 | `actual_schedules_create` | Create a schedule (one-off or recurring); recurrence is a typed config, see `src/lib/schemas/recur.ts` |
 | `actual_schedules_update` | Update an existing schedule's amount, payee, account, or recurrence |
-| `actual_schedules_delete` | Delete a schedule |
+| `actual_schedules_delete` | Delete a schedule and the rule that drives it |
 
 ## Advanced Query & Sync
 
@@ -153,7 +153,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 Four tools take many items in one call, for clients that allow only a few tool calls per turn. They share ONE contract: each item is applied independently and **not atomically**. There is no rollback, so items applied before a failure stay applied; a bad item is reported by its index and the rest continue; an infrastructure failure (lost connection, timeout) fails the whole call, and then you must read the data back before retrying anything. A bulk path never retries a create on its own.
 
 - `actual_transactions_update_batch` (counted under Transactions): update up to 50 transactions, `{id, fields}` each. Result: `{ succeeded: [{id}], failed: [{id, error}], total, successCount, failureCount }`. Items marked "not attempted" were never sent. Re-read with `actual_transactions_get` before retrying any item.
-- `actual_transactions_import` (counted under Transactions): bulk create with import semantics (deduplication and reconciliation against existing transactions, rules optionally applied). Use it to add many transactions at once.
+- `actual_transactions_import` (counted under Transactions): bulk create with import semantics (deduplication and reconciliation against existing transactions; rules are always applied). Use it to add many transactions at once.
 - `actual_budget_updates_batch`: set budget amounts and/or carryover flags for 1 to 100 month/category pairs, and the way to rebalance categories: read the month with `actual_budgets_getMonth`, then send one batch of absolute amounts. Each operation needs at least one of `amount` (integer cents) or `carryover`. Result: `{ succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }`. An unknown category, an out-of-range month or a carryover on an income category fails only that item. After a timeout, read the months back with `actual_budgets_getMonth` before retrying.
 - `actual_rules_create_batch` (counted under Rules): create 1 to 50 rules, each exactly the input of `actual_rules_create`. Result: `{ succeeded: [{index, id}], failed: [{index, error}], total, successCount, failureCount }`. Items marked "not attempted" were never sent. Re-read with `actual_rules_get` before retrying any item.
 

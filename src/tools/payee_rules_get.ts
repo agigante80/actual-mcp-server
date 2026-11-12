@@ -10,7 +10,8 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_payee_rules_get',
-  description: `Get all payee rules associated with a specific payee. Returns PayeeRule objects that show how transactions with this payee are automatically processed (conditions and actions).`,
+  description:
+    "List the rules that reference one payee (payeeId; find it with actual_payees_get): the conditions that match its transactions and the actions they apply. Read-only. For every rule use actual_rules_get. Returns { rules, count, payeeName }; an unknown payee returns { error, rules: [], count: 0 } instead of failing.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

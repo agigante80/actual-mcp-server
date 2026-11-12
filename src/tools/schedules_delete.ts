@@ -14,7 +14,8 @@ const InputSchema = z.object({
  */
 const tool: ToolDefinition = {
   name: 'actual_schedules_delete',
-  description: `Permanently delete a schedule from Actual Budget. The schedule's underlying rule is also removed. This operation cannot be undone.`,
+  description:
+    "Permanently delete one schedule by id, together with the rule that drives it. Transactions it already created stay. An unknown id is refused, pointing at actual_schedules_get. To change a schedule instead use actual_schedules_update. Cannot be undone. Returns { success: true }.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
