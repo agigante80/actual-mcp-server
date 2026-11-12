@@ -10,6 +10,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D22.0.0-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)](https://www.typescriptlang.org/)
+[![actual-mcp-server MCP server: quality and maintenance score on Glama](https://glama.ai/mcp/servers/agigante80/actual-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/agigante80/actual-mcp-server)
 
 A [Model Context Protocol](https://modelcontextprotocol.io/) server that lets an AI assistant (Claude, LibreChat, LobeChat, Cursor and others) read and manage your self-hosted [Actual Budget](https://actualbudget.org/).
 
