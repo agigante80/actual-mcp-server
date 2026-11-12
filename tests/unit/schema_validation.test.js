@@ -81,7 +81,7 @@ async function expectCallError(tool, input, label) {
     import('../../dist/src/tools/rules_create_batch.js').then(m => m.default),
     import('../../dist/src/tools/budget_updates_batch.js').then(m => m.default),
     import('../../dist/src/tools/budgets_transfer.js').then(m => m.default),
-    import('../../dist/src/tools/budgets_setAmount.js').then(m => m.default),
+    import('../../dist/src/tools/budgets_set_amount.js').then(m => m.default),
     import('../../dist/src/tools/schedules_create.js').then(m => m.default),
     import('../../dist/src/tools/schedules_update.js').then(m => m.default),
     import('../../dist/src/tools/schedules_delete.js').then(m => m.default),
@@ -194,8 +194,8 @@ async function expectCallError(tool, input, label) {
     { month: '2026-03', fromCategoryId: '10000000-0000-4000-8000-000000000001', toCategoryId: '10000000-0000-4000-8000-000000000001', amount: 100 },
     'same from/to category must be rejected at runtime')) fail();
 
-  // ── actual_budgets_setAmount ────────────────────────────────────────────
-  console.log('\n[actual_budgets_setAmount]');
+  // ── actual_budgets_set_amount ────────────────────────────────────────────
+  console.log('\n[actual_budgets_set_amount]');
 
   if (!expectParseError(setAmount, {}, 'empty input — all fields required')) fail();
   if (!expectParseError(setAmount,

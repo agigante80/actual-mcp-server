@@ -112,15 +112,28 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `M
 | `actual_budgets_list_available` | List all configured budget files |
 | `actual_budgets_switch` | Switch active budget (multi-budget) |
 | `actual_budgets_get_all` | List available budget files |
-| `actual_budgets_getMonths` | List budget months |
-| `actual_budgets_getMonth` | Get budget for a specific month |
-| `actual_budgets_setAmount` | Set category budget amount. The month must be one the budget has (see `actual_budgets_getMonths`) |
+| `actual_budgets_get_months` | List budget months |
+| `actual_budgets_get_month` | Get budget for a specific month |
+| `actual_budgets_set_amount` | Set category budget amount. The month must be one the budget has (see `actual_budgets_get_months`) |
 | `actual_budgets_transfer` | Transfer amount between categories |
-| `actual_budgets_setCarryover` | Enable/disable carryover |
-| `actual_budgets_holdForNextMonth` | Hold funds for next month. Actual clamps the hold to what is left to budget, so the response reports the amount actually held |
-| `actual_budgets_resetHold` | Release the amount held for next month (undoes `actual_budgets_holdForNextMonth`) |
+| `actual_budgets_set_carryover` | Enable/disable carryover |
+| `actual_budgets_hold_for_next_month` | Hold funds for next month. Actual clamps the hold to what is left to budget, so the response reports the amount actually held |
+| `actual_budgets_reset_hold` | Release the amount held for next month (undoes `actual_budgets_hold_for_next_month`) |
 | `actual_budgets_export` | Export the active budget as a `.zip` into `ACTUAL_EXPORT_DIR`; returns path, byte size and sha256, never the file contents |
 | `actual_budgets_import` | Restore a budget from an Actual `.zip` or a YNAB4/YNAB5 export. **Destructive:** the budget id comes from the archive, so re-importing an export *replaces* that budget's data rather than making a copy. Also loads the imported budget, changing the session's active budget |
+
+### Deprecated names
+
+Until v0.28.0 six budget tools had camelCase names. The old names still work as hidden aliases: a call or an `MCP_TOOLS` entry using one runs the new tool, under the same `MCP_READ_ONLY` and `MCP_TOOLSETS` rules, and the server logs one warning. They are not listed in `tools/list` and are removed in the first minor release after 2027-02-01. Re-select saved tool selections (for example in LibreChat) and re-approve the new names in Claude Desktop.
+
+| Old name | New name |
+|----------|----------|
+| `actual_budgets_getMonth` | `actual_budgets_get_month` |
+| `actual_budgets_getMonths` | `actual_budgets_get_months` |
+| `actual_budgets_setAmount` | `actual_budgets_set_amount` |
+| `actual_budgets_setCarryover` | `actual_budgets_set_carryover` |
+| `actual_budgets_holdForNextMonth` | `actual_budgets_hold_for_next_month` |
+| `actual_budgets_resetHold` | `actual_budgets_reset_hold` |
 
 ## Rules
 
@@ -154,7 +167,7 @@ Four tools take many items in one call, for clients that allow only a few tool c
 
 - `actual_transactions_update_batch` (counted under Transactions): update up to 50 transactions, `{id, fields}` each. Result: `{ succeeded: [{id}], failed: [{id, error}], total, successCount, failureCount }`. Items marked "not attempted" were never sent. Re-read with `actual_transactions_get` before retrying any item.
 - `actual_transactions_import` (counted under Transactions): bulk create with import semantics (deduplication and reconciliation against existing transactions; rules are always applied). Use it to add many transactions at once.
-- `actual_budget_updates_batch`: set budget amounts and/or carryover flags for 1 to 100 month/category pairs, and the way to rebalance categories: read the month with `actual_budgets_getMonth`, then send one batch of absolute amounts. Each operation needs at least one of `amount` (integer cents) or `carryover`. Result: `{ succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }`. An unknown category, an out-of-range month or a carryover on an income category fails only that item. After a timeout, read the months back with `actual_budgets_getMonth` before retrying.
+- `actual_budget_updates_batch`: set budget amounts and/or carryover flags for 1 to 100 month/category pairs, and the way to rebalance categories: read the month with `actual_budgets_get_month`, then send one batch of absolute amounts. Each operation needs at least one of `amount` (integer cents) or `carryover`. Result: `{ succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }`. An unknown category, an out-of-range month or a carryover on an income category fails only that item. After a timeout, read the months back with `actual_budgets_get_month` before retrying.
 - `actual_rules_create_batch` (counted under Rules): create 1 to 50 rules, each exactly the input of `actual_rules_create`. Result: `{ succeeded: [{index, id}], failed: [{index, error}], total, successCount, failureCount }`. Items marked "not attempted" were never sent. Re-read with `actual_rules_get` before retrying any item.
 
 ## Server Information & Lookup

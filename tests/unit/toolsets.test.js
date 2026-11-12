@@ -487,8 +487,8 @@ function modelFacingText(name) {
  * the real signal that the preset is wrong.
  */
 const CHAT_REFERENCE_ALLOWLIST = {
-  actual_budgets_getMonths: {
-    substitute: 'actual_budgets_getMonth',
+  actual_budgets_get_months: {
+    substitute: 'actual_budgets_get_month',
     reason: 'the out-of-range refusal from setAmount and the budget batch states the first and last month',
   },
   actual_rules_get: {
@@ -722,6 +722,51 @@ await check('ToolUnavailableError is not a PreflightRefusal and carries only the
   assert.strictEqual(e.name, 'ToolUnavailableError');
   assert.ok(!/extends PreflightRefusal/.test(code('src/lib/errors.ts').match(/class ToolUnavailableError[^{]*/)[0]));
   assert.ok(/ToolUnavailableSetting = 'MCP_TOOLSETS' \| 'MCP_READ_ONLY'/.test(read('src/lib/errors.ts')));
+});
+
+// ---------------------------------------------------------------- #652 deprecated aliases
+
+await check('#652: MCP_READ_ONLY refuses the old name of a writer exactly like the new name', async () => {
+  await manager.initialize({ toolsets: 'all', tools: '', readOnly: true });
+  for (const name of ['actual_budgets_setAmount', 'actual_budgets_set_amount']) {
+    await assert.rejects(
+      () => manager.callTool(name, { month: '2026-01', categoryId: 'c', amount: 1 }),
+      (e) => e instanceof ToolUnavailableError && e.setting === 'MCP_READ_ONLY' && e.message.includes('actual_budgets_set_amount'),
+      name,
+    );
+  }
+  await manager.initialize(ALL);
+});
+
+await check('#652: MCP_TOOLSETS=chat refuses the old name of a non-chat tool exactly like the new name', async () => {
+  assert.ok(!PRESETS.chat.includes('actual_budgets_get_months'), 'fixture: get_months must be outside the chat preset');
+  await manager.initialize({ toolsets: 'chat', tools: '', readOnly: false });
+  for (const name of ['actual_budgets_getMonths', 'actual_budgets_get_months']) {
+    await assert.rejects(
+      () => manager.callTool(name, {}),
+      (e) => e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS' && e.message.includes('actual_budgets_get_months'),
+      name,
+    );
+  }
+  await manager.initialize(ALL);
+});
+
+await check('#652: MCP_TOOLS maps an old name to the new one and reports the mapping', () => {
+  const policy = resolve({ toolsets: 'query', tools: 'actual_budgets_getMonths' });
+  assert.ok(policy.published.includes('actual_budgets_get_months'));
+  assert.ok(!policy.published.includes('actual_budgets_getMonths'));
+  assert.deepStrictEqual([...policy.settings.tools], ['actual_budgets_get_months']);
+  assert.deepStrictEqual(policy.mappedAliases.map((m) => ({ ...m })), [{ alias: 'actual_budgets_getMonths', tool: 'actual_budgets_get_months' }]);
+  assert.deepStrictEqual([...resolve({}).mappedAliases], []);
+});
+
+await check('#652: MCP_TOOLS naming the old and the new name lists the tool once', () => {
+  const policy = resolve({ toolsets: 'query', tools: 'actual_budgets_getMonths,actual_budgets_get_months' });
+  assert.deepStrictEqual([...policy.settings.tools], ['actual_budgets_get_months']);
+});
+
+await check('#652 NEGATIVE: an MCP_TOOLS typo of an old name is still an unknown tool', () => {
+  throwsMatching(() => resolve({ tools: 'actual_budgets_getMonthz' }), /Unknown tool in MCP_TOOLS[\s\S]*actual_budgets_getMonthz/, 'typo of an alias');
 });
 
 console.log(`\n[toolsets] Results: ${passed} passed, ${failed} failed`);

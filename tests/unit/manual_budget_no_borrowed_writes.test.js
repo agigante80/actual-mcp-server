@@ -107,13 +107,13 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
         return [];
       case 'actual_budgets_get_all':
         return [];
-      case 'actual_budgets_getMonth':
+      case 'actual_budgets_get_month':
         return month(args.month);
-      case 'actual_budgets_getMonths':
+      case 'actual_budgets_get_months':
         return [month(args.start)];
-      case 'actual_budgets_setAmount':
+      case 'actual_budgets_set_amount':
         return setAmount(args.month, args.categoryId, args.amount);
-      case 'actual_budgets_setCarryover':
+      case 'actual_budgets_set_carryover':
         writes.push(args.categoryId);
         cell(args.month, args.categoryId).carryover = args.flag;
         return { success: true };
@@ -125,10 +125,10 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
       case 'actual_accounts_delete':
         accounts.delete(args.id);
         return { success: true };
-      case 'actual_budgets_holdForNextMonth':
+      case 'actual_budgets_hold_for_next_month':
         buffer.set(args.month, (buffer.get(args.month) ?? 0) + args.amount);
         return { held: args.amount, partial: false };
-      case 'actual_budgets_resetHold':
+      case 'actual_budgets_reset_hold':
         buffer.set(args.month, 0);
         return { success: true };
       case 'actual_budgets_transfer': {
@@ -211,8 +211,8 @@ assertUntouched(await run({ preExisting: true }), 'B1');
 // it), every group and category the module created is still deleted, and the pre-existing
 // category was never written.
 {
-  const r = await run({ preExisting: true, throwOn: 'actual_budgets_setCarryover' });
-  assert.ok(r.thrown && /setCarryover failed/.test(r.thrown.message), `B3: the stub throw propagated, got ${r.thrown?.message}`);
+  const r = await run({ preExisting: true, throwOn: 'actual_budgets_set_carryover' });
+  assert.ok(r.thrown && /actual_budgets_set_carryover failed/.test(r.thrown.message), `B3: the stub throw propagated, got ${r.thrown?.message}`);
   assert.ok(r.writes.length > 0, 'B3: the module had written before the throw');
   assert.ok(!r.writes.includes(PRE.id), 'B3: no write targeted the pre-existing category');
   assertCleanedUp(r, 'B3');
@@ -221,7 +221,7 @@ assertUntouched(await run({ preExisting: true }), 'B1');
 // B4 (negative): a pre-existing amount changes during the run by a path no write targets. The
 // module's before/after snapshot (the check the live `full` run relies on) records the drift.
 {
-  const r = await run({ preExisting: true, driftOn: 'actual_budgets_resetHold' });
+  const r = await run({ preExisting: true, driftOn: 'actual_budgets_reset_hold' });
   assert.strictEqual(r.thrown, null, `B4: the module did not throw (${r.thrown?.message})`);
   const drift = r.added.filter(f => /changed 1 pre-existing category cell/.test(JSON.stringify(f)));
   assert.strictEqual(drift.length, 1, `B4: the drift was recorded once, got ${JSON.stringify(r.added)}`);

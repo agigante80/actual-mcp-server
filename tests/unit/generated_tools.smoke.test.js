@@ -18,7 +18,7 @@ console.log('Running generated tools smoke tests');
   const apiMod = await import('@actual-app/api');
   const apiDefault = (apiMod.default || apiMod);
   apiDefault.sync = async () => {};
-  // #371: accounts_close, accounts_reopen and budgets_holdForNextMonth used to reach the raw
+  // #371: accounts_close, accounts_reopen and budgets_hold_for_next_month used to reach the raw
   // api directly and needed faithful raw fakes here. Their guards now live in the adapter,
   // which this harness stubs wholesale, so the raw fakes are gone and the adapter stubs
   // below carry the contract instead. See stubResponses for the shapes they must return.
@@ -257,12 +257,12 @@ console.log('Running generated tools smoke tests');
   if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_delete')) inputExample.id = '30000000-0000-4000-8000-000000000001'; // matches getRules stub: { id: '30000000-0000-4000-8000-000000000001' }
   if (name.includes('rules_update')) inputExample.id = '30000000-0000-4000-8000-000000000001', inputExample.fields = { conditions: [] };
-  if (name.includes('budgets_setAmount')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.amount = 100;
-  if (name.includes('budgets_getMonth')) inputExample.month = '2025-12';
+  if (name.includes('budgets_set_amount')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.amount = 100;
+  if (name.includes('budgets_get_month')) inputExample.month = '2025-12';
   if (name.includes('budget_updates_batch')) inputExample.operations = [{ month: '2025-12', categoryId: '10000000-0000-4000-8000-000000000001', amount: 100 }];
-  if (name.includes('budgets_holdForNextMonth')) inputExample.month = '2025-12', inputExample.amount = 10000;
-  if (name.includes('budgets_resetHold')) inputExample.month = '2025-12'; // no categoryId — tool operates on whole month
-  if (name.includes('budgets_setCarryover')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.flag = true;
+  if (name.includes('budgets_hold_for_next_month')) inputExample.month = '2025-12', inputExample.amount = 10000;
+  if (name.includes('budgets_reset_hold')) inputExample.month = '2025-12'; // no categoryId — tool operates on whole month
+  if (name.includes('budgets_set_carryover')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.flag = true;
   // #332: a fixed name keeps the smoke run from accumulating timestamped files.
   if (name.includes('budgets_export')) inputExample.filename = 'smoke-export.zip';
   // #334: the schema requires exactly one of path/base64; base64 avoids needing a real file.
@@ -308,9 +308,9 @@ console.log('Running generated tools smoke tests');
       // List/get tools that return a { result } wrapper
       // accounts_create / payees_create use createTool which wraps the returned id in { result }
       const resultWrappers = ['accounts_list', 'categories_get',
-        'payees_get', 'budgets_getMonth', 'budgets_getMonths', 'budgets_get_all',
+        'payees_get', 'budgets_get_month', 'budgets_get_months', 'budgets_get_all',
         'query_run', 'transactions_filter', 'transactions_get', 'transactions_import',
-        'bank_sync', 'budgets_setAmount', 'budgets_transfer',
+        'bank_sync', 'budgets_set_amount', 'budgets_transfer',
         'accounts_create', 'payees_create', 'get_context'];
       if (resultWrappers.includes(n)) {
         if (!res || !('result' in res)) shapeErr(`expected { result } wrapper`);
@@ -340,8 +340,8 @@ console.log('Running generated tools smoke tests');
         'rules_delete', 'rules_update',
         'schedules_delete', 'schedules_update',
         'transactions_delete', 'transactions_update',
-        'budgets_resetHold', 'budgets_holdForNextMonth',
-        'budgets_setCarryover'];
+        'budgets_reset_hold', 'budgets_hold_for_next_month',
+        'budgets_set_carryover'];
       if (successTools.includes(n)) {
         if (!res || res.success !== true) shapeErr(`expected success=true`);
       }

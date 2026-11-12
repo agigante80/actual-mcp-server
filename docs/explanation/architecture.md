@@ -179,14 +179,14 @@ src/tools/
 ├── transfers_create.ts                  # Transfers
 ├── budgets_list_available.ts            # Budgets
 ├── budgets_switch.ts
-├── budgets_getMonth.ts
-├── budgets_getMonths.ts
+├── budgets_get_month.ts
+├── budgets_get_months.ts
 ├── budgets_get_all.ts
-├── budgets_setAmount.ts
+├── budgets_set_amount.ts
 ├── budgets_transfer.ts
-├── budgets_setCarryover.ts
-├── budgets_holdForNextMonth.ts
-├── budgets_resetHold.ts
+├── budgets_set_carryover.ts
+├── budgets_hold_for_next_month.ts
+├── budgets_reset_hold.ts
 ├── budgets_export.ts                    # #332: writes a zip to ACTUAL_EXPORT_DIR
 ├── budgets_import.ts                    # #334: LOADS the imported budget (active budget changes)
 ├── budget_updates_batch.ts

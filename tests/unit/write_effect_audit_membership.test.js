@@ -34,9 +34,9 @@ const audit = read('../../docs/audit/write-effect-audit.md');
 // IMPLEMENTED_TOOLS is the canonical registry. Take the tool names from it rather than from
 // the filesystem, so a tool that exists but is not registered cannot slip through either.
 // [A-Za-z0-9_], NOT [a-z0-9_]. The first version of this test omitted A-Z and therefore
-// could not see a single camelCase tool: actual_budgets_setAmount,
-// actual_budgets_holdForNextMonth, actual_budgets_setCarryover, actual_budgets_resetHold,
-// actual_budgets_getMonth and actual_budgets_getMonths were all invisible, four of them
+// could not see a single camelCase tool: actual_budgets_set_amount,
+// actual_budgets_hold_for_next_month, actual_budgets_set_carryover, actual_budgets_reset_hold,
+// actual_budgets_get_month and actual_budgets_get_months were all invisible, four of them
 // writes. A guard against silent gaps that has a silent gap is worse than none.
 const tools = [...new Set([...manager.matchAll(/'(actual_[A-Za-z0-9_]+)'/g)].map((m) => m[1]))];
 

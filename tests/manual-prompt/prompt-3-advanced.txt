@@ -107,25 +107,25 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 - actual_budgets_get_all
   Expect: budget data for all months, no error
 
-- actual_budgets_getMonth
+- actual_budgets_get_month
   Input: month = current month (YYYY-MM format)
   Expect: budget data object for the month
 
-- actual_budgets_getMonths
+- actual_budgets_get_months
   Input: months array = [3 consecutive months including current]
   Expect: array of month budget objects (≥ 1 item)
 
-- actual_budgets_setAmount
+- actual_budgets_set_amount
   Input: { month: current month, category: "{budget_cat_id}", amount: 50000 }
   Expect: success (50000 cents = $500.00 budgeted)
   Verify: re-fetch month budget and confirm budgeted=50000 for that category
 
-- actual_budgets_setCarryover
+- actual_budgets_set_carryover
   Input: { month: current month, category: "{budget_cat_id}", carryover: true }
   Expect: success
   Verify: carryover field=true in month budget for that category
 
-- actual_budgets_holdForNextMonth
+- actual_budgets_hold_for_next_month
   Input: { month: current month, amount: 10000 }
   Expect: EITHER success (holds $100.00 for next month) OR a refusal saying "nothing was
     held" when that month has no positive To Budget left. Both are correct answers and
@@ -134,7 +134,7 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
   Verify: on success, toBudget for the month decreased by 10000 cents. On refusal,
     toBudget is unchanged.
 
-- actual_budgets_resetHold
+- actual_budgets_reset_hold
   Input: { month: current month }
   Expect: success (hold released)
   Verify: toBudget restored to pre-hold value

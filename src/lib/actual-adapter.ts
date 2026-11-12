@@ -2332,7 +2332,7 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
     );
     const exists = (categories as any[]).some((c: any) => c.id === categoryId);
     if (!exists) {
-      // #377: MUST be a typed refusal. `budgets_setAmount` is one of the two tools whose
+      // #377: MUST be a typed refusal. `budgets_set_amount` is one of the two tools whose
       // published contract is the SHAPE (#89: an unknown category returns
       // { success: false, error }, it does not throw), and the tool decides that by type
       // now. Leaving this as a bare Error silently undid #89, and the unit test did not
@@ -2357,7 +2357,7 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
     if (Array.isArray(months) && months.length > 0 && !months.includes(String(month))) {
       throw new OutOfRangeRefusal(
         `Month "${month}" is outside this budget's range, which runs from ${months[0]} to ` +
-          `${months[months.length - 1]}. Use actual_budgets_getMonths to see the months you can budget to.`,
+          `${months[months.length - 1]}. Use actual_budgets_get_months to see the months you can budget to.`,
         String(month),
       );
     }
@@ -2444,7 +2444,7 @@ export async function transferBudgetAmount(
     // reason about, and the client re-reads instead.
     await withConcurrency(() => rawSetBudgetAmount(month, fromCategoryId, prevFrom - amount) as Promise<void>);
     const sourceDone = `Partial transfer: the source category ${fromCategoryId} was set from ${prevFrom} to ${prevFrom - amount}`;
-    const readBack = 'Read back with actual_budgets_getMonth before retrying.';
+    const readBack = 'Read back with actual_budgets_get_month before retrying.';
     const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;
     if (deadlineMs > 0 && Date.now() - startedAt > deadlineMs) {
       throw new Error(
@@ -4123,7 +4123,7 @@ const BUDGET_BATCH_DEADLINE_FRACTION = 0.75;
  *
  * RETRY: none. A refusal must never replay, an apply failure is deterministic, a retry would
  * spend the deadline, and infrastructure errors abort the batch instead; the client re-reads
- * (`actual_budgets_getMonth`) and retries.
+ * (`actual_budgets_get_month`) and retries.
  *
  * COOPERATIVE DEADLINE. The whole operation runs under one `withOpTimeout`, a `Promise.race`
  * that cannot cancel the callback, so an abandoned loop would keep writing after the caller was
@@ -4163,7 +4163,7 @@ export async function setBudgetBatch(items: BudgetBatchItem[]): Promise<BudgetBa
       } else if (monthKnown && !months.includes(String(item.month))) {
         refusal = new OutOfRangeRefusal(
           `Month "${item.month}" is outside this budget's range, which runs from ${months[0]} to ` +
-            `${months[months.length - 1]}. Use actual_budgets_getMonths to see the months you can budget to.`,
+            `${months[months.length - 1]}. Use actual_budgets_get_months to see the months you can budget to.`,
           String(item.month),
         );
       } else if (item.carryover !== undefined && category.is_income) {
@@ -4204,7 +4204,7 @@ export async function setBudgetBatch(items: BudgetBatchItem[]): Promise<BudgetBa
           total: items.length,
           applied: succeeded.map((x) => x.index).join(', '),
           message: msg,
-          readBackTool: 'actual_budgets_getMonth',
+          readBackTool: 'actual_budgets_get_month',
         });
         failed.push({ ...ref, error: amountWritten ? `amount was applied, then the carryover failed: ${msg}` : msg });
       }

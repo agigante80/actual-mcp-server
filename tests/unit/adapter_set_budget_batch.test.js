@@ -138,7 +138,7 @@ console.log('\n[#516] an out-of-range month is refused per item');
     { month: '2026-01', categoryId: FOOD, amount: 1000 },
   ]);
   check(res.failed.length === 1 && res.failed[0].index === 0 && res.failed[0].month === '1899-01', 'item 0 failed');
-  check(/outside this budget's range/.test(res.failed[0].error) && /2026-01/.test(res.failed[0].error) && /2026-03/.test(res.failed[0].error) && /actual_budgets_getMonths/.test(res.failed[0].error),
+  check(/outside this budget's range/.test(res.failed[0].error) && /2026-01/.test(res.failed[0].error) && /2026-03/.test(res.failed[0].error) && /actual_budgets_get_months/.test(res.failed[0].error),
     'with the range refusal naming the bounds and the listing tool', res.failed[0].error);
   check(res.succeeded.length === 1 && writes.length === 1, 'the valid item is applied');
 }
@@ -199,7 +199,7 @@ console.log('\n[#516] infrastructure errors abort the batch instead of becoming 
     ]);
   } catch (e) { threw = e; }
   check(threw instanceof Error, 'the call rejects');
-  check(threw && threw.message.startsWith('Budget batch aborted after 2 of 4 items (applied: 0, 1): read ECONNRESET.') && /actual_budgets_getMonth before retrying/.test(threw.message),
+  check(threw && threw.message.startsWith('Budget batch aborted after 2 of 4 items (applied: 0, 1): read ECONNRESET.') && /actual_budgets_get_month before retrying/.test(threw.message),
     'with the count, the applied indices, the original text and the read-back advice', threw?.message);
   // The pool-drop decision is isRetryableError && !isRateLimitError (_shouldDropPoolOnError delegates to exactly that).
   check(retryMod.isRetryableError(threw) && !retryMod.isRateLimitError(threw), 'the rethrown error is still classified as infrastructure (pool drop)');
@@ -311,7 +311,7 @@ console.log('\n[#539] transfer: a second-write failure is reported as a partial 
     check(threw instanceof Error && m.startsWith('Partial transfer:'), 'rejects as a partial transfer', m);
     check(m.includes(`source category ${FOOD} was set from 5000 to 4500`), 'names the source and its old and new amounts', m);
     check(m.includes(`target category ${RENT} failed, so it is unchanged at 1000`), 'says the target is unchanged', m);
-    check(m.includes('SqliteError: database is locked') && m.includes('actual_budgets_getMonth'), 'keeps the original text and the read-back tool', m);
+    check(m.includes('SqliteError: database is locked') && m.includes('actual_budgets_get_month'), 'keeps the original text and the read-back tool', m);
     check(threw?.cause instanceof Error && threw.cause.message === 'SqliteError: database is locked', 'carries the original error as cause');
     check(writes.length === 1 && writes[0].categoryId === FOOD && writes[0].amount === 4500, 'exactly the source write landed', JSON.stringify(writes));
     check(unhandled.length === 0, 'no unhandled rejection reached the process', unhandled.join(' | '));

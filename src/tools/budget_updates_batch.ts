@@ -37,9 +37,9 @@ const tool: ToolDefinition = {
   name: 'actual_budget_updates_batch',
   description: `Set budget amounts and/or carryover flags for many month/category pairs in one call. Accepts 1 to 100 operations; each operation needs at least one of amount (integer cents) or carryover (boolean).
 
-Each operation is applied independently and NOT atomically: there is no rollback, so items applied before a failure stay applied. An unknown category, a month outside the budget's range, or a carryover on an income category fails only that item and is reported per item. If an operation sets both amount and carryover and the carryover fails, the amount may already be applied. If the call times out, read the affected months back with actual_budgets_getMonth BEFORE retrying; some items may have been applied. If several items target the same month and category, the last one wins.
+Each operation is applied independently and NOT atomically: there is no rollback, so items applied before a failure stay applied. An unknown category, a month outside the budget's range, or a carryover on an income category fails only that item and is reported per item. If an operation sets both amount and carryover and the carryover fails, the amount may already be applied. If the call times out, read the affected months back with actual_budgets_get_month BEFORE retrying; some items may have been applied. If several items target the same month and category, the last one wins.
 
-Returns: { succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }. Every item failing is a normal result (successCount 0), not a tool error. To rebalance categories, read the month with actual_budgets_getMonth, then send one batch of absolute amounts.
+Returns: { succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }. Every item failing is a normal result (successCount 0), not a tool error. To rebalance categories, read the month with actual_budgets_get_month, then send one batch of absolute amounts.
 
 Example: Set health insurance budget for 2 months:
 {

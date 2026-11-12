@@ -8,9 +8,14 @@ import { errorLogFields } from './lib/errors.js';
 import config from './config.js';
 import { createModuleLogger } from './lib/loggerFactory.js';
 import { resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
+import { TOOL_ALIAS_REMOVAL_AFTER, resolveToolAlias } from './lib/tool-aliases.js';
 
 const toolsetLog = createModuleLogger('TOOLSETS');
 const outputLog = createModuleLogger('TOOL_OUTPUT');
+const aliasLog = createModuleLogger('TOOL_ALIAS');
+
+// #652: each deprecated alias warns once per process, not once per call.
+const warnedAliases = new Set<string>();
 
 // ✅ List of tools already implemented in this class.
 // Adding the tool name here is considered fully implemented.
@@ -32,12 +37,12 @@ const IMPLEMENTED_TOOLS = [
   'actual_budgets_get_all',
   'actual_budgets_list_available',
   'actual_budgets_switch',
-  'actual_budgets_getMonth',
-  'actual_budgets_getMonths',
-  'actual_budgets_holdForNextMonth',
-  'actual_budgets_resetHold',
-  'actual_budgets_setAmount',
-  'actual_budgets_setCarryover',
+  'actual_budgets_get_month',
+  'actual_budgets_get_months',
+  'actual_budgets_hold_for_next_month',
+  'actual_budgets_reset_hold',
+  'actual_budgets_set_amount',
+  'actual_budgets_set_carryover',
   'actual_budgets_transfer',
   'actual_budget_updates_batch',
   'actual_categories_create',
@@ -116,10 +121,10 @@ const API_TOOL_MAP: Record<string, string> = {
   updateTransaction: 'actual_transactions_update',
   deleteTransaction: 'actual_transactions_delete',
   mergeTransactions: 'actual_transactions_merge',
-  getBudgetMonths: 'actual_budgets_getMonths',
-  getBudgetMonth: 'actual_budgets_getMonth',
-  setBudgetAmount: 'actual_budgets_setAmount',
-  setBudgetCarryover: 'actual_budgets_setCarryover',
+  getBudgetMonths: 'actual_budgets_get_months',
+  getBudgetMonth: 'actual_budgets_get_month',
+  setBudgetAmount: 'actual_budgets_set_amount',
+  setBudgetCarryover: 'actual_budgets_set_carryover',
   getCategories: 'actual_categories_get',
   createCategory: 'actual_categories_create',
   updateCategory: 'actual_categories_update',
@@ -132,8 +137,8 @@ const API_TOOL_MAP: Record<string, string> = {
   getPayeeRules: 'actual_payee_rules_get',
   // #539: the tool covers this capability through per-item writes; it never calls batchBudgetUpdates.
   batchBudgetUpdates: 'actual_budget_updates_batch',
-  holdBudgetForNextMonth: 'actual_budgets_holdForNextMonth',
-  resetBudgetHold: 'actual_budgets_resetHold',
+  holdBudgetForNextMonth: 'actual_budgets_hold_for_next_month',
+  resetBudgetHold: 'actual_budgets_reset_hold',
   getRules: 'actual_rules_get',
   createRule: 'actual_rules_create',
   updateRule: 'actual_rules_update',
@@ -193,6 +198,13 @@ class ActualToolsManager {
         readOnly: this.policy.settings.readOnly,
       },
     );
+    for (const { alias, tool } of this.policy.mappedAliases) {
+      toolsetLog.warn('MCP_TOOLS names a deprecated tool alias; use the new name', {
+        alias,
+        tool,
+        removal: TOOL_ALIAS_REMOVAL_AFTER,
+      });
+    }
   }
 
   private requirePolicy(): PublishedPolicy {
@@ -234,7 +246,18 @@ class ActualToolsManager {
    * callTool plus the outputSchema verdict (#642). The verdict is computed against the
    * JSON-safe value, the same one the text block serialises, so the transports only frame.
    */
-  async callToolChecked(name: string, args: unknown): Promise<CheckedToolResult> {
+  async callToolChecked(requestedName: string, args: unknown): Promise<CheckedToolResult> {
+    // #652: a deprecated alias resolves FIRST, so registration and publication below judge
+    // the new name. getTool() deliberately does not resolve aliases.
+    const name = resolveToolAlias(requestedName);
+    if (name !== requestedName && !warnedAliases.has(requestedName)) {
+      warnedAliases.add(requestedName);
+      aliasLog.warn('A deprecated tool alias was called; use the new name', {
+        tool: name,
+        alias: requestedName,
+        removal: TOOL_ALIAS_REMOVAL_AFTER,
+      });
+    }
     const policy = this.requirePolicy();
     // Registration is checked BEFORE publication: an unregistered name stays "not found".
     const tool = this.getTool(name);

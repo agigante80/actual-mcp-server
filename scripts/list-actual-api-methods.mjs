@@ -21,7 +21,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 // 'actual_...'). Mirrors scripts/version-bump.js, which text-parses the same file.
 export function readImplementedTools() {
   const src = readFileSync(resolve(here, '..', 'src', 'actualToolsManager.ts'), 'utf8');
-  // Tool names can contain uppercase (e.g. actual_budgets_getMonths), so allow A-Z.
+  // Registered names are lower snake_case since #652 (tool_name_case.test.js); A-Z stays so a
+  // stray uppercase name is still extracted and reported rather than silently skipped.
   return (src.match(/^\s*'(actual_[A-Za-z0-9_]+)'/gm) || []).map(line => line.match(/'(actual_[A-Za-z0-9_]+)'/)[1]);
 }
 
@@ -69,14 +70,14 @@ export const API_TO_TOOL = {
   updateRule: 'actual_rules_update',
   deleteRule: 'actual_rules_delete',
   // budgets
-  getBudgetMonths: 'actual_budgets_getMonths',
-  getBudgetMonth: 'actual_budgets_getMonth',
-  setBudgetAmount: 'actual_budgets_setAmount',
-  setBudgetCarryover: 'actual_budgets_setCarryover',
+  getBudgetMonths: 'actual_budgets_get_months',
+  getBudgetMonth: 'actual_budgets_get_month',
+  setBudgetAmount: 'actual_budgets_set_amount',
+  setBudgetCarryover: 'actual_budgets_set_carryover',
   // #539: the tool covers this capability through per-item writes; it never calls batchBudgetUpdates.
   batchBudgetUpdates: 'actual_budget_updates_batch',
-  holdBudgetForNextMonth: 'actual_budgets_holdForNextMonth',
-  resetBudgetHold: 'actual_budgets_resetHold',
+  holdBudgetForNextMonth: 'actual_budgets_hold_for_next_month',
+  resetBudgetHold: 'actual_budgets_reset_hold',
   getBudgets: 'actual_budgets_list_available',
   // account groups (#429)
   getAccountGroups: 'actual_account_groups_list',

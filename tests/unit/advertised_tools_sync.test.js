@@ -45,10 +45,14 @@ function check(label, fn) {
 }
 
 // Backtick-delimited tool-name tokens: at least two underscores so an env-var-style
-// token like `actual_password` (one underscore) cannot match. Case-insensitive segments
-// because some tool names are camelCase (e.g. actual_budgets_setAmount, _getMonth).
+// token like `actual_password` (one underscore) cannot match. Case-insensitive segments so
+// a camelCase name (only the #652 deprecated aliases now) is still extracted and judged.
 const ADVERTISED_RE = /`(actual_[a-zA-Z0-9]+_[a-zA-Z0-9]+(?:_[a-zA-Z0-9]+)*)`/g;
 const advertisedNames = (text) => [...text.matchAll(ADVERTISED_RE)].map((m) => m[1]);
+
+// #652: the "### Deprecated names" section of tools.md lists the old camelCase aliases on
+// purpose; they are not registered tools. Only that section is exempt, up to the next `## `.
+const withoutDeprecatedSection = (text) => text.replace(/\n### Deprecated names\n[\s\S]*?(?=\n## )/, '\n');
 
 // IMPLEMENTED_TOOLS is a non-exported const; read the registry by extracting the
 // quoted actual_* literals inside the IMPLEMENTED_TOOLS array in the source. Anchor on
@@ -77,12 +81,18 @@ check('registry parsed completely (case-insensitive, no under-count)', () => {
 const ADVERTISING_FILES = ['README.md', 'docs/reference/tools.md'];
 for (const file of ADVERTISING_FILES) {
   check(`every actual_<domain>_<action> name advertised in ${file} is in IMPLEMENTED_TOOLS`, () => {
-    const advertised = [...new Set(advertisedNames(read(file)))];
+    const advertised = [...new Set(advertisedNames(withoutDeprecatedSection(read(file))))];
     assert.ok(advertised.length > 0, `no advertised tool names found in ${file} (extractor broke?)`);
     const missing = advertised.filter((n) => !registry.has(n)).sort();
     assert.strictEqual(missing.length, 0, `${file} advertises tool(s) not in IMPLEMENTED_TOOLS: ${missing.join(', ')}`);
   });
 }
+
+check('NEGATIVE (#652): an old camelCase name OUTSIDE the Deprecated names section is still flagged', () => {
+  const doc = '## Budgets\n`actual_budgets_getMonths`\n### Deprecated names\n`actual_budgets_setAmount`\n## Rules\n';
+  const missing = advertisedNames(withoutDeprecatedSection(doc)).filter((n) => !registry.has(n));
+  assert.deepStrictEqual(missing, ['actual_budgets_getMonths']);
+});
 
 // NEGATIVE: prove the guard catches a documented-but-missing / renamed tool.
 check('NEGATIVE: an advertised phantom tool is detected by the same extractor + set-difference', () => {

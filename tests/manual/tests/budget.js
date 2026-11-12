@@ -23,7 +23,7 @@ function monthAfter(m) {
 async function snapshotMonthCells(callTool, months) {
   const cells = new Map();
   for (const month of months) {
-    const res = await callTool("actual_budgets_getMonth", { month });
+    const res = await callTool("actual_budgets_get_month", { month });
     const data = res?.result || res;
     for (const group of data?.categoryGroups || []) {
       for (const cat of group.categories || []) {
@@ -231,19 +231,19 @@ export async function budgetTests(client, context) {
 
     // Get specific month
     console.log("\nGetting budget for current month...");
-    const monthBudget = await callTool("actual_budgets_getMonth", { month: currentDate });
+    const monthBudget = await callTool("actual_budgets_get_month", { month: currentDate });
     console.log("✓ Retrieved month budget:", currentDate);
 
     // Get multiple months
     console.log("\nGetting budgets for multiple months...");
-    const months = await callTool("actual_budgets_getMonths", { start: currentDate, end: currentDate });
+    const months = await callTool("actual_budgets_get_months", { start: currentDate, end: currentDate });
     const monthsArr = Array.isArray(months) ? months : (months.result || []);
     if (monthsArr.length >= 1) console.log(`  ✓ Retrieved months: ${monthsArr.length} (expected ≥ 1)`);
     else fail(`Verify getMonths: expected ≥ 1 month, got ${monthsArr.length}`);
 
     // Set amount
     console.log("\nSetting budget amount...");
-    await callTool("actual_budgets_setAmount", {
+    await callTool("actual_budgets_set_amount", {
       month: currentDate,
       categoryId: budgetCatId,
       amount: 50000,
@@ -252,7 +252,7 @@ export async function budgetTests(client, context) {
 
     // Verify setAmount
     {
-      const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const check = await callTool("actual_budgets_get_month", { month: currentDate });
       const monthData = check.result || check;
       const catEntry = (monthData.categoryGroups || [])
         .flatMap(g => g.categories || [])
@@ -262,12 +262,12 @@ export async function budgetTests(client, context) {
       else fail(`Verify setAmount: expected 50000, got ${catEntry.budgeted}`);
     }
 
-    // B4: budgets_setAmount with non-existent categoryId: pre-flight rejects nil/unknown UUIDs
+    // B4: budgets_set_amount with non-existent categoryId: pre-flight rejects nil/unknown UUIDs
     // Pre-flight validation is inside adapter.setBudgetAmount(): nil and unknown UUIDs both rejected.
-    console.log("\nNEGATIVE B4: budgets_setAmount with non-existent categoryId...");
+    console.log("\nNEGATIVE B4: budgets_set_amount with non-existent categoryId...");
     {
       try {
-        const badRes = await callTool("actual_budgets_setAmount", {
+        const badRes = await callTool("actual_budgets_set_amount", {
           month: currentDate,
           categoryId: "00000000-0000-0000-0000-000000000000",
           amount: 99999,
@@ -284,7 +284,7 @@ export async function budgetTests(client, context) {
 
     // Carryover
     console.log("\nSetting carryover...");
-    await callTool("actual_budgets_setCarryover", {
+    await callTool("actual_budgets_set_carryover", {
       month: currentDate,
       categoryId: budgetCatId,
       flag: true,
@@ -293,7 +293,7 @@ export async function budgetTests(client, context) {
 
     // Verify carryover
     {
-      const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const check = await callTool("actual_budgets_get_month", { month: currentDate });
       const monthData = check.result || check;
       const catEntry = (monthData.categoryGroups || [])
         .flatMap(g => g.categories || [])
@@ -321,14 +321,14 @@ export async function budgetTests(client, context) {
     const holdSeedId = (holdSeedAccount && holdSeedAccount.result) || holdSeedAccount;
 
     try {
-      const beforeHold = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const beforeHold = await callTool("actual_budgets_get_month", { month: currentDate });
       const beforeMonth = (beforeHold.result || beforeHold) ?? {};
       const toBudgetBefore = Number(beforeMonth.toBudget ?? 0);
       const heldBefore = Number(beforeMonth.forNextMonth ?? 0);
       // Failures route through fail() so they reach the runner's ledger (#281).
       const holdCheck = (cond, msg) => {
         if (cond) console.log(`  ✓ ${msg}`);
-        else fail(`actual_budgets_holdForNextMonth: ${msg}`);
+        else fail(`actual_budgets_hold_for_next_month: ${msg}`);
       };
 
       holdCheck(
@@ -349,7 +349,7 @@ export async function budgetTests(client, context) {
           'state from an interrupted run, not a tool regression',
       );
 
-      const res = await callTool("actual_budgets_holdForNextMonth", {
+      const res = await callTool("actual_budgets_hold_for_next_month", {
         month: currentDate,
         amount: HOLD_AMOUNT,
       });
@@ -359,7 +359,7 @@ export async function budgetTests(client, context) {
 
       // And the money actually moved. #355 exists because upstream can hold LESS than asked
       // (it clamps to what is left) or nothing at all, while reporting plain success.
-      const afterHold = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const afterHold = await callTool("actual_budgets_get_month", { month: currentDate });
       const afterMonth = (afterHold.result || afterHold) ?? {};
       holdCheck(
         Number(afterMonth.forNextMonth ?? 0) - heldBefore === HOLD_AMOUNT,
@@ -371,8 +371,8 @@ export async function budgetTests(client, context) {
       // whose exact size we just established is the only place the reset can be checked
       // against a known number.
       console.log("\nResetting hold...");
-      await callTool("actual_budgets_resetHold", { month: currentDate });
-      const afterReset = await callTool("actual_budgets_getMonth", { month: currentDate });
+      await callTool("actual_budgets_reset_hold", { month: currentDate });
+      const afterReset = await callTool("actual_budgets_get_month", { month: currentDate });
       const resetMonth = (afterReset.result || afterReset) ?? {};
       holdCheck(
         Number(resetMonth.forNextMonth ?? 0) === heldBefore,
@@ -391,7 +391,7 @@ export async function budgetTests(client, context) {
       // leftover hold would silently lower this month's To Budget by HOLD_AMOUNT on every
       // run and nothing would report it. The E2E twin registers the same reset as teardown.
       try {
-        await callTool("actual_budgets_resetHold", { month: currentDate });
+        await callTool("actual_budgets_reset_hold", { month: currentDate });
       } catch (err) {
         fail(`could not reset the hold for ${currentDate}: ${err.message}`);
       }
@@ -408,7 +408,7 @@ export async function budgetTests(client, context) {
     // no "could not create" skip: a precondition this module builds itself is never a skip.
     const targetCategoryId = budgetXferCatId;
     {
-      const preTransfer = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const preTransfer = await callTool("actual_budgets_get_month", { month: currentDate });
       const preData = preTransfer.result || preTransfer;
       const srcBefore = (preData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId)?.budgeted ?? null;
       const dstBefore = (preData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
@@ -419,7 +419,7 @@ export async function budgetTests(client, context) {
         toCategoryId: targetCategoryId,
       });
       console.log("✓ Budget transfer completed");
-      const postTransfer = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const postTransfer = await callTool("actual_budgets_get_month", { month: currentDate });
       const postData = postTransfer.result || postTransfer;
       const srcAfter = (postData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId)?.budgeted ?? null;
       const dstAfter = (postData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
@@ -449,7 +449,7 @@ export async function budgetTests(client, context) {
         }
       }
       // Verify state unchanged (atomic rejection, no partial write).
-      const postReject = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const postReject = await callTool("actual_budgets_get_month", { month: currentDate });
       const postRejectData = postReject.result || postReject;
       const srcAfterReject = (postRejectData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId)?.budgeted ?? null;
       const dstAfterReject = (postRejectData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
@@ -486,7 +486,7 @@ export async function budgetTests(client, context) {
     });
     console.log("✓ Batch updates completed");
     {
-      const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const check = await callTool("actual_budgets_get_month", { month: currentDate });
       const d = check.result || check;
       const cat = (d.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId);
       if (!cat) fail("Verify batch: category not found in month budget");
@@ -505,7 +505,7 @@ export async function budgetTests(client, context) {
     const batchResult = await callTool("actual_budget_updates_batch", { operations: largeBatch });
     console.log("✓ Large batch handled:", batchResult);
     {
-      const check = await callTool("actual_budgets_getMonth", { month: currentDate });
+      const check = await callTool("actual_budgets_get_month", { month: currentDate });
       const d = check.result || check;
       const cat = (d.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId);
       if (!cat) fail("Verify large batch: category not found in month budget");

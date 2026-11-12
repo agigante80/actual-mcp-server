@@ -29,6 +29,7 @@
  */
 
 import { ToolUnavailableError, type ToolUnavailableSetting } from './errors.js';
+import { resolveToolAlias } from './tool-aliases.js';
 
 /** Every registered tool belongs to exactly ONE of these (guarded by the unit test). */
 export const TOOLSETS = {
@@ -74,12 +75,12 @@ export const TOOLSETS = {
     'actual_payees_common_list',
   ],
   budget: [
-    'actual_budgets_getMonth',
-    'actual_budgets_getMonths',
-    'actual_budgets_setAmount',
-    'actual_budgets_setCarryover',
-    'actual_budgets_holdForNextMonth',
-    'actual_budgets_resetHold',
+    'actual_budgets_get_month',
+    'actual_budgets_get_months',
+    'actual_budgets_set_amount',
+    'actual_budgets_set_carryover',
+    'actual_budgets_hold_for_next_month',
+    'actual_budgets_reset_hold',
     'actual_budgets_transfer',
     'actual_budget_updates_batch',
     'actual_notes_get',
@@ -146,9 +147,9 @@ export const TOOLSET_NAMES = Object.keys(TOOLSETS) as ToolsetName[];
  * path, the batch writes, and the few single writes a chat assistant needs. It is 12 tools
  * where the full surface is 83, roughly a 76% cut in tools/list bytes.
  *
- * actual_budgets_getMonth is in it on purpose (decision recorded on #483): budget_updates_batch
- * and budgets_setAmount tell the model to read a month back with it, and query_run has no
- * budget-month table to stand in. actual_budgets_getMonths is NOT in it: the out-of-range
+ * actual_budgets_get_month is in it on purpose (decision recorded on #483): budget_updates_batch
+ * and budgets_set_amount tell the model to read a month back with it, and query_run has no
+ * budget-month table to stand in. actual_budgets_get_months is NOT in it: the out-of-range
  * refusal from setAmount and the batch already states the budget's first and last month.
  * tests/unit/toolsets.test.js scans every member's description and input schema for
  * references to tools the preset hides, and each such reference must name a published
@@ -166,8 +167,8 @@ export const PRESETS = {
     'actual_transactions_delete',
     'actual_rules_create',
     'actual_budgets_transfer',
-    'actual_budgets_setAmount',
-    'actual_budgets_getMonth',
+    'actual_budgets_set_amount',
+    'actual_budgets_get_month',
   ],
 } as const satisfies Record<string, readonly string[]>;
 
@@ -198,11 +199,11 @@ export const WRITE_CAPABLE: ReadonlySet<string> = new Set([
   'actual_bank_sync',
   'actual_budget_updates_batch',
   'actual_budgets_export',
-  'actual_budgets_holdForNextMonth',
+  'actual_budgets_hold_for_next_month',
   'actual_budgets_import',
-  'actual_budgets_resetHold',
-  'actual_budgets_setAmount',
-  'actual_budgets_setCarryover',
+  'actual_budgets_reset_hold',
+  'actual_budgets_set_amount',
+  'actual_budgets_set_carryover',
   'actual_budgets_switch',
   'actual_budgets_transfer',
   'actual_categories_create',
@@ -260,6 +261,8 @@ export interface PublishedPolicy {
   readonly hidden: ReadonlyMap<string, ToolUnavailableSetting>;
   /** Count of registered tools. */
   readonly registered: number;
+  /** #652: deprecated names in MCP_TOOLS and the names they were mapped to, for a startup warning. */
+  readonly mappedAliases: readonly { readonly alias: string; readonly tool: string }[];
   /** The resolved settings, for server_info and the startup log. */
   readonly settings: {
     readonly toolsets: readonly string[];
@@ -306,7 +309,16 @@ export function resolvePublishedToolNames(
     );
   }
 
-  const extras = splitList(settings.tools);
+  // #652: a deprecated alias maps to its new name BEFORE the unknown-name check, so an
+  // existing MCP_TOOLS keeps working through the deprecation window.
+  const mappedAliases: { alias: string; tool: string }[] = [];
+  // De-duplicated after mapping: an operator migrating may list the old and the new name side
+  // by side, which must publish (and report) the tool once.
+  const extras = [...new Set(splitList(settings.tools).map((t) => {
+    const tool = resolveToolAlias(t);
+    if (tool !== t) mappedAliases.push(Object.freeze({ alias: t, tool }));
+    return tool;
+  }))];
   const unknownTools = extras.filter((t) => !registered.has(t));
   if (unknownTools.length > 0) {
     throw new Error(
@@ -353,6 +365,7 @@ export function resolvePublishedToolNames(
     published: Object.freeze(published),
     hidden,
     registered: registeredNames.length,
+    mappedAliases: Object.freeze(mappedAliases),
     settings: Object.freeze({
       toolsets: Object.freeze(requested),
       tools: Object.freeze(extras),

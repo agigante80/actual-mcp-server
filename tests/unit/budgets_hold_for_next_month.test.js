@@ -1,5 +1,5 @@
 // tests/unit/budgets_hold_for_next_month.test.js
-// #355: actual_budgets_holdForNextMonth must report the amount ACTUALLY held.
+// #355: actual_budgets_hold_for_next_month must report the amount ACTUALLY held.
 //
 // Upstream has two ways of doing less than asked, and only one of them is a boolean:
 //
@@ -50,7 +50,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   apiDefault.sync = async () => {};
   const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
-    import('../../dist/src/tools/budgets_holdForNextMonth.js').then(m => m.default),
+    import('../../dist/src/tools/budgets_hold_for_next_month.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
   ]);
   adapterMod._setSkipApiInitForTests(true);
@@ -131,6 +131,6 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   }
 
   console.log('');
-  if (failures === 0) console.log('[#355] All budgets_holdForNextMonth tests passed ✓');
+  if (failures === 0) console.log('[#355] All budgets_hold_for_next_month tests passed ✓');
   else { console.error(`[#355] ${failures} test(s) FAILED`); process.exit(2); }
 })();

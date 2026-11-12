@@ -150,7 +150,7 @@ console.log('\n[#516] the description states the contract');
   check(/at least one of amount/i.test(d), 'at-least-one-of rule');
   check(/100/.test(d), 'the 100 cap');
   check(/NOT atomic/.test(d) && /no rollback/i.test(d), 'non-atomic, no rollback');
-  check(/actual_budgets_getMonth/.test(d) && /BEFORE retrying/.test(d), 'read back before retrying after a timeout');
+  check(/actual_budgets_get_month/.test(d) && /BEFORE retrying/.test(d), 'read back before retrying after a timeout');
 }
 
 console.log('\n[#516] the tool file holds no raw API access and no console');

@@ -49,7 +49,7 @@ There is no `lint` or `format` script. If `test:adapter` or `test:unit-js` compl
 
 ## Adding or changing a tool
 
-Follow [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) end to end. New tools use `createTool()` from `src/lib/toolFactory.ts`, are named `actual_<domain>_<action>`, take ids from `CommonSchemas` (`src/lib/schemas/common.ts`), and are added to `IMPLEMENTED_TOOLS` and `src/tools/index.ts`. Path-scoped conventions live in [.github/instructions/](.github/instructions/).
+Follow [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) end to end. New tools use `createTool()` from `src/lib/toolFactory.ts`, are named `actual_<domain>_<action>` in lower snake_case (never camelCase), take ids from `CommonSchemas` (`src/lib/schemas/common.ts`), and are added to `IMPLEMENTED_TOOLS` and `src/tools/index.ts`. Path-scoped conventions live in [.github/instructions/](.github/instructions/).
 
 ## Tests
 

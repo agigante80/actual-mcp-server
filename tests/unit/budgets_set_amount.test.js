@@ -1,8 +1,8 @@
-// tests/unit/budgets_setAmount.test.js
+// tests/unit/budgets_set_amount.test.js
 // Regression test for #89: nil-UUID categoryId should return { success: false, error }, not {}
 //
 // Run via: npm run test:unit-js
-// Or: node tests/unit/budgets_setAmount.test.js
+// Or: node tests/unit/budgets_set_amount.test.js
 
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
@@ -27,7 +27,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   apiDefault.setBudgetAmount = async () => { rawSetCalls++; };
 
   const [toolMod, adapterMod, errorsMod] = await Promise.all([
-    import('../../dist/src/tools/budgets_setAmount.js').then(m => m.default),
+    import('../../dist/src/tools/budgets_set_amount.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
     import('../../dist/src/lib/errors.js'),
   ]);
@@ -67,7 +67,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       check(threw?.refusalKind === 'out-of-range',                       'and the refusal is typed as out-of-range');
       check(!!threw && threw.message.includes('2026-01'),                'message names the first month available');
       check(!!threw && threw.message.includes('2026-03'),                'message names the last month available');
-      check(!!threw && threw.message.includes('actual_budgets_getMonths'), 'message names the listing tool');
+      check(!!threw && threw.message.includes('actual_budgets_get_months'), 'message names the listing tool');
       check(rawSetCalls === 0,                                          'no write attempted for an out-of-range month');
     }
 
@@ -83,12 +83,12 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       const res = await tool.call({ month: '2019-01', categoryId: '10000000-0000-4000-8000-000000000001', amount: 1000 });
       check(res?.success === false,                              'month refusal returns success:false, not a throw');
       check(typeof res?.error === 'string' && res.error.length > 0, 'and carries an actionable message');
-      check(/actual_budgets_getMonths/.test(res?.error ?? ''),    'that names the tool to call next');
+      check(/actual_budgets_get_months/.test(res?.error ?? ''),    'that names the tool to call next');
     }
 
     console.log('\n[#89] an unknown category returns the structured refusal, not a throw');
     {
-      // THE REGRESSION CASE. `budgets_setAmount` is one of only two tools whose published
+      // THE REGRESSION CASE. `budgets_set_amount` is one of only two tools whose published
       // contract is the SHAPE rather than the error channel, so an unknown category must
       // come back as { success: false, error } and must NOT throw.
       const nilUuid = '00000000-0000-0000-0000-000000000000';
@@ -198,7 +198,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
   console.log('');
   if (failures === 0) {
-    console.log('[#89] All budgets_setAmount tests passed ✓');
+    console.log('[#89] All budgets_set_amount tests passed ✓');
   } else {
     console.error(`[#89] ${failures} test(s) FAILED`);
     process.exit(2);

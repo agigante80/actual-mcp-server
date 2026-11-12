@@ -22,14 +22,14 @@ const InputSchema = z.object({
  * wording of the three answers: held in full, held in part, held nothing.
  */
 const tool: ToolDefinition = {
-  name: 'actual_budgets_holdForNextMonth',
+  name: 'actual_budgets_hold_for_next_month',
   description:
     "Hold an amount from this month's budget to carry into next month. The amount is in cents. " +
     'Actual can hold LESS than requested: it clamps the hold to the amount still left to budget, ' +
     'and holds nothing at all when that is zero or negative. The response reports the amount ' +
     'actually held and flags a partial hold, rather than reporting plain success.\n\n' +
     'Note: This operates on the month as a whole, not on a specific category.\n\n' +
-    'If this call reports an error, re-read the month with actual_budgets_getMonth before ' +
+    'If this call reports an error, re-read the month with actual_budgets_get_month before ' +
     'retrying: the amount held is measured by reading the month AFTER the write, so a failure ' +
     'of that verification read is reported even though the hold itself may have succeeded. ' +
     'Retrying blindly would hold the amount twice, because Actual ADDS to the existing buffer.',
@@ -42,7 +42,7 @@ const tool: ToolDefinition = {
       throw new Error(
         `Nothing was held for ${input.month}: that month has no positive amount left to budget, ` +
           'so there is nothing to carry into next month. Budget less to categories in that month, ' +
-          'or check it with actual_budgets_getMonth first.',
+          'or check it with actual_budgets_get_month first.',
       );
     }
 

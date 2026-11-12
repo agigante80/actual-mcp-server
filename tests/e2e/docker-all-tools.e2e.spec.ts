@@ -90,7 +90,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
 
     // Idempotence matches what the write-effect audit established, rather than being guessed:
     // upstream ADDS to the hold buffer, so repeating the call holds twice (#355).
-    expect(ann('actual_budgets_holdForNextMonth')?.idempotentHint).toBe(false);
+    expect(ann('actual_budgets_hold_for_next_month')?.idempotentHint).toBe(false);
     expect(ann('actual_rules_create_or_update')?.idempotentHint).toBe(true);
   });
 
@@ -1288,12 +1288,12 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(await mcp.call('actual_budgets_get_all')).toBeTruthy();
   });
 
-  test('actual_budgets_getMonth - should get month budget', async ({ mcp }) => {
-    expect(await mcp.call('actual_budgets_getMonth', { month: currentMonth() })).toBeTruthy();
+  test('actual_budgets_get_month - should get month budget', async ({ mcp }) => {
+    expect(await mcp.call('actual_budgets_get_month', { month: currentMonth() })).toBeTruthy();
   });
 
-  test('actual_budgets_getMonths - should get multiple months', async ({ mcp }) => {
-    const data = await mcp.call('actual_budgets_getMonths', {
+  test('actual_budgets_get_months - should get multiple months', async ({ mcp }) => {
+    const data = await mcp.call('actual_budgets_get_months', {
       start: currentMonth(),
       end: currentMonth(),
     });
@@ -1301,16 +1301,23 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(months).toBeTruthy();
   });
 
-  test('actual_budgets_setAmount - should set budget amount', async ({ mcp, makeCategory }) => {
+  // #652: the old camelCase name is a deprecated alias until the first minor after 2027-02-01.
+  test('actual_budgets_getMonths (deprecated alias) - returns the same as actual_budgets_get_months', async ({ mcp }) => {
+    const viaNew = await mcp.call('actual_budgets_get_months', {});
+    const viaAlias = await mcp.call('actual_budgets_getMonths', {});
+    expect(viaAlias).toEqual(viaNew);
+  });
+
+  test('actual_budgets_set_amount - should set budget amount', async ({ mcp, makeCategory }) => {
     const category = await makeCategory();
-    await mcp.call('actual_budgets_setAmount', {
+    await mcp.call('actual_budgets_set_amount', {
       month: currentMonth(),
       categoryId: category.id,
       amount: 50000,
     });
 
     // Assert the amount actually landed rather than that the call returned.
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     const groups = (month?.categoryGroups ?? month?.categoryGroups ?? []) as any[];
     const budgeted = groups
       .flatMap((g: any) => g?.categories ?? [])
@@ -1318,9 +1325,9 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(budgeted).toBe(50000);
   });
 
-  test('actual_budgets_setCarryover - should set carryover', async ({ mcp, makeCategory }) => {
+  test('actual_budgets_set_carryover - should set carryover', async ({ mcp, makeCategory }) => {
     const category = await makeCategory();
-    await mcp.call('actual_budgets_setCarryover', {
+    await mcp.call('actual_budgets_set_carryover', {
       month: currentMonth(),
       categoryId: category.id,
       flag: true,
@@ -1328,12 +1335,12 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
 
     // Read the flag back. Calling a write tool and asserting nothing is the failure mode
     // #350 exists to remove: it passes whether or not the write had any effect.
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     const cats = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []);
     expect(cats.find((c: any) => c?.id === category.id)?.carryover).toBe(true);
   });
 
-  test('actual_budgets_holdForNextMonth - should hold for next month', async ({ mcp, makeAccount, cleanup }) => {
+  test('actual_budgets_hold_for_next_month - should hold for next month', async ({ mcp, makeAccount, cleanup }) => {
     // #369 item 1. This test used to pass on success OR on a /nothing was held/ refusal,
     // because the fixture's To Budget was unknown. That made it a test that CANNOT FAIL: a
     // regression to always-refusing stayed green, and the only executing proof of the
@@ -1350,18 +1357,18 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     // still clears the hold. It runs ahead of the account delete (CLEANUP_ORDER), while
     // the income it was computed from is still there.
     cleanup.add(CLEANUP_ORDER.budgetHold, `reset hold for ${month}`, async () => {
-      await mcp.call('actual_budgets_resetHold', { month });
+      await mcp.call('actual_budgets_reset_hold', { month });
     });
     await makeAccount({ balance: 500_000 });
 
-    const before = await mcp.call('actual_budgets_getMonth', { month });
+    const before = await mcp.call('actual_budgets_get_month', { month });
     expect(
       before?.toBudget,
       'the seeded income must leave more to budget than the hold asks for',
     ).toBeGreaterThan(requested);
     const heldBefore = Number(before?.forNextMonth ?? 0);
 
-    const res = await mcp.call('actual_budgets_holdForNextMonth', { month, amount: requested });
+    const res = await mcp.call('actual_budgets_hold_for_next_month', { month, amount: requested });
     // Note there is no categoryId: the tool holds against the MONTH as a whole. The old
     // version passed one, which the schema silently stripped.
     expect(res?.held).toBe(requested);
@@ -1369,20 +1376,20 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
 
     // And the money actually moved. #355 exists because upstream can hold LESS than asked
     // (it clamps to what is left) or nothing at all, while reporting plain success.
-    const after = await mcp.call('actual_budgets_getMonth', { month });
+    const after = await mcp.call('actual_budgets_get_month', { month });
     expect(Number(after?.forNextMonth ?? 0) - heldBefore).toBe(requested);
   });
 
-  test('actual_budgets_resetHold - should reset hold', async ({ mcp, makeCategory }) => {
+  test('actual_budgets_reset_hold - should reset hold', async ({ mcp, makeCategory }) => {
     const category = await makeCategory();
     // resetHold clears the month's held-for-next-month buffer, which is a property of the
     // MONTH rather than of the category, so what is asserted is that the call is accepted
     // and the month remains readable and consistent afterwards. Asserting a specific
     // buffer value would require the fixture to first produce a positive To Budget, which
     // is #369 item 1 and needs a live budget to establish.
-    await mcp.call('actual_budgets_resetHold', { month: currentMonth(), categoryId: category.id });
+    await mcp.call('actual_budgets_reset_hold', { month: currentMonth(), categoryId: category.id });
 
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     expect(month?.month ?? month?.categoryGroups).toBeTruthy();
     expect(typeof month?.forNextMonth === 'number' || month?.forNextMonth === undefined).toBe(true);
   });
@@ -1398,7 +1405,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
 
     // The batch must have LANDED, not merely returned. This is one extra call and it is
     // the difference between testing the tool and testing that it did not throw.
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     const cats = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []);
     expect(cats.find((c: any) => c?.id === category.id)?.budgeted).toBe(60000);
   });
@@ -1430,7 +1437,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     // All 35 operations target the same category, so the LAST one wins. Asserting its
     // amount proves the whole batch drained rather than stalling partway, which is the
     // #278 lost-wakeup failure this test was originally the canary for.
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     const cats = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []);
     expect(cats.find((c: any) => c?.id === category.id)?.budgeted).toBe(10000 + 34 * 100);
   });
@@ -1459,7 +1466,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(result.failed[0].error).toMatch(/not found/i);
 
     // The good items must have LANDED (not rolled back), the refused one must not exist.
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     const cats = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []);
     expect(cats.find((c: any) => c?.id === good.id)?.budgeted).toBe(42000);
     expect(cats.find((c: any) => c?.id === other.id)?.budgeted).toBe(7000);
@@ -1501,7 +1508,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
 
     // Fund the source so the transfer has something to move. Without this the test
     // depended on whatever an earlier test had budgeted.
-    await mcp.call('actual_budgets_setAmount', {
+    await mcp.call('actual_budgets_set_amount', {
       month: currentMonth(),
       categoryId: source.id,
       amount: 20000,
@@ -1514,7 +1521,7 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
       toCategoryId: target.id,
     });
 
-    const month = await mcp.call('actual_budgets_getMonth', { month: currentMonth() });
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
     const cats = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []);
     expect(cats.find((c: any) => c?.id === target.id)?.budgeted).toBe(5000);
     expect(cats.find((c: any) => c?.id === source.id)?.budgeted).toBe(15000);

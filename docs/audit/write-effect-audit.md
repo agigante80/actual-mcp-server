@@ -123,10 +123,10 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_payees_delete` (transfer payee) | `deletePayee` | B | `db/index.ts` `deletePayee`: `if (transfer_acct) return;`. Our adapter checked existence only, and `getPayees()` includes transfer payees | #356 LANDED |
 | `actual_payees_merge` | `mergePayees` | B | `db/index.ts` `mergePayees`: silent return on a transfer target, silent filter of transfer sources, raw TypeError on an unknown id | #356 LANDED |
 | `actual_rules_delete` (schedule-owned) | `deleteRule` | A | `transactions/transaction-rules.ts:236` returns `false`; the tool discarded it | #355 LANDED |
-| `actual_budgets_holdForNextMonth` | `holdBudgetForNextMonth` | A | `budget/actions.ts` returns `false` when to-budget is not positive | #355 LANDED |
+| `actual_budgets_hold_for_next_month` | `holdBudgetForNextMonth` | A | `budget/actions.ts` returns `false` when to-budget is not positive | #355 LANDED |
 | `actual_transactions_create` | `addTransactions` | D | `accounts/sync.ts:961` never validates `acctId`; `api.ts:552` returns `'ok'` unconditionally | #359 LANDED |
 | `actual_accounts_create` | `api/account-create` | D | `loot-core/src/server/api.ts` destructures ONLY `account.name`, `account.offbudget`, `account.closed` and `initialBalance`, then calls `account-create`, which mints its own id via `insertWithUUID`. Our schema published an optional `id` that upstream discards, so a caller supplying one got `{success:true}` plus an account under a DIFFERENT id, and a not-found from the very next `actual_accounts_get_balance`. Fixed by REMOVING the field: there is no id to honour, so typing it would only have made an unusable field look deliberate | #380 LANDED |
-| `actual_budgets_setAmount` (month) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call, and the tool's schema did not check the format either. The guard now refuses any month outside the budget's own bounds, which upstream `getBudgetRange` computes as earliest-transaction-month minus 3 to current-month plus 12. A budget with no transactions yet therefore cannot be back-filled further than 3 months, which is upstream's rule, not ours | #361 LANDED |
+| `actual_budgets_set_amount` (month) | `setBudgetAmount` | D | `api.ts:466` omits the `validateMonth` its three siblings call, and the tool's schema did not check the format either. The guard now refuses any month outside the budget's own bounds, which upstream `getBudgetRange` computes as earliest-transaction-month minus 3 to current-month plus 12. A budget with no transactions yet therefore cannot be back-filled further than 3 months, which is upstream's rule, not ours | #361 LANDED |
 
 ### SAFE
 
@@ -147,9 +147,9 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_tags_update` | adapter throws `notFoundMsg('Tag', ...)` |
 | `actual_rules_update` | adapter throws `Rule with id <id> not found` |
 | `actual_payees_delete` (unknown id) | adapter pre-check against `getPayees()` |
-| `actual_budgets_setAmount` (unknown category) | adapter pre-check since #89 |
-| `actual_budgets_setCarryover` | upstream validates BOTH month and category |
-| `actual_budgets_resetHold` | `setBuffer(month, 0)`, no conditional path |
+| `actual_budgets_set_amount` (unknown category) | adapter pre-check since #89 |
+| `actual_budgets_set_carryover` | upstream validates BOTH month and category |
+| `actual_budgets_reset_hold` | `setBuffer(month, 0)`, no conditional path |
 | `actual_transfers_create` | adapter validates both accounts, refuses closed ones, and requires the destination transfer payee |
 | `actual_notes_update` | the tool validates the entity id against four listings to prevent orphan notes |
 | `actual_session_close` | pool only, not an Actual write |
@@ -192,7 +192,7 @@ something.
 | `actual_schedules_create` | traced 2026-10-13 for #547: an OMITTED payee or account was stored as a rule condition that can never match, so the schedule never linked; the adapter now strips it in the same drain (`tests/unit/schedules_dead_conditions.test.js`, E2E link proof). An unvalidated (non-existent) account or payee id is still not traced | trace `createSchedule` for an unvalidated account or payee id |
 | `actual_budgets_switch` | not traced; changes session state rather than budget data | confirm the preference write cannot silently no-op |
 | `actual_budgets_export` | not traced; writes a zip rather than calling a write API | confirm a failed write surfaces rather than returning a path |
-| `actual_budgets_transfer` | partial application answered by #518 and #539: the two budget-set-amount writes are separate raw calls, each awaited on its own (no `batchBudgetUpdates` bracket since #539), so each write is applied locally before the next starts and an apply failure is returned. A failed second write LEAVES the first applied (no rollback); the adapter reports it as `Partial transfer: ...` with the old and new source amount, says the target is unchanged only for a deterministic rejection (an infrastructure error reports its outcome as unknown), and keeps the original error text so infrastructure classification still drops the pool. A cooperative deadline (0.75 of `ACTUAL_OP_TIMEOUT_MS`) between the writes stops an abandoned operation from making the second write. Under the former bracket both writes were applied in one sqlite transaction, but an apply failure was a detached rejection that exited the server (#539). Silent success of each write is not traced. | trace the two budget-set-amount writes for a silent no-op (compare the actual_budgets_setAmount month finding in CONFIRMED) |
+| `actual_budgets_transfer` | partial application answered by #518 and #539: the two budget-set-amount writes are separate raw calls, each awaited on its own (no `batchBudgetUpdates` bracket since #539), so each write is applied locally before the next starts and an apply failure is returned. A failed second write LEAVES the first applied (no rollback); the adapter reports it as `Partial transfer: ...` with the old and new source amount, says the target is unchanged only for a deterministic rejection (an infrastructure error reports its outcome as unknown), and keeps the original error text so infrastructure classification still drops the pool. A cooperative deadline (0.75 of `ACTUAL_OP_TIMEOUT_MS`) between the writes stops an abandoned operation from making the second write. Under the former bracket both writes were applied in one sqlite transaction, but an apply failure was a detached rejection that exited the server (#539). Silent success of each write is not traced. | trace the two budget-set-amount writes for a silent no-op (compare the actual_budgets_set_amount month finding in CONFIRMED) |
 | `actual_budget_updates_batch` | traced in #516, changed in #539: `adapter.setBudgetBatch` (the tool no longer calls the raw api). NOT atomic, no rollback: a mid-batch failure LEAVES earlier writes applied. Each item gets its own verdict, with category and month guards applied before any write. Since #539 there is no `batchBudgetUpdates` bracket: each raw write is awaited on its own, upstream applies it (`_sendMessages`, then `applyMessages`) before the call returns and rethrows an apply failure, so `succeeded` means applied locally and a failed apply is that item's `failed` entry. Before #539 upstream `api/batch-budget-start` ran `batchMessages` un-awaited and `api/batch-budget-end` returned before the queued messages were applied, so an apply failure was a detached rejection that reached the `unhandledRejection` handler in `src/index.ts` and exited the server after `succeeded` was reported. Cost: one apply per write; the server sync is the debounced `scheduleFullSync`, so it runs once, except under `NODE_ENV=test`, where upstream awaits `fullSync()` per write. Verified against the shipped `dist/index.js` of `@actual-app/api` 26.10.0. | none; the non-atomic contract is stated in the tool description |
 | `actual_categories_create` | not traced | trace for an unvalidated `group_id` (shape D) |
 | `actual_category_groups_create` | not traced | trace for a silent duplicate-name outcome |
@@ -226,7 +226,7 @@ The first pass of this audit traced `methods.ts` to `api.ts` to the domain handl
 `db/index.ts`, and it traced the tool files. It did not check `src/lib/actual-adapter.ts`
 method by method. Two findings were overstated as a result:
 
-- **`budgets_setAmount` was reported as accepting an unknown category.** It has not since
+- **`budgets_set_amount` was reported as accepting an unknown category.** It has not since
   #89: `adapter.setBudgetAmount` reads `getCategories()` and throws. Only the month-range
   half survived.
 - **The update family was reported as six tools.** `adapter.updateTag` and
@@ -245,7 +245,7 @@ earlier version of this paragraph stated the rule as universal while five guards
 in the tool layer, including `rules_delete`, which is a CONFIRMED row in the table above. The
 audit's own headline example was on the wrong side of the rule the audit stated.
 
-- #371 moved `accounts_close`, `accounts_reopen` and `budgets_holdForNextMonth` (from
+- #371 moved `accounts_close`, `accounts_reopen` and `budgets_hold_for_next_month` (from
   #355/#357/#358).
 - #376 moved the remaining five: `rules_delete`, `category_groups_delete`,
   `schedules_delete`, `rules_create_or_update` and `notes_update`.

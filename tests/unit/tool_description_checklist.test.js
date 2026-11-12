@@ -32,8 +32,8 @@ const REWRITTEN_640 = [
 ];
 // #650: the 14 weakest on Glama's own TDQS for v0.27.1 that #640 had not rewritten.
 const REWRITTEN_650 = [
-  'actual_transactions_get', 'actual_category_groups_get', 'actual_budgets_getMonth', 'actual_categories_delete',
-  'actual_category_groups_create', 'actual_category_groups_update', 'actual_budgets_resetHold', 'actual_budgets_transfer',
+  'actual_transactions_get', 'actual_category_groups_get', 'actual_budgets_get_month', 'actual_categories_delete',
+  'actual_category_groups_create', 'actual_category_groups_update', 'actual_budgets_reset_hold', 'actual_budgets_transfer',
   'actual_categories_create', 'actual_payee_rules_get', 'actual_payees_update', 'actual_schedules_create',
   'actual_schedules_delete', 'actual_transactions_import',
 ];

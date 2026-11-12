@@ -66,8 +66,8 @@ const READ_ONLY = new Set<string>([
   'actual_accounts_get_balance',
   'actual_accounts_list',
   'actual_budgets_get_all',
-  'actual_budgets_getMonth',
-  'actual_budgets_getMonths',
+  'actual_budgets_get_month',
+  'actual_budgets_get_months',
   'actual_budgets_list_available',
   'actual_categories_get',
   'actual_category_groups_get',
@@ -160,7 +160,7 @@ const DESTRUCTIVE = new Set<string>([
  *
  * THE POLICY, stated so the boundary is a decision rather than an omission: overwriting a
  * FIELD on an existing row is additive; removing or replacing a ROW is destructive. So
- * `budgets_setAmount` and `accounts_update` are additive, while `transactions_update` is
+ * `budgets_set_amount` and `accounts_update` are additive, while `transactions_update` is
  * not, because on the split path it deletes and recreates child rows.
  */
 const ADDITIVE = new Set<string>([
@@ -170,10 +170,10 @@ const ADDITIVE = new Set<string>([
   'actual_accounts_reopen',
   'actual_accounts_update',
   'actual_budgets_switch',
-  'actual_budgets_holdForNextMonth',
-  'actual_budgets_resetHold',
-  'actual_budgets_setAmount',
-  'actual_budgets_setCarryover',
+  'actual_budgets_hold_for_next_month',
+  'actual_budgets_reset_hold',
+  'actual_budgets_set_amount',
+  'actual_budgets_set_carryover',
   'actual_budgets_transfer',
   'actual_budget_updates_batch',
   'actual_categories_create',
@@ -214,7 +214,7 @@ const ADDITIVE = new Set<string>([
  *
  * The exclusions are the point:
  *   most `*_create`             each call makes ANOTHER entity, so the state differs
- *   budgets_holdForNextMonth    upstream ADDS to the buffer, so a retry holds twice (#355)
+ *   budgets_hold_for_next_month    upstream ADDS to the buffer, so a retry holds twice (#355)
  *   budgets_transfer            moves money again on each call
  *   payees_merge                the sources are gone after the first
  *   bank_sync                   imports whatever is new upstream
@@ -243,9 +243,9 @@ const IDEMPOTENT = new Set<string>([
   'actual_accounts_reopen',
   'actual_accounts_update',
   'actual_budget_updates_batch',
-  'actual_budgets_resetHold',
-  'actual_budgets_setAmount',
-  'actual_budgets_setCarryover',
+  'actual_budgets_reset_hold',
+  'actual_budgets_set_amount',
+  'actual_budgets_set_carryover',
   'actual_budgets_switch',
   'actual_categories_delete',
   'actual_categories_update',

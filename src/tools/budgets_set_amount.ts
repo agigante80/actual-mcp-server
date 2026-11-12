@@ -6,22 +6,22 @@ import { isPreflightRefusal } from '../lib/errors.js';
 
 const InputSchema = z.object({
   // #361: this was a bare z.string().min(1), so 'banana' parsed and reached the API. The
-  // regex matches actual_budgets_holdForNextMonth and the other month-taking tools; the
+  // regex matches actual_budgets_hold_for_next_month and the other month-taking tools; the
   // adapter additionally checks the month is one this budget actually has.
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format')
-    .describe('Month as YYYY-MM, one the budget has (see actual_budgets_getMonths)'),
+    .describe('Month as YYYY-MM, one the budget has (see actual_budgets_get_months)'),
   categoryId: CommonSchemas.categoryId,
   amount: z.number().int('amount must be an integer (cents)')
     .describe('Budgeted amount for the category in that month, integer cents (5000 is $50.00)'),
 });
 
 const tool: ToolDefinition = {
-  name: 'actual_budgets_setAmount',
+  name: 'actual_budgets_set_amount',
   description:
     'Set the budgeted amount for a specific category in a given month. Amount in cents ' +
     '(e.g., 50000 = $500). Use this to allocate money to spending categories for budget planning. ' +
     'The month must be one the budget actually has: Actual allows from three months before the ' +
-    'earliest transaction to twelve months ahead. Use actual_budgets_getMonths to see the range.',
+    'earliest transaction to twelve months ahead. Use actual_budgets_get_months to see the range.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

@@ -115,7 +115,7 @@ All 85 tools are published by default. Chat clients with a small tool budget (Ge
 | `query` | 1 | `actual_query_run` (SELECT only) |
 | `admin` | 6 | Budget switching, import, export, bank sync and session management |
 
-The `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_setAmount` and `actual_budgets_getMonth`.
+The `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount` and `actual_budgets_get_month`.
 
 `MCP_READ_ONLY=true` hides and refuses 48 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->

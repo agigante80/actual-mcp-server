@@ -34,7 +34,7 @@ const UPSTREAM_DEPENDENT = [
   'actual_categories_delete (upstream throws "Category with id X not found")',
   'actual_schedules_update (upstream throws "Schedule X not found")',
   'actual_transactions_delete / actual_transactions_update (upstream returns [] for a missing id)',
-  'actual_budgets_setCarryover (upstream validates month and category)',
+  'actual_budgets_set_carryover (upstream validates month and category)',
 ];
 
 export function readAuditedVersion(text) {

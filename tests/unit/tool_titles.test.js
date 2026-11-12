@@ -86,8 +86,8 @@ const titleMismatches = (entries, table) =>
 console.log('\n[#641] fixture self-tests: each rule can fail');
 
 await check('NEGATIVE: a missing title is reported by name', () => {
-  assert.deepStrictEqual(missingFrom({ actual_accounts_list: 'List accounts' }, ['actual_accounts_list', 'actual_budgets_resetHold']),
-    ['actual_budgets_resetHold']);
+  assert.deepStrictEqual(missingFrom({ actual_accounts_list: 'List accounts' }, ['actual_accounts_list', 'actual_budgets_reset_hold']),
+    ['actual_budgets_reset_hold']);
 });
 await check('NEGATIVE: a stale key is reported by name', () => {
   assert.deepStrictEqual(staleIn({ actual_accounts_list: 'List accounts', actual_removed_tool: 'Remove thing' }, ['actual_accounts_list']),
@@ -175,7 +175,7 @@ await check('every title\'s first word agrees with the tool\'s readOnlyHint', ()
 });
 await check('two pinned titles: Create transaction, Release budget hold', () => {
   assert.strictEqual(TOOL_TITLES.actual_transactions_create, 'Create transaction');
-  assert.strictEqual(TOOL_TITLES.actual_budgets_resetHold, 'Release budget hold');
+  assert.strictEqual(TOOL_TITLES.actual_budgets_reset_hold, 'Release budget hold');
 });
 await check('titleFor returns undefined for an unknown name, including an Object.prototype key', () => {
   assert.strictEqual(titleFor('actual_not_a_tool'), undefined);

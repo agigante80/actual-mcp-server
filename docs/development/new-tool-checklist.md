@@ -83,7 +83,7 @@ Use this file every time a new tool is added. Print or open it alongside your ed
 
 **Location**: `src/tools/<domain>_<action>.ts`
 
-**Naming convention**: `actual_{domain}_{action}` (snake_case). Use the exact same name for:
+**Naming convention**: `actual_{domain}_{action}` in lower snake_case, never camelCase (#652: the six camelCase budget tools were renamed; `tests/unit/tool_name_case.test.js` fails on a new one). Use the exact same name for:
 - The file name (`<domain>_<action>.ts`)
 - The `name` field inside the tool definition
 - The entry in `IMPLEMENTED_TOOLS`
@@ -163,7 +163,7 @@ calling it.
       the `*_delete` family, `payees_merge`, `budgets_import`, and `accounts_close`, which
       REMOVES a zero-transaction account)? Is it **idempotent** (does calling it twice with
       the same arguments leave the same state)? Creates are not idempotent;
-      `budgets_holdForNextMonth` is not either, because upstream ADDS to the buffer.
+      `budgets_hold_for_next_month` is not either, because upstream ADDS to the buffer.
 - [ ] `openWorldHint` is handled for you: everything is a closed world except
       `actual_bank_sync`. Only touch `OPEN_WORLD` if your tool reaches a third-party service.
 - [ ] Run `npm run build && node tests/unit/tool_annotations.test.js`. The guard reads the
