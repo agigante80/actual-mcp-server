@@ -170,4 +170,4 @@ MIT, see [LICENSE](LICENSE). Built on [Actual Budget](https://actualbudget.org/)
 
 ---
 
-**Version:** 0.27.5 | **Tool Count:** 85 (verified LibreChat-compatible)
+**Version:** 0.27.6 | **Tool Count:** 85 (verified LibreChat-compatible)
