@@ -53,7 +53,7 @@ The ticket's negative scenarios rest on existing guards: an amount of `12.5` is 
 
 - **Re-score the four reviewed tools** and the 3-run after coherence once a free scorer answers again, then update the tables.
 - **Next weakest tools.** After the rewrites the minimum is `schedules_get` at 3.5, then `budgets_get_all`, `categories_create`, `category_groups_create`, `payees_get` and `schedules_create` at 3.6. Because the minimum carries 40% of description quality, raising those six lifts the overall more than polishing tools already above 4.5.
-- **Coherence is the ceiling.** Coherence did not measurably move (one after run scored 3.3, the baseline median is 3) and holds 30% of the overall. The scorer marks disambiguation and tool count lowest: it flags overlapping tools (for example `transactions_aggregate` against `account_flow_summary`) and the sheer number of tools. Description rewrites barely move it; fewer or clearly separated tools would.
+- **Coherence is the ceiling.** Coherence did not measurably move (one after run scored 3.3, the baseline median is 3) and holds 30% of the overall. The scorer marks disambiguation and tool count lowest: it flags overlapping tools (for example `transactions_aggregate` against `account_flow_summary`) and the sheer number of tools. Description rewrites barely move it; fewer or clearly separated tools would. The per-group decisions are in [tool-overlap.md](tool-overlap.md).
 
 ## Increment: Glama's own scores (#650)
 
