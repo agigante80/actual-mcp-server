@@ -1,6 +1,6 @@
 # Compact tool surface
 
-**Status:** design record for #670, implemented by #671 to #682. This page changes no code.
+**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation` exist, and the registry is empty until #672 onward add compact tools. Section 4b (rewriting legacy names in errors and result text) and the stale `listTool` in the adapter are NOT part of #671 and remain open for the first ticket that ships a compact tool.
 
 The compact surface is a second public tool list of 15 tools with no `actual_` prefix, named `verb_noun` in snake_case, each fronting a group of the 85 existing tools through one dispatcher. The implementation tickets (#671 to #678, #679, #680, #681) cite this page for the mapping, the schemas and the naming rules. The delivery plan is in `docs/plans/compact-tool-surface.md`.
 
@@ -64,7 +64,7 @@ The stale `listTool: 'actual_accounts_get'` in `src/lib/actual-adapter.ts` (the 
 
 A legacy ZodError path is mapped back to compact names: the dispatcher first strips the `fields` wrapper it added (section 5), then maps the first remaining segment through the rename table (`['fields', 'amount']` becomes `amount`, `['accountId']` becomes `account_id`).
 
-Legacy names inside success result messages and field descriptions (for example the `budgets_import` success message and the `budgets_switch` description) are an accepted Phase A gap. Under `all` those tools are callable. Under `compact` a call to one fails with a refusal naming `MCP_TOOL_SURFACE` rather than silently; that needs `ToolUnavailableSetting` (`src/lib/errors.ts`, today `'MCP_TOOLSETS' | 'MCP_READ_ONLY'`) extended with that value in #671. Rewriting them is a precondition of #680 (the default flip).
+Legacy names inside success result messages and field descriptions (for example the `budgets_import` success message and the `budgets_switch` description) are an accepted Phase A gap. Under `all` those tools are callable. Under `compact` a call to one fails with a refusal naming `MCP_TOOL_SURFACE` rather than silently; that needs `ToolUnavailableSetting` (`src/lib/errors.ts`, `'MCP_TOOLSETS' | 'MCP_READ_ONLY' | 'MCP_TOOL_SURFACE'` since #671). Rewriting them is a precondition of #680 (the default flip).
 
 ### 4c. Field types
 

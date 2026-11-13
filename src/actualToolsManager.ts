@@ -7,7 +7,10 @@ import { formatZodError } from './lib/zod-error-format.js';
 import { errorLogFields } from './lib/errors.js';
 import config from './config.js';
 import { createModuleLogger } from './lib/loggerFactory.js';
-import { resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
+import { operationUnavailableError, readOnlyError, resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
+import { COMPACT_TOOLS } from './compact/registry.js';
+import { buildCompactTool } from './compact/dispatch.js';
+import type { CompactOperations, CompactToolSpec } from './compact/types.js';
 import { TOOL_ALIAS_REMOVAL_AFTER, resolveToolAlias } from './lib/tool-aliases.js';
 
 const toolsetLog = createModuleLogger('TOOLSETS');
@@ -156,8 +159,11 @@ const API_TOOL_MAP: Record<string, string> = {
   getPreferences: 'actual_preferences_get',
 };
 
-class ActualToolsManager {
+class ActualToolsManager implements CompactOperations {
   private tools: Map<string, ToolDefinitionWithOutput> = new Map();
+  // Names of the compact tools (#671) inside `tools`. initialize() may run again on the same
+  // singleton (the unit tests do), so it removes these first and rebuilds them.
+  private compactNames = new Set<string>();
   // Resolved ONCE in initialize() (#483) and never recomputed. Null before that, and every
   // accessor below throws rather than fall back to "all tools", so a caller that runs
   // before initialize() fails closed instead of publishing a surface the operator hid.
@@ -173,7 +179,10 @@ class ActualToolsManager {
     toolsets: config.MCP_TOOLSETS,
     tools: config.MCP_TOOLS,
     readOnly: config.MCP_READ_ONLY,
-  }) {
+    surface: config.MCP_TOOL_SURFACE,
+  }, compactTools: readonly CompactToolSpec[] = COMPACT_TOOLS) {
+    for (const name of this.compactNames) this.tools.delete(name);
+    this.compactNames.clear();
     // Dynamically import all tool modules from src/tools/index.ts
     const toolModules = (await import('./tools/index.js')) as Record<string, unknown>;
     let count = 0;
@@ -186,8 +195,25 @@ class ActualToolsManager {
     }
     logger.info(`🔗 Loaded ${count} tool modules from src/tools`);
 
-    // Throws on an unknown name or an empty result: startup fails loudly (#483).
-    this.policy = resolvePublishedToolNames(this.getToolNames(), settings);
+    // Every action must name a registered LEGACY tool: a typo fails startup, not the first call.
+    for (const spec of compactTools) {
+      for (const [action, row] of spec.actions) {
+        if (!this.tools.has(row.legacy)) {
+          throw new Error(`Compact tool "${spec.name}" action "${action}" maps to unregistered tool "${row.legacy}"`);
+        }
+      }
+    }
+    const legacyNames = this.getToolNames();
+    // Throws on an unknown name, a name collision or an empty result: startup fails loudly (#483).
+    this.policy = resolvePublishedToolNames(
+      legacyNames,
+      settings,
+      compactTools.map((c) => ({ name: c.name, legacy: [...c.actions.values()].map((r) => r.legacy) })),
+    );
+    for (const spec of compactTools) {
+      this.tools.set(spec.name, buildCompactTool(spec, this));
+      this.compactNames.add(spec.name);
+    }
     toolsetLog.info(
       `Publishing ${this.policy.published.length} of ${this.policy.registered} registered tools`,
       {
@@ -196,6 +222,7 @@ class ActualToolsManager {
         toolsets: this.policy.settings.toolsets,
         extraTools: this.policy.settings.tools,
         readOnly: this.policy.settings.readOnly,
+        surface: this.policy.settings.surface,
       },
     );
     for (const { alias, tool } of this.policy.mappedAliases) {
@@ -220,18 +247,28 @@ class ActualToolsManager {
   }
 
   /** The resolved MCP_TOOLSETS / MCP_TOOLS / MCP_READ_ONLY, for server_info. */
-  getToolPolicy(): { toolsets: string[]; tools: string[]; readOnly: boolean } {
-    const { toolsets, tools, readOnly } = this.requirePolicy().settings;
-    return { toolsets: [...toolsets], tools: [...tools], readOnly };
+  getToolPolicy(): { toolsets: string[]; tools: string[]; readOnly: boolean; surface: string } {
+    const { toolsets, tools, readOnly, surface } = this.requirePolicy().settings;
+    return { toolsets: [...toolsets], tools: [...tools], readOnly, surface };
   }
 
-  /** How many tools exist, published or not, for the sys_startup record (#623). */
+  /**
+   * How many LEGACY tools exist, published or not, for the sys_startup record (#623). Compact
+   * tools (#671) are excluded on purpose: the legacy registry must keep equalling
+   * IMPLEMENTED_TOOLS (tests/unit/toolsets.test.js), and the tool-count guards count it.
+   */
   getRegisteredToolCount(): number {
-    return this.tools.size;
+    return this.tools.size - this.compactNames.size;
   }
 
+  /** The registered LEGACY tool names (see getRegisteredToolCount). Compact names: getCompactToolNames(). */
   getToolNames(): string[] {
-    return Array.from(this.tools.keys());
+    return Array.from(this.tools.keys()).filter((n) => !this.compactNames.has(n));
+  }
+
+  /** The registered compact tool names (#671), published or not. */
+  getCompactToolNames(): string[] {
+    return [...this.compactNames];
   }
 
   getTool(name: string): ToolDefinitionWithOutput | undefined {
@@ -263,11 +300,38 @@ class ActualToolsManager {
     const tool = this.getTool(name);
     if (!tool) throw new Error(`Tool not found: ${name}`);
     // Hide AND refuse (#483): omitting a tool from tools/list is not access control.
-    const unavailable = unavailableError(policy, name);
+    // Read-only first (#671): the same check callOperation makes, so the two ways into a
+    // writer cannot disagree. For a published tool it never fires (the resolver hid it).
+    const unavailable = readOnlyError(policy, name) ?? unavailableError(policy, name);
     if (unavailable) {
       toolsetLog.warn('Refused a call to an unpublished tool', { tool: name, setting: unavailable.setting });
       throw unavailable;
     }
+    return this.execute(tool, name, args);
+  }
+
+  /**
+   * Run one LEGACY tool on behalf of a compact action (#671). It is the only way a compact
+   * tool reaches a legacy one. Checks, in order: the name is a registered legacy tool (a
+   * compact name is never an operation); MCP_READ_ONLY against WRITE_CAPABLE; publication,
+   * where ONLY a hide caused by MCP_TOOL_SURFACE=compact is skipped (a tool hidden by
+   * MCP_TOOLSETS still refuses, naming that setting). No alias resolution: a mapping row
+   * names the current tool. Returns the JSON-safe value; the compact tool has no outputSchema.
+   */
+  async callOperation(legacyName: string, args: unknown, via?: { tool: string; action: string }): Promise<unknown> {
+    const policy = this.requirePolicy();
+    const tool = this.tools.get(legacyName);
+    if (!tool || this.compactNames.has(legacyName)) throw new Error(`Tool not found: ${legacyName}`);
+    const unavailable = readOnlyError(policy, legacyName) ?? operationUnavailableError(policy, legacyName);
+    if (unavailable) {
+      toolsetLog.warn('Refused a compact operation on an unavailable tool', { tool: legacyName, setting: unavailable.setting, via: via?.tool, action: via?.action });
+      throw unavailable;
+    }
+    return (await this.execute(tool, legacyName, args, via)).value;
+  }
+
+  private async execute(tool: ToolDefinitionWithOutput, name: string, args: unknown, via?: { tool: string; action: string }): Promise<CheckedToolResult> {
+    const viaFields = via ? { via: via.tool, action: via.action } : {};
     const startTime = Date.now();
     try {
       const result = await tool.call(args);
@@ -284,7 +348,7 @@ class ActualToolsManager {
       // `durationMs`, not `ms`: the logger reserves a top-level `ms` key (src/logger.ts).
       const verdict = checkToolOutput(tool, safe);
       const mismatch = verdict?.check === 'mismatch';
-      logger.info('[TOOL RESULT]', { tool: name, durationMs: Date.now() - startTime, outcome: mismatch ? 'output_mismatch' : 'ok', bytes: Buffer.byteLength(json, 'utf8') });
+      logger.info('[TOOL RESULT]', { tool: name, durationMs: Date.now() - startTime, outcome: mismatch ? 'output_mismatch' : 'ok', ...viaFields, bytes: Buffer.byteLength(json, 'utf8') });
       if (mismatch) {
         // Tool name and Zod issue paths only: the values are budget data (#556).
         outputLog.warn('Tool result does not match its outputSchema; returning it as an error', { tool: name, issuePaths: verdict?.issuePaths });
@@ -297,7 +361,7 @@ class ActualToolsManager {
       // never the arguments. It never carries the error MESSAGE either (#559): that text
       // is for the client and can quote input or upstream content. errorLogFields gives
       // the class, a refusal's kind, and the throw site's withLogMessage text if any.
-      const failure = { tool: name, durationMs: Date.now() - startTime, outcome: 'error' };
+      const failure = { tool: name, durationMs: Date.now() - startTime, outcome: 'error', ...viaFields };
       if (err && typeof err === 'object' && 'issues' in err) {
         const formattedMsg = formatZodError(err as z.ZodError, tool.inputSchema);
         // The #206 text is for the client only: a schema's custom refine message can quote

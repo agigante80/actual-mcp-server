@@ -155,6 +155,9 @@ services:
       - MCP_BRIDGE_LOG_LEVEL=info
       - MAX_CONCURRENT_SESSIONS=15
       - NODE_ENV=test
+      # #671: the E2E suite drives the legacy tool names. `all` keeps them published and adds
+      # the compact tools as they land (#672 onward), so the suite can cover both.
+      - MCP_TOOL_SURFACE=all
       # No auth for testing; MCP_SSE_AUTHORIZATION left empty intentionally.
       # #242 makes HTTP auth required-by-default on a non-loopback (0.0.0.0) bind,
       # so the open posture this suite exercises must opt out explicitly or the

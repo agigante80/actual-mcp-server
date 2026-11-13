@@ -1,0 +1,186 @@
+// tests/unit/compact_mapping_parity.test.js
+//
+// #671: every legacy tool must be accounted for by the compact layer, so the day the compact
+// surface becomes the default no capability has silently disappeared. A legacy tool is, in
+// exactly one place, one of:
+//   - MAPPED: some compact action's `legacy` names it;
+//   - OUT_OF_SCOPE: deliberately never exposed through a compact tool (the session tools
+//     manage the pool itself, see CLAUDE.md "Session tools are the only exception");
+//   - PENDING: waiting for its compact tool (#672 onward). Each ticket that maps a tool MUST
+//     delete it from PENDING in the same commit; a name both mapped and pending fails.
+//
+// The check is defined here, then run twice: on the real registry, and on fixtures that
+// prove it can fail (it must name the missing tool).
+//
+// Run: node tests/unit/compact_mapping_parity.test.js   (needs `npm run build` first)
+
+import assert from 'assert';
+
+process.env.ACTUAL_SERVER_URL ??= 'http://127.0.0.1:5999';
+process.env.ACTUAL_PASSWORD ??= 'dummy';
+process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
+
+let passed = 0;
+let failed = 0;
+async function check(label, fn) {
+  try { await fn(); console.log(`  ok: ${label}`); passed++; }
+  catch (err) { console.error(`  FAIL: ${label} -> ${err.message}`); failed++; }
+}
+
+console.log('\n[compact-mapping-parity]');
+
+const OUT_OF_SCOPE = ['actual_session_list', 'actual_session_close'];
+
+const PENDING = [
+  'actual_account_flow_summary',
+  'actual_account_groups_create',
+  'actual_account_groups_delete',
+  'actual_account_groups_list',
+  'actual_account_groups_update',
+  'actual_accounts_close',
+  'actual_accounts_create',
+  'actual_accounts_delete',
+  'actual_accounts_get_balance',
+  'actual_accounts_list',
+  'actual_accounts_reopen',
+  'actual_accounts_update',
+  'actual_bank_sync',
+  'actual_budget_updates_batch',
+  'actual_budgets_export',
+  'actual_budgets_get_all',
+  'actual_budgets_get_month',
+  'actual_budgets_get_months',
+  'actual_budgets_hold_for_next_month',
+  'actual_budgets_import',
+  'actual_budgets_list_available',
+  'actual_budgets_reset_hold',
+  'actual_budgets_set_amount',
+  'actual_budgets_set_carryover',
+  'actual_budgets_switch',
+  'actual_budgets_transfer',
+  'actual_categories_create',
+  'actual_categories_delete',
+  'actual_categories_get',
+  'actual_categories_update',
+  'actual_category_groups_create',
+  'actual_category_groups_delete',
+  'actual_category_groups_get',
+  'actual_category_groups_update',
+  'actual_entities_search',
+  'actual_get_context',
+  'actual_get_id_by_name',
+  'actual_notes_get',
+  'actual_notes_update',
+  'actual_payee_rules_get',
+  'actual_payees_common_list',
+  'actual_payees_create',
+  'actual_payees_delete',
+  'actual_payees_get',
+  'actual_payees_merge',
+  'actual_payees_update',
+  'actual_preferences_get',
+  'actual_query_run',
+  'actual_recurring_expenses_summary',
+  'actual_rules_create',
+  'actual_rules_create_batch',
+  'actual_rules_create_or_update',
+  'actual_rules_delete',
+  'actual_rules_get',
+  'actual_rules_update',
+  'actual_schedules_create',
+  'actual_schedules_dates',
+  'actual_schedules_delete',
+  'actual_schedules_get',
+  'actual_schedules_update',
+  'actual_server_get_version',
+  'actual_server_info',
+  'actual_tags_create',
+  'actual_tags_delete',
+  'actual_tags_list',
+  'actual_tags_update',
+  'actual_transactions_aggregate',
+  'actual_transactions_create',
+  'actual_transactions_delete',
+  'actual_transactions_filter',
+  'actual_transactions_get',
+  'actual_transactions_import',
+  'actual_transactions_merge',
+  'actual_transactions_search_by_amount',
+  'actual_transactions_search_by_category',
+  'actual_transactions_search_by_month',
+  'actual_transactions_search_by_payee',
+  'actual_transactions_summary_by_category',
+  'actual_transactions_summary_by_payee',
+  'actual_transactions_uncategorized',
+  'actual_transactions_update',
+  'actual_transactions_update_batch',
+  'actual_transfers_create',
+];
+
+/** Returns the list of problems (empty means parity holds). */
+function parityProblems({ legacyNames, compactTools, outOfScope, pending }) {
+  const problems = [];
+  const legacy = new Set(legacyNames);
+  const mapped = new Map(); // legacy name -> "tool.action"
+  for (const spec of compactTools) {
+    for (const [action, row] of spec.actions) {
+      const where = `${spec.name}.${action}`;
+      if (!legacy.has(row.legacy)) problems.push(`${where} maps to unregistered tool ${row.legacy}`);
+      if (mapped.has(row.legacy)) problems.push(`${row.legacy} is mapped twice: ${mapped.get(row.legacy)} and ${where}`);
+      mapped.set(row.legacy, where);
+    }
+  }
+  const out = new Set(outOfScope);
+  const pend = new Set(pending);
+  for (const n of legacyNames) {
+    const places = [mapped.has(n) && 'mapped', out.has(n) && 'out of scope', pend.has(n) && 'pending'].filter(Boolean);
+    if (places.length === 0) problems.push(`${n} is not mapped, out of scope or pending`);
+    if (places.length > 1) problems.push(`${n} is in more than one place: ${places.join(' and ')}`);
+  }
+  for (const n of [...out, ...pend]) if (!legacy.has(n)) problems.push(`${n} is listed but is not a registered tool`);
+  return problems;
+}
+
+const manager = (await import('../../dist/src/actualToolsManager.js')).default;
+const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+await manager.initialize();
+const legacyNames = manager.getToolNames();
+const { z } = await import('zod');
+
+await check('the real registry accounts for every legacy tool exactly once', () => {
+  const problems = parityProblems({ legacyNames, compactTools: COMPACT_TOOLS, outOfScope: OUT_OF_SCOPE, pending: PENDING });
+  assert.deepStrictEqual(problems, []);
+});
+
+const row = (legacy) => ({ legacy, fields: z.object({}) });
+const fixture = (legacy) => [{ name: 'actual_fx', actions: new Map(legacy.map((l, i) => [`a${i}`, row(l)])) }];
+const without = (list, n) => list.filter((x) => x !== n);
+
+await check('NEGATIVE: a legacy tool that is nowhere is reported by name', () => {
+  const problems = parityProblems({ legacyNames, compactTools: [], outOfScope: OUT_OF_SCOPE, pending: without(PENDING, 'actual_accounts_list') });
+  assert.deepStrictEqual(problems, ['actual_accounts_list is not mapped, out of scope or pending']);
+});
+
+await check('NEGATIVE: a tool both mapped and still pending is reported', () => {
+  const problems = parityProblems({ legacyNames, compactTools: fixture(['actual_accounts_list']), outOfScope: OUT_OF_SCOPE, pending: PENDING });
+  assert.deepStrictEqual(problems, ['actual_accounts_list is in more than one place: mapped and pending']);
+});
+
+await check('NEGATIVE: a tool mapped by two actions is reported', () => {
+  const specs = [{ name: 'actual_fx', actions: new Map([['a', row('actual_accounts_list')], ['b', row('actual_accounts_list')]]) }];
+  const problems = parityProblems({ legacyNames, compactTools: specs, outOfScope: OUT_OF_SCOPE, pending: without(PENDING, 'actual_accounts_list') });
+  assert.ok(problems.some((p) => /actual_accounts_list is mapped twice/.test(p)), problems.join('; '));
+});
+
+await check('NEGATIVE: an action naming a tool that is not registered is reported', () => {
+  const problems = parityProblems({ legacyNames, compactTools: fixture(['actual_nope_nothing']), outOfScope: OUT_OF_SCOPE, pending: PENDING });
+  assert.ok(problems.some((p) => /actual_nope_nothing/.test(p)), problems.join('; '));
+});
+
+await check('NEGATIVE: a stale pending entry for a tool that no longer exists is reported', () => {
+  const problems = parityProblems({ legacyNames, compactTools: [], outOfScope: OUT_OF_SCOPE, pending: [...PENDING, 'actual_gone_tool'] });
+  assert.deepStrictEqual(problems, ['actual_gone_tool is listed but is not a registered tool']);
+});
+
+console.log(`\n[compact-mapping-parity] Results: ${passed} passed, ${failed} failed`);
+process.exit(failed > 0 ? 1 : 0);

@@ -107,8 +107,8 @@ export function isPreflightRefusal(error: unknown): error is PreflightRefusal {
   );
 }
 
-/** The server setting that can hide a registered tool (#483). MCP_TOOLS only adds tools. */
-export type ToolUnavailableSetting = 'MCP_TOOLSETS' | 'MCP_READ_ONLY';
+/** The server setting that can hide a registered tool (#483, #671). MCP_TOOLS only adds tools. */
+export type ToolUnavailableSetting = 'MCP_TOOLSETS' | 'MCP_READ_ONLY' | 'MCP_TOOL_SURFACE';
 
 /**
  * A registered tool exists but this process does not publish it (#483), so the call is
@@ -121,11 +121,14 @@ export class ToolUnavailableError extends Error {
   readonly tool: string;
   readonly setting: ToolUnavailableSetting;
 
-  constructor(tool: string, setting: ToolUnavailableSetting) {
+  /** @param surface the MCP_TOOL_SURFACE value, named in the message for that setting only. */
+  constructor(tool: string, setting: ToolUnavailableSetting, surface?: string) {
     super(
       setting === 'MCP_READ_ONLY'
         ? `Tool "${tool}" is not available: it can change state and this server runs with MCP_READ_ONLY=true.`
-        : `Tool "${tool}" is not available: it is not published by this server's MCP_TOOLSETS configuration.`,
+        : setting === 'MCP_TOOL_SURFACE'
+          ? `Tool "${tool}" is not available: this server publishes the ${surface ?? 'configured'} tool surface (MCP_TOOL_SURFACE).`
+          : `Tool "${tool}" is not available: it is not published by this server's MCP_TOOLSETS configuration.`,
     );
     this.name = 'ToolUnavailableError';
     this.tool = tool;

@@ -536,9 +536,12 @@ MCP_TRANSPORT_MODE=--http               # Only --http is supported
 MCP_TOOLSETS=all                        # groups and presets, e.g. chat
 MCP_TOOLS=                              # extra tools by full name
 MCP_READ_ONLY=false                     # true hides and refuses write-capable tools
+MCP_TOOL_SURFACE=legacy                 # legacy | compact | all (#671)
 ```
 
 `actualToolsManager.initialize()` resolves these once into a frozen policy (`src/lib/toolsets.ts`): the policy object, the published list and the settings are frozen, while the per-tool hide map is a `ReadonlyMap` by type only (`Object.freeze` does not reach Map contents). It holds, for every hidden tool, the setting that hid it (`MCP_READ_ONLY` first when both apply). `tools/list` on every path reads that list, and `callTool` refuses any tool not on the frozen published list with a `ToolUnavailableError` built from the stored reason, so altering the hide map cannot unhide a tool. Dispatch never reads the environment. A configuration that publishes zero tools fails startup.
+
+**Compact layer (#671).** `src/compact/` holds a second, optional tool list: a compact tool is one published name with an action selector, and each action is a row naming a legacy tool (`types.ts`), a dispatcher that validates the chosen action's strict schema, renames and wraps the arguments and calls the legacy tool (`dispatch.ts`), and the registry of compact tools (`registry.ts`, empty until #672 onward). The layer never imports the adapter or `@actual-app/api`: it reaches Actual only through `actualToolsManager.callOperation`, so every legacy rule (`withActualApi`, the write queue, no nested sessions) is inherited. `MCP_TOOL_SURFACE` picks the published list (`legacy`, `compact` or `all`). Under `compact` the legacy tools stay registered but are hidden, and `callOperation` skips only that hide: a tool hidden by `MCP_TOOLSETS` or `MCP_READ_ONLY` still refuses, naming that setting. `getToolNames()` and `getRegisteredToolCount()` remain legacy-only; `getCompactToolNames()` lists the rest. The design record is `docs/explanation/compact-tool-surface.md`.
 
 #### Security
 

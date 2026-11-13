@@ -216,6 +216,24 @@ export const configSchema = z.object({
       return z.NEVER;
     }),
 
+  // MCP_TOOL_SURFACE (#671) picks WHICH list of tools this process publishes: the 85 legacy
+  // tools ('legacy', the default and today's behaviour), the compact registry ('compact'),
+  // or both ('all'). Trimmed and case-insensitive; anything else refuses startup naming the
+  // value, like MCP_READ_ONLY. docs/explanation/compact-tool-surface.md has the design.
+  MCP_TOOL_SURFACE: z
+    .string()
+    .optional()
+    .transform((raw, ctx): 'legacy' | 'compact' | 'all' => {
+      const v = (raw ?? '').trim().toLowerCase();
+      if (v === '') return 'legacy';
+      if (v === 'legacy' || v === 'compact' || v === 'all') return v;
+      ctx.addIssue({
+        code: 'custom',
+        message: `MCP_TOOL_SURFACE must be "legacy", "compact" or "all" (case-insensitive; unset or empty means legacy), got ${JSON.stringify(raw)}.`,
+      });
+      return z.NEVER;
+    }),
+
   // --- OIDC bearer auth (CF-5) ---
   // Set AUTH_PROVIDER=oidc to enable JWT validation (src/auth/bearer.ts).
   // When 'none' (default), the legacy MCP_SSE_AUTHORIZATION static Bearer token is used.
@@ -408,6 +426,27 @@ export const configSchema = z.object({
   .refine(
     (cfg) => !cfg.MCP_ENABLE_HTTPS || (!!cfg.MCP_HTTPS_CERT && !!cfg.MCP_HTTPS_KEY),
     { message: 'MCP_ENABLE_HTTPS=true requires both MCP_HTTPS_CERT and MCP_HTTPS_KEY to be set.' },
+  )
+  // #671: MCP_TOOLSETS and MCP_TOOLS name LEGACY tools, which `compact` does not publish.
+  // Until #680 remaps them, combining them with `compact` would silently do nothing, so
+  // refuse it. `MCP_TOOLSETS=all` (the default) and an empty MCP_TOOLS are the accepted values.
+  .refine(
+    (cfg) => cfg.MCP_TOOL_SURFACE !== 'compact' || ['', 'all'].includes(cfg.MCP_TOOLSETS.trim().toLowerCase()),
+    {
+      path: ['MCP_TOOLSETS'],
+      message:
+        'MCP_TOOLSETS must be unset or "all" with MCP_TOOL_SURFACE=compact: toolsets name legacy tools, ' +
+        'which the compact surface does not publish, until they are remapped (#680).',
+    },
+  )
+  .refine(
+    (cfg) => cfg.MCP_TOOL_SURFACE !== 'compact' || cfg.MCP_TOOLS.trim() === '',
+    {
+      path: ['MCP_TOOLS'],
+      message:
+        'MCP_TOOLS must be empty with MCP_TOOL_SURFACE=compact: it names legacy tools, ' +
+        'which the compact surface does not publish, until it is remapped (#680).',
+    },
   )
   // Refuse to send the E2E budget encryption password over a plaintext upstream
   // (#161, CWE-319). If ACTUAL_BUDGET_PASSWORD is set, the default upstream must

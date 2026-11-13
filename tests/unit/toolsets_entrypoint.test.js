@@ -55,7 +55,7 @@ const baseEnv = () => {
     ACTUAL_DATA_DIR: DATA_DIR,
     LOG_LEVEL: 'error',
   };
-  for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete env[k];
+  for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete env[k];
   return env;
 };
 
@@ -185,6 +185,18 @@ await check('an invalid MCP_READ_ONLY value exits 1, naming the variable and the
   const { code, stderr } = await runToExit(['--stdio'], { MCP_READ_ONLY: 'yes' });
   assert.strictEqual(code, 1);
   assert.ok(/MCP_READ_ONLY/.test(stderr) && /yes/.test(stderr), `stderr must name variable and value, got: ${stderr.slice(-400)}`);
+});
+
+await check('an invalid MCP_TOOL_SURFACE value exits 1, naming the variable and the value (#671)', async () => {
+  const { code, stderr } = await runToExit(['--stdio'], { MCP_TOOL_SURFACE: 'banana' });
+  assert.strictEqual(code, 1);
+  assert.ok(/MCP_TOOL_SURFACE/.test(stderr) && /banana/.test(stderr), `stderr must name variable and value, got: ${stderr.slice(-400)}`);
+});
+
+await check('MCP_TOOL_SURFACE=compact exits 1 while no compact tool is registered (#671)', async () => {
+  const { code, stderr } = await runToExit(['--stdio'], { MCP_TOOL_SURFACE: 'compact' });
+  assert.strictEqual(code, 1);
+  assert.ok(/No tools would be published/.test(stderr), `stderr must say nothing would be published, got: ${stderr.slice(-400)}`);
 });
 
 await check('a configuration that resolves to zero tools exits 1', async () => {

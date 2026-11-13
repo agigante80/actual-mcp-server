@@ -2,7 +2,7 @@
 
 Every tool the server registers, grouped by domain, with the caveats you need before calling it. All tools use the `actual_<category>_<action>` naming convention. Amounts are integer cents and dates are `YYYY-MM-DD` strings throughout.
 
-Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS` and `MCP_READ_ONLY`; the toolset sizes are in the README's [Reducing the tool surface](../../README.md#reducing-the-tool-surface) table and every variable is in the [configuration reference](configuration.md).
+Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_READ_ONLY` and `MCP_TOOL_SURFACE` (`legacy` by default; the compact tools of #671 onward are listed only when it is `compact` or `all`); the toolset sizes are in the README's [Reducing the tool surface](../../README.md#reducing-the-tool-surface) table and every variable is in the [configuration reference](configuration.md).
 
 ## Accounts
 

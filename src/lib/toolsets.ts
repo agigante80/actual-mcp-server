@@ -9,6 +9,8 @@
  *   MCP_TOOLSETS   comma list of toolsets and presets. Default `all` (today's behaviour).
  *   MCP_TOOLS      extra individual tools published on top of MCP_TOOLSETS.
  *   MCP_READ_ONLY  drops every write-capable tool, overriding the two above.
+ *   MCP_TOOL_SURFACE  (#671) which LIST is published: the legacy tools, the compact registry
+ *                  (src/compact/), or both. Toolsets and MCP_TOOLS name legacy tools only.
  *
  * Design rules, each the answer to a way this can go wrong:
  *   - ONE source. resolvePublishedToolNames is pure and runs once, in
@@ -246,6 +248,20 @@ export interface ToolsetSettings {
   tools: string;
   /** MCP_READ_ONLY, already parsed by configSchema. */
   readOnly: boolean;
+  /** MCP_TOOL_SURFACE (#671). Optional so a three-field caller keeps today's behaviour: `legacy`. */
+  surface?: ToolSurface;
+}
+
+/** Which tool list a process publishes (#671). `legacy` is today's behaviour and the default. */
+export type ToolSurface = 'legacy' | 'compact' | 'all';
+
+/**
+ * What the resolver needs to know about one compact tool (#671): its name, and the legacy
+ * tools its actions call, so MCP_READ_ONLY can hide a compact tool that could write.
+ */
+export interface CompactPublication {
+  readonly name: string;
+  readonly legacy: readonly string[];
 }
 
 /**
@@ -259,7 +275,7 @@ export interface PublishedPolicy {
   readonly published: readonly string[];
   /** Registered names that are NOT published, mapped to the setting that hides them. */
   readonly hidden: ReadonlyMap<string, ToolUnavailableSetting>;
-  /** Count of registered tools. */
+  /** Count of registered tools: legacy plus compact (#671). */
   readonly registered: number;
   /** #652: deprecated names in MCP_TOOLS and the names they were mapped to, for a startup warning. */
   readonly mappedAliases: readonly { readonly alias: string; readonly tool: string }[];
@@ -268,23 +284,29 @@ export interface PublishedPolicy {
     readonly toolsets: readonly string[];
     readonly tools: readonly string[];
     readonly readOnly: boolean;
+    readonly surface: ToolSurface;
   };
 }
 
 const splitList = (raw: string): string[] =>
   raw.split(',').map((t) => t.trim()).filter(Boolean);
 
-/**
- * Resolve the publication policy. Pure: same inputs, same policy, no environment reads.
- * Throws (a startup failure) on an unknown toolset, preset or tool name, on a group or
- * preset naming an unregistered tool, and on a configuration that publishes nothing.
- */
-export function resolvePublishedToolNames(
-  registeredNames: readonly string[],
-  settings: ToolsetSettings,
-): PublishedPolicy {
-  const registered = new Set(registeredNames);
+interface LegacyResolution {
+  readonly published: string[];
+  readonly hidden: Map<string, ToolUnavailableSetting>;
+  readonly requested: string[];
+  readonly extras: string[];
+  readonly mappedAliases: { alias: string; tool: string }[];
+}
 
+/**
+ * The legacy publication algorithm (#483, unchanged): MCP_TOOLSETS, MCP_TOOLS and
+ * MCP_READ_ONLY over the legacy registry. It validates the settings (an unknown name throws)
+ * but does NOT reject an empty result: the caller judges the final list, which may include
+ * compact tools.
+ */
+function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSettings): LegacyResolution {
+  const registered = new Set(registeredNames);
   // A table naming a tool the registry lacks would advertise something that cannot run.
   for (const [kind, table] of [['Toolset', TOOLSETS], ['Preset', PRESETS]] as const) {
     for (const [name, members] of Object.entries(table) as [string, readonly string[]][]) {
@@ -348,28 +370,75 @@ export function resolvePublishedToolNames(
     else published.push(name);
   }
 
+  return { published, hidden, requested, extras, mappedAliases };
+}
+
+/**
+ * Resolve the publication policy. Pure: same inputs, same policy, no environment reads.
+ * Throws (a startup failure) on an unknown toolset, preset or tool name, on a group or
+ * preset naming an unregistered tool, on a compact tool whose name collides with a legacy
+ * one, and on a configuration that publishes nothing.
+ *
+ * Surfaces (#671), over the legacy names and the compact tools:
+ *   legacy   today's algorithm on the legacy names; every compact tool is hidden (MCP_TOOL_SURFACE).
+ *   compact  every legacy name is hidden (MCP_TOOL_SURFACE); a compact tool is published unless
+ *            MCP_READ_ONLY=true and one of its actions maps to a WRITE_CAPABLE tool.
+ *   all      the legacy result plus the compact tools under the same read-only rule.
+ * MCP_TOOLSETS and MCP_TOOLS select among LEGACY names only and never hide a compact tool.
+ */
+export function resolvePublishedToolNames(
+  registeredNames: readonly string[],
+  settings: ToolsetSettings,
+  compactTools: readonly CompactPublication[] = [],
+): PublishedPolicy {
+  const surface: ToolSurface = settings.surface ?? 'legacy';
+  const legacyNames = new Set(registeredNames);
+  const collisions = compactTools.filter((c) => legacyNames.has(c.name)).map((c) => c.name);
+  if (collisions.length > 0) {
+    throw new Error(`Compact tool name collides with a registered tool: ${collisions.join(', ')}`);
+  }
+
+  const legacy = resolveLegacy(registeredNames, settings);
+  const published: string[] = [];
+  const hidden = new Map<string, ToolUnavailableSetting>();
+
+  for (const name of registeredNames) {
+    if (surface === 'compact') hidden.set(name, 'MCP_TOOL_SURFACE');
+    else if (legacy.hidden.has(name)) hidden.set(name, legacy.hidden.get(name)!);
+    else published.push(name);
+  }
+  for (const tool of compactTools) {
+    if (surface === 'legacy') hidden.set(tool.name, 'MCP_TOOL_SURFACE');
+    // A tool that mixes reads and writes is hidden whole under read-only, by design.
+    else if (settings.readOnly && tool.legacy.some((n) => WRITE_CAPABLE.has(n))) hidden.set(tool.name, 'MCP_READ_ONLY');
+    else published.push(tool.name);
+  }
+
+  const total = registeredNames.length + compactTools.length;
   // Partition invariant: every registered name is exactly one of published or hidden.
-  if (published.length + hidden.size !== registeredNames.length || published.some((n) => hidden.has(n))) {
+  if (published.length + hidden.size !== total || published.some((n) => hidden.has(n))) {
     throw new Error('toolsets: published and hidden must partition the registry');
   }
 
   if (published.length === 0) {
     throw new Error(
-      `No tools would be published: MCP_TOOLSETS="${settings.toolsets}", MCP_TOOLS="${settings.tools}" and ` +
+      `No tools would be published: MCP_TOOL_SURFACE="${surface}", MCP_TOOLSETS="${settings.toolsets}", MCP_TOOLS="${settings.tools}" and ` +
         `MCP_READ_ONLY=${settings.readOnly} resolve to 0 tools. For example, a toolset made only of writers ` +
-        `(structure) publishes nothing under MCP_READ_ONLY=true.`,
+        `(structure) publishes nothing under MCP_READ_ONLY=true, and the compact surface publishes nothing ` +
+        `until a compact tool is registered.`,
     );
   }
 
   return Object.freeze({
     published: Object.freeze(published),
     hidden,
-    registered: registeredNames.length,
-    mappedAliases: Object.freeze(mappedAliases),
+    registered: total,
+    mappedAliases: Object.freeze(legacy.mappedAliases),
     settings: Object.freeze({
-      toolsets: Object.freeze(requested),
-      tools: Object.freeze(extras),
+      toolsets: Object.freeze(legacy.requested),
+      tools: Object.freeze(legacy.extras),
       readOnly: settings.readOnly,
+      surface,
     }),
   });
 }
@@ -381,5 +450,30 @@ export function resolvePublishedToolNames(
  */
 export function unavailableError(policy: PublishedPolicy, tool: string): ToolUnavailableError | undefined {
   if (policy.published.includes(tool)) return undefined;
-  return new ToolUnavailableError(tool, policy.hidden.get(tool) ?? 'MCP_TOOLSETS');
+  return new ToolUnavailableError(tool, policy.hidden.get(tool) ?? 'MCP_TOOLSETS', policy.settings?.surface);
+}
+
+/**
+ * The read-only check shared by BOTH ways into a legacy tool (#671): callToolChecked and
+ * callOperation. It decides from MCP_READ_ONLY and the hard-coded WRITE_CAPABLE set, never
+ * from annotations, and never from `hidden`, so a surface that hides a writer for another
+ * reason (compact) still refuses it with the read-only message.
+ */
+export function readOnlyError(policy: PublishedPolicy, tool: string): ToolUnavailableError | undefined {
+  if (policy.settings?.readOnly && WRITE_CAPABLE.has(tool)) return new ToolUnavailableError(tool, 'MCP_READ_ONLY');
+  return undefined;
+}
+
+/**
+ * The publication check for callOperation (#671, design record section 4a). It skips ONLY the
+ * hide that the compact surface itself causes: legacy tools stay registered and merely
+ * unpublished under `compact`. A tool hidden for any other reason (MCP_TOOLSETS, under
+ * `all`) is still refused naming that setting, exactly as a direct call is. Fails closed:
+ * a missing hide reason counts as MCP_TOOLSETS, and the bypass needs the `compact` surface.
+ */
+export function operationUnavailableError(policy: PublishedPolicy, tool: string): ToolUnavailableError | undefined {
+  if (policy.published.includes(tool)) return undefined;
+  const reason = policy.hidden.get(tool) ?? 'MCP_TOOLSETS';
+  if (reason === 'MCP_TOOL_SURFACE' && policy.settings?.surface === 'compact') return undefined;
+  return new ToolUnavailableError(tool, reason, policy.settings?.surface);
 }

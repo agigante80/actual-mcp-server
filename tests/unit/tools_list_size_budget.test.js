@@ -16,7 +16,7 @@ import assert from 'assert';
 process.env.ACTUAL_SERVER_URL ??= 'http://localhost:5006';
 process.env.ACTUAL_PASSWORD ??= 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
-for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.env[k];
+for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete process.env[k];
 
 // Raising either ceiling is a deliberate edit. Change the number AND replace the reason below
 // in the same commit; a reviewer should be able to see why the list got heavier.
@@ -36,6 +36,12 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.e
 //   bytes, plus about 2%. The heaviest entry is unchanged, so the per-tool ceiling is too.
 const TOTAL_CEILING = 120500;
 const PER_TOOL_CEILING = 3900;
+// #671: the compact registry ships empty, so its measured total is 0. This is the ceiling for
+// the compact tools COMBINED (they are what the `compact` surface lists; the design record
+// plans 15). The per-tool ceiling above applies to each compact entry unchanged. The `all`
+// surface lists both, so its budget is the sum of the two ceilings, never a third number.
+// #672 onward raise COMPACT_TOTAL_CEILING as tools land, stating the measured size here.
+const COMPACT_TOTAL_CEILING = 30000;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 
@@ -115,6 +121,36 @@ await check('a total ceiling 1 byte under the real total fails, naming the total
 
 await check('a total ceiling exactly at the real total passes', () => {
   assert.deepStrictEqual(checkBudget(entries, realTotal, Number.MAX_SAFE_INTEGER), []);
+});
+
+// ---- #671: the compact surface and the `all` surface ----
+
+const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+const { buildCompactTool } = await import('../../dist/src/compact/dispatch.js');
+const compactMeta = (spec) => {
+  const tool = buildCompactTool(spec, { callOperation: async () => undefined });
+  return { name: spec.name, description: tool.description, schema: z.toJSONSchema(tool.inputSchema) };
+};
+const compactEntries = buildToolListEntries(COMPACT_TOOLS.map((c) => c.name), (name) => compactMeta(COMPACT_TOOLS.find((c) => c.name === name)));
+const compactTotal = sizeOf(compactEntries);
+console.log(`  measured: compact ${compactEntries.length} tools, ${compactTotal} bytes; all-surface ${realTotal + compactTotal} bytes`);
+
+await check('the compact tools are within the compact total and the per-tool ceiling', () => {
+  assert.deepStrictEqual(checkBudget(compactEntries, COMPACT_TOTAL_CEILING, PER_TOOL_CEILING), []);
+});
+
+await check('the all surface (legacy plus compact) is within the sum of the two total ceilings', () => {
+  assert.deepStrictEqual(checkBudget([...entries, ...compactEntries], TOTAL_CEILING + COMPACT_TOTAL_CEILING, PER_TOOL_CEILING), []);
+});
+
+await check('NEGATIVE: a compact entry padded past the per-tool ceiling, and a compact total 1 byte low, are both reported', () => {
+  const fixture = [{ name: 'actual_fixture', description: 'x'.repeat(PER_TOOL_CEILING + 1), inputSchema: {}, annotations: {} }];
+  const tooBig = checkBudget(fixture, COMPACT_TOTAL_CEILING, PER_TOOL_CEILING);
+  assert.strictEqual(tooBig.length, 1);
+  assert.ok(tooBig[0].includes('actual_fixture') && tooBig[0].includes('per-tool ceiling'), tooBig[0]);
+  const low = checkBudget(fixture, sizeOf(fixture) - 1, Number.MAX_SAFE_INTEGER);
+  assert.strictEqual(low.length, 1);
+  assert.ok(low[0].includes('total ceiling'), low[0]);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -38,7 +38,7 @@ process.env.ACTUAL_SERVER_URL ??= 'http://localhost:5006';
 process.env.ACTUAL_PASSWORD ??= 'dummy';
 process.env.ACTUAL_BUDGET_SYNC_ID ??= '00000000-0000-0000-0000-000000000000';
 // The suite must exercise the DEFAULT config for the "unset" cases, whatever the caller exported.
-for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY']) delete process.env[k];
+for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE']) delete process.env[k];
 
 const read = (p) => readFileSync(join(ROOT, p), 'utf8');
 
@@ -643,7 +643,7 @@ await check('server_info reports the published total, the registered total and t
   assert.strictEqual(info.tools.total, manager.getPublishedToolNames().length);
   assert.strictEqual(info.tools.total, new Set([...PRESETS.chat, 'actual_server_info']).size);
   assert.strictEqual(info.tools.registered, registered.length);
-  assert.deepStrictEqual(info.tools.policy, { toolsets: ['chat'], tools: ['actual_server_info'], readOnly: false });
+  assert.deepStrictEqual(info.tools.policy, { toolsets: ['chat'], tools: ['actual_server_info'], readOnly: false, surface: 'legacy' });
 });
 
 // ---------------------------------------------------------------- source assertions
@@ -721,7 +721,7 @@ await check('ToolUnavailableError is not a PreflightRefusal and carries only the
   assert.ok(!isPreflightRefusal(e));
   assert.strictEqual(e.name, 'ToolUnavailableError');
   assert.ok(!/extends PreflightRefusal/.test(code('src/lib/errors.ts').match(/class ToolUnavailableError[^{]*/)[0]));
-  assert.ok(/ToolUnavailableSetting = 'MCP_TOOLSETS' \| 'MCP_READ_ONLY'/.test(read('src/lib/errors.ts')));
+  assert.ok(/ToolUnavailableSetting = 'MCP_TOOLSETS' \| 'MCP_READ_ONLY' \| 'MCP_TOOL_SURFACE'/.test(read('src/lib/errors.ts')));
 });
 
 // ---------------------------------------------------------------- #652 deprecated aliases
