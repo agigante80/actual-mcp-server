@@ -3,7 +3,7 @@
     "actual-budget": {
       "type": "stdio",
       "command": "npx",
-      "args": ["actual-mcp-server@latest", "--stdio"],
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "${ACTUAL_PASSWORD}",

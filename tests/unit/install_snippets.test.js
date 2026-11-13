@@ -270,6 +270,7 @@ try {
     const argv = claudeArgv(claudeBlock());
     assert.ok(argv.includes('ACTUAL_PASSWORD=${ACTUAL_PASSWORD}'), argv.join(' '));
     assert.ok(!argv.some((a) => a.includes('secret')), argv.join(' '));
+    assert.deepStrictEqual(argv.slice(0, 6), ['claude', 'mcp', 'add', '--scope', 'user', 'actual-budget'], argv.join(' '));
     assert.deepStrictEqual(argv.slice(-5), ['--', 'npx', '-y', 'actual-mcp-server', '--stdio'], argv.join(' '));
   });
 

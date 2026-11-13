@@ -29,7 +29,7 @@ Talk to your [Actual Budget](https://actualbudget.org/) in plain language: ask w
 
 ## Quick start
 
-For Claude Code on your own machine, one command registers the server over stdio. It needs Node.js 22 or later and your Actual password in the `ACTUAL_PASSWORD` environment variable. The single quotes matter: your shell must not expand the reference, so the password never lands in your shell history or in Claude Code's config.
+For Claude Code on your own machine, one command registers the server over stdio. It needs Node.js 22 or later and your Actual password in the `ACTUAL_PASSWORD` environment variable. The single quotes matter: your shell must not expand the reference, so the password never appears in the process list or in Claude Code's config.
 
 <!-- runnable: claude-code-add -->
 ```bash
