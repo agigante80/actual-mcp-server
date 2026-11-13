@@ -67,7 +67,7 @@ The stale `listTool: 'actual_accounts_get'` in `src/lib/actual-adapter.ts` (the 
 
 A legacy ZodError path is mapped back to compact names: the dispatcher first strips the `fields` wrapper it added (section 5), then maps the first remaining segment through the rename table (`['fields', 'amount']` becomes `amount`, `['accountId']` becomes `account_id`).
 
-Legacy names inside success result messages and field descriptions (for example the `budgets_import` success message and the `budgets_switch` description) are an accepted Phase A gap. Under `all` those tools are callable. Under `compact` a call to one fails with a refusal naming `MCP_TOOL_SURFACE` rather than silently; that needs `ToolUnavailableSetting` (`src/lib/errors.ts`, `'MCP_TOOLSETS' | 'MCP_READ_ONLY' | 'MCP_TOOL_SURFACE'` since #671). Rewriting them is a precondition of #680 (the default flip).
+Legacy names inside success result messages were an accepted Phase A gap and are closed by #680: `message` joined `error` and `hint` in `MESSAGE_KEYS` (`src/compact/dispatch.ts`), so the `budgets_import` success message reaches a compact client naming `manage_budget_files` actions. The rewrite runs only in the compact dispatcher, so a legacy client keeps the original text. A call to a legacy tool under `compact` still fails with a refusal naming `MCP_TOOL_SURFACE` and the opt-out `MCP_TOOL_SURFACE=legacy`.
 
 ### 4c. Field types
 
@@ -385,8 +385,17 @@ MCP prompts (`prompts/list`, `prompts/get`) are offered only when every tool a p
 | `MCP_READ_ONLY=true` | hidden if it names a `manage_*` tool (hidden whole) | hidden if it names a writer |
 | `MCP_TOOLSETS`, `MCP_TOOLS` | unaffected (they select legacy names only) | hidden if a named tool is filtered out |
 
-Until #680 makes `compact` the default, a prompt that names compact tools is hidden on the default surface.
+Since #680 `compact` is the default surface, so a prompt that names compact tools is offered by default and one that names legacy tools is hidden unless `MCP_TOOL_SURFACE` is `legacy` or `all`.
 
 ## 9. Rollout
 
-Phase A (#671 to #679) ships the surface behind `MCP_TOOL_SURFACE=legacy|compact|all` (registered in `src/config.ts`, `.env.example` and `docs/reference/configuration.md`, checked by `npm run config-drift`), default `legacy`, non-breaking, minor bump. Phase B flips the default (#680), migrates the test suites (#681) and later removes the legacy surface (#682, which absorbs #657).
+Phase A (#671 to #679) ships the surface behind `MCP_TOOL_SURFACE=legacy|compact|all` (registered in `src/config.ts`, `.env.example` and `docs/reference/configuration.md`, checked by `npm run config-drift`), default `legacy`, non-breaking, minor bump. Phase B flips the default (#680, done: breaking, a minor bump while the major version is 0, opt-out `MCP_TOOL_SURFACE=legacy`), migrates the test suites (#681) and later removes the legacy surface (#682, which absorbs #657).
+
+### 9a. The flip (#680)
+
+- Default `compact`. The two startup refusals of #671 (`compact` with `MCP_TOOLSETS` or `MCP_TOOLS`) are gone.
+- Toolsets under `compact` (decision R1, option A): a compact tool is LISTED when at least one legacy tool its actions call is selected by `MCP_TOOLSETS`, or when it is named in `MCP_TOOLS`. What an action may CALL is still decided per legacy operation: a legacy tool that `MCP_TOOLSETS` or `MCP_READ_ONLY` hides keeps that hide reason, so `manage_transactions` `import` under `MCP_TOOLSETS=chat` and `manage_accounts` `bank_sync` without the `admin` toolset are refused naming the setting. The `chat` preset lists exactly `get_context`, `run_query`, `manage_transactions`, `manage_budget_months`, `manage_rules` and `list_budget_months`.
+- `MCP_TOOLS` under `compact` (decision R2): compact names only; a legacy name stops startup with an error that names `MCP_TOOL_SURFACE=legacy`. A named compact tool selects every operation behind it. `MCP_READ_ONLY` still wins.
+- Server instructions key on `get_context` and `run_query` when those are published.
+- `actual_session_list` and `actual_session_close` have no compact home, so they are reachable only under `legacy` or `all`.
+- Counts (decision R6): prose says 15 tools over 85 operations; the `**Tool Count:**` markers and the repository description stay 85 because they count operations.

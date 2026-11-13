@@ -6,6 +6,8 @@
 process.env.ACTUAL_SERVER_URL     = process.env.ACTUAL_SERVER_URL     ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
 process.env.ACTUAL_PASSWORD       = process.env.ACTUAL_PASSWORD       ?? 'dummy';
+// #680: these tests call the legacy actual_* tools through the manager, so they pin the legacy surface.
+process.env.MCP_TOOL_SURFACE = 'legacy';
 
 let failures = 0;
 const pass = (l) => console.log(`  ✓ ${l}`);

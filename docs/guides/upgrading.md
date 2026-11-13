@@ -10,7 +10,7 @@ This table names where each requirement is defined rather than copying a value t
 |-------------|-----------------|-------------------|
 | Node.js floor | `engines.node` in `package.json` | `src/lib/node-version-guard.ts` refuses to run below it, because npm and npx do not enforce `engines`; `npm run node-version-drift` keeps the Dockerfile and workflows consistent with it |
 | Actual Budget server range | `SUPPORTED_ACTUAL_SERVER_RANGE` (`minVersion`, `testedMaxMajor`) in `src/lib/constants.ts` | `src/lib/server-version-guard.ts` logs an advisory warning outside the range; it never fails startup or blocks an operation |
-| Bundled `@actual-app/api` | `dependencies` in `package.json` | the `actual_server_info` tool reports the resolved version |
+| Bundled `@actual-app/api` | `dependencies` in `package.json` | `get_context` with `topic: "server"` reports the resolved version (`actual_server_info` under `MCP_TOOL_SURFACE=legacy`) |
 | This server's version | `version` in `package.json`, and the `vX.Y.Z` release tags | `npm run version:check` |
 
 ## Steps
@@ -59,6 +59,10 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 ## Changes that can stop an upgraded server
 
 These notes are copied from [explanation/security-and-privacy.md](../explanation/security-and-privacy.md), which keeps the full context for each.
+
+### The default tool surface is compact (#680)
+
+`MCP_TOOL_SURFACE` now defaults to `compact`: the server publishes 15 tools (`get_context`, `run_query`, `list_entities`, the `manage_*` family and others) over the same 85 operations, instead of 85 `actual_*` tools. A client, prompt or script that calls an `actual_*` name by default now gets a typed refusal naming `MCP_TOOL_SURFACE=legacy`. To keep the old surface, set `MCP_TOOL_SURFACE=legacy`; `all` publishes both. `MCP_TOOLS` entries must be compact names under `compact` (a legacy name there refuses startup and names the setting). `MCP_TOOLSETS` and the `chat` preset keep working: they select the compact tools whose operations they allow, and each action stays refused when its own toolset or `MCP_READ_ONLY` excludes it. See [reference/tools.md](../reference/tools.md) for the name mapping.
 
 ### HTTP auth is required by default (#242)
 

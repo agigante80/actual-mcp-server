@@ -1315,8 +1315,13 @@ jobs:
           # Canonical tool count via scripts/tool-count.mjs (#193): never a
           # literal, which is how the old "62 MCP tools" body drifted (#261 fix 4).
           TOOL_COUNT=$(node -e "import('./scripts/tool-count.mjs').then(m => console.log(m.getCanonicalCount()))")
+          # #680: the default surface publishes the compact tools, so the headline is
+          # "N tools over M operations". N is the length of the COMPACT_TOOLS array literal.
+          COMPACT_COUNT=$(grep -m1 '^export const COMPACT_TOOLS' src/compact/registry.ts \
+            | sed -E 's/.*= *\[(.*)\].*/\1/' | awk -F',' '{ n = 0; for (i = 1; i <= NF; i++) if ($i ~ /[A-Za-z0-9_]/) n++; print n }')
           API_VERSION=$(node -p "require('./package.json').dependencies['@actual-app/api'].replace(/^[^0-9]*/, '')")
           echo "tool_count=$TOOL_COUNT" >> $GITHUB_OUTPUT
+          echo "compact_count=$COMPACT_COUNT" >> $GITHUB_OUTPUT
           echo "api_version=$API_VERSION" >> $GITHUB_OUTPUT
           echo "Release facts: ${TOOL_COUNT} tools, @actual-app/api ${API_VERSION}"
 
@@ -1365,7 +1370,7 @@ jobs:
             ### 📊 What this release ships
 
             - `@actual-app/api` pinned at `${{ steps.facts.outputs.api_version }}`
-            - All ${{ steps.facts.outputs.tool_count }} MCP tools registered and validated on this tag
+            - ${{ steps.facts.outputs.compact_count }} tools over ${{ steps.facts.outputs.tool_count }} operations registered and validated on this tag
 
             ### 🔒 Security
 

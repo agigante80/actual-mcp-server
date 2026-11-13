@@ -16,7 +16,7 @@ A [Model Context Protocol](https://modelcontextprotocol.io/) server that lets an
 
 **What you can ask it:** "How much did I spend on groceries last month, by payee?", "Add a $47.50 grocery transaction at Whole Foods to my checking account.", "Move $200 from Dining Out to Emergency Fund for this month."
 
-**85 tools** across accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
+**15 tools over 85 operations** covering accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
 
 ## Pick your path
 
@@ -91,7 +91,7 @@ Budget data the tools return goes to whichever model provider your AI client use
 
 ## Compatibility
 
-Node.js 22 or later, Actual Budget server 25.0.0 or later, and the bundled `@actual-app/api` (its version is in `package.json` and reported by the `actual_server_info` tool). Requirements and upgrade steps: [upgrading](docs/guides/upgrading.md).
+Node.js 22 or later, Actual Budget server 25.0.0 or later, and the bundled `@actual-app/api` (its version is in `package.json` and reported by `get_context` with `topic: "version"`). Requirements and upgrade steps: [upgrading](docs/guides/upgrading.md).
 
 ## Tools
 
@@ -99,11 +99,11 @@ Every tool, with its description and caveats, is in the [tools reference](docs/r
 
 ### Reducing the tool surface
 
-All 85 tools are published by default. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer. A tool that is not published is also refused if a client calls it by name.
+By default the server serves 15 tools over 85 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer. A tool that is not published is also refused if a client calls it by name.
 
 <!-- BEGIN GENERATED: tools-summary -->
 <!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->
-| Toolset | Tools | Contents |
+| Toolset | Operations | Contents |
 |---------|-------|----------|
 | `context` | 14 | Orientation, lookups and server information |
 | `transactions` | 14 | Transaction reads, create, update, delete, import and transfers |
@@ -115,16 +115,18 @@ All 85 tools are published by default. Chat clients with a small tool budget (Ge
 | `query` | 1 | `actual_query_run` (SELECT only) |
 | `admin` | 6 | Budget switching, import, export, bank sync and session management |
 
-The `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount` and `actual_budgets_get_month`.
+On the default compact surface the `chat` preset publishes 6 tools: `get_context`, `list_budget_months`, `run_query`, `manage_transactions`, `manage_rules` and `manage_budget_months`.
 
-`MCP_READ_ONLY=true` hides and refuses 48 write-capable tools and leaves 37 published.
+With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount` and `actual_budgets_get_month`.
+
+`MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 48 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->
 
 Example: a chat assistant with two extra tools.
 
 ```bash
 MCP_TOOLSETS=chat
-MCP_TOOLS=actual_accounts_list,actual_payees_get
+MCP_TOOLS=list_entities,search_transactions
 ```
 
 A configuration that resolves to zero tools refuses to start. See [Security and Privacy](docs/explanation/security-and-privacy.md#tool-surface-mcp_toolsets-and-mcp_read_only).

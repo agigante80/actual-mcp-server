@@ -89,8 +89,13 @@ export const TOTAL_PATTERNS = [
   // The api-design-principles skill states the total in its frontmatter `description:`,
   // which the phrasings above do not match, so it drifted silently.
   { re: /(\d{2,3})-tool set\b/g, label: 'N-tool set', localOnly: true },
-  { re: /\*\*(\d{2,3}) tools\*\* across/g, label: '**N tools** across' },
-  { re: /\*\*(\d{2,3}) tools\*\* listed/g, label: '**N tools** listed' },
+  // #680: the headline is "15 tools over 85 operations" now. The operation count is the
+  // total this guard pins to IMPLEMENTED_TOOLS; the 15 is the compact registry size, which
+  // compact_default_surface.test.js and the e2e specs pin against COMPACT_TOOLS.
+  // #680 retired six anchors whose phrasings the compact default rewrote ("**N tools** across/listed",
+  // "N tools loaded with", "should list N tools", "Budget: N tools", the ASCII diagram count): a
+  // dead anchor fails tool_count_sync, and the client guides now state the compact registry size.
+  { re: /\btools over (\d{2,3}) operations\b/g, label: 'N tools over M operations (M is the total)' },
   { re: /E2E \((\d{2,3}) tools\)/g, label: 'E2E (N tools)' },
   { re: /\b(\d{2,3})\/\1 tools\b/g, label: 'N/N tools (equal halves only)' },
   // #601: the two Unraid XML phrasings (ca_profile.xml <Profile>, template <Overview> and <Description>).
@@ -100,16 +105,12 @@ export const TOTAL_PATTERNS = [
   { re: /(\d{2,3}) tools registered/gi, label: 'N tools registered' },
   { re: /Registers (\d{2,3}) tools/g, label: 'Registers N tools' },
   { re: /(?:exposing|providing|exposes|provides) \*\*(\d{2,3}) tools\*\*/gi, label: 'exposing **N tools**', localOnly: true },
-  { re: /should list (\d{2,3}) tools/gi, label: 'should list N tools' },
   { re: /\((\d{2,3}) tools in IMPLEMENTED_TOOLS/g, label: '(N tools in IMPLEMENTED_TOOLS', localOnly: true },
   { re: /\((\d{2,3}) tools, Zod/g, label: '(N tools, Zod', localOnly: true },
   { re: /\((\d{2,3}) tools \+ index/g, label: '(N tools + index' },
   { re: /Production-ready, (\d{2,3}) tools/g, label: 'Production-ready, N tools', localOnly: true },
   { re: /(\d{2,3}) tools implemented/g, label: 'N tools implemented', localOnly: true },
   { re: /tool definitions \((\d{2,3}) tools\)/g, label: 'tool definitions (N tools)' },
-  { re: /│\s*\((\d{2,3}) tools\)/g, label: 'ASCII diagram (N tools)' },
-  { re: /(\d{2,3}) tools loaded with/g, label: 'N tools loaded with' },
-  { re: /Budget: (\d{2,3}) tools/g, label: 'Budget: N tools (short desc)' },
   { re: /(\d{2,3}) tools smoke validation/gi, label: 'N tools smoke validation' },
   { re: /(\d{2,3}) tools execute successfully/gi, label: 'N tools execute successfully' },
   { re: /(\d{2,3}) tools[:)] (?:stub|response-shape| stub|registered correctly)/gi, label: 'N tools: stub (TESTING)' },

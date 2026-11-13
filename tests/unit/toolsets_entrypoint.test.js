@@ -5,6 +5,10 @@
 // policy; this proves the wiring: that the list a real client receives is the filtered one,
 // that a hidden tool is refused over the wire, and that a bad setting stops the process.
 //
+//   Since #680 the default surface is compact. The legacy policy cases pin MCP_TOOL_SURFACE=legacy;
+//   the default and the compact chat preset have their own cases (the same scenarios also run in
+//   compact_default_surface.test.js, which owns the compact policy).
+//
 //   stdio:  MCP_TOOLSETS=chat lists exactly the preset; tools/call of a hidden tool is refused
 //           naming MCP_TOOLSETS; MCP_READ_ONLY=true lists no write-capable tool.
 //   http:   the no-session tools/list path (the one path that needs no upstream Actual server)
@@ -125,16 +129,20 @@ const INIT = { id: 1, method: 'initialize', params: { protocolVersion: '2025-06-
 const INITIALIZED = { method: 'notifications/initialized' };
 const LIST = { id: 2, method: 'tools/list' };
 const sameSet = (a, b) => assert.deepStrictEqual([...a].sort(), [...b].sort());
+const LEGACY = { MCP_TOOL_SURFACE: 'legacy' };
+const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+const COMPACT_NAMES = COMPACT_TOOLS.map((t) => t.name);
+const COMPACT_CHAT = ['get_context', 'run_query', 'manage_transactions', 'manage_budget_months', 'manage_rules', 'list_budget_months'];
 
 // ---------------------------------------------------------------- stdio
 
-await check('stdio: MCP_TOOLSETS=chat lists exactly the preset', async () => {
-  const res = await stdioSession({ MCP_TOOLSETS: 'chat' }, [INIT, INITIALIZED, LIST]);
+await check('stdio: legacy surface, MCP_TOOLSETS=chat lists exactly the preset', async () => {
+  const res = await stdioSession({ ...LEGACY, MCP_TOOLSETS: 'chat' }, [INIT, INITIALIZED, LIST]);
   sameSet(res.get(2).result.tools.map((t) => t.name), PRESETS.chat);
 });
 
-await check('stdio: a hidden tool is refused over the wire, naming MCP_TOOLSETS', async () => {
-  const res = await stdioSession({ MCP_TOOLSETS: 'chat' }, [
+await check('stdio: legacy surface, a hidden tool is refused over the wire, naming MCP_TOOLSETS', async () => {
+  const res = await stdioSession({ ...LEGACY, MCP_TOOLSETS: 'chat' }, [
     INIT, INITIALIZED,
     { id: 3, method: 'tools/call', params: { name: 'actual_bank_sync', arguments: {} } },
   ]);
@@ -144,8 +152,8 @@ await check('stdio: a hidden tool is refused over the wire, naming MCP_TOOLSETS'
   assert.ok(/MCP_TOOLSETS/.test(text), `the refusal must name MCP_TOOLSETS, got: ${text}`);
 });
 
-await check('stdio: MCP_READ_ONLY=true lists no write-capable tool, and refuses one naming MCP_READ_ONLY', async () => {
-  const res = await stdioSession({ MCP_READ_ONLY: 'true' }, [
+await check('stdio: legacy surface, MCP_READ_ONLY=true lists no write-capable tool, and refuses one naming MCP_READ_ONLY', async () => {
+  const res = await stdioSession({ ...LEGACY, MCP_READ_ONLY: 'true' }, [
     INIT, INITIALIZED, LIST,
     { id: 3, method: 'tools/call', params: { name: 'actual_bank_sync', arguments: {} } },
   ]);
@@ -157,8 +165,18 @@ await check('stdio: MCP_READ_ONLY=true lists no write-capable tool, and refuses 
   assert.ok(/MCP_READ_ONLY/.test(text), `the refusal must name MCP_READ_ONLY, got: ${text}`);
 });
 
-await check('stdio: unset settings list more than the preset (the default is unchanged)', async () => {
+await check('stdio: unset settings publish the 15 compact tools (the default flipped in #680)', async () => {
   const res = await stdioSession({}, [INIT, INITIALIZED, LIST]);
+  assert.deepStrictEqual(res.get(2).result.tools.map((t) => t.name), COMPACT_NAMES);
+});
+
+await check('stdio: MCP_TOOLSETS=chat under the default surface lists the six compact chat tools, and refuses nothing it lists', async () => {
+  const res = await stdioSession({ MCP_TOOLSETS: 'chat' }, [INIT, INITIALIZED, LIST]);
+  sameSet(res.get(2).result.tools.map((t) => t.name), COMPACT_CHAT);
+});
+
+await check('stdio: legacy surface with unset toolsets lists the whole registry', async () => {
+  const res = await stdioSession(LEGACY, [INIT, INITIALIZED, LIST]);
   const names = res.get(2).result.tools.map((t) => t.name);
   const registryManager = (await import('../../dist/src/actualToolsManager.js')).default;
   await registryManager.initialize({ toolsets: '', tools: '', readOnly: false });
@@ -175,10 +193,16 @@ await check('a typo in MCP_TOOLSETS exits 1, naming the value', async () => {
   assert.ok(/transactons/.test(stderr), `stderr must name the value, got: ${stderr.slice(-400)}`);
 });
 
-await check('a typo in MCP_TOOLS exits 1, naming the value', async () => {
-  const { code, stderr } = await runToExit(['--stdio'], { MCP_TOOLS: 'actual_accounts_lst' });
+await check('a typo in MCP_TOOLS exits 1, naming the value (legacy surface)', async () => {
+  const { code, stderr } = await runToExit(['--stdio'], { ...LEGACY, MCP_TOOLS: 'actual_accounts_lst' });
   assert.strictEqual(code, 1);
   assert.ok(/actual_accounts_lst/.test(stderr), `stderr must name the value, got: ${stderr.slice(-400)}`);
+});
+
+await check('a typo in MCP_TOOLS exits 1 under the default compact surface too, naming the value', async () => {
+  const { code, stderr } = await runToExit(['--stdio'], { MCP_TOOLS: 'list_entitiez' });
+  assert.strictEqual(code, 1);
+  assert.ok(/list_entitiez/.test(stderr), `stderr must name the value, got: ${stderr.slice(-400)}`);
 });
 
 await check('an invalid MCP_READ_ONLY value exits 1, naming the variable and the value', async () => {
@@ -209,11 +233,13 @@ await check('MCP_TOOL_SURFACE=compact under MCP_READ_ONLY=true publishes every c
   assert.deepStrictEqual(res.get(2).result.tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
 });
 
-await check('NEGATIVE: the default surface does not list the compact tools (#672)', async () => {
-  const res = await stdioSession({}, [INIT, INITIALIZED, LIST]);
-  const names = res.get(2).result.tools.map((t) => t.name);
-  assert.ok(!names.includes('get_context') && !names.includes('list_entities'));
-  assert.strictEqual(names.length, 85);
+await check('NEGATIVE: the default surface does not list the legacy tools (#680), and legacy does not list the compact ones (#672)', async () => {
+  const dflt = (await stdioSession({}, [INIT, INITIALIZED, LIST])).get(2).result.tools.map((t) => t.name);
+  assert.ok(dflt.every((n) => !n.startsWith('actual_')), 'the default publishes no actual_ tool');
+  assert.strictEqual(dflt.length, 15);
+  const legacy = (await stdioSession(LEGACY, [INIT, INITIALIZED, LIST])).get(2).result.tools.map((t) => t.name);
+  assert.ok(!legacy.includes('get_context') && !legacy.includes('list_entities'));
+  assert.strictEqual(legacy.length, 85);
 });
 
 await check('a configuration that resolves to zero tools exits 1', async () => {
@@ -230,10 +256,10 @@ const freePort = () => new Promise((resolve, reject) => {
   s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
 });
 
-await check('http: the no-session tools/list path returns the filtered list', async () => {
+async function httpList(extraEnv) {
   const port = await freePort();
   const proc = spawn(process.execPath, [ENTRY, '--http'], {
-    env: { ...baseEnv(), MCP_TOOLSETS: 'chat', MCP_BRIDGE_PORT: String(port), MCP_ALLOW_UNAUTHENTICATED: 'true' },
+    env: { ...baseEnv(), ...extraEnv, MCP_BRIDGE_PORT: String(port), MCP_ALLOW_UNAUTHENTICATED: 'true' },
     stdio: ['ignore', 'ignore', 'ignore'],
   });
   try {
@@ -251,11 +277,23 @@ await check('http: the no-session tools/list path returns the filtered list', as
         await new Promise((r) => setTimeout(r, 250));
       }
     }
-    sameSet(json.result.tools.map((t) => t.name), PRESETS.chat);
+    return json.result.tools.map((t) => t.name);
   } finally {
     // SIGKILL: a detached node server ignores a polite signal while it retries its upstream.
     proc.kill('SIGKILL');
   }
+}
+
+await check('http: legacy surface, the no-session tools/list path returns the filtered list', async () => {
+  sameSet(await httpList({ ...LEGACY, MCP_TOOLSETS: 'chat' }), PRESETS.chat);
+});
+
+await check('http: the default surface lists the 15 compact tools on the no-session path (#680)', async () => {
+  assert.deepStrictEqual(await httpList({}), COMPACT_NAMES);
+});
+
+await check('http: MCP_TOOLSETS=chat under the default surface lists the six compact chat tools (#680)', async () => {
+  sameSet(await httpList({ MCP_TOOLSETS: 'chat' }), COMPACT_CHAT);
 });
 
 console.log(`\n[toolsets-entrypoint] Results: ${passed} passed, ${failed} failed`);

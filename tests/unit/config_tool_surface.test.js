@@ -1,9 +1,10 @@
 // tests/unit/config_tool_surface.test.js
 //
-// #671: MCP_TOOL_SURFACE is legacy (default), compact or all, trimmed and case-insensitive.
-// Unset or empty means legacy; anything else refuses startup with a message naming the
-// variable. `compact` replaces the legacy list, so it cannot be combined with MCP_TOOLSETS
-// or MCP_TOOLS (both select legacy names); `all` and `legacy` accept them.
+// #671, #680: MCP_TOOL_SURFACE is compact (default since #680), legacy or all, trimmed and
+// case-insensitive. Unset or empty means compact; anything else refuses startup with a message
+// naming the variable. Since #680 every surface accepts MCP_TOOLSETS and MCP_TOOLS: under
+// `compact` they are remapped to compact tools (resolvePublishedToolNames, covered by
+// compact_default_surface.test.js, which also owns the unknown-name startup failure).
 // Tested through configSchema.safeParse so the module-level process.exit never runs.
 //
 // Run: node tests/unit/config_tool_surface.test.js   (needs `npm run build` first)
@@ -28,7 +29,7 @@ const surfaceOf = (extra) => configSchema.safeParse({ ...base, ...extra });
 
 console.log('\n[config-tool-surface]');
 
-for (const [raw, want] of [[undefined, 'legacy'], ['', 'legacy'], ['  ', 'legacy'], ['legacy', 'legacy'], ['compact', 'compact'], ['all', 'all'], [' Compact ', 'compact'], ['ALL', 'all']]) {
+for (const [raw, want] of [[undefined, 'compact'], ['', 'compact'], ['  ', 'compact'], ['legacy', 'legacy'], ['compact', 'compact'], ['all', 'all'], [' Compact ', 'compact'], ['ALL', 'all']]) {
   check(`${JSON.stringify(raw)} parses to ${want}`, () => {
     const r = surfaceOf(raw === undefined ? {} : { MCP_TOOL_SURFACE: raw });
     assert.strictEqual(r.success, true, JSON.stringify(r.error?.issues));
@@ -46,16 +47,22 @@ for (const bad of ['banana', 'compat', 'legacy,compact', 'true', '0']) {
   });
 }
 
-check('compact + MCP_TOOLSETS=chat: rejected, naming MCP_TOOLSETS', () => {
+check('compact + MCP_TOOLSETS=chat: accepted (#680 R1, toolsets are remapped, not refused)', () => {
   const r = surfaceOf({ MCP_TOOL_SURFACE: 'compact', MCP_TOOLSETS: 'chat' });
-  assert.strictEqual(r.success, false);
-  assert.ok(r.error.issues.some((i) => i.path.join('.') === 'MCP_TOOLSETS'), JSON.stringify(r.error.issues));
+  assert.strictEqual(r.success, true, JSON.stringify(r.error?.issues));
+  assert.strictEqual(r.data.MCP_TOOLSETS, 'chat');
 });
 
-check('compact + MCP_TOOLS=x: rejected, naming MCP_TOOLS', () => {
+check('default (unset) + MCP_TOOLSETS=chat and compact MCP_TOOLS: accepted', () => {
+  const r = surfaceOf({ MCP_TOOLSETS: 'chat', MCP_TOOLS: 'list_entities' });
+  assert.strictEqual(r.success, true, JSON.stringify(r.error?.issues));
+  assert.strictEqual(r.data.MCP_TOOL_SURFACE, 'compact');
+});
+
+check('(negative) the schema does not judge MCP_TOOLS names: a legacy name parses, the resolver refuses it at startup', () => {
   const r = surfaceOf({ MCP_TOOL_SURFACE: 'compact', MCP_TOOLS: 'actual_accounts_list' });
-  assert.strictEqual(r.success, false);
-  assert.ok(r.error.issues.some((i) => i.path.join('.') === 'MCP_TOOLS'), JSON.stringify(r.error.issues));
+  assert.strictEqual(r.success, true);
+  assert.strictEqual(r.data.MCP_TOOLS, 'actual_accounts_list');
 });
 
 check('compact + MCP_TOOLSETS=all (or empty) and no MCP_TOOLS: accepted', () => {

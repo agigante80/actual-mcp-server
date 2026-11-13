@@ -1,8 +1,8 @@
 # Tools reference
 
-Every tool the server registers, grouped by domain, with the caveats you need before calling it. All tools use the `actual_<category>_<action>` naming convention. Amounts are integer cents and dates are `YYYY-MM-DD` strings throughout.
+Every tool the server registers, grouped by domain, with the caveats you need before calling it. The server publishes 15 tools over 85 operations by default: the 85 operations (the legacy `actual_<category>_<action>` tools) are described by domain below, and the [compact surface](#compact-surface) that fronts them is at the end. Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead. Amounts are integer cents and dates are `YYYY-MM-DD` strings throughout.
 
-Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_READ_ONLY` and `MCP_TOOL_SURFACE` (`legacy` by default; the compact tools of #671 onward are listed only when it is `compact` or `all`); the toolset sizes are in the README's [Reducing the tool surface](../../README.md#reducing-the-tool-surface) table and every variable is in the [configuration reference](configuration.md).
+Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_READ_ONLY` and `MCP_TOOL_SURFACE` (`compact` by default since #680; the `actual_*` tools listed below are published only when it is `legacy` or `all`, and the compact tools only when it is `compact` or `all`); the toolset sizes are in the README's [Reducing the tool surface](../../README.md#reducing-the-tool-surface) table and every variable is in the [configuration reference](configuration.md).
 
 ## Accounts
 
@@ -191,7 +191,7 @@ These two manage the session pool itself, not budget data.
 
 ## Compact surface
 
-Six compact tools ship so far (#672, #673, #674). They are listed only under `MCP_TOOL_SURFACE=compact` or `all`, carry no `actual_` prefix and no `outputSchema`, and are read-only, so they stay published under `MCP_READ_ONLY=true`. Each call reaches one legacy tool and returns its result unchanged. The mapping and the other 9 planned tools are in the [design record](../explanation/compact-tool-surface.md).
+Fifteen compact tools ship (#672 to #678). They are listed under `MCP_TOOL_SURFACE=compact` (the default) or `all`, carry no `actual_` prefix and no `outputSchema`, and are the six read tools stay published under `MCP_READ_ONLY=true` and the nine `manage_*` tools are hidden whole. Each call reaches one legacy tool and returns its result unchanged. The full 85-row mapping is in the [design record](../explanation/compact-tool-surface.md#7-full-mapping-of-the-85-tools).
 
 | Tool | Description |
 |------|-------------|
@@ -210,3 +210,12 @@ Six compact tools ship so far (#672, #673, #674). They are listed only under `MC
 | `manage_schedules` | Write schedules, chosen by `action`: `create` (`date`: YYYY-MM-DD or a recurrence object; optional `name`, `payee`, `account`, `amount`, `amount_op`, `posts_transaction`), `update` (`id` and any of those plus `reset_next_date`; null clears `payee` and `account`) or `delete` (`id`, also removes the schedule's rule). Destructive (delete); hidden under `MCP_READ_ONLY` |
 | `manage_budget_months` | Write budget month data, chosen by `action`: `set_amount` (`month`, `category_id`, `amount`), `set_amount_batch` (`operations`, 1 to 100; not atomic), `set_carryover` (`month`, `category_id`, `flag`), `hold` (`month`, `amount` above 0; may hold less than asked), `reset_hold` (`month`), `transfer` (`month`, `from_category_id`, `to_category_id`, `amount` above 0; not atomic) or `set_note` (`month`, `note`; "" clears). Not destructive; hidden under `MCP_READ_ONLY` |
 | `manage_budget_files` | Switch, import or export budget files, chosen by `action`: `switch` (`budget_name`; this session only), `import` (exactly one of `path` or `base64`; optional `type`, `filename`; replaces the local copy of the archive's budget, uploads a new server file and loads it) or `export` (optional `filename`; writes a .zip into the server export directory, overwriting a same-named file). Destructive (import); hidden under `MCP_READ_ONLY` |
+
+### Migrating from the `actual_*` names (#680)
+
+Since #680 the default surface is compact, so a client that calls `actual_accounts_list` and its siblings gets a refusal naming `MCP_TOOL_SURFACE`. Two ways forward:
+
+- Change the calls to the compact tools. Each legacy tool is one `action` (or `type`, `topic`, `by`, `report`) value of a compact tool; the [mapping table](../explanation/compact-tool-surface.md#7-full-mapping-of-the-85-tools) has one row per legacy tool. `actual_server_info` and `actual_server_get_version` are `get_context` with `topic` `server` and `version`.
+- Opt out: set `MCP_TOOL_SURFACE=legacy` (Docker: `-e MCP_TOOL_SURFACE=legacy`) or pin the previous image tag.
+
+`actual_session_list` and `actual_session_close` have no compact home, so they exist only under `MCP_TOOL_SURFACE=legacy` or `all`. `MCP_TOOLSETS` works as before and decides which operations a compact tool may call; `MCP_TOOLS` takes compact names under the default surface.

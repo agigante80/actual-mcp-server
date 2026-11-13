@@ -57,9 +57,9 @@ try {
   }
   console.log(`  ok tools/list: ${tools.length} tools${EXPECTED != null ? ` (expected ${EXPECTED})` : ''}`);
 
-  // #681: compact calls. The smoke server runs the surface the container is pinned to; the
-  // compact tools are published on `compact` and `all`, and the deploy script refuses a legacy
-  // surface count mismatch via EXPECTED_TOOL_COUNT above.
+  // #681: compact calls. The smoke server runs the surface the container is configured with
+  // (compact when MCP_TOOL_SURFACE is unset since #680); the compact tools are published on
+  // `compact` and `all`, and the deploy script refuses a count mismatch via EXPECTED_TOOL_COUNT above.
   const ver = await withTimeout(client.callTool({ name: 'get_context', arguments: { topic: 'version' } }), 'get_context topic=version');
   if (ver.isError) fail(`get_context topic=version returned isError: ${textOf(ver)}`);
   const verText = textOf(ver);

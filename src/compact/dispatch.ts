@@ -188,7 +188,7 @@ function rewriteError(err: unknown, table: ReadonlyMap<string, string>): void {
 }
 
 /** The message keys a legacy result carries text for the model in. Data keys are never touched. */
-const MESSAGE_KEYS = ['error', 'hint'] as const;
+const MESSAGE_KEYS = ['error', 'hint', 'message'] as const;
 
 /**
  * Rewrite the message strings of a returned value (legacy tools return a refusal, or a

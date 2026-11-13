@@ -200,13 +200,15 @@ done
 # ── 6b. Work out the expected tool count for the surface the container publishes (#681) ──
 # The count depends on MCP_TOOL_SURFACE (legacy 85, compact 15, all 100), so it is computed
 # only now, from the RUNNING container's own configuration, not from the source alone. The
-# container is pinned in the local-env config (outside this repository). The suite assumes the
+# container's surface comes from the local-env config (outside this repository); unset means the default, compact. The suite assumes the
 # full set is published, so a narrowed set is refused rather than counted wrongly.
 container_env() { docker exec actual-mcp-bearer-backend printenv "$1" 2>/dev/null | tr 'A-Z' 'a-z' || true; }
 TOOL_SURFACE="$(container_env MCP_TOOL_SURFACE)"
+# Unset (or empty) is the DEFAULT surface, compact since #680, which is what the suite should
+# prove for the default deployment; the local-env config may also pin legacy, compact or all.
 if [ -z "$TOOL_SURFACE" ]; then
-  err "MCP_TOOL_SURFACE is not set on actual-mcp-bearer-backend: pin it in the local-env config (outside the repository)"
-  exit 1
+  TOOL_SURFACE="compact"
+  info "MCP_TOOL_SURFACE is unset on actual-mcp-bearer-backend: the server default (compact) applies"
 fi
 CONT_TOOLSETS="$(container_env MCP_TOOLSETS)"
 if [ -n "$CONT_TOOLSETS" ] && [ "$CONT_TOOLSETS" != "all" ]; then

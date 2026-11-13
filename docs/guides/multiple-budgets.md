@@ -1,6 +1,6 @@
 # Multiple budgets
 
-Configure several Actual Budget files so the AI can switch between them at runtime with `actual_budgets_list_available` and `actual_budgets_switch`. The variables are a dynamic family read by `src/lib/budget-registry.ts`; their reference rows are under "Multi-budget (dynamic family)" in [reference/configuration.md](../reference/configuration.md).
+Configure several Actual Budget files so the AI can switch between them at runtime with `manage_budget_files` (`switch`) and `list_entities` (`type: "budget_file"`); under `MCP_TOOL_SURFACE=legacy` those are `actual_budgets_switch` and `actual_budgets_list_available`. The variables are a dynamic family read by `src/lib/budget-registry.ts`; their reference rows are under "Multi-budget (dynamic family)" in [reference/configuration.md](../reference/configuration.md).
 
 ## Variables
 

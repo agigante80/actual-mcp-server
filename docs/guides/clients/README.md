@@ -35,7 +35,7 @@ Requests travel over stdin, responses come back over stdout, and all server logs
 ┌─────────────┐   MCP/HTTP   ┌──────────────────┐   Actual API   ┌──────────────┐
 │  AI Client  │ ◄──────────► │  Actual MCP      │ ◄───────────► │   Actual     │
 │ (LibreChat  │              │  Server          │               │   Budget     │
-│  LobeChat)  │              │  (85 tools)      │               │   Server     │
+│  LobeChat)  │              │  (compact)       │               │   Server     │
 └─────────────┘              └──────────────────┘               └──────────────┘
 ```
 
@@ -143,7 +143,7 @@ curl -s -X POST http://localhost:3600/http \
   | python3 -c "import json,sys; data=json.load(sys.stdin); print(f'{len(data[\"result\"][\"tools\"])} tools loaded')"
 ```
 
-With every toolset published, the `tools/list` response should list 85 tools, and a connected client shows 85 tools loaded with the `actual_` prefix. A smaller number is expected when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set.
+With every toolset published, the `tools/list` response should list the 15 compact tools (`get_context`, `list_entities` and the `manage_*` family, none with an `actual_` prefix). A smaller number is expected when `MCP_TOOLSETS`, `MCP_TOOLS` or `MCP_READ_ONLY` is set. A client that still calls the 85 `actual_*` tools needs `MCP_TOOL_SURFACE=legacy` on the server; the [migration table](../../reference/tools.md#migrating-from-the-actual_-names-680) maps each old name to its compact call.
 
 For a stdio client, check the server by hand before blaming the client. From a shell that loaded the env file above, send one `initialize` request (`sleep` keeps stdin open long enough for the reply):
 

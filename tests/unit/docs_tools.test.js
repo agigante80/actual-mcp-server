@@ -76,6 +76,25 @@ await check('renderToolsSummary matches the stub registry', () => {
   assert.ok(out.includes('`MCP_READ_ONLY=true` hides and refuses 1 write-capable tools and leaves 2 published.'), out);
 });
 
+await check('#680: deriveCompact lists a compact tool for chat when any operation is chat, and keeps read-only tools with no write operation', () => {
+  const c = tools.deriveCompact({
+    tools: [{ name: 'c1', legacy: ['t1', 't2'] }, { name: 'c2', legacy: ['t3'] }, { name: 'c3', legacy: ['t4'] }],
+    chat: ['t3', 't1'], writeCapable: new Set(['t2']),
+  });
+  assert.deepStrictEqual(c.chat, ['c1', 'c2']);
+  assert.deepStrictEqual(c.readOnly, ['c2', 'c3']);
+});
+
+await check('#680: a compact input renders the compact sentences and keeps the legacy ones; without it only legacy', () => {
+  const withCompact = tools.renderToolsSummary({ ...stubInputs(), compact: { chat: ['c1'], readOnly: ['c2', 'c3'] } });
+  assert.ok(withCompact.includes('| Toolset | Operations | Contents |'), withCompact);
+  assert.ok(withCompact.includes('On the default compact surface the `chat` preset publishes 1 tools: `c1`.'), withCompact);
+  assert.ok(withCompact.includes('With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 2 tools: `t3` and `t1`.'), withCompact);
+  assert.ok(withCompact.includes('publishes 2 compact tools (`c2` and `c3`)'), withCompact);
+  const legacyOnly = tools.renderToolsSummary(stubInputs());
+  assert.ok(legacyOnly.includes('| Toolset | Tools | Contents |') && !/compact/.test(legacyOnly), legacyOnly);
+});
+
 await check('NEGATIVE: a toolset with no scope entry throws', () => {
   const inp = stubInputs();
   inp.toolsets.c = ['t4'];
@@ -169,8 +188,14 @@ await check('real registry: the rendered block equals the README block and carri
     return;
   }
   const real = await import(pathToFileURL(distFile).href);
+  const { COMPACT_TOOLS } = await import(pathToFileURL(join(ROOT, 'dist/src/compact/registry.js')).href);
+  const { compactLegacyNames } = await import(pathToFileURL(join(ROOT, 'dist/src/compact/dispatch.js')).href);
+  const compact = tools.deriveCompact({
+    tools: COMPACT_TOOLS.map((c) => ({ name: c.name, legacy: compactLegacyNames(c) })),
+    chat: real.PRESETS.chat, writeCapable: real.WRITE_CAPABLE,
+  });
   const block = tools.renderToolsSummary({
-    toolsets: real.TOOLSETS, chat: real.PRESETS.chat, writeCapable: real.WRITE_CAPABLE, scopes: tools.TOOLSET_SCOPES,
+    toolsets: real.TOOLSETS, chat: real.PRESETS.chat, writeCapable: real.WRITE_CAPABLE, scopes: tools.TOOLSET_SCOPES, compact,
   });
   const readme = readFileSync(join(ROOT, 'README.md'), 'utf8');
   assert.strictEqual(tools.replaceBlock(readme, block), readme, 'README block is stale');

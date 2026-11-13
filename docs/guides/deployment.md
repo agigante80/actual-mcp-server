@@ -236,6 +236,7 @@ docker compose down
 **Default ports:**
 - MCP server (HTTP): `3600`. Both the `dev` and `production` compose profiles set `MCP_BRIDGE_PORT=3600`. `production` publishes `3600:3600`; `dev` runs without authentication and publishes `127.0.0.1:3600:3600` only. To reach a dev server from another machine, override `ports` in a `docker-compose.override.yml` (and set a token first).
 - A standalone `docker run` of the image listens on whatever `MCP_BRIDGE_PORT` you set (the application default is `3600`). The image's `EXPOSE` and `HEALTHCHECK` also use `3600`, so a direct `docker run` is consistent out of the box: map `-p 3600:3600` and the healthcheck and your published port agree.
+- A container with no `MCP_TOOL_SURFACE` serves the compact surface (15 tools over the 85 operations) since #680. Add `-e MCP_TOOL_SURFACE=legacy` to keep publishing the `actual_*` tools; see [upgrading](upgrading.md).
 
 > **Upgrading from an earlier version?** The Compose profiles previously published the MCP server on host port `3000`; they now use `3600` to match the published image and all guides. If you reach the server on `3000` today, update your host mapping, reverse proxy, or client URL to `3600`. Your budget data is unaffected: the named volume and the host data directory are unchanged, only the in-container mount path moved from `/data` to `/app/data` together with `MCP_BRIDGE_DATA_DIR`, so the same files are still read.
 

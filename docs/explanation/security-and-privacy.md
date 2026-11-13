@@ -488,7 +488,11 @@ withheld under `MCP_READ_ONLY=true`.
 
 `MCP_TOOLSETS`, `MCP_TOOLS` and `MCP_READ_ONLY` choose which tools the server publishes.
 A tool that is not published is both left out of `tools/list` and refused if called by
-name; the refusal names the setting responsible. When both settings hide a tool, the refusal names `MCP_READ_ONLY`, because no toolset change can publish it while read-only is on.
+name; the refusal names the setting responsible. The names below are the legacy `actual_*`
+operations. Under the default compact surface (`MCP_TOOL_SURFACE=compact`, #680) these
+settings still decide per operation: a compact tool is listed when any operation behind it
+is selected, an action whose operation is hidden is refused naming the setting, and a
+compact tool with a write-capable action is hidden whole under `MCP_READ_ONLY=true`. When both settings hide a tool, the refusal names `MCP_READ_ONLY`, because no toolset change can publish it while read-only is on.
 
 - `MCP_READ_ONLY=true` hides and refuses every write-capable tool: every tool that
   reaches the adapter write queue, plus `actual_bank_sync`, `actual_budgets_export`,

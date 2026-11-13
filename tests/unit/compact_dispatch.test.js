@@ -381,10 +381,31 @@ await check('legacy surface: callOperation refuses a tool MCP_TOOLSETS hides', a
   assert.ok(e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS', String(e));
 });
 
-// config.ts rejects compact plus a narrowed MCP_TOOLSETS at startup today; this pins the
-// resolver as a second guard, so relaxing that refine (#680) cannot open a bypass.
+// #680: compact runs with a narrowed MCP_TOOLSETS. A compact tool is LISTED when any action's
+// legacy tool is selected; each action stays refused per legacy operation, naming MCP_TOOLSETS.
+const mixed = {
+  name: 'actual_fixture_mixed',
+  description: 'Fixture compact tool with one action inside the query toolset and one outside it.',
+  actions: new Map([
+    ['list', { legacy: LIST, fields: z.object({}) }],
+    ['query', { legacy: 'actual_query_run', fields: z.object({}) }],
+  ]),
+};
+
+await check('compact surface + MCP_TOOLSETS=query: a compact tool with one selected action is listed (#680 R1)', () => {
+  const p = resolveWith({ surface: 'compact', toolsets: 'query' }, [mixed]);
+  assert.deepStrictEqual([...p.published], [mixed.name]);
+});
+
+await check('NEGATIVE: compact surface + MCP_TOOLSETS=query: a compact tool with no selected action is hidden for MCP_TOOLSETS', () => {
+  const p = resolveWith({ surface: 'compact', toolsets: 'query' }, [mixed, spec]);
+  assert.deepStrictEqual([...p.published], [mixed.name]);
+  assert.strictEqual(p.hidden.get(spec.name), 'MCP_TOOLSETS');
+});
+
 await check('NEGATIVE: compact surface: callOperation still refuses a tool MCP_TOOLSETS hides', async () => {
-  await init({ surface: 'compact', toolsets: 'query' });
+  await init({ surface: 'compact', toolsets: 'query' }, [mixed]);
+  calls.length = 0;
   const e = await reason(() => manager.callOperation(LIST, {}));
   assert.ok(e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS', String(e));
   assert.strictEqual(calls.length, 0);
@@ -541,6 +562,25 @@ await check('4b: error and hint under the createTool { result } wrapper are rewr
   }
   assert.strictEqual(r.result.name, RA, 'a data key holding a tool name is left alone');
   assert.strictEqual(r.result.rows[0].error, RA, 'nothing deeper than the wrapper is walked');
+});
+
+await check('4b (#680 R3): a success `message` naming legacy tools is rewritten, top level and under { result }', async () => {
+  const ph = legacyPhrases([routed]);
+  const ops = { callOperation: async () => ({ message: `Imported 3. Verify with ${RA}.`, result: { message: `then ${RA}`, rows: [{ message: RA }] } }) };
+  const r = await dispatchCompact(ops, routed, { type: 'account' }, ph);
+  for (const text of [r.message, r.result.message]) {
+    assert.ok(!/actual_/.test(text) && /fixture_routed with type account/.test(text), text);
+  }
+  assert.strictEqual(r.result.rows[0].message, RA, 'nothing deeper than the wrapper is walked');
+});
+
+await check('NEGATIVE (#680 R3): a `message` naming no legacy tool comes back byte-identical, and a non-string message is untouched', async () => {
+  const ph = legacyPhrases([routed]);
+  const plain = 'Imported 3 transactions, 1 duplicate skipped.';
+  const ops = { callOperation: async () => ({ message: plain, result: { message: 42 } }) };
+  const r = await dispatchCompact(ops, routed, { type: 'account' }, ph);
+  assert.strictEqual(r.message, plain);
+  assert.strictEqual(r.result.message, 42);
 });
 
 await check('NEGATIVE: an unknown legacy name in error text is left as written', async () => {

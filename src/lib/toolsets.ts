@@ -9,8 +9,10 @@
  *   MCP_TOOLSETS   comma list of toolsets and presets. Default `all` (today's behaviour).
  *   MCP_TOOLS      extra individual tools published on top of MCP_TOOLSETS.
  *   MCP_READ_ONLY  drops every write-capable tool, overriding the two above.
- *   MCP_TOOL_SURFACE  (#671) which LIST is published: the legacy tools, the compact registry
- *                  (src/compact/), or both. Toolsets and MCP_TOOLS name legacy tools only.
+ *   MCP_TOOL_SURFACE  (#671) which LIST is published: the compact registry (src/compact/, the
+ *                  default since #680), the legacy tools, or both. Toolsets always name legacy
+ *                  tools. MCP_TOOLS names legacy tools under `legacy` and `all`, compact tools
+ *                  under `compact` (#680).
  *
  * Design rules, each the answer to a way this can go wrong:
  *   - ONE source. resolvePublishedToolNames is pure and runs once, in
@@ -248,11 +250,11 @@ export interface ToolsetSettings {
   tools: string;
   /** MCP_READ_ONLY, already parsed by configSchema. */
   readOnly: boolean;
-  /** MCP_TOOL_SURFACE (#671). Optional so a three-field caller keeps today's behaviour: `legacy`. */
+  /** MCP_TOOL_SURFACE (#671). Optional: a three-field caller (the pure unit tests) gets `legacy`; the server always passes the validated config value, `compact` by default. */
   surface?: ToolSurface;
 }
 
-/** Which tool list a process publishes (#671). `legacy` is today's behaviour and the default. */
+/** Which tool list a process publishes (#671). `compact` is the default since #680; `legacy` is the opt-out. */
 export type ToolSurface = 'legacy' | 'compact' | 'all';
 
 /**
@@ -296,6 +298,8 @@ interface LegacyResolution {
   readonly hidden: Map<string, ToolUnavailableSetting>;
   readonly requested: string[];
   readonly extras: string[];
+  /** Legacy names MCP_TOOLSETS and MCP_TOOLS select, before MCP_READ_ONLY is applied. */
+  readonly selected: ReadonlySet<string>;
   readonly mappedAliases: { alias: string; tool: string }[];
 }
 
@@ -370,7 +374,7 @@ function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSett
     else published.push(name);
   }
 
-  return { published, hidden, requested, extras, mappedAliases };
+  return { published, hidden, requested, extras, selected, mappedAliases };
 }
 
 /**
@@ -382,10 +386,19 @@ function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSett
  * Surfaces (#671), over the legacy names and the compact tools:
  *   legacy   today's algorithm on the legacy names; every compact tool is hidden (MCP_TOOL_SURFACE).
  *   compact  every legacy name is hidden (MCP_TOOL_SURFACE, or its legacy reason when
- *            MCP_TOOLSETS or MCP_READ_ONLY hides it anyway); a compact tool is published unless
- *            MCP_READ_ONLY=true and one of its actions maps to a WRITE_CAPABLE tool.
+ *            MCP_TOOLSETS or MCP_READ_ONLY hides it anyway). A compact tool is published when
+ *            at least one legacy tool its actions call is selected by MCP_TOOLSETS, or it is
+ *            named in MCP_TOOLS (#680, decisions R1 and R2 on the ticket), and it is hidden
+ *            whole under MCP_READ_ONLY=true when one of its actions maps to a WRITE_CAPABLE
+ *            tool. MCP_TOOLS takes compact names only: a legacy name stops startup.
  *   all      the legacy result plus the compact tools under the same read-only rule.
- * MCP_TOOLSETS and MCP_TOOLS select among LEGACY names only and never hide a compact tool.
+ *
+ * The compact toolset rule decides only what is LISTED. What an ACTION may call is still
+ * decided per legacy operation: a legacy tool that MCP_TOOLSETS or MCP_READ_ONLY hides keeps
+ * that hide reason, so callOperation refuses it naming that setting even though its compact
+ * tool is listed (for example `manage_transactions` action `import` under MCP_TOOLSETS=chat).
+ * Under `all`, MCP_TOOLSETS and MCP_TOOLS select among LEGACY names only and never hide a
+ * compact tool.
  */
 export function resolvePublishedToolNames(
   registeredNames: readonly string[],
@@ -399,7 +412,35 @@ export function resolvePublishedToolNames(
     throw new Error(`Compact tool name collides with a registered tool: ${collisions.join(', ')}`);
   }
 
-  const legacy = resolveLegacy(registeredNames, settings);
+  // Under `compact`, MCP_TOOLS names COMPACT tools (#680 R2). The legacy algorithm never sees
+  // it; a compact tool named there selects every legacy tool its actions call, so each of its
+  // actions works, while MCP_READ_ONLY still wins over it (it hides in the legacy pass).
+  const compactExtras: string[] = [];
+  let legacySettings = settings;
+  if (surface === 'compact') {
+    const compactNames = new Set(compactTools.map((c) => c.name));
+    compactExtras.push(...new Set(splitList(settings.tools)));
+    const unknown = compactExtras.filter((t) => !compactNames.has(t));
+    if (unknown.length > 0) {
+      const legacyNamed = unknown.filter((t) => legacyNames.has(t) || resolveToolAlias(t) !== t);
+      throw new Error(
+        `Unknown tool in MCP_TOOLS: ${unknown.map((t) => `"${t}"`).join(', ')}. ` +
+          (legacyNamed.length > 0
+            ? `${legacyNamed.map((t) => `"${t}"`).join(', ')} ${legacyNamed.length === 1 ? 'is a legacy tool name' : 'are legacy tool names'}, ` +
+              `which MCP_TOOL_SURFACE=compact does not publish; use a compact tool name or set MCP_TOOL_SURFACE=legacy. `
+            : '') +
+          `Compact tools: ${[...compactNames].sort().join(', ')}`,
+      );
+    }
+    legacySettings = { ...settings, tools: '' };
+  }
+  const legacy = resolveLegacy(registeredNames, legacySettings);
+  const selectedLegacy = new Set(legacy.selected);
+  if (surface === 'compact') {
+    for (const tool of compactTools) {
+      if (compactExtras.includes(tool.name)) tool.legacy.forEach((n) => selectedLegacy.add(n));
+    }
+  }
   const published: string[] = [];
   const hidden = new Map<string, ToolUnavailableSetting>();
 
@@ -407,15 +448,19 @@ export function resolvePublishedToolNames(
     // The legacy reason wins over the surface reason, also under `compact`: callOperation
     // waves through ONLY a tool whose sole hide is the surface, so a tool that MCP_TOOLSETS or
     // MCP_READ_ONLY would hide anyway stays refused even if config.ts stops rejecting the
-    // combination (#680 plans to relax that refine).
-    if (legacy.hidden.has(name)) hidden.set(name, legacy.hidden.get(name)!);
-    else if (surface === 'compact') hidden.set(name, 'MCP_TOOL_SURFACE');
+    // combination (#680 relaxed that refine, so compact now runs with a narrowed MCP_TOOLSETS).
+    // A legacy tool selected only through a compact MCP_TOOLS entry is not an MCP_TOOLSETS hide.
+    if (legacy.hidden.has(name) && !(legacy.hidden.get(name) === 'MCP_TOOLSETS' && selectedLegacy.has(name))) {
+      hidden.set(name, legacy.hidden.get(name)!);
+    } else if (surface === 'compact') hidden.set(name, 'MCP_TOOL_SURFACE');
     else published.push(name);
   }
   for (const tool of compactTools) {
     if (surface === 'legacy') hidden.set(tool.name, 'MCP_TOOL_SURFACE');
     // A tool that mixes reads and writes is hidden whole under read-only, by design.
     else if (settings.readOnly && tool.legacy.some((n) => WRITE_CAPABLE.has(n))) hidden.set(tool.name, 'MCP_READ_ONLY');
+    // Listed when any action's legacy tool is selected (#680 R1, option A); the rest refuse per action.
+    else if (surface === 'compact' && !tool.legacy.some((n) => selectedLegacy.has(n))) hidden.set(tool.name, 'MCP_TOOLSETS');
     else published.push(tool.name);
   }
 
@@ -429,8 +474,7 @@ export function resolvePublishedToolNames(
     throw new Error(
       `No tools would be published: MCP_TOOL_SURFACE="${surface}", MCP_TOOLSETS="${settings.toolsets}", MCP_TOOLS="${settings.tools}" and ` +
         `MCP_READ_ONLY=${settings.readOnly} resolve to 0 tools. For example, a toolset made only of writers ` +
-        `(structure) publishes nothing under MCP_READ_ONLY=true, and the compact surface publishes nothing ` +
-        `until a compact tool is registered.`,
+        `(structure) publishes nothing under MCP_READ_ONLY=true.`,
     );
   }
 
@@ -441,7 +485,7 @@ export function resolvePublishedToolNames(
     mappedAliases: Object.freeze(legacy.mappedAliases),
     settings: Object.freeze({
       toolsets: Object.freeze(legacy.requested),
-      tools: Object.freeze(legacy.extras),
+      tools: Object.freeze(surface === 'compact' ? compactExtras : legacy.extras),
       readOnly: settings.readOnly,
       surface,
     }),

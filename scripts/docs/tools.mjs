@@ -9,6 +9,12 @@
  * function of its inputs (no timestamp, no total), so two runs give identical bytes.
  * Read or write comes from WRITE_CAPABLE, never from tool annotations.
  *
+ * #680: the default surface is compact, so the block also states the compact chat and
+ * read-only sets. They are derived from dist/src/compact/ (a compact tool is listed when
+ * any operation behind it is selected; read-only drops a tool with any write-capable
+ * operation, the resolver's own rule), never typed. `compact` is optional: absent, the
+ * block carries the legacy sentences only.
+ *
  * `scopes` is injectable for the unit tests, which run against stub registries.
  */
 
@@ -21,6 +27,8 @@ export const name = 'tools';
 const BEGIN = '<!-- BEGIN GENERATED: tools-summary -->';
 const END = '<!-- END GENERATED: tools-summary -->';
 const DIST_REL = 'dist/src/lib/toolsets.js';
+const COMPACT_REGISTRY_REL = 'dist/src/compact/registry.js';
+const COMPACT_DISPATCH_REL = 'dist/src/compact/dispatch.js';
 const NO_DIST = `${DIST_REL} not found (run npm run build)`;
 const MARKER_ERR = 'README.md needs exactly one tools-summary BEGIN marker followed by one END marker';
 const STALE_ERR = 'README.md tools-summary block is stale: run npm run build && npm run docs:gen';
@@ -48,7 +56,7 @@ function joinNames(names) {
 }
 
 /** Pure. Returns the block text including both markers. Throws on a scope mismatch. */
-export function renderToolsSummary({ toolsets, chat, writeCapable, scopes }) {
+export function renderToolsSummary({ toolsets, chat, writeCapable, scopes, compact }) {
   const keys = Object.keys(toolsets);
   for (const key of keys) {
     if (!(key in scopes)) throw new Error(`TOOLSET_SCOPES has no entry for toolset ${key}`);
@@ -61,13 +69,23 @@ export function renderToolsSummary({ toolsets, chat, writeCapable, scopes }) {
   return [
     BEGIN,
     '<!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->',
-    '| Toolset | Tools | Contents |',
+    `| Toolset | ${compact ? 'Operations' : 'Tools'} | Contents |`,
     '|---------|-------|----------|',
     ...rows,
     '',
-    `The \`chat\` preset publishes ${chat.length} tools: ${joinNames(chat)}.`,
-    '',
-    `\`MCP_READ_ONLY=true\` hides and refuses ${writeCapable.size} write-capable tools and leaves ${total - writeCapable.size} published.`,
+    ...(compact
+      ? [
+        `On the default compact surface the \`chat\` preset publishes ${compact.chat.length} tools: ${joinNames(compact.chat)}.`,
+        '',
+        `With \`MCP_TOOL_SURFACE=legacy\` the \`chat\` preset publishes ${chat.length} tools: ${joinNames(chat)}.`,
+        '',
+        `\`MCP_READ_ONLY=true\` publishes ${compact.readOnly.length} compact tools (${joinNames(compact.readOnly)}); every tool that can write is hidden whole. With \`MCP_TOOL_SURFACE=legacy\` it hides and refuses ${writeCapable.size} write-capable tools and leaves ${total - writeCapable.size} published.`,
+      ]
+      : [
+        `The \`chat\` preset publishes ${chat.length} tools: ${joinNames(chat)}.`,
+        '',
+        `\`MCP_READ_ONLY=true\` hides and refuses ${writeCapable.size} write-capable tools and leaves ${total - writeCapable.size} published.`,
+      ]),
     END,
   ].join('\n');
 }
@@ -86,11 +104,27 @@ export function replaceBlock(text, block) {
   return text.slice(0, start) + block.replace(/\r?\n/g, eol) + text.slice(end + END.length);
 }
 
+/** Pure. The compact tools the chat preset lists and the read-only surface keeps, in registry order. */
+export function deriveCompact({ tools, chat, writeCapable }) {
+  const chatSet = new Set(chat);
+  return {
+    chat: tools.filter((t) => t.legacy.some((n) => chatSet.has(n))).map((t) => t.name),
+    readOnly: tools.filter((t) => !t.legacy.some((n) => writeCapable.has(n))).map((t) => t.name),
+  };
+}
+
 async function loadRegistry(root) {
   const file = join(root, DIST_REL);
   if (!existsSync(file)) return null;
   const mod = await import(pathToFileURL(file).href);
-  return { toolsets: mod.TOOLSETS, chat: mod.PRESETS.chat, writeCapable: mod.WRITE_CAPABLE };
+  const base = { toolsets: mod.TOOLSETS, chat: mod.PRESETS.chat, writeCapable: mod.WRITE_CAPABLE };
+  const registryFile = join(root, COMPACT_REGISTRY_REL);
+  const dispatchFile = join(root, COMPACT_DISPATCH_REL);
+  if (!existsSync(registryFile) || !existsSync(dispatchFile)) return base;
+  const { COMPACT_TOOLS } = await import(pathToFileURL(registryFile).href);
+  const { compactLegacyNames } = await import(pathToFileURL(dispatchFile).href);
+  const tools = COMPACT_TOOLS.map((c) => ({ name: c.name, legacy: compactLegacyNames(c) }));
+  return { ...base, compact: deriveCompact({ tools, chat: base.chat, writeCapable: base.writeCapable }) };
 }
 
 export async function check({ root, scopes = TOOLSET_SCOPES }) {

@@ -127,7 +127,13 @@ export class ToolUnavailableError extends Error {
       setting === 'MCP_READ_ONLY'
         ? `Tool "${tool}" is not available: it can change state and this server runs with MCP_READ_ONLY=true.`
         : setting === 'MCP_TOOL_SURFACE'
-          ? `Tool "${tool}" is not available: this server publishes the ${surface ?? 'configured'} tool surface (MCP_TOOL_SURFACE).`
+          ? `Tool "${tool}" is not available: this server publishes the ${surface ?? 'configured'} tool surface (MCP_TOOL_SURFACE).${
+            surface === 'compact'
+              ? ' The legacy tools are published only with MCP_TOOL_SURFACE=legacy.'
+              : surface === 'legacy'
+                ? ' The compact tools are published only with MCP_TOOL_SURFACE=compact.'
+                : ''
+          }`
           : `Tool "${tool}" is not available: it is not published by this server's MCP_TOOLSETS configuration.`,
     );
     this.name = 'ToolUnavailableError';
