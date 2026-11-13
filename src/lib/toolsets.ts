@@ -433,6 +433,18 @@ export function resolvePublishedToolNames(
       );
     }
     legacySettings = { ...settings, tools: '' };
+  } else if (surface === 'legacy') {
+    // The mirror of the compact case above: a compact name under `legacy` stops startup naming
+    // the setting that would publish it, instead of the generic hint to use an actual_ name.
+    const compactNames = new Set(compactTools.map((c) => c.name));
+    const compactNamed = [...new Set(splitList(settings.tools))].filter((t) => compactNames.has(t));
+    if (compactNamed.length > 0) {
+      throw new Error(
+        `Unknown tool in MCP_TOOLS: ${compactNamed.map((t) => `"${t}"`).join(', ')}. ` +
+          `${compactNamed.length === 1 ? 'It is a compact tool name' : 'They are compact tool names'}, ` +
+          `which MCP_TOOL_SURFACE=legacy does not publish; use a legacy tool name (for example actual_accounts_list) or set MCP_TOOL_SURFACE=compact.`,
+      );
+    }
   }
   const legacy = resolveLegacy(registeredNames, legacySettings);
   const selectedLegacy = new Set(legacy.selected);
@@ -499,7 +511,14 @@ export function resolvePublishedToolNames(
  */
 export function unavailableError(policy: PublishedPolicy, tool: string): ToolUnavailableError | undefined {
   if (policy.published.includes(tool)) return undefined;
-  return new ToolUnavailableError(tool, policy.hidden.get(tool) ?? 'MCP_TOOLSETS', policy.settings?.surface);
+  const reason = policy.hidden.get(tool) ?? 'MCP_TOOLSETS';
+  // Under `compact` no legacy tool is published whatever MCP_TOOLSETS says, so a direct call to
+  // one is refused naming the surface: widening MCP_TOOLSETS would not help the caller. Only
+  // this direct-call path does so; operationUnavailableError must keep the MCP_TOOLSETS reason.
+  if (reason === 'MCP_TOOLSETS' && policy.settings?.surface === 'compact' && tool.startsWith('actual_')) {
+    return new ToolUnavailableError(tool, 'MCP_TOOL_SURFACE', 'compact');
+  }
+  return new ToolUnavailableError(tool, reason, policy.settings?.surface);
 }
 
 /**

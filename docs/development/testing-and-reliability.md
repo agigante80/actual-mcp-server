@@ -1032,7 +1032,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `contributor_docs.test.js` | Contributor docs (AGENTS.md, CONTRIBUTING.md, PR template, SUPPORT.md, CODE_OF_CONDUCT.md): real scripts, tracked links, `AGENTS.md` required and short, PR template at most 40 lines, instructions files defer to it (#496, #609) | 20+ |
 | `toolsets.test.js` | Toolset policy: partition, preset, read-only set and its call-graph guard, refusal, fail-closed (#483); alias policy (#652) | 58 |
 | `toolsets_entrypoint.test.js` | Entrypoint spawn: filtered list over stdio and HTTP, refusal, startup failures (#483) | 10 |
-| `compact_default_surface.test.js` | Unset `MCP_TOOL_SURFACE` is compact end to end, legacy opt-out, compact `MCP_TOOLS` and toolsets (#680) | 20 |
+| `compact_default_surface.test.js` | Unset `MCP_TOOL_SURFACE` is compact end to end, legacy opt-out, compact `MCP_TOOLS` and toolsets (#680) | 22 |
 | `config_tool_surface.test.js` | `MCP_TOOL_SURFACE` parsing, default compact (#671, #680) | 20 |
 | `compact_dispatch.test.js` | Compact surface: resolver, dispatcher, routes, 4b rewrite, `callOperation` bypass, import guard, `build` hook (#671, #672, #678) | 61 |
 | `compact_mapping_parity.test.js` | Every legacy tool mapped, out of scope or pending exactly once; routes counted under one compact tool, `notes_update` shared from `set_note`, PENDING empty (#671, #672, #676, #677, #678) | 12 |

@@ -229,6 +229,19 @@ await check('under the default surface a legacy name is refused with setting MCP
   assert.ok(e.message.includes('MCP_TOOL_SURFACE=legacy'), e.message);
 });
 
+await check('a legacy name outside a narrowed MCP_TOOLSETS is still refused naming the surface, not MCP_TOOLSETS', async () => {
+  await init({ surface: 'compact', toolsets: 'chat' });
+  const e = await reason(() => manager.callTool('actual_accounts_list', {}));
+  assert.ok(e instanceof ToolUnavailableError, String(e));
+  assert.strictEqual(e.setting, 'MCP_TOOL_SURFACE');
+  assert.ok(e.message.includes('MCP_TOOL_SURFACE=legacy'), e.message);
+});
+
+await check('NEGATIVE: a compact name in MCP_TOOLS under legacy stops startup naming MCP_TOOL_SURFACE=compact', async () => {
+  const e = await reason(() => init({ surface: 'legacy', tools: 'get_context' }));
+  assert.ok(e && /get_context/.test(e.message) && e.message.includes('MCP_TOOL_SURFACE=compact'), String(e));
+});
+
 await check('NEGATIVE: a compact name is refused under the legacy surface, naming MCP_TOOL_SURFACE=compact', async () => {
   await init({ surface: 'legacy' });
   const e = await reason(() => manager.callTool('get_context', {}));

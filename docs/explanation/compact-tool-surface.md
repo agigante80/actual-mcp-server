@@ -383,7 +383,7 @@ MCP prompts (`prompts/list`, `prompts/get`) are offered only when every tool a p
 | `MCP_TOOL_SURFACE=compact` | offered | hidden |
 | `MCP_TOOL_SURFACE=all` | offered | offered as for legacy |
 | `MCP_READ_ONLY=true` | hidden if it names a `manage_*` tool (hidden whole) | hidden if it names a writer |
-| `MCP_TOOLSETS`, `MCP_TOOLS` | unaffected (they select legacy names only) | hidden if a named tool is filtered out |
+| `MCP_TOOLSETS`, `MCP_TOOLS` | under `compact`: hidden if a named compact tool is not listed (for example `get_context` under `MCP_TOOLSETS=admin`); under `all`: unaffected (they select legacy names only) | hidden if a named tool is filtered out |
 
 Since #680 `compact` is the default surface, so a prompt that names compact tools is offered by default and one that names legacy tools is hidden unless `MCP_TOOL_SURFACE` is `legacy` or `all`.
 
