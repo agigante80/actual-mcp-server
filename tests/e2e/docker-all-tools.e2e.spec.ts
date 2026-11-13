@@ -3345,3 +3345,34 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     expect(await refusal(() => mcp.call('manage_payees', { action: 'delete', id: 'nope' }))).toMatch(/\bid\b/);
   });
 });
+
+test.describe('Docker E2E - compact manage_tags (#676)', () => {
+  const tagsOf = async (mcp: any): Promise<any[]> => {
+    const d = await mcp.call('actual_tags_list');
+    return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+  };
+
+  test('manage_tags create, update and delete', async ({ mcp, cleanup }) => {
+    const tag = `E2E-Tag676-${uniqueSuffix()}`;
+    const id = (await mcp.call('manage_tags', { action: 'create', tag, color: '#33aa33' })) as string;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${tag}`, async () => {
+      await mcp.call('actual_tags_delete', { id }).catch(() => undefined);
+    });
+    expect((await tagsOf(mcp)).some((t: any) => t?.id === id && t?.tag === tag)).toBe(true);
+    const renamed = `${tag}-renamed`;
+    await mcp.call('manage_tags', { action: 'update', id, tag: renamed, description: 'updated by E2E' });
+    const row = (await tagsOf(mcp)).find((t: any) => t?.id === id);
+    expect(row?.tag).toBe(renamed);
+    expect(row?.description).toBe('updated by E2E');
+    await mcp.call('manage_tags', { action: 'delete', id });
+    expect((await tagsOf(mcp)).some((t: any) => t?.id === id)).toBe(false);
+  });
+
+  test('manage_tags - ERROR: an unknown action, a create without tag and an empty update name the problem', async ({ mcp }) => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    expect(await refusal(() => mcp.call('manage_tags', { action: 'frobnicate' }))).toMatch(/action/);
+    expect(await refusal(() => mcp.call('manage_tags', { action: 'create' }))).toMatch(/tag.*required for action: create/);
+    expect(await refusal(() => mcp.call('manage_tags', { action: 'update', id }))).toMatch(/At least one of tag, color, or description/);
+  });
+});

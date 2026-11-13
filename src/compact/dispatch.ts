@@ -238,13 +238,18 @@ function allFields(spec: CompactToolSpec): Iterable<[string, z.ZodType]> {
   return fields.flatMap((f) => Object.entries(f.shape) as [string, z.ZodType][]);
 }
 
+/** One `ZodOptional` layer removed, so `x` and `x.optional()` are the same declaration (Zod 4: `x.optional().unwrap() === x`). */
+const stripOptional = (schema: z.ZodType): z.ZodType => (schema instanceof z.ZodOptional ? (schema.unwrap() as z.ZodType) : schema);
+
 /**
  * The published input schema: one flat, strict object (a union of per-action schemas would
  * not survive every MCP client's JSON Schema handling). The selector is an enum; every other
  * key is optional here, and planCall re-runs in superRefine so the flat shape never accepts
  * what the dispatcher would refuse. A key two targets declare with different schema objects
  * is left open (z.any) in the flat shape; declare it once and share the object to keep it
- * typed. The target schema still decides.
+ * typed. Declarations are compared after removing ONE optional layer, so `x` in one target
+ * (required there) and `x.optional()` in another count as the same object and the key stays
+ * typed and described (#676). The target schema still decides.
  */
 function compactInputSchema(spec: CompactToolSpec): z.ZodType {
   const selector = selectorOf(spec);
@@ -261,7 +266,7 @@ function compactInputSchema(spec: CompactToolSpec): z.ZodType {
     if (prior === undefined) {
       seen.set(key, schema);
       shape[key] = single ? schema : schema.optional();
-    } else if (prior !== schema) {
+    } else if (stripOptional(prior) !== stripOptional(schema)) {
       shape[key] = z.any().optional();
     }
   }

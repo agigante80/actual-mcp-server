@@ -63,8 +63,16 @@ console.log('Running published-schema OpenAI/ECMA-262 compatibility guard (#293)
 
   const toolNames = Object.keys(toolsIndex).filter((n) => n !== 'default');
 
-  for (const name of toolNames) {
-    const tool = toolsIndex[name];
+  // #676: the compact tools publish their own input schemas, so they are a second source.
+  const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+  const { buildCompactTool } = await import('../../dist/src/compact/dispatch.js');
+  const compactBuilt = COMPACT_TOOLS.map((spec) => buildCompactTool(spec, { callOperation: async () => undefined }));
+  const sources = [
+    ...toolNames.map((name) => [name, toolsIndex[name]]),
+    ...compactBuilt.map((tool) => [tool.name, tool]),
+  ];
+
+  for (const [name, tool] of sources) {
     if (!tool || !tool.inputSchema) continue;
     toolsChecked++;
 
@@ -149,6 +157,11 @@ console.log('Running published-schema OpenAI/ECMA-262 compatibility guard (#293)
     console.error('  FAIL: no tool inputSchemas were checked (index empty?). Guard would pass vacuously.');
     failures++;
   }
+  if (compactBuilt.length === 0) {
+    console.error('  FAIL: no compact tool inputSchemas were checked (#676). The compact half would pass vacuously.');
+    failures++;
+  }
+  console.log(`Checked ${compactBuilt.length} compact tool schema(s).`);
 
   if (failures > 0) {
     console.error(`\n❌ ${failures} published-schema compatibility failure(s).`);

@@ -44,6 +44,12 @@ const ALLOWLIST = new Set([
   'actual_rules_create_or_update.actions.items.options',
   'actual_rules_update.fields.actions.items.value',
   'actual_rules_update.fields.actions.items.options',
+  // #676: compact manage_transactions update_batch. `fields` is `z.looseObject({})` with no named
+  // properties (the legacy FieldsSchema validates the real keys downstream, and the compact
+  // description points at the update action's field list), so it publishes a pure open object
+  // `{ type: 'object', additionalProperties: {} }`. A client can still construct it: it is a
+  // plain map of Actual transaction fields.
+  'manage_transactions.updates.items.fields',
 ]);
 
 let failures = 0;
@@ -225,8 +231,14 @@ function findShapeless(toolName, published) {
   // ── The guard: every published tool schema must be fully shaped (modulo the allowlist) ──
   console.log('\n[#224] every tool publishes a fully-shaped input schema');
   const mod = await import('../../dist/src/tools/index.js');
-  const tools = Object.values(mod).filter((t) => t && t.name && t.inputSchema);
-  ok(tools.length > 0, `collected ${tools.length} tools with an inputSchema`);
+  const legacyTools = Object.values(mod).filter((t) => t && t.name && t.inputSchema);
+  ok(legacyTools.length > 0, `collected ${legacyTools.length} tools with an inputSchema`);
+  // #676: the compact registry is a second source of published input schemas.
+  const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+  const { buildCompactTool } = await import('../../dist/src/compact/dispatch.js');
+  const compactTools = COMPACT_TOOLS.map((spec) => buildCompactTool(spec, { callOperation: async () => undefined }));
+  ok(compactTools.length > 0, `collected ${compactTools.length} compact tools with an inputSchema`);
+  const tools = [...legacyTools, ...compactTools];
 
   const offending = [];
   for (const tool of tools) {

@@ -523,10 +523,33 @@ await check('startup validation rejects a route whose legacy tool is not registe
   await manager.initialize(ALL);
 });
 
+// ---- #676: flat schema typing compares declarations after one optional layer ----
+
+const typingSpec = (a, b) => ({
+  name: 'fixture_typing',
+  description: 'Fixture for the flat typing rule.',
+  actions: new Map([
+    ['one', { legacy: LIST, fields: z.object({ name: a }) }],
+    ['two', { legacy: LIST, fields: z.object({ name: b }) }],
+  ]),
+});
+await check('flat typing: name required in one action and name.optional() in another stays a typed, described string (#676)', () => {
+  const shared = z.string().describe('The name.');
+  const js = z.toJSONSchema(buildCompactTool(typingSpec(shared, shared.optional()), { callOperation: async () => undefined }).inputSchema);
+  assert.strictEqual(js.properties.name.type, 'string');
+  assert.strictEqual(js.properties.name.description, 'The name.');
+  assert.ok(!js.required.includes('name'), 'name stays optional in the flat shape');
+});
+await check('NEGATIVE: flat typing: two different name objects still publish an untyped key (#676)', () => {
+  const js = z.toJSONSchema(buildCompactTool(typingSpec(z.string().describe('A.'), z.string().describe('B.').optional()), { callOperation: async () => undefined }).inputSchema);
+  assert.strictEqual(js.properties.name.type, undefined);
+  assert.strictEqual(js.properties.name.description, undefined);
+});
+
 // ---- registry and source guards ----
 
-await check('the shipped registry holds exactly the ten compact tools so far (#672 to #676)', () => {
-  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees']);
+await check('the shipped registry holds exactly the eleven compact tools so far (#672 to #676)', () => {
+  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags']);
 });
 
 await check('src/compact/ never imports the adapter or @actual-app/api, and never calls .call(', () => {

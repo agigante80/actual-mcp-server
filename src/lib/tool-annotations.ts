@@ -123,6 +123,7 @@ const DESTRUCTIVE = new Set<string>([
   'manage_accounts',
   'manage_categories',
   'manage_payees',
+  'manage_tags',
   'actual_account_groups_delete',
   'actual_accounts_close',
   'actual_accounts_delete',

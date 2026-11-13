@@ -58,9 +58,6 @@ const PENDING = [
   'actual_schedules_create',
   'actual_schedules_delete',
   'actual_schedules_update',
-  'actual_tags_create',
-  'actual_tags_delete',
-  'actual_tags_update',
 ];
 
 /** Returns the list of problems (empty means parity holds). */
