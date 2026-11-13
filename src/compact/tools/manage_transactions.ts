@@ -35,7 +35,9 @@ const payee = z.string().nullable().optional().describe('Payee id (update: or na
 const payeeName = z.string().nullable().optional().describe('Payee name.');
 const importedPayee = z.string().nullable().optional().describe('Imported payee.');
 const category = z.string().nullable().optional().describe('Category id.');
-const notes = z.string().max(1000).nullable().optional().describe('Notes.');
+// No maxLength here: with it Zod publishes anyOf [string, null], which some function-schema
+// clients reject. REAL enforces the 1000 character cap.
+const notes = z.string().nullable().optional().describe('Notes.');
 const cleared = z.boolean().nullable().optional().describe('Cleared flag.');
 const importedId = z.string().nullable().optional().describe('Source id.');
 const transferId = z.string().nullable().optional().describe('Transfer id.');
@@ -53,6 +55,7 @@ const REAL: Readonly<Record<string, z.ZodType>> = {
   date: CommonSchemas.date,
   amount: CommonSchemas.amountCents,
   subtransactions: CommonSchemas.subtransactions,
+  notes: z.string().max(1000, 'at most 1000 characters'),
 };
 
 /** The nine keys an update_batch item may change. Strict: an unknown key is refused. */

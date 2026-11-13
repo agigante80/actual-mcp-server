@@ -27,7 +27,7 @@ export const runQuery: CompactToolSpec = {
     'Writes, stacked statements and comments are refused. ' +
     'Transactions come back in split-inline mode: "is_parent = true" returns nothing, use "is_parent = false" to exclude split children. ' +
     'Joins use dot notation: payee.name, category.name, account.name (NOT payee_name). Amounts are in cents: $100.00 = 10000. Dates are quoted YYYY-MM-DD strings: date >= \'2025-01-01\'. ' +
-    'Read-only: it never changes data. Returns the matching rows; an empty result may carry a "hint" naming a category.name, payee.name or account.name value that matches no entity, with the query that lists the exact names. ' +
+    'Read-only: it never changes data. Returns { result: rows }; an empty result may carry a "hint" naming a category.name, payee.name or account.name value that matches no entity, with the query that lists the exact names. ' +
     'Tables: transactions (id, date, amount, notes, cleared, account, payee, category); accounts (id, name, type, closed, offbudget); ' +
     'categories (id, name, group, is_income); payees (id, name); category_groups (id, name, is_income).',
   selector: null,

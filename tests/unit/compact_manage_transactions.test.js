@@ -177,7 +177,7 @@ await check('NEGATIVE: merge with one id, three ids, or the same id twice names 
   await refused({ action: 'merge' }, /ids.*required for action: merge/);
 });
 await check('NEGATIVE: notes over 1000 characters are refused', () =>
-  refused({ action: 'create', account: A, date: '2026-11-13', amount: 1, notes: 'x'.repeat(1001) }, /notes/));
+  refused({ action: 'create', account: A, date: '2026-11-13', amount: 1, notes: 'x'.repeat(1001) }, /notes[^]*1000/));
 await check('NEGATIVE: camelCase legacy keys are refused', () => refused({ action: 'import', accountId: A, txs: [{ date: '2026-11-13', amount: 1 }] }, /accountId/));
 
 // ---- real legacy transfer tool behind callOperation ----
@@ -238,13 +238,13 @@ await check('published schema: flat, action required, no oneOf or anyOf, every p
   assert.strictEqual(js.type, 'object');
   assert.strictEqual(js.oneOf, undefined);
   assert.strictEqual(js.anyOf, undefined);
-  assert.ok(!/oneOf/.test(JSON.stringify(js.properties)), 'no oneOf in any property (a nullable key is anyOf [type, null], which update needs to clear a field)');
+  assert.ok(!/oneOf|anyOf/.test(JSON.stringify(js.properties)), 'no oneOf or anyOf in any property (a nullable key publishes type [T, null])');
   assert.deepStrictEqual(js.required, ['action']);
   assert.deepStrictEqual(js.properties.action.enum, ['create', 'update', 'update_batch', 'delete', 'import', 'merge', 'transfer']);
   for (const [k, v] of Object.entries(js.properties)) {
     if (k === 'action') continue;
     assert.ok(v.description, `${k} has no description`);
-    assert.ok(v.type || (v.anyOf && v.anyOf.every((m) => m.type)), `${k} is untyped`);
+    assert.ok(v.type, `${k} is untyped`);
   }
 });
 await check('description: Returns, every action, destructive actions, siblings, no legacy name', () => {

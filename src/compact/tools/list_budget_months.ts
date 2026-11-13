@@ -21,8 +21,8 @@ export const listBudgetMonths: CompactToolSpec = {
   name: 'list_budget_months',
   description:
     'List the budget months, or read one month\'s budget when `month` is given. Read-only. ' +
-    'Returns the array of budget months as YYYY-MM strings (nothing else) when `month` is omitted. ' +
-    'Returns that month\'s budget when `month` (YYYY-MM) is given: totals (totalIncome, totalBudgeted, totalSpent, toBudget, forNextMonth, totalBalance) and categoryGroups; ' +
+    'Returns { result: [YYYY-MM, ...] }, the budget months and nothing else, when `month` is omitted. ' +
+    'Returns { result } holding that month\'s budget when `month` (YYYY-MM) is given: totals (totalIncome, totalBudgeted, totalSpent, toBudget, forNextMonth, totalBalance) and categoryGroups; ' +
     'an expense category carries budgeted, spent and balance, an income category received; amounts are integer cents. ' +
     'Use it for budgeted versus spent per category; for actual spending totals use summarize_transactions, for ids use list_entities, ' +
     'for individual transactions use search_transactions. To change a budgeted amount use manage_budget_months. ' +
