@@ -33,8 +33,9 @@ export function currentMonth(): string {
 
 /** The server's local today, YYYY-MM-DD. */
 export function today(): string {
+  // One clock read: a second one could land in the next month across midnight on a month end.
   const now = new Date();
-  return `${currentMonth()}-${pad2(now.getDate())}`;
+  return `${now.getFullYear()}-${pad2(now.getMonth() + 1)}-${pad2(now.getDate())}`;
 }
 
 /**
