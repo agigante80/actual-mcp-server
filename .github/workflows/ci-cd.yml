@@ -420,11 +420,12 @@ jobs:
   docker-e2e:
     name: Docker E2E Tests
     runs-on: ubuntu-latest
-    # #593: 25, not 20, so the run step's own 18 minute timeout (below) always fires first. Measured
-    # on the runs before this change: the steps before it take about 1 minute warm, the log dump
-    # and teardown under 15 seconds, the image cache save under 30 seconds, so a run that stalls
-    # to the step limit still ends with over 5 minutes of job time to spare.
-    timeout-minutes: 25
+    # #593: the job cap sits above the run step's own timeout (below) so that step always fires
+    # first. Measured on the runs before #593: the steps before it take about 1 minute warm, the
+    # log dump and teardown under 15 seconds, the image cache save under 30 seconds, so a run that
+    # stalls to the step limit still ends with over 5 minutes of job time to spare. 37 since the
+    # step went to 30 (#678).
+    timeout-minutes: 37
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     # #600: this job only checks out, uses the Actions cache and builds images locally. It pushes
@@ -476,9 +477,13 @@ jobs:
       # this step timed out in a test run (40330966576, timeout 1), nothing from the script's
       # EXIT trap reached the job log and the containers were still up at the cleanup step, so
       # that step dumps the service logs too.
+      # #678: 30, not 18. The compact surface rows grew the suite to 257 tests per leg,
+      # and the stdio leg is paced at 90 calls a minute: run 43378416460 passed HTTP in 5.2
+      # minutes and was cut off in the last stdio rows at 18; the same sha took 12.3 minutes for
+      # stdio alone locally. A healthy run is now about 19 minutes.
       - name: 🧪 Run Docker E2E tests (FULL - 63 tests)
         id: e2e
-        timeout-minutes: 18
+        timeout-minutes: 30
         run: npm run test:e2e:docker:full
 
       # #593: this runs BEFORE the image cache save so the dump is the first thing after a stalled
