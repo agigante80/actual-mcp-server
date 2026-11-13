@@ -9,7 +9,7 @@ import config from './config.js';
 import { createModuleLogger } from './lib/loggerFactory.js';
 import { operationUnavailableError, readOnlyError, resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
 import { COMPACT_TOOLS } from './compact/registry.js';
-import { buildCompactTool } from './compact/dispatch.js';
+import { buildCompactTool, compactLegacyNames, legacyPhrases } from './compact/dispatch.js';
 import type { CompactOperations, CompactToolSpec } from './compact/types.js';
 import { TOOL_ALIAS_REMOVAL_AFTER, resolveToolAlias } from './lib/tool-aliases.js';
 
@@ -198,8 +198,10 @@ class ActualToolsManager implements CompactOperations {
     // Every action must name a registered LEGACY tool: a typo fails startup, not the first call.
     for (const spec of compactTools) {
       for (const [action, row] of spec.actions) {
-        if (!this.tools.has(row.legacy)) {
-          throw new Error(`Compact tool "${spec.name}" action "${action}" maps to unregistered tool "${row.legacy}"`);
+        for (const legacy of compactLegacyNames({ ...spec, actions: new Map([[action, row]]) })) {
+          if (!this.tools.has(legacy)) {
+            throw new Error(`Compact tool "${spec.name}" action "${action}" maps to unregistered tool "${legacy}"`);
+          }
         }
       }
     }
@@ -208,10 +210,12 @@ class ActualToolsManager implements CompactOperations {
     this.policy = resolvePublishedToolNames(
       legacyNames,
       settings,
-      compactTools.map((c) => ({ name: c.name, legacy: [...c.actions.values()].map((r) => r.legacy) })),
+      compactTools.map((c) => ({ name: c.name, legacy: compactLegacyNames(c) })),
     );
+    // One table for ALL compact tools (#670 4b): an error from one may name a sibling's tool.
+    const phrases = legacyPhrases(compactTools);
     for (const spec of compactTools) {
-      this.tools.set(spec.name, buildCompactTool(spec, this));
+      this.tools.set(spec.name, buildCompactTool(spec, this, phrases));
       this.compactNames.add(spec.name);
     }
     toolsetLog.info(

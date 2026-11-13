@@ -1,6 +1,6 @@
 # Compact tool surface
 
-**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation` exist, and the registry is empty until #672 onward add compact tools. Section 4b (rewriting legacy names in errors and result text) and the stale `listTool` in the adapter are NOT part of #671 and remain open for the first ticket that ships a compact tool.
+**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. The other 13 tools are still to come. The stale `listTool` in the adapter is still not corrected.
 
 The compact surface is a second public tool list of 15 tools with no `actual_` prefix, named `verb_noun` in snake_case, each fronting a group of the 85 existing tools through one dispatcher. The implementation tickets (#671 to #678, #679, #680, #681) cite this page for the mapping, the schemas and the naming rules. The delivery plan is in `docs/plans/compact-tool-surface.md`.
 
@@ -69,6 +69,37 @@ Legacy names inside success result messages and field descriptions (for example 
 ### 4c. Field types
 
 Each compact property is at least as strict as the legacy validator for that field (`CommonSchemas` ids, `CommonSchemas.date` for dates including `cutoff`, integer cents for `amount`, `min_amount` and `max_amount`), so the compact schema never accepts what the legacy schema rejects. The legacy schema still validates after normalisation.
+
+### 4d. Routes and parity counting (shipped by #672)
+
+A row of a compact tool may carry `routes`: alternative legacy targets chosen by which keys the caller sent. Each route has `triggers` (the route is chosen when any of those keys is present), its own `fields` schema, and the same `rename`, `wrap`, `drop` and `fixed` options as a row. `drop` names compact keys that are consumed but not forwarded (for example `sort`, `scope`). `fixed` names legacy arguments the compact layer sets itself and that win over a caller key (for example `type: "accounts"` on `actual_entities_search`). A route may also carry `when(call)` for a trigger that only counts for some values (`scope: "server"`). The legacy name comes only from the static tables, never from caller input.
+
+Two routes triggered together are refused as mutually exclusive, a trigger without a key its route requires is refused naming both ("query: required with limit"), and a key the chosen target does not declare is refused naming the types that accept it. All of these are `ZodError`s raised before any `callOperation`, and the flat published schema runs the same plan, so a client that validates locally sees the same refusal.
+
+`get_context` routes (selector `topic`, default `structure`):
+
+| topic | legacy tool |
+|-------|-------------|
+| structure | `actual_get_context` (options renamed to camelCase) |
+| server | `actual_server_info` |
+| version | `actual_server_get_version` |
+| preferences | `actual_preferences_get` |
+
+`list_entities` routes (selector `type`, required):
+
+| type | default row | routes |
+|------|-------------|--------|
+| account, category | `actual_accounts_list`, `actual_categories_get` | `query`, `match_type`, `limit` to `actual_entities_search`; `name` to `actual_get_id_by_name` |
+| payee | `actual_payees_get` | the two above, and `sort` to `actual_payees_common_list` |
+| account_group, category_group, tag | `actual_account_groups_list`, `actual_category_groups_get`, `actual_tags_list` | none |
+| rule | `actual_rules_get` | `payee_id` to `actual_payee_rules_get` |
+| schedule | `actual_schedules_get` | `name` to `actual_get_id_by_name`; `schedule_id`, `start`, `end`, `count` to `actual_schedules_dates` |
+| note | `actual_notes_get` (`id` required) | none |
+| budget_file | `actual_budgets_list_available` | `scope: "server"` to `actual_budgets_get_all` |
+
+Parity counting (`tests/unit/compact_mapping_parity.test.js`): a legacy tool is mapped when some row or route of a compact tool targets it, and it must belong to exactly one compact tool. Several rows or routes of the same tool may share a target, so `actual_entities_search` and `actual_get_id_by_name` are counted once, under `list_entities`, however many types route to them.
+
+The 4b rewrite lives in `src/compact/dispatch.ts` (`legacyPhrases`, `rewriteError`, `rewriteResult`). A route's phrase names its first trigger, for example `list_entities with query`. An error is rewritten in place, so a `NotFoundRefusal` keeps its class and `isPreflightRefusal` still holds; its `listTool` property is not rewritten.
 
 ## 5. Update-shape normalisation
 

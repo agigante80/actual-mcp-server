@@ -60,6 +60,11 @@ const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
  *   actual_session_close   closes a pooled connection: server state, not budget data.
  */
 const READ_ONLY = new Set<string>([
+  // Compact tools (#672): every action of each maps to a legacy tool outside WRITE_CAPABLE.
+  // tests/unit/compact_dispatch.test.js re-derives that from the registry. readOnlyHint implies
+  // idempotentHint true below, so neither is added to IDEMPOTENT.
+  'get_context',
+  'list_entities',
   'actual_account_groups_list',
   'actual_account_flow_summary',
   'actual_recurring_expenses_summary',

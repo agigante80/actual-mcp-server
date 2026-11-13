@@ -17,12 +17,12 @@ export interface CompactOperations {
   callOperation(legacyName: string, args: unknown, via?: { tool: string; action: string }): Promise<unknown>;
 }
 
-/** One action of a compact tool: which legacy tool it calls and how the arguments are shaped. */
-export interface CompactActionRow {
-  /** The registered legacy tool this action calls. Validated against the registry at startup. */
+/** What a call is turned into: which legacy tool, which fields are allowed, how they are shaped. */
+export interface CompactTarget {
+  /** The registered legacy tool this target calls. Validated against the registry at startup. */
   legacy: string;
   /**
-   * The action's own STRICT input schema, selector excluded. It is the validation authority:
+   * The target's own STRICT input schema, selector excluded. It is the validation authority:
    * a key the schema does not name is refused, so a typo is never silently dropped.
    */
   fields: z.ZodObject;
@@ -33,6 +33,31 @@ export interface CompactActionRow {
    * moves under `into`; the wrapper object is always present, even when empty.
    */
   wrap?: { into: string; top: readonly string[] };
+  /** Compact keys the compact layer consumes itself and never forwards (a default-valued switch). */
+  drop?: readonly string[];
+  /** Legacy arguments the compact layer sets itself (a value translation such as `type: "accounts"`). Win over a caller key. */
+  fixed?: Readonly<Record<string, unknown>>;
+}
+
+/**
+ * A field route (#672): inside one action, the presence of a trigger field sends the call to a
+ * different legacy tool than the action's default. The legacy name is a static table value,
+ * never read from input. A route's `fields` are the only fields allowed once it is chosen.
+ */
+export interface CompactRoute extends CompactTarget {
+  /** The route is chosen when ANY of these keys is present (not undefined) in the call. */
+  triggers: readonly string[];
+  /** Optional extra condition on the call, for a trigger that selects only by value. */
+  when?: (call: Readonly<Record<string, unknown>>) => boolean;
+}
+
+/** One action of a compact tool: a default target, plus optional field routes. */
+export interface CompactActionRow extends CompactTarget {
+  /**
+   * Routes in priority order. More than one matching route is refused (the fields name
+   * different lookups); none matching means the row's own target is called.
+   */
+  routes?: readonly CompactRoute[];
 }
 
 /** A compact tool: one published name, many actions. */

@@ -2,8 +2,10 @@
 //
 // #671: MCP_TOOL_SURFACE, the compact registry, the dispatcher and callOperation.
 //
-// The registry ships EMPTY, so every case builds its own compact spec over real legacy tool
-// names and stubs the legacy tools' `call`, which means nothing here reaches the adapter.
+// Most cases build their own compact spec over real legacy tool names and stub the legacy
+// tools' `call`, so nothing here reaches the adapter. #672 adds the shipped registry checks,
+// routes (a row that sends different arguments to a different legacy tool) and the 4b rewrite
+// of legacy tool names in error text.
 //
 // What this proves, and why each part exists:
 //   - the resolver publishes the right list per surface and hides the rest for the right
@@ -37,7 +39,8 @@ console.log('\n[compact-dispatch]');
 const { z } = await import('zod');
 const { resolvePublishedToolNames, WRITE_CAPABLE } = await import('../../dist/src/lib/toolsets.js');
 const { ToolUnavailableError } = await import('../../dist/src/lib/errors.js');
-const { dispatchCompact, buildCompactTool } = await import('../../dist/src/compact/dispatch.js');
+const { dispatchCompact, buildCompactTool, compactLegacyNames, legacyPhrases } = await import('../../dist/src/compact/dispatch.js');
+const { NotFoundRefusal, isPreflightRefusal } = await import('../../dist/src/lib/errors.js');
 const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
 const { buildToolListEntries } = await import('../../dist/src/lib/tool-list-entry.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
@@ -85,7 +88,7 @@ const restore = () => { for (const [n, fn] of originals) manager.getTool(n).call
 const init = (settings, specs = [spec]) => manager.initialize({ ...ALL, ...settings }, specs);
 
 const resolveWith = (settings, compact = [spec]) =>
-  resolvePublishedToolNames(legacyNames, { ...ALL, ...settings }, compact.map((c) => ({ name: c.name, legacy: [...c.actions.values()].map((r) => r.legacy) })));
+  resolvePublishedToolNames(legacyNames, { ...ALL, ...settings }, compact.map((c) => ({ name: c.name, legacy: compactLegacyNames(c) })));
 
 const reason = async (fn) => { try { await fn(); } catch (e) { return e; } return undefined; };
 
@@ -312,10 +315,140 @@ await check('NEGATIVE: callOperation before initialize fails closed', async () =
   await assert.rejects(() => new Ctor().callOperation(LIST, {}), /initialize\(\)/);
 });
 
+// ---- routes, drop, fixed and the 4b rewrite (#672) ----
+
+const RA = 'actual_accounts_list';
+const RB = 'actual_entities_search';
+const RC = 'actual_get_id_by_name';
+const qSchema = z.string().describe('query');
+const nSchema = z.string().describe('name');
+const lSchema = z.number().describe('limit');
+const rows = { none: z.object({}) };
+const routed = {
+  name: 'fixture_routed',
+  description: 'Fixture. Returns things.',
+  selector: 'type',
+  actions: new Map([
+    [
+      'account',
+      {
+        legacy: RA,
+        fields: rows.none,
+        routes: [
+          { legacy: RB, triggers: ['query', 'limit'], fields: z.object({ query: qSchema.optional(), limit: lSchema.optional() }), fixed: { type: 'accounts' } },
+          { legacy: RC, triggers: ['name'], fields: z.object({ name: nSchema.optional() }), drop: ['limit'], fixed: { type: 'accounts' } },
+        ],
+      },
+    ],
+  ]),
+};
+const rec = () => {
+  const seen = [];
+  return { seen, ops: { callOperation: async (n, a) => { seen.push({ n, a }); return { ok: n }; } } };
+};
+const cm = (spec2, input, ops) => dispatchCompact(ops, spec2, input);
+
+await check('route: a trigger key sends the call to the route target with fixed args merged', async () => {
+  const { seen, ops } = rec();
+  await cm(routed, { type: 'account', query: 'x' }, ops);
+  assert.deepStrictEqual(seen, [{ n: RB, a: { query: 'x', type: 'accounts' } }]);
+});
+
+await check('route: no trigger key uses the row default and forwards the remaining keys', async () => {
+  const { seen, ops } = rec();
+  await cm(routed, { type: 'account' }, ops);
+  assert.deepStrictEqual(seen, [{ n: RA, a: {} }]);
+});
+
+await check('route: drop removes a compact key the target does not take', async () => {
+  const dropping = { ...routed, actions: new Map([['account', { ...routed.actions.get('account'), routes: [{ legacy: RC, triggers: ['name'], fields: z.object({ name: nSchema.optional(), limit: lSchema.optional() }), drop: ['limit'] }] }]]) };
+  const { seen, ops } = rec();
+  await cm(dropping, { type: 'account', name: 'n', limit: 4 }, ops);
+  assert.deepStrictEqual(seen, [{ n: RC, a: { name: 'n' } }]);
+});
+
+await check('NEGATIVE: fixed wins over a caller key of the same name, so the target cannot be re-pointed', async () => {
+  const pinned = { ...routed, actions: new Map([['account', { ...routed.actions.get('account'), routes: [{ legacy: RB, triggers: ['query'], fields: z.object({ query: qSchema.optional(), mode: z.string().optional() }), fixed: { mode: 'pinned' } }] }]]) };
+  const { seen, ops } = rec();
+  await cm(pinned, { type: 'account', query: 'x', mode: 'caller' }, ops);
+  assert.deepStrictEqual(seen, [{ n: RB, a: { query: 'x', mode: 'pinned' } }]);
+});
+
+await check('NEGATIVE: two routes triggered together are refused as mutually exclusive, nothing is called', async () => {
+  const { seen, ops } = rec();
+  const e = await reason(() => cm(routed, { type: 'account', query: 'x', name: 'n' }, ops));
+  assert.ok(e instanceof z.ZodError && /mutually exclusive/.test(e.issues.map((i) => i.message).join()), String(e));
+  assert.strictEqual(seen.length, 0);
+});
+
+await check('NEGATIVE: a trigger without the key its route requires is refused naming both', async () => {
+  const req = { ...routed, actions: new Map([['account', { ...routed.actions.get('account'), routes: [{ legacy: RB, triggers: ['query', 'limit'], fields: z.object({ query: qSchema, limit: lSchema.optional() }) }] }]]) };
+  const { seen, ops } = rec();
+  const e = await reason(() => cm(req, { type: 'account', limit: 5 }, ops));
+  assert.ok(e instanceof z.ZodError && e.issues.some((i) => /query: required with limit/.test(`${i.path.join('.')}: ${i.message}`)), String(e && e.message));
+  assert.strictEqual(seen.length, 0);
+});
+
+await check('NEGATIVE: a key no target of the chosen row declares is refused, nothing is called', async () => {
+  const { seen, ops } = rec();
+  const e = await reason(() => cm(routed, { type: 'account', bogus: 1 }, ops));
+  assert.ok(e instanceof z.ZodError, String(e));
+  assert.strictEqual(seen.length, 0);
+});
+
+await check('compactLegacyNames lists row defaults and route targets, deduplicated', () => {
+  assert.deepStrictEqual([...compactLegacyNames(routed)].sort(), [RA, RB, RC].sort());
+});
+
+await check('the flat published schema has no oneOf/anyOf and refuses what planCall refuses', () => {
+  const tool = buildCompactTool(routed, rec().ops);
+  assert.ok(!/oneOf|anyOf/.test(JSON.stringify(z.toJSONSchema(tool.inputSchema))));
+  assert.ok(!tool.inputSchema.safeParse({ type: 'account', query: 'x', name: 'n' }).success);
+  assert.ok(tool.inputSchema.safeParse({ type: 'account', query: 'x' }).success);
+});
+
+await check('legacyPhrases maps a default to "tool with type X" and a route to its first trigger', () => {
+  const ph = legacyPhrases([routed]);
+  assert.strictEqual(ph.get(RA), 'fixture_routed with type account');
+  assert.strictEqual(ph.get(RB), 'fixture_routed with query');
+  assert.strictEqual(ph.get(RC), 'fixture_routed with name');
+});
+
+await check('4b: a thrown error naming a legacy tool is rewritten in place and keeps its class', async () => {
+  const ph = legacyPhrases([routed]);
+  const err = new NotFoundRefusal('Account', 'abc', RB);
+  const ops = { callOperation: async () => { throw err; } };
+  const e = await reason(() => dispatchCompact(ops, routed, { type: 'account', query: 'x' }, ph));
+  assert.strictEqual(e, err, 'same object');
+  assert.ok(e instanceof NotFoundRefusal && isPreflightRefusal(e));
+  assert.ok(!/actual_/.test(e.message) && /fixture_routed with query/.test(e.message), e.message);
+});
+
+await check('4b: a returned top-level error string is rewritten, other fields are untouched', async () => {
+  const ph = legacyPhrases([routed]);
+  const ops = { callOperation: async () => ({ error: `use ${RA}`, note: `keep ${RA}`, n: 1 }) };
+  const r = await dispatchCompact(ops, routed, { type: 'account' }, ph);
+  assert.ok(!/actual_/.test(r.error) && /fixture_routed with type account/.test(r.error), r.error);
+  assert.strictEqual(r.note, `keep ${RA}`);
+});
+
+await check('NEGATIVE: an unknown legacy name in error text is left as written', async () => {
+  const ph = legacyPhrases([routed]);
+  const ops = { callOperation: async () => { throw new Error('see actual_unknown_tool'); } };
+  const e = await reason(() => dispatchCompact(ops, routed, { type: 'account' }, ph));
+  assert.ok(/actual_unknown_tool/.test(e.message));
+});
+
+await check('startup validation rejects a route whose legacy tool is not registered', async () => {
+  const bad = { ...routed, name: 'fixture_bad', actions: new Map([['account', { ...routed.actions.get('account'), routes: [{ legacy: 'actual_not_a_tool', triggers: ['query'], fields: z.object({ query: qSchema.optional() }) }] }]]) };
+  await assert.rejects(() => manager.initialize({ ...ALL, surface: 'all' }, [bad]), /actual_not_a_tool/);
+  await manager.initialize(ALL);
+});
+
 // ---- registry and source guards ----
 
-await check('the shipped registry is empty (#671 ships no compact tool)', () => {
-  assert.strictEqual(COMPACT_TOOLS.length, 0);
+await check('the shipped registry holds exactly get_context and list_entities (#672)', () => {
+  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities']);
 });
 
 await check('src/compact/ never imports the adapter or @actual-app/api, and never calls .call(', () => {
@@ -328,7 +461,7 @@ await check('src/compact/ never imports the adapter or @actual-app/api, and neve
   }
 });
 
-// ---- second-source guards (vacuous while the registry is empty, wired for #672 onward) ----
+// ---- second-source guards (run over the shipped registry) ----
 //
 // The per-legacy-tool guards (tool_annotations, tool_description_checklist,
 // new_tool_completeness) iterate the legacy registry only, so a compact tool would escape
@@ -341,7 +474,7 @@ const { titleFor } = await import('../../dist/src/lib/tool-titles.js');
 function compactMetadataProblems(specs) {
   const problems = [];
   for (const spec of specs) {
-    const writes = [...spec.actions.values()].some((r) => WRITE_CAPABLE.has(r.legacy));
+    const writes = compactLegacyNames(spec).some((n) => WRITE_CAPABLE.has(n));
     const ann = annotationsFor(spec.name);
     if (titleFor(spec.name) === undefined) problems.push(`${spec.name} has no title in src/lib/tool-titles.ts`);
     if (ann.readOnlyHint === true && writes) problems.push(`${spec.name} claims readOnlyHint but an action maps to a write-capable tool`);

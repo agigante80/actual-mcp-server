@@ -2766,3 +2766,116 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(back?.success).toBe(true);
   });
 });
+
+// ==================== COMPACT SURFACE (#672) ====================
+// The stack runs MCP_TOOL_SURFACE=all (tests/e2e/compose.yaml), so the compact tools are
+// published beside the legacy ones. Each row calls the compact tool and the legacy tool it
+// routes to, and asserts the same result. Workers are 1, so two reads in a row see one state.
+test.describe('Docker E2E - compact get_context and list_entities (#672)', () => {
+  const keys = (v: unknown) => Object.keys((v ?? {}) as object).sort();
+
+  // ---- get_context: one row per topic ----
+  test('get_context - topic structure matches actual_get_context, and defaults to structure', async ({ mcp, makeAccount, makeCategory, makePayee }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const payee = await makePayee();
+    const compact = await mcp.call('get_context', { payee_limit: 2000 });
+    expect(await mcp.call('get_context', { topic: 'structure', payee_limit: 2000 })).toEqual(compact);
+    expect(compact).toEqual(await mcp.call('actual_get_context', { payeeLimit: 2000 }));
+    expect(JSON.stringify(compact)).toContain(account.id);
+    expect(JSON.stringify(compact)).toContain(category.id);
+    expect(JSON.stringify(compact)).toContain(payee.id);
+  });
+
+  test('get_context - include flags are honoured', async ({ mcp, makeAccount }) => {
+    await makeAccount();
+    const compact = await mcp.call('get_context', { include_payees: false, include_categories: false });
+    expect(compact).toEqual(await mcp.call('actual_get_context', { includePayees: false, includeCategories: false }));
+  });
+
+  test('get_context - topic server returns the same keys as actual_server_info', async ({ mcp }) => {
+    // uptime moves between two calls, so only the shape is deterministic.
+    expect(keys(await mcp.call('get_context', { topic: 'server' }))).toEqual(keys(await mcp.call('actual_server_info')));
+  });
+
+  test('get_context - topic version matches actual_server_get_version', async ({ mcp }) => {
+    expect(await mcp.call('get_context', { topic: 'version' })).toEqual(await mcp.call('actual_server_get_version'));
+  });
+
+  test('get_context - topic preferences matches actual_preferences_get', async ({ mcp }) => {
+    expect(await mcp.call('get_context', { topic: 'preferences' })).toEqual(await mcp.call('actual_preferences_get'));
+  });
+
+  test('get_context - refuses an option the topic does not take, naming the field', async ({ mcp }) => {
+    await expect(mcp.call('get_context', { topic: 'server', include_accounts: true })).rejects.toThrow(/include_accounts/);
+  });
+
+  // ---- list_entities: one row per type ----
+  const DEFAULT_ROWS: [string, string][] = [
+    ['account', 'actual_accounts_list'],
+    ['account_group', 'actual_account_groups_list'],
+    ['category', 'actual_categories_get'],
+    ['category_group', 'actual_category_groups_get'],
+    ['payee', 'actual_payees_get'],
+    ['tag', 'actual_tags_list'],
+    ['rule', 'actual_rules_get'],
+    ['schedule', 'actual_schedules_get'],
+    ['budget_file', 'actual_budgets_list_available'],
+  ];
+  for (const [type, legacy] of DEFAULT_ROWS) {
+    test(`list_entities - type ${type} matches ${legacy}`, async ({ mcp }) => {
+      expect(await mcp.call('list_entities', { type })).toEqual(await mcp.call(legacy));
+    });
+  }
+
+  test('list_entities - query and name on account, category and payee match the legacy search and id lookup', async ({ mcp, makeAccount, makeCategory, makePayee }) => {
+    const token = `Cq${uniqueSuffix().replace(/-/g, '')}`;
+    const account = await makeAccount({ name: `E2E-${token}-acct` });
+    const category = await makeCategory({ name: `E2E-${token}-cat` });
+    const payee = await makePayee({ name: `E2E-${token}-pay` });
+    const rows: [string, string, { id: string; name: string }][] = [
+      ['account', 'accounts', account],
+      ['category', 'categories', category],
+      ['payee', 'payees', payee],
+    ];
+    for (const [type, plural, ref] of rows) {
+      const q = await mcp.call('list_entities', { type, query: token.toLowerCase(), match_type: 'contains', limit: 50 });
+      expect(q).toEqual(await mcp.call('actual_entities_search', { type: plural, query: token.toLowerCase(), matchType: 'contains', limit: 50 }));
+      expect((q.matches as any[]).some((m) => m.id === ref.id), `${type} query finds the seeded entity`).toBe(true);
+      const byName = await mcp.call('list_entities', { type, name: ref.name });
+      expect(byName).toEqual(await mcp.call('actual_get_id_by_name', { type: plural, name: ref.name }));
+      expect(JSON.stringify(byName)).toContain(ref.id);
+    }
+  });
+
+  test('list_entities - payee sort frequency matches actual_payees_common_list', async ({ mcp }) => {
+    expect(await mcp.call('list_entities', { type: 'payee', sort: 'frequency' })).toEqual(await mcp.call('actual_payees_common_list'));
+  });
+
+  test('list_entities - rule with payee_id matches actual_payee_rules_get', async ({ mcp, makePayee }) => {
+    const payee = await makePayee();
+    expect(await mcp.call('list_entities', { type: 'rule', payee_id: payee.id })).toEqual(await mcp.call('actual_payee_rules_get', { payeeId: payee.id }));
+  });
+
+  test('list_entities - schedule name and schedule_id match the legacy lookups', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule();
+    expect(await mcp.call('list_entities', { type: 'schedule', name: schedule.name }))
+      .toEqual(await mcp.call('actual_get_id_by_name', { type: 'schedules', name: schedule.name }));
+    expect(await mcp.call('list_entities', { type: 'schedule', schedule_id: schedule.id, count: 2 }))
+      .toEqual(await mcp.call('actual_schedules_dates', { schedule_id: schedule.id, count: 2 }));
+  });
+
+  test('list_entities - note with a budget month id matches actual_notes_get', async ({ mcp }) => {
+    expect(await mcp.call('list_entities', { type: 'note', id: 'budget-1970-01' })).toEqual(await mcp.call('actual_notes_get', { id: 'budget-1970-01' }));
+  });
+
+  test('list_entities - budget_file scope configured and server match the two legacy listings', async ({ mcp }) => {
+    expect(await mcp.call('list_entities', { type: 'budget_file', scope: 'configured' })).toEqual(await mcp.call('actual_budgets_list_available'));
+    expect(await mcp.call('list_entities', { type: 'budget_file', scope: 'server' })).toEqual(await mcp.call('actual_budgets_get_all'));
+  });
+
+  test('list_entities - refuses query with name together, and an unknown type', async ({ mcp }) => {
+    await expect(mcp.call('list_entities', { type: 'account', query: 'x', name: 'y' })).rejects.toThrow(/mutually exclusive/);
+    await expect(mcp.call('list_entities', { type: 'transaction' })).rejects.toThrow();
+  });
+});

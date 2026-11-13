@@ -54,6 +54,9 @@ const names = [...toolsSrc.matchAll(/'(actual_[A-Za-z0-9_]+)'/g)]
   .filter((n, i, a) => a.indexOf(n) === i);
 
 const { annotationsFor, _ANNOTATION_SETS } = await import('../../dist/src/lib/tool-annotations.js');
+const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+const { compactLegacyNames } = await import('../../dist/src/compact/dispatch.js');
+const { WRITE_CAPABLE } = await import('../../dist/src/lib/toolsets.js');
 
 check('the derivation is real (guards against every check below passing over nothing)', () => {
   assert.ok(writes.size >= 20, `expected many write adapter methods, found ${writes.size}`);
@@ -154,11 +157,26 @@ check('an unclassified tool publishes NO safety claim', () => {
 });
 
 check('the classification sets name only real tools', () => {
-  const known = new Set(names);
+  // Compact tools (#672) are not in IMPLEMENTED_TOOLS by design; their names are real too.
+  const known = new Set([...names, ...COMPACT_TOOLS.map((t) => t.name)]);
   const unknown = Object.values(_ANNOTATION_SETS)
     .flatMap((s) => [...s])
     .filter((n) => !known.has(n));
   assert.strictEqual(unknown.length, 0, `sets reference non-existent tools: ${unknown.join(', ')}`);
+});
+
+check('every compact tool is annotated read-only, idempotent and closed-world exactly when all its targets are readers (#672)', () => {
+  for (const t of COMPACT_TOOLS) {
+    const writes = compactLegacyNames(t).filter((n) => WRITE_CAPABLE.has(n));
+    const a = annotationsFor(t.name);
+    assert.strictEqual(a.readOnlyHint, writes.length === 0, `${t.name}: readOnlyHint vs write-capable targets [${writes.join(', ')}]`);
+    if (a.readOnlyHint) assert.strictEqual(a.idempotentHint, true, `${t.name}: a read-only tool is idempotent`);
+    assert.notStrictEqual(a.openWorldHint, true, `${t.name}: no open-world target`);
+  }
+});
+
+check('NEGATIVE: a compact name nobody classified publishes no safety claim', () => {
+  assert.strictEqual(annotationsFor('not_a_compact_tool').readOnlyHint, false);
 });
 
 check('a tool whose OWN description claims upsert semantics is marked idempotent', () => {

@@ -143,6 +143,7 @@ const { TOOL_TITLES, titleFor } = await import('../../dist/src/lib/tool-titles.j
 const { annotationsFor } = await import('../../dist/src/lib/tool-annotations.js');
 const { buildToolListEntries } = await import('../../dist/src/lib/tool-list-entry.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
+const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
 
 const implementedSrc = readFileSync(join(ROOT, 'src/actualToolsManager.ts'), 'utf8');
 const implemented = [...implementedSrc.slice(0, implementedSrc.indexOf('];')).matchAll(/'(actual_[A-Za-z0-9_]+)'/g)]
@@ -154,8 +155,11 @@ await check('IMPLEMENTED_TOOLS was read (guards against every check passing over
 await check('every tool in IMPLEMENTED_TOOLS has a title', () => {
   assert.deepStrictEqual(missingFrom(TOOL_TITLES, implemented), []);
 });
-await check('no stale key: every TOOL_TITLES key is in IMPLEMENTED_TOOLS', () => {
-  assert.deepStrictEqual(staleIn(TOOL_TITLES, implemented), []);
+await check('no stale key: every TOOL_TITLES key is in IMPLEMENTED_TOOLS or the compact registry', () => {
+  assert.deepStrictEqual(staleIn(TOOL_TITLES, [...implemented, ...COMPACT_TOOLS.map((t) => t.name)]), []);
+});
+await check('every compact tool has a title (#672)', () => {
+  assert.deepStrictEqual(missingFrom(TOOL_TITLES, COMPACT_TOOLS.map((t) => t.name)), []);
 });
 await check('titles are unique across the set', () => {
   assert.deepStrictEqual(duplicates(TOOL_TITLES), []);

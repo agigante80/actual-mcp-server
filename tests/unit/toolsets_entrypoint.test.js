@@ -193,10 +193,27 @@ await check('an invalid MCP_TOOL_SURFACE value exits 1, naming the variable and 
   assert.ok(/MCP_TOOL_SURFACE/.test(stderr) && /banana/.test(stderr), `stderr must name variable and value, got: ${stderr.slice(-400)}`);
 });
 
-await check('MCP_TOOL_SURFACE=compact exits 1 while no compact tool is registered (#671)', async () => {
-  const { code, stderr } = await runToExit(['--stdio'], { MCP_TOOL_SURFACE: 'compact' });
-  assert.strictEqual(code, 1);
-  assert.ok(/No tools would be published/.test(stderr), `stderr must say nothing would be published, got: ${stderr.slice(-400)}`);
+await check('MCP_TOOL_SURFACE=compact publishes exactly the compact tools over stdio, with annotations and titles (#672)', async () => {
+  const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact' }, [INIT, INITIALIZED, LIST]);
+  const tools = res.get(2).result.tools;
+  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities']);
+  for (const t of tools) {
+    assert.strictEqual(t.annotations.readOnlyHint, true, `${t.name} readOnlyHint`);
+    assert.ok(typeof t.title === 'string' && t.title.length > 0, `${t.name} title`);
+    assert.strictEqual(t.outputSchema, undefined, `${t.name} has no outputSchema`);
+  }
+});
+
+await check('MCP_TOOL_SURFACE=compact under MCP_READ_ONLY=true still publishes both compact tools (#672)', async () => {
+  const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact', MCP_READ_ONLY: 'true' }, [INIT, INITIALIZED, LIST]);
+  assert.deepStrictEqual(res.get(2).result.tools.map((t) => t.name), ['get_context', 'list_entities']);
+});
+
+await check('NEGATIVE: the default surface does not list the compact tools (#672)', async () => {
+  const res = await stdioSession({}, [INIT, INITIALIZED, LIST]);
+  const names = res.get(2).result.tools.map((t) => t.name);
+  assert.ok(!names.includes('get_context') && !names.includes('list_entities'));
+  assert.strictEqual(names.length, 85);
 });
 
 await check('a configuration that resolves to zero tools exits 1', async () => {

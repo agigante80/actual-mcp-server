@@ -1,9 +1,10 @@
 import type { CompactToolSpec } from './types.js';
+import { getContext } from './tools/get_context.js';
+import { listEntities } from './tools/list_entities.js';
 
 /**
- * Every compact tool this server can publish (#671). EMPTY on purpose: the layer ships with
- * its dispatcher, guards and setting first, and each compact tool lands in its own ticket
- * (#672 onward) by appending one spec here. Until then MCP_TOOL_SURFACE=compact refuses to
- * start ("No tools would be published") and `all` publishes only the legacy tools.
+ * Every compact tool this server can publish (#671). Each compact tool lands in its own
+ * ticket (#672 onward) by appending one spec here. A compact tool is NOT in IMPLEMENTED_TOOLS
+ * or src/tools/index.ts: the legacy registry stays 85 tools.
  */
-export const COMPACT_TOOLS: readonly CompactToolSpec[] = [];
+export const COMPACT_TOOLS: readonly CompactToolSpec[] = [getContext, listEntities];

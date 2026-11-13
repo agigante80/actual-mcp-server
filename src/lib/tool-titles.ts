@@ -102,6 +102,9 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   actual_transactions_update: 'Update transaction',
   actual_transactions_update_batch: 'Update transactions in bulk',
   actual_transfers_create: 'Create transfer',
+  // Compact tools (#672). Not registered legacy tools: tool_titles.test.js checks them against COMPACT_TOOLS.
+  get_context: 'Get budget and server context',
+  list_entities: 'List budget entities',
 };
 
 /** The display title for a tool, or undefined when it has none (the builder then omits it). */

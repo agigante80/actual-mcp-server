@@ -36,12 +36,12 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   bytes, plus about 2%. The heaviest entry is unchanged, so the per-tool ceiling is too.
 const TOTAL_CEILING = 120500;
 const PER_TOOL_CEILING = 3900;
-// #671: the compact registry ships empty, so its measured total is 0. This is the ceiling for
-// the compact tools COMBINED (they are what the `compact` surface lists; the design record
-// plans 15). The per-tool ceiling above applies to each compact entry unchanged. The `all`
-// surface lists both, so its budget is the sum of the two ceilings, never a third number.
-// #672 onward raise COMPACT_TOTAL_CEILING as tools land, stating the measured size here.
-const COMPACT_TOTAL_CEILING = 30000;
+// The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
+// record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
+// `all` surface lists both, so its budget is the sum of the two ceilings, never a third number.
+// #672 (get_context, list_entities) measured 6210 bytes, so the ceiling is that plus about 10%.
+// Each later compact ticket raises it by its own measured size, stated here.
+const COMPACT_TOTAL_CEILING = 6800;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

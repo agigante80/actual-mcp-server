@@ -24,7 +24,9 @@ async function verifyCompactRegistry(legacyNames) {
     if (seen.has(spec.name) || legacyNames.has(spec.name)) throw new Error(`compact tool name is not unique: ${spec.name}`);
     seen.add(spec.name);
     for (const [action, row] of spec.actions) {
-      if (!legacyNames.has(row.legacy)) throw new Error(`compact ${spec.name}.${action}: unregistered legacy tool ${row.legacy}`);
+      for (const legacy of [row.legacy, ...(row.routes ?? []).map((r) => r.legacy)]) {
+        if (!legacyNames.has(legacy)) throw new Error(`compact ${spec.name}.${action}: unregistered legacy tool ${legacy}`);
+      }
     }
     console.log(`compact ${spec.name}: OK (${spec.actions.size} actions)`);
   }
