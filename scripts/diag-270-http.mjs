@@ -58,13 +58,15 @@ async function main() {
   // A: steady-state pooled write under a mid-session stall.
   A = mkClient();
   await A.client.connect(A.transport);
-  const g = await A.client.callTool({ name: 'actual_category_groups_get', arguments: {} });
+  // #680: compact tool names; the gate container refuses a legacy name.
+  const g = await A.client.callTool({ name: 'list_entities', arguments: { type: 'category_group' } });
   const gid = (JSON.parse(textOf(g) || '{}').groups || [])[0]?.id;
-  await A.client.callTool({ name: 'actual_categories_create', arguments: { name: `MCP-DIAG270-base-${RUN_ID}`, group_id: gid } });
+  const createCategory = (label) => A.client.callTool({ name: 'manage_categories', arguments: { action: 'create', entity: 'category', name: `MCP-DIAG270-${label}-${RUN_ID}`, group_id: gid } });
+  await createCategory('base');
   T0 = now();
   log('A: session open; baseline write OK. Blackholing upstream...');
   await blackhole();
-  const wr = await bounded(A.client.callTool({ name: 'actual_categories_create', arguments: { name: `MCP-DIAG270-mid-${RUN_ID}`, group_id: gid } }).then((r) => (r.isError ? 'rejected' : 'resolved'), () => 'rejected'));
+  const wr = await bounded(createCategory('mid').then((r) => (r.isError ? 'rejected' : 'resolved'), () => 'rejected'));
   log(`A: steady-state pooled write during stall -> ${wr === '__HANG__' ? 'HANG' : wr} (expected: resolved; offline-first)`);
   await clearNet();
 
@@ -76,7 +78,7 @@ async function main() {
   const initRun = (async () => {
     await B.client.connect(B.transport);
     phase = 'op';
-    await B.client.callTool({ name: 'actual_category_groups_get', arguments: {} });
+    await B.client.callTool({ name: 'list_entities', arguments: { type: 'category_group' } });
     return 'ok';
   })().catch(() => 'client-rejected');
   const initRes = await bounded(initRun);

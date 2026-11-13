@@ -161,7 +161,9 @@ await checkAsync('HARVEST (#576): every name the step 9 scripts generate matches
       seen++;
     }
   }
-  assert.ok(seen >= 4, `expected the harness templates to be harvested, got ${seen}`);
+  // regression-270 has two templates (category, group); diag-270 has one since #680 folded
+  // its two creates into one helper.
+  assert.ok(seen >= 3, `expected the harness templates to be harvested, got ${seen}`);
 });
 
 check('the regex is anchored (no substring match inside a longer human name)', () => {

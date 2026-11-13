@@ -25,11 +25,14 @@ const text = (v) => ({ content: [{ type: 'text', text: JSON.stringify(v) }] });
 function stubServer({ cats = [], groups = [], hang = new Set(), fail = new Set() } = {}) {
   const calls = [];
   const callTool = async (name, args) => {
-    calls.push(args?.id ? `${name}:${args.id}` : name);
-    if (hang.has(name) || hang.has(args?.id)) return new Promise(() => {});
+    // #680: the compact calls. `list:<type>` for a listing, `delete:<entity>:<id>` for a delete.
+    const key = name === 'list_entities' ? `list:${args.type}` : `${args.action}:${args.entity}:${args.id}`;
+    assert.ok(name === 'list_entities' || name === 'manage_categories', `unexpected tool ${name}`);
+    calls.push(key);
+    if (hang.has(key) || hang.has(args?.id)) return new Promise(() => {});
     if (fail.has(args?.id)) return { isError: true, content: [{ type: 'text', text: 'nope' }] };
-    if (name === 'actual_categories_get') return text({ result: cats });
-    if (name === 'actual_category_groups_get') return text({ groups });
+    if (key === 'list:category') return text({ result: cats });
+    if (key === 'list:category_group') return text({ groups });
     return text({ ok: true });
   };
   return { calls, callTool };
@@ -63,8 +66,8 @@ await check('deletes exactly this run\'s categories, then its groups, in that or
   });
   const r = await deleteOwnObjects(s.callTool, { prefix: 'MCP-REG270', runId: 4242, log: quiet });
   assert.deepStrictEqual(s.calls, [
-    'actual_categories_get', 'actual_categories_delete:c1', 'actual_categories_delete:c2',
-    'actual_category_groups_get', 'actual_category_groups_delete:g1',
+    'list:category', 'delete:category:c1', 'delete:category:c2',
+    'list:category_group', 'delete:category_group:g1',
   ]);
   assert.deepStrictEqual(r, { deleted: 3, failed: 0, timedOut: false });
 });
@@ -72,7 +75,7 @@ await check('deletes exactly this run\'s categories, then its groups, in that or
 await check('NEGATIVE: nothing of ours present means no delete call at all', async () => {
   const s = stubServer({ cats: [{ id: 'c3', name: 'MCP-REG270-baseline-9999' }], groups: [{ id: 'g2', name: 'Bills' }] });
   const r = await deleteOwnObjects(s.callTool, { prefix: 'MCP-REG270', runId: 4242, log: quiet });
-  assert.ok(!s.calls.some((c) => c.includes('_delete')), `unexpected delete: ${s.calls}`);
+  assert.ok(!s.calls.some((c) => c.startsWith('delete:')), `unexpected delete: ${s.calls}`);
   assert.strictEqual(r.deleted, 0);
 });
 
@@ -86,14 +89,14 @@ await check('a timed-out call stops the cleanup instead of queueing every later 
   const r = await deleteOwnObjects(s.callTool, { prefix: 'MCP-REG270', runId: 1, boundMs: 50, log: quiet });
   assert.ok(Date.now() - t0 < 1000, 'cleanup must be bounded');
   assert.strictEqual(r.timedOut, true);
-  assert.deepStrictEqual(s.calls, ['actual_categories_get', 'actual_categories_delete:c1']);
+  assert.deepStrictEqual(s.calls, ['list:category', 'delete:category:c1']);
 });
 
 await check('a hung listing is bounded too', async () => {
-  const s = stubServer({ hang: new Set(['actual_categories_get']) });
+  const s = stubServer({ hang: new Set(['list:category']) });
   const r = await deleteOwnObjects(s.callTool, { prefix: 'MCP-REG270', runId: 1, boundMs: 50, log: quiet });
   assert.strictEqual(r.timedOut, true);
-  assert.deepStrictEqual(s.calls, ['actual_categories_get']);
+  assert.deepStrictEqual(s.calls, ['list:category']);
 });
 
 await check('a failed delete is counted and the cleanup continues; a throwing callTool never throws out', async () => {
@@ -107,12 +110,12 @@ await check('a failed delete is counted and the cleanup continues; a throwing ca
 
 await check('NEGATIVE: an error listing is a failure, never a clean "deleted 0"', async () => {
   const lines = [];
-  const callTool = async (name) => (name === 'actual_categories_get'
+  const callTool = async (_name, args) => (args.type === 'category'
     ? { isError: true, content: [{ type: 'text', text: 'Actual API operation timed out' }] }
     : text({ groups: [] }));
   const r = await deleteOwnObjects(callTool, { prefix: 'MCP-REG270', runId: 1, log: (l) => lines.push(l) });
   assert.deepStrictEqual(r, { deleted: 0, failed: 1, timedOut: false });
-  assert.ok(lines.some((l) => l.includes('actual_categories_get failed') && l.includes('timed out')), lines.join('\n'));
+  assert.ok(lines.some((l) => l.includes('list_entities type category failed') && l.includes('timed out')), lines.join('\n'));
 });
 
 clearInterval(keepAlive);

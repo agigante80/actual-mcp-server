@@ -15,7 +15,13 @@
 // Every call is bounded. Cleanup runs right after the stalled op, which may still be
 // holding the server's api lock; an unbounded delete queued behind it would turn a
 // leak into a hang that fails the gate for a reason unrelated to the change.
+//
+// #680: the calls are the COMPACT ones (list_entities, manage_categories). Step 9 runs
+// against the gate container, which publishes the default compact surface and refuses a
+// legacy name; the shapes come from tests/manual/compact-calls.js, which a unit test runs
+// through the real compact dispatcher.
 import { unwrapToolResult } from '../../tests/shared/mcp-protocol.js';
+import { listCall, listingLabel, REMOVE } from '../../tests/manual/compact-calls.js';
 
 const DEFAULT_BOUND_MS = 15000;
 
@@ -54,26 +60,27 @@ export async function deleteOwnObjects(callTool, { prefix, runId, boundMs = DEFA
   const call = async (name, args) => {
     if (out.timedOut) return TIMEOUT;
     const r = await bounded(callTool(name, args).catch((e) => ({ isError: true, content: [{ type: 'text', text: String(e?.message || e) }] })));
-    if (r === TIMEOUT) { out.timedOut = true; log(`  cleanup: ${name} did not answer within ${boundMs}ms; leaving the rest to the pre-run sweep`); }
+    if (r === TIMEOUT) { out.timedOut = true; log(`  cleanup: ${name}${args?.type ? ` type ${args.type}` : ''} did not answer within ${boundMs}ms; leaving the rest to the pre-run sweep`); }
     return r;
   };
 
-  const sweep = async (getTool, deleteTool) => {
-    const listed = await call(getTool, {});
+  const sweep = async (type, kind) => {
+    const getTool = listingLabel(type);
+    const listed = await call(...listCall(type));
     if (listed === TIMEOUT) return;
     // An error result parses to no list; without this the log would read "deleted 0" as
     // if nothing of ours existed.
     if (listed?.isError) { out.failed++; log(`  cleanup: ${getTool} failed: ${textOf(listed)}`); return; }
     for (const o of listOf(listed).filter((x) => re.test(String(x?.name)))) {
-      const r = await call(deleteTool, { id: o.id });
+      const r = await call(...REMOVE[kind](o.id));
       if (r === TIMEOUT) return;
       if (r?.isError) { out.failed++; log(`  cleanup: could not delete ${o.name}: ${textOf(r)}`); } else out.deleted++;
     }
   };
 
   // Categories first: a group that still holds categories cannot be deleted.
-  await sweep('actual_categories_get', 'actual_categories_delete');
-  await sweep('actual_category_groups_get', 'actual_category_groups_delete');
+  await sweep('category', 'category');
+  await sweep('category_group', 'group');
   log(`  cleanup: deleted ${out.deleted} ${prefix}-*-${runId} object(s)${out.failed ? `, ${out.failed} failed` : ''}`);
   return out;
 }

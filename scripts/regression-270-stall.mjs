@@ -56,14 +56,20 @@ const textOf = (r) => r?.content?.find((c) => c.type === 'text')?.text ?? '';
 // tests/manual/residue.js), and it is what removeOwnObjects() below matches exactly.
 const RUN_ID = Date.now();
 const PREFIX = 'MCP-REG270';
-const create = (label, groupId) => client.callTool({ name: 'actual_categories_create', arguments: { name: `MCP-REG270-${label}-${RUN_ID}`, group_id: groupId } });
+const create = (label, groupId) => client.callTool({ name: 'manage_categories', arguments: { action: 'create', entity: 'category', name: `MCP-REG270-${label}-${RUN_ID}`, group_id: groupId } });
+
+// #680: compact tool names. The gate container publishes the default compact surface, where
+// a legacy name is refused (tests/unit/manual_support_compact.test.js guards this file).
+const listGroups = () => client.callTool({ name: 'list_entities', arguments: { type: 'category_group' } });
 
 async function getGroupId() {
-  const g = await client.callTool({ name: 'actual_category_groups_get', arguments: {} });
+  const g = await listGroups();
   const groups = JSON.parse(textOf(g) || '{}').groups || [];
   if (groups.length) return groups[0].id;
-  const created = await client.callTool({ name: 'actual_category_groups_create', arguments: { name: `MCP-REG270-grp-${RUN_ID}` } });
-  return JSON.parse(textOf(created) || '{}').groupId;
+  const created = await client.callTool({ name: 'manage_categories', arguments: { action: 'create', entity: 'category_group', name: `MCP-REG270-grp-${RUN_ID}` } });
+  // The tool returns { id, success }; the legacy read of `groupId` here never matched.
+  const made = JSON.parse(textOf(created) || '{}');
+  return made.id ?? made.result?.id;
 }
 
 // #575: the own data dir starts empty on every recreated container, so the first op
@@ -73,7 +79,7 @@ async function getGroupId() {
 // would weaken the bound the regression asserts.
 async function warmUp(attempts = 12, pauseMs = 5000) {
   for (let i = 1; i <= attempts; i++) {
-    const r = await client.callTool({ name: 'actual_category_groups_get', arguments: {} });
+    const r = await listGroups();
     if (!r.isError) return;
     console.log(`  warm-up ${i}/${attempts}: budget not loaded yet (${textOf(r).slice(0, 120)})`);
     await new Promise((res) => setTimeout(res, pauseMs));

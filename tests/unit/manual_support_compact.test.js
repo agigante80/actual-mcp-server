@@ -46,6 +46,12 @@ const SUPPORT_FILES = [
   'tests/manual/context.js',
   'tests/manual/assert.js',
   'tests/manual/index.js',
+  // The step 9 scripts of scripts/deploy-and-test.sh: they run against the same gate
+  // container, and a legacy name there failed the v0.30.0 gate after both suites passed.
+  'scripts/regression-270-stall.mjs',
+  'scripts/diag-270-http.mjs',
+  'scripts/assert-no-residue.mjs',
+  'scripts/lib/harness-cleanup.mjs',
 ];
 
 /** Hand-run diagnostics that probe the LEGACY tools on purpose; not part of the suite. */
