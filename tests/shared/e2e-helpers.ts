@@ -184,8 +184,12 @@ const RATE_WINDOW_MS = 60_000;
  * 2.4 minutes to 5.2 minutes. A pacer that never slept could not have more than doubled the
  * runtime. The extra time IS the pacer holding calls back, which is the cost being paid.
  */
+// #681: the HTTP budget went from 230 to 200. With the suite grown by the legacy smoke block and
+// the prompts rows, a run at 230 held the pacer 47 times and still tripped the limiter inside the
+// schedules block (a schedule write is the densest call the suite makes: op, rule and sync), which
+// then cascaded into 15 failures. 200 calls at the 1.8 peak ratio is ~360 requests.
 const RATE_MAX_CALLS_PER_WINDOW =
-  process.env.MCP_TEST_TRANSPORT === 'stdio' ? 90 : 230;
+  process.env.MCP_TEST_TRANSPORT === 'stdio' ? 90 : 200;
 const recentCallTimes: number[] = [];
 
 /** Block until sending one more call keeps us inside the window budget. */

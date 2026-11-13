@@ -50,7 +50,8 @@ test.describe('Docker E2E - tool surface', () => {
 
   test('get_context version - should return version string', async ({ mcp }) => {
     const data = await mcp.call('get_context', { topic: 'version' });
-    expect(data).toBeTruthy();
+    expect(typeof data?.version).toBe('string');
+    expect(data.version).toMatch(/\d+\.\d+\.\d+/);
   });
 
   // #570 filters both budget listings for a RESTRICTED session. This stack runs without
@@ -417,7 +418,8 @@ test.describe('Docker E2E - tool surface', () => {
     const json = await res.json();
     expect(json.error).toBeFalsy();
     // get_context has a default topic, so a call with no arguments answers instead of refusing.
-    expect(json.result.content[0].text.length).toBeGreaterThan(0);
+    const structure = JSON.parse(json.result.content[0].text);
+    expect(Array.isArray((structure?.result ?? structure).accounts)).toBe(true);
   });
 
   test('tools/call without arguments - ERROR: the tool validates an empty object', async ({ mcp }) => {
@@ -628,7 +630,7 @@ test.describe('Docker E2E - tool surface', () => {
   });
 
   test('list_entities payee - should return recent frequent payees or empty array', async ({ mcp }) => {
-    const payees = (await mcp.call('list_entities', { type: 'payee' })) as any[];
+    const payees = (await mcp.call('list_entities', { type: 'payee', sort: 'frequency' })) as any[];
 
     // Empty list is a valid success result (no recent activity); both cases must pass.
     expect(Array.isArray(payees)).toBeTruthy();
@@ -1104,7 +1106,7 @@ payee: payee.id,
     const category = await makeCategory();
     const txn = await makeTransaction({ account, category: category.id });
 
-    const data = await mcp.call('search_transactions', { by: 'category', categoryId: category.id });
+    const data = await mcp.call('search_transactions', { by: 'category', category_name: category.name });
     const txns = (Array.isArray(data) ? data : data?.transactions || []) as any[];
     expect(Array.isArray(txns)).toBeTruthy();
     expect(txns.find((t: any) => t?.id === txn.id)).toBeTruthy();
@@ -1125,19 +1127,19 @@ payee: payee.id,
     const payee = await makePayee();
     const txn = await makeTransaction({ account, payee: payee.id });
 
-    const data = await mcp.call('search_transactions', { by: 'payee', payeeId: payee.id });
+    const data = await mcp.call('search_transactions', { by: 'payee', payee_name: payee.name });
     const txns = (Array.isArray(data) ? data : data?.transactions || []) as any[];
     expect(Array.isArray(txns)).toBeTruthy();
     expect(txns.find((t: any) => t?.id === txn.id)).toBeTruthy();
   });
 
   test('summarize_transactions by_category - should summarize by category', async ({ mcp }) => {
-    const summary = await mcp.call('summarize_transactions', { report: 'by_category', month: currentMonth() });
+    const summary = await mcp.call('summarize_transactions', { report: 'by_category', start_date: `${currentMonth()}-01`, end_date: today() });
     expect(summary).toBeTruthy();
   });
 
   test('summarize_transactions by_payee - should summarize by payee', async ({ mcp }) => {
-    const summary = await mcp.call('summarize_transactions', { report: 'by_payee', month: currentMonth() });
+    const summary = await mcp.call('summarize_transactions', { report: 'by_payee', start_date: `${currentMonth()}-01`, end_date: today() });
     expect(summary).toBeTruthy();
   });
 
@@ -1352,12 +1354,11 @@ payee: payee.id,
   });
 
   test('list_budget_months - should get multiple months', async ({ mcp }) => {
-    const data = await mcp.call('list_budget_months', {
-      start: currentMonth(),
-      end: currentMonth(),
-    });
+    // No month lists every month with summary data. The legacy tool never took a start/end range
+    // (its schema is an empty object), so there is no range input to carry over.
+    const data = await mcp.call('list_budget_months');
     const months = Array.isArray(data) ? data : (data?.months || []);
-    expect(months).toBeTruthy();
+    expect(months.length).toBeGreaterThanOrEqual(1);
   });
 
   // #652: the old camelCase name is a deprecated alias until the first minor after 2027-02-01.
@@ -1441,14 +1442,13 @@ payee: payee.id,
     expect(Number(after?.forNextMonth ?? 0) - heldBefore).toBe(requested);
   });
 
-  test('manage_budget_months reset_hold - should reset hold', async ({ mcp, makeCategory }) => {
-    const category = await makeCategory();
+  test('manage_budget_months reset_hold - should reset hold', async ({ mcp }) => {
     // resetHold clears the month's held-for-next-month buffer, which is a property of the
     // MONTH rather than of the category, so what is asserted is that the call is accepted
     // and the month remains readable and consistent afterwards. Asserting a specific
     // buffer value would require the fixture to first produce a positive To Budget, which
     // is #369 item 1 and needs a live budget to establish.
-    await mcp.call('manage_budget_months', { action: 'reset_hold', month: currentMonth(), categoryId: category.id });
+    await mcp.call('manage_budget_months', { action: 'reset_hold', month: currentMonth() });
 
     const month = await mcp.call('list_budget_months', { month: currentMonth() });
     expect(month?.month ?? month?.categoryGroups).toBeTruthy();
@@ -1559,7 +1559,7 @@ payee: payee.id,
     await expect(mcp.call('manage_budget_months', {
       action: 'set_amount_batch',
       operations: [{ month: currentMonth(), categoryId: ghostId, amount: 12.5 }],
-    })).rejects.toThrow(/integer/i);
+    })).rejects.toThrow(/operations\.0\.amount: expected int/);
     await expect(mcp.call('manage_budget_months', {
       action: 'set_amount_batch',
       operations: [{ month: currentMonth(), categoryId: ghostId }],
@@ -2354,7 +2354,7 @@ payee: payee.id,
   });
 
   test('get_context structure - should reject an out-of-range payeeLimit', async ({ mcp }) => {
-    await expect(mcp.call('get_context', { topic: 'structure', payee_limit: 0 })).rejects.toThrow(/payeeLimit/i);
+    await expect(mcp.call('get_context', { topic: 'structure', payee_limit: 0 })).rejects.toThrow(/payee_limit/i);
   });
 
   // ==================== #514: manage_transactions merge ====================
@@ -2693,15 +2693,17 @@ payee: payee.id,
   });
 
   test('set_note - orphan id returns error without writing', async ({ mcp }) => {
+    // A well-formed UUID that names no entity: manage_accounts checks the id format first.
+    const orphan = '00000000-0000-4000-8000-000000000001';
     const data = await mcp.call('manage_accounts', {
       action: 'set_note',
-      id: 'not-a-real-entity-id',
+      id: orphan,
       note: 'should not be written',
     });
     // The tool returns { error: '...' } and does NOT write.
     expect(typeof data?.error === 'string').toBeTruthy();
 
-    const readBack = await mcp.call('list_entities', { type: 'note', id: 'not-a-real-entity-id' });
+    const readBack = await mcp.call('list_entities', { type: 'note', id: orphan });
     expect(readBack?.found).toBe(false);
   });
 
@@ -2924,7 +2926,9 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
   });
 
   test('list_entities - payee sort frequency answers the frequency listing', async ({ mcp }) => {
-    expect(await mcp.call('list_entities', { type: 'payee', sort: 'frequency' })).toBeTruthy();
+    const frequent = (await mcp.call('list_entities', { type: 'payee', sort: 'frequency' })) as any[];
+    expect(Array.isArray(frequent)).toBe(true);
+    expect(frequent.length).toBeLessThanOrEqual(10);
   });
 
   test('list_entities - rule with payee_id answers the payee rules', async ({ mcp, makePayee }) => {

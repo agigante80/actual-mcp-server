@@ -259,10 +259,13 @@ export async function accountTests(client, context) {
 
     // NEGATIVE: a group that does not exist is refused, and the message says how to list them.
     const ghost = "00000000-0000-4000-8000-000000000999";
-    for (const tool of ["manage_accounts update account_group", "manage_accounts delete account_group"]) {
-      const args = tool.endsWith("update") ? { id: ghost, name: "nope" } : { id: ghost };
+    for (const action of ["update", "delete"]) {
+      const tool = `manage_accounts ${action} account_group`;
+      const args = action === "update"
+        ? { action, entity: "account_group", id: ghost, name: "nope" }
+        : { action, entity: "account_group", id: ghost };
       try {
-        await callTool(tool, args);
+        await callTool("manage_accounts", args);
         fail(`${tool} NEGATIVE: a nonexistent group was accepted (expected refusal)`);
       } catch (err) {
         if (/not found/i.test(err.message) && err.message.includes("list_entities with type account_group")) {

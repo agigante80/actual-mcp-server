@@ -48,9 +48,9 @@ test.describe('compact surface (MCP_TOOL_SURFACE=compact)', () => {
   });
 
   test('get_context topic=version returns a semver string', async ({ mcp }) => {
-    const version = await mcp.call('get_context', { topic: 'version' });
-    expect(typeof version).toBe('string');
-    expect(version).toMatch(/\d+\.\d+\.\d+/);
+    const data = await mcp.call('get_context', { topic: 'version' });
+    expect(typeof data?.version).toBe('string');
+    expect(data.version).toMatch(/\d+\.\d+\.\d+/);
   });
 
   test('manage_accounts create then delete, each read back through list_entities', async ({ mcp }) => {

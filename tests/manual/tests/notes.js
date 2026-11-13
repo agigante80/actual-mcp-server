@@ -125,32 +125,49 @@ export async function notesTests(client, context) {
   // --------------------------------------------------------------------------
   // Positive: category and payee notes, each set by the tool of its entity kind
   // --------------------------------------------------------------------------
-  for (const [tool, listType, label] of [['manage_categories', 'category', 'category'], ['manage_payees', 'payee', 'payee']]) {
+  // The note is written on a DISPOSABLE category and payee created here and deleted in a finally,
+  // never on an existing entity of the live budget: clearing a test note there would destroy a
+  // real note, and a failed read-back would leave the test note behind.
+  {
+    const stamp = Date.now();
+    let groupId = null;
+    let categoryId = null;
+    let payeeId = null;
     try {
-      const listed = await callTool('list_entities', { type: listType });
-      const rows = (listed?.result ?? listed);
-      const flat = Array.isArray(rows) ? rows : (rows?.groups ?? rows?.payees ?? rows?.categories ?? []);
-      const pool = flat.flatMap((r) => (Array.isArray(r?.categories) ? r.categories : [r]));
-      const target = pool.find((r) => r?.id && !r.transfer_acct);
-      if (!target) {
-        console.log(`  info notes [${label} note]: skipped (no ${label} in budget)`);
-        continue;
+      const grp = await callTool('manage_categories', { action: 'create', entity: 'category_group', name: `MCP-NoteGroup-${stamp}` });
+      groupId = grp?.id ?? grp?.result?.id ?? grp?.result ?? null;
+      const cat = await callTool('manage_categories', { action: 'create', entity: 'category', name: `MCP-NoteCat-${stamp}`, group_id: groupId });
+      categoryId = cat?.categoryId ?? cat?.id ?? cat?.result ?? null;
+      const pay = await callTool('manage_payees', { action: 'create', name: `MCP-NotePayee-${stamp}` });
+      payeeId = pay?.id ?? pay?.result ?? (typeof pay === 'string' ? pay : null);
+
+      const setters = [
+        [(id, note) => callTool('manage_categories', { action: 'set_note', id, note }), categoryId, 'category'],
+        [(id, note) => callTool('manage_payees', { action: 'set_note', id, note }), payeeId, 'payee'],
+      ];
+      for (const [setNote, targetId, label] of setters) {
+        try {
+          if (!targetId) { fail(`notes ${label} test: the disposable ${label} was not created`); continue; }
+          const NOTE = `MCP-${label}-Note-${Date.now()}`;
+          const res = await setNote(targetId, NOTE);
+          const ok = res?.success === true || res?.result?.success === true;
+          if (!ok) fail(`notes_update [${label} note set]: ${JSON.stringify(res).slice(0, 200)}`);
+          const getRes = await callTool('list_entities', { type: 'note', id: targetId });
+          const data = getRes?.result ?? getRes;
+          if (data?.note === NOTE) console.log(`  ok notes_get [${label} note read-back]: "${data.note}"`);
+          else fail(`notes_get [${label} note read-back]: got ${JSON.stringify(data).slice(0, 200)}`);
+          await setNote(targetId, '');
+          console.log(`  ok notes_update [${label} note cleared]`);
+        } catch (err) {
+          fail(`notes ${label} test: ${err.message}`);
+        }
       }
-      const NOTE = `MCP-${label}-Note-${Date.now()}`;
-      const res = tool === 'manage_categories'
-        ? await callTool('manage_categories', { action: 'set_note', id: target.id, note: NOTE })
-        : await callTool('manage_payees', { action: 'set_note', id: target.id, note: NOTE });
-      const ok = res?.success === true || res?.result?.success === true;
-      if (!ok) fail(`notes_update [${label} note set]: ${JSON.stringify(res).slice(0, 200)}`);
-      const getRes = await callTool('list_entities', { type: 'note', id: target.id });
-      const data = getRes?.result ?? getRes;
-      if (data?.note === NOTE) console.log(`  ok notes_get [${label} note read-back]: "${data.note}"`);
-      else fail(`notes_get [${label} note read-back]: got ${JSON.stringify(data).slice(0, 200)}`);
-      if (tool === 'manage_categories') await callTool('manage_categories', { action: 'set_note', id: target.id, note: '' });
-      else await callTool('manage_payees', { action: 'set_note', id: target.id, note: '' });
-      console.log(`  ok notes_update [${label} note cleared]`);
     } catch (err) {
-      fail(`notes ${label} test: ${err.message}`);
+      fail(`notes category and payee setup: ${err.message}`);
+    } finally {
+      if (payeeId) { try { await callTool('manage_payees', { action: 'delete', id: payeeId }); } catch { /* residue sweep covers */ } }
+      if (categoryId) { try { await callTool('manage_categories', { action: 'delete', entity: 'category', id: categoryId }); } catch { /* residue sweep covers */ } }
+      if (groupId) { try { await callTool('manage_categories', { action: 'delete', entity: 'category_group', id: groupId }); } catch { /* residue sweep covers */ } }
     }
   }
 
