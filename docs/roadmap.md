@@ -114,13 +114,16 @@ Adopts stable @actual-app/api 26.11.0, which carries the upstream fixes we contr
 Outcome (2026-11-03): re-shaped. #618, #479 and #548 shipped one commit each and were released together as v0.26.0 after a green Docker E2E full run and a green full dual-transport run with zero residue on the final HEAD; #617 closed with #479. One planned item did not land: the live #548 replay against a bank-linked account, because GoCardless returned 503 on both attempts. It moved to #619 (Backlog), which appeared during the work for a separate reason: an all-accounts sync on 26.11 is awaited and can outlast the shared operation timeout, so it needs its own bound. The full run also showed that upstream refuses `completed` in updateSchedule, so the completed-schedule dates case became a unit test; `actual_schedules_update` still advertised that field, which #627 later removed.
 
 ## Phase: Compact tool surface
-state: open
+state: done
 plan: docs/plans/compact-tool-surface.md
 
 Glama scores the server's coherence at Disambiguation 2, Naming 4, Tool Count 1 and Completeness 5 with 85 tools; its rubric reserves the top Tool Count score for about 3 to 15 tools and the top Naming score for one verb_noun pattern. This phase builds a 15-tool surface without the `actual_` prefix that fronts the existing tools through a dispatcher, opt-in through `MCP_TOOL_SURFACE=compact`, and scores it locally. It comes first because every later step (the default flip, prompts that name tools, the README capabilities section) depends on the final tool names.
 
+Outcome (2026-11-13): done. All ten planned tickets (#670 to #679) and #653 shipped and were released together as v0.29.0 (a minor bump: the surface is opt-in through `MCP_TOOL_SURFACE`, default `legacy`), after a green Docker E2E full run and a green full dual-transport run with zero residue on the final HEAD. The local TDQS harness scores the compact list at 4.6 overall against 3.7 for the legacy list; that is an estimate from a different judge model, and the real score needs a Glama rebuild that only the maintainer can trigger. One thing appeared during the work: the Docker E2E step outgrew its 18 minute CI limit once the compact rows landed, and the limit was raised to 30 minutes in the same phase. No planned work was skipped.
+
 ## Phase: Compact default, prompts and first-run docs
-state: planned
+state: open
+plan: docs/plans/compact-default-prompts-and-first-run-docs.md
 
 Makes the compact surface the default (a breaking change for clients that call `actual_*` names, with `legacy` still selectable), migrates the test suites to it, adds MCP prompts (the capability plus five prompts, each naming compact tools) and rewrites the README opening, install path and capabilities section after a review of three competing Actual servers. It follows Compact tool surface because prompts and docs must name the tools that phase settles.
 
