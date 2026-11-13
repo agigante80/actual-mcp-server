@@ -4,6 +4,9 @@ import type { CompactActionRow, CompactOperations, CompactTarget, CompactToolSpe
 
 const selectorOf = (spec: CompactToolSpec): string => spec.selector ?? 'action';
 
+/** A tool declared `selector: null` has one action and publishes no selector property (#674). */
+const hasSelector = (spec: CompactToolSpec): boolean => spec.selector !== null;
+
 function unknownActionError(selector: string, spec: CompactToolSpec, got: unknown): z.ZodError {
   return new z.ZodError([
     {
@@ -56,6 +59,7 @@ const customIssue = (key: string, message: string): z.core.$ZodIssue => ({ code:
 
 /** The message for a key the chosen target does not accept, naming the actions that do. */
 function notValidMessage(spec: CompactToolSpec, selector: string, chosen: string, row: CompactActionRow, key: string): string {
+  if (!hasSelector(spec)) return rowKeys(row).has(key) ? 'cannot be used with the other fields given' : `not accepted by ${spec.name}`;
   const owners = [...spec.actions].filter(([, r]) => rowKeys(r).has(key)).map(([name]) => name);
   if (rowKeys(row).has(key)) return `cannot be used with the other fields given for ${selector}: ${chosen}`;
   return owners.length > 0
@@ -77,8 +81,8 @@ interface CallPlan {
 function planCall(spec: CompactToolSpec, input: unknown): CallPlan {
   const selector = selectorOf(spec);
   const record = input && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
-  const chosen = record[selector] ?? spec.defaultAction;
-  delete record[selector];
+  const chosen = hasSelector(spec) ? (record[selector] ?? spec.defaultAction) : spec.defaultAction;
+  if (hasSelector(spec)) delete record[selector];
   const row = typeof chosen === 'string' ? spec.actions.get(chosen) : undefined;
   if (!row || typeof chosen !== 'string') throw unknownActionError(selector, spec, chosen);
 
@@ -88,7 +92,10 @@ function planCall(spec: CompactToolSpec, input: unknown): CallPlan {
   if (hits.length > 1) {
     const named = hits.map((r) => r.triggers.find((t) => record[t] !== undefined)!);
     throw new z.ZodError([
-      customIssue(named[1]!, `${named.join(' and ')} are mutually exclusive for ${selector}: ${chosen}; send one of them`),
+      customIssue(
+        named[1]!,
+        `${named.join(' and ')} are mutually exclusive${hasSelector(spec) ? ` for ${selector}: ${chosen}` : ''}; send one of them`,
+      ),
     ]);
   }
   const target: CompactTarget = hits[0] ?? row;
@@ -101,7 +108,8 @@ function planCall(spec: CompactToolSpec, input: unknown): CallPlan {
     .map(([key]) => key);
   const result = target.fields.strict().safeParse(record);
   if (!result.success || missing.length > 0) {
-    const reason = given.length > 0 ? `required with ${given.join(', ')}` : `required for ${selector}: ${chosen}`;
+    const reason =
+      given.length > 0 ? `required with ${given.join(', ')}` : hasSelector(spec) ? `required for ${selector}: ${chosen}` : 'required';
     const issues = [
       ...missing.map((key) => customIssue(key, reason)),
       ...(result.success ? [] : result.error.issues).filter((issue) => !missing.includes(String(issue.path[0]))).flatMap(
@@ -140,7 +148,7 @@ export function legacyPhrases(specs: readonly CompactToolSpec[]): ReadonlyMap<st
     // legacy -> route phrase -> the selector values that carry that route
     const routed = new Map<string, Map<string, string[]>>();
     for (const [value, row] of spec.actions) {
-      add(row.legacy, `${spec.name} with ${selector} ${value}`);
+      add(row.legacy, hasSelector(spec) ? `${spec.name} with ${selector} ${value}` : spec.name);
       for (const route of row.routes ?? []) {
         const byPhrase = routed.get(route.legacy) ?? new Map<string, string[]>();
         const key = route.phrase ?? route.triggers[0];
@@ -151,7 +159,12 @@ export function legacyPhrases(specs: readonly CompactToolSpec[]): ReadonlyMap<st
     // One value names it (`with type rule and payee_id`); several are not listed (`with type and query`).
     for (const [legacy, byPhrase] of routed) {
       for (const [key, values] of byPhrase) {
-        add(legacy, `${spec.name} with ${selector}${values.length === 1 ? ` ${values[0]}` : ''} and ${key}`);
+        add(
+          legacy,
+          hasSelector(spec)
+            ? `${spec.name} with ${selector}${values.length === 1 ? ` ${values[0]}` : ''} and ${key}`
+            : `${spec.name} with ${key}`,
+        );
       }
     }
   }
@@ -236,20 +249,26 @@ function allFields(spec: CompactToolSpec): Iterable<[string, z.ZodType]> {
 function compactInputSchema(spec: CompactToolSpec): z.ZodType {
   const selector = selectorOf(spec);
   const names = [...spec.actions.keys()] as [string, ...string[]];
+  const withSelector = hasSelector(spec);
   const shape: Record<string, z.ZodType> = {};
   const seen = new Map<string, z.ZodType>();
+  // A tool with no selector, one action and no routes has nothing to choose between, so a
+  // field its schema requires stays required in the published shape (#674 run_query.query).
+  const single = !withSelector && spec.actions.size === 1 && [...spec.actions.values()].every((r) => (r.routes ?? []).length === 0);
   for (const [key, schema] of allFields(spec)) {
-    if (key === selector) continue;
+    if (withSelector && key === selector) continue;
     const prior = seen.get(key);
     if (prior === undefined) {
       seen.set(key, schema);
-      shape[key] = schema.optional();
+      shape[key] = single ? schema : schema.optional();
     } else if (prior !== schema) {
       shape[key] = z.any().optional();
     }
   }
-  const selectorSchema = z.enum(names);
-  shape[selector] = spec.defaultAction === undefined ? selectorSchema : selectorSchema.optional();
+  if (withSelector) {
+    const selectorSchema = z.enum(names);
+    shape[selector] = spec.defaultAction === undefined ? selectorSchema : selectorSchema.optional();
+  }
   return z
     .object(shape)
     .strict()

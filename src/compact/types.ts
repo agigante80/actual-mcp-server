@@ -67,9 +67,13 @@ export interface CompactToolSpec {
   /** Published name, `actual_<domain>` style; must not collide with a legacy tool name. */
   name: string;
   description: string;
-  /** The argument that picks the action. Defaults to `action`. */
-  selector?: string;
-  /** Action used when the selector is absent. When unset the selector is required. */
+  /**
+   * The argument that picks the action. Defaults to `action`. `null` means the tool has no
+   * selector (#674): one action, which must be `defaultAction`; no selector property is
+   * published and a caller key of that name is refused like any unknown key.
+   */
+  selector?: string | null;
+  /** Action used when the selector is absent. When unset the selector is required. With `selector: null` it names the one action. */
   defaultAction?: string;
   /** Action name to row. A Map, so `__proto__` or `constructor` can never name an action. */
   actions: ReadonlyMap<string, CompactActionRow>;

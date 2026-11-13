@@ -213,6 +213,59 @@ await check('NEGATIVE: no selector and no defaultAction is a validation error na
   assert.strictEqual(calls.length, 0);
 });
 
+// ---- #674: a tool with `selector: null` has one action and publishes no selector ----
+
+const noSelector = {
+  name: 'fixture_no_selector',
+  description: 'Fixture compact tool without a selector.',
+  selector: null,
+  defaultAction: 'only',
+  actions: new Map([['only', {
+    legacy: LIST,
+    fields: z.object({}),
+    routes: [{ triggers: ['id'], legacy: UPDATE, fields: z.object({ id: z.string().min(1) }) }],
+  }]]),
+};
+const singleRequired = {
+  name: 'fixture_single_required',
+  description: 'Fixture compact tool with one required field.',
+  selector: null,
+  defaultAction: 'only',
+  actions: new Map([['only', { legacy: LIST, fields: z.object({ q: z.string().min(1) }) }]]),
+};
+
+await check('selector null: no selector property is published and the route is chosen by its trigger', async () => {
+  const t = buildCompactTool(noSelector, { callOperation: async (n, a) => ({ n, a }) });
+  const js = z.toJSONSchema(t.inputSchema);
+  assert.deepStrictEqual(Object.keys(js.properties), ['id']);
+  assert.ok(!js.required || js.required.length === 0);
+  assert.deepStrictEqual(await t.call({}), { n: LIST, a: {} });
+  assert.deepStrictEqual(await t.call({ id: 'x' }), { n: UPDATE, a: { id: 'x' } });
+});
+await check('NEGATIVE: selector null refuses a caller key named like the default selector, naming it, and calls nothing', async () => {
+  const t = buildCompactTool(noSelector, { callOperation: async () => { calls.push('x'); } });
+  calls.length = 0;
+  await assert.rejects(() => t.call({ action: 'only' }), /action/);
+  // Past the flat schema, the dispatcher's own wording must not name a selector the tool lacks.
+  await assert.rejects(() => dispatchCompact({ callOperation: async () => { calls.push('x'); } }, noSelector, { action: 'only' }), (e) => /not accepted by fixture_no_selector/.test(JSON.stringify(e.issues)) && !/not valid for/.test(JSON.stringify(e.issues)));
+  const parsed = t.inputSchema.safeParse({ action: 'only' });
+  assert.strictEqual(parsed.success, false);
+  assert.ok(!/not valid for/.test(JSON.stringify(parsed.error.issues)), 'no selector wording for a tool without a selector');
+  assert.strictEqual(calls.length, 0);
+});
+await check('selector null: the error phrase names the tool, and the route trigger, without a selector', () => {
+  const phrases = legacyPhrases([noSelector]);
+  assert.strictEqual(phrases.get(LIST), 'fixture_no_selector');
+  assert.strictEqual(phrases.get(UPDATE), 'fixture_no_selector with id');
+});
+await check('selector null with one action and no routes keeps a required field required in the published schema', () => {
+  const t = buildCompactTool(singleRequired, { callOperation: async () => undefined });
+  assert.deepStrictEqual(z.toJSONSchema(t.inputSchema).required, ['q']);
+  assert.strictEqual(t.inputSchema.safeParse({}).success, false);
+  const routed = buildCompactTool(noSelector, { callOperation: async () => undefined });
+  assert.ok(!z.toJSONSchema(routed.inputSchema).required);
+});
+
 for (const bad of ['bogus', '__proto__', 'constructor', 'toString', 'hasOwnProperty']) {
   await check(`NEGATIVE: action ${JSON.stringify(bad)} is unknown and calls nothing`, async () => {
     await init({ surface: 'all' });
@@ -472,8 +525,8 @@ await check('startup validation rejects a route whose legacy tool is not registe
 
 // ---- registry and source guards ----
 
-await check('the shipped registry holds exactly the four compact tools so far (#672, #673)', () => {
-  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions']);
+await check('the shipped registry holds exactly the six compact tools so far (#672 to #674)', () => {
+  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
 });
 
 await check('src/compact/ never imports the adapter or @actual-app/api, and never calls .call(', () => {

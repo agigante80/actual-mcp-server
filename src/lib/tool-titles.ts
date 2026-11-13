@@ -108,6 +108,9 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   // Compact tools (#673).
   search_transactions: 'Search transactions',
   summarize_transactions: 'Summarize transactions',
+  // Compact tools (#674).
+  list_budget_months: 'List or get budget months',
+  run_query: 'Run read-only budget query',
 };
 
 /** The display title for a tool, or undefined when it has none (the builder then omits it). */

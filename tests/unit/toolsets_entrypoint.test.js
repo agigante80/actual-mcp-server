@@ -196,7 +196,7 @@ await check('an invalid MCP_TOOL_SURFACE value exits 1, naming the variable and 
 await check('MCP_TOOL_SURFACE=compact publishes exactly the compact tools over stdio, with annotations and titles (#672)', async () => {
   const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact' }, [INIT, INITIALIZED, LIST]);
   const tools = res.get(2).result.tools;
-  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions']);
+  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
   for (const t of tools) {
     assert.strictEqual(t.annotations.readOnlyHint, true, `${t.name} readOnlyHint`);
     assert.ok(typeof t.title === 'string' && t.title.length > 0, `${t.name} title`);
@@ -206,7 +206,7 @@ await check('MCP_TOOL_SURFACE=compact publishes exactly the compact tools over s
 
 await check('MCP_TOOL_SURFACE=compact under MCP_READ_ONLY=true still publishes every compact tool (#672, #673)', async () => {
   const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact', MCP_READ_ONLY: 'true' }, [INIT, INITIALIZED, LIST]);
-  assert.deepStrictEqual(res.get(2).result.tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions']);
+  assert.deepStrictEqual(res.get(2).result.tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
 });
 
 await check('NEGATIVE: the default surface does not list the compact tools (#672)', async () => {

@@ -3006,3 +3006,34 @@ test.describe('Docker E2E - compact search_transactions and summarize_transactio
     await expect(mcp.call('summarize_transactions', { report: 'grouped', start_date: '2026-01-01', end_date: '2026-01-31' })).rejects.toThrow(/group_by/);
   });
 });
+
+test.describe('Docker E2E - compact list_budget_months and run_query (#674)', () => {
+  test('list_budget_months - no month matches actual_budgets_get_months and lists YYYY-MM strings', async ({ mcp }) => {
+    const compact = await mcp.call('list_budget_months', {});
+    expect(Array.isArray(compact)).toBe(true);
+    for (const m of compact) expect(m).toMatch(/^\d{4}-\d{2}$/);
+    expect(compact).toEqual(await mcp.call('actual_budgets_get_months', {}));
+  });
+
+  test('list_budget_months - a month matches actual_budgets_get_month', async ({ mcp }) => {
+    const compact = await mcp.call('list_budget_months', { month: currentMonth() });
+    expect(Array.isArray(compact.categoryGroups)).toBe(true);
+    expect(compact).toEqual(await mcp.call('actual_budgets_get_month', { month: currentMonth() }));
+  });
+
+  test('run_query - matches actual_query_run', async ({ mcp }) => {
+    const query = 'SELECT id FROM accounts LIMIT 1';
+    expect(await mcp.call('run_query', { query })).toEqual(await mcp.call('actual_query_run', { query }));
+  });
+
+  test('run_query - refuses a stacked statement naming run_query, never the legacy name', async ({ mcp }) => {
+    let message = '';
+    try {
+      await mcp.call('run_query', { query: 'SELECT * FROM transactions; DROP TABLE accounts' });
+    } catch (err) {
+      message = String((err as Error).message);
+    }
+    expect(message).toMatch(/run_query/);
+    expect(message).not.toContain('actual_query_run');
+  });
+});

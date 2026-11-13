@@ -42,8 +42,9 @@ const PER_TOOL_CEILING = 3900;
 // #672 (get_context, list_entities) measured 6210 bytes, so the ceiling is that plus about 10%.
 // #673 (search_transactions, summarize_transactions) raised the four-tool total to 13558 bytes (each
 // new tool stays under the per-tool ceiling), so the ceiling is now that plus about 10%.
+// #674 (list_budget_months, run_query) raised the six-tool total to 16863 bytes, so the ceiling is that plus about 10%.
 // Each later compact ticket raises it by its own measured size, stated here.
-const COMPACT_TOTAL_CEILING = 14900;
+const COMPACT_TOTAL_CEILING = 18500;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

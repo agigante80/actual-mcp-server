@@ -67,6 +67,8 @@ const READ_ONLY = new Set<string>([
   'list_entities',
   'search_transactions',
   'summarize_transactions',
+  'list_budget_months',
+  'run_query',
   'actual_account_groups_list',
   'actual_account_flow_summary',
   'actual_recurring_expenses_summary',
