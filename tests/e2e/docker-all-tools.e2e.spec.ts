@@ -2860,7 +2860,16 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
   ];
   for (const [type, legacy] of DEFAULT_ROWS) {
     test(`list_entities - type ${type} matches ${legacy}`, async ({ mcp }) => {
-      expect(await mcp.call('list_entities', { type })).toEqual(await mcp.call(legacy));
+      // The compact result names compact tools in its hint text (the 4b rewrite), so the
+      // budget_file hint differs from the legacy one by design; everything else is equal.
+      const [compact, old] = [await mcp.call('list_entities', { type }), await mcp.call(legacy)];
+      if (type === 'budget_file') {
+        expect(compact.hint).toMatch(/manage_budget_files with action switch/);
+        expect(compact.hint).not.toMatch(/actual_/);
+        expect({ ...compact, hint: '' }).toEqual({ ...old, hint: '' });
+      } else {
+        expect(compact).toEqual(old);
+      }
     });
   }
 
@@ -2906,7 +2915,9 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
   });
 
   test('list_entities - budget_file scope configured and server match the two legacy listings', async ({ mcp }) => {
-    expect(await mcp.call('list_entities', { type: 'budget_file', scope: 'configured' })).toEqual(await mcp.call('actual_budgets_list_available'));
+    const configured = await mcp.call('list_entities', { type: 'budget_file', scope: 'configured' });
+    expect({ ...configured, hint: '' }).toEqual({ ...(await mcp.call('actual_budgets_list_available')), hint: '' });
+    expect(configured.hint).not.toMatch(/actual_/);
     expect(await mcp.call('list_entities', { type: 'budget_file', scope: 'server' })).toEqual(await mcp.call('actual_budgets_get_all'));
   });
 
