@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
-import { daysInMonth, isCalendarDay, today } from './dates.js';
+import { dayArgSchema, daysInMonth } from './dates.js';
 
 /**
  * spending_check (#662): a mid-month pace check as of one day. The default date lives in the
@@ -34,14 +34,7 @@ const spending_check: PromptDefinition = {
     },
   ],
   requiredTools: ['list_budget_months', 'summarize_transactions'],
-  argsSchema: z.strictObject({
-    date: z
-      .string()
-      .max(10)
-      .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/)
-      .refine(isCalendarDay, 'must be a real calendar date')
-      .default(() => today()),
-  }),
+  argsSchema: z.strictObject({ date: dayArgSchema() }),
   render(args) {
     const date = args.date as string;
     const month = date.slice(0, 7);

@@ -3764,6 +3764,26 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.message).toContain('months');
   });
 
+  test('prompts/get budget_cleanup - the window and the no-write sentence are filled in (#664)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('budget_cleanup', { date: '2026-01-15' });
+    expect(out.error).toBeUndefined();
+    expect(out.result.messages).toHaveLength(1);
+    expect(out.result.messages[0].role).toBe('user');
+    expect(out.result.messages[0].content.type).toBe('text');
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('list_entities');
+    expect(text).toContain('from 2025-07-01 to 2026-01-15');
+    expect(text).toContain('Do not call any manage_ tool in this turn.');
+    expect(text).not.toContain('{');
+  });
+
+  test('prompts/get budget_cleanup - ERROR: an impossible date is -32602 (#664)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('budget_cleanup', { date: '2026-02-31' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('date');
+  });
+
   test('prompts/get - ERROR: an unknown prompt is -32602 "Unknown prompt"', async ({ mcp }) => {
     const out = await mcp.getPrompt('no_such_prompt');
     expect(out.result).toBeUndefined();

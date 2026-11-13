@@ -11,6 +11,7 @@ Defaults that depend on the date (a month, a day) are resolved by the server's l
 | `monthly_review` | Monthly budget review | `month` (optional, `YYYY-MM`, default the server's current month) | `get_context`, `list_budget_months`, `summarize_transactions`, `search_transactions` |
 | `spending_check` | Spending check | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_budget_months`, `summarize_transactions` |
 | `spending_patterns` | Spending patterns | `months` (optional, 1 to 24, default 6), `end_month` (optional, `YYYY-MM`, default the month before the server's current month) | `summarize_transactions`, `list_budget_months` |
+| `budget_cleanup` | Budget cleanup | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_entities`, `summarize_transactions`, `list_budget_months` |
 
 ## monthly_review
 
@@ -36,3 +37,11 @@ Spending trends over the last N full months: overall direction, the categories t
 |----------|----------|------------|
 | `months` | No | A string of an integer from 1 to 24, no leading zero and no whitespace, default 6. |
 | `end_month` | No | `YYYY-MM`, month 01 to 12, at most 7 characters. The default is the month before the server's local current month (UTC in the Docker image). An unknown key is refused. |
+
+## budget_cleanup
+
+A read-only structure review as of one day: duplicate and unused payees, rules that overlap or point at unused or missing payees and categories, unused categories with a zero budget and balance, empty groups, and open accounts with a zero balance. "Unused" means no transaction in the six months that end with the date's month, and the server renders the window start by integer month arithmetic. It proposes changes, names the `manage_` action each needs, and asks which to apply; the text says no `manage_` tool is called in the turn. The required tools are read tools, so the prompt stays offered under `MCP_READ_ONLY=true` on the `compact` and `all` surfaces and is hidden on `legacy`.
+
+| Argument | Required | Validation |
+|----------|----------|------------|
+| `date` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-31` is refused), at most 10 characters. The default is the server's local today (UTC in the Docker image). An unknown key is refused. |

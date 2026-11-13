@@ -4,7 +4,22 @@
  * Docker image that is UTC. Month arithmetic is on integers only, never setMonth.
  */
 
+import { z } from 'zod';
+
 const pad2 = (n: number): string => String(n).padStart(2, '0');
+
+/**
+ * The shared `date` argument of the prompts that review a month as of a day (#662, #664): a real
+ * YYYY-MM-DD calendar day, at most 10 characters, defaulting in the schema to the server's today.
+ * CommonSchemas.date is not used: its pattern accepts 2026-02-31.
+ */
+export const dayArgSchema = () =>
+  z
+    .string()
+    .max(10)
+    .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/)
+    .refine(isCalendarDay, 'must be a real calendar date')
+    .default(() => today());
 
 /** The server's local current month, YYYY-MM. */
 export function currentMonth(): string {
