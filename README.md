@@ -57,7 +57,7 @@ only my user can read, register the server for my user with `claude mcp add
 under "Verify your setup" in the README.
 ```
 
-**Other clients**, one page each: [Claude Desktop](docs/guides/clients/claude-desktop.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md), [Codex CLI](docs/guides/clients/codex.md). Chat UIs ([LibreChat](docs/guides/clients/librechat.md), [LobeChat](docs/guides/clients/lobechat.md)) and several users need the HTTP path below.
+**Other clients**: one page each in the [client guides](docs/guides/clients/README.md). Chat UIs (LibreChat, LobeChat) and several users need the HTTP path below.
 
 ## Run it over HTTP (Docker)
 
