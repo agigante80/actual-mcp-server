@@ -87,8 +87,8 @@ await check('NEGATIVE: create with id is refused', () => refused({ action: 'crea
 await check('NEGATIVE: update with only id is refused with the legacy message and calls nothing', () =>
   refused({ action: 'update', id: U1 }, /At least one of tag, color, or description must be provided/));
 await check('NEGATIVE: malformed id and empty tag are refused', async () => {
-  await refused({ action: 'delete', id: 'nope' }, /id/);
-  await refused({ action: 'update', id: 'nope', tag: 'x' }, /id/);
+  await refused({ action: 'delete', id: 'nope' }, /Invalid tag ID format/);
+  await refused({ action: 'update', id: 'nope', tag: 'x' }, /Invalid tag ID format/);
   await refused({ action: 'create', tag: '' }, /tag must not be empty/);
   await refused({ action: 'update', id: U1, tag: '' }, /tag must not be empty/);
 });

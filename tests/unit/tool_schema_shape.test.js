@@ -49,7 +49,7 @@ const ALLOWLIST = new Set([
   // description points at the update action's field list), so it publishes a pure open object
   // `{ type: 'object', additionalProperties: {} }`. A client can still construct it: it is a
   // plain map of Actual transaction fields.
-  'manage_transactions.updates.items.fields',
+  'manage_transactions.updates.items.fields.additionalProperties',
 ]);
 
 let failures = 0;
