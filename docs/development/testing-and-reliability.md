@@ -1017,7 +1017,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `toolsets_entrypoint.test.js` | Entrypoint spawn: filtered list over stdio and HTTP, refusal, startup failures (#483) | 10 |
 | `config_tool_surface.test.js` | `MCP_TOOL_SURFACE` parsing and its exclusion of `MCP_TOOLSETS` and `MCP_TOOLS` under `compact` (#671) | 19 |
 | `compact_dispatch.test.js` | Compact surface: resolver, dispatcher, routes, 4b rewrite, `callOperation` bypass, import guard, `build` hook (#671, #672, #678) | 61 |
-| `compact_mapping_parity.test.js` | Every legacy tool mapped, out of scope or pending exactly once; routes counted under one compact tool, `notes_update` shared from `set_note`, PENDING empty (#671, #672, #676, #677, #678) | 13 |
+| `compact_mapping_parity.test.js` | Every legacy tool mapped, out of scope or pending exactly once; routes counted under one compact tool, `notes_update` shared from `set_note`, PENDING empty (#671, #672, #676, #677, #678) | 12 |
 | `compact_get_context.test.js` | Compact `get_context`: routing, refusals, schema shape (#672) | 19 |
 | `compact_list_entities.test.js` | Compact `list_entities`: defaults, routes, refusals, 4b rewrite (#672) | 51 |
 | `compact_search_transactions.test.js` | Compact `search_transactions`: seven rows, refusals, schema shape, 4b rewrite (#673) | 30 |

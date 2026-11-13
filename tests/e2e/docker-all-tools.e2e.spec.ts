@@ -3623,7 +3623,8 @@ test.describe('Docker E2E - compact manage_budget_months (#678)', () => {
 
     const cleared = parse(await mcp.raw('manage_budget_months', { action: 'set_note', month: currentMonth(), note: '' }));
     expect(cleared.result.cleared).toBe(true);
-    expect((await mcp.call('actual_notes_get', { id })).found).toBe(false);
+    // A cleared note stays as a row holding '' (upstream updates, never deletes), so `found` stays true.
+    expect((await mcp.call('actual_notes_get', { id })).note || '').toBe('');
   });
 
   test('manage_budget_months - ERROR: a decimal amount, a zero hold and month 2026-13 are refused', async ({ mcp, makeCategory }) => {

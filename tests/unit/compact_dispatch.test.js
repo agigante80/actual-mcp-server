@@ -199,6 +199,7 @@ await check('dispatch: wrap always sends the wrapper object, even with nothing i
   assert.deepStrictEqual(calls[0].args, { id: 'a1', fields: {} });
 });
 
+let buildRuns = 0;
 const withBuild = {
   name: 'actual_fixture_build',
   description: 'Fixture compact tool with a build hook.',
@@ -208,7 +209,7 @@ const withBuild = {
       {
         legacy: UPDATE,
         fields: z.object({ month: z.string(), note: z.string() }),
-        build: (a) => ({ id: `budget-${String(a.month)}`, note: a.note }),
+        build: (a) => { buildRuns += 1; return { id: `budget-${String(a.month)}`, note: a.note }; },
       },
     ],
   ]),
@@ -224,8 +225,11 @@ await check('dispatch: build derives the legacy arguments from the validated one
 await check('NEGATIVE: build never runs on arguments that fail validation, nothing is called', async () => {
   await init({ surface: 'all' }, [withBuild]);
   calls.length = 0;
+  buildRuns = 0;
   await assert.rejects(() => manager.callTool(withBuild.name, { action: 'update', month: '2026-11' }), /note/);
   assert.strictEqual(calls.length, 0);
+  // Counted directly: a build that ran before validation would still make no legacy call.
+  assert.strictEqual(buildRuns, 0);
 });
 
 await check('dispatch: defaultAction runs when the selector is absent', async () => {

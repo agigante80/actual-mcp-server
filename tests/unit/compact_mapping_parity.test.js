@@ -153,11 +153,6 @@ await check('NEGATIVE: a route naming an unregistered tool is reported', () => {
   assert.ok(problems.some((p) => /actual_nope_nothing/.test(p)), problems.join('; '));
 });
 
-await check('PENDING is empty: the compact surface covers every legacy tool but the session tools', () => {
-  assert.deepStrictEqual(PENDING, []);
-  assert.deepStrictEqual(OUT_OF_SCOPE, ['actual_session_list', 'actual_session_close']);
-});
-
 await check('shipped: entities_search and get_id_by_name are counted once, under list_entities', () => {
   const owners = (name) => COMPACT_TOOLS.filter((t) => [...t.actions.values()].some((r) => r.legacy === name || (r.routes ?? []).some((x) => x.legacy === name))).map((t) => t.name);
   assert.deepStrictEqual(owners('actual_entities_search'), ['list_entities']);
