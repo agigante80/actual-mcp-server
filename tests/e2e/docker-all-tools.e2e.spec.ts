@@ -268,17 +268,16 @@ test.describe('Docker E2E - tool surface', () => {
   // The two legs run in separate Playwright invocations, so "stdio equals HTTP" is proven by
   // both legs equalling this one expected text: buildServerInstructions() for the full registry,
   // not read-only, which is what this stack runs. The builder names the compact context and query
-  // tools when they are published and the legacy ones otherwise (#680), so the names are taken
-  // from this session's own tool list rather than written here, and the text is right under
-  // every MCP_TOOL_SURFACE. A change to the builder text fails BOTH legs here until this
+  // tools when they are published (#680), so the names are checked against this session's own
+  // tool list. A legacy-only surface is unit-level only. A change to the builder text fails BOTH legs here until this
   // is updated, which is the point. The per-preset and read-only texts are unit-level only
   // (tests/unit/server_instructions.test.js).
   const expectedInstructions = (toolNames: string[]): string => {
-    // #680: the builder names the compact tool when it is published, else the legacy one.
-    const pick = (compact: string, legacy: string) =>
-      toolNames.includes(compact) ? compact : toolNames.includes(legacy) ? legacy : undefined;
-    const ctx = pick('get_context', 'actual_get_context');
-    const query = pick('run_query', 'actual_query_run');
+    // #680: the builder names the compact tools whenever they are published, which they are on
+    // every surface this suite runs (`all` and `compact`). The legacy spellings are not written
+    // here: e2e_uses_compact_names.test.js keeps legacy names out of this file.
+    const ctx = toolNames.includes('get_context') ? 'get_context' : undefined;
+    const query = toolNames.includes('run_query') ? 'run_query' : undefined;
     let text = 'This server exposes an Actual Budget through MCP tools. ' +
       'Amounts are integer cents (5000 is 50.00, negative is an outflow) and dates are YYYY-MM-DD strings.';
     if (ctx) {
@@ -334,12 +333,11 @@ test.describe('Docker E2E - tool surface', () => {
     // stdio check here would test an empty placeholder. Unit check 7 and the source scan in
     // server_instructions.test.js cover the legacy key for the shared Server construction.
     if (!isStdio) expect('serverInstructions' in initResult).toBe(false);
-    // #680: the text names the compact tools when they are published (the `all` surface included),
-    // otherwise the legacy ones, so both spellings are looked up.
+    // #680: the text names the compact tools when they are published (the `all` surface included).
+    // A legacy name in the text would also be caught: `actual_` names are collected too.
     const named = [...FULL_REGISTRY_INSTRUCTIONS.matchAll(/\b(?:actual_[a-z0-9_]+|get_context|run_query)\b/g)].map((m) => m[0]);
     // With neither a context nor a query tool published the text names no tool at all, so there is nothing to look up.
-    const NAMEABLE = ['get_context', 'run_query', 'actual_get_context', 'actual_query_run'];
-    if (toolNames.some((n) => NAMEABLE.includes(n))) expect(named.length).toBeGreaterThan(0);
+    if (toolNames.some((n) => n === 'get_context' || n === 'run_query')) expect(named.length).toBeGreaterThan(0);
     // Negative: a name the text uses but this session does not publish would be listed here.
     expect(named.filter((n) => !toolNames.includes(n))).toEqual([]);
   });
