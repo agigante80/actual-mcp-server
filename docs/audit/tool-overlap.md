@@ -1,5 +1,7 @@
 # Tool overlap inventory (#653)
 
+> **Superseded (#670):** the "keep, sharpen descriptions" conclusion below, and #654's open question, are superseded by the compact tool surface decision in [../explanation/compact-tool-surface.md](../explanation/compact-tool-surface.md). This audit is kept as the point-in-time record.
+
 Why this exists: Glama grades the tool surface for coherence, and Disambiguation scored 2 of 5 for v0.27.1. Our own TDQS run flagged the same overlaps ([tdqs-baseline.md](tdqs-baseline.md)). This doc decides, group by group, whether tools should merge, stay with sharper descriptions, or stay as they are. Which tools a smaller default surface shows is #654's question, not this one's.
 
 This is a point-in-time baseline. Its counts (85 tools) are not kept in step by release tooling. **Do NOT add this file to `FILES` in `scripts/tool-count.mjs`**, or the count check will fail on it at the next tool change.
