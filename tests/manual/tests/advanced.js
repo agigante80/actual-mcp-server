@@ -36,43 +36,57 @@ export async function advancedTests(client, context, opts = {}) {
   const { callTool } = client;
   console.log("\n-- Running ADVANCED TESTS --");
 
-  // Session list (actual_session_list)
-  console.log("\nListing active sessions...");
+  // #680: the session tools have no compact equivalent, so they are published only on the `all`
+  // surface (and legacy). On the default compact surface a call is refused with "not available";
+  // that is the surface working, not a failure, so skip LOUDLY (never silently) and keep the
+  // test for the surface that publishes them. If tools/list itself cannot be read, run the test.
+  let sessionToolsPublished = true;
   try {
-    const sessionList = await callTool("actual_session_list", {});
-    const total = sessionList?.totalSessions ?? sessionList?.result?.totalSessions;
-    // #280: stdio has no MCP sessions by construction (the connection pool is keyed by
-    // session id, which only the HTTP transport establishes). Zero is the CORRECT answer
-    // there, so assert the transport-appropriate expectation rather than a blanket >= 1.
-    const STDIO = (process.env.MCP_TEST_TRANSPORT || 'http').toLowerCase() === 'stdio';
-    if (STDIO) {
-      console.log(`  ✓ Verify session_list [stdio]: totalSessions=${total} (stdio has no MCP sessions; expected 0)`);
-    } else if (typeof total === 'number' && total >= 1) {
-      console.log(`  ✓ Verify session_list: totalSessions=${total}, activeSessions=${sessionList?.activeSessions ?? sessionList?.result?.activeSessions}`);
-    } else {
-      fail(`Verify session_list: expected totalSessions >= 1, got ${JSON.stringify(sessionList).slice(0, 120)}`);
-    }
-  } catch (err) {
-    fail(`session_list failed: ${err.message}`);
-  }
+    const names = new Set((await client.listTools()).map((t) => t?.name));
+    sessionToolsPublished = names.has('actual_session_list') && names.has('actual_session_close');
+  } catch { /* unknown: run the test and let it report */ }
 
-  // Session close: no sessionId, closes oldest idle session (or reports none to close)
-  console.log("\nTesting session close (no-op, current session protected)...");
-  try {
-    const closeResult = await callTool("actual_session_close", {});
-    const success = closeResult?.success ?? closeResult?.result?.success;
-    const message = closeResult?.message ?? closeResult?.result?.message ?? '';
-    if (success === true) {
-      console.log(`  ✓ Verify session_close: closed session (${message})`);
-    } else if (typeof message === 'string' && (
-      message.includes('No other sessions') || message.includes('No sessions')
-    )) {
-      console.log(`  ✓ Verify session_close: correctly reported no closable sessions (${message})`);
-    } else {
-      fail(`Verify session_close: unexpected response: ${JSON.stringify(closeResult).slice(0, 120)}`);
+  if (!sessionToolsPublished) {
+    skip("skip: actual_session_list and actual_session_close are not published on this server's tool surface (they have no compact tool; set MCP_TOOL_SURFACE=all to run them)");
+  } else {
+    // Session list (actual_session_list)
+    console.log("\nListing active sessions...");
+    try {
+      const sessionList = await callTool("actual_session_list", {});
+      const total = sessionList?.totalSessions ?? sessionList?.result?.totalSessions;
+      // #280: stdio has no MCP sessions by construction (the connection pool is keyed by
+      // session id, which only the HTTP transport establishes). Zero is the CORRECT answer
+      // there, so assert the transport-appropriate expectation rather than a blanket >= 1.
+      const STDIO = (process.env.MCP_TEST_TRANSPORT || 'http').toLowerCase() === 'stdio';
+      if (STDIO) {
+        console.log(`  ✓ Verify session_list [stdio]: totalSessions=${total} (stdio has no MCP sessions; expected 0)`);
+      } else if (typeof total === 'number' && total >= 1) {
+        console.log(`  ✓ Verify session_list: totalSessions=${total}, activeSessions=${sessionList?.activeSessions ?? sessionList?.result?.activeSessions}`);
+      } else {
+        fail(`Verify session_list: expected totalSessions >= 1, got ${JSON.stringify(sessionList).slice(0, 120)}`);
+      }
+    } catch (err) {
+      fail(`session_list failed: ${err.message}`);
     }
-  } catch (err) {
-    fail(`session_close failed: ${err.message}`);
+
+    // Session close: no sessionId, closes oldest idle session (or reports none to close)
+    console.log("\nTesting session close (no-op, current session protected)...");
+    try {
+      const closeResult = await callTool("actual_session_close", {});
+      const success = closeResult?.success ?? closeResult?.result?.success;
+      const message = closeResult?.message ?? closeResult?.result?.message ?? '';
+      if (success === true) {
+        console.log(`  ✓ Verify session_close: closed session (${message})`);
+      } else if (typeof message === 'string' && (
+        message.includes('No other sessions') || message.includes('No sessions')
+      )) {
+        console.log(`  ✓ Verify session_close: correctly reported no closable sessions (${message})`);
+      } else {
+        fail(`Verify session_close: unexpected response: ${JSON.stringify(closeResult).slice(0, 120)}`);
+      }
+    } catch (err) {
+      fail(`session_close failed: ${err.message}`);
+    }
   }
 
   // ActualQL search/summary tools

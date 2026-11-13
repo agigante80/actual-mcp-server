@@ -19,6 +19,8 @@ tests/manual/
 ├── cleanup.js                 ← standalone cleanup: finds and removes all
 │                                 MCP-Test-* / MCP-Cat-* / MCP-Group-* / MCP-Payee-*
 │                                 / MCP-Rule-* data left by test runs
+├── compact-calls.js           ← the compact tool calls the support code makes (listings,
+│                                 deletes, closes), one place, shapes read from src/compact/
 └── tests/
     ├── sanity.js              ← read-only protocol checks (tool count, server version, SQL, etc.)
     ├── smoke.js               ← sanity + account balances, categories, recent txns
@@ -184,7 +186,7 @@ The `cleanup` level matches on these prefixes and is safe to run repeatedly.
 const client = createClient({ url: MCP_URL, rl });
 client.setToken('Bearer abc123');
 await client.initialize();
-const accounts = await client.callTool('actual_accounts_list', {});
+const accounts = await client.callTool('list_entities', { type: 'account' });
 ```
 
 The client owns all transport state (`sessionId`, `requestId`) as closure variables.
@@ -247,7 +249,17 @@ These rules apply to everyone adding or modifying tests in this directory.
   the cleanup level can find and delete them.
 - Timestamps are generated **inside** the function that creates the entity —
   never passed in from outside.
-- Tool names follow the `actual_{domain}_{action}` convention of the MCP server.
+- Call the 15 compact tools (`list_entities`, `manage_*`, `search_transactions`, ...), never a
+  legacy `actual_*` name: the default surface refuses them. The one exception is the two session
+  tools (`actual_session_list`, `actual_session_close`), which have no compact tool;
+  `tests/advanced.js` checks `tools/list` first and prints one `skip:` line (not a failure) when
+  they are not published. The support code (`runner.js`, `residue.js`, `cleanup.js`) builds its
+  calls through `compact-calls.js`, and `tests/unit/manual_support_compact.test.js` fails when a
+  legacy name appears there or a call stops reaching its legacy tool.
+- Listings are unpaginated: a bare `list_entities type X` returns every entity, and the sweep and
+  the zero-residue assertion rely on that. Never pass `query` or `limit` to a listing they read.
+- `repro-212.mjs` and `repro-delete-guards.mjs` are hand-run reproductions of the legacy tools
+  and need a server on the `all` or `legacy` surface.
 
 ### Error handling
 - Use `try/catch` around regression tests and known-failing checks; log `✓`, `❌`,

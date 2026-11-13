@@ -66,28 +66,26 @@ export function isTestRule(rule) {
   return conditions.some((c) => String(c?.value ?? '').startsWith(RULE_MARKER_PREFIX));
 }
 
+import { LISTING_KEY, listCall, listingLabel, accountTransactionsCall, remove } from './compact-calls.js';
+
 const list = (x) => (Array.isArray(x) ? x : Array.isArray(x?.result) ? x.result : []);
 
-// #584: three legacy listing tools return their array under their own key, and both test
-// clients pass that shape through unchanged (unwrapToolResult strips only `result`). Reading
-// them through `list` alone saw `[]`, so a leaked group, schedule or rule was invisible to the
-// sweep and to the zero-residue assertion. A key is read only from the tool that returns it.
-const LISTING_KEY = {
-  actual_category_groups_get: 'groups',
-  actual_rules_get: 'rules',
-  actual_schedules_get: 'schedules',
-};
+// #584: three listings return their array under their own key (LISTING_KEY in compact-calls.js),
+// and both test clients pass that shape through unchanged (unwrapToolResult strips only
+// `result`). Reading them through `list` alone saw `[]`, so a leaked group, schedule or rule was
+// invisible to the sweep and to the zero-residue assertion. A key is read only from the type
+// that returns it. #680: listings are list_entities calls by `type`; see compact-calls.js.
 
 /**
- * The array a listing tool returned, or null when its reply is not a listing.
+ * The array a listing returned, or null when its reply is not a listing.
  *
  * #583: null means UNREADABLE (error text, null, another object, a foreign key), never
  * empty. Decided by shape, not message text, so a new error wording cannot read as clean.
  */
-function readListing(tool, x) {
+function readListing(type, x) {
   if (Array.isArray(x)) return x;
   if (Array.isArray(x?.result)) return x.result;
-  const key = LISTING_KEY[tool];
+  const key = LISTING_KEY[type];
   return key && Array.isArray(x?.[key]) ? x[key] : null;
 }
 /**
@@ -108,7 +106,7 @@ const redact = (id) => (typeof id === 'string' && id.length > 8 ? `${id.slice(0,
  * Guard: the sweep may only ever touch a budget the caller has explicitly designated
  * as disposable, AND that designation must match the budget the SERVER has loaded.
  *
- * `actual_budgets_get_all` returns the budget-file LIST with no active marker, so list
+ * `list_entities` with type budget_file returns the budget-file LIST with no active marker, so list
  * membership is not evidence: on a multi-budget server it passes while a different
  * budget is loaded. The authoritative id is the server's own ACTUAL_BUDGET_SYNC_ID,
  * which deploy-and-test.sh reads out of the container and passes in as
@@ -146,25 +144,26 @@ export function assertSweepAllowed(env = process.env) {
  */
 export async function findResidue(callTool) {
   const unreadable = [];
-  const listing = (tool) => callTool(tool, {})
-    .then((x) => readListing(tool, x))
+  // #680: every listing is `list_entities` with a `type`; the type names it in `unreadable`.
+  const listing = (type) => callTool(...listCall(type))
+    .then((x) => readListing(type, x))
     .catch(() => null)
     .then((arr) => {
-      if (arr === null) unreadable.push(tool);
+      if (arr === null) unreadable.push(listingLabel(type));
       return arr ?? [];
     });
   const [accounts, payees, categories, groups, rules, schedules, tags] = await Promise.all([
-    listing('actual_accounts_list'),
-    listing('actual_payees_get'),
-    listing('actual_categories_get'),
-    listing('actual_category_groups_get'),
-    listing('actual_rules_get'),
-    listing('actual_schedules_get'),
+    listing('account'),
+    listing('payee'),
+    listing('category'),
+    listing('category_group'),
+    listing('rule'),
+    listing('schedule'),
     // #451: tags. Added with the tags integration module, because a fixture the sweep cannot
     // see is a fixture the zero-residue assertion silently certifies as absent. tags.js deletes
     // its own tag in a `finally`, but a run killed by the wall-clock guard or by an open circuit
     // breaker never reaches it, and the next run would then inherit an invisible leftover.
-    listing('actual_tags_list'),
+    listing('tag'),
   ]);
 
   const named = (arr) => arr.filter((o) => isTestObjectName(o?.name));
@@ -243,8 +242,8 @@ export async function sweepResidue(callTool, env = process.env) {
   }
 
   // Count real outcomes. The old code swallowed each per-op failure and then printed an
-  // unconditional success, so a balance-bearing account (which actual_accounts_close
-  // cannot close without a transferAccountId) silently survived while the sweep claimed
+  // unconditional success, so a balance-bearing account (which manage_accounts close
+  // cannot close without a transfer_account_id) silently survived while the sweep claimed
   // to have removed it, and the next run failed the zero-residue assertion (#287). Count
   // only what is actually gone, and report anything that could not be removed.
   let swept = 0, failed = 0;
@@ -255,32 +254,32 @@ export async function sweepResidue(callTool, env = process.env) {
 
   // Order matters: rules and schedules reference payees/categories, so remove them first.
   // Tags reference nothing and nothing references them, so the order is free here.
-  for (const t of found.tags) await tryRemove('tag delete', t.tag, () => callTool('actual_tags_delete', { id: t.id }));
-  for (const r of found.rules) await tryRemove('rule delete', r.id, () => callTool('actual_rules_delete', { id: r.id }));
-  for (const s of found.schedules) await tryRemove('schedule delete', s.name, () => callTool('actual_schedules_delete', { id: s.id }));
-  for (const p of found.payees) await tryRemove('payee delete', p.name, () => callTool('actual_payees_delete', { id: p.id }));
-  for (const c of found.categories) await tryRemove('category delete', c.name, () => callTool('actual_categories_delete', { id: c.id }));
-  for (const g of found.groups) await tryRemove('group delete', g.name, () => callTool('actual_category_groups_delete', { id: g.id }));
+  for (const t of found.tags) await tryRemove('tag delete', t.tag, () => remove(callTool, 'tag', t.id));
+  for (const r of found.rules) await tryRemove('rule delete', r.id, () => remove(callTool, 'rule', r.id));
+  for (const s of found.schedules) await tryRemove('schedule delete', s.name, () => remove(callTool, 'schedule', s.id));
+  for (const p of found.payees) await tryRemove('payee delete', p.name, () => remove(callTool, 'payee', p.id));
+  for (const c of found.categories) await tryRemove('category delete', c.name, () => remove(callTool, 'category', c.id));
+  for (const g of found.groups) await tryRemove('group delete', g.name, () => remove(callTool, 'group', g.id));
   // Accounts (#287): an OPEN account with a non-zero balance cannot be closed without a
   // transferAccountId, so the old close-only path silently failed. Zero the balance by
   // deleting the account's transactions, then delete the account; fall back to closing it
   // (with a zero balance, close succeeds) so it lands in the accepted terminal state
-  // rather than as open residue. The legacy "NEVER actual_accounts_delete" caution was a
+  // rather than as open residue. The legacy "NEVER delete an account" caution was a
   // pre-#134 per-op-init timeout; since #134 the session is pooled and the delete is
   // bounded by the #270 op-timeout, so it no longer loops (verified live during the
   // v0.8.13 release cleanup).
   for (const a of found.openAccounts) {
     await tryRemove('account remove', a.name, async () => {
-      const txns = list(await callTool('actual_transactions_get', { accountId: a.id }).catch(() => []));
+      const txns = list(await callTool(...accountTransactionsCall(a.id)).catch(() => []));
       for (const t of txns) {
-        if (t?.id) await callTool('actual_transactions_delete', { id: t.id }).catch(() => {});
+        if (t?.id) await remove(callTool, 'transaction', t.id).catch(() => {});
       }
       try {
-        await callTool('actual_accounts_delete', { id: a.id });
+        await remove(callTool, 'account', a.id);
       } catch {
         // Balance is zero now, so close is the fallback. If this ALSO throws, it propagates
         // to tryRemove, which records the account as failed (not swept): the summary stays honest.
-        await callTool('actual_accounts_close', { id: a.id });
+        await remove(callTool, 'accountClose', a.id);
       }
     });
   }

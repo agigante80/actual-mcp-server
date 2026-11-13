@@ -130,7 +130,10 @@ export async function transactionTests(client, context) {
       fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilUpd).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes('not found') && msg.includes('search_transactions account')) {
+      // #680: the adapter hint names the legacy transactions listing tool; the compact dispatcher rewrites a legacy name to
+      // `<tool> with <selector> <value>`, and the selector here is `by`, so the phrase is "search_transactions with by account"
+      // (the wording search_transactions tests and the prompts already use). The text is generated, not malformed.
+      if (msg.includes('not found') && msg.includes('search_transactions with by account')) {
         console.log(`  ✓ FIXED(#212): transactions_update nil-id throws actionable error: ${msg.slice(0, 120)}`);
       } else {
         fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
@@ -378,7 +381,10 @@ export async function transactionTests(client, context) {
       fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes('not found') && msg.includes('search_transactions account')) {
+      // #680: the adapter hint names the legacy transactions listing tool; the compact dispatcher rewrites a legacy name to
+      // `<tool> with <selector> <value>`, and the selector here is `by`, so the phrase is "search_transactions with by account"
+      // (the wording search_transactions tests and the prompts already use). The text is generated, not malformed.
+      if (msg.includes('not found') && msg.includes('search_transactions with by account')) {
         console.log(`  ✓ FIXED(BUG-8): transactions_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
       } else {
         fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);

@@ -16,6 +16,9 @@
 
 import assert from 'node:assert';
 import { sweepResidue, assertNoResidue, EXIT_UNSAFE_BUDGET } from '../manual/residue.js';
+// #680: every call below goes through the real compact dispatcher (see the helper), so the stub is
+// keyed by the LEGACY tool a compact call reaches, and a wrong compact argument throws.
+import { viaCompact } from './helpers/compact-call-tool.js';
 
 const ACCT = 'MCP-Test-2026-07-10T20-46-50-942Z-Updated'; // matches TEST_OBJECT_RE (has a timestamp)
 const ENV = { MCP_TEST_BUDGET_SYNC_ID: 'budget-x', MCP_ACTIVE_BUDGET_SYNC_ID: 'budget-x' };
@@ -25,24 +28,24 @@ const ENV = { MCP_TEST_BUDGET_SYNC_ID: 'budget-x', MCP_ACTIVE_BUDGET_SYNC_ID: 'b
 function makeMock(overrides = {}) {
   const calls = [];
   const base = {
-    actual_accounts_list: () => ({ result: [{ id: 'a1', name: ACCT, closed: false }] }),
+    actual_accounts_list: () => ({ result: [{ id: '00000000-0000-4000-8000-0000000000a1', name: ACCT, closed: false }] }),
     actual_payees_get: () => [],
     actual_categories_get: () => [],
     actual_category_groups_get: () => [],
     actual_rules_get: () => [],
     actual_schedules_get: () => [],
-    actual_transactions_get: () => ({ result: [{ id: 't1' }, { id: 't2' }] }),
+    actual_transactions_get: () => ({ result: [{ id: '00000000-0000-4000-8000-0000000000b1' }, { id: '00000000-0000-4000-8000-0000000000b2' }] }),
     actual_transactions_delete: () => ({ success: true }),
     actual_accounts_delete: () => ({ success: true }),
     actual_accounts_close: () => ({ success: true }),
   };
   const behaviors = { ...base, ...overrides };
-  const callTool = async (name, args) => {
+  const callTool = viaCompact(async (name, args) => {
     calls.push({ name, args });
     const b = behaviors[name];
     if (!b) return { result: [] };
-    return b(args); // may throw (rejected promise) since callTool is async
-  };
+    return b(args); // may throw (rejected promise) since the stub is async
+  });
   return { callTool, calls };
 }
 const names = (calls) => calls.map((c) => c.name);
@@ -63,21 +66,23 @@ await check('deletes the account transactions then the account (swept:1, failed:
   assert.deepStrictEqual(res, { swept: 1, failed: 0, skipped: false });
   const seq = names(calls);
   const delTxns = calls.filter((c) => c.name === 'actual_transactions_delete').map((c) => c.args.id);
-  assert.deepStrictEqual(delTxns, ['t1', 't2'], 'both transactions deleted');
+  assert.deepStrictEqual(delTxns, ['00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-0000000000b2'], 'both transactions deleted');
   assert.ok(seq.indexOf('actual_accounts_delete') > seq.lastIndexOf('actual_transactions_delete'),
     'account deleted AFTER its transactions');
   assert.ok(!seq.includes('actual_accounts_close'), 'close not used when delete succeeds');
+  const listed = calls.find((c) => c.name === 'actual_transactions_get');
+  assert.ok(listed && listed.args.accountId === '00000000-0000-4000-8000-0000000000a1', 'transactions listed for the swept account');
 });
 
 // Positive 1b: the LIVE callTool unwraps actual_transactions_get to a BARE ARRAY (via
 // unwrapToolResult), not {result:[...]}. list() absorbs both; assert the production shape
 // still drives the per-transaction deletes, so this test mirrors the real unwrap.
 await check('handles the live bare-array transactions_get shape (production unwrap)', async () => {
-  const { callTool, calls } = makeMock({ actual_transactions_get: () => [{ id: 't1' }, { id: 't2' }] });
+  const { callTool, calls } = makeMock({ actual_transactions_get: () => [{ id: '00000000-0000-4000-8000-0000000000b1' }, { id: '00000000-0000-4000-8000-0000000000b2' }] });
   const res = await sweepResidue(callTool, ENV);
   assert.deepStrictEqual(res, { swept: 1, failed: 0, skipped: false });
   const delTxns = calls.filter((c) => c.name === 'actual_transactions_delete').map((c) => c.args.id);
-  assert.deepStrictEqual(delTxns, ['t1', 't2'], 'both transactions deleted from the bare-array shape');
+  assert.deepStrictEqual(delTxns, ['00000000-0000-4000-8000-0000000000b1', '00000000-0000-4000-8000-0000000000b2'], 'both transactions deleted from the bare-array shape');
 });
 
 // Fallback 2: delete fails, close succeeds -> still counted as removed.
@@ -86,7 +91,7 @@ await check('falls back to close when actual_accounts_delete fails (swept:1, fai
   const res = await sweepResidue(callTool, ENV);
   assert.deepStrictEqual(res, { swept: 1, failed: 0, skipped: false });
   const closeCalls = calls.filter((c) => c.name === 'actual_accounts_close').map((c) => c.args.id);
-  assert.deepStrictEqual(closeCalls, ['a1'], 'close fallback invoked for the account');
+  assert.deepStrictEqual(closeCalls, ['00000000-0000-4000-8000-0000000000a1'], 'close fallback invoked for the account');
 });
 
 // Negative 3 (the regression, was RED): every removal path fails -> honest report, no
@@ -138,16 +143,16 @@ await check('sweeps a test TAG, and matches on the `tag` field not `name`', asyn
   const { callTool, calls } = makeMock({
     actual_accounts_list: () => ({ result: [] }),
     actual_tags_list: () => ({ result: [
-      { id: 'tag-1', tag: TAG },
-      { id: 'tag-2', tag: 'groceries' },          // a REAL user tag: must never be touched
-      { id: 'tag-3', name: TAG },                 // wrong field: must not be treated as a match
+      { id: '00000000-0000-4000-8000-0000000000c1', tag: TAG },
+      { id: '00000000-0000-4000-8000-0000000000c2', tag: 'groceries' },          // a REAL user tag: must never be touched
+      { id: '00000000-0000-4000-8000-0000000000c3', name: TAG },                 // wrong field: must not be treated as a match
     ] }),
     actual_tags_delete: () => ({ success: true }),
   });
   await sweepResidue(callTool, ENV);
   const deletes = calls.filter((c) => c.name === 'actual_tags_delete');
   assert.strictEqual(deletes.length, 1, `expected exactly one tag delete, got ${deletes.length}`);
-  assert.strictEqual(deletes[0].args.id, 'tag-1', 'the wrong tag was deleted');
+  assert.strictEqual(deletes[0].args.id, '00000000-0000-4000-8000-0000000000c1', 'the wrong tag was deleted');
 });
 
 await check('a budget with only a stray test tag is NOT reported clean', async () => {
@@ -155,7 +160,7 @@ await check('a budget with only a stray test tag is NOT reported clean', async (
   // deleting, which is the failure mode this whole section exists to prevent.
   const { callTool, calls } = makeMock({
     actual_accounts_list: () => ({ result: [] }),
-    actual_tags_list: () => ({ result: [{ id: 'tag-1', tag: 'MCP-Test-tag-1783679144993' }] }),
+    actual_tags_list: () => ({ result: [{ id: '00000000-0000-4000-8000-0000000000c1', tag: 'MCP-Test-tag-1783679144993' }] }),
     actual_tags_delete: () => ({ success: true }),
   });
   await sweepResidue(callTool, ENV);
@@ -171,7 +176,7 @@ await check('a tag-only residue failure NAMES the tag it found', async () => {
   const TAG = 'MCP-Test-tag-1783679144993';
   const { callTool } = makeMock({
     actual_accounts_list: () => ({ result: [] }),
-    actual_tags_list: () => ({ result: [{ id: 'tag-1', tag: TAG }] }),
+    actual_tags_list: () => ({ result: [{ id: '00000000-0000-4000-8000-0000000000c1', tag: TAG }] }),
   });
   const lines = [];
   const origLog = console.log;
@@ -197,7 +202,7 @@ await check('the sweep preview names the tag it is about to delete', async () =>
   const TAG = 'MCP-Test-tag-1783679144993';
   const { callTool } = makeMock({
     actual_accounts_list: () => ({ result: [] }),
-    actual_tags_list: () => ({ result: [{ id: 'tag-1', tag: TAG }] }),
+    actual_tags_list: () => ({ result: [{ id: '00000000-0000-4000-8000-0000000000c1', tag: TAG }] }),
     actual_tags_delete: () => ({ success: true }),
   });
   const lines = [];
@@ -219,10 +224,10 @@ await check('the sweep preview names the tag it is about to delete', async () =>
 await check('#584: sweeps a live-shape rule, schedule and group, in dependency order', async () => {
   const { callTool, calls } = makeMock({
     actual_accounts_list: () => ({ result: [] }),
-    actual_categories_get: () => ({ result: [{ id: 'c1', name: 'MCP-Cat-1761000000000' }] }),
-    actual_category_groups_get: () => ({ groups: [{ id: 'g1', name: 'MCP-Leak-1761000000000' }] }),
-    actual_rules_get: () => ({ rules: [{ id: 'r1', conditions: [{ value: 'MCP-Rule-x' }] }] }),
-    actual_schedules_get: () => ({ schedules: [{ id: 's1', name: 'MCP-Schedule-1761000000000' }], count: 1 }),
+    actual_categories_get: () => ({ result: [{ id: '00000000-0000-4000-8000-0000000000d1', name: 'MCP-Cat-1761000000000' }] }),
+    actual_category_groups_get: () => ({ groups: [{ id: '00000000-0000-4000-8000-0000000000e1', name: 'MCP-Leak-1761000000000' }] }),
+    actual_rules_get: () => ({ rules: [{ id: '00000000-0000-4000-8000-0000000000f1', conditions: [{ value: 'MCP-Rule-x' }] }] }),
+    actual_schedules_get: () => ({ schedules: [{ id: '00000000-0000-4000-8000-0000000000a5', name: 'MCP-Schedule-1761000000000' }], count: 1 }),
   });
   const origLog = console.log;
   console.log = () => {};
@@ -230,10 +235,10 @@ await check('#584: sweeps a live-shape rule, schedule and group, in dependency o
   try { res = await sweepResidue(callTool, ENV); } finally { console.log = origLog; }
   const deletes = calls.filter((c) => /_delete$/.test(c.name)).map((c) => `${c.name} ${c.args.id}`);
   assert.deepStrictEqual(deletes, [
-    'actual_rules_delete r1',
-    'actual_schedules_delete s1',
-    'actual_categories_delete c1',
-    'actual_category_groups_delete g1',
+    'actual_rules_delete 00000000-0000-4000-8000-0000000000f1',
+    'actual_schedules_delete 00000000-0000-4000-8000-0000000000a5',
+    'actual_categories_delete 00000000-0000-4000-8000-0000000000d1',
+    'actual_category_groups_delete 00000000-0000-4000-8000-0000000000e1',
   ]);
   assert.deepStrictEqual(res, { swept: 4, failed: 0, skipped: false });
 });
@@ -241,9 +246,9 @@ await check('#584: sweeps a live-shape rule, schedule and group, in dependency o
 await check('#584: never deletes a human group, schedule or unmarked rule in the live shapes', async () => {
   const { callTool, calls } = makeMock({
     actual_accounts_list: () => ({ result: [] }),
-    actual_category_groups_get: () => ({ groups: [{ id: 'g2', name: 'Bills' }] }),
-    actual_rules_get: () => ({ rules: [{ id: 'r2', conditions: [{ value: 'Amazon' }] }] }),
-    actual_schedules_get: () => ({ schedules: [{ id: 's2', name: 'Rent' }], count: 1 }),
+    actual_category_groups_get: () => ({ groups: [{ id: '00000000-0000-4000-8000-0000000000e2', name: 'Bills' }] }),
+    actual_rules_get: () => ({ rules: [{ id: '00000000-0000-4000-8000-0000000000f2', conditions: [{ value: 'Amazon' }] }] }),
+    actual_schedules_get: () => ({ schedules: [{ id: '00000000-0000-4000-8000-0000000000a6', name: 'Rent' }], count: 1 }),
   });
   const lines = [];
   const origLog = console.log;

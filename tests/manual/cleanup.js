@@ -9,6 +9,8 @@
  * independently of any test level.
  */
 
+import { listCall, remove } from "./compact-calls.js";
+
 /**
  * @param {{ callTool: Function }} client
  */
@@ -17,7 +19,7 @@ export async function cleanupMcpTestAccounts(client) {
   console.log("\n-- Running MCP TEST ACCOUNT CLEANUP --");
   console.log("Scanning for accounts whose name starts with \"MCP-Test-\"...");
 
-  const accounts = await callTool("actual_accounts_list", {});
+  const accounts = await callTool(...listCall("account"));
   const allAccounts = Array.isArray(accounts) ? accounts : [];
   const mcpTestAccounts = allAccounts.filter(a => a.name && a.name.startsWith("MCP-Test-"));
   console.log(`\n✓ Found ${mcpTestAccounts.length} MCP-Test-* account(s)`);
@@ -41,7 +43,7 @@ export async function cleanupMcpTestAccounts(client) {
     // in closed accounts. Deleting individual transactions is unnecessary for cleanup and
     // caused infinite retry loops when the delete timed out after the Actual API init cycle.
     try {
-      await callTool("actual_accounts_close", { id: account.id });
+      await remove(callTool, "accountClose", account.id);
       console.log(`  ✓ Account closed`);
       closedCount++;
     } catch (err) {
@@ -52,7 +54,7 @@ export async function cleanupMcpTestAccounts(client) {
   // ---------- Rules ----------
   // Rules have no name field — detected by any condition with value starting with "MCP-Rule-"
   console.log("\n-- Scanning for MCP-Rule-* rules --");
-  const rulesData = await callTool("actual_rules_get", {});
+  const rulesData = await callTool(...listCall("rule"));
   const rulesList = rulesData.rules || rulesData.result || rulesData || [];
   const mcpRules = Array.isArray(rulesList)
     ? rulesList.filter(r =>
@@ -64,7 +66,7 @@ export async function cleanupMcpTestAccounts(client) {
   let rulesDeleted = 0;
   for (const rule of mcpRules) {
     const marker = rule.conditions.find(c => c.value && String(c.value).startsWith('MCP-Rule-'))?.value;
-    await callTool("actual_rules_delete", { id: rule.id });
+    await remove(callTool, "rule", rule.id);
     console.log(`  ✓ Deleted rule: condition value="${marker}"`);
     rulesDeleted++;
   }
@@ -74,25 +76,25 @@ export async function cleanupMcpTestAccounts(client) {
   console.log("\n-- Scanning for MCP-Schedule-* schedules --");
   let schedulesDeleted = 0;
   try {
-    const schedulesData = await callTool('actual_schedules_get', {});
+    const schedulesData = await callTool(...listCall('schedule'));
     const schedulesList = schedulesData?.schedules ?? schedulesData?.result?.schedules ?? schedulesData ?? [];
     const mcpSchedules = Array.isArray(schedulesList)
       ? schedulesList.filter(s => s && s.name && s.name.startsWith('MCP-Schedule-'))
       : [];
     console.log(`✓ Found ${mcpSchedules.length} MCP-Schedule-* schedules(s)`);
     for (const sched of mcpSchedules) {
-      await callTool('actual_schedules_delete', { id: sched.id });
+      await remove(callTool, 'schedule', sched.id);
       console.log(`  ✓ Deleted schedule: "${sched.name}"`);
       schedulesDeleted++;
     }
     if (schedulesDeleted === 0) console.log('  (none found)');
   } catch (err) {
-    console.log(`  ⚠ Schedule cleanup skipped (actual_schedules_get unavailable): ${err.message}`);
+    console.log(`  ⚠ Schedule cleanup skipped (list_entities type schedule unavailable): ${err.message}`);
   }
 
   // ---------- Categories ----------
   console.log("\n-- Scanning for MCP-Cat-* categories --");
-  const catsData = await callTool("actual_categories_get", {});
+  const catsData = await callTool(...listCall("category"));
   const catsResult = catsData.result || catsData || [];
   const flatCats = Array.isArray(catsResult)
     ? catsResult.flatMap(g => (g.categories && Array.isArray(g.categories)) ? g.categories : (g.id ? [g] : []))
@@ -101,7 +103,7 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`✓ Found ${mcpCats.length} MCP-Cat-* categorie(s)`);
   let catsDeleted = 0;
   for (const cat of mcpCats) {
-    await callTool("actual_categories_delete", { id: cat.id });
+    await remove(callTool, "category", cat.id);
     console.log(`  ✓ Deleted category: "${cat.name}"`);
     catsDeleted++;
   }
@@ -109,7 +111,7 @@ export async function cleanupMcpTestAccounts(client) {
 
   // ---------- Category Groups ----------
   console.log("\n-- Scanning for MCP-Group-* category groups --");
-  const groupsData = await callTool("actual_category_groups_get", {});
+  const groupsData = await callTool(...listCall("category_group"));
   const groupsList = groupsData.groups || groupsData || [];
   const mcpGroups = Array.isArray(groupsList)
     ? groupsList.filter(g => g && g.id && g.name && g.name.startsWith("MCP-Group-"))
@@ -117,7 +119,7 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`✓ Found ${mcpGroups.length} MCP-Group-* group(s)`);
   let groupsDeleted = 0;
   for (const grp of mcpGroups) {
-    await callTool("actual_category_groups_delete", { id: grp.id });
+    await remove(callTool, "group", grp.id);
     console.log(`  ✓ Deleted category group: "${grp.name}"`);
     groupsDeleted++;
   }
@@ -125,7 +127,7 @@ export async function cleanupMcpTestAccounts(client) {
 
   // ---------- Payees ----------
   console.log("\n-- Scanning for MCP-Payee-* payees --");
-  const payeesData = await callTool("actual_payees_get", {});
+  const payeesData = await callTool(...listCall("payee"));
   const payeesList = payeesData.result || payeesData || [];
   const mcpPayees = Array.isArray(payeesList)
     ? payeesList.filter(p => p && p.id && p.name && p.name.startsWith("MCP-Payee"))
@@ -133,7 +135,7 @@ export async function cleanupMcpTestAccounts(client) {
   console.log(`✓ Found ${mcpPayees.length} MCP-Payee-* payee(s)`);
   let payeesDeleted = 0;
   for (const payee of mcpPayees) {
-    await callTool("actual_payees_delete", { id: payee.id });
+    await remove(callTool, "payee", payee.id);
     console.log(`  ✓ Deleted payee: "${payee.name}"`);
     payeesDeleted++;
   }
@@ -153,7 +155,7 @@ export async function cleanupMcpTestAccounts(client) {
 
   // Post-cleanup verification — accounts
   console.log(`\n-- Verifying account state post-cleanup --`);
-  const accountsAfter = await callTool("actual_accounts_list", {});
+  const accountsAfter = await callTool(...listCall("account"));
   const mcpAfter = (Array.isArray(accountsAfter) ? accountsAfter : [])
     .filter(a => a.name && a.name.startsWith("MCP-Test-"));
 
@@ -169,7 +171,8 @@ export async function cleanupMcpTestAccounts(client) {
   // Post-cleanup verification — categories, groups, payees
   console.log(`\n-- Verifying category/group/payee state post-cleanup --`);
 
-  const catsAfterResult = (await callTool("actual_categories_get", {})).result || [];
+  const catsAfterData = await callTool(...listCall("category"));
+  const catsAfterResult = catsAfterData?.result || catsAfterData || [];
   const flatCatsAfter = Array.isArray(catsAfterResult)
     ? catsAfterResult.flatMap(g => (g.categories && Array.isArray(g.categories)) ? g.categories : (g.id ? [g] : []))
     : [];
@@ -177,7 +180,7 @@ export async function cleanupMcpTestAccounts(client) {
   if (mcpCatsAfter.length === 0) console.log(`  ✓ No MCP-Cat-* categories remain`);
   else mcpCatsAfter.forEach(c => console.log(`  ❌ [STILL EXISTS] category: "${c.name}"`));
 
-  const groupsAfterData = await callTool("actual_category_groups_get", {});
+  const groupsAfterData = await callTool(...listCall("category_group"));
   const groupsAfterList = groupsAfterData.groups || groupsAfterData || [];
   const mcpGroupsAfter = Array.isArray(groupsAfterList)
     ? groupsAfterList.filter(g => g && g.id && g.name && g.name.startsWith("MCP-Group-"))
@@ -185,14 +188,14 @@ export async function cleanupMcpTestAccounts(client) {
   if (mcpGroupsAfter.length === 0) console.log(`  ✓ No MCP-Group-* category groups remain`);
   else mcpGroupsAfter.forEach(g => console.log(`  ❌ [STILL EXISTS] group: "${g.name}"`));
 
-  const payeesAfterData = await callTool("actual_payees_get", {});
+  const payeesAfterData = await callTool(...listCall("payee"));
   const payeesAfterList = payeesAfterData.result || payeesAfterData || [];
   const mcpPayeesAfter = Array.isArray(payeesAfterList)
     ? payeesAfterList.filter(p => p && p.id && p.name && p.name.startsWith("MCP-Payee"))
     : [];
   if (mcpPayeesAfter.length === 0) console.log(`  ✓ No MCP-Payee-* payees remain`);
   else mcpPayeesAfter.forEach(p => console.log(`  ❌ [STILL EXISTS] payee: "${p.name}"`));
-  const rulesAfterData = await callTool("actual_rules_get", {});
+  const rulesAfterData = await callTool(...listCall("rule"));
   const rulesAfterList = rulesAfterData.rules || rulesAfterData.result || rulesAfterData || [];
   const mcpRulesAfter = Array.isArray(rulesAfterList)
     ? rulesAfterList.filter(r =>

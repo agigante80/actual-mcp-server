@@ -18,6 +18,7 @@ import assert from 'assert';
 import { readFileSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { viaCompact } from './helpers/compact-call-tool.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const { TEST_OBJECT_RE, RULE_MARKER_PREFIX, isTestObjectName, isTestRule } =
@@ -74,8 +75,8 @@ check('REJECT: the static MCP-Rule-* markers (they travel the OTHER detection pa
 });
 
 check('RULE PATH: isTestRule matches on a condition value, not a name', () => {
-  assert.ok(isTestRule({ id: 'r1', conditions: [{ field: 'notes', value: 'MCP-Rule-test-marker' }] }));
-  assert.ok(isTestRule({ id: 'r2', conditions: [{ value: 'x' }, { value: 'MCP-Rule-leak-marker' }] }));
+  assert.ok(isTestRule({ id: '00000000-0000-4000-8000-0000000000f1', conditions: [{ field: 'notes', value: 'MCP-Rule-test-marker' }] }));
+  assert.ok(isTestRule({ id: '00000000-0000-4000-8000-0000000000f2', conditions: [{ value: 'x' }, { value: 'MCP-Rule-leak-marker' }] }));
   assert.ok(!isTestRule({ id: 'r3', conditions: [{ value: 'Groceries' }] }));
   assert.ok(!isTestRule({ id: 'r4' }), 'a rule with no conditions is not test residue');
   assert.ok(!isTestRule(null));
@@ -174,19 +175,19 @@ await checkAsync('TRANSFER PAYEES are never residue, no matter how test-shaped t
   // Test accounts are CLOSED rather than deleted, so their transfer payees legitimately
   // persist. A live dry-run caught this pattern about to delete 6 of them.
   const { findResidue } = await import('../../tests/manual/residue.js');
-  const stub = async (tool) => {
+  const stub = viaCompact(async (tool) => {
     switch (tool) {
-      case 'actual_accounts_list': return [{ id: 'a1', name: `MCP-Test-${ISO}`, closed: true }];
+      case 'actual_accounts_list': return [{ id: '00000000-0000-4000-8000-0000000000a1', name: `MCP-Test-${ISO}`, closed: true }];
       case 'actual_payees_get': return [
-        { id: 'p1', name: `MCP-Test-${ISO}`, transfer_acct: 'a1' },  // transfer payee: NOT residue
-        { id: 'p2', name: `MCP-Payee-${ISO}` },                       // plain payee: residue
-        { id: 'p3', name: 'Groceries' },                              // human payee: NOT residue
+        { id: '00000000-0000-4000-8000-0000000000b1', name: `MCP-Test-${ISO}`, transfer_acct: '00000000-0000-4000-8000-0000000000a1' },  // transfer payee: NOT residue
+        { id: '00000000-0000-4000-8000-0000000000b2', name: `MCP-Payee-${ISO}` },                       // plain payee: residue
+        { id: '00000000-0000-4000-8000-0000000000b3', name: 'Groceries' },                              // human payee: NOT residue
       ];
       default: return [];
     }
-  };
+  });
   const r = await findResidue(stub);
-  assert.deepStrictEqual(r.payees.map((p) => p.id), ['p2'], 'only the plain test payee is residue');
+  assert.deepStrictEqual(r.payees.map((p) => p.id), ['00000000-0000-4000-8000-0000000000b2'], 'only the plain test payee is residue');
   assert.strictEqual(r.closedAccounts.length, 1, 'the closed test account is reported, not swept');
   assert.strictEqual(r.openAccounts.length, 0);
 });
@@ -195,11 +196,11 @@ await checkAsync('TRANSFER PAYEES are never residue, no matter how test-shaped t
 // pass that through. The rows above all stub bare arrays, a shape the live server never sends
 // for these three, which is how the blind spot survived. These rows use the LIVE shapes.
 const LIVE_LEAKS = {
-  actual_category_groups_get: { groups: [{ id: 'g1', name: 'MCP-Leak-1761000000000' }] },
-  actual_rules_get: { rules: [{ id: 'r1', conditions: [{ value: 'MCP-Rule-x' }] }] },
-  actual_schedules_get: { schedules: [{ id: 's1', name: 'MCP-Schedule-1761000000000' }], count: 1 },
+  actual_category_groups_get: { groups: [{ id: '00000000-0000-4000-8000-0000000000e1', name: 'MCP-Leak-1761000000000' }] },
+  actual_rules_get: { rules: [{ id: '00000000-0000-4000-8000-0000000000f1', conditions: [{ value: 'MCP-Rule-x' }] }] },
+  actual_schedules_get: { schedules: [{ id: '00000000-0000-4000-8000-0000000000a5', name: 'MCP-Schedule-1761000000000' }], count: 1 },
 };
-const stubFrom = (map) => async (tool) => (tool in map ? map[tool] : []);
+const stubFrom = (map) => viaCompact(async (tool) => (tool in map ? map[tool] : []));
 async function quietly(fn) {
   const lines = [];
   const orig = console.log;
@@ -211,7 +212,7 @@ await checkAsync('#584: a leaked group, rule and schedule in their LIVE shapes a
   const { assertNoResidue } = await import('../../tests/manual/residue.js');
   const { value, out } = await quietly(() => assertNoResidue(stubFrom(LIVE_LEAKS)));
   assert.strictEqual(value, 3, `expected 3 residue objects, got ${value}`);
-  for (const name of ['MCP-Leak-1761000000000', 'MCP-Schedule-1761000000000', 'r1']) {
+  for (const name of ['MCP-Leak-1761000000000', 'MCP-Schedule-1761000000000', '00000000-0000-4000-8000-0000000000f1']) {
     assert.ok(out.includes(name), `the failure listing must name ${name}, got:\n${out}`);
   }
 });
@@ -219,9 +220,9 @@ await checkAsync('#584: a leaked group, rule and schedule in their LIVE shapes a
 await checkAsync('#584: human objects in the same live shapes are never counted', async () => {
   const { assertNoResidue } = await import('../../tests/manual/residue.js');
   const { value } = await quietly(() => assertNoResidue(stubFrom({
-    actual_category_groups_get: { groups: [{ id: 'g2', name: 'Bills' }] },
-    actual_rules_get: { rules: [{ id: 'r2', conditions: [{ value: 'Amazon' }] }] },
-    actual_schedules_get: { schedules: [{ id: 's2', name: 'Rent' }], count: 1 },
+    actual_category_groups_get: { groups: [{ id: '00000000-0000-4000-8000-0000000000e2', name: 'Bills' }] },
+    actual_rules_get: { rules: [{ id: '00000000-0000-4000-8000-0000000000f2', conditions: [{ value: 'Amazon' }] }] },
+    actual_schedules_get: { schedules: [{ id: '00000000-0000-4000-8000-0000000000a6', name: 'Rent' }], count: 1 },
   })));
   assert.strictEqual(value, 0);
 });
@@ -229,8 +230,8 @@ await checkAsync('#584: human objects in the same live shapes are never counted'
 await checkAsync('#584: the existing `result` and bare-array shapes still count', async () => {
   const { assertNoResidue } = await import('../../tests/manual/residue.js');
   const { value } = await quietly(() => assertNoResidue(stubFrom({
-    actual_payees_get: { result: [{ id: 'p1', name: 'MCP-Payee-1761000000000' }] },
-    actual_categories_get: [{ id: 'c1', name: 'MCP-Cat-1761000000000' }],
+    actual_payees_get: { result: [{ id: '00000000-0000-4000-8000-0000000000b1', name: 'MCP-Payee-1761000000000' }] },
+    actual_categories_get: [{ id: '00000000-0000-4000-8000-0000000000d1', name: 'MCP-Cat-1761000000000' }],
   })));
   assert.strictEqual(value, 2);
 });
@@ -245,7 +246,7 @@ await checkAsync('#584: a listing key is read only from the tool that returns it
   })));
   assert.strictEqual(residueCount(value), 1, 'only the rule counts');
   assert.deepStrictEqual(value.payees, [], 'no phantom payee');
-  assert.deepStrictEqual(value.unreadable, ['actual_payees_get']);
+  assert.deepStrictEqual(value.unreadable, ['list_entities type payee']);
 });
 
 console.log(`\n[residue-pattern] Results: ${passed} passed, ${failed} failed`);

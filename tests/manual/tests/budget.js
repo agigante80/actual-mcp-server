@@ -484,7 +484,9 @@ export async function budgetTests(client, context) {
         fail(`Same source and target accepted (expected rejection)`);
       } catch (err) {
         const msg = err.message || String(err);
-        if (msg.includes("Source and target categories must be different")) {
+        // #680: under the compact surface the manage_budget_months refine rejects this before the legacy tool runs,
+        // as "to_category_id: must differ from from_category_id" (the legacy wording is never reached).
+        if (msg.includes("must differ from from_category_id")) {
           console.log(`  ✓ Same source and target correctly rejected`);
         } else {
           fail(`Same source and target rejected, but with an unexpected message: ${msg}`);

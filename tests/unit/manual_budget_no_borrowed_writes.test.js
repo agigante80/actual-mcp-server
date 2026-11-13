@@ -133,8 +133,9 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
         buffer.set(args.month, 0);
         return { success: true };
       case 'manage_budget_months/transfer': {
+        // #680: the compact dispatcher rejects this itself (manage_budget_months), so the stub says what it says.
         writes.push(args.from_category_id, args.to_category_id);
-        if (args.from_category_id === args.to_category_id) throw new Error('Source and target categories must be different');
+        if (args.from_category_id === args.to_category_id) throw new Error('to_category_id: must differ from from_category_id');
         const from = cell(args.month, args.from_category_id);
         if (from.budgeted < args.amount) throw new Error('Insufficient budget in source category');
         from.budgeted -= args.amount;

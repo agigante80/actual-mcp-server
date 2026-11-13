@@ -34,6 +34,7 @@ import { config as loadDotenv } from 'dotenv';
 import { createClient } from './mcp-client.js';
 import { createClient as createStdioClient } from './mcp-client-stdio.js';
 import { sweepResidue, assertNoResidue, ResidueUnreadableError, EXIT_RESIDUE, EXIT_UNSAFE_BUDGET } from './residue.js';
+import { budgetFilesCall, remove } from './compact-calls.js';
 import { fail, failureCount, failureList } from './assert.js';
 import { shouldDeleteCategory } from './context.js';
 import { sanityTests } from './tests/sanity.js';
@@ -219,7 +220,7 @@ export async function run() {
       guard.setLastCompleted('extendedTests');
       await fullTests(client, context, testOpts);
       guard.setLastCompleted('fullTests');
-      // #332/#334: LAST, and only at `full`. actual_budgets_import LOADS the
+      // #332/#334: LAST, and only at `full`. manage_budget_files import LOADS the
       // imported budget, so anything running after it would silently target the
       // imported copy. The module switches back before returning, but running it
       // last is the primary defence and the switch-back is the backstop. Its own
@@ -239,8 +240,9 @@ export async function run() {
     // Show which budget was used
     let budgetName = "Unknown";
     try {
-      const budgets = await client.callTool("actual_budgets_get_all", {});
-      const activeBudget = budgets.result?.find(b => b.id === "_test-budget") || budgets.result?.[0];
+      const budgets = await client.callTool(...budgetFilesCall());
+      const budgetList = Array.isArray(budgets) ? budgets : budgets?.result;
+      const activeBudget = budgetList?.find?.(b => b.id === "_test-budget") || budgetList?.[0];
       if (activeBudget) budgetName = activeBudget.name || "Test Budget";
     } catch { /* ignore */ }
 
@@ -276,17 +278,17 @@ export async function run() {
 
       if (context.transactionId) {
         console.log("\nDeleting test transaction...");
-        await callTool("actual_transactions_delete", { id: context.transactionId });
+        await remove(callTool, "transaction", context.transactionId);
         console.log("✓ Transaction deleted");
       }
       if (context.ruleWithoutOpId) {
         console.log("\nDeleting test rule (without op)...");
-        await callTool("actual_rules_delete", { id: context.ruleWithoutOpId });
+        await remove(callTool, "rule", context.ruleWithoutOpId);
         console.log("✓ Rule (without op) deleted");
       }
       if (context.rulesUpsertId) {
         console.log("\nDeleting test rule (upsert)...");
-        await callTool("actual_rules_delete", { id: context.rulesUpsertId });
+        await remove(callTool, "rule", context.rulesUpsertId);
         console.log("✓ Rule (upsert) deleted");
       }
       // #585: a backstop for a module delete that failed WITHOUT throwing (fail() records and
@@ -295,7 +297,7 @@ export async function run() {
       if (context.ruleStage342Id) {
         console.log("\nDeleting test rule (#342 stage)...");
         try {
-          await callTool("actual_rules_delete", { id: context.ruleStage342Id });
+          await remove(callTool, "rule", context.ruleStage342Id);
           // Not verified here: a tool error comes back as a reply, not a throw. The post-run
           // zero-residue assertion reads rules and is the check.
           console.log("  Rule (#342 stage) delete requested; the zero-residue assertion verifies it");
@@ -305,17 +307,17 @@ export async function run() {
       }
       if (context.ruleId) {
         console.log("\nDeleting test rule...");
-        await callTool("actual_rules_delete", { id: context.ruleId });
+        await remove(callTool, "rule", context.ruleId);
         console.log("✓ Rule deleted");
       }
       if (context.payeeId) {
         console.log("\nDeleting test payee...");
-        await callTool("actual_payees_delete", { id: context.payeeId });
+        await remove(callTool, "payee", context.payeeId);
         console.log("✓ Payee deleted");
       }
       if (shouldDeleteCategory(context)) {
         console.log("\nDeleting test category...");
-        await callTool("actual_categories_delete", { id: context.categoryId });
+        await remove(callTool, "category", context.categoryId);
         console.log("✓ Category deleted");
       } else if (context.categoryId) {
         // #590: the modules borrowed a PRE-EXISTING category; it is the budget's, not ours.
@@ -323,12 +325,12 @@ export async function run() {
       }
       if (context.categoryGroupId) {
         console.log("\nDeleting test category group...");
-        await callTool("actual_category_groups_delete", { id: context.categoryGroupId });
+        await remove(callTool, "group", context.categoryGroupId);
         console.log("✓ Category group deleted");
       }
       if (context.accountId) {
         console.log("\nDeleting test account...");
-        await callTool("actual_accounts_delete", { id: context.accountId });
+        await remove(callTool, "account", context.accountId);
         console.log("✓ Account deleted");
       }
 

@@ -9,7 +9,7 @@
  *   const client = createClient({ url, rl });
  *   client.setToken('Bearer abc123');
  *   await client.initialize();
- *   const result = await client.callTool('actual_accounts_list', {});
+ *   const result = await client.callTool('list_entities', { type: 'account' });
  */
 
 import fetch from 'node-fetch';

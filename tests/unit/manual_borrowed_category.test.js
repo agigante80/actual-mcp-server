@@ -178,9 +178,9 @@ const cleanupWouldDelete = shouldDeleteCategory;
 {
   const here = dirname(fileURLToPath(import.meta.url));
   const runner = readFileSync(join(here, '..', 'manual', 'runner.js'), 'utf8');
-  const guarded = /if \(shouldDeleteCategory\(context\)\) \{[\s\S]{0,200}?actual_categories_delete/.test(runner);
+  const guarded = /if \(shouldDeleteCategory\(context\)\) \{[\s\S]{0,200}?remove\(callTool, ["']category["']/.test(runner);
   assert.ok(guarded, 'S5: runner.js deletes context.categoryId without asking shouldDeleteCategory() first');
-  const deletes = runner.match(/actual_categories_delete/g) ?? [];
+  const deletes = runner.match(/remove\(callTool, ["']category["']/g) ?? [];
   assert.strictEqual(deletes.length, 1, `S5: runner.js has ${deletes.length} category delete paths; the guard covers one`);
 }
 

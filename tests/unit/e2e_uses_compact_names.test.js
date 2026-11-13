@@ -77,7 +77,6 @@ const SESSION_CLOSE = '[end legacy or all surface only]';
  */
 const LEGACY_HELPERS = {
   'tests/e2e/fixtures.ts': 'the self-provisioning fixtures create their entities through the legacy tools; they run on the all surface and are not a client-facing call',
-  'tests/manual/runner.js': 'the runner owns the S5 residue sweep that deletes disposable categories through the legacy delete tool',
 };
 
 const scannedFiles = () => {
