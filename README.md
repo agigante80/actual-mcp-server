@@ -27,7 +27,39 @@ Talk to your [Actual Budget](https://actualbudget.org/) in plain language: ask w
 
 **Works with:** [Claude Desktop](docs/guides/clients/claude-desktop.md), [Claude Code](docs/guides/clients/claude-code.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md) and [Codex CLI](docs/guides/clients/codex.md) on your own machine, and chat UIs such as [LibreChat](docs/guides/clients/librechat.md) and [LobeChat](docs/guides/clients/lobechat.md) against a server you run in Docker (also on [Unraid](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg) and in the official [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.agigante80/actual-mcp-server`). It needs a client with MCP support: a hosted assistant that cannot reach your machine or private network cannot use it, and neither can a client that supports neither stdio nor HTTP MCP. Every client page: [docs/guides/clients/](docs/guides/clients/README.md).
 
-## Quick start (Docker, HTTP)
+## Quick start
+
+For Claude Code on your own machine, one command registers the server over stdio. It needs Node.js 22 or later and your Actual password in the `ACTUAL_PASSWORD` environment variable. The single quotes matter: your shell must not expand the reference, so the password never lands in your shell history or in Claude Code's config.
+
+<!-- runnable: claude-code-add -->
+```bash
+claude mcp add --scope user actual-budget \
+  --env ACTUAL_SERVER_URL=http://localhost:5006 \
+  --env 'ACTUAL_PASSWORD=${ACTUAL_PASSWORD}' \
+  --env ACTUAL_BUDGET_SYNC_ID=your-sync-id-here \
+  --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
+  -- npx -y actual-mcp-server --stdio
+```
+
+Replace the URL, the Sync ID (Actual: Settings, Show advanced settings, Sync ID) and the data directory, which should be a folder only you can read. Then check it under [Verify your setup](#verify-your-setup).
+
+**Or let Claude do it.** Paste this into a Claude Code session:
+
+```text
+Install and configure the Actual Budget MCP server for me over stdio, using
+`npx -y actual-mcp-server --stdio`. Ask me for my Actual server URL and my
+Sync ID. Take the password from the ACTUAL_PASSWORD environment variable that I
+have already set: never ask me to type it into this chat, never echo or log it,
+and never write it into a file in a repository. Create a data directory that
+only my user can read, register the server for my user with `claude mcp add
+--scope user`, passing the password as the literal reference
+'ACTUAL_PASSWORD=${ACTUAL_PASSWORD}' in single quotes, then run the checks
+under "Verify your setup" in the README.
+```
+
+**Other clients**, one page each: [Claude Desktop](docs/guides/clients/claude-desktop.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md), [Codex CLI](docs/guides/clients/codex.md). Chat UIs ([LibreChat](docs/guides/clients/librechat.md), [LobeChat](docs/guides/clients/lobechat.md)) and several users need the HTTP path below.
+
+## Run it over HTTP (Docker)
 
 You need an [Actual Budget](https://actualbudget.org/) server and Docker. **1. Create `.env` with a generated token.** In an empty directory:
 
@@ -86,6 +118,12 @@ On a fresh `.env`, fill in the three Actual settings, then run the last line aga
 ```bash
 npx actual-mcp-server --http
 ```
+
+## Verify your setup
+
+1. In a new conversation in your client, ask: "List my Actual Budget accounts and their balances." You should get your accounts back.
+2. Over HTTP, `tools/list` should return **15 tools over 85 operations** (the default compact surface; 85 is the legacy surface under `MCP_TOOL_SURFACE=legacy`). The count comes from that HTTP check: the stdio `initialize` probe lists no tools.
+3. For a stdio client, check the server by hand before blaming the client: send one `initialize` request and look for `serverInfo` in the reply. The command is in [verify your setup](docs/guides/clients/README.md#verify) in the client guide.
 
 ## Under the hood
 

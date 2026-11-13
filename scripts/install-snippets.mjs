@@ -30,7 +30,7 @@ export const FRAGMENT_MARKER = '<!-- install-snippets: fragment -->';
 
 // Commands a marked block may use. Anything else fails before the block runs.
 export const COMMAND_ALLOWLIST = new Set([
-  'docker', 'npx', 'curl', 'openssl', 'grep', 'install', 'chmod', 'printf', 'mv', 'umask', 'tail',
+  'docker', 'npx', 'curl', 'claude', 'openssl', 'grep', 'install', 'chmod', 'printf', 'mv', 'umask', 'tail',
   '[', 'for', 'do', 'done', 'if', 'then', 'fi', '!',
 ]);
 

@@ -48,7 +48,7 @@ function check(label, fn) {
 // Marked blocks every listed file must carry. #604 and #607 may move a block, never drop it:
 // moving one moves its row here.
 const REQUIRED_RUNNABLE = {
-  'README.md': ['env-token', 'docker-run', 'compose-production', 'npx-http'],
+  'README.md': ['env-token', 'docker-run', 'compose-production', 'npx-http', 'claude-code-add'],
   'docs/guides/deployment.md': ['quick-start-docker-run', 'production-docker-run', 'docker-run-https'],
   'docs/guides/clients/README.md': ['http-docker-run'],
 };
@@ -222,7 +222,7 @@ try {
   const stubDir = join(sandbox, 'stubs');
   mkdirSync(stubDir);
   const stub = readFileSync(join(FIXTURES, 'stubs', 'stub.sh'), 'utf8');
-  for (const name of ['docker', 'npx', 'curl']) writeFileSync(join(stubDir, name), stub, { mode: 0o755 });
+  for (const name of ['docker', 'npx', 'curl', 'claude']) writeFileSync(join(stubDir, name), stub, { mode: 0o755 });
   const realDir = makeToolDir(join(sandbox, 'real'));
   PATH_DIRS = `${stubDir}:${realDir}`;
 } catch (err) {
@@ -231,14 +231,14 @@ try {
 }
 
 let caseNo = 0;
-function runCase(block, { setup, withEnvExample = false } = {}) {
+function runCase(block, { setup, withEnvExample = false, extraEnv = {} } = {}) {
   const cwd = join(sandbox, `case-${++caseNo}`);
   mkdirSync(cwd);
   const log = join(cwd, '.stub-log');
   writeFileSync(log, '');
   if (withEnvExample) copyFileSync(join(ROOT, '.env.example'), join(cwd, '.env.example'));
   if (setup) setup(cwd);
-  const r = runBlock(block, { cwd, path: PATH_DIRS, extraEnv: { STUB_LOG: log } });
+  const r = runBlock(block, { cwd, path: PATH_DIRS, extraEnv: { STUB_LOG: log, ...extraEnv } });
   const calls = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((l) => l.split('\0').slice(0, -1));
   return { cwd, r, calls, env: () => readFileSync(join(cwd, '.env'), 'utf8') };
 }
@@ -255,6 +255,31 @@ try {
     assert.ok(runs[0].includes('ghcr.io/agigante80/actual-mcp-server:latest'), runs[0].join(' '));
     assert.ok(runs[0].includes('--env-file'), runs[0].join(' '));
     assert.ok(!runs[0].some((a) => /ACTUAL_SERVER_URL=\S*(localhost|127\.0\.0\.1)/.test(a)), runs[0].join(' '));
+  });
+
+  const claudeBlock = () => findRunnable(readme, 'README.md', 'claude-code-add');
+  const claudeArgv = (block) => {
+    const { r, calls } = runCase(block, { extraEnv: { ACTUAL_PASSWORD: 'secret' } });
+    assert.strictEqual(r.status, 0, r.stderr);
+    const adds = calls.filter((c) => c[0] === 'claude' && c[1] === 'mcp' && c[2] === 'add');
+    assert.strictEqual(adds.length, 1, `claude mcp add calls: ${JSON.stringify(calls)}`);
+    return adds[0];
+  };
+
+  check('README claude-code-add keeps the password a literal reference and ends with the one npx form', () => {
+    const argv = claudeArgv(claudeBlock());
+    assert.ok(argv.includes('ACTUAL_PASSWORD=${ACTUAL_PASSWORD}'), argv.join(' '));
+    assert.ok(!argv.some((a) => a.includes('secret')), argv.join(' '));
+    assert.deepStrictEqual(argv.slice(-5), ['--', 'npx', '-y', 'actual-mcp-server', '--stdio'], argv.join(' '));
+  });
+
+  check('NEGATIVE: unquoted ACTUAL_PASSWORD reference is expanded and the case fails', () => {
+    const mutated = { ...claudeBlock(), text: claudeBlock().text.replace("'ACTUAL_PASSWORD=${ACTUAL_PASSWORD}'", 'ACTUAL_PASSWORD=${ACTUAL_PASSWORD}') };
+    assert.notStrictEqual(mutated.text, claudeBlock().text, 'mutation must change the block');
+    assert.throws(() => {
+      const argv = claudeArgv(mutated);
+      assert.ok(argv.includes('ACTUAL_PASSWORD=${ACTUAL_PASSWORD}'), argv.join(' '));
+    });
   });
 
   for (const [file, ids] of Object.entries(REQUIRED_RUNNABLE)) {

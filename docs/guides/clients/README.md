@@ -96,7 +96,7 @@ Then add `. ~/.config/actual-mcp/env` to `~/.bashrc` or `~/.zshrc`, and start th
 
 Claude Desktop through `mcp-remote`, Claude Code and Codex over HTTP, LibreChat and LobeChat all connect to a running server. Start it in Docker.
 
-First create `.env` with a generated token: run the step 1 block of the [README Docker quick start](../../../README.md#quick-start-docker-http). It prints the token. Then fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. Inside the container `localhost` is the container itself, so use your Actual server's LAN address or domain, or `http://host.docker.internal:5006` when Actual runs on the Docker host. Then, in the directory that holds `.env`:
+First create `.env` with a generated token: run the step 1 block of the [README HTTP and Docker quick start](../../../README.md#run-it-over-http-docker). It prints the token. Then fill in `ACTUAL_PASSWORD`, `ACTUAL_BUDGET_SYNC_ID` and `ACTUAL_SERVER_URL` in `.env`. Inside the container `localhost` is the container itself, so use your Actual server's LAN address or domain, or `http://host.docker.internal:5006` when Actual runs on the Docker host. Then, in the directory that holds `.env`:
 
 <!-- runnable: http-docker-run -->
 ```bash

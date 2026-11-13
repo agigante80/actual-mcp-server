@@ -21,7 +21,7 @@ A `.mcp.json` in the project root holds only references, so it is safe to commit
     "actual-budget": {
       "type": "stdio",
       "command": "npx",
-      "args": ["actual-mcp-server@latest", "--stdio"],
+      "args": ["-y", "actual-mcp-server", "--stdio"],
       "env": {
         "ACTUAL_SERVER_URL": "http://localhost:5006",
         "ACTUAL_PASSWORD": "${ACTUAL_PASSWORD}",
@@ -33,7 +33,7 @@ A `.mcp.json` in the project root holds only references, so it is safe to commit
 }
 ```
 
-`actual-mcp-server@latest` makes `npx` run the latest published version; drop `@latest` to use the version `npx` has cached. Never write a literal password into `.mcp.json`; a file with a literal value belongs at user scope, never in a repository.
+`npx -y` installs the package without asking and runs the version `npx` resolves; add `@latest` after the package name to force the newest published version. Never write a literal password into `.mcp.json`; a file with a literal value belongs at user scope, never in a repository.
 
 ### stdio, user scope from the CLI
 
@@ -45,7 +45,7 @@ claude mcp add --scope user actual-budget \
   --env 'ACTUAL_PASSWORD=${ACTUAL_PASSWORD}' \
   --env ACTUAL_BUDGET_SYNC_ID=your-sync-id-here \
   --env MCP_BRIDGE_DATA_DIR=/absolute/path/to/data-dir \
-  -- npx actual-mcp-server@latest --stdio
+  -- npx -y actual-mcp-server --stdio
 ```
 
 ### HTTP
