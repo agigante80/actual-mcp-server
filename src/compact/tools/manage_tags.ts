@@ -54,6 +54,9 @@ const deleteFields = asFields(
 
 export const manageTags: CompactToolSpec = {
   name: 'manage_tags',
+  domain: 'Changing data',
+  summary: 'Create, change or delete tags.',
+  examplePrompt: 'Create a tag called vacation with a blue color.',
   description:
     'Create, change or delete tags; pick one `action`. Writes. ' +
     'To read tags or find ids use list_entities with type tag. Other fields are refused. ' +

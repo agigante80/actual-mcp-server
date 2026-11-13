@@ -2,6 +2,8 @@
 
 Every tool the server registers, grouped by domain, with the caveats you need before calling it. The server publishes 15 tools over 85 operations by default: the 85 operations (the legacy `actual_<category>_<action>` tools) are described by domain below, and the [compact surface](#compact-surface) that fronts them is at the end. Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead. Amounts are integer cents and dates are `YYYY-MM-DD` strings throughout.
 
+The README's [Tools section](../../README.md#tools) is the generated overview (the 15 compact tools by domain, the prompts and the measured `tools/list` sizes); this page is the full per-operation reference behind it.
+
 Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_READ_ONLY` and `MCP_TOOL_SURFACE` (`compact` by default since #680; the `actual_*` tools listed below are published only when it is `legacy` or `all`, and the compact tools only when it is `compact` or `all`); the toolset sizes are in the README's [Reducing the tool surface](../../README.md#reducing-the-tool-surface) table and every variable is in the [configuration reference](configuration.md).
 
 ## Accounts

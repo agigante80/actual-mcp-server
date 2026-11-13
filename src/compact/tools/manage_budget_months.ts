@@ -99,6 +99,9 @@ const noteFields = asFields(
 
 export const manageBudgetMonths: CompactToolSpec = {
   name: 'manage_budget_months',
+  domain: 'Budget months',
+  summary: 'Set a month budget amount, carryover or hold, move money between categories and write the month note.',
+  examplePrompt: 'Move $50 from Dining Out to Groceries for this month.',
   description:
     'Change the budget of a month: amounts, carryover, the hold for next month, transfers between categories, the month note; pick one `action`. Writes. ' +
     'To read months use list_budget_months; to switch, import or export a budget file use manage_budget_files; category notes use manage_categories. Cents are integers. Other fields are refused. ' +

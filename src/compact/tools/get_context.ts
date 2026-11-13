@@ -40,6 +40,9 @@ const none = z.object({});
 
 export const getContext: CompactToolSpec = {
   name: 'get_context',
+  domain: 'Context and lookup',
+  summary: 'Read the budget structure (accounts, categories, payees) or the Actual server details in one call.',
+  examplePrompt: 'What accounts and categories do I have?',
   description:
     'Read the budget structure or the Actual server details in one call; start here to learn what exists before reading or changing anything. ' +
     'Read-only: it never creates, changes or deletes data. ' +

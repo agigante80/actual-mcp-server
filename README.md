@@ -139,7 +139,44 @@ Node.js 22 or later, Actual Budget server 25.0.0 or later, and the bundled `@act
 
 ## Tools
 
-Every tool, with its description and caveats, is in the [tools reference](docs/reference/tools.md).
+Amounts are integer cents and dates are `YYYY-MM-DD` strings. Each tool takes an action or report selector; the fields of every action and its caveats are in the [tools reference](docs/reference/tools.md).
+
+<!-- BEGIN GENERATED: capabilities-tools -->
+<!-- Generated from dist/src/compact/registry.js by `npm run docs:gen`. Do not edit. -->
+
+### Context and lookup
+
+- **`get_context`**: Read the budget structure (accounts, categories, payees) or the Actual server details in one call. Example prompt: "What accounts and categories do I have?"
+- **`list_entities`**: List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id. Example prompt: "List my payees whose name contains Market."
+
+### Reading transactions
+
+- **`search_transactions`**: Find transactions by date, account, category, payee or amount. Example prompt: "Show my Costco purchases over $100 this year."
+
+### Reports
+
+- **`summarize_transactions`**: Total spending and income by category, payee, account or month, find recurring expenses and read account balances. Example prompt: "How much did I spend on groceries each month this year?"
+
+### Budget months
+
+- **`list_budget_months`**: Read the list of budget months, or one month with budgeted, spent and balance per category. Example prompt: "Which categories are overspent in October 2026?"
+- **`manage_budget_months`**: Set a month budget amount, carryover or hold, move money between categories and write the month note. Example prompt: "Move $50 from Dining Out to Groceries for this month."
+
+### Querying
+
+- **`run_query`**: Run a read-only SQL query against the budget data when no other read tool fits. Example prompt: "Run a query that lists my ten largest payees by total spend."
+
+### Changing data
+
+- **`manage_transactions`**: Create, change, delete, import, merge or transfer transactions. Example prompt: "Add a $12.50 coffee purchase to my checking account for today."
+- **`manage_accounts`**: Create, change, close, reopen, delete, bank-sync or annotate accounts and account groups. Example prompt: "Close my old savings account."
+- **`manage_categories`**: Create, change, delete or annotate budget categories and category groups. Example prompt: "Create a Pets category in the Everyday group."
+- **`manage_payees`**: Create, change, delete, merge or annotate payees. Example prompt: "Merge the payees Costco and Costco Wholesale."
+- **`manage_tags`**: Create, change or delete tags. Example prompt: "Create a tag called vacation with a blue color."
+- **`manage_rules`**: Create, upsert, change or delete the rules that categorize imported transactions. Example prompt: "Make a rule that files every Spotify transaction under Subscriptions."
+- **`manage_schedules`**: Create, change or delete one-off and recurring scheduled transactions. Example prompt: "Schedule my $900 rent on the first of every month."
+- **`manage_budget_files`**: Switch the active budget, import a budget file or export the active budget. Example prompt: "Export my budget to a file."
+<!-- END GENERATED: capabilities-tools -->
 
 ### Reducing the tool surface
 
@@ -166,6 +203,22 @@ With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 12 tools: `actual_get
 `MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 48 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->
 
+How large the `tools/list` response is for each choice, so you can pick for a small tool budget:
+
+<!-- BEGIN GENERATED: capabilities-sizes -->
+<!-- Generated from scripts/docs/tools-list-sizes.json by `npm run docs:gen`. Do not edit. -->
+| Configuration | Tools | `tools/list` bytes | KiB |
+|---------------|-------|--------------------|-----|
+| Compact surface (default) | 15 | 41000 | 40.0 |
+| Compact, `MCP_TOOLSETS=chat` | 6 | 16658 | 16.3 |
+| Compact, `MCP_READ_ONLY=true` | 6 | 16935 | 16.5 |
+| `MCP_TOOL_SURFACE=legacy` | 85 | 120457 | 117.6 |
+| Legacy, `MCP_TOOLSETS=chat` | 12 | 24744 | 24.2 |
+| Legacy, `MCP_READ_ONLY=true` | 37 | 44582 | 43.5 |
+
+Measured offline, as the server builds the list (the bytes of the `tools/list` result, not an estimate); reproduce with `node scripts/measure-tools-list-size.mjs`.
+<!-- END GENERATED: capabilities-sizes -->
+
 Example: a chat assistant with two extra tools.
 
 ```bash
@@ -174,6 +227,27 @@ MCP_TOOLS=list_entities,search_transactions
 ```
 
 A configuration that resolves to zero tools refuses to start. See [Security and Privacy](docs/explanation/security-and-privacy.md#tool-surface-mcp_toolsets-and-mcp_read_only).
+
+## Prompts
+
+Prompts are ready-made workflows a client can offer as templates or slash commands. Those that can change data ask before they write.
+
+<!-- BEGIN GENERATED: capabilities-prompts -->
+<!-- Generated from dist/src/prompts/index.js by `npm run docs:gen`. Do not edit. -->
+| Prompt | Parameters | Description |
+|--------|------------|-------------|
+| `monthly_review` | `month` (optional) | Review a month: budget versus actual per category, overspent and unused categories, income versus expenses, and suggestions. |
+| `spending_check` | `date` (optional) | Quick check on a month so far: on track or overspending, categories to watch, and what is left to spend. |
+| `spending_patterns` | `months` (optional), `end_month` (optional) | Spending trends over the last N full months: direction, biggest category changes, savings rate trend, unusual items. |
+| `budget_cleanup` | `date` (optional) | Read-only review of payees, rules, categories and accounts for duplicates and unused items; proposes changes and asks before writing. |
+| `categorize_uncategorized` | `since` (optional) | Find uncategorised transactions, propose categories from payee history, confirm, apply in one batch, and offer rules for repeat payees. |
+
+A prompt appears only when every tool it names is offered. With `MCP_READ_ONLY=true`, `categorize_uncategorized` is hidden, because it names a tool that can write.
+<!-- END GENERATED: capabilities-prompts -->
+
+## Resources
+
+None yet: the server offers tools and prompts only.
 
 ## Configuration
 

@@ -78,6 +78,9 @@ const exportFields = asFields(
 
 export const manageBudgetFiles: CompactToolSpec = {
   name: 'manage_budget_files',
+  domain: 'Changing data',
+  summary: 'Switch the active budget, import a budget file or export the active budget.',
+  examplePrompt: 'Export my budget to a file.',
   description:
     'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. Writes. ' +
     'To list the configured budget names use list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused. ' +

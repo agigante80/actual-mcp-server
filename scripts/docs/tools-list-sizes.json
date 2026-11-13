@@ -1,0 +1,32 @@
+{
+  "compact": {
+    "bytes": 41000,
+    "label": "Compact surface (default)",
+    "tools": 15
+  },
+  "compact-chat": {
+    "bytes": 16658,
+    "label": "Compact, `MCP_TOOLSETS=chat`",
+    "tools": 6
+  },
+  "compact-read-only": {
+    "bytes": 16935,
+    "label": "Compact, `MCP_READ_ONLY=true`",
+    "tools": 6
+  },
+  "legacy": {
+    "bytes": 120457,
+    "label": "`MCP_TOOL_SURFACE=legacy`",
+    "tools": 85
+  },
+  "legacy-chat": {
+    "bytes": 24744,
+    "label": "Legacy, `MCP_TOOLSETS=chat`",
+    "tools": 12
+  },
+  "legacy-read-only": {
+    "bytes": 44582,
+    "label": "Legacy, `MCP_READ_ONLY=true`",
+    "tools": 37
+  }
+}

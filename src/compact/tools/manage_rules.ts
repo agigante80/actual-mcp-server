@@ -89,6 +89,9 @@ const deleteFields = asFields(
 
 export const manageRules: CompactToolSpec = {
   name: 'manage_rules',
+  domain: 'Changing data',
+  summary: 'Create, upsert, change or delete the rules that categorize imported transactions.',
+  examplePrompt: 'Make a rule that files every Spotify transaction under Subscriptions.',
   description:
     'Create, upsert, change or delete budget rules; pick one `action`. Writes. ' +
     'To read rules use list_entities with type rule. Other fields are refused. ' +

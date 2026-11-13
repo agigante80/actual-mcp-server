@@ -68,10 +68,32 @@ export interface CompactActionRow extends CompactTarget {
   routes?: readonly CompactRoute[];
 }
 
+/**
+ * The README and tools reference headings a compact tool is listed under (#668), in display
+ * order. scripts/docs/capabilities.mjs reads this list from dist and throws on a tool whose
+ * `domain` is not one of them, or on a heading no tool uses.
+ */
+export const COMPACT_DOMAINS = [
+  'Context and lookup',
+  'Reading transactions',
+  'Reports',
+  'Budget months',
+  'Querying',
+  'Changing data',
+] as const;
+
+export type CompactDomain = (typeof COMPACT_DOMAINS)[number];
+
 /** A compact tool: one published name, many actions. */
 export interface CompactToolSpec {
   /** Published name, `actual_<domain>` style; must not collide with a legacy tool name. */
   name: string;
+  /** Docs only (#668): the heading the README lists this tool under. Never published in tools/list. */
+  domain: CompactDomain;
+  /** Docs only (#668): one verb-led sentence for the README. Never published in tools/list. */
+  summary: string;
+  /** Docs only (#668): one example user prompt for the README. Fictional values only. Never published in tools/list. */
+  examplePrompt: string;
   description: string;
   /**
    * The argument that picks the action. Defaults to `action`. `null` means the tool has no

@@ -113,6 +113,9 @@ const deleteFields = asFields(
 
 export const manageSchedules: CompactToolSpec = {
   name: 'manage_schedules',
+  domain: 'Changing data',
+  summary: 'Create, change or delete one-off and recurring scheduled transactions.',
+  examplePrompt: 'Schedule my $900 rent on the first of every month.',
   description:
     'Create, change or delete schedules (one-off or recurring); pick one `action`. Writes. ' +
     'To read schedules use list_entities with type schedule; to preview occurrence dates use list_entities with type schedule and schedule_id. Cents are integers, outflows negative. Other fields are refused. ' +

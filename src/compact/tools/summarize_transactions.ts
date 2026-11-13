@@ -79,6 +79,9 @@ const row = (legacy: string, shape: Record<string, z.ZodType>, report: string, r
 
 export const summarizeTransactions: CompactToolSpec = {
   name: 'summarize_transactions',
+  domain: 'Reports',
+  summary: 'Total spending and income by category, payee, account or month, find recurring expenses and read account balances.',
+  examplePrompt: 'How much did I spend on groceries each month this year?',
   description:
     'Totals, not records: spending sums, grouped breakdowns, recurring expenses and account balance; pick one `report`. Read-only. ' +
     'For individual transactions use search_transactions; for ids use list_entities; for budgeted versus spent use list_budget_months; for a custom query use run_query. ' +

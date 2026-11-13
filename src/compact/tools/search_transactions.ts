@@ -67,6 +67,9 @@ const bounded = (target: CompactActionRow): CompactActionRow => ({
 
 export const searchTransactions: CompactToolSpec = {
   name: 'search_transactions',
+  domain: 'Reading transactions',
+  summary: 'Find transactions by date, account, category, payee or amount.',
+  examplePrompt: 'Show my Costco purchases over $100 this year.',
   description:
     'Find transaction records (id, date, amount, payee, category, notes), not totals; pick one `by`. Read-only. ' +
     'For totals use summarize_transactions; for ids use list_entities; for a custom query use run_query. ' +

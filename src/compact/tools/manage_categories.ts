@@ -94,6 +94,9 @@ const groupWrapped = (legacy: string, fields: CompactActionRow['fields']): Compa
 
 export const manageCategories: CompactToolSpec = {
   name: 'manage_categories',
+  domain: 'Changing data',
+  summary: 'Create, change, delete or annotate budget categories and category groups.',
+  examplePrompt: 'Create a Pets category in the Everyday group.',
   description:
     'Create, change, delete or annotate budget categories and category groups; pick one `action`. Writes. ' +
     'To read or find ids use list_entities; budget amounts and month notes belong to manage_budget_months. Other fields are refused. ' +

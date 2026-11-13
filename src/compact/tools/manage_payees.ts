@@ -77,6 +77,9 @@ const noteFields = asFields(
 
 export const managePayees: CompactToolSpec = {
   name: 'manage_payees',
+  domain: 'Changing data',
+  summary: 'Create, change, delete, merge or annotate payees.',
+  examplePrompt: 'Merge the payees Costco and Costco Wholesale.',
   description:
     'Create, change, delete, merge or annotate payees; pick one `action`. Writes. ' +
     'To read or find ids use list_entities. Other fields are refused. ' +

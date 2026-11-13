@@ -63,6 +63,9 @@ const row = (legacy: string, routes?: readonly CompactRoute[]): CompactActionRow
 
 export const listEntities: CompactToolSpec = {
   name: 'list_entities',
+  domain: 'Context and lookup',
+  summary: 'List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id.',
+  examplePrompt: 'List my payees whose name contains Market.',
   description:
     'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note or budget_file. ' +
     'Read-only: never creates, changes or deletes data. ' +

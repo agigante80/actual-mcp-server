@@ -136,7 +136,8 @@ function dependencyVersionLiterals(readme) {
 
 // ----- #603: hand-typed tool-surface counts are forbidden outside the generated block -----
 
-const BLOCK_RE = /<!-- BEGIN GENERATED: tools-summary -->[\s\S]*?<!-- END GENERATED: tools-summary -->/;
+// #668: every generated block, whatever its id (tools-summary and the capabilities blocks).
+const BLOCK_RE = /<!-- BEGIN GENERATED: ([a-z-]+) -->[\s\S]*?<!-- END GENERATED: \1 -->/g;
 const HAND_TYPED = [
   /\d+ write-capable/,
   /\(\d+ of the \d+/,
@@ -282,6 +283,18 @@ check('POSITIVE: the generated block is stripped before scanning', () => {
   const text = 'x\n<!-- BEGIN GENERATED: tools-summary -->\nhides 48 write-capable tools and leaves 36\n<!-- END GENERATED: tools-summary -->\ny';
   assert.deepStrictEqual(handTypedCounts('README.md', text), []);
   assert.strictEqual(handTypedCounts('README.md', text + ' the 48 write-capable').length, 1);
+});
+
+check('(#668) POSITIVE: a count inside a capabilities block is not reported; the same text outside every block still is', () => {
+  const inside = 'x\n<!-- BEGIN GENERATED: capabilities-tools -->\nthe surface publishes 6 tools\n<!-- END GENERATED: capabilities-tools -->\ny';
+  assert.deepStrictEqual(handTypedCounts('README.md', inside), []);
+  assert.strictEqual(handTypedCounts('README.md', inside + '\nit publishes 6 tools').length, 1);
+  assert.strictEqual(handTypedCounts('README.md', 'it publishes 6 tools').length, 1);
+});
+
+check('(#668) NEGATIVE: a mismatched END id does not hide a count', () => {
+  const text = '<!-- BEGIN GENERATED: capabilities-tools -->\npublishes 6 tools\n<!-- END GENERATED: capabilities-sizes -->';
+  assert.strictEqual(handTypedCounts('README.md', text).length, 1);
 });
 
 console.log(`\n[readme-stats-sync] Results: ${passed} passed, ${failed} failed`);

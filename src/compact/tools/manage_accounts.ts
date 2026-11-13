@@ -121,6 +121,9 @@ const groupRoute = (legacy: string, fields: CompactActionRow['fields']): Compact
 
 export const manageAccounts: CompactToolSpec = {
   name: 'manage_accounts',
+  domain: 'Changing data',
+  summary: 'Create, change, close, reopen, delete, bank-sync or annotate accounts and account groups.',
+  examplePrompt: 'Close my old savings account.',
   description:
     'Create, change, close, reopen, delete, bank-sync or annotate accounts and account groups; pick one `action`. Writes. ' +
     'To read or find ids use list_entities; month notes belong to manage_budget_months. Other fields are refused. ' +

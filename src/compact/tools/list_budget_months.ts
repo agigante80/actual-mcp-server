@@ -19,6 +19,9 @@ const month = CommonSchemas.monthYear.describe('Month as YYYY-MM, one the budget
 
 export const listBudgetMonths: CompactToolSpec = {
   name: 'list_budget_months',
+  domain: 'Budget months',
+  summary: 'Read the list of budget months, or one month with budgeted, spent and balance per category.',
+  examplePrompt: 'Which categories are overspent in October 2026?',
   description:
     'List the budget months, or read one month\'s budget when `month` is given. Read-only. ' +
     'Returns { result: [YYYY-MM, ...] }, the budget months and nothing else, when `month` is omitted. ' +

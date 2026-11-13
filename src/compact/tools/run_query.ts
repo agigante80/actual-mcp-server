@@ -16,6 +16,9 @@ const query = z.string().min(1).describe('The read-only SQL query to run, for ex
 
 export const runQuery: CompactToolSpec = {
   name: 'run_query',
+  domain: 'Querying',
+  summary: 'Run a read-only SQL query against the budget data when no other read tool fits.',
+  examplePrompt: 'Run a query that lists my ten largest payees by total spend.',
   description:
     'Run a read-only SQL query against the budget data; the escape hatch when search_transactions, summarize_transactions, list_entities and list_budget_months do not fit (prefer them when they do). ' +
     'A bare table name (e.g. "transactions") returns all its records. ' +

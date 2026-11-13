@@ -204,6 +204,9 @@ const transferFields = asFields(
 
 export const manageTransactions: CompactToolSpec = {
   name: 'manage_transactions',
+  domain: 'Changing data',
+  summary: 'Create, change, delete, import, merge or transfer transactions.',
+  examplePrompt: 'Add a $12.50 coffee purchase to my checking account for today.',
   description:
     'Create, change, delete, import, merge or transfer transactions; pick one `action`. Writes. ' +
     'To read use search_transactions; ids come from list_entities. Cents are integers, outflows negative; dates YYYY-MM-DD. Other fields are refused. ' +
