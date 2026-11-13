@@ -14,7 +14,7 @@ const InputSchema = z.object({
  */
 const tool: ToolDefinition = {
   name: 'actual_category_groups_delete',
-  description: `Delete a category group from Actual Budget. Note: Categories within the group will be moved to a default group or ungrouped. This operation cannot be undone.`,
+  description: `Delete a category group from Actual Budget. DESTRUCTIVE: every category in the group is deleted with it (their transactions are left uncategorized); move categories to another group first with actual_categories_update. This operation cannot be undone.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

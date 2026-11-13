@@ -90,7 +90,7 @@ await check('NEGATIVE: create without name, and delete or update without id, nam
 });
 await check('NEGATIVE: update with only id is refused with the exact message', () =>
   refused({ action: 'update', id: U1 }, /update needs at least one of: name, transfer_acct, category/));
-await check('NEGATIVE: merge needs target_id and merge_ids; empty, 51 or target-listed-in-sources shapes are refused', async () => {
+await check('NEGATIVE: merge needs target_id and merge_ids; empty or 51-item lists are refused', async () => {
   await refused({ action: 'merge', merge_ids: [U2] }, /target_id.*required for action: merge/);
   await refused({ action: 'merge', target_id: U1 }, /merge_ids.*required for action: merge/);
   await refused({ action: 'merge', target_id: U1, merge_ids: [] }, /merge_ids/);
