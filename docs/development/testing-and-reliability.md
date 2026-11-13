@@ -300,7 +300,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `compact_get_context.test.js` | #672: `get_context`: every topic and option routes to the exact legacy tool and arguments through a stubbed `callOperation`; refusals call nothing; flat schema has no `oneOf`/`anyOf` and no `outputSchema`; read-only publication |
 | `prompt_registry.test.js` | #660: prompt registry: offer filter, the surface matrix through the real tool policy, name, required-tool and bounded-argument validators fed bad fixtures, `renderPrompt` |
 | `prompt_handlers.test.js` | #660: `registerPromptHandlers` over an in-memory SDK client (list, get, `-32602` for unknown, hidden, malformed and missing arguments, name cleaning) and the wiring assertions for both transports and the three start calls |
-| `prompts_entrypoint.test.js` | #660: the built entrypoint over stdio: `initialize` advertises prompts, `prompts/list` is `[]` on the default (legacy) surface and holds `monthly_review` on compact and compact read-only, `prompts/get` of an unknown name is `-32602` |
+| `prompts_entrypoint.test.js` | #660: the built entrypoint over stdio: `initialize` advertises prompts, `prompts/list` holds `monthly_review` on the default (compact, #680), compact and compact read-only surfaces and is `[]` on legacy, `prompts/get` of an unknown name is `-32602` |
 | `prompt_monthly_review.test.js` | #661: the `monthly_review` prompt: the four required tools, the `month` schema (malformed, hostile and unknown-key refusals), exact first and last day (leap year included), the schema default month, the read-only text, and the offer matrix through the real tool policy |
 | `prompt_spending_check.test.js` | #662: the `spending_check` prompt: the two required read tools, the calendar-checked `date` schema (non-dates, `2026-02-31`, hostile and unknown-key refusals, no echo), `isCalendarDay` never throwing, exact day and days-in-month values, the sign-safe overall-budget wording, the schema default date, and the offer matrix through the real tool policy |
 | `prompt_spending_patterns.test.js` | #663: the `spending_patterns` prompt: the `months` string-to-number schema and its refusals, `end_month`, exact ranges (year rollover, leap year, 24 months), the default end month under a faked clock (New Year, a 31st), `assertArgsBounded` seeing through transform and default, and the offer matrix |
@@ -1039,7 +1039,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `compact_get_context.test.js` | Compact `get_context`: routing, refusals, schema shape (#672) | 19 |
 | `prompt_registry.test.js` | Prompt registry offer filter, surface matrix, validators (#660) | 20 |
 | `prompt_handlers.test.js` | `prompts/list` and `prompts/get` over an in-memory client, transport wiring guards (#660) | 13 |
-| `prompts_entrypoint.test.js` | Built entrypoint over stdio: prompts capability, empty list, `-32602` (#660) | 8 |
+| `prompts_entrypoint.test.js` | Built entrypoint over stdio: prompts capability, list per surface, `-32602` (#660, #680) | 10 |
 | `prompt_monthly_review.test.js` | `monthly_review` prompt: schema, month boundaries, default month, read-only text, offer matrix (#661) | 8 |
 | `prompt_spending_check.test.js` | `spending_check` prompt: calendar-checked date schema, day math, sign-safe wording, default date, offer matrix (#662) | 10 |
 | `prompt_spending_patterns.test.js` | `spending_patterns` prompt: schemas, exact ranges, default end month, offer matrix (#663) | 11 |

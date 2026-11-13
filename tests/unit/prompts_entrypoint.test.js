@@ -92,7 +92,9 @@ const LIST = { id: 2, method: 'prompts/list' };
 const GET = (name) => ({ id: 3, method: 'prompts/get', params: { name } });
 
 const CONFIGS = [
+  // #680: the default surface is compact, so the unset case offers the prompts; legacy is the explicit one.
   ['default surface', {}],
+  ['MCP_TOOL_SURFACE=legacy', { MCP_TOOL_SURFACE: 'legacy' }],
   ['MCP_TOOL_SURFACE=compact', { MCP_TOOL_SURFACE: 'compact' }],
   ['MCP_TOOL_SURFACE=compact with MCP_READ_ONLY=true', { MCP_TOOL_SURFACE: 'compact', MCP_READ_ONLY: 'true' }],
 ];
@@ -107,7 +109,7 @@ for (const [label, env] of CONFIGS) {
   await check(`${label}: prompts/list follows the surface (legacy offers none, compact offers the read prompts)`, async () => {
     const res = await stdioSession(env, [INIT, INITIALIZED, LIST]);
     assert.ok(!res.get(2).error, JSON.stringify(res.get(2)));
-    if (env.MCP_TOOL_SURFACE === 'compact') {
+    if (env.MCP_TOOL_SURFACE !== 'legacy') {
       // #661: monthly_review needs only read tools, so it is offered with or without MCP_READ_ONLY.
       assert.ok(res.get(2).result.prompts.some((p) => p.name === 'monthly_review'), JSON.stringify(res.get(2).result));
     } else {
