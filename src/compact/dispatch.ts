@@ -123,7 +123,9 @@ const LEGACY_NAME = /\bactual_[a-z0-9_]+/g;
 /**
  * Legacy tool name to the compact phrase that now reaches it, built from the registry so it
  * cannot drift: `actual_accounts_list` becomes `list_entities with type account`; a routed
- * tool names its trigger (`list_entities with query`). A tool reached more than one way lists
+ * tool names the selector AND its trigger (`list_entities with type rule and payee_id`, or
+ * `list_entities with type and query` when several types carry the route), because the
+ * trigger alone is not a callable shape (the selector is required). A tool reached more than one way lists
  * each phrase joined with " or ".
  */
 export function legacyPhrases(specs: readonly CompactToolSpec[]): ReadonlyMap<string, string> {
@@ -135,9 +137,22 @@ export function legacyPhrases(specs: readonly CompactToolSpec[]): ReadonlyMap<st
   };
   for (const spec of specs) {
     const selector = selectorOf(spec);
+    // legacy -> route phrase -> the selector values that carry that route
+    const routed = new Map<string, Map<string, string[]>>();
     for (const [value, row] of spec.actions) {
       add(row.legacy, `${spec.name} with ${selector} ${value}`);
-      for (const route of row.routes ?? []) add(route.legacy, `${spec.name} with ${route.triggers[0]}`);
+      for (const route of row.routes ?? []) {
+        const byPhrase = routed.get(route.legacy) ?? new Map<string, string[]>();
+        const key = route.phrase ?? route.triggers[0];
+        byPhrase.set(key, [...(byPhrase.get(key) ?? []), value]);
+        routed.set(route.legacy, byPhrase);
+      }
+    }
+    // One value names it (`with type rule and payee_id`); several are not listed (`with type and query`).
+    for (const [legacy, byPhrase] of routed) {
+      for (const [key, values] of byPhrase) {
+        add(legacy, `${spec.name} with ${selector}${values.length === 1 ? ` ${values[0]}` : ''} and ${key}`);
+      }
     }
   }
   return new Map([...phrases].map(([legacy, list]) => [legacy, list.join(' or ')]));
@@ -158,12 +173,26 @@ function rewriteError(err: unknown, table: ReadonlyMap<string, string>): void {
   if (typeof e.stack === 'string') e.stack = rewriteText(e.stack, table);
 }
 
-/** Rewrite a returned top-level `error` string (legacy tools return a refusal as a value). */
+/** The message keys a legacy result carries text for the model in. Data keys are never touched. */
+const MESSAGE_KEYS = ['error', 'hint'] as const;
+
+/**
+ * Rewrite the message strings of a returned value (legacy tools return a refusal, or a
+ * truncation hint, as a value). Looked for at the top level and one level down under
+ * `result`, because createTool() wraps every handler value as `{ result }`. Only the
+ * MESSAGE_KEYS are rewritten: a payee or note that happens to contain a tool name is data.
+ */
 function rewriteResult(result: unknown, table: ReadonlyMap<string, string>): unknown {
-  if (result && typeof result === 'object' && !Array.isArray(result)) {
-    const r = result as Record<string, unknown>;
-    if (typeof r.error === 'string') r.error = rewriteText(r.error, table);
-  }
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return;
+    const r = value as Record<string, unknown>;
+    for (const key of MESSAGE_KEYS) {
+      const text = r[key];
+      if (typeof text === 'string') r[key] = rewriteText(text, table);
+    }
+  };
+  visit(result);
+  if (result && typeof result === 'object' && !Array.isArray(result)) visit((result as Record<string, unknown>).result);
   return result;
 }
 

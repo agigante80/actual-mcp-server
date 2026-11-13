@@ -132,7 +132,7 @@ await check('NEGATIVE: note without id, with a blank id, or with scope is refuse
   await refused({ type: 'note', id: '' });
   await refused({ type: 'note', id: U, scope: 'server' }, /scope/);
 });
-await check('NEGATIVE: id on a type that does not take it is refused', () => refused({ type: 'account', id: U }, /id/));
+await check('NEGATIVE: id on a type that does not take it is refused', () => refused({ type: 'account', id: U }, /"id"[^]*not valid for type: account; valid only for type: note/));
 await check('NEGATIVE: malformed payee_id, schedule_id and dates are refused once, with their own message', async () => {
   await refused({ type: 'rule', payee_id: 'bad' }, /payee_id/);
   await refused({ type: 'schedule', schedule_id: 'bad' }, /schedule_id/);
@@ -191,7 +191,7 @@ await check('4b: a typed refusal naming a legacy tool is rewritten in place and 
 await check('4b: a returned top-level error string is rewritten to the route phrase', async () => {
   const t = buildCompactTool(spec, { callOperation: async () => ({ error: 'bad call to actual_entities_search' }) }, phrases);
   const r = await t.call({ type: 'account', query: 'x' });
-  assert.ok(!/actual_/.test(r.error) && /list_entities with query/.test(r.error), r.error);
+  assert.ok(!/actual_/.test(r.error) && /list_entities with type and query/.test(r.error), r.error);
 });
 
 console.log(`\n[compact-list-entities] Results: ${passed} passed, ${failed} failed`);

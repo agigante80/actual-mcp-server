@@ -342,6 +342,8 @@ const routed = {
     ],
   ]),
 };
+const PH_RB = 'fixture_routed with type account and query';
+const PH_RC = 'fixture_routed with type account and name';
 const rec = () => {
   const seen = [];
   return { seen, ops: { callOperation: async (n, a) => { seen.push({ n, a }); return { ok: n }; } } };
@@ -407,11 +409,23 @@ await check('the flat published schema has no oneOf/anyOf and refuses what planC
   assert.ok(tool.inputSchema.safeParse({ type: 'account', query: 'x' }).success);
 });
 
-await check('legacyPhrases maps a default to "tool with type X" and a route to its first trigger', () => {
+await check('legacyPhrases maps a default to "tool with type X" and a route to the selector plus its trigger', () => {
   const ph = legacyPhrases([routed]);
   assert.strictEqual(ph.get(RA), 'fixture_routed with type account');
-  assert.strictEqual(ph.get(RB), 'fixture_routed with query');
-  assert.strictEqual(ph.get(RC), 'fixture_routed with name');
+  assert.strictEqual(ph.get(RB), PH_RB);
+  assert.strictEqual(ph.get(RC), PH_RC);
+});
+
+await check('legacyPhrases: a route carried by several selector values names no value; a route phrase overrides the trigger', () => {
+  const account = routed.actions.get('account');
+  const multi = { ...routed, actions: new Map([
+    ['account', account],
+    ['payee', { ...account, legacy: 'actual_payees_get', routes: [account.routes[0], { ...account.routes[1], legacy: 'actual_budgets_get_all', phrase: 'scope server' }] }],
+  ]) };
+  const ph = legacyPhrases([multi]);
+  assert.strictEqual(ph.get(RB), 'fixture_routed with type and query');
+  assert.strictEqual(ph.get(RC), PH_RC);
+  assert.strictEqual(ph.get('actual_budgets_get_all'), 'fixture_routed with type payee and scope server');
 });
 
 await check('4b: a thrown error naming a legacy tool is rewritten in place and keeps its class', async () => {
@@ -421,7 +435,7 @@ await check('4b: a thrown error naming a legacy tool is rewritten in place and k
   const e = await reason(() => dispatchCompact(ops, routed, { type: 'account', query: 'x' }, ph));
   assert.strictEqual(e, err, 'same object');
   assert.ok(e instanceof NotFoundRefusal && isPreflightRefusal(e));
-  assert.ok(!/actual_/.test(e.message) && /fixture_routed with query/.test(e.message), e.message);
+  assert.ok(!/actual_/.test(e.message) && e.message.includes(PH_RB), e.message);
 });
 
 await check('4b: a returned top-level error string is rewritten, other fields are untouched', async () => {
@@ -430,6 +444,17 @@ await check('4b: a returned top-level error string is rewritten, other fields ar
   const r = await dispatchCompact(ops, routed, { type: 'account' }, ph);
   assert.ok(!/actual_/.test(r.error) && /fixture_routed with type account/.test(r.error), r.error);
   assert.strictEqual(r.note, `keep ${RA}`);
+});
+
+await check('4b: error and hint under the createTool { result } wrapper are rewritten, data is not', async () => {
+  const ph = legacyPhrases([routed]);
+  const ops = { callOperation: async () => ({ hint: `try ${RA}`, result: { error: `use ${RA}`, hint: `or ${RA}`, name: RA, rows: [{ error: RA }] } }) };
+  const r = await dispatchCompact(ops, routed, { type: 'account' }, ph);
+  for (const text of [r.hint, r.result.error, r.result.hint]) {
+    assert.ok(!/actual_/.test(text) && /fixture_routed with type account/.test(text), text);
+  }
+  assert.strictEqual(r.result.name, RA, 'a data key holding a tool name is left alone');
+  assert.strictEqual(r.result.rows[0].error, RA, 'nothing deeper than the wrapper is walked');
 });
 
 await check('NEGATIVE: an unknown legacy name in error text is left as written', async () => {

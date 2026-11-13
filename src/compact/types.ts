@@ -49,6 +49,8 @@ export interface CompactRoute extends CompactTarget {
   triggers: readonly string[];
   /** Optional extra condition on the call, for a trigger that selects only by value. */
   when?: (call: Readonly<Record<string, unknown>>) => boolean;
+  /** How error text names this route when the first trigger alone would mislead (`scope server`). Defaults to the first trigger. */
+  phrase?: string;
 }
 
 /** One action of a compact tool: a default target, plus optional field routes. */

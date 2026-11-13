@@ -99,7 +99,7 @@ Two routes triggered together are refused as mutually exclusive, a trigger witho
 
 Parity counting (`tests/unit/compact_mapping_parity.test.js`): a legacy tool is mapped when some row or route of a compact tool targets it, and it must belong to exactly one compact tool. Several rows or routes of the same tool may share a target, so `actual_entities_search` and `actual_get_id_by_name` are counted once, under `list_entities`, however many types route to them.
 
-The 4b rewrite lives in `src/compact/dispatch.ts` (`legacyPhrases`, `rewriteError`, `rewriteResult`). A route's phrase names its first trigger, for example `list_entities with query`. An error is rewritten in place, so a `NotFoundRefusal` keeps its class and `isPreflightRefusal` still holds; its `listTool` property is not rewritten.
+The 4b rewrite lives in `src/compact/dispatch.ts` (`legacyPhrases`, `rewriteError`, `rewriteResult`). A route's phrase names the selector and its first trigger, for example `list_entities with type rule and payee_id`, or `list_entities with type and query` when several types carry the route. `rewriteResult` rewrites only the message keys `error` and `hint`, at the top level and under the `{ result }` wrapper that `createTool()` adds; data keys are never rewritten. An error is rewritten in place, so a `NotFoundRefusal` keeps its class and `isPreflightRefusal` still holds; its `listTool` property is not rewritten.
 
 ## 5. Update-shape normalisation
 
