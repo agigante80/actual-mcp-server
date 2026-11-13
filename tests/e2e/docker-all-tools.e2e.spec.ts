@@ -334,9 +334,12 @@ test.describe('Docker E2E - tool surface', () => {
     // stdio check here would test an empty placeholder. Unit check 7 and the source scan in
     // server_instructions.test.js cover the legacy key for the shared Server construction.
     if (!isStdio) expect('serverInstructions' in initResult).toBe(false);
-    const named = [...FULL_REGISTRY_INSTRUCTIONS.matchAll(/actual_[a-z0-9_]+/g)].map((m) => m[0]);
-    // On a surface with no legacy set the text names no tool at all, so there is nothing to look up.
-    if (toolNames.some((n) => n.startsWith('actual_'))) expect(named.length).toBeGreaterThan(0);
+    // #680: the text names the compact tools when they are published (the `all` surface included),
+    // otherwise the legacy ones, so both spellings are looked up.
+    const named = [...FULL_REGISTRY_INSTRUCTIONS.matchAll(/\b(?:actual_[a-z0-9_]+|get_context|run_query)\b/g)].map((m) => m[0]);
+    // With neither a context nor a query tool published the text names no tool at all, so there is nothing to look up.
+    const NAMEABLE = ['get_context', 'run_query', 'actual_get_context', 'actual_query_run'];
+    if (toolNames.some((n) => NAMEABLE.includes(n))) expect(named.length).toBeGreaterThan(0);
     // Negative: a name the text uses but this session does not publish would be listed here.
     expect(named.filter((n) => !toolNames.includes(n))).toEqual([]);
   });
