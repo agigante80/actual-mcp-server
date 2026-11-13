@@ -75,6 +75,12 @@ export interface CompactToolSpec {
   selector?: string | null;
   /** Action used when the selector is absent. When unset the selector is required. With `selector: null` it names the one action. */
   defaultAction?: string;
+  /**
+   * true drops every top-level argument whose value is null before validation, so null means
+   * "not sent" (#673: some clients send null for each optional field they leave out). Only for
+   * a tool where null carries no meaning of its own: never a write tool that clears a field with null.
+   */
+  nullAsAbsent?: boolean;
   /** Action name to row. A Map, so `__proto__` or `constructor` can never name an action. */
   actions: ReadonlyMap<string, CompactActionRow>;
 }

@@ -251,8 +251,8 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `account` | `transactions_get` | none | account_id, start_date, end_date |  |
-| `filter` | `transactions_filter` | none | account_id, start_date, end_date, min_amount, max_amount, category_id, payee_id, notes, cleared, reconciled | id-based filter. The legacy tool also accepts `null` for each field; the compact tool does not (omit a field for "no limit"), which the legacy tool treats the same way and which keeps the published schema within the size budget |
-| `amount` | `transactions_search_by_amount` | none | min_amount, max_amount, absolute_amount, start_date, end_date, account_id, category_name, limit |  |
+| `filter` | `transactions_filter` | none | account_id, start_date, end_date, min_amount, max_amount, category_id, payee_id, notes, cleared, reconciled | id-based filter. The legacy tool also accepts `null` for each field. The compact tool publishes no nullable field (that keeps the published schema within the size budget) but treats a `null` value on any `search_transactions` field as an absent field, which the legacy tool treats the same way |
+| `amount` | `transactions_search_by_amount` | none | min_amount, max_amount, absolute_amount, start_date, end_date, account_id, category_name, limit | at least one of account_id, start_date, end_date is required (the legacy unbounded-scan guard, refused here in compact field names); `limit` is capped at 1000 on every `search_transactions` row |
 | `category` | `transactions_search_by_category` | none | category_name, start_date, end_date, account_id, min_amount, max_amount, limit |  |
 | `month` | `transactions_search_by_month` | none | month, account_id, category_name, payee_name, min_amount, max_amount, limit |  |
 | `payee` | `transactions_search_by_payee` | none | payee_name, start_date, end_date, account_id, category_name, min_amount, max_amount, limit |  |

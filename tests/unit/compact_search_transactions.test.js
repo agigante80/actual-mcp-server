@@ -96,7 +96,14 @@ await check('NEGATIVE: a malformed month is refused', () => refused({ by: 'month
 await check('NEGATIVE: a non-integer amount is refused', () => refused({ by: 'filter', min_amount: 1.5 }, /min_amount/));
 await check('NEGATIVE: a zero limit is refused', () => refused({ by: 'amount', limit: 0 }, /limit/));
 await check('NEGATIVE: a negative offset is refused', () => refused({ by: 'uncategorized', offset: -1 }, /offset/));
-await check('NEGATIVE: null is refused (omit a field for no limit)', () => refused({ by: 'filter', account_id: null }, /account_id/));
+await check('a null field is treated as absent (clients that send null for every optional field)', () =>
+  expectCall({ by: 'filter', account_id: null, category_id: null, start_date: '2026-01-01' }, 'actual_transactions_filter', { startDate: '2026-01-01' }));
+await check('NEGATIVE: a null selector is still refused naming by', () => refused({ by: null }, /by/));
+await check('NEGATIVE: by amount with no account and no date is refused in compact field names', () =>
+  refused({ by: 'amount', absolute_amount: 5000 }, /account_id[^]*at least one of account_id, start_date, end_date/));
+await check('by amount bounded by a date alone is accepted', () =>
+  expectCall({ by: 'amount', absolute_amount: 5000, end_date: '2026-01-31' }, 'actual_transactions_search_by_amount', { absoluteAmount: 5000, endDate: '2026-01-31' }));
+await check('NEGATIVE: a limit over 1000 is refused', () => refused({ by: 'uncategorized', limit: 5000 }, /limit/));
 await check('NEGATIVE: camelCase legacy keys are refused', () => refused({ by: 'account', accountId: A }, /accountId/));
 
 // ---- published shape and metadata ----
@@ -144,7 +151,7 @@ await check('4b: a typed refusal naming a legacy tool is rewritten in place and 
 });
 await check('4b: a returned top-level error string is rewritten', async () => {
   const t = buildCompactTool(spec, { callOperation: async () => ({ error: 'Unbounded query via actual_transactions_search_by_amount' }) }, phrases);
-  const r = await t.call({ by: 'amount' });
+  const r = await t.call({ by: 'amount', start_date: '2026-01-01' });
   assert.ok(!/actual_/.test(r.error) && /search_transactions with by amount/.test(r.error), r.error);
 });
 

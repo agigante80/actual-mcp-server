@@ -38,7 +38,7 @@ const payeeIds = z.array(z.string().min(1)).min(1).max(100).describe('Only these
 const excludeTransfers = z.boolean().describe('false keeps transfers (default true).').optional();
 const months = z.number().int().min(1).max(60).describe('Look back this many months, instead of start_date.').optional();
 const minOccurrences = z.number().int().min(2).max(100).describe('Fewest occurrences to count (default 3).').optional();
-const includeInactive = z.boolean().describe('true also lists inactive payees (default false).').optional();
+const includeInactive = z.boolean().describe('true also lists series that have stopped (default false).').optional();
 const cutoff = CommonSchemas.date.describe('Balance as of this day (default now).').optional();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

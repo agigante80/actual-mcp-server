@@ -303,6 +303,12 @@ export function buildCompactTool(
     name: spec.name,
     description: spec.description,
     inputSchema,
-    call: async (args: unknown) => dispatchCompact(ops, spec, inputSchema.parse(args ?? {}), names),
+    call: async (args: unknown) => {
+      const sent =
+        spec.nullAsAbsent && args && typeof args === 'object' && !Array.isArray(args)
+          ? Object.fromEntries(Object.entries(args).filter(([, value]) => value !== null))
+          : (args ?? {});
+      return dispatchCompact(ops, spec, inputSchema.parse(sent), names);
+    },
   };
 }

@@ -16,8 +16,10 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
  * Every schema below is built ONCE and shared by each row that uses it (the flat published
  * schema keeps a key typed only when every row shares the very same object). No schema carries
  * a default: legacy defaults are applied by the legacy tool. Unlike legacy transactions_filter,
- * no field accepts null (it would double the published size of five keys): omit a field for
- * "no limit", which the legacy tool treats the same way. The tool-size budget in
+ * no published field is nullable (it would double the published size of five keys). A null value
+ * is still treated as an absent field (`nullAsAbsent`), because some clients send null for every
+ * optional field they leave out; the legacy tool treats null and absent the same way. `limit` is
+ * capped at 1000 on every row (legacy caps only uncategorized): a larger page helps no caller. The tool-size budget in
  * tests/unit/tools_list_size_budget.test.js is why descriptions here are terse.
  */
 
@@ -28,7 +30,7 @@ const minAmount = z.number().int().describe('Smallest amount in cents; outflows 
 const maxAmount = z.number().int().describe('Largest amount in cents; outflows negative.').optional();
 const categoryName = z.string().min(1).describe('Category name, case-insensitive.').optional();
 const payeeName = z.string().min(1).describe('Payee name, case-insensitive.').optional();
-const limit = z.number().int().min(1).describe('Maximum rows (default 100; uncategorized 50, max 1000).').optional();
+const limit = z.number().int().min(1).max(1000).describe('Maximum rows, up to 1000 (default 100; uncategorized 50).').optional();
 const month = CommonSchemas.monthYear.describe('Month, YYYY-MM (default current).').optional();
 const absoluteAmount = z.number().int().describe('Amount in cents, either sign; overrides min_amount and max_amount.').optional();
 const categoryId = z.string().describe('Category id from list_entities.').optional();
@@ -49,6 +51,20 @@ const row = (legacy: string, shape: Record<string, z.ZodType>): CompactActionRow
   rename: camel(Object.keys(shape)),
 });
 
+/**
+ * The legacy amount search refuses a scan with no account and no date, but names its own
+ * camelCase keys in that refusal. Refuse here first, in the compact tool's own field names.
+ */
+const bounded = (target: CompactActionRow): CompactActionRow => ({
+  ...target,
+  fields: target.fields.superRefine((value, ctx) => {
+    const v = value as Record<string, unknown>;
+    if (v.account_id === undefined && v.start_date === undefined && v.end_date === undefined) {
+      ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'by: amount needs at least one of account_id, start_date, end_date (an unbounded scan is refused)' });
+    }
+  }) as CompactActionRow['fields'],
+});
+
 export const searchTransactions: CompactToolSpec = {
   name: 'search_transactions',
   description:
@@ -65,6 +81,7 @@ export const searchTransactions: CompactToolSpec = {
     'Returns { result: [transaction] } for account and filter; { transactions, count, totalAmount } for amount, category, month and payee (an unknown name gives an error field); ' +
     '{ totalCount, totalAmount, byAccount, dateRange } for uncategorized, plus transactions and hasMore with include_transactions.',
   selector: 'by',
+  nullAsAbsent: true,
   actions: new Map<string, CompactActionRow>([
     ['account', row('actual_transactions_get', { account_id: accountId, start_date: startDate, end_date: endDate })],
     ['filter', row('actual_transactions_filter', {
@@ -79,7 +96,7 @@ export const searchTransactions: CompactToolSpec = {
       cleared,
       reconciled,
     })],
-    ['amount', row('actual_transactions_search_by_amount', {
+    ['amount', bounded(row('actual_transactions_search_by_amount', {
       min_amount: minAmount,
       max_amount: maxAmount,
       absolute_amount: absoluteAmount,
@@ -88,7 +105,7 @@ export const searchTransactions: CompactToolSpec = {
       account_id: accountId,
       category_name: categoryName,
       limit,
-    })],
+    }))],
     ['category', row('actual_transactions_search_by_category', {
       category_name: categoryName,
       start_date: startDate,
