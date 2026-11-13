@@ -122,10 +122,12 @@ Glama scores the server's coherence at Disambiguation 2, Naming 4, Tool Count 1 
 Outcome (2026-11-13): done. All ten planned tickets (#670 to #679) and #653 shipped and were released together as v0.29.0 (a minor bump: the surface is opt-in through `MCP_TOOL_SURFACE`, default `legacy`), after a green Docker E2E full run and a green full dual-transport run with zero residue on the final HEAD. The local TDQS harness scores the compact list at 4.6 overall against 3.7 for the legacy list; that is an estimate from a different judge model, and the real score needs a Glama rebuild that only the maintainer can trigger. One thing appeared during the work: the Docker E2E step outgrew its 18 minute CI limit once the compact rows landed, and the limit was raised to 30 minutes in the same phase. No planned work was skipped.
 
 ## Phase: Compact default, prompts and first-run docs
-state: open
+state: done
 plan: docs/plans/compact-default-prompts-and-first-run-docs.md
 
 Makes the compact surface the default (a breaking change for clients that call `actual_*` names, with `legacy` still selectable), migrates the test suites to it, adds MCP prompts (the capability plus five prompts, each naming compact tools) and rewrites the README opening, install path and capabilities section after a review of three competing Actual servers. It follows Compact tool surface because prompts and docs must name the tools that phase settles.
+
+Outcome (2026-11-13): done. All twelve planned tickets (#660 to #669, #680, #681) shipped and were released together as v0.30.0 (a minor bump with a BREAKING section in the release notes: the default surface is now `compact`, and `legacy` and `all` stay selectable). The order differed from the plan: the prompts landed before the default flip, in the same release. The first two release-gate runs failed because the live suite's support code and the step 9 regression scripts still called `actual_*` names, which the compact default refuses; both were migrated and a unit guard now covers those files. The final HEAD had a green Docker E2E full run and a green full dual-transport run with zero residue. Nothing was moved out of the phase. Removing the legacy surface stays in Backlog (#682).
 
 ## Phase: Backlog
 state: backlog
