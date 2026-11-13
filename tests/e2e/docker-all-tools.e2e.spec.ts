@@ -3430,6 +3430,7 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
     const marker = `E2E-Rule677-${uniqueSuffix()}`;
     const id = (await mcp.call('manage_rules', {
       action: 'create',
+      conditions_op: 'or',
       stage: 'pre',
       conditions: [{ field: 'notes', op: 'contains', value: marker }],
       actions: [{ op: 'set', field: 'category', value: category.id }],
@@ -3445,7 +3446,8 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
     expect(parse(upd).success).toBe(true);
     const row = (await rulesOf(mcp)).find((r: any) => r?.id === id);
     expect(JSON.stringify(row?.conditions)).toContain(marker2);
-    expect(row?.conditionsOp).toBe('and');
+    // Created as 'or': an update that does not send conditions_op must leave it, not reset it to the default.
+    expect(row?.conditionsOp).toBe('or');
 
     const del = await mcp.raw('manage_rules', { action: 'delete', id });
     expect(parse(del).success).toBe(true);
@@ -3468,6 +3470,10 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
     });
     expect(first.created).toBe(true);
     const second = parse(await mcp.raw('manage_rules', input));
+    // If the upsert wrongly created a duplicate, delete it too so the failure leaves no residue.
+    cleanup.add(CLEANUP_ORDER.rule, `upsert duplicate ${marker}`, async () => {
+      if (second.id && second.id !== first.id) await mcp.call('actual_rules_delete', { id: second.id }).catch(() => undefined);
+    });
     expect(second.id).toBe(first.id);
     expect(second.created).toBe(false);
   });

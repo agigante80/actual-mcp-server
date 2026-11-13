@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
 import { ACTION_DESCRIBE, ConditionSchema, RuleItemSchema, ActionSchema as CreateActionSchema } from '../../lib/schemas/rules.js';
-import { asFields, needs, strict, strictDeep } from '../refine.js';
+import { asFields, atLeastOne, needs, strict, strictDeep } from '../refine.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
 /**
@@ -76,6 +76,7 @@ const createBatchFields = asFields(
 const updateFields = asFields(
   z.object({ id, stage, conditions_op: conditionsOp, conditions, actions }).superRefine((value, ctx) => {
     needs('update', ctx, value as V, ['id']);
+    atLeastOne(ctx, value as V, ['stage', 'conditions_op', 'conditions', 'actions']);
     strictDeep(ctx, value as V, REAL_UPDATE);
   }),
 );
@@ -95,7 +96,7 @@ export const manageRules: CompactToolSpec = {
     'create: conditions, actions; optional stage, conditions_op. ' +
     'create_batch: rules (1 to 50, items with camelCase keys); NOT atomic, no rollback: a failing rule is reported in failed and the rest are still attempted; if the call itself fails, read the rules back before retrying. ' +
     'upsert: conditions, actions; optional stage, conditions_op; a rule with the same conditions and conditions_op (any order) has its actions replaced and its stage replaced only if sent, else a rule is created. ' +
-    'update: id and any of stage, conditions_op, conditions, actions; unsent fields stay. ' +
+    'update: id and at least one of stage, conditions_op, conditions, actions; unsent fields stay. ' +
     'delete: id; DESTRUCTIVE, cannot be undone; a rule owned by a schedule is refused (use manage_schedules delete); an unknown id is refused. ' +
     'Returns { id, success } (create), { result: { succeeded, failed, total, successCount, failureCount } } (create_batch), { id, created } (upsert), { success: true } (update, delete).',
   selector: 'action',

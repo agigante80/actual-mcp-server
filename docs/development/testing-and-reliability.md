@@ -1029,8 +1029,8 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `compact_manage_categories.test.js` | Compact `manage_categories`: four actions, entity routes, refusals, read-only (#676) | 25 |
 | `compact_manage_payees.test.js` | Compact `manage_payees`: five actions, refusals, null category, read-only (#676) | 25 |
 | `compact_manage_tags.test.js` | Compact `manage_tags`: three actions, refusals, read-only, size, annotations (#676) | 19 |
-| `compact_manage_rules.test.js` | Compact `manage_rules`: five actions, refusals, batch item keys, legacy passthrough, read-only (#677) | 33 |
-| `compact_manage_schedules.test.js` | Compact `manage_schedules`: three actions, date and amount unions, refusals, read-only (#677) | 27 |
+| `compact_manage_rules.test.js` | Compact `manage_rules`: five actions, refusals, batch item keys, legacy passthrough, read-only (#677) | 34 |
+| `compact_manage_schedules.test.js` | Compact `manage_schedules`: three actions, date and amount unions, refusals, read-only (#677) | 28 |
 | `compact_manage_budget_months.test.js` | Compact `manage_budget_months`: seven actions, refusals, rewrite, read-only (#678) | 28 |
 | `compact_manage_budget_files.test.js` | Compact `manage_budget_files`: three actions, refusals, destructive description, read-only (#678) | 21 |
 | `startup_record.test.js` | `sys_startup` builder: allowlist, privacy, auth facts, `actual_server_info` parity (#623) | 19 |

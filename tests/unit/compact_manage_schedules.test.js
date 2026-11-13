@@ -193,6 +193,8 @@ await check('compactLegacyNames covers the three targets, all write-capable', ()
   assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_schedules_create', 'actual_schedules_delete', 'actual_schedules_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
+await check('NEGATIVE: update with only id is refused and calls nothing', () =>
+  refused({ action: 'update', id: U1 }, /update needs at least one of: name, payee/));
 
 console.log(`\n[compact-manage-schedules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

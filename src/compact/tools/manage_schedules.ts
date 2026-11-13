@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
 import { RecurConfigSchema } from '../../lib/schemas/recur.js';
 import { ScheduleAmountSchema, amountOpMismatch, ISBETWEEN_NEEDS_RANGE } from '../../lib/schemas/schedule-amount.js';
-import { asFields, issue, needs, strict } from '../refine.js';
+import { asFields, atLeastOne, issue, needs, strict } from '../refine.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
 /**
@@ -94,6 +94,7 @@ const updateFields = asFields(
     .superRefine((value, ctx) => {
       const v = value as V;
       needs('update', ctx, v, ['id']);
+      atLeastOne(ctx, v, ['name', 'payee', 'account', 'amount', 'amount_op', 'date', 'posts_transaction', 'reset_next_date']);
       nullsOnly('update', ctx, v, ['payee', 'account']);
       strict(ctx, v, REAL);
       checkUnions(ctx, v);
@@ -116,7 +117,7 @@ export const manageSchedules: CompactToolSpec = {
     'Create, change or delete schedules (one-off or recurring); pick one `action`. Writes. ' +
     'To read schedules use list_entities with type schedule; to preview occurrence dates use list_entities with type schedule and schedule_id. Cents are integers, outflows negative. Other fields are refused. ' +
     'create: date; optional name, payee, account, amount, amount_op, posts_transaction. amount_op isbetween needs amount {num1, num2}; an object amount needs isbetween. ' +
-    'update: id and any of name, payee, account (null clears), amount, amount_op, date, posts_transaction, reset_next_date; unsent fields stay; a new date replaces the stored recurrence; completed and next_date cannot be set. ' +
+    'update: id and at least one of name, payee, account (null clears), amount, amount_op, date, posts_transaction, reset_next_date; unsent fields stay; a new date replaces the stored recurrence; completed and next_date cannot be set. ' +
     'delete: id; DESTRUCTIVE, cannot be undone; removes the schedule and the rule that drives it; transactions it already created stay; an unknown id is refused. ' +
     'Returns { id } (create), { success: true } (update, delete).',
   selector: 'action',

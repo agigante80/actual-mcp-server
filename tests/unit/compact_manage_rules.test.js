@@ -200,6 +200,8 @@ await check('compactLegacyNames covers the five targets, all write-capable', () 
   assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_rules_create', 'actual_rules_create_batch', 'actual_rules_create_or_update', 'actual_rules_delete', 'actual_rules_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
+await check('NEGATIVE: update with only id is refused and calls nothing', () =>
+  refused({ action: 'update', id: U1 }, /update needs at least one of: stage, conditions_op, conditions, actions/));
 
 console.log(`\n[compact-manage-rules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
