@@ -1,6 +1,6 @@
 # Compact tool surface
 
-**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. #673 ships `search_transactions` and `summarize_transactions`. #674 ships `list_budget_months` and `run_query`, the first tools with no selector (`selector: null` in the spec; a route trigger or the single action decides). #675 ships `manage_transactions` (rows 37 to 43), the first write tool: destructive, hidden under `MCP_READ_ONLY`, `null` accepted only for `update`, its strict id, date and amount rules enforced per action by the row refines because the published entry must stay under the 3900 byte cap; the section 4b rewrite of `result.error` was already in the dispatcher. #676 ships `manage_accounts`, `manage_categories`, `manage_payees` and `manage_tags` (rows 44 to 62, 71 to 73 and `notes_update` from action `set_note`): destructive, hidden under `MCP_READ_ONLY`, `entity` routes to the group tools and is never forwarded, `manage_accounts` is the one open-world compact tool (bank sync), and `notes_update` is the one legacy tool several compact tools may map, allowed by the parity test only from `set_note`. `compactInputSchema` now treats `x` and `x.optional()` as one declaration, so a key required in one action and optional in another stays typed. The other 4 tools are still to come. The stale `listTool` in the adapter is still not corrected.
+**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. #673 ships `search_transactions` and `summarize_transactions`. #674 ships `list_budget_months` and `run_query`, the first tools with no selector (`selector: null` in the spec; a route trigger or the single action decides). #675 ships `manage_transactions` (rows 37 to 43), the first write tool: destructive, hidden under `MCP_READ_ONLY`, `null` accepted only for `update`, its strict id, date and amount rules enforced per action by the row refines because the published entry must stay under the 3900 byte cap; the section 4b rewrite of `result.error` was already in the dispatcher. #676 ships `manage_accounts`, `manage_categories`, `manage_payees` and `manage_tags` (rows 44 to 62, 71 to 73 and `notes_update` from action `set_note`): destructive, hidden under `MCP_READ_ONLY`, `entity` routes to the group tools and is never forwarded, `manage_accounts` is the one open-world compact tool (bank sync), and `notes_update` is the one legacy tool several compact tools may map, allowed by the parity test only from `set_note`. `compactInputSchema` now treats `x` and `x.optional()` as one declaration, so a key required in one action and optional in another stays typed. #677 ships `manage_rules` (rows 63 to 67) and `manage_schedules` (rows 68 to 70): both destructive and hidden under `MCP_READ_ONLY`, `nullAsAbsent` off, no `.default()` anywhere so an update never injects a legacy default, and the published schemas free of `anyOf`. A schedule `amount` and `date` publish a multi-type `type` and are checked as the real unions in the row refine; rule `conditions`, `actions` and `rules` publish loose typed items and the real legacy schemas run in the refine. Items inside `create_batch` `rules` keep their legacy camelCase keys (`conditionsOp`), and `conditions_op` inside an item is refused by name. `create_batch` keeps the legacy `{ result: { succeeded, failed, ... } }` wrapper because that tool is built with `createTool`. The stale `listTool` in the adapter is corrected to `actual_accounts_list`. The other 2 tools are still to come.
 
 The compact surface is a second public tool list of 15 tools with no `actual_` prefix, named `verb_noun` in snake_case, each fronting a group of the 85 existing tools through one dispatcher. The implementation tickets (#671 to #678, #679, #680, #681) cite this page for the mapping, the schemas and the naming rules. The delivery plan is in `docs/plans/compact-tool-surface.md`.
 
@@ -60,7 +60,7 @@ Errors pass through untouched as types: `NotFoundRefusal`, `OutOfRangeRefusal` a
 
 The dispatcher therefore rewrites names in text: in the message of any error a `callOperation` call throws, and in a returned top-level `error` string, every `actual_<name>` that appears in the section 7 table is replaced by its compact (tool, selector) phrase. For example `actual_accounts_list` becomes `list_entities with type account`. So `manage_transactions` `{action: "create"}` with an unknown account id returns an `error` text that names `list_entities with type account`, never `actual_accounts_list`.
 
-The stale `listTool: 'actual_accounts_get'` in `src/lib/actual-adapter.ts` (the id-filter map, line 3015 at the time of writing) names a tool that is not registered. #671 corrects it to `actual_accounts_list` so the table can translate it.
+The stale `listTool: 'actual_accounts_get'` in `src/lib/actual-adapter.ts` (the id-filter map, line 3015 at the time of writing) names a tool that is not registered. #677 corrected it to `actual_accounts_list` so the table can translate it.
 
 A legacy ZodError path is mapped back to compact names: the dispatcher first strips the `fields` wrapper it added (section 5), then maps the first remaining segment through the rename table (`['fields', 'amount']` becomes `amount`, `['accountId']` becomes `account_id`).
 
@@ -336,19 +336,19 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `create` | `rules_create` | conditions, actions | stage, conditions_op |  |
-| `create_batch` | `rules_create_batch` | rules | none | legacy array, max 50 |
-| `upsert` | `rules_create_or_update` | conditions, actions | stage, conditions_op |  |
-| `update` | `rules_update` | id | stage, conditions_op, conditions, actions | wrapped into legacy `fields`; omitting `stage` leaves it unchanged |
-| `delete` | `rules_delete` | id | none |  |
+| `create` | `rules_create` | conditions, actions | stage, conditions_op | `conditions_op` is renamed to `conditionsOp`; no default is sent, the legacy tool applies stage null and `and`; an action without `op` defaults to set |
+| `create_batch` | `rules_create_batch` | rules (1 to 50) | none | items keep camelCase keys (`conditionsOp`); `conditions_op` in an item is refused by name; NOT atomic; answers `{ result: { succeeded, failed, total, successCount, failureCount } }` |
+| `upsert` | `rules_create_or_update` | conditions, actions | stage, conditions_op | answers `{ id, created }` |
+| `update` | `rules_update` | id | stage, conditions_op, conditions, actions | non-id properties wrapped into legacy `fields`; omitting `stage` or `conditions_op` leaves it unchanged; every action needs `op` here |
+| `delete` | `rules_delete` | id | none | a rule owned by a schedule is refused |
 
 **`manage_schedules`** (selector `action`, required)
 
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `create` | `schedules_create` | date | name, payee, account, amount, amount_op, posts_transaction | `date` is YYYY-MM-DD or the legacy RecurConfig object |
-| `update` | `schedules_update` | id | name, payee, account, amount, amount_op, date, posts_transaction, reset_next_date | legacy is flat |
-| `delete` | `schedules_delete` | id | none |  |
+| `create` | `schedules_create` | date | name, payee, account, amount, amount_op, posts_transaction | `date` is YYYY-MM-DD or the legacy RecurConfig object; `amount_op` is renamed to `amountOp`; `isbetween` needs an `{num1, num2}` amount and the reverse (#527), with the legacy text translated to `amount_op`; null is refused |
+| `update` | `schedules_update` | id | name, payee, account, amount, amount_op, date, posts_transaction, reset_next_date | legacy is flat; `reset_next_date` is renamed to `resetNextDate`; null clears only payee and account; no default is sent |
+| `delete` | `schedules_delete` | id | none | removes the schedule and its rule |
 
 **`manage_budget_months`** (selector `action`, required)
 

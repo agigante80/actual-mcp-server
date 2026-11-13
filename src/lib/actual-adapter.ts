@@ -3012,7 +3012,7 @@ export async function getRules(): Promise<unknown[]> {
 const RULE_REFERENCE_FIELDS = {
   category: { entity: 'Category', listTool: 'actual_categories_get' },
   payee: { entity: 'Payee', listTool: 'actual_payees_get' },
-  account: { entity: 'Account', listTool: 'actual_accounts_get' },
+  account: { entity: 'Account', listTool: 'actual_accounts_list' },
 } as const;
 type RuleReferenceField = keyof typeof RULE_REFERENCE_FIELDS;
 

@@ -118,6 +118,8 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   manage_categories: 'Manage categories and groups',
   manage_payees: 'Manage payees',
   manage_tags: 'Manage tags',
+  manage_rules: 'Manage rules',
+  manage_schedules: 'Manage schedules',
 };
 
 /** The display title for a tool, or undefined when it has none (the builder then omits it). */

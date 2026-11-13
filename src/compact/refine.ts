@@ -35,3 +35,21 @@ export const atLeastOne = (ctx: z.RefinementCtx, v: Record<string, unknown>, cha
 
 /** A refined object is still a ZodObject at run time; the type loses that, so say it once. */
 export const asFields = (schema: z.ZodType): CompactActionRow['fields'] => schema as unknown as CompactActionRow['fields'];
+
+/**
+ * Like `strict`, for a value with nested structure (an array of rule items): the message leads
+ * with the path inside the value (`actions.0.op: ...`) so a caller learns WHICH element and key
+ * to fix, not only that `actions` was wrong. The issue stays on the top-level compact key.
+ */
+export const strictDeep = (ctx: z.RefinementCtx, v: Record<string, unknown>, real: Readonly<Record<string, z.ZodType>>): void => {
+  for (const [key, schema] of Object.entries(real)) {
+    const value = v[key];
+    if (value === undefined || value === null) continue;
+    const r = schema.safeParse(value);
+    if (r.success) continue;
+    const first = r.error.issues[0];
+    const where = first && first.path.length > 0 ? `${first.path.join('.')}: ` : '';
+    const message = first?.code === 'unrecognized_keys' ? `unknown key ${first.keys.map((k) => `"${k}"`).join(', ')} at ${first.path.join('.') || key}` : (first?.message ?? `invalid ${key}`);
+    issue(ctx, key, first?.code === 'unrecognized_keys' ? message : `${where}${message}`);
+  }
+};

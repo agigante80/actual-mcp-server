@@ -178,7 +178,7 @@ check('every compact tool is annotated read-only, idempotent and closed-world ex
 
 check('manage_accounts is open-world (bank_sync) and the other compact writers are not (#676)', () => {
   assert.strictEqual(annotationsFor('manage_accounts').openWorldHint, true);
-  for (const n of ['manage_categories', 'manage_payees', 'manage_tags', 'manage_transactions']) assert.strictEqual(annotationsFor(n).openWorldHint, false, n);
+  for (const n of ['manage_categories', 'manage_payees', 'manage_rules', 'manage_schedules', 'manage_tags', 'manage_transactions']) assert.strictEqual(annotationsFor(n).openWorldHint, false, n);
 });
 
 check('NEGATIVE: a compact name nobody classified publishes no safety claim', () => {

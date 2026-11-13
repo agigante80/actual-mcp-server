@@ -5,6 +5,8 @@ import { listEntities } from './tools/list_entities.js';
 import { manageAccounts } from './tools/manage_accounts.js';
 import { manageCategories } from './tools/manage_categories.js';
 import { managePayees } from './tools/manage_payees.js';
+import { manageRules } from './tools/manage_rules.js';
+import { manageSchedules } from './tools/manage_schedules.js';
 import { manageTags } from './tools/manage_tags.js';
 import { manageTransactions } from './tools/manage_transactions.js';
 import { runQuery } from './tools/run_query.js';
@@ -16,4 +18,4 @@ import { summarizeTransactions } from './tools/summarize_transactions.js';
  * ticket (#672 onward) by appending one spec here. A compact tool is NOT in IMPLEMENTED_TOOLS
  * or src/tools/index.ts: the legacy registry stays 85 tools.
  */
-export const COMPACT_TOOLS: readonly CompactToolSpec[] = [getContext, listEntities, searchTransactions, summarizeTransactions, listBudgetMonths, runQuery, manageTransactions, manageAccounts, manageCategories, managePayees, manageTags];
+export const COMPACT_TOOLS: readonly CompactToolSpec[] = [getContext, listEntities, searchTransactions, summarizeTransactions, listBudgetMonths, runQuery, manageTransactions, manageAccounts, manageCategories, managePayees, manageTags, manageRules, manageSchedules];

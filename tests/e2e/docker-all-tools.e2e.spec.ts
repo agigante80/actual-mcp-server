@@ -3046,8 +3046,10 @@ test.describe('Docker E2E - compact manage_transactions (#675)', () => {
 
   test('manage_transactions create - adds a transaction readable through the legacy getter', async ({ mcp, makeAccount }) => {
     const account = await makeAccount();
-    const res = await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1111, notes: `e2e-${uniqueSuffix()}` });
-    expect(res).toBeTruthy();
+    // mcp.call would apply extractResult, which returns parsed.id (null here) when the payload has an
+    // id key, and create answers { success: true, id: null }. Read the full payload instead.
+    const raw = await mcp.raw('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1111, notes: `e2e-${uniqueSuffix()}` });
+    expect(JSON.parse(raw.content[0].text).success).toBe(true);
     const rows = await rowsOf(mcp, account.id);
     expect(rows.some((t: any) => t?.amount === -1111)).toBe(true);
   });
@@ -3374,5 +3376,123 @@ test.describe('Docker E2E - compact manage_tags (#676)', () => {
     expect(await refusal(() => mcp.call('manage_tags', { action: 'frobnicate' }))).toMatch(/action/);
     expect(await refusal(() => mcp.call('manage_tags', { action: 'create' }))).toMatch(/tag.*required for action: create/);
     expect(await refusal(() => mcp.call('manage_tags', { action: 'update', id }))).toMatch(/At least one of tag, color, or description/);
+  });
+});
+
+// #677: the compact manage_rules and manage_schedules tools. Reads go through the legacy readers.
+// mcp.call applies extractResult (the id, else result, else the whole payload), so a create that
+// answers { id, success } comes back as the bare id string and { id, created } needs mcp.raw.
+test.describe('Docker E2E - compact manage_rules (#677)', () => {
+  const rulesOf = async (mcp: any): Promise<any[]> => {
+    const d = await mcp.call('actual_rules_get');
+    return (Array.isArray(d) ? d : (d?.rules ?? [])) as any[];
+  };
+  const parse = (raw: any): any => JSON.parse(raw.content[0].text);
+
+  test('manage_rules create, update and delete', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const marker = `E2E-Rule677-${uniqueSuffix()}`;
+    const id = (await mcp.call('manage_rules', {
+      action: 'create',
+      stage: 'pre',
+      conditions: [{ field: 'notes', op: 'contains', value: marker }],
+      actions: [{ op: 'set', field: 'category', value: category.id }],
+    })) as string;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.rule, `rule ${marker}`, async () => {
+      await mcp.call('actual_rules_delete', { id }).catch(() => undefined);
+    });
+    expect((await rulesOf(mcp)).some((r: any) => r?.id === id)).toBe(true);
+
+    const marker2 = `${marker}-changed`;
+    const upd = await mcp.raw('manage_rules', { action: 'update', id, conditions: [{ field: 'notes', op: 'contains', value: marker2 }] });
+    expect(parse(upd).success).toBe(true);
+    const row = (await rulesOf(mcp)).find((r: any) => r?.id === id);
+    expect(JSON.stringify(row?.conditions)).toContain(marker2);
+    expect(row?.conditionsOp).toBe('and');
+
+    const del = await mcp.raw('manage_rules', { action: 'delete', id });
+    expect(parse(del).success).toBe(true);
+    expect((await rulesOf(mcp)).some((r: any) => r?.id === id)).toBe(false);
+  });
+
+  test('manage_rules upsert - the same conditions twice: created, then updated with the same id', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const marker = `E2E-Upsert677-${uniqueSuffix()}`;
+    const input = {
+      action: 'upsert',
+      stage: 'pre',
+      conditions: [{ field: 'notes', op: 'contains', value: marker }],
+      actions: [{ op: 'set', field: 'category', value: category.id }],
+    };
+    const first = parse(await mcp.raw('manage_rules', input));
+    expect(typeof first.id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.rule, `upsert rule ${marker}`, async () => {
+      await mcp.call('actual_rules_delete', { id: first.id }).catch(() => undefined);
+    });
+    expect(first.created).toBe(true);
+    const second = parse(await mcp.raw('manage_rules', input));
+    expect(second.id).toBe(first.id);
+    expect(second.created).toBe(false);
+  });
+
+  test('manage_rules create_batch - two rules are created', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const markers = [`E2E-Batch677-a-${uniqueSuffix()}`, `E2E-Batch677-b-${uniqueSuffix()}`];
+    cleanup.add(CLEANUP_ORDER.rule, 'batch rules 677', async () => {
+      for (const r of await rulesOf(mcp)) {
+        if (markers.some((m) => JSON.stringify(r?.conditions).includes(m))) await mcp.call('actual_rules_delete', { id: r.id }).catch(() => undefined);
+      }
+    });
+    const res = await mcp.call('manage_rules', {
+      action: 'create_batch',
+      rules: markers.map((m) => ({ stage: 'pre', conditions: [{ field: 'notes', op: 'contains', value: m }], actions: [{ op: 'set', field: 'category', value: category.id }] })),
+    });
+    expect(res?.successCount).toBe(2);
+    expect(res?.failureCount).toBe(0);
+    const rows = await rulesOf(mcp);
+    for (const m of markers) expect(rows.some((r: any) => JSON.stringify(r?.conditions).includes(m))).toBe(true);
+  });
+
+  test('manage_rules - ERROR: create without actions, a batch item with conditions_op and an update action without op name the problem', async ({ mcp }) => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    const cond = { field: 'notes', op: 'contains', value: 'x' };
+    expect(await refusal(() => mcp.call('manage_rules', { action: 'create', conditions: [cond] }))).toMatch(/actions.*required for action: create/);
+    expect(await refusal(() => mcp.call('manage_rules', { action: 'create_batch', rules: [{ conditions_op: 'or', conditions: [cond], actions: [{ op: 'set', field: 'notes', value: 'y' }] }] }))).toMatch(/conditions_op/);
+    expect(await refusal(() => mcp.call('manage_rules', { action: 'update', id, actions: [{ field: 'notes', value: 'y' }] }))).toMatch(/op/);
+    expect(await refusal(() => mcp.call('manage_rules', { action: 'delete', id }))).not.toBe('');
+  });
+});
+
+test.describe('Docker E2E - compact manage_schedules (#677)', () => {
+  const schedulesOf = async (mcp: any): Promise<any[]> => {
+    const d = await mcp.call('actual_schedules_get');
+    return (d?.schedules ?? d?.result?.schedules ?? (Array.isArray(d) ? d : [])) as any[];
+  };
+
+  test('manage_schedules create, update and delete', async ({ mcp, cleanup }) => {
+    const name = `E2E-Sched677-${uniqueSuffix()}`;
+    const data = await mcp.call('manage_schedules', { action: 'create', name, date: today(), amount: -2500, amount_op: 'is' });
+    const id = (typeof data === 'string' ? data : data?.id) as string;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.schedule, `schedule ${name}`, async () => {
+      await mcp.call('actual_schedules_delete', { id }).catch(() => undefined);
+    });
+    expect((await schedulesOf(mcp)).some((s: any) => s?.id === id && s?.name === name)).toBe(true);
+
+    const renamed = `${name}-renamed`;
+    const upd = await mcp.raw('manage_schedules', { action: 'update', id, name: renamed });
+    expect(JSON.parse(upd.content[0].text).success).toBe(true);
+    expect((await schedulesOf(mcp)).find((s: any) => s?.id === id)?.name).toBe(renamed);
+
+    const del = await mcp.raw('manage_schedules', { action: 'delete', id });
+    expect(JSON.parse(del.content[0].text).success).toBe(true);
+    expect((await schedulesOf(mcp)).some((s: any) => s?.id === id)).toBe(false);
+  });
+
+  test('manage_schedules - ERROR: update without id, a bad date and isbetween without a range name the problem', async ({ mcp }) => {
+    expect(await refusal(() => mcp.call('manage_schedules', { action: 'update', name: 'x' }))).toMatch(/id.*required for action: update/);
+    expect(await refusal(() => mcp.call('manage_schedules', { action: 'create', date: '13/11/2026' }))).toMatch(/date must be/);
+    expect(await refusal(() => mcp.call('manage_schedules', { action: 'create', date: today(), amount: -100, amount_op: 'isbetween' }))).toMatch(/amount_op 'isbetween' needs amount/);
   });
 });

@@ -549,7 +549,7 @@ await check('NEGATIVE: flat typing: two different name objects still publish an 
 // ---- registry and source guards ----
 
 await check('the shipped registry holds exactly the eleven compact tools so far (#672 to #676)', () => {
-  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags']);
+  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags', 'manage_rules', 'manage_schedules']);
 });
 
 await check('src/compact/ never imports the adapter or @actual-app/api, and never calls .call(', () => {

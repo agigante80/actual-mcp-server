@@ -50,14 +50,6 @@ const PENDING = [
   'actual_budgets_set_carryover',
   'actual_budgets_switch',
   'actual_budgets_transfer',
-  'actual_rules_create',
-  'actual_rules_create_batch',
-  'actual_rules_create_or_update',
-  'actual_rules_delete',
-  'actual_rules_update',
-  'actual_schedules_create',
-  'actual_schedules_delete',
-  'actual_schedules_update',
 ];
 
 /** Returns the list of problems (empty means parity holds). */
