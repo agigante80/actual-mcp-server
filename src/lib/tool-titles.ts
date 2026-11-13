@@ -105,6 +105,9 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   // Compact tools (#672). Not registered legacy tools: tool_titles.test.js checks them against COMPACT_TOOLS.
   get_context: 'Get budget and server context',
   list_entities: 'List budget entities',
+  // Compact tools (#673).
+  search_transactions: 'Search transactions',
+  summarize_transactions: 'Summarize transactions',
 };
 
 /** The display title for a tool, or undefined when it has none (the builder then omits it). */

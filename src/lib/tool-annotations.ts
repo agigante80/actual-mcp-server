@@ -65,6 +65,8 @@ const READ_ONLY = new Set<string>([
   // idempotentHint true below, so neither is added to IDEMPOTENT.
   'get_context',
   'list_entities',
+  'search_transactions',
+  'summarize_transactions',
   'actual_account_groups_list',
   'actual_account_flow_summary',
   'actual_recurring_expenses_summary',

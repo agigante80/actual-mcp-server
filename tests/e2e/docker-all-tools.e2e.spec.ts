@@ -2879,3 +2879,130 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
     await expect(mcp.call('list_entities', { type: 'transaction' })).rejects.toThrow();
   });
 });
+
+test.describe('Docker E2E - compact search_transactions and summarize_transactions (#673)', () => {
+  // Each row is compared with the legacy tool called with the mapped camelCase arguments in the
+  // same test, so the compact layer is proven to forward exactly what it was given.
+  const range = () => ({ start: `${currentMonth()}-01`, end: today() });
+
+  // ---- search_transactions: one row per `by` ----
+  test('search_transactions - by account matches actual_transactions_get and finds the seeded row', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -1234 });
+    const compact = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+    expect(compact).toEqual(await mcp.call('actual_transactions_get', { accountId: account.id }));
+    expect(JSON.stringify(compact)).toContain(txn.id);
+  });
+
+  test('search_transactions - by filter matches actual_transactions_filter', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -2222, notes: `E2E-Filter-${uniqueSuffix()}` });
+    const compact = await mcp.call('search_transactions', { by: 'filter', account_id: account.id, min_amount: -3000, max_amount: -1000, notes: txn.notes });
+    expect(compact).toEqual(await mcp.call('actual_transactions_filter', { accountId: account.id, minAmount: -3000, maxAmount: -1000, notes: txn.notes }));
+    expect(JSON.stringify(compact)).toContain(txn.id);
+  });
+
+  test('search_transactions - by amount matches actual_transactions_search_by_amount', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    await makeTransaction({ account, amount: -4321 });
+    const compact = await mcp.call('search_transactions', { by: 'amount', account_id: account.id, absolute_amount: 4321, limit: 10 });
+    expect(compact).toEqual(await mcp.call('actual_transactions_search_by_amount', { accountId: account.id, absoluteAmount: 4321, limit: 10 }));
+    expect(compact.count).toBeGreaterThanOrEqual(1);
+  });
+
+  test('search_transactions - by category matches actual_transactions_search_by_category', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    await makeTransaction({ account, amount: -777, category: category.id });
+    const { start, end } = range();
+    const compact = await mcp.call('search_transactions', { by: 'category', category_name: category.name, start_date: start, end_date: end, account_id: account.id });
+    expect(compact).toEqual(await mcp.call('actual_transactions_search_by_category', { categoryName: category.name, startDate: start, endDate: end, accountId: account.id }));
+  });
+
+  test('search_transactions - by month matches actual_transactions_search_by_month', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    await makeTransaction({ account, amount: -555 });
+    const compact = await mcp.call('search_transactions', { by: 'month', month: currentMonth(), account_id: account.id });
+    expect(compact).toEqual(await mcp.call('actual_transactions_search_by_month', { month: currentMonth(), accountId: account.id }));
+    expect(compact.count).toBeGreaterThanOrEqual(1);
+  });
+
+  test('search_transactions - by payee matches actual_transactions_search_by_payee', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    await makeTransaction({ account, amount: -888, payee: payee.id });
+    const { start, end } = range();
+    const compact = await mcp.call('search_transactions', { by: 'payee', payee_name: payee.name, start_date: start, end_date: end, account_id: account.id });
+    expect(compact).toEqual(await mcp.call('actual_transactions_search_by_payee', { payeeName: payee.name, startDate: start, endDate: end, accountId: account.id }));
+  });
+
+  test('search_transactions - by uncategorized matches actual_transactions_uncategorized', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    await makeTransaction({ account, amount: -999 });
+    const compact = await mcp.call('search_transactions', { by: 'uncategorized', account_id: account.id, include_transactions: true, limit: 5, offset: 0 });
+    expect(compact).toEqual(await mcp.call('actual_transactions_uncategorized', { accountId: account.id, includeTransactions: true, limit: 5, offset: 0 }));
+  });
+
+  test('search_transactions - refuses an unknown by, and a field the row does not take, naming the field', async ({ mcp }) => {
+    await expect(mcp.call('search_transactions', { by: 'frobnicate' })).rejects.toThrow(/by/);
+    await expect(mcp.call('search_transactions', { by: 'payee', absolute_amount: 5 })).rejects.toThrow(/absolute_amount/);
+  });
+
+  // ---- summarize_transactions: one row per `report` ----
+  test('summarize_transactions - by_category matches actual_transactions_summary_by_category', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    await makeTransaction({ account, amount: -1500, category: category.id });
+    const { start, end } = range();
+    const compact = await mcp.call('summarize_transactions', { report: 'by_category', start_date: start, end_date: end, account_id: account.id });
+    expect(compact).toEqual(await mcp.call('actual_transactions_summary_by_category', { startDate: start, endDate: end, accountId: account.id }));
+    expect(JSON.stringify(compact)).toContain(category.name);
+  });
+
+  test('summarize_transactions - by_payee matches actual_transactions_summary_by_payee', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    await makeTransaction({ account, amount: -1600, payee: payee.id });
+    const { start, end } = range();
+    const compact = await mcp.call('summarize_transactions', { report: 'by_payee', start_date: start, end_date: end, account_id: account.id, limit: 10 });
+    expect(compact).toEqual(await mcp.call('actual_transactions_summary_by_payee', { startDate: start, endDate: end, accountId: account.id, limit: 10 }));
+  });
+
+  test('summarize_transactions - grouped matches actual_transactions_aggregate for a string and an array group_by', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    await makeTransaction({ account, amount: -1700 });
+    const { start, end } = range();
+    for (const groupBy of ['month', ['month', 'account']]) {
+      const compact = await mcp.call('summarize_transactions', { report: 'grouped', start_date: start, end_date: end, group_by: groupBy, account_ids: [account.id] });
+      expect(compact).toEqual(await mcp.call('actual_transactions_aggregate', { startDate: start, endDate: end, groupBy, accountIds: [account.id] }));
+    }
+  });
+
+  test('summarize_transactions - account_flow matches actual_account_flow_summary', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    await makeTransaction({ account, amount: -1800 });
+    const { start, end } = range();
+    const compact = await mcp.call('summarize_transactions', { report: 'account_flow', start_date: start, end_date: end, account_ids: [account.id] });
+    expect(compact).toEqual(await mcp.call('actual_account_flow_summary', { startDate: start, endDate: end, accountIds: [account.id] }));
+  });
+
+  test('summarize_transactions - recurring matches actual_recurring_expenses_summary', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const compact = await mcp.call('summarize_transactions', { report: 'recurring', months: 3, account_ids: [account.id], min_occurrences: 2 });
+    expect(compact).toEqual(await mcp.call('actual_recurring_expenses_summary', { months: 3, accountIds: [account.id], minOccurrences: 2 }));
+  });
+
+  test('summarize_transactions - balance matches actual_accounts_get_balance (account_id is sent as id)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    await makeTransaction({ account, amount: -2500 });
+    const compact = await mcp.call('summarize_transactions', { report: 'balance', account_id: account.id });
+    expect(compact).toEqual(await mcp.call('actual_accounts_get_balance', { id: account.id }));
+    expect(Number.isInteger(compact.balance)).toBe(true);
+  });
+
+  test('summarize_transactions - refuses account_ids on by_payee, and grouped without group_by, naming the field', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    await expect(mcp.call('summarize_transactions', { report: 'by_payee', account_ids: [account.id] })).rejects.toThrow(/account_ids/);
+    await expect(mcp.call('summarize_transactions', { report: 'grouped', start_date: '2026-01-01', end_date: '2026-01-31' })).rejects.toThrow(/group_by/);
+  });
+});

@@ -191,9 +191,11 @@ These two manage the session pool itself, not budget data.
 
 ## Compact surface
 
-Two compact tools ship so far (#672). They are listed only under `MCP_TOOL_SURFACE=compact` or `all`, carry no `actual_` prefix and no `outputSchema`, and are read-only, so they stay published under `MCP_READ_ONLY=true`. Each call reaches one legacy tool and returns its result unchanged. The mapping and the other 13 planned tools are in the [design record](../explanation/compact-tool-surface.md).
+Four compact tools ship so far (#672, #673). They are listed only under `MCP_TOOL_SURFACE=compact` or `all`, carry no `actual_` prefix and no `outputSchema`, and are read-only, so they stay published under `MCP_READ_ONLY=true`. Each call reaches one legacy tool and returns its result unchanged. The mapping and the other 11 planned tools are in the [design record](../explanation/compact-tool-surface.md).
 
 | Tool | Description |
 |------|-------------|
 | `get_context` | Budget structure or server details, chosen by `topic`: `structure` (default; accounts, categories with groups, payees; options `include_accounts`, `include_categories`, `include_payees`, `include_closed`, `payee_limit`), `server`, `version` or `preferences` |
 | `list_entities` | List, search or look up one entity `type` (account, account_group, category, category_group, payee, tag, rule, schedule, note, budget_file). Account, category and payee take `query` (with `match_type`, `limit`) or `name`; payee takes `sort: "frequency"`; rule takes `payee_id`; schedule takes `name` or `schedule_id` (with `start`, `end`, `count`); note requires `id`; budget_file takes `scope` |
+| `search_transactions` | Find transaction records, chosen by `by`: `account`, `filter` (id-based, with `notes`, `cleared`, `reconciled`), `amount` (range or `absolute_amount`; needs an account or a date), `category`, `month`, `payee` (by name) or `uncategorized` (with `include_transactions`, `limit`, `offset`). Read-only; `null` is not accepted, omit a field instead |
+| `summarize_transactions` | Totals, chosen by `report`: `by_category`, `by_payee`, `grouped` (requires `start_date`, `end_date`, `group_by`, one grouping or an array of up to 5), `account_flow` (requires `start_date`, `end_date`, `account_ids`), `recurring` (`start_date` or `months`) or `balance` (requires `account_id`, optional `cutoff`). Read-only |

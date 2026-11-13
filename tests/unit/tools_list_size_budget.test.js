@@ -40,8 +40,10 @@ const PER_TOOL_CEILING = 3900;
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
 // `all` surface lists both, so its budget is the sum of the two ceilings, never a third number.
 // #672 (get_context, list_entities) measured 6210 bytes, so the ceiling is that plus about 10%.
+// #673 (search_transactions, summarize_transactions) raised the four-tool total to 13558 bytes (each
+// new tool stays under the per-tool ceiling), so the ceiling is now that plus about 10%.
 // Each later compact ticket raises it by its own measured size, stated here.
-const COMPACT_TOTAL_CEILING = 6800;
+const COMPACT_TOTAL_CEILING = 14900;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

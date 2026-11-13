@@ -1,6 +1,6 @@
 # Compact tool surface
 
-**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. The other 13 tools are still to come. The stale `listTool` in the adapter is still not corrected.
+**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. #673 ships `search_transactions` and `summarize_transactions`. The other 11 tools are still to come. The stale `listTool` in the adapter is still not corrected.
 
 The compact surface is a second public tool list of 15 tools with no `actual_` prefix, named `verb_noun` in snake_case, each fronting a group of the 85 existing tools through one dispatcher. The implementation tickets (#671 to #678, #679, #680, #681) cite this page for the mapping, the schemas and the naming rules. The delivery plan is in `docs/plans/compact-tool-surface.md`.
 
@@ -251,7 +251,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `account` | `transactions_get` | none | account_id, start_date, end_date |  |
-| `filter` | `transactions_filter` | none | account_id, start_date, end_date, min_amount, max_amount, category_id, payee_id, notes, cleared, reconciled | id-based filter; nullable fields keep their legacy null meaning |
+| `filter` | `transactions_filter` | none | account_id, start_date, end_date, min_amount, max_amount, category_id, payee_id, notes, cleared, reconciled | id-based filter. The legacy tool also accepts `null` for each field; the compact tool does not (omit a field for "no limit"), which the legacy tool treats the same way and which keeps the published schema within the size budget |
 | `amount` | `transactions_search_by_amount` | none | min_amount, max_amount, absolute_amount, start_date, end_date, account_id, category_name, limit |  |
 | `category` | `transactions_search_by_category` | none | category_name, start_date, end_date, account_id, min_amount, max_amount, limit |  |
 | `month` | `transactions_search_by_month` | none | month, account_id, category_name, payee_name, min_amount, max_amount, limit |  |
@@ -265,8 +265,8 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | `by_category` | `transactions_summary_by_category` | none | start_date, end_date, account_id, include_income |  |
 | `by_payee` | `transactions_summary_by_payee` | none | start_date, end_date, account_id, limit |  |
 | `grouped` | `transactions_aggregate` | start_date, end_date, group_by | account_ids, category_ids, category_group_ids, payee_ids, include_income, exclude_transfers | `group_by` is one of month, category, category_group, payee, account, or an array of 1 to 5 of them |
-| `account_flow` | `account_flow_summary` | start_date, end_date, account_ids | none |  |
-| `recurring` | `recurring_expenses_summary` | none | start_date, end_date, months, account_ids, min_occurrences, include_inactive |  |
+| `account_flow` | `account_flow_summary` | start_date, end_date, account_ids | none | `end_date` is not before `start_date`, as for `grouped` |
+| `recurring` | `recurring_expenses_summary` | none | start_date, end_date, months, account_ids, min_occurrences, include_inactive | `months` and `start_date` are mutually exclusive |
 | `balance` | `accounts_get_balance` | account_id | cutoff | `account_id` maps to the legacy field `id` |
 
 **`list_budget_months`** (no selector)
