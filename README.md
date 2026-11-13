@@ -12,18 +12,20 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-7.0-blue)](https://www.typescriptlang.org/)
 [![actual-mcp-server MCP server: quality and maintenance score on Glama](https://glama.ai/mcp/servers/agigante80/actual-mcp-server/badges/score.svg)](https://glama.ai/mcp/servers/agigante80/actual-mcp-server)
 
-A [Model Context Protocol](https://modelcontextprotocol.io/) server that lets an AI assistant (Claude, LibreChat, LobeChat, Cursor and others) read and manage your self-hosted [Actual Budget](https://actualbudget.org/).
+Talk to your [Actual Budget](https://actualbudget.org/) in plain language: ask where the money went, and let your AI assistant make the changes you approve.
 
-**What you can ask it:** "How much did I spend on groceries last month, by payee?", "Add a $47.50 grocery transaction at Whole Foods to my checking account.", "Move $200 from Dining Out to Emergency Fund for this month."
+**What it lets you do:**
 
-**15 tools over 85 operations** covering accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
+- Find where your money went, by payee, category or month.
+- Compare what you spent with what you planned, and see if you are on track.
+- Add, fix and categorise transactions, after you approve them.
+- Tidy up accounts, payees, categories and rules, and plan the month ahead.
 
-## Pick your path
+**Ask:** "How much did I spend on groceries last month, by payee?", "Am I on track this month?", "Which payees cost me the most this year?"
 
-- **Claude Desktop, Claude Code, Cursor, VS Code or another local client:** run it over stdio with `npx`, no server to keep running. Follow your client's page in [docs/guides/clients/](docs/guides/clients/README.md), for example [Claude Desktop](docs/guides/clients/claude-desktop.md) or [Claude Code](docs/guides/clients/claude-code.md).
-- **A chat UI such as LibreChat or LobeChat, or several users:** run it over HTTP in Docker with the quick start below, then follow [LibreChat](docs/guides/clients/librechat.md) or [LobeChat](docs/guides/clients/lobechat.md).
-- **A client that installs from the official [MCP Registry](https://registry.modelcontextprotocol.io/):** it is listed as `io.github.agigante80/actual-mcp-server`, with the npm package (stdio) and the Docker image (HTTP); the client asks for the same settings as the pages above.
-- **Unraid:** install it from [Community Applications](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg); see [Unraid](docs/guides/deployment.md#unraid-and-puidpgid-227).
+**Ask it to change things (it confirms first):** "Which uncategorised transactions look like my usual groceries? Categorise them after I confirm.", "Add a $47.50 grocery transaction at Whole Foods to my checking account.", "Move $200 from Dining Out to Emergency Fund for this month."
+
+**Works with:** [Claude Desktop](docs/guides/clients/claude-desktop.md), [Claude Code](docs/guides/clients/claude-code.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md) and [Codex CLI](docs/guides/clients/codex.md) on your own machine, and chat UIs such as [LibreChat](docs/guides/clients/librechat.md) and [LobeChat](docs/guides/clients/lobechat.md) against a server you run in Docker (also on [Unraid](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg) and in the official [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.agigante80/actual-mcp-server`). It needs a client with MCP support: a hosted assistant that cannot reach your machine or private network cannot use it, and neither can a client that supports neither stdio nor HTTP MCP. Every client page: [docs/guides/clients/](docs/guides/clients/README.md).
 
 ## Quick start (Docker, HTTP)
 
@@ -84,6 +86,10 @@ On a fresh `.env`, fill in the three Actual settings, then run the last line aga
 ```bash
 npx actual-mcp-server --http
 ```
+
+## Under the hood
+
+**15 tools over 85 operations** covering accounts, transactions, budgets, rules, schedules and more, over stdio or HTTP, with Bearer token or OIDC auth, per-user budget access, up to 15 concurrent sessions, and automatic retry of transient Actual errors (3 attempts, exponential backoff; deletes and merges are never retried).
 
 ## Privacy
 
