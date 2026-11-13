@@ -164,7 +164,7 @@ Amounts are integer cents and dates are `YYYY-MM-DD` strings. Each tool takes an
 
 ### Querying
 
-- **`run_query`**: Run a read-only SQL query against the budget data when no other read tool fits. Example prompt: "Run a query that lists my ten largest payees by total spend."
+- **`run_query`**: Run a read-only SQL query against the budget data when no other read tool fits. Example prompt: "Run a query for my uncleared transactions over $500 since January."
 
 ### Changing data
 

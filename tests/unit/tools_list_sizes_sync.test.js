@@ -48,6 +48,7 @@ check('POSITIVE: identical sizes give no difference and serialize with sorted ke
 });
 
 if (!existsSync(join(ROOT, 'dist/src/actualToolsManager.js'))) {
+  if (process.env.CI) throw new Error('dist required under CI: run npm run build before this test');
   console.log('  skip: dist/ is absent, run npm run build to measure the committed sizes');
 } else {
   check('POSITIVE: the committed JSON matches a fresh measurement of every configuration', () => {
