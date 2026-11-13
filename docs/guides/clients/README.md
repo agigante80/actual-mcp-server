@@ -46,6 +46,10 @@ The client speaks JSON-RPC 2.0 to the server, which turns each tool call into Ac
 | `--stdio` | Spawned by the client on demand | None (OS process) | Local single-user use: Claude Desktop, Claude Code, Cursor, VS Code, Gemini CLI, Codex |
 | `--http` | Always-on service (Docker or systemd) | Bearer token or OIDC | Shared or multi-user deployments: LibreChat, LobeChat, remote access |
 
+## Prompts
+
+The server also offers MCP prompts (ready-made starting messages) when the tools they use are available. How a client shows them varies: Claude Desktop lists them as slash-style entries, while many chat UIs do not surface prompts at all.
+
 ## Your Actual Budget credentials
 
 Every client needs the same three values:

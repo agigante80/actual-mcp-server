@@ -14,6 +14,7 @@ The compact surface is a second public tool list of 15 tools with no `actual_` p
 - [6. Settled design points](#6-settled-design-points)
 - [7. Full mapping of the 85 tools](#7-full-mapping-of-the-85-tools)
 - [8. Flat schemas of the 15 tools](#8-flat-schemas-of-the-15-tools)
+- [Prompt visibility per surface](#prompt-visibility-per-surface-660)
 - [9. Rollout](#9-rollout)
 
 ## 1. Decision record
@@ -369,6 +370,20 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | `switch` | `budgets_switch` | budget_name | none | renamed to `budgetName`; this session only, also saved as the caller's preferred budget; an unconfigured or not permitted name is refused alike |
 | `import` | `budgets_import` | none | path, base64, type, filename | exactly one of path and base64; `type` has no default here (the legacy default `actual` applies); DESTRUCTIVE: replaces the local copy of the archive's budget, uploads a NEW server file and loads it, changing the session's active budget |
 | `export` | `budgets_export` | none | filename | writes a .zip into the server export directory and overwrites a file of the same name; the contents are not returned |
+
+## Prompt visibility per surface (#660)
+
+MCP prompts (`prompts/list`, `prompts/get`) are offered only when every tool a prompt names is in the published tool list, so the list follows the same policy as `tools/list`. The offered list is computed once at startup and is the same for every session and principal; the budget ACL does not affect it.
+
+| Setting | A prompt naming compact tools | A prompt naming legacy `actual_*` tools |
+|---|---|---|
+| `MCP_TOOL_SURFACE=legacy` | hidden | offered if every named tool survives the legacy filters |
+| `MCP_TOOL_SURFACE=compact` | offered | hidden |
+| `MCP_TOOL_SURFACE=all` | offered | offered as for legacy |
+| `MCP_READ_ONLY=true` | hidden if it names a `manage_*` tool (hidden whole) | hidden if it names a writer |
+| `MCP_TOOLSETS`, `MCP_TOOLS` | unaffected (they select legacy names only) | hidden if a named tool is filtered out |
+
+Until #680 makes `compact` the default, a prompt that names compact tools is hidden on the default surface.
 
 ## 9. Rollout
 

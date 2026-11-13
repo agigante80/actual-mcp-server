@@ -9,6 +9,8 @@ import {
   CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import logger, { resolveRequestId } from '../logger.js';
+import { registerPromptHandlers } from '../lib/promptHandlers.js';
+import type { PromptDefinition } from '../prompts/registry.js';
 import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
 import { SERVER_NAME } from '../lib/mcp-version.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
@@ -114,6 +116,7 @@ export async function startHttpServer(
   advertisedUrl?: string,
   onListening?: (facts: HttpListenerFacts) => void, // #623: index.ts logs sys_startup from here
   outputSchemas: Record<string, unknown> = {},       // #642: published outputSchema per covered tool
+  offeredPrompts: readonly PromptDefinition[] = [],  // #660: resolved once in index.ts; LAST so positional callers still compile
 ) {
   // #572: resolve MCP_STATIC_TOKENS (token variables, budget names) before anything
   // binds, so a bad entry refuses startup like an unreadable TLS key. The registry is
@@ -537,7 +540,7 @@ export async function startHttpServer(
     // ensure capabilities.tools is an object mapping tool name -> {}
     const capabilitiesObj = capabilities && Object.keys(capabilities).length
       ? capabilities
-      : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}) };
+      : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}), prompts: {} };
 
     // Only the two ServerOptions the MCP spec defines (#560). tools/list is served by the
     // request handler, not by these options; the SDK ignored the extra keys this once passed.
@@ -563,6 +566,8 @@ export async function startHttpServer(
       logger.debug(`[TOOLS LIST] Returning ${tools.length} tools`);
       return { tools };
     });
+
+    registerPromptHandlers(server, offeredPrompts);
 
     // Call tool handler -> proxy to mcp.executeTool or to actualToolsManager
     // Note: sessionId is available via requestContext.getStore() for tools that need it

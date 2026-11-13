@@ -116,7 +116,16 @@ export type McpClient = {
   post(payload: unknown): Promise<APIResponse>;
   /** #641: the published tools/list entries, on either transport. */
   listTools(): Promise<any[]>;
+  /** #660: the `capabilities` object the server returned from `initialize`, on either transport. */
+  serverCapabilities(): Promise<Record<string, unknown> | undefined>;
+  /** #660: the prompts/list entries. Throws on a JSON-RPC error. */
+  listPrompts(): Promise<any[]>;
+  /** #660: prompts/get. Returns the result, or `{ error: { code, message } }` on a JSON-RPC error, on both transports. */
+  getPrompt(name: string, args?: Record<string, unknown>): Promise<PromptGetOutcome>;
 };
+
+/** The outcome of prompts/get: the parsed result, or the JSON-RPC error (same shape on both transports). */
+export type PromptGetOutcome = { result?: any; error?: { code: number; message: string } };
 
 export type AccountRef = { id: string; name: string };
 export type CategoryGroupRef = { id: string; name: string };
@@ -189,6 +198,7 @@ export type Fixtures = {
  * in its own process, so two workers never share this.
  */
 let cachedSessionId: string | undefined;
+let cachedCapabilities: Record<string, unknown> | undefined;
 
 async function initSession(request: APIRequestContext): Promise<string> {
   if (cachedSessionId) return cachedSessionId;
@@ -218,6 +228,11 @@ async function initSession(request: APIRequestContext): Promise<string> {
   const isHealthy = await waitForMCPHealth(request, `${DEFAULT_MCP_SERVER_URL}/health`);
   expect(isHealthy, 'the MCP server must report healthy before tests run').toBeTruthy();
 
+  try {
+    cachedCapabilities = (await initRes.json())?.result?.capabilities;
+  } catch {
+    cachedCapabilities = undefined;
+  }
   cachedSessionId = sessionId;
   return sessionId;
 }
@@ -252,6 +267,33 @@ function makeClient(request: APIRequestContext, sessionId: string): McpClient {
         throw new Error(`tools/list failed: HTTP ${res.status()} ${text.slice(0, 300)}`);
       }
       return body.result.tools;
+    },
+    serverCapabilities: async () => cachedCapabilities,
+    listPrompts: async () => {
+      const res = await request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
+        data: JSON.stringify({ jsonrpc: '2.0', id: 6601, method: 'prompts/list', params: {} }),
+        headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
+      });
+      const text = await res.text();
+      let body: any;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      if (!res.ok() || !Array.isArray(body?.result?.prompts)) {
+        throw new Error(`prompts/list failed: HTTP ${res.status()} ${text.slice(0, 300)}`);
+      }
+      return body.result.prompts;
+    },
+    getPrompt: async (name, args) => {
+      const res = await request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
+        data: JSON.stringify({ jsonrpc: '2.0', id: 6602, method: 'prompts/get', params: { name, ...(args ? { arguments: args } : {}) } }),
+        headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
+      });
+      const text = await res.text();
+      let body: any;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      if (!body || (body.result === undefined && body.error === undefined)) {
+        throw new Error(`prompts/get gave no JSON-RPC outcome: HTTP ${res.status()} ${text.slice(0, 300)}`);
+      }
+      return body.error ? { error: { code: body.error.code, message: String(body.error.message) } } : { result: body.result };
     },
   };
 }
@@ -321,6 +363,9 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         raw: session.raw,
         call: session.call,
         listTools: session.listTools,
+        serverCapabilities: session.serverCapabilities,
+        listPrompts: session.listPrompts,
+        getPrompt: session.getPrompt,
         // stdio has no HTTP envelope to inspect. The two callers of `post` assert on the raw
         // JSON-RPC error shape, which the SDK surfaces as a thrown exception instead, so they
         // are scoped to HTTP rather than asserted differently here. Throwing names the reason.

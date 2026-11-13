@@ -3645,3 +3645,29 @@ test.describe('Docker E2E - compact manage_budget_months (#678)', () => {
     expect(await refusal(() => mcp.call('manage_budget_months', { action: 'set_note', month: '2026-13', note: 'x' }))).toMatch(/month must be in YYYY-MM format/);
   });
 });
+
+test.describe('Docker E2E - MCP prompts (#660)', () => {
+  // The stack runs MCP_TOOL_SURFACE=all and #660 ships an empty PROMPT_DEFINITIONS, so this proves
+  // the capability and the empty-registry wiring on both transports. Offer and hide decisions are
+  // proven by tests/unit/prompt_registry.test.js. The first prompt ticket adds a positive
+  // prompts/get content assertion.
+  test('initialize advertises prompts and prompts/list entries are well formed', async ({ mcp }) => {
+    const caps = await mcp.serverCapabilities();
+    expect(caps?.prompts, 'capabilities.prompts must be advertised').toBeTruthy();
+    expect(typeof caps?.prompts).toBe('object');
+    const prompts = await mcp.listPrompts();
+    expect(Array.isArray(prompts)).toBe(true);
+    for (const p of prompts) {
+      expect(p.name).toMatch(/^[a-z][a-z0-9_]*$/);
+      expect(typeof p.description).toBe('string');
+      expect(p.description.length).toBeGreaterThan(0);
+    }
+  });
+
+  test('prompts/get - ERROR: an unknown prompt is -32602 "Unknown prompt"', async ({ mcp }) => {
+    const out = await mcp.getPrompt('no_such_prompt');
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('Unknown prompt');
+  });
+});

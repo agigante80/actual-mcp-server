@@ -26,7 +26,7 @@ import type { z } from 'zod';
 const MAX_KEY_LEN = 64;
 
 /** Strip control characters and cap length so a hostile key cannot flood or inject. */
-function sanitizeKey(key: unknown): string {
+export function sanitizeKey(key: unknown): string {
   let k = typeof key === 'string' ? key : String(key);
   // eslint-disable-next-line no-control-regex
   k = k.replace(/[\u0000-\u001f\u007f]/g, '');

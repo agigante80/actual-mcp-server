@@ -97,7 +97,7 @@ export class ActualMCPConnection extends EventEmitter {
         list: tools,
       },
       resources: false,
-      prompts: false,
+      prompts: { listChanged: false },
       models: false,
       logging: false,
     };

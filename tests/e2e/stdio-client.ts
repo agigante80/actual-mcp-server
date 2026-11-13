@@ -24,6 +24,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { pace, extractResult } from '../shared/e2e-helpers.js';
@@ -67,6 +68,12 @@ export type StdioSession = {
   listToolNames(): Promise<string[]>;
   /** #641: the full tools/list entries (title, annotations, schemas), parsed by the SDK. */
   listTools(): Promise<any[]>;
+  /** #660: the server capabilities from `initialize`, parsed by the SDK. */
+  serverCapabilities(): Promise<Record<string, unknown> | undefined>;
+  /** #660: prompts/list entries. */
+  listPrompts(): Promise<any[]>;
+  /** #660: prompts/get. A JSON-RPC error (an SDK McpError) is returned as `{ error }`, like the HTTP client. */
+  getPrompt(name: string, args?: Record<string, unknown>): Promise<{ result?: any; error?: { code: number; message: string } }>;
   close(): Promise<void>;
 };
 
@@ -154,6 +161,17 @@ export async function openStdioSession(): Promise<StdioSession> {
     serverInfo: () => client.getServerVersion(),
     listToolNames: async () => (await client.listTools()).tools.map((t) => t.name),
     listTools: async () => (await client.listTools()).tools,
+    serverCapabilities: async () => client.getServerCapabilities() as Record<string, unknown> | undefined,
+    listPrompts: async () => (await client.listPrompts()).prompts,
+    getPrompt: async (name, args) => {
+      try {
+        // The SDK types prompt arguments as strings; a test that passes another type is the test's bug.
+        return { result: await client.getPrompt({ name, ...(args ? { arguments: args as Record<string, string> } : {}) }) };
+      } catch (err) {
+        if (err instanceof McpError) return { error: { code: err.code, message: err.message } };
+        throw err;
+      }
+    },
     close,
   };
 }

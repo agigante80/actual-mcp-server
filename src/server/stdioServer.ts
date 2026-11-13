@@ -10,6 +10,8 @@ import actualToolsManager from '../actualToolsManager.js';
 import { requestContext } from '../lib/requestContext.js';
 import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
+import { registerPromptHandlers } from '../lib/promptHandlers.js';
+import type { PromptDefinition } from '../prompts/registry.js';
 import { executeAndFrame } from '../lib/tool-output.js';
 import { classifyInitFailure, isInitFailure } from '../lib/init-failure.js';
 
@@ -99,6 +101,8 @@ export async function startStdioServer(
   toolSchemas: Record<string, unknown>,
   version: string,
   outputSchemas: Record<string, unknown> = {},
+  // #660: resolved once in index.ts; LAST and defaulted so existing positional callers still compile.
+  offeredPrompts: readonly PromptDefinition[] = [],
 ): Promise<void> {
   const toolsList = Array.isArray(implementedTools) ? implementedTools : [];
 
@@ -145,6 +149,8 @@ export async function startStdioServer(
     logger.debug(`[STDIO] tools/list → ${tools.length} tools`);
     return { tools };
   });
+
+  registerPromptHandlers(server, offeredPrompts);
 
   // Call tool handler — delegates to ActualMCPConnection.executeTool()
   server.setRequestHandler(CallToolRequestSchema, createStdioCallToolHandler(mcp, stdioSessionId));
