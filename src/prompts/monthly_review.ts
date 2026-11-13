@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
+import { currentMonth, daysInMonth } from './dates.js';
 
 /**
  * monthly_review (#661): budget versus actual for one month. A static numbered script that names
@@ -7,16 +8,9 @@ import type { PromptDefinition } from './registry.js';
  * never in the template, so the rendered text always carries a concrete month.
  */
 
-/** The server's local current month, YYYY-MM (same rule as legacy search_transactions by month). */
-function currentMonth(): string {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-}
-
 /** The last day of a YYYY-MM month, zero padded: 2024-02 gives 29, 2026-12 gives 31. */
 function lastDayOfMonth(month: string): string {
-  const [y, m] = month.split('-').map(Number) as [number, number];
-  return String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, '0');
+  return String(daysInMonth(month)).padStart(2, '0');
 }
 
 const TEMPLATE = `Review my budget for {month}, from {first_day} to {last_day}. Work through these steps and stay read-only: do not change anything.

@@ -3718,6 +3718,32 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.message).not.toContain('October');
   });
 
+  test('prompts/get spending_check - an explicit date fills the day and days in month (#662)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('spending_check', { date: '2026-10-15' });
+    expect(out.error).toBeUndefined();
+    expect(out.result.messages).toHaveLength(1);
+    expect(out.result.messages[0].role).toBe('user');
+    expect(out.result.messages[0].content.type).toBe('text');
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('list_budget_months');
+    expect(text).toContain('day 15 of 31');
+  });
+
+  test('prompts/get spending_check - the default date is concrete, never "this month" (#662)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('spending_check', {});
+    expect(out.error).toBeUndefined();
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toMatch(/as of \d{4}-\d{2}-\d{2}/);
+    expect(text).not.toContain('this month');
+  });
+
+  test('prompts/get spending_check - ERROR: a non-calendar date is -32602 (#662)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('spending_check', { date: '2026-02-31' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('date');
+  });
+
   test('prompts/get - ERROR: an unknown prompt is -32602 "Unknown prompt"', async ({ mcp }) => {
     const out = await mcp.getPrompt('no_such_prompt');
     expect(out.result).toBeUndefined();
