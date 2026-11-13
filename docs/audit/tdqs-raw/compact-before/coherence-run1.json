@@ -1,0 +1,22 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 4,
+      "justification": "Each tool has a distinct output shape and the descriptions actively cross-reference siblings, for example search_transactions versus summarize_transactions versus list_entities versus run_query. There is mild overlap among the six read paths (get_context, list_entities, search_transactions, summarize_transactions, list_budget_months, run_query) that can all touch the same data, but the descriptions draw enforceable boundaries such as records versus totals versus ids versus SQL escape hatch."
+    },
+    "naming_consistency": {
+      "score": 5,
+      "justification": "Every name is lower snake_case with a verb then domain noun: get_context, list_entities, search_transactions, summarize_transactions, run_query, and a uniform manage_<entity> family. The verb variety (get, list, search, summarize, run, manage) is deliberate and maps cleanly to read versus write intent."
+    },
+    "tool_count_appropriateness": {
+      "score": 5,
+      "justification": "Fifteen tools sits at the top of the well-scoped band and every one earns its place: six read tools with distinct outputs and one manage_ tool per mutating entity family. There is no redundant tool and no orphaned surface."
+    },
+    "completeness": {
+      "score": 5,
+      "justification": "The surface covers the full lifecycle for every budget entity: full CRUD plus merge, import, transfer, bank sync, and annotation for accounts, categories, payees, tags, rules, schedules, transactions, and budget months, plus file switch/import/export. Reads span structure, entities, records, summaries, months, and a SQL escape hatch, leaving no obvious dead end."
+    }
+  },
+  "shadowing_risks": [],
+  "summary": "A high-coherence, carefully documented tool set with consistent verb_noun naming, a well-sized 15-tool surface, and near-complete CRUD coverage of the Actual Budget domain. Read paths are deliberately partitioned by output shape (structure, ids, records, totals, months, arbitrary SQL) and the descriptions enforce those boundaries, so disambiguation is strong despite the shared data domain. No shadow candidate pairs were supplied, so no shadowing risks are reported."
+}

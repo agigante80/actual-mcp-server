@@ -1,0 +1,312 @@
+[
+  {
+    "tool": "get_context",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: read the budget structure or server details in one call, and it explicitly contrasts with list_entities returning the whole structure at once."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "States when to start here, names the alternative `list_entities` for one kind of entity or name-to-id resolution, and describes each topic's scope."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Beyond the read-only annotations it discloses per-topic defaults, the at-least-one-include constraint, omission of excluded sections, and refusal of fields a topic does not take."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 83 percent so the baseline is 3; the description adds real meaning with the default topic, payee_limit range/default, and the include-flag invariant."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with purpose and guidance, then dense per-topic detail; long but nearly every clause carries a distinct constraint."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "With no output schema, it still documents the returned object for each topic and the read-only guarantee, leaving little ambiguity."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A rich, front-loaded description that clearly separates this structure-wide read from sibling tools and documents per-topic behavior and returns; only slightly verbose."
+  },
+  {
+    "tool": "list_entities",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource: list, search or look up one entity type, with an enumerated type set and explicit contrast to get_context."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Names the alternative for whole-structure reads and gives type-specific branches for query, name, schedule_id, rule and note usage."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds mutual-exclusivity rules, per-type field applicability, refusal-by-name behavior, and mode-specific return shapes, well beyond the read-only annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 92 percent (baseline 3); the description adds which fields pair with which type and the query/name and schedule_id/name exclusivity not enforced by schema alone."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense and long, but the opening sentence orients the reader and each subsequent clause covers a distinct type or constraint."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents the varied return shapes for list, query, name, schedule dates and note results despite having no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Excellent routing and per-type semantics with explicit sibling differentiation; length is the main cost, not clarity."
+  },
+  {
+    "tool": "search_transactions",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Clear verb and resource (find transaction records, not totals) with an explicit distinction from summarize_transactions, list_entities and run_query."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly routes totals to summarize_transactions, ids to list_entities and custom queries to run_query, then enumerates the field set per `by` mode."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses mode-specific return envelopes, the unknown-name error field, off-budget exclusion for filter, and per-mode defaults, well beyond the read-only annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 94 percent (baseline 3); the description adds which fields each `by` accepts and refusal behavior, complementing the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Information-dense and long, but front-loaded with a clear chooser sentence and grouped per-mode field lists."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Spells out the differing return shapes for account, filter, amount, category, month, payee and uncategorized modes with no output schema present."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong mode-based routing and return documentation; verbosity is justified by the seven-way `by` branch."
+  },
+  {
+    "tool": "summarize_transactions",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource (totals and breakdowns, not records) with a clear report-oriented framing and sibling contrasts."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly redirects to search_transactions for records, list_entities for ids, list_budget_months for budgeted-vs-spent and run_query for custom SQL."
+      },
+      "behavioral_transparency": {
+        "score": 4,
+        "justification": "Adds per-report required/optional fields and return envelopes, though several defaults and semantics already live in the schema descriptions."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 94 percent (baseline 3); the description usefully maps fields to each report and notes group_by supports an array of up to five."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Long but organized as a chooser sentence followed by a compact per-report field list; each clause carries information."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents the return structure for each of the six reports, which is essential given no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A well-routed, report-oriented description with clear alternatives and return shapes; slightly repetitive of schema defaults."
+  },
+  {
+    "tool": "list_budget_months",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Precisely states the dual behavior: list months when `month` is omitted, read one month's budget when provided, and contrasts with summarize_transactions and list_entities."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Names the use case (budgeted versus spent per category), points changes to manage_budget_months, and routes actual spending, ids and individual transactions to their tools."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Documents both return shapes in detail, including category fields and integer-cents amounts, and notes that any other property is refused by name."
+      },
+      "parameter_semantics": {
+        "score": 3,
+        "justification": "Coverage is 100 percent, so the baseline is 3; the description restates `month` as YYYY-MM and its omission behavior, adding little beyond the schema."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Compact, front-loaded and every sentence contributes a distinct fact about behavior or output."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Explains both the list and single-month return objects fully, compensating for the absent output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A tight, well-scoped description that fully covers the tool's two modes and outputs, with minimal wasted text."
+  },
+  {
+    "tool": "run_query",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource (read-only SQL query) and explicitly positioned as the escape hatch when the four other read tools do not fit."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly says to prefer search_transactions, summarize_transactions, list_entities and list_budget_months when they fit, and only use this otherwise."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses supported and unsupported syntax, that unsupported constructs return an error rather than running unfiltered, refusal of writes and comments, split-inline behavior, and an empty-result hint."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "The single `query` parameter's semantics are extensively elaborated with grammar, examples, operators, join dot notation, table schemas and value formats."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Long, but for a SQL escape hatch the grammar and caveats are load bearing; it remains front-loaded with purpose and preference guidance."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers return shape, error behavior, table inventory and example queries, which is thorough for a bare one-param tool with no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "An unusually thorough description that fully specifies the query grammar, limits and refusal behavior; length is warranted by the domain."
+  },
+  {
+    "tool": "manage_transactions",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource spanning create, change, delete, import, merge and transfer, with a clear read-versus-write separation."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Says to use search_transactions to read and list_entities for ids, and enumerates exactly which fields each action takes."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds substantial behavior beyond the destructive annotation: update_batch is non-atomic, delete and merge are permanent, null clears fields, and import applies bank-import matching rules."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 95 percent (baseline 3); the description adds per-action field requirements, the null-clears convention, and that subtransaction cents sum to amount."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Dense and long, but organized as a chooser sentence then one clause per action with return shapes appended."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Lists the return shape for every action, including failure cases, despite no output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A comprehensive, action-partitioned description that adds real safety and semantics beyond the annotations; verbosity is the only drawback."
+  },
+  {
+    "tool": "manage_accounts",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Clear verb and resource covering create, update, close, reopen, delete, bank-sync and note actions on accounts and groups."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Points reads and id lookup to list_entities and month notes to manage_budget_months, and gives per-action prerequisites such as transfer_account_id."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses that an account with no transactions is removed rather than closed, that delete is permanent and takes transactions, and that bank_sync reaches external providers."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 92 percent (baseline 3); the description adds entity applicability and cross-field requirements like transfer_account_id for non-zero balances."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Long but logically ordered by action, with the destructive details surfaced before the return-shape list."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Documents the distinct return object for each of the seven actions, which is important without an output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Strong action-by-action disclosure with notable safety detail on close and delete; dense but well structured."
+  },
+  {
+    "tool": "manage_categories",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource for categories and category groups, with a clear write framing and read delegation to list_entities."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Directs reads to list_entities, budget amounts and month notes to manage_budget_months, and routes account and payee notes to their respective tools."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds critical behavior beyond the destructive annotation: deleting a group also deletes its categories, transactions are not moved on delete, and hidden true is preferred over deletion."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 88 percent (baseline 3); the description adds entity applicability and that create category needs group_id while update group_id is category-only."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Comparatively compact, with purpose, routing, per-action rules and return shapes each stated once and in order."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Covers all action return shapes and the destructive cascade, sufficient detail for a no-output-schema write tool."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A concise yet behavior-rich description, especially strong on destructive cascade warnings and note routing."
+  },
+  {
+    "tool": "manage_payees",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Specific verb and resource covering create, update, delete, merge and note actions on payees, clearly marked as writes."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Sends reads and id lookup to list_entities and routes account and category notes to their respective manage tools."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Adds meaningful behavior: delete strips the payee from transactions, transfer payees are refused for delete and merge, merge is permanent, and the default category is stored as a possibly broad rule."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 89 percent (baseline 3); the description adds per-action field requirements and constraints such as merge_ids never including target_id."
+      },
+      "conciseness_structure": {
+        "score": 5,
+        "justification": "Compact and front-loaded, with each action and its return shape stated once without filler."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Enumerates return shapes for all five actions and discloses destructive side effects, adequate without an output schema."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A concise, behaviorally complete description with clear destructive warnings and cross-tool routing for notes."
+  }
+]

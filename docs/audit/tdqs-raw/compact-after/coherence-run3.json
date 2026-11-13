@@ -1,0 +1,22 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 4,
+      "justification": "The read tools overlap in surface (search_transactions, summarize_transactions, run_query, list_budget_months) but their descriptions repeatedly draw explicit boundaries, for example 'for totals use summarize_transactions; for a custom query use run_query'. list_entities also competes with get_context and several manage_* set_note actions, yet each says which to prefer. Boundaries are mostly enforceable, with only minor residual ambiguity between run_query and the specialized readers."
+    },
+    "naming_consistency": {
+      "score": 5,
+      "justification": "Every name is lower snake_case verb_noun, built from a small set of consistent prefixes: get_, list_, search_, summarize_, run_ and manage_. No camelCase or mixed verb styles appear, and the manage_<domain> family maps predictably onto the entity types."
+    },
+    "tool_count_appropriateness": {
+      "score": 5,
+      "justification": "Fifteen tools cover a large domain (transactions, accounts, categories, payees, tags, rules, schedules, budgets, budget files, SQL) by consolidating each entity family into a single action-dispatching manage_ tool. That is well-scoped and every tool earns its place."
+    },
+    "completeness": {
+      "score": 4,
+      "justification": "The surface covers the full CRUD and lifecycle for the main entities, plus reads, notes, imports/exports, schedule previews and a read-only SQL escape hatch. Minor gaps remain, such as no delete or remove action for budget files, but agents can work around these."
+    }
+  },
+  "shadowing_risks": [],
+  "summary": "A compact, coherent 15-tool surface for a broad budgeting domain, with consistent verb_noun naming and a well-designed manage_<entity> action-dispatch pattern. Read tools overlap somewhat but cross-reference each other to enforce boundaries. Completeness is strong, with only small gaps such as budget-file deletion. No shadowing candidates were supplied."
+}

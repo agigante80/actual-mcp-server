@@ -1,0 +1,22 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 5,
+      "justification": "The read surface is partitioned by intent (context, entity lookup, transaction records, totals, budget months, SQL escape hatch) and each description names the sibling to use instead. Write tools are split cleanly by entity domain (transactions, accounts, categories, payees, tags, rules, schedules, budget months, budget files). Remaining overlap, such as get_context structure versus list_entities, is explicitly bounded by the descriptions."
+    },
+    "naming_consistency": {
+      "score": 5,
+      "justification": "Every tool is lower snake_case with a predictable verb_noun shape: get_context, list_entities, search_transactions, summarize_transactions, run_query, and the manage_<domain> family. The single verb family per concern (list, search, summarize, manage) is applied consistently across all 15 tools."
+    },
+    "tool_count_appropriateness": {
+      "score": 5,
+      "justification": "Fifteen tools sits at the top of the well-scoped range but each maps to a distinct budget domain or read mode. The read tools cover the common query intents and the manage_ tools cover the write surface without redundant duplicates."
+    },
+    "completeness": {
+      "score": 4,
+      "justification": "CRUD and lifecycle coverage is broad: transactions, accounts, categories, payees, tags, rules, schedules, budget months, and budget file switch/import/export all have paths. Minor gaps remain, such as creating or deleting budget files and some split-specific operations, but these are workable through import, subtransactions, and run_query."
+    }
+  },
+  "shadowing_risks": [],
+  "summary": "This is a highly coherent tool set: a small, consistently named surface split into read modes and per-domain write managers, with descriptions that explicitly steer the agent between overlapping read tools. Completeness is strong for budget workflows, with only minor lifecycle gaps around budget files and split transactions. No shadow candidate pairs were supplied, and the read tools that do overlap are cheaply disambiguated by cost and description."
+}

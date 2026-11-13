@@ -48,8 +48,9 @@ const PER_TOOL_CEILING = 3900;
 // #676 (manage_tags, 1229 bytes) raised the eleven-tool total to 28930 bytes, so the ceiling is that plus about 10%.
 // #677 (manage_rules 3308, manage_schedules 2294 bytes) raised the thirteen-tool total to 34563 bytes, so the ceiling is that plus about 10%.
 // #678 (manage_budget_months, manage_budget_files) completed the fifteen-tool compact surface at 40681 bytes, so the ceiling is that plus about 10%.
+// #679 (set_note routing sentences in manage_accounts, manage_categories, manage_payees) grew the fifteen-tool total from 40681 to 41000 bytes (319 more), so the ceiling rose by the same 319, from 44800 to 45119.
 // Each later compact ticket raises it by its own measured size, stated here.
-const COMPACT_TOTAL_CEILING = 44800;
+const COMPACT_TOTAL_CEILING = 45119;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

@@ -101,7 +101,7 @@ export const manageCategories: CompactToolSpec = {
     'create: entity, name; a category also needs group_id and may set is_income; a category_group may set is_income and hidden. ' +
     'update: entity, id and at least one of name, group_id (category only), is_income, hidden; prefer hidden true over delete to retire a category. ' +
     'delete: entity, id; DESTRUCTIVE, cannot be undone: a category is removed and its transactions are not moved (recategorize them first); deleting a group ALSO deletes every category in it (move them out first with update group_id). ' +
-    'set_note: id (a category or category group UUID), note ("" clears); not budget-YYYY-MM. ' +
+    'set_note: id (a category or category group UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a payee note through manage_payees. ' +
     'Returns { success, categoryId, message } (create category), { id, success } (create group), { success } (update, delete), { result: { success, id, note, cleared } } (set_note).',
   selector: 'action',
   actions: new Map<string, CompactActionRow>([

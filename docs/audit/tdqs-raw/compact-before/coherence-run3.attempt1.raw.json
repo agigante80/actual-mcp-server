@@ -1,0 +1,45 @@
+{
+  "cli": "opencode",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "status": "SUCCESS",
+  "response": "{\n  \"scores\": {\n    \"disambiguation\": {\n      \"score\": 5,\n      \"justification\": \"The read surface is partitioned by intent (context, entity lookup, transaction records, totals, budget months, SQL escape hatch) and each description names the sibling to use instead. Write tools are split cleanly by entity domain (transactions, accounts, categories, payees, tags, rules, schedules, budget months, budget files). Remaining overlap, such as get_context structure versus list_entities, is explicitly bounded by the descriptions.\"\n    },\n    \"naming_consistency\": {\n      \"score\": 5,\n      \"justification\": \"Every tool is lower snake_case with a predictable verb_noun shape: get_context, list_entities, search_transactions, summarize_transactions, run_query, and the manage_<domain> family. The single verb family per concern (list, search, summarize, manage) is applied consistently across all 15 tools.\"\n    },\n    \"tool_count_appropriateness\": {\n      \"score\": 5,\n      \"justification\": \"Fifteen tools sits at the top of the well-scoped range but each maps to a distinct budget domain or read mode. The read tools cover the common query intents and the manage_ tools cover the write surface without redundant duplicates.\"\n    },\n    \"completeness\": {\n      \"score\": 4,\n      \"justification\": \"CRUD and lifecycle coverage is broad: transactions, accounts, categories, payees, tags, rules, schedules, budget months, and budget file switch/import/export all have paths. Minor gaps remain, such as creating or deleting budget files and some split-specific operations, but these are workable through import, subtransactions, and run_query.\"\n    }\n  },\n  \"shadowing_risks\": [],\n  \"summary\": \"This is a highly coherent tool set: a small, consistently named surface split into read modes and per-domain write managers, with descriptions that explicitly steer the agent between overlapping read tools. Completeness is strong for budget workflows, with only minor lifecycle gaps around budget files and split transactions. No shadow candidate pairs were supplied, and the read tools that do overlap are cheaply disambiguated by cost and description.\"\n}",
+  "result": [
+    {
+      "type": "step_start",
+      "timestamp": 1794549582124,
+      "sessionID": "ses_e2c82ab3dffe04Nw7oZpoKT4nc",
+      "part": {
+        "id": "prt_1d37d891e0015JQ4cfOh3x5pZD",
+        "messageID": "msg_1d37d59bf001TNSMP17QDKGaMm",
+        "sessionID": "ses_e2c82ab3dffe04Nw7oZpoKT4nc",
+        "snapshot": "81574e85a7a0096ef5fe5342e231300eba13f7c3",
+        "type": "step-start"
+      }
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1794549595454,
+      "sessionID": "ses_e2c82ab3dffe04Nw7oZpoKT4nc",
+      "part": {
+        "id": "prt_1d37dbd340011ZJ4326O15Iww1",
+        "reason": "stop",
+        "snapshot": "81574e85a7a0096ef5fe5342e231300eba13f7c3",
+        "messageID": "msg_1d37d59bf001TNSMP17QDKGaMm",
+        "sessionID": "ses_e2c82ab3dffe04Nw7oZpoKT4nc",
+        "type": "step-finish",
+        "tokens": {
+          "total": 23594,
+          "input": 20486,
+          "output": 469,
+          "reasoning": 847,
+          "cache": {
+            "write": 0,
+            "read": 1792
+          }
+        },
+        "cost": 0
+      }
+    }
+  ],
+  "stderr": ""
+}

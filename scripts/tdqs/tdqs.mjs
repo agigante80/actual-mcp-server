@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // TDQS v1.3 self-scoring harness (#640). Usage:
-//   node tdqs.mjs capture <repoRoot> <out tools.json>
+//   node tdqs.mjs capture <repoRoot> <out tools.json> [--surface legacy|compact]   (default legacy)
 //   node tdqs.mjs score <tools.json> <outDir> [--runs 3] [--only a,b,c] [--batch 10]
 //   node tdqs.mjs coherence <tools.json> <outDir> [--runs 3]
 //   node tdqs.mjs report <tools.json> <scoreDir> [coherenceDir]
@@ -193,14 +193,24 @@ The ${tools.length} tool definitions below are each a separate user message in t
 ${msgs.join('\n\n=====\n\n')}`;
 }
 
-async function capture(repo, out) {
+// The child env is a closed list: the repo's own .env must not leak a surface, toolset, tool list or
+// read-only setting into the capture (dotenv never overrides a key that is already present, empty
+// included). 'compact' is refused by the server unless MCP_TOOLSETS is '' or 'all' and MCP_TOOLS is empty.
+export function captureEnv(surface, dataDir) {
+  if (surface !== 'legacy' && surface !== 'compact') throw new Error(`--surface must be legacy or compact, got ${surface === undefined ? 'nothing' : JSON.stringify(surface)}`);
+  return { PATH: process.env.PATH, HOME: process.env.HOME, ACTUAL_SERVER_URL: 'http://127.0.0.1:5999', ACTUAL_PASSWORD: 'dummy',
+    ACTUAL_BUDGET_SYNC_ID: '00000000-0000-0000-0000-000000000000', MCP_BRIDGE_DATA_DIR: dataDir,
+    MCP_TOOL_SURFACE: surface, MCP_TOOLSETS: 'all', MCP_TOOLS: '', MCP_READ_ONLY: 'false' };
+}
+
+async function capture(repo, out, surface) {
+  const dataDir = mkdtempSync(join(tmpdir(), 'tdqs-data-'));
+  const env = captureEnv(surface, dataDir);
   const { Client } = await import(pathToFileURL(join(repo, 'node_modules/@modelcontextprotocol/sdk/dist/esm/client/index.js')).href);
   const { StdioClientTransport } = await import(pathToFileURL(join(repo, 'node_modules/@modelcontextprotocol/sdk/dist/esm/client/stdio.js')).href);
-  const dataDir = mkdtempSync(join(tmpdir(), 'tdqs-data-'));
   const transport = new StdioClientTransport({
     command: process.execPath, args: [join(repo, 'dist/src/index.js'), '--stdio'], cwd: repo,
-    env: { PATH: process.env.PATH, HOME: process.env.HOME, ACTUAL_SERVER_URL: 'http://127.0.0.1:5999', ACTUAL_PASSWORD: 'dummy',
-      ACTUAL_BUDGET_SYNC_ID: '00000000-0000-0000-0000-000000000000', MCP_BRIDGE_DATA_DIR: dataDir },
+    env,
     stderr: 'ignore',
   });
   const client = new Client({ name: 'tdqs-capture', version: '1' });
@@ -328,12 +338,19 @@ function report(toolsPath, dir, cohDir) {
   console.log(JSON.stringify(out, null, 2));
 }
 
-const [cmd, a1, a2, a3] = args;
-if (cmd === 'capture') await capture(a1, a2);
-else if (cmd === 'score') score(a1, a2);
-else if (cmd === 'coherence') coherence(a1, a2);
-else if (cmd === 'report') report(a1, a2, a3);
-else if (cmd === 'reparse') { for (const f of readdirSync(a1).filter((x) => /\.raw\.json$/.test(x)).sort()) { const r = JSON.parse(readFileSync(join(a1, f), 'utf8')); const v = extractJson(r.response ?? r.result?.result?.response); const m = f.match(/^(coherence-run\d+)\.attempt\d+\.raw\.json$/); if (m && v && !Array.isArray(v)) { writeFileSync(join(a1, `${m[1]}.json`), JSON.stringify(v, null, 2)); console.log(`reparsed ${f}`); } } }
-else if (cmd === 'signals') { for (const t of JSON.parse(readFileSync(a1, 'utf8'))) console.log(t.name, JSON.stringify(signals(t))); }
-else if (cmd === 'prompt') { const all = JSON.parse(readFileSync(a1, 'utf8')); const n = Number(a2 || 3); process.stdout.write(batchPrompt(loadPrompt('appendixA-system.txt'), all.slice(0, n), all)); }
-else { console.error('usage: capture|score|coherence|report|signals'); process.exit(2); }
+const USAGE = 'usage: capture <repoRoot> <out.json> [--surface legacy|compact] | score | coherence | report | reparse | signals | prompt';
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  const [cmd, a1, a2, a3] = args;
+  if (cmd === 'capture') {
+    const surface = args.includes('--surface') ? flag('--surface') : 'legacy';
+    try { captureEnv(surface, ''); } catch (e) { console.error(e.message); console.error(USAGE); process.exit(2); }
+    await capture(a1, a2, surface);
+  }
+  else if (cmd === 'score') score(a1, a2);
+  else if (cmd === 'coherence') coherence(a1, a2);
+  else if (cmd === 'report') report(a1, a2, a3);
+  else if (cmd === 'reparse') { for (const f of readdirSync(a1).filter((x) => /\.raw\.json$/.test(x)).sort()) { const r = JSON.parse(readFileSync(join(a1, f), 'utf8')); const v = extractJson(r.response ?? r.result?.result?.response); const m = f.match(/^(coherence-run\d+)\.attempt\d+\.raw\.json$/); if (m && v && !Array.isArray(v)) { writeFileSync(join(a1, `${m[1]}.json`), JSON.stringify(v, null, 2)); console.log(`reparsed ${f}`); } } }
+  else if (cmd === 'signals') { for (const t of JSON.parse(readFileSync(a1, 'utf8'))) console.log(t.name, JSON.stringify(signals(t))); }
+  else if (cmd === 'prompt') { const all = JSON.parse(readFileSync(a1, 'utf8')); const n = Number(a2 || 3); process.stdout.write(batchPrompt(loadPrompt('appendixA-system.txt'), all.slice(0, n), all)); }
+  else { console.error(USAGE); process.exit(2); }
+}

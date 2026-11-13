@@ -131,7 +131,7 @@ export const manageAccounts: CompactToolSpec = {
     'reopen: id. ' +
     'delete: entity, id; DESTRUCTIVE, cannot be undone: an account takes its transactions with it (a closed one cannot be deleted), a group leaves its accounts ungrouped. ' +
     'bank_sync: optional account_id (omit for every linked open account); reaches the bank providers. ' +
-    'set_note: id, note ("" clears); id is any entity UUID, not budget-YYYY-MM. ' +
+    'set_note: id, note ("" clears); id is any entity UUID, not budget-YYYY-MM; for a category or payee note prefer manage_categories or manage_payees, so each note is set by the tool of its entity kind. ' +
     'Returns { result: id } (create account), { result: { id, name } } (create group), { success, accountId, updatedFields } (update account), ' +
     '{ result: { success, id, updated } } (update group), { success, closed | alreadyClosed | removed } (close), { success, reopened | alreadyOpen } (reopen), ' +
     '{ success } (delete account), { result: { success, id } } (delete group), { result, newTransactions, matchedTransactions, updatedAccounts, truncated } (bank_sync), ' +

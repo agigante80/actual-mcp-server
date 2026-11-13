@@ -1,0 +1,45 @@
+{
+  "cli": "opencode",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "status": "SUCCESS",
+  "response": "{\"scores\":{\"disambiguation\":{\"score\":5,\"justification\":\"Every tool has a distinct read or write role, and the descriptions cross-reference each other explicitly, e.g. search_transactions for records versus summarize_transactions for totals and run_query as the bounded escape hatch. The get_context versus list_entities split is likewise stated outright, leaving no enforceable ambiguity.\"},\"naming_consistency\":{\"score\":5,\"justification\":\"All names follow verb_noun in lower snake_case: get_context, list_entities, search_transactions, summarize_transactions, run_query, and a uniform manage_<domain> family for writes. Action variants are consolidated inside each tool rather than producing inconsistent per-action names.\"},\"tool_count_appropriateness\":{\"score\":5,\"justification\":\"Fifteen tools for a budget domain spanning accounts, transactions, categories, payees, tags, rules, schedules, budget months and files is well-scoped. Broad operations are folded into action parameters, so no tool feels redundant.\"},\"completeness\":{\"score\":5,\"justification\":\"The surface covers the full lifecycle: reading structure and entities, searching and summarizing transactions, CRUD for every entity kind, budget month and file management, plus a SQL escape hatch for gaps. No obvious dead ends remain for the stated purpose.\"}},\"shadowing_risks\":[],\"summary\":\"A highly coherent tool set: crisp verb_noun naming, explicit boundaries between read tools and between the manage_ write tools, and full lifecycle coverage of the Actual Budget domain. At fifteen well-consolidated tools it is neither thin nor bloated, and no supplied shadow candidates apply.\"}",
+  "result": [
+    {
+      "type": "step_start",
+      "timestamp": 1794550005591,
+      "sessionID": "ses_e2c7c135dffeIhUXP5kosi3Km7",
+      "part": {
+        "id": "prt_1d383ff4e001NNmdG3tmEwFJ8V",
+        "messageID": "msg_1d383f124001GGig65MUJKyB2K",
+        "sessionID": "ses_e2c7c135dffeIhUXP5kosi3Km7",
+        "snapshot": "fbc5b0b8b0b7cbf9627cf1e608625eff6c7450c8",
+        "type": "step-start"
+      }
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1794550012904,
+      "sessionID": "ses_e2c7c135dffeIhUXP5kosi3Km7",
+      "part": {
+        "id": "prt_1d3841bdf001fKMY6TasoZdY5y",
+        "reason": "stop",
+        "snapshot": "fbc5b0b8b0b7cbf9627cf1e608625eff6c7450c8",
+        "messageID": "msg_1d383f124001GGig65MUJKyB2K",
+        "sessionID": "ses_e2c7c135dffeIhUXP5kosi3Km7",
+        "type": "step-finish",
+        "tokens": {
+          "total": 23131,
+          "input": 6600,
+          "output": 340,
+          "reasoning": 447,
+          "cache": {
+            "write": 0,
+            "read": 15744
+          }
+        },
+        "cost": 0
+      }
+    }
+  ],
+  "stderr": ""
+}

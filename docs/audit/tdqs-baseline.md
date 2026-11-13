@@ -23,7 +23,8 @@ A local measurement of our tool definitions against Glama's Tool Definition Qual
 ```bash
 npm run build
 export TDQS_CLI=opencode TDQS_OPENCODE="$(command -v opencode)" TDQS_MODEL=opencode/deepseek-v4.1-flash-free
-node scripts/tdqs/tdqs.mjs capture . tools.json          # offline tools/list, dummy Actual settings
+node scripts/tdqs/tdqs.mjs capture . tools.json          # offline tools/list, dummy Actual settings (85 legacy tools)
+node scripts/tdqs/tdqs.mjs capture . compact.json --surface compact   # the 15 compact tools (#679); a repo .env cannot change either surface
 node scripts/tdqs/tdqs.mjs score tools.json runs --runs 3 # add --only a,b to score some tools
 node scripts/tdqs/tdqs.mjs coherence tools.json coh       # Appendix B, 3 runs
 node scripts/tdqs/tdqs.mjs report tools.json runs coh     # medians, tiers, aggregates as JSON
@@ -198,3 +199,57 @@ Each was rewritten to the same rules as the #640 ten, with every claim checked a
 | :--- | ---: | ---: | ---: | ---: | ---: | :--- |
 | Baseline | 2 | 3 | 2 | 4 | 3 | 3.3, 2.5, 3 |
 | After (1 run) | 3 | 3 | 2 | 5 | 3.3 | 3.3 |
+
+## Compact surface (#679)
+
+The 15-tool compact surface (`MCP_TOOL_SURFACE=compact`, #671 to #678) scored with the same harness, captured with `capture . compact.json --surface compact`. Every score and coherence run went into a new directory, as the harness stamp requires.
+
+| | |
+| :--- | :--- |
+| Date | 2026-11-13 |
+| Scorer | `opencode/deepseek-v4.1-flash-free` through the opencode CLI, the same pin as the 85-tool baseline above, so the comparison is like for like on the scorer. The tool sets differ (15 compact tools against 85 legacy tools), so per-tool figures describe different descriptions |
+| Runs | 3 per tool and 3 coherence runs, before and after tuning; no run stalled, and one batch answer (`run3-batch01`, after) was unparseable once and parsed on the harness retry |
+| Measured | develop `46986920` plus the tuning below |
+| Tuning rounds used | 1 of at most 3, then stopped (see Gaps) |
+| Raw output | `docs/audit/tdqs-raw/compact-before/` (first scoring) and `docs/audit/tdqs-raw/compact-after/` (after tuning); each holds the captured `tools.json` and the `report` output as `report.json` |
+
+### Result
+
+| | Mean | Min (tool) | Description quality | Disambiguation | Naming | Tool count | Completeness | Coherence (run scores) | Overall |
+| :--- | ---: | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 85 tools, baseline | 4.1 | 2.9 (transactions_create) | 3.6 | 2 | 3 | 2 | 4 | 3 (3.3, 2.5, 3) | 3.4 |
+| 85 tools, after #640 | 4.3 | 3.5 (schedules_get) | 4 | 3 | 3 | 2 | 5 | 3.3 (1 run) | 3.7 |
+| 15 tools, before tuning | 4.7 | 4.5 (list_budget_months) | 4.6 | 4 | 5 | 5 | 4 | 4.8 (4.8, 4.5, 4.8) | 4.7 |
+| 15 tools, after tuning | 4.7 | 4.5 (search_transactions, summarize_transactions, list_budget_months) | 4.6 | 4 | 5 | 5 | 4 | 4.5 (5, 4.3, 4.5) | 4.6 |
+
+The 85-tool "after" row uses the baseline coherence median for its overall, as the Aggregates table above does. Every compact tool is at least 4.5, so the minimum target (4.0) is met; the weakest single dimension is `list_budget_months` parameter semantics at 3 in every run. No compact tool had an annotation contradiction flagged in any run.
+
+### Per-tool scores after tuning
+
+| Tool | Purpose | Guidelines | Transparency | Params | Concise | Complete | TDQS | Before | Runs |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | :--- |
+| get_context | 5 | 5 | 4 | 4 | 4 | 5 | 4.6 | 4.6 | 4.5, 4.8, 4.6 |
+| list_budget_months | 5 | 5 | 4 | 3 | 5 | 5 | 4.5 | 4.5 | 4.5, 4.7, 4.5 |
+| list_entities | 5 | 5 | 4 | 4 | 4 | 5 | 4.6 | 4.6 | 4.5, 4.8, 4.6 |
+| manage_accounts | 5 | 4 | 5 | 4 | 4 | 5 | 4.6 | 4.8 | 4.6, 4.8, 4.6 |
+| manage_budget_files | 5 | 5 | 5 | 4 | 4 | 5 | 4.8 | 4.8 | 4.8, 4.8, 4.8 |
+| manage_budget_months | 5 | 5 | 5 | 4 | 4 | 5 | 4.8 | 4.8 | 4.7, 4.8, 4.8 |
+| manage_categories | 5 | 4 | 5 | 4 | 4 | 5 | 4.6 | 4.8 | 4.5, 4.9, 4.6 |
+| manage_payees | 5 | 4 | 5 | 4 | 4 | 5 | 4.6 | 4.8 | 4.5, 4.9, 4.6 |
+| manage_rules | 5 | 5 | 5 | 4 | 4 | 5 | 4.8 | 4.9 | 4.7, 4.9, 4.8 |
+| manage_schedules | 5 | 5 | 5 | 4 | 4 | 5 | 4.8 | 4.8 | 4.8, 4.8, 4.8 |
+| manage_tags | 5 | 5 | 5 | 4 | 5 | 5 | 4.7 | 4.8 | 4.6, 4.7, 4.9 |
+| manage_transactions | 5 | 4 | 5 | 4 | 4 | 5 | 4.7 | 4.7 | 4.6, 4.8, 4.7 |
+| run_query | 5 | 5 | 5 | 5 | 4 | 5 | 4.9 | 4.9 | 4.9, 4.9, 4.9 |
+| search_transactions | 5 | 5 | 4 | 4 | 4 | 4 | 4.5 | 4.6 | 4.5, 4.8, 4.5 |
+| summarize_transactions | 5 | 5 | 4 | 4 | 4 | 4 | 4.5 | 4.6 | 4.5, 4.6, 4.5 |
+
+### Tuning round 1
+
+The first scoring left coherence at 4 on Disambiguation and Completeness. Two of the three Disambiguation justifications named the same overlap: `set_note` is offered by `manage_accounts`, `manage_categories` and `manage_payees`, and `manage_accounts` accepts any entity UUID. Round 1 reworded the three `set_note` sentences (description text only, 319 bytes added in total, no field, action or behaviour changed): each now says which tool sets the note of which entity kind. The re-score did not move the medians: Disambiguation 5, 4, 4 and Completeness 5, 4, 4 across the three runs, against 4, 4, 5 and 5, 4, 4 before. The per-tool scores moved by at most 0.2 either way, which is the scorer's own run-to-run spread (single runs differ by up to 0.4). The total of the 15 entries grew from 40,681 to 41,000 bytes and `COMPACT_TOTAL_CEILING` rose by the same 319 bytes, to 45,119.
+
+### Gaps (not met, with the reason)
+
+- **Coherence is 4, not 5, on Disambiguation and Completeness** (median of 3, both before and after tuning). Disambiguation: the justifications cite the read overlap among `get_context`, `list_entities`, `run_query`, `search_transactions`, `summarize_transactions` and `list_budget_months`, which the descriptions already bound by naming the sibling to use instead; the run-to-run result is 4, 4, 5 (before) and 5, 4, 4 (after), so one more rewording cannot be told from noise. Completeness: the cited gaps are not description defects but missing operations: creating or deleting budget files, assigning a tag to a transaction, merging categories, transaction attachments. Closing them needs new actions, which this ticket does not allow, and no description sentence can state an operation that does not exist. Tuning stopped after one round because the two remaining dimensions are either scorer noise or outside what a description edit may change.
+- **Minimum TDQS is met (4.5)**; the weakest dimension in the set is `list_budget_months` parameter semantics (3 in every run, one parameter, `month`, already described in the schema).
+- **Not comparable with a Glama-hosted score**, as stated in Deviations above. Coherence run scores vary by 0.7 across three runs, so a one-run coherence figure is not a reliable difference.

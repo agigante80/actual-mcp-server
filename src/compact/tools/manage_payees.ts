@@ -84,7 +84,7 @@ export const managePayees: CompactToolSpec = {
     'update: id and at least one of name, transfer_acct, category (a default category, stored as a payee rule that may cover other payees; null deletes that whole rule). ' +
     'delete: id; DESTRUCTIVE, cannot be undone: transactions lose the payee; a transfer payee is refused. ' +
     'merge: target_id, merge_ids (1 to 50, never target_id itself); DESTRUCTIVE, cannot be undone: the sources\' transactions move to target_id and the sources are deleted; transfer payees are refused. ' +
-    'set_note: id (a payee UUID), note ("" clears); not budget-YYYY-MM. ' +
+    'set_note: id (a payee UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a category note through manage_categories. ' +
     'Returns { result: id } (create), { success, payeeId, updatedFields } (update), { success } (delete), { success, mergedIds, message } (merge), { result: { success, id, note, cleared } } (set_note).',
   selector: 'action',
   actions: new Map<string, CompactActionRow>([

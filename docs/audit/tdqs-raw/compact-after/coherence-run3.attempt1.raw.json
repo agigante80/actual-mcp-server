@@ -1,0 +1,45 @@
+{
+  "cli": "opencode",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "status": "SUCCESS",
+  "response": "{\n  \"scores\": {\n    \"disambiguation\": {\n      \"score\": 4,\n      \"justification\": \"The read tools overlap in surface (search_transactions, summarize_transactions, run_query, list_budget_months) but their descriptions repeatedly draw explicit boundaries, for example 'for totals use summarize_transactions; for a custom query use run_query'. list_entities also competes with get_context and several manage_* set_note actions, yet each says which to prefer. Boundaries are mostly enforceable, with only minor residual ambiguity between run_query and the specialized readers.\"\n    },\n    \"naming_consistency\": {\n      \"score\": 5,\n      \"justification\": \"Every name is lower snake_case verb_noun, built from a small set of consistent prefixes: get_, list_, search_, summarize_, run_ and manage_. No camelCase or mixed verb styles appear, and the manage_<domain> family maps predictably onto the entity types.\"\n    },\n    \"tool_count_appropriateness\": {\n      \"score\": 5,\n      \"justification\": \"Fifteen tools cover a large domain (transactions, accounts, categories, payees, tags, rules, schedules, budgets, budget files, SQL) by consolidating each entity family into a single action-dispatching manage_ tool. That is well-scoped and every tool earns its place.\"\n    },\n    \"completeness\": {\n      \"score\": 4,\n      \"justification\": \"The surface covers the full CRUD and lifecycle for the main entities, plus reads, notes, imports/exports, schedule previews and a read-only SQL escape hatch. Minor gaps remain, such as no delete or remove action for budget files, but agents can work around these.\"\n    }\n  },\n  \"shadowing_risks\": [],\n  \"summary\": \"A compact, coherent 15-tool surface for a broad budgeting domain, with consistent verb_noun naming and a well-designed manage_<entity> action-dispatch pattern. Read tools overlap somewhat but cross-reference each other to enforce boundaries. Completeness is strong, with only small gaps such as budget-file deletion. No shadowing candidates were supplied.\"\n}",
+  "result": [
+    {
+      "type": "step_start",
+      "timestamp": 1794550032343,
+      "sessionID": "ses_e2c7ba4ddffeJBjbTEPscR6aHz",
+      "part": {
+        "id": "prt_1d38467cc001w1bM76Xxapty34",
+        "messageID": "msg_1d3845f16001bG4KEjxHrQj5ny",
+        "sessionID": "ses_e2c7ba4ddffeJBjbTEPscR6aHz",
+        "snapshot": "fbc5b0b8b0b7cbf9627cf1e608625eff6c7450c8",
+        "type": "step-start"
+      }
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1794550045565,
+      "sessionID": "ses_e2c7ba4ddffeJBjbTEPscR6aHz",
+      "part": {
+        "id": "prt_1d3849b76001R4dh4bpw19dxex",
+        "reason": "stop",
+        "snapshot": "fbc5b0b8b0b7cbf9627cf1e608625eff6c7450c8",
+        "messageID": "msg_1d3845f16001bG4KEjxHrQj5ny",
+        "sessionID": "ses_e2c7ba4ddffeJBjbTEPscR6aHz",
+        "type": "step-finish",
+        "tokens": {
+          "total": 23236,
+          "input": 6600,
+          "output": 454,
+          "reasoning": 438,
+          "cache": {
+            "write": 0,
+            "read": 15744
+          }
+        },
+        "cost": 0
+      }
+    }
+  ],
+  "stderr": ""
+}

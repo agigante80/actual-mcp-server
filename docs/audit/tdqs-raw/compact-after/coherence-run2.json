@@ -1,0 +1,22 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 4,
+      "justification": "Each tool targets a distinct resource or action, and the descriptions explicitly cross-reference alternatives (e.g. use summarize_transactions for totals, list_entities for ids), so boundaries are mostly enforceable. The residual overlap is between the broad read tools get_context, list_entities, and run_query, which the text draws but does not make impossible to confuse."
+    },
+    "naming_consistency": {
+      "score": 4,
+      "justification": "Names are uniformly lower snake_case with a leading verb, and the writes follow a clear manage_<resource> pattern across nine tools. The read side mixes get, list, search, summarize, and run, which is semantically sensible but a small deviation from one predictable verb style."
+    },
+    "tool_count_appropriateness": {
+      "score": 5,
+      "justification": "Fifteen tools is well within a reasonable range for a full personal-budgeting domain and each maps to a distinct resource family or read pattern (context, entities, transactions, summaries, months, query, and eight manage_ tools). No tool looks redundant."
+    },
+    "completeness": {
+      "score": 4,
+      "justification": "The surface covers read, search, aggregate, raw query, and full create/update/delete for accounts, transactions, categories, payees, tags, rules, schedules, budget months, and budget files, so core lifecycle coverage is strong. Minor gaps remain around peripheral Actual features such as transaction attachments and some bank/provider management detail, which agents can work around."
+    }
+  },
+  "shadowing_risks": [],
+  "summary": "This is a coherent, carefully bounded tool set: distinct read versus write families, explicit cross-references steering agents away from overlapping reads, and near-complete CRUD plus an escape-hatch query tool. Naming is consistent with only minor verb variety on the read side, and 15 tools is appropriately scoped for the domain. No supplied shadow candidates exist, so no shadowing risk is reported."
+}

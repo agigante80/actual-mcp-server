@@ -1,0 +1,45 @@
+{
+  "cli": "opencode",
+  "model": "opencode/deepseek-v4.1-flash-free",
+  "status": "SUCCESS",
+  "response": "{\"scores\":{\"disambiguation\":{\"score\":4,\"justification\":\"Each tool targets a distinct resource or action, and the descriptions explicitly cross-reference alternatives (e.g. use summarize_transactions for totals, list_entities for ids), so boundaries are mostly enforceable. The residual overlap is between the broad read tools get_context, list_entities, and run_query, which the text draws but does not make impossible to confuse.\"},\"naming_consistency\":{\"score\":4,\"justification\":\"Names are uniformly lower snake_case with a leading verb, and the writes follow a clear manage_<resource> pattern across nine tools. The read side mixes get, list, search, summarize, and run, which is semantically sensible but a small deviation from one predictable verb style.\"},\"tool_count_appropriateness\":{\"score\":5,\"justification\":\"Fifteen tools is well within a reasonable range for a full personal-budgeting domain and each maps to a distinct resource family or read pattern (context, entities, transactions, summaries, months, query, and eight manage_ tools). No tool looks redundant.\"},\"completeness\":{\"score\":4,\"justification\":\"The surface covers read, search, aggregate, raw query, and full create/update/delete for accounts, transactions, categories, payees, tags, rules, schedules, budget months, and budget files, so core lifecycle coverage is strong. Minor gaps remain around peripheral Actual features such as transaction attachments and some bank/provider management detail, which agents can work around.\"}},\"shadowing_risks\":[],\"summary\":\"This is a coherent, carefully bounded tool set: distinct read versus write families, explicit cross-references steering agents away from overlapping reads, and near-complete CRUD plus an escape-hatch query tool. Naming is consistent with only minor verb variety on the read side, and 15 tools is appropriately scoped for the domain. No supplied shadow candidates exist, so no shadowing risk is reported.\"}",
+  "result": [
+    {
+      "type": "step_start",
+      "timestamp": 1794550018335,
+      "sessionID": "ses_e2c7bdbe0ffe1xYS7d2wHV5JDE",
+      "part": {
+        "id": "prt_1d3843116001XbcUPsR1LRsnYF",
+        "messageID": "msg_1d384282e001ITXP5y8caqUowi",
+        "sessionID": "ses_e2c7bdbe0ffe1xYS7d2wHV5JDE",
+        "snapshot": "fbc5b0b8b0b7cbf9627cf1e608625eff6c7450c8",
+        "type": "step-start"
+      }
+    },
+    {
+      "type": "step_finish",
+      "timestamp": 1794550026683,
+      "sessionID": "ses_e2c7bdbe0ffe1xYS7d2wHV5JDE",
+      "part": {
+        "id": "prt_1d38451b1001z6Km3er6HiAnVy",
+        "reason": "stop",
+        "snapshot": "fbc5b0b8b0b7cbf9627cf1e608625eff6c7450c8",
+        "messageID": "msg_1d384282e001ITXP5y8caqUowi",
+        "sessionID": "ses_e2c7bdbe0ffe1xYS7d2wHV5JDE",
+        "type": "step-finish",
+        "tokens": {
+          "total": 23433,
+          "input": 6728,
+          "output": 405,
+          "reasoning": 684,
+          "cache": {
+            "write": 0,
+            "read": 15616
+          }
+        },
+        "cost": 0
+      }
+    }
+  ],
+  "stderr": ""
+}

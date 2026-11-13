@@ -1,0 +1,22 @@
+{
+  "scores": {
+    "disambiguation": {
+      "score": 4,
+      "justification": "Read tools are split by the shape of the answer (structure, one entity type, records, totals, budget month, SQL escape hatch), and write tools are split by domain, so selection is usually clear. The main overlap is set_note, which appears in manage_accounts, manage_categories and manage_payees, and manage_accounts accepts any entity UUID, so a category or payee note can be reached through more than one tool."
+    },
+    "naming_consistency": {
+      "score": 5,
+      "justification": "Every tool is lower snake_case with a verb first (get_, list_, search_, summarize_, run_, manage_), and the manage_ prefix consistently marks writable lifecycle tools. The only variation, run_query versus the more specific get or list verbs, is still readable and predictable."
+    },
+    "tool_count_appropriateness": {
+      "score": 5,
+      "justification": "Fifteen tools sit at the top of the well-scoped 3-15 range without redundant entries. The heavy action multiplexing lives inside the manage_ tools rather than inflating the registry."
+    },
+    "completeness": {
+      "score": 4,
+      "justification": "The surface covers reading and writing transactions, accounts and groups, categories and groups, payees, tags, rules, schedules, budget months and budget files, including batch, import, merge, split and transfer paths. Remaining gaps are modest: no create or delete for budget files, no explicit tag-to-transaction assignment, and no category merge."
+    }
+  },
+  "shadowing_risks": [],
+  "summary": "This is a coherent, deliberately partitioned budget tool set: read tools are differentiated by the shape of the answer and write tools by entity domain, all under consistent snake_case naming. The main weaknesses are note-setting reachable from several manage_ tools and a few lifecycle gaps such as budget-file deletion and tag assignment. No supplied shadow candidates, and none invented."
+}

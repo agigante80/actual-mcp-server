@@ -1,0 +1,157 @@
+[
+  {
+    "tool": "manage_tags",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States the exact verb and resource (create, change, delete tags) and names the sibling alternative (list_entities with type tag) for reads. Clearly a single-tool entry point for tag writes."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly routes reads to list_entities and warns that other fields are refused, so the agent knows when not to use it and how to get ids. Per-action requirements are stated."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Goes well beyond the annotations: discloses that delete is a soft delete, that a deleted name can still be updated and return an id, that unknown ids are refused, and gives exact return shapes. destructiveHint is already true, but the soft-delete detail is real added context."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 80 percent, so the baseline is 3; the description adds action-conditional requirements (create needs tag, update needs id plus one field, delete needs id) and the no-hash tag convention. Some detail like default colors is left to the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded with purpose and alternatives, and every clause carries semantics. The single dense paragraph with semicolons is readable but slightly run-on for a five-parameter tool."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema is provided, and the description documents both return shapes for each action. Combined with annotations and the schema, nothing material is missing."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A strong, action-focused definition that distinguishes reads from writes, documents soft-delete behavior, and gives return shapes. Minor density is the only cost."
+  },
+  {
+    "tool": "manage_rules",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Names the resource (budget rules) and all five operations (create, create_batch, upsert, update, delete) with the action discriminator. Clearly distinct from list_entities reads and from schedule management."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "States when to use list_entities instead, warns that ids must exist or nothing is written, and redirects deletion of schedule-owned rules to manage_schedules. Alternatives and exclusions are explicit."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Rich beyond the annotations: batch semantics are non-atomic with no rollback, failures are reported while the rest continue, and the agent is told to read rules back before retrying after a call failure. Upsert matching and field-replacement rules are also disclosed."
+      },
+      "parameter_semantics": {
+        "score": 5,
+        "justification": "Schema coverage is 86 percent, but the schema leaves ops as bare strings; the description supplies the entire op vocabulary per field type (text, id, amount, date) and the link-schedule id caveat. This is substantial added meaning."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and every sentence earns its place given five actions and a condition grammar. The single very long paragraph makes it harder to scan than a bulleted form would."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema exists, yet each action's return shape is stated, including the batch counters. Safety and retry guidance complete the picture."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Exceptional coverage of a complex multi-action tool, especially the condition/op grammar and the non-atomic batch behavior. Density is the only weakness."
+  },
+  {
+    "tool": "manage_schedules",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Clearly states create, change, delete of one-off or recurring schedules and distinguishes reads and occurrence previews via list_entities. Specific verb plus resource."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Explicitly names list_entities for reading and schedule_id for previewing dates, and states that completed and next_date cannot be set. Refusal conditions are spelled out."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Discloses that delete removes the driving rule but leaves already-created transactions, that a new date replaces the stored recurrence, and that unknown ids are refused. This exceeds what the annotations convey."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Schema coverage is 90 percent, so baseline is 3; the description adds the amount/amount_op coupling, the isbetween object requirement, and the reset_next_date tip. Most field-level detail is already in the schema."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and mostly tight, but the recurrence and action explanations are packed into one long paragraph with semicolons, reducing scannability."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Return shapes for all three actions are given despite no output schema, and the date/amount interactions are fully explained."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Well-differentiated and behaviorally rich for schedules, with clear alternatives and return shapes. The prose could be structured better but content is complete."
+  },
+  {
+    "tool": "manage_budget_months",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "Enumerates exactly what is changed (amounts, carryover, hold, transfers, month note) and names the seven actions. Clearly separates month budgeting from file and category operations."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Points to list_budget_months for reads, manage_budget_files for file operations, and manage_categories for category notes. It also states constraints like month must exist and amount greater than 0."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Unusually thorough: batch is non-atomic with no rollback and last-item-wins, hold may be clamped and adds to the buffer so re-read before retrying, transfer is non-atomic with a partially applied failure. This goes far past the annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 89 percent, above baseline 3; the description adds per-action amount constraints, the carryover income-category exclusion, and note template directives. Some of this is already in the schema."
+      },
+      "conciseness_structure": {
+        "score": 3,
+        "justification": "The content is warranted by seven actions, but it is delivered as one extremely long paragraph, making it the least scannable of the set. A structured list would serve the reader better."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "Return shapes are documented for every action, including the partial-hold shape, so the absent output schema is fully compensated."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "Behaviorally excellent and complete, with strong disclosure of partial-failure semantics. The wall-of-text presentation is the main detractor."
+  },
+  {
+    "tool": "manage_budget_files",
+    "scores": {
+      "purpose_clarity": {
+        "score": 5,
+        "justification": "States the three operations precisely (switch active budget, import a budget file, export to a file) and distinguishes them from list_entities and manage_budget_months. Specific verb plus resource."
+      },
+      "usage_guidelines": {
+        "score": 5,
+        "justification": "Names the alternatives for listing budgets and for month changes, and gives explicit warnings: import is destructive, confirm before overwriting real data, caller-limited budgets are refused."
+      },
+      "behavioral_transparency": {
+        "score": 5,
+        "justification": "Very strong: switch is session-only but remembered as caller preference, import replaces the local copy and loads a budget outside the configured list, export overwrites same-named files and does not return contents. Significantly exceeds the annotations."
+      },
+      "parameter_semantics": {
+        "score": 4,
+        "justification": "Coverage is 83 percent, so baseline 3; the description reinforces the exactly-one-of path/base64 rule and spells out filename constraints per action. Much of this overlaps with the schema descriptions."
+      },
+      "conciseness_structure": {
+        "score": 4,
+        "justification": "Front-loaded and each action's caveats are grouped logically. It remains a long single paragraph, though the content density is justified by the destructive import path."
+      },
+      "contextual_completeness": {
+        "score": 5,
+        "justification": "No output schema, but return shapes for switch, import and export are all given with their fields. The destructive import consequences are fully explained."
+      }
+    },
+    "annotation_contradiction": false,
+    "summary": "A high-quality, safety-aware definition that thoroughly documents the irreversible import behavior and per-action fields. Only the paragraph structure and some schema overlap keep it below perfect."
+  }
+]

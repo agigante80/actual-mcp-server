@@ -1,0 +1,345 @@
+{
+  "scored": 15,
+  "total": 15,
+  "meanTdqs": 4.7,
+  "minTdqs": 4.5,
+  "descriptionQuality": 4.6,
+  "rows": [
+    {
+      "name": "get_context",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 4,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.6,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.5,
+        4.6
+      ],
+      "contradiction": false,
+      "summary": "A high-quality definition: clear purpose, explicit sibling alternatives, and topic-level constraints and return shapes. Only minor cost is length."
+    },
+    {
+      "name": "list_entities",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 4,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.6,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.5,
+        4.6
+      ],
+      "contradiction": false,
+      "summary": "Excellent definition that compensates for a large schema with clear per-type rules and explicit return shapes. Length is the only tradeoff."
+    },
+    {
+      "name": "search_transactions",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 4,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.6,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.5,
+        4.6
+      ],
+      "contradiction": false,
+      "summary": "Strong, mode-based definition that ties parameters to variants and spells out return shapes. Dense but appropriately so."
+    },
+    {
+      "name": "summarize_transactions",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 4,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.6,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.5,
+        4.6
+      ],
+      "contradiction": false,
+      "summary": "Well-structured report selector with explicit sibling alternatives, per-report parameter rules, and documented returns. Strong across the board."
+    },
+    {
+      "name": "list_budget_months",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 4,
+        "parameter_semantics": 3,
+        "conciseness_structure": 5,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.5,
+      "tier": "A",
+      "runTdqs": [
+        4.7,
+        4.5,
+        4.4
+      ],
+      "contradiction": false,
+      "summary": "A tight, complete definition for a small tool. Good sibling routing and return documentation; transparency slightly less rich because annotations already carry the safety story."
+    },
+    {
+      "name": "run_query",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 5,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.9,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.9,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "Outstanding definition for a complex tool: full grammar, refusal behavior, table inventory, and return hints. Length is warranted by the surface."
+    },
+    {
+      "name": "manage_transactions",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.7,
+      "tier": "A",
+      "runTdqs": [
+        4.7,
+        4.7,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "Comprehensive multi-action write tool with explicit destructive warnings and per-action returns. Only slight gap is mode-choice guidance between update variants."
+    },
+    {
+      "name": "manage_accounts",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.7,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "Detailed, well-routed write tool with strong disclosure of destructive and side-effecting behavior. Minor density in the update clause."
+    },
+    {
+      "name": "manage_categories",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.7,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "Clear, consequence-aware write tool with good sibling routing and documented returns. One of the cleaner manage definitions."
+    },
+    {
+      "name": "manage_payees",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.7,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "Well-written write tool that warns about transfer-payee refusals and merge consequences, with per-action returns. Consistently strong."
+    },
+    {
+      "name": "manage_tags",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.8,
+        4.9,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "A strong, dense definition: purpose and write/read split are explicit, destructive behavior is described in detail, and per-action return shapes compensate for the missing output schema. Only the paragraph formatting slightly hurts scanability."
+    },
+    {
+      "name": "manage_rules",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 5,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.9,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.9,
+        4.9
+      ],
+      "contradiction": false,
+      "summary": "An exemplary definition for a complex tool: it documents atomicity gaps, idempotency behavior of upsert, operator/field constraints, and return shapes that annotations and schema omit. Length is justified, though formatting could be improved."
+    },
+    {
+      "name": "manage_schedules",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.9,
+        4.8,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "Highly informative: the destructive delete side effects, recurrence/amount_op coupling, and unsettable fields are all disclosed. Purpose and alternatives are explicit, so an agent can select and invoke it confidently."
+    },
+    {
+      "name": "manage_budget_months",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 3,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.8,
+        4.8,
+        4.7
+      ],
+      "contradiction": false,
+      "summary": "Behaviorally excellent, with atomicity, clamping, and buffer-additive risks clearly disclosed. The main weakness is structure: a single sprawling paragraph for seven actions is hard to parse, though content-wise it is thorough."
+    },
+    {
+      "name": "manage_budget_files",
+      "runs": 3,
+      "med": {
+        "purpose_clarity": 5,
+        "usage_guidelines": 5,
+        "behavioral_transparency": 5,
+        "parameter_semantics": 4,
+        "conciseness_structure": 4,
+        "contextual_completeness": 5
+      },
+      "tdqs": 4.8,
+      "tier": "A",
+      "runTdqs": [
+        4.8,
+        4.8,
+        4.8
+      ],
+      "contradiction": false,
+      "summary": "A strong, safety-forward definition: the surprising session-active-budget change on import and the local-copy replacement are clearly disclosed, alongside output shapes. Some parameter detail duplicates the schema, but the behavioral warnings justify the length."
+    }
+  ],
+  "coherence": {
+    "runs": 3,
+    "medians": {
+      "disambiguation": 4,
+      "naming_consistency": 5,
+      "tool_count_appropriateness": 5,
+      "completeness": 4
+    },
+    "runScores": [
+      4.8,
+      4.5,
+      4.8
+    ],
+    "score": 4.8,
+    "shadowing": [
+      [],
+      [],
+      []
+    ]
+  },
+  "overall": 4.7
+}
