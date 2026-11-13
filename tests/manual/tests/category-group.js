@@ -16,7 +16,7 @@ export async function categoryGroupTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running CATEGORY GROUP TESTS --");
 
-  const groupsData = await callTool("actual_category_groups_get", {});
+  const groupsData = await callTool("list_entities", { type: "category_group" });
   const groups = groupsData.groups || groupsData || [];
   console.log("✓ Category groups found:", groups.length);
 
@@ -24,7 +24,9 @@ export async function categoryGroupTests(client, context) {
 
   // Create
   console.log("\nCreating test category group...");
-  const newGroup = await callTool("actual_category_groups_create", {
+  const newGroup = await callTool("manage_categories", {
+    action: "create",
+    entity: "category_group",
     name: `MCP-Group-${timestamp}`,
   });
   const groupId = newGroup.id || newGroup.result || newGroup;
@@ -33,7 +35,7 @@ export async function categoryGroupTests(client, context) {
 
   // Verify create
   {
-    const gd = await callTool("actual_category_groups_get", {});
+    const gd = await callTool("list_entities", { type: "category_group" });
     const all = gd.groups || gd || [];
     const found = Array.isArray(all) ? all.find(g => g.id === groupId) : null;
     if (!found) fail(["Verify create: group not found in list (id:", groupId, ")"].map(String).join(" "));
@@ -43,15 +45,17 @@ export async function categoryGroupTests(client, context) {
 
   // Update
   console.log("\nUpdating category group...");
-  await callTool("actual_category_groups_update", {
+  await callTool("manage_categories", {
+    action: "update",
+    entity: "category_group",
     id: groupId,
-    fields: { name: `MCP-Group-${timestamp}-Updated` },
+    name: `MCP-Group-${timestamp}-Updated`,
   });
   console.log("✓ Category group updated");
 
   // Verify update
   {
-    const gd = await callTool("actual_category_groups_get", {});
+    const gd = await callTool("list_entities", { type: "category_group" });
     const all = gd.groups || gd || [];
     const found = Array.isArray(all) ? all.find(g => g.id === groupId) : null;
     if (!found) fail("Verify update: group not found in list");
@@ -61,9 +65,11 @@ export async function categoryGroupTests(client, context) {
 
   // category_groups_delete: create a disposable group, negative UUID test, delete, verify absence
   // NOTE: We create a second group for the delete test so context.categoryGroupId (needed by category tests) remains intact.
-  // FIXED(BUG-10): actual_category_groups_delete with nil-UUID now returns { success: false, error } actionable error
+  // FIXED(BUG-10): manage_categories delete category_group with nil-UUID now returns { success: false, error } actionable error
   console.log("\nTesting category_groups_delete (CG3): creating disposable group for delete test...");
-  const disposableGroup = await callTool("actual_category_groups_create", {
+  const disposableGroup = await callTool("manage_categories", {
+    action: "create",
+    entity: "category_group",
     name: `MCP-Group-Del-${timestamp}`,
   });
   const disposableGroupId = disposableGroup.id || disposableGroup.result || disposableGroup;
@@ -71,7 +77,9 @@ export async function categoryGroupTests(client, context) {
 
   console.log("\nTesting category_groups_delete (negative nil-UUID)...");
   try {
-    const nilResult = await callTool("actual_category_groups_delete", {
+    const nilResult = await callTool("manage_categories", {
+      action: "delete",
+      entity: "category_group",
       id: '00000000-0000-0000-0000-000000000000',
     });
     const success = nilResult?.success ?? nilResult?.result?.success;
@@ -87,11 +95,11 @@ export async function categoryGroupTests(client, context) {
   if (disposableGroupId) {
     console.log(`\nDeleting disposable category group (${disposableGroupId})...`);
     try {
-      await callTool("actual_category_groups_delete", { id: disposableGroupId });
+      await callTool("manage_categories", { action: "delete", entity: "category_group", id: disposableGroupId });
       console.log("✓ Delete call completed");
 
       // Verify absence
-      const gd = await callTool("actual_category_groups_get", {});
+      const gd = await callTool("list_entities", { type: "category_group" });
       const all = gd.groups || gd || [];
       const stillExists = Array.isArray(all) ? all.find(g => g.id === disposableGroupId) : null;
       if (stillExists) {

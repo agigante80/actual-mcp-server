@@ -32,8 +32,8 @@ export async function scheduleTests(client, context) {
   console.log('\n-- Running SCHEDULE TESTS --');
 
   // ── 1. List existing schedules ───────────────────────────────────────────
-  console.log('\nListing all schedules (actual_schedules_get)...');
-  const listResult = await callTool('actual_schedules_get', {});
+  console.log('\nListing all schedules (list_entities schedule)...');
+  const listResult = await callTool('list_entities', { type: 'schedule' });
   const initialSchedules = listResult?.schedules ?? listResult?.result?.schedules ?? listResult ?? [];
   if (!Array.isArray(initialSchedules)) {
     fail(`expected schedules array, got: ${JSON.stringify(listResult).slice(0, 100)}`);
@@ -46,11 +46,12 @@ export async function scheduleTests(client, context) {
   const oneOffName = `MCP-Schedule-OneOff-${timestamp}`;
   let scheduleOneOffId;
   try {
-    const created = await callTool('actual_schedules_create', {
+    const created = await callTool('manage_schedules', {
+      action: 'create',
       name: oneOffName,
       date: '2026-06-15',
       amount: -5000,
-      amountOp: 'is',
+      amount_op: 'is',
       posts_transaction: false,
     });
     scheduleOneOffId = created?.id ?? created?.result?.id ?? created;
@@ -66,7 +67,7 @@ export async function scheduleTests(client, context) {
 
   // ── 3. Verify one-off appears in list ────────────────────────────────────
   if (scheduleOneOffId) {
-    const afterCreate = await callTool('actual_schedules_get', {});
+    const afterCreate = await callTool('list_entities', { type: 'schedule' });
     const allAfter = afterCreate?.schedules ?? afterCreate?.result?.schedules ?? afterCreate ?? [];
     const found = Array.isArray(allAfter) ? allAfter.find(s => s.id === scheduleOneOffId) : null;
     if (found) {
@@ -81,7 +82,8 @@ export async function scheduleTests(client, context) {
   const recurName = `MCP-Schedule-Recur-${timestamp}`;
   let scheduleRecurId;
   try {
-    const createdRecur = await callTool('actual_schedules_create', {
+    const createdRecur = await callTool('manage_schedules', {
+      action: 'create',
       name: recurName,
       date: {
         frequency: 'monthly',
@@ -90,7 +92,7 @@ export async function scheduleTests(client, context) {
         interval: 1,
       },
       amount: -10000,
-      amountOp: 'is',
+      amount_op: 'is',
       posts_transaction: false,
     });
     scheduleRecurId = createdRecur?.id ?? createdRecur?.result?.id ?? createdRecur;
@@ -106,7 +108,7 @@ export async function scheduleTests(client, context) {
 
   // ── 5. Verify recurring has next_date populated ───────────────────────────
   if (scheduleRecurId) {
-    const afterRecur = await callTool('actual_schedules_get', {});
+    const afterRecur = await callTool('list_entities', { type: 'schedule' });
     const allAfterRecur = afterRecur?.schedules ?? afterRecur?.result?.schedules ?? afterRecur ?? [];
     const foundRecur = Array.isArray(allAfterRecur) ? allAfterRecur.find(s => s.id === scheduleRecurId) : null;
     if (foundRecur) {
@@ -125,7 +127,8 @@ export async function scheduleTests(client, context) {
     console.log('\nUpdating one-off schedule name...');
     const updatedName = `${oneOffName}-updated`;
     try {
-      const updateResult = await callTool('actual_schedules_update', {
+      const updateResult = await callTool('manage_schedules', {
+        action: 'update',
         id: scheduleOneOffId,
         name: updatedName,
       });
@@ -136,7 +139,7 @@ export async function scheduleTests(client, context) {
         fail(`update: unexpected response: ${JSON.stringify(updateResult).slice(0, 120)}`);
       }
       // Verify
-      const afterUpdate = await callTool('actual_schedules_get', {});
+      const afterUpdate = await callTool('list_entities', { type: 'schedule' });
       const allAfterUpdate = afterUpdate?.schedules ?? afterUpdate?.result?.schedules ?? afterUpdate ?? [];
       const foundUpdated = Array.isArray(allAfterUpdate) ? allAfterUpdate.find(s => s.id === scheduleOneOffId) : null;
       if (foundUpdated?.name === updatedName) {
@@ -153,7 +156,8 @@ export async function scheduleTests(client, context) {
   if (scheduleRecurId) {
     console.log('\nUpdating recurring schedule date + resetNextDate: true...');
     try {
-      const updateRecurResult = await callTool('actual_schedules_update', {
+      const updateRecurResult = await callTool('manage_schedules', {
+        action: 'update',
         id: scheduleRecurId,
         date: {
           frequency: 'monthly',
@@ -161,7 +165,7 @@ export async function scheduleTests(client, context) {
           endMode: 'never',
           interval: 1,
         },
-        resetNextDate: true,
+        reset_next_date: true,
       });
       const success = updateRecurResult?.success ?? updateRecurResult?.result?.success;
       if (success === true) {
@@ -182,20 +186,22 @@ export async function scheduleTests(client, context) {
     let linkAccId;
     let linkSchedId;
     try {
-      const acc = await callTool('actual_accounts_create', { name: `MCP-Test-Link547-${timestamp}`, balance: 0 });
+      const acc = await callTool('manage_accounts', { action: 'create', entity: 'account', name: `MCP-Test-Link547-${timestamp}`, balance: 0 });
       linkAccId = acc?.id ?? acc?.result ?? acc;
       const today = new Date().toISOString().slice(0, 10);
-      const sched = await callTool('actual_schedules_create', {
+      const sched = await callTool('manage_schedules', {
+        action: 'create',
         name: `MCP-Schedule-Link547-${timestamp}`,
         date: today,
         amount: -7547,
-        amountOp: 'is',
+        amount_op: 'is',
         account: linkAccId,
         posts_transaction: false,
       });
       linkSchedId = sched?.id ?? sched?.result?.id ?? sched;
-      const imported = await callTool('actual_transactions_import', {
-        accountId: linkAccId,
+      const imported = await callTool('manage_transactions', {
+        action: 'import',
+        account_id: linkAccId,
         txs: [
           { date: today, amount: -7547, imported_id: `mcp-547-match-${timestamp}` },
           { date: today, amount: -2000, imported_id: `mcp-547-other-${timestamp}` },
@@ -203,7 +209,7 @@ export async function scheduleTests(client, context) {
       });
       const added = imported?.added ?? imported?.result?.added ?? [];
       if (added.length !== 2) fail(`#547 import: expected 2 added, got ${JSON.stringify(imported).slice(0, 120)}`);
-      const got = await callTool('actual_transactions_get', { accountId: linkAccId });
+      const got = await callTool('search_transactions', { by: 'account', account_id: linkAccId });
       const rows = Array.isArray(got) ? got : (got?.result ?? []);
       const match = rows.find((t) => t?.amount === -7547);
       const other = rows.find((t) => t?.amount === -2000);
@@ -221,10 +227,10 @@ export async function scheduleTests(client, context) {
       fail(`#547 link check failed: ${err.message}`);
     } finally {
       if (linkSchedId) {
-        try { await callTool('actual_schedules_delete', { id: linkSchedId }); } catch (err) { fail(`#547 cleanup schedule: ${err.message}`); }
+        try { await callTool('manage_schedules', { action: 'delete', id: linkSchedId }); } catch (err) { fail(`#547 cleanup schedule: ${err.message}`); }
       }
       if (linkAccId) {
-        try { await callTool('actual_accounts_delete', { id: linkAccId }); } catch (err) { fail(`#547 cleanup account: ${err.message}`); }
+        try { await callTool('manage_accounts', { action: 'delete', entity: 'account', id: linkAccId }); } catch (err) { fail(`#547 cleanup account: ${err.message}`); }
       }
     }
   }
@@ -233,7 +239,7 @@ export async function scheduleTests(client, context) {
   if (scheduleOneOffId) {
     console.log('\nDeleting one-off schedule...');
     try {
-      const delResult = await callTool('actual_schedules_delete', { id: scheduleOneOffId });
+      const delResult = await callTool('manage_schedules', { action: 'delete', id: scheduleOneOffId });
       const success = delResult?.success ?? delResult?.result?.success;
       if (success === true) {
         console.log(`  ✓ delete returned success=true`);
@@ -241,7 +247,7 @@ export async function scheduleTests(client, context) {
         fail(`delete one-off: unexpected response: ${JSON.stringify(delResult).slice(0, 120)}`);
       }
       // Verify gone
-      const afterDel = await callTool('actual_schedules_get', {});
+      const afterDel = await callTool('list_entities', { type: 'schedule' });
       const allAfterDel = afterDel?.schedules ?? afterDel?.result?.schedules ?? afterDel ?? [];
       const stillThere = Array.isArray(allAfterDel) ? allAfterDel.find(s => s.id === scheduleOneOffId) : null;
       if (!stillThere) {
@@ -258,7 +264,7 @@ export async function scheduleTests(client, context) {
   if (scheduleRecurId) {
     console.log('\nDeleting recurring schedule...');
     try {
-      const delRecurResult = await callTool('actual_schedules_delete', { id: scheduleRecurId });
+      const delRecurResult = await callTool('manage_schedules', { action: 'delete', id: scheduleRecurId });
       const success = delRecurResult?.success ?? delRecurResult?.result?.success;
       if (success === true) {
         console.log(`  ✓ delete recurring returned success=true`);
@@ -275,15 +281,16 @@ export async function scheduleTests(client, context) {
   {
     let rangeId;
     try {
-      const created = await callTool('actual_schedules_create', {
+      const created = await callTool('manage_schedules', {
+        action: 'create',
         name: `MCP-Schedule-Range-${timestamp}`,
         date: '2026-06-15',
         amount: { num1: -10000, num2: -5000 },
-        amountOp: 'isbetween',
+        amount_op: 'isbetween',
         posts_transaction: false,
       });
       rangeId = created?.id ?? created?.result?.id ?? created;
-      const after = await callTool('actual_schedules_get', {});
+      const after = await callTool('list_entities', { type: 'schedule' });
       const all = after?.schedules ?? after?.result?.schedules ?? after ?? [];
       const row = Array.isArray(all) ? all.find(s => s.id === rangeId) : null;
       if (row?.amountOp === 'isbetween' && row?.amount?.num1 === -10000 && row?.amount?.num2 === -5000) {
@@ -295,17 +302,18 @@ export async function scheduleTests(client, context) {
       fail(`create range schedule failed: ${err.message}`);
     } finally {
       if (typeof rangeId === 'string') {
-        try { await callTool('actual_schedules_delete', { id: rangeId }); } catch (err) { fail(`delete range schedule failed: ${err.message}`); }
+        try { await callTool('manage_schedules', { action: 'delete', id: rangeId }); } catch (err) { fail(`delete range schedule failed: ${err.message}`); }
       }
     }
 
     console.log('NEGATIVE: scalar amount with amountOp isbetween (#527)...');
     try {
-      const bad = await callTool('actual_schedules_create', {
+      const bad = await callTool('manage_schedules', {
+        action: 'create',
         name: `MCP-Schedule-Scalar-${timestamp}`,
         date: '2026-06-15',
         amount: -5000,
-        amountOp: 'isbetween',
+        amount_op: 'isbetween',
         posts_transaction: false,
       });
       fail(`Expected a refusal but the tool returned: ${JSON.stringify(bad).slice(0, 120)}`);
@@ -330,14 +338,15 @@ export async function scheduleTests(client, context) {
     const lastDay = new Date(y, m + 1, 0).getDate();
     let patternId;
     try {
-      const created = await callTool('actual_schedules_create', {
+      const created = await callTool('manage_schedules', {
+        action: 'create',
         name: `MCP-Schedule-LastDay-${timestamp}`,
         date: { frequency: 'monthly', start: ymd(3), endMode: 'never', patterns: [{ type: 'day', value: -1 }] },
         amount: -5000,
         posts_transaction: false,
       });
       patternId = created?.id ?? created?.result?.id ?? created;
-      const after = await callTool('actual_schedules_get', {});
+      const after = await callTool('list_entities', { type: 'schedule' });
       const all = after?.schedules ?? after?.result?.schedules ?? after ?? [];
       const row = Array.isArray(all) ? all.find(s => s.id === patternId) : null;
       if (row?.next_date === ymd(lastDay) && row?.date?.patterns?.[0]?.value === -1) {
@@ -349,14 +358,15 @@ export async function scheduleTests(client, context) {
       fail(`create last-day schedule failed: ${err.message}`);
     } finally {
       if (typeof patternId === 'string') {
-        try { await callTool('actual_schedules_delete', { id: patternId }); } catch (err) { fail(`delete last-day schedule failed: ${err.message}`); }
+        try { await callTool('manage_schedules', { action: 'delete', id: patternId }); } catch (err) { fail(`delete last-day schedule failed: ${err.message}`); }
       }
     }
 
     console.log('NEGATIVE: patterns on a weekly schedule (#478)...');
     let refused = false;
     try {
-      await callTool('actual_schedules_create', {
+      await callTool('manage_schedules', {
+        action: 'create',
         name: `MCP-Schedule-WeeklyPatterns-${timestamp}`,
         date: { frequency: 'weekly', start: ymd(3), patterns: [{ type: 'day', value: 1 }] },
         amount: -5000,
@@ -378,11 +388,11 @@ export async function scheduleTests(client, context) {
   console.log('\nNEGATIVE: Deleting non-existent schedule UUID...');
   {
     try {
-      const nilResult = await callTool('actual_schedules_delete', { id: NON_EXISTENT_UUID });
+      const nilResult = await callTool('manage_schedules', { action: 'delete', id: NON_EXISTENT_UUID });
       fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes('not found') && msg.includes('actual_schedules_get')) {
+      if (msg.includes('not found') && msg.includes('list_entities with type schedule')) {
         console.log(`  ✓ FIXED(BUG-11): schedules_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
       } else {
         fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);

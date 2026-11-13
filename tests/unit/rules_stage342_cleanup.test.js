@@ -17,7 +17,7 @@ import { failureList } from '../manual/assert.js';
 const GHOST = '19999999-0000-4000-8000-000000000009';
 const STAGE_342 = 'MCP-Rule-stage-342';
 
-// opts.stickyDelete: a condition value whose rule survives actual_rules_delete (a delete that
+// opts.stickyDelete: a condition value whose rule survives manage_rules delete (a delete that
 // "succeeds" without taking effect, the non-throwing failure the module must notice).
 function makeClient(opts = {}) {
   const calls = [];
@@ -29,16 +29,17 @@ function makeClient(opts = {}) {
     rules.push({ id, stage: r.stage ?? null, conditions: r.conditions, actions: r.actions.map(a => ({ op: 'set', ...a })) });
     return id;
   };
+  // The module calls the compact tools: a call is (tool, selector value in `action` or `type`).
   const callTool = async (name, args) => {
     calls.push([name, args]);
-    switch (name) {
-      case 'actual_rules_get':
+    switch (`${name}/${args.action ?? args.type ?? ''}`) {
+      case 'list_entities/rule':
         return { rules: rules.map(r => ({ ...r })) };
-      case 'actual_rules_create':
+      case 'manage_rules/create':
         if (args.stage === 'default') throw new Error('Invalid stage');
         if (args.actions?.some(a => a.value === GHOST)) throw new Error(`Category ${GHOST} not found; available: cat-1`);
         return { id: create(args) };
-      case 'actual_rules_create_batch': {
+      case 'manage_rules/create_batch': {
         const succeeded = [];
         const failed = [];
         args.rules.forEach((r, index) => {
@@ -48,12 +49,13 @@ function makeClient(opts = {}) {
         });
         return { total: args.rules.length, successCount: succeeded.length, failureCount: failed.length, succeeded, failed };
       }
-      case 'actual_rules_update': {
+      case 'manage_rules/update': {
         const r = rules.find(x => x.id === args.id);
-        if (r) Object.assign(r, args.fields);
+        const { action: _a, id: _i, ...fields } = args;
+        if (r) Object.assign(r, fields);
         return {};
       }
-      case 'actual_rules_delete': {
+      case 'manage_rules/delete': {
         if (args.id === '00000000-0000-0000-0000-000000000000') throw new Error('Rule not found');
         const i = rules.findIndex(x => x.id === args.id);
         if (i >= 0 && marker(rules[i]) !== opts.stickyDelete) rules.splice(i, 1);
@@ -80,13 +82,13 @@ async function run(opts) {
   return { calls, rules, context, added: failureList().slice(before) };
 }
 
-const deletedIds = (calls) => calls.filter(([n]) => n === 'actual_rules_delete').map(([, a]) => a.id);
+const deletedIds = (calls) => calls.filter(([n, a]) => n === 'manage_rules' && a.action === 'delete').map(([, a]) => a.id);
 
 // S1 (positive): the #342 rule the module created is deleted, and its context id is cleared.
 {
   const r = await run();
   assert.deepStrictEqual(r.added, [], `S1: no failures recorded, got ${JSON.stringify(r.added)}`);
-  assert.ok(deletedIds(r.calls).includes('rule-342'), 'S1: actual_rules_delete called with the #342 rule id');
+  assert.ok(deletedIds(r.calls).includes('rule-342'), 'S1: manage_rules delete called with the #342 rule id');
   assert.strictEqual(r.context.ruleStage342Id, null, 'S1: context.ruleStage342Id cleared after a verified delete');
   assert.deepStrictEqual(r.rules, [], `S1: no rule left in the store, got ${JSON.stringify(r.rules.map(x => x.id))}`);
 }

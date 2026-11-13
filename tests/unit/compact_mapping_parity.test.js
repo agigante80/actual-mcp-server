@@ -170,5 +170,27 @@ await check('NEGATIVE: a stale pending entry for a tool that no longer exists is
   assert.deepStrictEqual(problems, ['actual_gone_tool is listed but is not a registered tool']);
 });
 
+// #681: the compact surface has a hard ceiling of 15 tools (docs/explanation/compact-tool-surface.md,
+// section 1). A sixteenth tool would turn it back into a catalogue the model must page through,
+// which is what the surface exists to avoid. A pure function so the negative run below can feed
+// it a list of 16 and watch it object.
+const COMPACT_CEILING = 15;
+function compactCountProblems(tools) {
+  return tools.length > COMPACT_CEILING
+    ? [`COMPACT_TOOLS has ${tools.length} tools; the ceiling is ${COMPACT_CEILING} (docs/explanation/compact-tool-surface.md, section 1)`]
+    : [];
+}
+
+await check('the shipped COMPACT_TOOLS stays within the 15-tool ceiling', () => {
+  assert.deepStrictEqual(compactCountProblems(COMPACT_TOOLS), []);
+});
+
+await check('NEGATIVE: a 16-entry compact list is reported exactly once', () => {
+  const sixteen = Array.from({ length: 16 }, (_, i) => ({ name: `tool_${i}` }));
+  assert.deepStrictEqual(compactCountProblems(sixteen), [
+    'COMPACT_TOOLS has 16 tools; the ceiling is 15 (docs/explanation/compact-tool-surface.md, section 1)',
+  ]);
+});
+
 console.log(`\n[compact-mapping-parity] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

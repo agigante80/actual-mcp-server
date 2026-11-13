@@ -34,7 +34,9 @@ export async function categoryTests(client, context) {
 
   // Create
   console.log("\nCreating test category in MCP category group...");
-  const newCat = await callTool("actual_categories_create", {
+  const newCat = await callTool("manage_categories", {
+    action: "create",
+    entity: "category",
     name: `MCP-Cat-${timestamp}`,
     group_id: context.categoryGroupId,
   });
@@ -44,7 +46,7 @@ export async function categoryTests(client, context) {
 
   // Verify create
   {
-    const found = flattenCats(await callTool("actual_categories_get", {})).find(c => c.id === categoryId);
+    const found = flattenCats(await callTool("list_entities", { type: "category" })).find(c => c.id === categoryId);
     if (!found) fail(["Verify create: category not found in list (id:", categoryId, ")"].map(String).join(" "));
     else if (found.name === `MCP-Cat-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
     else fail(`Verify create: expected "MCP-Cat-${timestamp}", got "${found.name}"`);
@@ -52,29 +54,31 @@ export async function categoryTests(client, context) {
 
   // Update
   console.log("\nUpdating category...");
-  await callTool("actual_categories_update", {
+  await callTool("manage_categories", {
+    action: "update",
+    entity: "category",
     id: categoryId,
-    fields: { name: `MCP-Cat-${timestamp}-Updated` },
+    name: `MCP-Cat-${timestamp}-Updated`,
   });
   console.log("✓ Category updated");
 
   // Verify update
   {
-    const found = flattenCats(await callTool("actual_categories_get", {})).find(c => c.id === categoryId);
+    const found = flattenCats(await callTool("list_entities", { type: "category" })).find(c => c.id === categoryId);
     if (!found) fail("Verify update: category not found in list");
     else if (found.name === `MCP-Cat-${timestamp}-Updated`) console.log(`  ✓ Verify update: name="${found.name}"`);
     else fail(`Verify update: expected "MCP-Cat-${timestamp}-Updated", got "${found.name}"`);
   }
 
-  // FIXED(BUG-1): actual_categories_delete with nil-UUID now returns actionable error (pre-flight check in adapter)
+  // FIXED(BUG-1): manage_categories delete category with nil-UUID now returns actionable error (pre-flight check in adapter)
   console.log("\nNEGATIVE: categories_delete with nil-UUID...");
   try {
-    const nilRes = await callTool("actual_categories_delete", { id: '00000000-0000-0000-0000-000000000000' });
+    const nilRes = await callTool("manage_categories", { action: "delete", entity: "category", id: '00000000-0000-0000-0000-000000000000' });
     // The adapter throws a descriptive error: this catch handles it
     fail(`Expected an error for the nil UUID but the tool returned: ${JSON.stringify(nilRes).slice(0, 120)}`);
   } catch (err) {
     const msg = err.message || String(err);
-    if (msg.includes('not found') && msg.includes('actual_categories_get')) {
+    if (msg.includes('not found') && msg.includes('list_entities with type category')) {
       console.log(`  ✓ FIXED(BUG-1): categories_delete nil-UUID returns actionable error: ${msg.slice(0, 120)}`);
     } else {
       fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
@@ -84,11 +88,11 @@ export async function categoryTests(client, context) {
   if (context.categoryId) {
     console.log("\nDeleting test category...");
     try {
-      await callTool("actual_categories_delete", { id: context.categoryId });
+      await callTool("manage_categories", { action: "delete", entity: "category", id: context.categoryId });
       console.log("✓ Delete call completed");
 
       // Verify deletion
-      const afterCats = flattenCats(await callTool("actual_categories_get", {}));
+      const afterCats = flattenCats(await callTool("list_entities", { type: "category" }));
       const stillExists = afterCats.find(c => c.id === context.categoryId);
       if (stillExists) {
         fail("Verify delete: category still present in list");

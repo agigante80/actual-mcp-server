@@ -14,10 +14,10 @@ import { fail, skip } from '../assert.js';
  * inside this function.
  *
  * TWO PROPERTIES OF THE TOOLS SHAPE EVERY ASSERTION BELOW, both from their descriptions:
- *   - actual_tags_create is an UPSERT ON THE WORD. A fixed fixture name would silently reuse
+ *   - manage_tags create is an UPSERT ON THE WORD. A fixed fixture name would silently reuse
  *     a previous run's row and the create assertion would pass having created nothing, so the
  *     name is timestamped like every other module's fixture.
- *   - actual_tags_delete is a SOFT delete (tombstone). Verification is therefore ABSENCE FROM
+ *   - manage_tags delete is a SOFT delete (tombstone). Verification is therefore ABSENCE FROM
  *     THE LIST, never an error on re-read.
  *
  * Reads from context:  (none)
@@ -51,7 +51,7 @@ export async function tagTests(client, context) {
 
   /** The tag list, normalised: the tools return an array, the runner may wrap it. */
   async function allTags() {
-    const res = await callTool("actual_tags_list", {});
+    const res = await callTool("list_entities", { type: "tag" });
     return res?.result || res || [];
   }
 
@@ -69,7 +69,8 @@ export async function tagTests(client, context) {
 
     // --- create ---
     console.log(`\nCreating tag "${TAG_WORD}"...`);
-    const created = await callTool("actual_tags_create", {
+    const created = await callTool("manage_tags", {
+      action: "create",
       tag: TAG_WORD,
       color: '#33aa33',
       description: 'Created by the MCP integration suite',
@@ -84,7 +85,7 @@ export async function tagTests(client, context) {
     // Verify by READ-BACK, never by trusting the create response (#347/#349).
     const afterCreate = await allTags();
     if (!afterCreate.find((t) => t.id === tagId)) {
-      fail("Verify create: the new tag is not in actual_tags_list");
+      fail("Verify create: the new tag is not in list_entities tag");
     } else {
       console.log("  ✓ Verify create: tag present in list");
     }
@@ -93,7 +94,7 @@ export async function tagTests(client, context) {
     // This is the property most likely to surprise a caller, and it is stated in the tool
     // description, so it is pinned here rather than assumed.
     console.log("\nRe-creating the SAME tag word (documented upsert)...");
-    const recreated = await callTool("actual_tags_create", { tag: TAG_WORD });
+    const recreated = await callTool("manage_tags", { action: "create", tag: TAG_WORD });
     const recreatedId = idOf(recreated);
     if (recreatedId !== tagId) {
       fail(`Upsert: expected the same id back, got ${recreatedId} (was ${tagId})`);
@@ -109,7 +110,8 @@ export async function tagTests(client, context) {
 
     // --- update ---
     console.log("\nUpdating the tag...");
-    await callTool("actual_tags_update", {
+    await callTool("manage_tags", {
+      action: "update",
       id: tagId,
       tag: RENAMED,
       color: '#112233',
@@ -131,7 +133,7 @@ export async function tagTests(client, context) {
     // case is what proves the guard exists at all.
     console.log("\nNEGATIVE: tags_update with a non-existent id...");
     try {
-      const res = await callTool("actual_tags_update", { id: NIL_UUID, tag: 'should-not-exist' });
+      const res = await callTool("manage_tags", { action: "update", id: NIL_UUID, tag: 'should-not-exist' });
       fail(`Expected a not-found error, got: ${JSON.stringify(res).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
@@ -145,7 +147,7 @@ export async function tagTests(client, context) {
     // --- NEGATIVE: update with no fields (schema refine) ---
     console.log("\nNEGATIVE: tags_update with no fields to change...");
     try {
-      const res = await callTool("actual_tags_update", { id: tagId });
+      const res = await callTool("manage_tags", { action: "update", id: tagId });
       fail(`Expected a validation error, got: ${JSON.stringify(res).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
@@ -159,7 +161,7 @@ export async function tagTests(client, context) {
     // --- NEGATIVE: delete a non-existent id ---
     console.log("\nNEGATIVE: tags_delete with a non-existent id...");
     try {
-      const res = await callTool("actual_tags_delete", { id: NIL_UUID });
+      const res = await callTool("manage_tags", { action: "delete", id: NIL_UUID });
       fail(`Expected a not-found error, got: ${JSON.stringify(res).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
@@ -176,11 +178,11 @@ export async function tagTests(client, context) {
     if (tagId) {
       console.log("\nDeleting test tag...");
       try {
-        await callTool("actual_tags_delete", { id: tagId });
+        await callTool("manage_tags", { action: "delete", id: tagId });
         // Soft delete: verify ABSENCE from the list, not an error on read.
         const afterDelete = await allTags();
         if (afterDelete.find((t) => t.id === tagId)) {
-          fail("Verify delete: the tag is still present in actual_tags_list");
+          fail("Verify delete: the tag is still present in list_entities tag");
         } else {
           console.log("  ✓ Verify delete: tag no longer in list");
         }
@@ -199,7 +201,7 @@ export async function tagTests(client, context) {
         console.log(`\nCleaning up ${strays.length} tag(s) found by name (no id was captured)...`);
         for (const stray of strays) {
           try {
-            await callTool("actual_tags_delete", { id: stray.id });
+            await callTool("manage_tags", { action: "delete", id: stray.id });
             console.log(`  \u2713 Removed stray tag "${stray.tag}"`);
           } catch (err) {
             fail(`Could not remove stray tag "${stray.tag}": ${String(err.message || err).slice(0, 100)}`);

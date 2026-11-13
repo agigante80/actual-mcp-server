@@ -23,13 +23,13 @@ export async function payeeTests(client, context) {
 
   // List existing payees
   console.log("\nListing existing payees...");
-  const payeesData = await callTool("actual_payees_get", {});
+  const payeesData = await callTool("list_entities", { type: "payee" });
   const existingPayees = payeesData.result || payeesData || [];
   console.log("✓ Found payees:", existingPayees.length);
 
   // Helper: fetch current payee list
   async function allPayees() {
-    const pd = await callTool("actual_payees_get", {});
+    const pd = await callTool("list_entities", { type: "payee" });
     return pd.result || pd || [];
   }
 
@@ -37,35 +37,35 @@ export async function payeeTests(client, context) {
 
   // Create first payee
   console.log("\nCreating test payee...");
-  const newPayee = await callTool("actual_payees_create", { name: `MCP-Payee-${timestamp}` });
+  const newPayee = await callTool("manage_payees", { action: "create", name: `MCP-Payee-${timestamp}` });
   const payeeId = newPayee.id || newPayee.result || newPayee;
   console.log("✓ Created payee:", payeeId);
   context.payeeId = payeeId;
 
   // Create second payee for merge test
   console.log("\nCreating second test payee for merge...");
-  const newPayee2 = await callTool("actual_payees_create", { name: `MCP-Payee2-${timestamp}` });
+  const newPayee2 = await callTool("manage_payees", { action: "create", name: `MCP-Payee2-${timestamp}` });
   const payeeId2 = newPayee2.id || newPayee2.result || newPayee2;
   console.log("✓ Created second payee:", payeeId2);
   context.payeeId2 = payeeId2;
 
-  // #204: actual_entities_search (pattern + fuzzy lookup, and the no-match contract)
-  console.log("\nTesting actual_entities_search (#204)...");
+  // #204: list_entities search (pattern + fuzzy lookup, and the no-match contract)
+  console.log("\nTesting list_entities search (#204)...");
   {
-    const contains = await callTool("actual_entities_search", { type: 'payees', query: `MCP-Payee-${timestamp}` });
+    const contains = await callTool("list_entities", { type: 'payee', query: `MCP-Payee-${timestamp}` });
     const cm = contains?.matches || contains?.result?.matches || [];
     if (cm.some(m => m.id === payeeId)) console.log(`  ✓ contains: found the created payee by partial name (${cm.length} match(es))`);
     else fail([`contains: created payee not found:`, JSON.stringify(contains).slice(0, 140)].map(String).join(" "));
 
     // fuzzy: drop a character to simulate a typo
     const typo = `MCP-Paye-${timestamp}`;
-    const fuzzy = await callTool("actual_entities_search", { type: 'payees', query: typo, matchType: 'fuzzy' });
+    const fuzzy = await callTool("list_entities", { type: 'payee', query: typo, match_type: 'fuzzy' });
     const fm = fuzzy?.matches || fuzzy?.result?.matches || [];
     if (fm.some(m => m.id === payeeId)) console.log(`  ✓ fuzzy: typo "${typo}" still resolved the payee`);
     else fail(`fuzzy: the typo did not resolve to the payee (matches: ${JSON.stringify(fm).slice(0, 120)})`);
 
     // no-match contract: empty result, no error
-    const none = await callTool("actual_entities_search", { type: 'payees', query: 'zzz-nonexistent-zzz' });
+    const none = await callTool("list_entities", { type: 'payee', query: 'zzz-nonexistent-zzz' });
     const nm = none?.matches || none?.result?.matches || [];
     const nc = none?.count ?? none?.result?.count;
     if (nm.length === 0 && nc === 0 && !(none?.error || none?.result?.error)) console.log("  ✓ no-match: returns { matches: [], count: 0 } with no error");
@@ -101,18 +101,18 @@ export async function payeeTests(client, context) {
     try {
       let groupId = context.categoryGroupId;
       if (!groupId) {
-        const grp = await callTool("actual_category_groups_create", { name: `MCP-PayeeCatGroup-${timestamp}` });
+        const grp = await callTool("manage_categories", { action: "create", entity: "category_group", name: `MCP-PayeeCatGroup-${timestamp}` });
         groupId = grp.id || grp.groupId || grp.result || grp;
         throwawayGroupId = groupId;
       }
-      const cat = await callTool("actual_categories_create", { name: `MCP-PayeeCat-${timestamp}`, group_id: groupId });
+      const cat = await callTool("manage_categories", { action: "create", entity: "category", name: `MCP-PayeeCat-${timestamp}`, group_id: groupId });
       throwawayCatId = cat.categoryId || cat.id || cat.result || cat;
       catForPayee = throwawayCatId;
       console.log(`  ℹ category-via-rules: created throwaway category ${catForPayee} (context.categoryId was nulled by category.js)`);
     } catch {
       catForPayee = null;
       if (throwawayGroupId) {
-        try { await callTool("actual_category_groups_delete", { id: throwawayGroupId }); } catch { /* residue sweep covers */ }
+        try { await callTool("manage_categories", { action: "delete", entity: "category_group", id: throwawayGroupId }); } catch { /* residue sweep covers */ }
         throwawayGroupId = null;
       }
     }
@@ -122,14 +122,15 @@ export async function payeeTests(client, context) {
     // ── 1. SET category (create rule path) ────────────────────────────────
     console.log("\nSetting default category on payee (create rule path)...");
     try {
-      await callTool("actual_payees_update", {
+      await callTool("manage_payees", {
+        action: "update",
         id: payeeId,
-        fields: { category: catForPayee },
+        category: catForPayee,
       });
-      console.log("✓ actual_payees_update with category succeeded");
+      console.log("✓ manage_payees update with category succeeded");
 
       // Verify: payee_rules_get should reveal exactly 1 'set category' rule
-      const rulesAfterSet = await callTool("actual_payee_rules_get", { payeeId });
+      const rulesAfterSet = await callTool("list_entities", { type: "rule", payee_id: payeeId });
       const rulesAfterSetArr = Array.isArray(rulesAfterSet)
         ? rulesAfterSet
         : (rulesAfterSet?.rules ?? rulesAfterSet?.result ?? []);
@@ -154,14 +155,15 @@ export async function payeeTests(client, context) {
     // ── 2. SET category again (update / no-duplication path) ──────────────
     console.log("\nSetting same category again (update rule: no duplicate)...");
     try {
-      await callTool("actual_payees_update", {
+      await callTool("manage_payees", {
+        action: "update",
         id: payeeId,
-        fields: { category: catForPayee },
+        category: catForPayee,
       });
-      console.log("✓ Second actual_payees_update with same category succeeded");
+      console.log("✓ Second manage_payees update with same category succeeded");
 
       // Verify: still exactly 1 'set category' rule, not 2
-      const rulesAfterUpdate = await callTool("actual_payee_rules_get", { payeeId });
+      const rulesAfterUpdate = await callTool("list_entities", { type: "rule", payee_id: payeeId });
       const rulesAfterUpdateArr = Array.isArray(rulesAfterUpdate)
         ? rulesAfterUpdate
         : (rulesAfterUpdate?.rules ?? rulesAfterUpdate?.result ?? []);
@@ -181,14 +183,15 @@ export async function payeeTests(client, context) {
     // ── 3. CLEAR category (delete rule path) ──────────────────────────────
     console.log("\nClearing default category on payee (delete rule path)...");
     try {
-      await callTool("actual_payees_update", {
+      await callTool("manage_payees", {
+        action: "update",
         id: payeeId,
-        fields: { category: null },
+        category: null,
       });
-      console.log("✓ actual_payees_update with category=null succeeded");
+      console.log("✓ manage_payees update with category=null succeeded");
 
       // Verify: no 'set category' rule remains
-      const rulesAfterClear = await callTool("actual_payee_rules_get", { payeeId });
+      const rulesAfterClear = await callTool("list_entities", { type: "rule", payee_id: payeeId });
       const rulesAfterClearArr = Array.isArray(rulesAfterClear)
         ? rulesAfterClear
         : (rulesAfterClear?.rules ?? rulesAfterClear?.result ?? []);
@@ -208,9 +211,10 @@ export async function payeeTests(client, context) {
     // ── 4. NEGATIVE: non-existent payee UUID with category ────────────────
     console.log("\nNegative: category update on non-existent payee UUID...");
     try {
-      await callTool("actual_payees_update", {
+      await callTool("manage_payees", {
+        action: "update",
         id: '00000000-0000-0000-0000-000000000000',
-        fields: { category: catForPayee },
+        category: catForPayee,
       });
       fail("Non-existent payee update with a category did not throw. The comment here guessed that Actual allows orphan rules; that is a question, and tolerating both answers is what lets this pair of branches pass whichever happens.");
     } catch (err) {
@@ -222,11 +226,11 @@ export async function payeeTests(client, context) {
 
   // Clean up the throwaway category/group if this block created them (#282).
   if (throwawayCatId) {
-    try { await callTool("actual_categories_delete", { id: throwawayCatId }); }
+    try { await callTool("manage_categories", { action: "delete", entity: "category", id: throwawayCatId }); }
     catch (err) { fail(`throwaway category cleanup failed: ${err.message?.slice(0, 80)}. Deferring to the residue sweep hides WHICH step leaked it.`); }
   }
   if (throwawayGroupId) {
-    try { await callTool("actual_category_groups_delete", { id: throwawayGroupId }); }
+    try { await callTool("manage_categories", { action: "delete", entity: "category_group", id: throwawayGroupId }); }
     catch (err) { fail(`throwaway group cleanup failed: ${err.message?.slice(0, 80)}. Deferring to the residue sweep hides WHICH step leaked it.`); }
   }
 
@@ -240,9 +244,10 @@ export async function payeeTests(client, context) {
 
   // Update name
   console.log("\nUpdating payee name...");
-  await callTool("actual_payees_update", {
+  await callTool("manage_payees", {
+    action: "update",
     id: payeeId,
-    fields: { name: `MCP-Payee-${timestamp}-Updated` },
+    name: `MCP-Payee-${timestamp}-Updated`,
   });
   console.log("✓ Payee updated");
 
@@ -257,7 +262,7 @@ export async function payeeTests(client, context) {
   // REGRESSION: strict validation: invalid field
   console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
   try {
-    await callTool("actual_payees_update", { id: payeeId, fields: { invalidField: "should fail" } });
+    await callTool("manage_payees", { action: "update", id: payeeId, invalidField: "should fail" });
     fail("REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
   } catch (err) {
     if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
@@ -269,7 +274,7 @@ export async function payeeTests(client, context) {
 
   // Merge payeeId2 into payeeId
   console.log("\nMerging payees...");
-  await callTool("actual_payees_merge", { targetId: payeeId, mergeIds: [payeeId2] });
+  await callTool("manage_payees", { action: "merge", target_id: payeeId, merge_ids: [payeeId2] });
   console.log("✓ Payees merged (payee2 merged into payee1)");
   context.payeeId2 = null; // gone after merge
 
@@ -287,18 +292,18 @@ export async function payeeTests(client, context) {
 
   // Payee rules: after category was set then cleared above, expect 0 rules
   console.log("\nGetting payee rules (after category cleared: expect 0)...");
-  const rules = await callTool("actual_payee_rules_get", { payeeId });
+  const rules = await callTool("list_entities", { type: "rule", payee_id: payeeId });
   const rulesArr = Array.isArray(rules) ? rules : (rules?.rules ?? rules?.result ?? null);
   if (!Array.isArray(rulesArr)) fail(["Verify payee rules: expected array, got", typeof rulesArr].map(String).join(" "));
   else console.log(`  ✓ Payee rules: ${rulesArr.length} rule(s) (expected 0 for new payee)`);
 
-  // FIXED(BUG-3): actual_payee_rules_get with non-existent payeeId now returns actionable error with empty rules array
+  // FIXED(BUG-3): list_entities rule with non-existent payeeId now returns actionable error with empty rules array
   // The adapter post-filters by payee_id, and the tool verifies the payee exists first.
   console.log("\nNEGATIVE P6: payee_rules_get with non-existent payeeId...");
   {
-    const badRules = await callTool("actual_payee_rules_get", { payeeId: "00000000-0000-0000-0000-000000000000" });
+    const badRules = await callTool("list_entities", { type: "rule", payee_id: "00000000-0000-0000-0000-000000000000" });
     const hasError = typeof badRules?.error === 'string';
-    if (hasError && badRules.error.includes('not found') && badRules.error.includes('actual_payees_get')) {
+    if (hasError && badRules.error.includes('not found') && badRules.error.includes('list_entities with type payee')) {
       console.log(`  ✓ FIXED(BUG-3): payee_rules_get nil-UUID returns actionable error: ${badRules.error.slice(0, 120)}`);
     } else if (hasError) {
       fail(`P6: an error was returned but the message is not actionable: ${badRules.error.slice(0, 120)}`);
@@ -307,13 +312,13 @@ export async function payeeTests(client, context) {
     }
   }
 
-  // #451: actual_payees_common_list had no live-server coverage. READ ONLY, so it creates no
+  // #451: list_entities payee had no live-server coverage. READ ONLY, so it creates no
   // residue and can sit anywhere in this module. Asserted as a shape plus a consistency check
   // against the full list rather than against a fixed count: "common" is derived from recent
   // transaction frequency, so the CONTENT legitimately varies between runs and between budgets.
   console.log("\nListing common payees...");
   try {
-    const commonRes = await callTool("actual_payees_common_list", {});
+    const commonRes = await callTool("list_entities", { type: "payee", sort: "frequency" });
     const common = commonRes?.result || commonRes || [];
     if (!Array.isArray(common)) {
       fail(`payees_common_list did not return an array: ${JSON.stringify(commonRes).slice(0, 120)}`);
@@ -322,7 +327,7 @@ export async function payeeTests(client, context) {
       const allIds = new Set(all.map((p) => p.id));
       const strays = common.filter((p) => p && p.id && !allIds.has(p.id));
       if (strays.length) {
-        fail(`payees_common_list returned ${strays.length} payee(s) absent from actual_payees_get`);
+        fail(`payees_common_list returned ${strays.length} payee(s) absent from list_entities payee`);
       } else {
         console.log(`  \u2713 payees_common_list returned ${common.length} payee(s), all present in the full list`);
       }
@@ -331,15 +336,15 @@ export async function payeeTests(client, context) {
     fail(`payees_common_list threw: ${String(err.message || err).slice(0, 120)}`);
   }
 
-  // FIXED(BUG-2): actual_payees_delete with non-existent UUID now returns actionable error (pre-flight check in adapter)
+  // FIXED(BUG-2): manage_payees delete with non-existent UUID now returns actionable error (pre-flight check in adapter)
   console.log("\nNEGATIVE: payees_delete with nil-UUID...");
   try {
-    const nilRes = await callTool("actual_payees_delete", { id: '00000000-0000-0000-0000-000000000000' });
+    const nilRes = await callTool("manage_payees", { action: "delete", id: '00000000-0000-0000-0000-000000000000' });
     // The adapter throws a descriptive error: this catch handles it
     fail(`Expected an error but the tool returned: ${JSON.stringify(nilRes).slice(0, 120)}`);
   } catch (err) {
     const msg = err.message || String(err);
-    if (msg.includes('not found') && msg.includes('actual_payees_get')) {
+    if (msg.includes('not found') && msg.includes('list_entities with type payee')) {
       console.log(`  ✓ FIXED(BUG-2): payees_delete nil-UUID returns actionable error: ${msg.slice(0, 120)}`);
     } else {
       fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
@@ -349,7 +354,7 @@ export async function payeeTests(client, context) {
   if (payeeId) {
     console.log("\nDeleting test payee...");
     try {
-      await callTool("actual_payees_delete", { id: payeeId });
+      await callTool("manage_payees", { action: "delete", id: payeeId });
       console.log("✓ Delete call completed");
 
       // Verify deletion

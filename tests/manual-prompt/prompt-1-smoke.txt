@@ -1,26 +1,28 @@
 ─────────────────────────────────────────────────────────────────────────────────
 PROMPT 1 OF 3: SMOKE (Read-Only)
-  Tests 9 read-only tools to confirm the MCP server is connected and healthy.
+  Tests 9 read-only operations to confirm the MCP server is connected and healthy.
+  Written for the DEFAULT compact tool surface (MCP_TOOL_SURFACE=compact): 15 tools,
+  most of them taking one selector argument (topic, type, by, report or action).
 
 HOW TO USE
   1. Make sure the MCP server is running and connected to the chat platform.
   2. Open a NEW chat session with a model that has MCP tool access.
   3. Copy everything below the "─── PROMPT START" line and paste it as your
      first message.
-  4. The AI will generate a session timestamp, then test Phase 1 (9 tools).
-  5. If ALL tools pass → paste prompt-2-core.txt in the same chat session.
-  6. If any tool fails → fix the issue before continuing.
+  4. The AI will generate a session timestamp, then test Phase 1 (9 operations).
+  5. If ALL operations pass → paste prompt-2-core.txt in the same chat session.
+  6. If any operation fails → fix the issue before continuing.
 
-WHAT IT TESTS (Phase 1: 9 tools)
-  actual_server_info
-  actual_server_get_version
-  actual_accounts_list
-  actual_category_groups_get
-  actual_categories_get
-  actual_payees_get
-  actual_get_context (positive + negative sub-calls, counts as 1 tool)
-  actual_get_id_by_name (4 sub-calls, counts as 1 tool)
-  actual_entities_search (positive + negative sub-calls, counts as 1 tool)
+WHAT IT TESTS (Phase 1: 9 operations)
+  get_context          topic server
+  get_context          topic version
+  list_entities        type account
+  list_entities        type category_group
+  list_entities        type category
+  list_entities        type payee
+  get_context          topic structure (positive + negative sub-calls, counts as 1)
+  list_entities        name lookup, 4 types (4 sub-calls, counts as 1)
+  list_entities        query search (positive + negative sub-calls, counts as 1)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
 
@@ -34,27 +36,30 @@ Store this as `{TS}`. You will use it in Prompts 2 and 3 for every test-data nam
 **Preflight Assumptions:**
 - An Actual Budget file is already open and writable
 - MCP server is connected to a single budget
+- The server runs the compact tool surface: 15 tools, each taking a selector argument
+  (`topic`, `type`, `by`, `report` or `action`) that picks the operation. Argument names are
+  flat snake_case (`account_id`, `start_date`, `payee_name`).
 - No other concurrent clients are mutating the budget
 - Currency is cents-based integers throughout
 - Dates use YYYY-MM-DD format
 
 **Failure Definition:**
-A tool test FAILS if:
+A test FAILS if:
 - The tool returns an error, exception, or non-OK status
 - The response schema is missing required fields
 - Returned data contradicts expected effects
 - IDs expected to be returned are null or missing
 
 **Testing Rules:**
-1. Test ONE tool at a time: NEVER call multiple tools in parallel
-2. WAIT for each tool's response before proceeding to the next
+1. Test ONE operation at a time: NEVER call multiple tools in parallel
+2. WAIT for each response before proceeding to the next
 3. Continue AUTOMATICALLY: DO NOT stop for confirmation
 4. ONLY STOP on a failure (as defined above) and report it, then wait for instructions
-5. Output exactly ONE status line per tool:
-   [Phase 1] tool_name: ✓ success
-   [Phase 1] tool_name: ✗ failure: <brief error>
-   [Phase 1] tool_name: ℹ informational: <reason>
-6. NO explanatory text between tools: status line only, then immediately next tool
+5. Output exactly ONE status line per operation, naming the tool and its selector value:
+   [Phase 1] tool_name selector_value: ✓ success
+   [Phase 1] tool_name selector_value: ✗ failure: <brief error>
+   [Phase 1] tool_name selector_value: ℹ informational: <reason>
+6. NO explanatory text between operations: status line only, then immediately the next one
 7. ACTUALLY INVOKE each MCP tool: do NOT simulate or fabricate results
 
 **Safety Rule:**
@@ -62,58 +67,65 @@ Abort immediately if a destructive operation would affect non-test data.
 
 ---
 
-**Phase 1: Server & Read-Only (9 tools):**
+**Phase 1: Server & Read-Only (9 operations):**
 
-- actual_server_info
-  Expect: server metadata object (name, version, etc.), no error
+- get_context, topic: "server"
+  Input: { topic: "server" }
+  Expect: server metadata object (MCP server version, name, Node.js and SDK versions, tool count, uptime), no error
 
-- actual_server_get_version
+- get_context, topic: "version"
+  Input: { topic: "version" }
   Expect: { version: string } on success OR { error: string } on version mismatch: both are ✓ non-failures; only an exception counts as ✗ failure
 
-- actual_accounts_list
+- list_entities, type: "account"
+  Input: { type: "account" }
   Expect: array (possibly empty), no error
-  Save the first account's name and id as `{account1_name}` and `{account1_id}` for use in actual_get_id_by_name below
+  Save the first account's name and id as `{account1_name}` and `{account1_id}` for use in the name lookup below
 
-- actual_category_groups_get
+- list_entities, type: "category_group"
+  Input: { type: "category_group" }
   Expect: category groups array, no error
 
-- actual_categories_get
+- list_entities, type: "category"
+  Input: { type: "category" }
   Expect: categories array (grouped or flat per API contract), no error
   Save the first category's name as `{cat1_name}`
 
-- actual_payees_get
+- list_entities, type: "payee"
+  Input: { type: "payee" }
   Expect: payees array (possibly empty), no error
   Save the first non-transfer payee's name as `{payee1_name}`
 
-- actual_get_context (positive + negative sub-calls, counts as 1 tool):
-  Positive: call with {} (defaults).
+- get_context, topic: "structure" (positive + negative sub-calls, counts as 1 operation):
+  Positive: call with { topic: "structure" } (or no topic at all: structure is the default).
     Expect: { accounts: [...], categoryGroups: [...], payees: [...], payeesTruncated: boolean, payeeTotal: number }
     Verify: accounts, categoryGroups, and payees are arrays; no error thrown (✓ pass).
-  Negative: call with { payeeLimit: 0 }.
-    Expect: validation error naming payeeLimit (must be >= 1) (✓ pass).
+  Negative: call with { topic: "structure", payee_limit: 0 }.
+    Expect: validation error naming payee_limit (must be >= 1) (✓ pass).
 
-- actual_get_id_by_name: test all 4 supported types (all 4 sub-calls count as 1 tool):
-  * type='accounts': use `{account1_name}` saved above → verify returned id matches `{account1_id}`
-  * type='categories': use `{cat1_name}` saved above → verify returned id is a UUID
-  * type='payees': use `{payee1_name}` saved above → verify returned id is a UUID
-  * type='schedules': if no schedules exist, report as ✓ informational (expected for most test budgets)
+- list_entities name lookup, type: "account" (resolves one exact name to its id; 4 sub-calls count as 1 operation).
+  Test all 4 supported types:
+  * list_entities, type: "account": Input { type: "account", name: "{account1_name}" } → verify returned id matches `{account1_id}`
+  * list_entities, type: "category": Input { type: "category", name: "{cat1_name}" } → verify returned id is a UUID
+  * list_entities, type: "payee": Input { type: "payee", name: "{payee1_name}" } → verify returned id is a UUID
+  * list_entities, type: "schedule": Input { type: "schedule", name: "<any schedule name>" }; if no schedules exist, report as ✓ informational (expected for most test budgets)
 
-- actual_entities_search (positive + negative sub-calls, counts as 1 tool):
+- list_entities query search, type: "payee" (positive + negative sub-calls, counts as 1 operation):
   Positive: use `{payee1_name}` saved above.
     Take a 3-to-5 character substring from the middle of the name as the search query.
-    Input: { type: 'payees', query: '<substring>', matchType: 'contains', limit: 20 }
+    Input: { type: "payee", query: "<substring>", match_type: "contains", limit: 20 }
     Expect: { matches: [...], count: N, type: 'payees', matchType: 'contains' } with N >= 1
     Verify: at least one entry in matches has the same id as the payee whose name was used.
     If no named payees exist in the budget, report as ✓ informational and skip this sub-call.
   Negative (no-match contract):
-    Input: { type: 'payees', query: 'zzz-nonexistent-xqz-9999', matchType: 'contains', limit: 10 }
+    Input: { type: "payee", query: "zzz-nonexistent-xqz-9999", match_type: "contains", limit: 10 }
     Expect: { matches: [], count: 0 } with no error field and no exception thrown.
     Verify: count === 0, matches is an empty array.
 
 ---
 
 **Phase 1 Summary:**
-After completing all 9 tools, output:
+After completing all 9 operations, output:
 ```
 === PHASE 1 SMOKE RESULTS ===
 Passed:       X / 9
@@ -127,4 +139,4 @@ If any failed:   output "❌ Phase 1 failure: fix issues before pasting Prompt 2
 
 ---
 
-**START NOW: Actually invoke "actual_server_info" with no parameters and wait for the real response before proceeding.**
+**START NOW: Actually invoke get_context with { topic: "server" } and wait for the real response before proceeding.**

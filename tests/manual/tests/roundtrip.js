@@ -5,7 +5,7 @@
  *
  * WHY THIS IS GATED, AND GATED HARD.
  *
- * actual_budgets_import does not just read a file: upstream importBudget CREATES a
+ * manage_budget_files import does not just read a file: upstream importBudget CREATES a
  * budget file on the Actual server AND LOADS it, so the session's active budget
  * changes to the new copy. Two consequences drive the guards below:
  *
@@ -40,7 +40,7 @@ export async function roundtripTests(client, _context) {
   // Positive: preferences are readable and normalised
   // --------------------------------------------------------------------------
   try {
-    const prefs = unwrap(await callTool('actual_preferences_get', {}));
+    const prefs = unwrap(await callTool('get_context', { topic: 'preferences' }));
     const okShape =
       prefs && typeof prefs.preferences === 'object' && !Array.isArray(prefs.preferences) && Array.isArray(prefs.keys);
     if (!okShape) {
@@ -59,7 +59,7 @@ export async function roundtripTests(client, _context) {
   // --------------------------------------------------------------------------
   let originalBudgetName = null;
   try {
-    const available = unwrap(await callTool('actual_budgets_list_available', {}));
+    const available = unwrap(await callTool('list_entities', { type: 'budget_file' }));
     const list = Array.isArray(available) ? available : available?.budgets;
     originalBudgetName = list?.[0]?.name ?? null;
   } catch {
@@ -72,7 +72,7 @@ export async function roundtripTests(client, _context) {
   let exportedPath = null;
   let exportedBytes = 0;
   try {
-    const res = unwrap(await callTool('actual_budgets_export', { filename: 'mcp-integration-roundtrip.zip' }));
+    const res = unwrap(await callTool('manage_budget_files', { action: 'export', filename: 'mcp-integration-roundtrip.zip' }));
     if (res?.success !== true || typeof res?.path !== 'string') {
       fail(`budgets_export: expected { success: true, path }, got ${JSON.stringify(res).slice(0, 160)}`);
     } else if (!(res.bytes > 100)) {
@@ -95,7 +95,7 @@ export async function roundtripTests(client, _context) {
   // Negative: a filename that would escape the export directory is refused
   // --------------------------------------------------------------------------
   try {
-    const res = await callTool('actual_budgets_export', { filename: '../escape.zip' });
+    const res = await callTool('manage_budget_files', { action: 'export', filename: '../escape.zip' });
     const payload = unwrap(res);
     const rejected = Boolean(res?.error || payload?.error || payload?.isError);
     if (rejected) {
@@ -112,7 +112,7 @@ export async function roundtripTests(client, _context) {
   // Negative: import requires exactly one source
   // --------------------------------------------------------------------------
   try {
-    const res = await callTool('actual_budgets_import', {});
+    const res = await callTool('manage_budget_files', { action: 'import' });
     const payload = unwrap(res);
     const rejected = Boolean(res?.error || payload?.error || payload?.isError);
     if (rejected) {
@@ -146,10 +146,10 @@ export async function roundtripTests(client, _context) {
   }
 
   try {
-    const beforeAccounts = unwrap(await callTool('actual_accounts_list', {}));
+    const beforeAccounts = unwrap(await callTool('list_entities', { type: 'account' }));
     const beforeCount = Array.isArray(beforeAccounts) ? beforeAccounts.length : 0;
 
-    const res = unwrap(await callTool('actual_budgets_import', { path: exportedPath, type: 'actual' }));
+    const res = unwrap(await callTool('manage_budget_files', { action: 'import', path: exportedPath, type: 'actual' }));
     if (res?.success !== true || typeof res?.budgetId !== 'string') {
       fail(`budgets_import: expected { success: true, budgetId }, got ${JSON.stringify(res).slice(0, 160)}`);
     } else {
@@ -158,7 +158,7 @@ export async function roundtripTests(client, _context) {
       // THE ROUND-TRIP ASSERTION. The imported budget is now loaded, so this reads
       // the restored copy. Equal account counts is what proves the export was
       // actually RESTORABLE rather than merely well-formed.
-      const afterAccounts = unwrap(await callTool('actual_accounts_list', {}));
+      const afterAccounts = unwrap(await callTool('list_entities', { type: 'account' }));
       const afterCount = Array.isArray(afterAccounts) ? afterAccounts.length : 0;
       if (afterCount !== beforeCount) {
         fail(`round trip: account count changed across export/import (${beforeCount} before, ${afterCount} after)`);
@@ -174,7 +174,7 @@ export async function roundtripTests(client, _context) {
     // phase, which deletes test entities by id.
     if (originalBudgetName) {
       try {
-        const back = unwrap(await callTool('actual_budgets_switch', { budgetName: originalBudgetName }));
+        const back = unwrap(await callTool('manage_budget_files', { action: 'switch', budget_name: originalBudgetName }));
         if (back?.success === true) {
           console.log(`  ok switched back to the configured budget "${originalBudgetName}"`);
         } else {

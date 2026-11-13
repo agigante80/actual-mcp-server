@@ -105,26 +105,26 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     
     // Verify key tools exist
     const toolNames = tools.map((t: any) => t.name);
-    expect(toolNames).toContain('actual_server_info');
-    expect(toolNames).toContain('actual_accounts_list');
-    expect(toolNames).toContain('actual_transactions_create');
+    expect(toolNames).toContain('get_context');
+    expect(toolNames).toContain('list_entities');
+    expect(toolNames).toContain('manage_transactions');
   });
 
-  test('should execute actual_server_info tool', async ({ request }) => {
+  test('should execute get_context (topic server)', async ({ request }) => {
     if (!sessionId) {
       test.skip();
       return;
     }
     
-    console.log('🔧 Testing actual_server_info tool...');
+    console.log('🔧 Testing get_context topic server...');
     const rpcUrl = `${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`;
     const callPayload = {
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
       params: {
-        name: 'actual_server_info',
-        arguments: {},
+        name: 'get_context',
+        arguments: { topic: 'server' },
       },
     };
 
@@ -167,8 +167,8 @@ test.describe('Docker E2E - Full Stack Integration', () => {
       id: 4,
       method: 'tools/call',
       params: {
-        name: 'actual_accounts_list',
-        arguments: {},
+        name: 'list_entities',
+        arguments: { type: 'account' },
       },
     };
 
@@ -211,8 +211,10 @@ test.describe('Docker E2E - Full Stack Integration', () => {
       id: 5,
       method: 'tools/call',
       params: {
-        name: 'actual_accounts_create',
+        name: 'manage_accounts',
         arguments: {
+          action: 'create',
+          entity: 'account',
           name: testAccountName,
           offbudget: false,
         },
@@ -240,7 +242,7 @@ test.describe('Docker E2E - Full Stack Integration', () => {
     const result = callJson.result;
     expect(result.content).toBeTruthy();
     
-    // The actual_accounts_create tool returns the account ID (UUID) in the result
+    // The manage_accounts create action returns the account ID (UUID) in the result
     // Verify we got a valid response (either UUID or success message)
     const text = result.content[0]?.text || '';
     expect(text.length).toBeGreaterThan(0);
@@ -274,8 +276,8 @@ test.describe('Docker E2E - Full Stack Integration', () => {
         id: 10 + i,
         method: 'tools/call',
         params: {
-          name: 'actual_server_info',
-          arguments: {},
+          name: 'get_context',
+          arguments: { topic: 'server' },
         },
       };
 
@@ -389,8 +391,10 @@ test.describe('Docker E2E - Error Handling', () => {
       id: 101,
       method: 'tools/call',
       params: {
-        name: 'actual_accounts_create',
+        name: 'manage_accounts',
         arguments: {
+          action: 'create',
+          entity: 'account',
           // Missing required 'name' parameter
           offbudget: false,
         },

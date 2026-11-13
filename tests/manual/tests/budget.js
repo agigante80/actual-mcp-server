@@ -23,7 +23,7 @@ function monthAfter(m) {
 async function snapshotMonthCells(callTool, months) {
   const cells = new Map();
   for (const month of months) {
-    const res = await callTool("actual_budgets_get_month", { month });
+    const res = await callTool("list_budget_months", { month });
     const data = res?.result || res;
     for (const group of data?.categoryGroups || []) {
       for (const cat of group.categories || []) {
@@ -72,16 +72,16 @@ export async function budgetTests(client, context) {
   try {
     const currentDate = new Date().toISOString().split('T')[0].substring(0, 7); // YYYY-MM
 
-    // ── 1. actual_budgets_list_available ──────────────────────────────────────
-    console.log("\nTesting actual_budgets_list_available...");
+    // ── 1. list_entities budget_file ──────────────────────────────────────
+    console.log("\nTesting list_entities budget_file...");
     let availableBudgets = [];
     let originalBudgetName = null;
     try {
-      const listRes = await callTool("actual_budgets_list_available", {});
+      const listRes = await callTool("list_entities", { type: "budget_file" });
       if (listRes && Array.isArray(listRes.budgets) && typeof listRes.count === 'number') {
         availableBudgets = listRes.budgets;
         originalBudgetName = availableBudgets.length > 0 ? availableBudgets[0].name : null;
-        console.log(`✓ actual_budgets_list_available: returned ${listRes.count} budget(s)`);
+        console.log(`✓ list_entities budget_file: returned ${listRes.count} budget(s)`);
         if (listRes.count > 0) {
           const b = listRes.budgets[0];
           if (b.name && b.syncId && b.serverUrl && typeof b.hasEncryption === 'boolean') {
@@ -91,16 +91,16 @@ export async function budgetTests(client, context) {
           }
         }
       } else {
-        fail(["actual_budgets_list_available: unexpected shape:", JSON.stringify(listRes).slice(0, 200)].map(String).join(" "));
+        fail(["list_entities budget_file: unexpected shape:", JSON.stringify(listRes).slice(0, 200)].map(String).join(" "));
       }
     } catch (err) {
-      fail(["actual_budgets_list_available threw:", err.message].map(String).join(" "));
+      fail(["list_entities budget_file threw:", err.message].map(String).join(" "));
     }
 
     // #348: stdio CAN now switch budgets, so these assertions run on both transports.
     //
     // Until #348 the stdio process never entered a requestContext scope, so it had no
-    // sessionId, no slot in the per-session budget map, and actual_budgets_switch
+    // sessionId, no slot in the per-session budget map, and manage_budget_files switch
     // refused outright (#280 skipped these assertions for that reason). stdioServer.ts
     // now mints a synthetic per-process session id, which gives stdio its own slot
     // without reintroducing the process-global that #156 removed.
@@ -110,12 +110,12 @@ export async function budgetTests(client, context) {
     // sessionless branch below could never run, so a transport that genuinely lacked
     // sessions would fall through to fail() instead of the message that flag implied.
 
-    // ── 2. actual_budgets_switch (positive) ──────────────────────────────────
+    // ── 2. manage_budget_files switch (positive) ──────────────────────────────────
     // Prefer a SAME-SERVER alternate budget so the test exercises the #172
     // fast path (no upstream re-auth) rather than hammering the Actual server's
     // login rate limiter on every cross-server switch. Fall back to any other
     // budget if no same-server alternate exists.
-    console.log("\nTesting actual_budgets_switch (positive)...");
+    console.log("\nTesting manage_budget_files switch (positive)...");
     const firstBudget = availableBudgets[0];
     const sameServerAlternate = availableBudgets.find(
       (b, i) => i > 0 && firstBudget && b.serverUrl === firstBudget.serverUrl,
@@ -125,27 +125,27 @@ export async function budgetTests(client, context) {
     let switchedToAlternate = false;
     if (alternateBudget) {
       try {
-        const switchRes = await callTool("actual_budgets_switch", { budgetName: alternateBudget.name });
+        const switchRes = await callTool("manage_budget_files", { action: "switch", budget_name: alternateBudget.name });
         if (switchRes?.success === true && switchRes?.budgetName && switchRes?.budgetId && switchRes?.serverUrl) {
           switchedToAlternate = availableBudgets.length > 1;
-          console.log(`  ✓ actual_budgets_switch: switched to "${switchRes.budgetName}" (${switchRes.budgetId})`);
+          console.log(`  ✓ manage_budget_files switch: switched to "${switchRes.budgetName}" (${switchRes.budgetId})`);
           if (availableBudgets.length === 1) {
             console.log("  ℹ only one budget configured: switched to same budget to verify mechanism");
           }
         } else {
-          fail(["actual_budgets_switch: unexpected response:", JSON.stringify(switchRes).slice(0, 200)].map(String).join(" "));
+          fail(["manage_budget_files switch: unexpected response:", JSON.stringify(switchRes).slice(0, 200)].map(String).join(" "));
         }
       } catch (err) {
-        fail(["actual_budgets_switch threw:", err.message].map(String).join(" "));
+        fail(["manage_budget_files switch threw:", err.message].map(String).join(" "));
       }
     } else {
-      console.log("  ℹ actual_budgets_switch (positive): no budgets available: skipped");
+      console.log("  ℹ manage_budget_files switch (positive): no budgets available: skipped");
     }
 
     // ── 3. Get last 5 transactions in current budget (confirms switch context) ─
     console.log("\nGetting last 5 transactions in switched budget (post-switch)...");
     try {
-      const txRes = await callTool("actual_transactions_filter", { limit: 5 });
+      const txRes = await callTool("search_transactions", { by: "filter" });
       const txArr = Array.isArray(txRes) ? txRes : (txRes?.transactions ?? txRes?.result ?? []);
       console.log(`  ✓ Retrieved ${txArr.length} transaction(s) from switched budget`);
       for (const tx of txArr.slice(0, 5)) {
@@ -158,26 +158,26 @@ export async function budgetTests(client, context) {
       fail(`Could not fetch transactions after the budget switch: ${err.message}`);
     }
 
-    // ── 4. actual_budgets_switch (negative: non-existent budget name) ────────
-    console.log("\nTesting actual_budgets_switch (negative: unknown name)...");
+    // ── 4. manage_budget_files switch (negative: non-existent budget name) ────────
+    console.log("\nTesting manage_budget_files switch (negative: unknown name)...");
     try {
-      const badRes = await callTool("actual_budgets_switch", { budgetName: "__nonexistent_budget_MCP_test__" });
+      const badRes = await callTool("manage_budget_files", { action: "switch", budget_name: "__nonexistent_budget_MCP_test__" });
       const text = JSON.stringify(badRes);
       if (text.includes("not found") || text.includes("No budget") || text.includes("available") || badRes?.error) {
-        console.log("  ✓ actual_budgets_switch [negative]: correctly returned not-found with context");
+        console.log("  ✓ manage_budget_files switch [negative]: correctly returned not-found with context");
       } else {
-        fail(["actual_budgets_switch [negative]: no useful error for unknown name:", text.slice(0, 200)].map(String).join(" "));
+        fail(["manage_budget_files switch [negative]: no useful error for unknown name:", text.slice(0, 200)].map(String).join(" "));
       }
     } catch (err) {
       if (err.message.includes("requires an MCP session")) {
         // Reachable only from a genuinely sessionless caller. Since #348 both
         // transports have a session, so this is a real failure rather than the
         // documented stdio behaviour it used to be.
-        fail("actual_budgets_switch: the caller had no MCP session; since #348 both transports should have one");
+        fail("manage_budget_files switch: the caller had no MCP session; since #348 both transports should have one");
       } else if (err.message.includes("not found") || err.message.includes("No budget") || err.message.includes("available")) {
-        console.log("  ✓ actual_budgets_switch [negative]: threw with useful message");
+        console.log("  ✓ manage_budget_files switch [negative]: threw with useful message");
       } else {
-        fail(["actual_budgets_switch [negative]: unhelpful error:", err.message].map(String).join(" "));
+        fail(["manage_budget_files switch [negative]: unhelpful error:", err.message].map(String).join(" "));
       }
     }
 
@@ -185,7 +185,7 @@ export async function budgetTests(client, context) {
     if (originalBudgetName && switchedToAlternate) {
       console.log(`\nSwitching back to original budget "${originalBudgetName}" before continuing...`);
       try {
-        const backRes = await callTool("actual_budgets_switch", { budgetName: originalBudgetName });
+        const backRes = await callTool("manage_budget_files", { action: "switch", budget_name: originalBudgetName });
         if (backRes?.success === true) {
           console.log(`  ✓ Switched back to "${backRes.budgetName}"`);
         } else {
@@ -206,18 +206,22 @@ export async function budgetTests(client, context) {
       fail('Budget tests: the month snapshot read no category cells, so the amount-drift check cannot see anything (every real budget has at least an income category)');
     }
 
-    const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BudgetTest-Group-${ts}` });
+    const newGroup = await callTool("manage_categories", { action: "create", entity: "category_group", name: `MCP-BudgetTest-Group-${ts}` });
     budgetOwnedGroupId = newGroup.id || newGroup.result || newGroup;
     console.log(`  ✓ Created disposable category group for budget tests: ${budgetOwnedGroupId}`);
 
-    const newCat = await callTool("actual_categories_create", {
+    const newCat = await callTool("manage_categories", {
+      action: "create",
+      entity: "category",
       name: `MCP-BudgetTest-Cat-${ts}`,
       group_id: budgetOwnedGroupId,
     });
     budgetCatId = newCat.categoryId || newCat.id || newCat.result || newCat;
     console.log(`  ✓ Created disposable category for budget writes: ${budgetCatId}`);
 
-    const xferRes = await callTool("actual_categories_create", {
+    const xferRes = await callTool("manage_categories", {
+      action: "create",
+      entity: "category",
       name: `MCP-BudgetXfer-${ts}`,
       group_id: budgetOwnedGroupId,
     });
@@ -226,33 +230,34 @@ export async function budgetTests(client, context) {
 
     // Get all budgets
     console.log("\nGetting all budgets...");
-    await callTool("actual_budgets_get_all", {});
+    await callTool("list_entities", { type: "budget_file", scope: "server" });
     console.log("✓ Retrieved all budgets");
 
     // Get specific month
     console.log("\nGetting budget for current month...");
-    const monthBudget = await callTool("actual_budgets_get_month", { month: currentDate });
+    const monthBudget = await callTool("list_budget_months", { month: currentDate });
     console.log("✓ Retrieved month budget:", currentDate);
 
     // Get multiple months
     console.log("\nGetting budgets for multiple months...");
-    const months = await callTool("actual_budgets_get_months", { start: currentDate, end: currentDate });
+    const months = await callTool("list_budget_months", {});
     const monthsArr = Array.isArray(months) ? months : (months.result || []);
     if (monthsArr.length >= 1) console.log(`  ✓ Retrieved months: ${monthsArr.length} (expected ≥ 1)`);
     else fail(`Verify getMonths: expected ≥ 1 month, got ${monthsArr.length}`);
 
     // Set amount
     console.log("\nSetting budget amount...");
-    await callTool("actual_budgets_set_amount", {
+    await callTool("manage_budget_months", {
+      action: "set_amount",
       month: currentDate,
-      categoryId: budgetCatId,
+      category_id: budgetCatId,
       amount: 50000,
     });
     console.log("✓ Budget amount set to 500.00");
 
     // Verify setAmount
     {
-      const check = await callTool("actual_budgets_get_month", { month: currentDate });
+      const check = await callTool("list_budget_months", { month: currentDate });
       const monthData = check.result || check;
       const catEntry = (monthData.categoryGroups || [])
         .flatMap(g => g.categories || [])
@@ -267,9 +272,10 @@ export async function budgetTests(client, context) {
     console.log("\nNEGATIVE B4: budgets_set_amount with non-existent categoryId...");
     {
       try {
-        const badRes = await callTool("actual_budgets_set_amount", {
+        const badRes = await callTool("manage_budget_months", {
+          action: "set_amount",
           month: currentDate,
-          categoryId: "00000000-0000-0000-0000-000000000000",
+          category_id: "00000000-0000-0000-0000-000000000000",
           amount: 99999,
         });
         if (typeof badRes?.error === 'string') {
@@ -284,16 +290,17 @@ export async function budgetTests(client, context) {
 
     // Carryover
     console.log("\nSetting carryover...");
-    await callTool("actual_budgets_set_carryover", {
+    await callTool("manage_budget_months", {
+      action: "set_carryover",
       month: currentDate,
-      categoryId: budgetCatId,
+      category_id: budgetCatId,
       flag: true,
     });
     console.log("✓ Carryover enabled");
 
     // Verify carryover
     {
-      const check = await callTool("actual_budgets_get_month", { month: currentDate });
+      const check = await callTool("list_budget_months", { month: currentDate });
       const monthData = check.result || check;
       const catEntry = (monthData.categoryGroups || [])
         .flatMap(g => g.categories || [])
@@ -314,21 +321,23 @@ export async function budgetTests(client, context) {
     // income minus what is already allocated, so seeding one guarantees the success branch.
     console.log("\nHolding budget for next month...");
     const HOLD_AMOUNT = 10000;
-    const holdSeedAccount = await callTool("actual_accounts_create", {
+    const holdSeedAccount = await callTool("manage_accounts", {
+      action: "create",
+      entity: "account",
       name: `Hold-Seed-${Date.now()}`,
       balance: 500000,
     });
     const holdSeedId = (holdSeedAccount && holdSeedAccount.result) || holdSeedAccount;
 
     try {
-      const beforeHold = await callTool("actual_budgets_get_month", { month: currentDate });
+      const beforeHold = await callTool("list_budget_months", { month: currentDate });
       const beforeMonth = (beforeHold.result || beforeHold) ?? {};
       const toBudgetBefore = Number(beforeMonth.toBudget ?? 0);
       const heldBefore = Number(beforeMonth.forNextMonth ?? 0);
       // Failures route through fail() so they reach the runner's ledger (#281).
       const holdCheck = (cond, msg) => {
         if (cond) console.log(`  ✓ ${msg}`);
-        else fail(`actual_budgets_hold_for_next_month: ${msg}`);
+        else fail(`manage_budget_months hold: ${msg}`);
       };
 
       holdCheck(
@@ -349,7 +358,8 @@ export async function budgetTests(client, context) {
           'state from an interrupted run, not a tool regression',
       );
 
-      const res = await callTool("actual_budgets_hold_for_next_month", {
+      const res = await callTool("manage_budget_months", {
+        action: "hold",
         month: currentDate,
         amount: HOLD_AMOUNT,
       });
@@ -359,7 +369,7 @@ export async function budgetTests(client, context) {
 
       // And the money actually moved. #355 exists because upstream can hold LESS than asked
       // (it clamps to what is left) or nothing at all, while reporting plain success.
-      const afterHold = await callTool("actual_budgets_get_month", { month: currentDate });
+      const afterHold = await callTool("list_budget_months", { month: currentDate });
       const afterMonth = (afterHold.result || afterHold) ?? {};
       holdCheck(
         Number(afterMonth.forNextMonth ?? 0) - heldBefore === HOLD_AMOUNT,
@@ -371,8 +381,8 @@ export async function budgetTests(client, context) {
       // whose exact size we just established is the only place the reset can be checked
       // against a known number.
       console.log("\nResetting hold...");
-      await callTool("actual_budgets_reset_hold", { month: currentDate });
-      const afterReset = await callTool("actual_budgets_get_month", { month: currentDate });
+      await callTool("manage_budget_months", { action: "reset_hold", month: currentDate });
+      const afterReset = await callTool("list_budget_months", { month: currentDate });
       const resetMonth = (afterReset.result || afterReset) ?? {};
       holdCheck(
         Number(resetMonth.forNextMonth ?? 0) === heldBefore,
@@ -391,12 +401,12 @@ export async function budgetTests(client, context) {
       // leftover hold would silently lower this month's To Budget by HOLD_AMOUNT on every
       // run and nothing would report it. The E2E twin registers the same reset as teardown.
       try {
-        await callTool("actual_budgets_reset_hold", { month: currentDate });
+        await callTool("manage_budget_months", { action: "reset_hold", month: currentDate });
       } catch (err) {
         fail(`could not reset the hold for ${currentDate}: ${err.message}`);
       }
       try {
-        await callTool("actual_accounts_delete", { id: holdSeedId });
+        await callTool("manage_accounts", { action: "delete", entity: "account", id: holdSeedId });
       } catch (err) {
         fail(`could not remove the hold seed account ${holdSeedId}: ${err.message}. That is residue.`);
       }
@@ -408,18 +418,19 @@ export async function budgetTests(client, context) {
     // no "could not create" skip: a precondition this module builds itself is never a skip.
     const targetCategoryId = budgetXferCatId;
     {
-      const preTransfer = await callTool("actual_budgets_get_month", { month: currentDate });
+      const preTransfer = await callTool("list_budget_months", { month: currentDate });
       const preData = preTransfer.result || preTransfer;
       const srcBefore = (preData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId)?.budgeted ?? null;
       const dstBefore = (preData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
-      await callTool("actual_budgets_transfer", {
+      await callTool("manage_budget_months", {
+        action: "transfer",
         month: currentDate,
         amount: 5000,
-        fromCategoryId: budgetCatId,
-        toCategoryId: targetCategoryId,
+        from_category_id: budgetCatId,
+        to_category_id: targetCategoryId,
       });
       console.log("✓ Budget transfer completed");
-      const postTransfer = await callTool("actual_budgets_get_month", { month: currentDate });
+      const postTransfer = await callTool("list_budget_months", { month: currentDate });
       const postData = postTransfer.result || postTransfer;
       const srcAfter = (postData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId)?.budgeted ?? null;
       const dstAfter = (postData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
@@ -433,11 +444,12 @@ export async function budgetTests(client, context) {
       const obscene = Math.max((srcAfter ?? 0) * 100, 100_000_000);
       let insufficientErr = null;
       try {
-        await callTool("actual_budgets_transfer", {
+        await callTool("manage_budget_months", {
+          action: "transfer",
           month: currentDate,
           amount: obscene,
-          fromCategoryId: budgetCatId,
-          toCategoryId: targetCategoryId,
+          from_category_id: budgetCatId,
+          to_category_id: targetCategoryId,
         });
         fail(`Insufficient-funds transfer accepted (expected rejection)`);
       } catch (err) {
@@ -449,7 +461,7 @@ export async function budgetTests(client, context) {
         }
       }
       // Verify state unchanged (atomic rejection, no partial write).
-      const postReject = await callTool("actual_budgets_get_month", { month: currentDate });
+      const postReject = await callTool("list_budget_months", { month: currentDate });
       const postRejectData = postReject.result || postReject;
       const srcAfterReject = (postRejectData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId)?.budgeted ?? null;
       const dstAfterReject = (postRejectData.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === targetCategoryId)?.budgeted ?? null;
@@ -462,11 +474,12 @@ export async function budgetTests(client, context) {
       // #141 negative: same source and target rejected at the tool layer.
       console.log("\nTesting budget transfer (negative): same source and target rejected");
       try {
-        await callTool("actual_budgets_transfer", {
+        await callTool("manage_budget_months", {
+          action: "transfer",
           month: currentDate,
           amount: 100,
-          fromCategoryId: budgetCatId,
-          toCategoryId: budgetCatId,
+          from_category_id: budgetCatId,
+          to_category_id: budgetCatId,
         });
         fail(`Same source and target accepted (expected rejection)`);
       } catch (err) {
@@ -481,12 +494,13 @@ export async function budgetTests(client, context) {
 
     // Batch updates
     console.log("\nTesting batch budget updates...");
-    await callTool("actual_budget_updates_batch", {
+    await callTool("manage_budget_months", {
+      action: "set_amount_batch",
       operations: [{ month: currentDate, categoryId: budgetCatId, amount: 60000 }],
     });
     console.log("✓ Batch updates completed");
     {
-      const check = await callTool("actual_budgets_get_month", { month: currentDate });
+      const check = await callTool("list_budget_months", { month: currentDate });
       const d = check.result || check;
       const cat = (d.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId);
       if (!cat) fail("Verify batch: category not found in month budget");
@@ -502,10 +516,10 @@ export async function budgetTests(client, context) {
       amount: 10000 + (i * 100),
     }));
     const lastAmount = 10000 + (34 * 100); // 13400
-    const batchResult = await callTool("actual_budget_updates_batch", { operations: largeBatch });
+    const batchResult = await callTool("manage_budget_months", { action: "set_amount_batch", operations: largeBatch });
     console.log("✓ Large batch handled:", batchResult);
     {
-      const check = await callTool("actual_budgets_get_month", { month: currentDate });
+      const check = await callTool("list_budget_months", { month: currentDate });
       const d = check.result || check;
       const cat = (d.categoryGroups || []).flatMap(g => g.categories || []).find(c => c.id === budgetCatId);
       if (!cat) fail("Verify large batch: category not found in month budget");
@@ -521,7 +535,7 @@ export async function budgetTests(client, context) {
       { month: currentDate, categoryId: budgetCatId, amount: 90000 },       // valid
     ];
     try {
-      const mixedResult = await callTool("actual_budget_updates_batch", { operations: mixedBatch });
+      const mixedResult = await callTool("manage_budget_months", { action: "set_amount_batch", operations: mixedBatch });
       fail(["REGRESSION FAILED: batch accepted invalid-date (Zod month regex not enforced):", mixedResult].map(String).join(" "));
     } catch (err) {
       if (err.message.includes("YYYY-MM") || err.message.includes("invalid-date") || err.message.includes("month")) {
@@ -536,7 +550,7 @@ export async function budgetTests(client, context) {
     for (const [id, what] of [[budgetXferCatId, 'transfer test category'], [budgetCatId, 'budget-test category']]) {
       if (!id) continue;
       try {
-        await callTool("actual_categories_delete", { id });
+        await callTool("manage_categories", { action: "delete", entity: "category", id });
         console.log(`\n✓ Cleaned up disposable ${what} (${id})`);
       } catch (err) {
         fail(`Could not delete the disposable ${what} ${id}: ${err.message}. That is residue.`);
@@ -544,7 +558,7 @@ export async function budgetTests(client, context) {
     }
     if (budgetOwnedGroupId) {
       try {
-        await callTool("actual_category_groups_delete", { id: budgetOwnedGroupId });
+        await callTool("manage_categories", { action: "delete", entity: "category_group", id: budgetOwnedGroupId });
         console.log(`✓ Cleaned up disposable budget-test category group (${budgetOwnedGroupId})`);
       } catch (err) {
         fail(`Could not delete the disposable category group ${budgetOwnedGroupId}: ${err.message}. That is residue.`);

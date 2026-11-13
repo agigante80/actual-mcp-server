@@ -57,6 +57,12 @@ const SYNC_ID_FILE = process.env.MCP_STDIO_SYNC_ID_FILE || '/tmp/actual-sync-id.
 // container's CONFIGURED environment, and the configured ACTUAL_SERVER_URL is the HTTP leg's.
 const SERVER_URL_OVERRIDE = process.env.MCP_STDIO_SERVER_URL || '';
 
+// #681: which tool surface the exec'd server publishes. Unset means "inherit the container's own"
+// (`all` on the compose stack, so the legacy-bound rows and the compact rows both run). The
+// compact leg (tests/e2e/compact-surface.e2e.spec.ts, project docker-e2e-compact-stdio) sets it
+// to `compact`, which `docker exec -e` makes win over the container's configured value.
+const TOOL_SURFACE_OVERRIDE = process.env.MCP_E2E_TOOL_SURFACE || '';
+
 export type StdioSession = {
   raw(tool: string, args?: Record<string, unknown>): Promise<any>;
   call(tool: string, args?: Record<string, unknown>): Promise<any>;
@@ -122,6 +128,7 @@ export async function openStdioSession(): Promise<StdioSession> {
       '-u', 'app',
       '-e', `MCP_BRIDGE_DATA_DIR=${DATA_DIR}`,
       ...(SERVER_URL_OVERRIDE ? ['-e', `ACTUAL_SERVER_URL=${SERVER_URL_OVERRIDE}`] : []),
+      ...(TOOL_SURFACE_OVERRIDE ? ['-e', `MCP_TOOL_SURFACE=${TOOL_SURFACE_OVERRIDE}`] : []),
       STDIO_CONTAINER,
       'sh', '-c',
       `export ACTUAL_BUDGET_SYNC_ID=$(cat ${SYNC_ID_FILE}) && exec node dist/src/index.js --stdio`,

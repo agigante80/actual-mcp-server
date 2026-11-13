@@ -21,13 +21,13 @@ export async function smokeTests(client) {
 
   // Categories
   console.log("\nTesting category list...");
-  const categories = await callTool("actual_categories_get", {});
+  const categories = await callTool("list_entities", { type: "category" });
   const categoryCount = Array.isArray(categories) ? categories.length : 0;
   console.log(`✓ Found ${categoryCount} categories`);
 
   // Category groups
   console.log("\nTesting category groups...");
-  const groups = await callTool("actual_category_groups_get", {});
+  const groups = await callTool("list_entities", { type: "category_group" });
   const groupCount = Array.isArray(groups)
     ? groups.length
     : (groups && typeof groups === 'object' ? Object.keys(groups).length : 0);
@@ -35,12 +35,12 @@ export async function smokeTests(client) {
 
   // Accounts with balances
   console.log("\nListing accounts...");
-  const accounts = await callTool("actual_accounts_list", {});
+  const accounts = await callTool("list_entities", { type: "account" });
   if (!Array.isArray(accounts) || accounts.length === 0) {
     console.log("  (no accounts found)");
   } else {
     for (const a of accounts) {
-      const balData = await callTool("actual_accounts_get_balance", { id: a.id });
+      const balData = await callTool("summarize_transactions", { report: "balance", account_id: a.id });
       const bal = typeof balData?.balance === 'number'
         ? (balData.balance / 100).toFixed(2)
         : 'n/a';
@@ -50,7 +50,7 @@ export async function smokeTests(client) {
 
   // Last 3 transactions
   console.log("\nLast 3 transactions...");
-  const txns = await callTool("actual_transactions_filter", { account: null });
+  const txns = await callTool("search_transactions", { by: "filter", account_id: null });
   const recent = Array.isArray(txns) ? txns.slice(0, 3) : [];
   if (recent.length === 0) {
     console.log("  (no transactions found)");

@@ -8,7 +8,10 @@
  * Writes to context:   (none)
  *
  * Environment:
- *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 85)
+ *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 85, the legacy
+ *                        surface). The count differs per MCP_TOOL_SURFACE: legacy 85,
+ *                        compact 15, all 100. A direct run against a non-legacy server
+ *                        must set it.
  */
 
 import { noteTolerated } from '../assert.js';
@@ -31,52 +34,52 @@ export async function sanityTests(client) {
 
   // 2. Server info (MCP server)
   console.log("\nChecking MCP server info...");
-  await callTool("actual_server_info", {});
+  await callTool("get_context", { topic: "server" });
   console.log("✓ Server info returned successfully");
 
   // 3. Actual Budget server version
   console.log("\nChecking Actual Budget server version...");
-  const versionResult = await callTool("actual_server_get_version", {});
+  const versionResult = await callTool("get_context", { topic: "version" });
   if (typeof versionResult?.version === 'string') {
     console.log(`✓ Actual Budget server version: ${versionResult.version}`);
   } else if (typeof versionResult?.error === 'string') {
     // #387: a genuinely tolerated alternative, and the only one in this suite so far. The version
     // endpoint does not exist in older self-hosted Actual builds, and this is a read-only sanity
     // check whose job is to prove the protocol works, not to pin the server's feature set.
-    noteTolerated(`actual_server_get_version reported an error, which older self-hosted builds do without the endpoint: ${versionResult.error}`);
+    noteTolerated(`get_context version reported an error, which older self-hosted builds do without the endpoint: ${versionResult.error}`);
   } else {
-    throw new Error(`actual_server_get_version: unexpected response: ${JSON.stringify(versionResult).slice(0, 120)}`);
+    throw new Error(`get_context version: unexpected response: ${JSON.stringify(versionResult).slice(0, 120)}`);
   }
 
   // 4. Accounts list (assert array)
   console.log("\nListing accounts...");
-  const accounts = await callTool("actual_accounts_list", {});
-  if (!Array.isArray(accounts)) throw new Error("actual_accounts_list did not return an array");
+  const accounts = await callTool("list_entities", { type: "account" });
+  if (!Array.isArray(accounts)) throw new Error("list_entities account did not return an array");
   console.log(`✓ Accounts listed: ${accounts.length}`);
 
   // 5. Transactions filter (read-only)
   console.log("\nFiltering transactions...");
-  await callTool("actual_transactions_filter", { account: null });
+  await callTool("search_transactions", { by: "filter", account_id: null });
   console.log("✓ Transactions filter returned successfully");
 
   // 5b. Get context (read-only)
   console.log("\nGetting budget context...");
-  const contextRes = await callTool("actual_get_context", {});
+  const contextRes = await callTool("get_context", { topic: "structure" });
   const ctx = contextRes?.result ?? contextRes;
   if (!Array.isArray(ctx?.accounts) || !Array.isArray(ctx?.categoryGroups) || !Array.isArray(ctx?.payees) || typeof ctx?.payeeTotal !== 'number') {
-    throw new Error(`actual_get_context: unexpected response shape: ${JSON.stringify(ctx).slice(0, 120)}`);
+    throw new Error(`get_context structure: unexpected response shape: ${JSON.stringify(ctx).slice(0, 120)}`);
   }
   console.log(`✓ Budget context: ${ctx.accounts.length} accounts, ${ctx.categoryGroups.length} groups, ${ctx.payees.length} payees`);
 
   // 6. Valid SQL query
   console.log("\nRunning SQL query...");
-  await callTool("actual_query_run", { query: "SELECT id FROM accounts LIMIT 1" });
+  await callTool("run_query", { query: "SELECT id FROM accounts LIMIT 1" });
   console.log("✓ SQL query executed successfully");
 
   // 7. GraphQL must be rejected
   console.log("\nChecking GraphQL rejection...");
   try {
-    await callTool("actual_query_run", { query: "{transactions{id}}" });
+    await callTool("run_query", { query: "{transactions{id}}" });
     throw new Error("GraphQL syntax was accepted - should have been rejected");
   } catch (err) {
     if (err.message.includes("GraphQL syntax was accepted")) throw err;
@@ -86,7 +89,7 @@ export async function sanityTests(client) {
   // 8. Invalid SQL field must be rejected
   console.log("\nChecking invalid field rejection...");
   try {
-    await callTool("actual_query_run", { query: "SELECT payee_name FROM transactions LIMIT 1" });
+    await callTool("run_query", { query: "SELECT payee_name FROM transactions LIMIT 1" });
     throw new Error("Invalid field 'payee_name' was accepted - should have been rejected");
   } catch (err) {
     if (err.message.includes("payee_name' was accepted")) throw err;
@@ -115,7 +118,7 @@ export async function sanityTests(client) {
   let patternsChecked = 0;
   let sawBudgetsSwitch = false;
   for (const t of tools) {
-    if (t.name === 'actual_budgets_switch') sawBudgetsSwitch = true;
+    if (t.name === 'manage_budget_files') sawBudgetsSwitch = true;
     const found = [];
     collectPatterns(t.inputSchema, t.name, found);
     for (const { path, pattern } of found) {
@@ -135,8 +138,10 @@ export async function sanityTests(client) {
       }
     }
   }
-  if (!sawBudgetsSwitch) {
-    throw new Error("actual_budgets_switch not present in tools/list; #293 regression check could not run");
+  // The compact tool is only published on the compact and all surfaces; a legacy server has no such name.
+  const compactPublished = tools.some((t) => t.name === 'get_context');
+  if (compactPublished && !sawBudgetsSwitch) {
+    throw new Error("manage_budget_files not present in tools/list; #293 regression check could not run");
   }
   console.log(`✓ Published schemas OpenAI-compatible: ${patternsChecked} pattern(s) across ${tools.length} tools`);
 

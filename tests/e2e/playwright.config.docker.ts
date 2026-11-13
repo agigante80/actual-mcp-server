@@ -71,5 +71,15 @@ export default defineConfig({
       name: 'docker-e2e-full-stdio',
       testMatch: /docker-all-tools\.e2e\.spec\.ts$/,
     },
+    /**
+     * #681: the compact leg. One stdio worker exec'd into the same container with
+     * `-e MCP_TOOL_SURFACE=compact` (MCP_E2E_TOOL_SURFACE, read by stdio-client.ts), the only run of
+     * the compact-only dispatch path (`operationUnavailableError` in src/lib/toolsets.ts). Run by
+     * `tests/e2e/run-docker-e2e.sh` as Step 6c, after Step 6b, with MCP_TEST_TRANSPORT=stdio.
+     */
+    {
+      name: 'docker-e2e-compact-stdio',
+      testMatch: /compact-surface\.e2e\.spec\.ts$/,
+    },
   ],
 });

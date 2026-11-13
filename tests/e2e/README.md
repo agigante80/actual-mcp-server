@@ -22,6 +22,8 @@ tests/e2e/
 │                                         make* factories that provision and tear down test
 │                                         data. Import `test` from HERE, not @playwright/test
 ├── tsconfig.json                      ← typecheck project for this dir (npm run typecheck:e2e)
+├── compact-surface.e2e.spec.ts        ← the compact leg (#681): the 15-tool surface over stdio,
+│                                         project docker-e2e-compact-stdio, Step 6c
 └── docker-all-tools.e2e.spec.ts      ← Comprehensive coverage of all 85 tools; the ONLY
                                         file that carries E2E assertions (see the #366 note)
 ```
@@ -78,6 +80,7 @@ logs before tearing the stack down.
 | `MCP_SERVER_URL` | `http://mcp-server-test:3600` | MCP server URL |
 | `EXPECTED_TOOL_COUNT` | `85` | Expected tool count (must match `actualToolsManager.ts`) |
 | `USE_DOCKER_MCP_SERVER` | `true` | Set to `false` to spawn a local server (mcp-client spec only) |
+| `MCP_E2E_TOOL_SURFACE` | unset | Read by `stdio-client.ts` (#681): when set (the compact leg sets `compact`), it passes `-e MCP_TOOL_SURFACE=<value>` to the `docker exec` that starts the stdio server, so the spec sees that surface. Unset leaves the server default |
 
 ---
 
@@ -101,6 +104,16 @@ nests inside `test-results`) and a rate-limit tail on the write-heavy block (a t
 closes the budget, forcing a re-download + re-login). Run it locally with `RUN_STDIO_E2E=true`
 (ADVISORY unless `STDIO_E2E_GATING=true`); #423 fixes both, enables it in CI, and makes it gating.
 
+The compact leg (#681) is a THIRD run: `run-docker-e2e.sh` Step 6c runs `compact-surface.e2e.spec.ts`
+as the Playwright project `docker-e2e-compact-stdio`, from the HOST over stdio like step 6b, with
+`MCP_E2E_TOOL_SURFACE=compact`. It asserts the published `tools/list` is exactly the 15 compact
+tools, reads the version through `get_context`, round-trips a throwaway account through
+`manage_accounts` and `list_entities`, and checks that a direct legacy call is refused. It runs at
+the full level only and is skipped when `RUN_STDIO_E2E=false` (the script default is on), it does
+not depend on step 6b, and it shares the cool-down that drains Actual's rate-limit window. The
+per-action coverage of the compact tools lives in `docker-all-tools.e2e.spec.ts`, which calls the
+compact names on the all surface the stack runs.
+
 Both workflows invoke `npm run test:e2e:docker:full`,
 which selects the `docker-e2e-full` project, which collects that one file. Every other spec in this
 directory is a MANUAL diagnostic, and that is a decision rather than an oversight.
@@ -116,6 +129,7 @@ table below is enforced, not merely documented.
 | Spec | Runs in CI? | Why |
 |---|---|---|
 | `docker-all-tools.e2e.spec.ts` | **yes, TWICE** | the gate, over HTTP (`docker-e2e-full`) and then stdio (`docker-e2e-full-stdio`, #383) |
+| `compact-surface.e2e.spec.ts` | **yes**, Step 6c | the compact leg (#681): project `docker-e2e-compact-stdio`, stdio, `MCP_E2E_TOOL_SURFACE=compact` |
 | `mcp-client.playwright.spec.ts` | no, manual | round trip duplicated by docker-all-tools, session shim covered by `tests/unit/httpServer_session_not_found.test.js`; only the SSE connect is unique |
 | `docker.e2e.spec.ts` | no, manual | the smoke level, for fast local feedback; its assertions are a subset of docker-all-tools |
 
@@ -135,6 +149,15 @@ streaming, and session lifecycle.
 - Reads `MCP_SERVER_URL` from environment — does not spawn a server
 - Tests: `/health` endpoint, tool count, a handful of CRUD operations
 - Verifies the Docker image works end-to-end with a real Actual Budget connection
+
+### `compact-surface.e2e.spec.ts` (#681)
+
+**Purpose:** the default compact surface end to end: 15 tools over 85 operations.
+
+- Runs as project `docker-e2e-compact-stdio` in Step 6c of `run-docker-e2e.sh`, over stdio from the host
+- `MCP_E2E_TOOL_SURFACE=compact` makes `stdio-client.ts` start the server with `MCP_TOOL_SURFACE=compact`
+- Calls compact names, plus one deliberate legacy call (the refusal row); `tests/unit/e2e_uses_compact_names.test.js` enforces it
+- Rows: the exact 15-name `tools/list`, the `get_context` version, a `manage_accounts` create, `list_entities` read-back and delete, and the refusal
 
 ### `docker-all-tools.e2e.spec.ts`
 

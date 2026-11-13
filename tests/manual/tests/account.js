@@ -17,7 +17,7 @@ export async function accountTests(client, context) {
   const { callTool } = client;
   console.log("\n-- Running ACCOUNT TESTS --");
 
-  const accountsBefore = await callTool("actual_accounts_list", {});
+  const accountsBefore = await callTool("list_entities", { type: "account" });
   console.log(`Accounts before: ${accountsBefore.length}`);
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -25,7 +25,7 @@ export async function accountTests(client, context) {
 
   // Helper: verify account presence/absence in the live list.
   async function listAndVerify(label, id, expectPresent, check) {
-    const all = await callTool("actual_accounts_list", {});
+    const all = await callTool("list_entities", { type: "account" });
     const found = Array.isArray(all) ? all.find(a => a.id === id) : null;
     const total = Array.isArray(all) ? all.length : 0;
     if (!expectPresent) {
@@ -52,7 +52,7 @@ export async function accountTests(client, context) {
 
   // Create
   console.log("\nCreating test account...");
-  const newAcc = await callTool("actual_accounts_create", { name: accountName, balance: 0 });
+  const newAcc = await callTool("manage_accounts", { action: "create", entity: "account", name: accountName, balance: 0 });
   const accountId = newAcc.id || newAcc.result || newAcc;
   console.log("✓ Created account:", accountName);
   console.log("  Account ID:", accountId);
@@ -64,7 +64,7 @@ export async function accountTests(client, context) {
 
   // Balance
   console.log("\nGetting account balance...");
-  const balance = await callTool("actual_accounts_get_balance", { id: accountId });
+  const balance = await callTool("summarize_transactions", { report: "balance", account_id: accountId });
   const balanceVal = typeof balance === 'object' ? (balance.balance ?? balance.result) : balance;
   if (balanceVal === 0) console.log(`  ✓ Balance: ${balanceVal} (expected 0 for new account)`);
   else fail(`Balance: expected 0 for new account, got ${balanceVal}`);
@@ -72,8 +72,8 @@ export async function accountTests(client, context) {
   // FIXED(BUG-5): accounts_get_balance with non-existent id now returns actionable error
   console.log("\nNEGATIVE A4: accounts_get_balance with non-existent id...");
   {
-    const badBalance = await callTool("actual_accounts_get_balance", { id: "00000000-0000-0000-0000-000000000000" });
-    if (typeof badBalance?.error === 'string' && badBalance.error.includes('not found') && badBalance.error.includes('actual_accounts_list')) {
+    const badBalance = await callTool("summarize_transactions", { report: "balance", account_id: "00000000-0000-0000-0000-000000000000" });
+    if (typeof badBalance?.error === 'string' && badBalance.error.includes('not found') && badBalance.error.includes('list_entities with type account')) {
       console.log(`  ✓ FIXED(BUG-5): accounts_get_balance nil-UUID returns actionable error: ${badBalance.error.slice(0, 120)}`);
     } else if (typeof badBalance?.error === 'string') {
       fail(`A4: an error was returned but the message is not actionable: ${badBalance.error.slice(0, 120)}`);
@@ -85,9 +85,12 @@ export async function accountTests(client, context) {
   // REGRESSION: multi-field update
   console.log("\nREGRESSION: Updating multiple account fields (name, offbudget)...");
   const updatedName = accountName + "-Updated";
-  await callTool("actual_accounts_update", {
+  await callTool("manage_accounts", {
+    action: "update",
+    entity: "account",
     id: accountId,
-    fields: { name: updatedName, offbudget: true },
+    name: updatedName,
+    offbudget: true,
   });
   console.log("✓ Account updated with multiple fields");
 
@@ -98,7 +101,7 @@ export async function accountTests(client, context) {
   // REGRESSION: strict validation: invalid field
   console.log("\nREGRESSION: Testing strict validation (invalid field should fail)...");
   try {
-    await callTool("actual_accounts_update", { id: accountId, fields: { invalidField: "should fail" } });
+    await callTool("manage_accounts", { action: "update", entity: "account", id: accountId, invalidField: "should fail" });
     fail("REGRESSION FAILED: Invalid field was accepted (should have been rejected)");
   } catch (err) {
     if (err.message.includes("unexpected field") || err.message.includes("invalidField")) {
@@ -120,7 +123,8 @@ export async function accountTests(client, context) {
   // undocumented.
   console.log("\nAdding dummy transaction (amount=0) to prevent tombstone-on-close...");
   const today = new Date().toISOString().slice(0, 10);
-  await callTool("actual_transactions_create", {
+  await callTool("manage_transactions", {
+    action: "create",
     account: accountId,
     date: today,
     amount: 0,
@@ -130,7 +134,7 @@ export async function accountTests(client, context) {
 
   // Close
   console.log("\nClosing account...");
-  await callTool("actual_accounts_close", { id: accountId });
+  await callTool("manage_accounts", { action: "close", id: accountId });
   console.log("✓ Account closed");
 
   await listAndVerify("After close", accountId, true,
@@ -138,7 +142,7 @@ export async function accountTests(client, context) {
 
   // Reopen
   console.log("\nReopening account...");
-  await callTool("actual_accounts_reopen", { id: accountId });
+  await callTool("manage_accounts", { action: "reopen", id: accountId });
   console.log("✓ Account reopened");
 
   await listAndVerify("After reopen", accountId, true,
@@ -147,44 +151,45 @@ export async function accountTests(client, context) {
   // Reset offbudget to false: the update test set it to true, but downstream tests
   // (e.g. batch/uncategorized) create transactions in context.accountId and expect it
   // to be on-budget so those transactions appear in the uncategorized list.
-  await callTool("actual_accounts_update", { id: accountId, fields: { offbudget: false } });
+  await callTool("manage_accounts", { action: "update", entity: "account", id: accountId, offbudget: false });
   await listAndVerify("After offbudget reset", accountId, true,
     a => (a.offbudget === false) || `expected offbudget=false, got offbudget=${a.offbudget}`);
 
-  // actual_accounts_delete: uses a separate disposable account (no transactions)
+  // manage_accounts delete account: uses a separate disposable account (no transactions)
   // so Actual hard-deletes it cleanly without tombstoning.
-  console.log("\nTesting actual_accounts_delete...");
+  console.log("\nTesting manage_accounts delete account...");
   const deleteTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
   const deleteAccName = `MCP-Test-Del-${deleteTimestamp}`;
-  const newDelAcc = await callTool("actual_accounts_create", { name: deleteAccName, balance: 0 });
+  const newDelAcc = await callTool("manage_accounts", { action: "create", entity: "account", name: deleteAccName, balance: 0 });
   const deleteAccId = newDelAcc.id || newDelAcc.result || newDelAcc;
   console.log(`✓ Created disposable account: ${deleteAccName} (${deleteAccId})`);
-  await callTool("actual_accounts_delete", { id: deleteAccId });
+  await callTool("manage_accounts", { action: "delete", entity: "account", id: deleteAccId });
   console.log("✓ Account deleted");
   {
-    const all = await callTool("actual_accounts_list", {});
+    const all = await callTool("list_entities", { type: "account" });
     const found = Array.isArray(all) ? all.find(a => a.id === deleteAccId) : null;
     if (!found) console.log(`  ✓ Verify delete: account no longer present in list`);
     else fail(`Verify delete: account still present after delete! ${JSON.stringify(found)}`);
   }
 
-  // #425: actual_account_flow_summary reconciles a selection's balance change end to end and
+  // #425: summarize_transactions account_flow reconciles a selection's balance change end to end and
   // separates transfers from spending. Uses two disposable accounts so the run leaves no residue.
   // Original tool by @maxvanweenen (PR #399). Runs over BOTH transports via the dual-transport gate.
-  console.log("\nTesting actual_account_flow_summary (reconciliation + transfer separation)...");
+  console.log("\nTesting summarize_transactions account_flow (reconciliation + transfer separation)...");
   {
     const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const flowA = await callTool("actual_accounts_create", { name: `MCP-Flow-A-${ts}`, balance: 0 });
-    const flowB = await callTool("actual_accounts_create", { name: `MCP-Flow-B-${ts}`, balance: 0 });
+    const flowA = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-Flow-A-${ts}`, balance: 0 });
+    const flowB = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-Flow-B-${ts}`, balance: 0 });
     const flowAId = flowA.id || flowA.result || flowA;
     const flowBId = flowB.id || flowB.result || flowB;
     const day = new Date().toISOString().slice(0, 10);
     // A category-free expense (-5000) counts as expenseOutflow; a within-selection transfer must not.
-    await callTool("actual_transactions_create", { account: flowAId, date: day, amount: -5000, notes: "flow expense" });
-    await callTool("actual_transfers_create", { from_account: flowAId, to_account: flowBId, amount: 3000, date: day });
+    await callTool("manage_transactions", { action: "create", account: flowAId, date: day, amount: -5000, notes: "flow expense" });
+    await callTool("manage_transactions", { action: "transfer", from_account: flowAId, to_account: flowBId, amount: 3000, date: day });
 
-    const flow = await callTool("actual_account_flow_summary", {
-      startDate: "2000-01-01", endDate: "2100-01-01", accountIds: [flowAId, flowBId],
+    const flow = await callTool("summarize_transactions", {
+      report: "account_flow",
+      start_date: "2000-01-01", end_date: "2100-01-01", account_ids: [flowAId, flowBId],
     });
     const f = flow?.result ?? flow;
     if (f?.external?.expenseOutflow === 5000) console.log("  \u2713 expenseOutflow === 5000 (uncategorized outflow counted)");
@@ -199,7 +204,7 @@ export async function accountTests(client, context) {
 
     // NEGATIVE: an account NAME is refused with the resolved id (#388), not an empty selection.
     try {
-      await callTool("actual_account_flow_summary", { startDate: "2025-01-01", endDate: "2025-01-31", accountIds: [`MCP-Flow-A-${ts}`] });
+      await callTool("summarize_transactions", { report: "account_flow", start_date: "2025-01-01", end_date: "2025-01-31", account_ids: [`MCP-Flow-A-${ts}`] });
       fail("account_flow_summary NEGATIVE: an account NAME was accepted (expected refusal)");
     } catch (err) {
       if (err.message.includes(flowAId)) console.log("  \u2713 NEGATIVE: an account NAME is refused with its resolved id");
@@ -207,8 +212,8 @@ export async function accountTests(client, context) {
     }
 
     // Clean up both disposable accounts (removes their transactions too), leaving zero residue.
-    await callTool("actual_accounts_delete", { id: flowAId });
-    await callTool("actual_accounts_delete", { id: flowBId });
+    await callTool("manage_accounts", { action: "delete", entity: "account", id: flowAId });
+    await callTool("manage_accounts", { action: "delete", entity: "account", id: flowBId });
     console.log("  \u2713 flow-summary disposable accounts deleted");
   }
 
@@ -220,17 +225,17 @@ export async function accountTests(client, context) {
     const gts = new Date().toISOString().replace(/[:.]/g, '-');
     const groupName = `MCP-AcctGroup-${gts}`;
 
-    const before = await callTool("actual_account_groups_list", {});
+    const before = await callTool("list_entities", { type: "account_group" });
     if (!Array.isArray(before)) fail(`account_groups_list: expected an array, got ${typeof before}`);
     else console.log(`  \u2713 account_groups_list returned ${before.length} group(s)`);
 
-    const created = await callTool("actual_account_groups_create", { name: groupName });
+    const created = await callTool("manage_accounts", { action: "create", entity: "account_group", name: groupName });
     const groupId = typeof created === 'string' ? created : created?.id;
     if (!groupId) fail(`account_groups_create: no id returned: ${JSON.stringify(created)}`);
     else console.log(`  \u2713 account_groups_create returned id ${groupId}`);
 
     // READ-BACK: the group must be listed with the name we supplied.
-    const afterCreate = await callTool("actual_account_groups_list", {});
+    const afterCreate = await callTool("list_entities", { type: "account_group" });
     const found = Array.isArray(afterCreate) ? afterCreate.find(g => g.id === groupId) : null;
     if (!found) fail("account_groups_create: group NOT found in the list after creation");
     else if (found.name !== groupName) fail(`account_groups_create: name round-trip failed: ${found.name}`);
@@ -238,15 +243,15 @@ export async function accountTests(client, context) {
 
     // UPDATE, then read back the new name.
     const renamed = `${groupName}-renamed`;
-    await callTool("actual_account_groups_update", { id: groupId, name: renamed });
-    const afterUpdate = await callTool("actual_account_groups_list", {});
+    await callTool("manage_accounts", { action: "update", entity: "account_group", id: groupId, name: renamed });
+    const afterUpdate = await callTool("list_entities", { type: "account_group" });
     const updated = Array.isArray(afterUpdate) ? afterUpdate.find(g => g.id === groupId) : null;
     if (updated?.name === renamed) console.log("  \u2713 read-back: rename persisted");
     else fail(`account_groups_update: rename did not persist: ${JSON.stringify(updated)}`);
 
     // NEGATIVE (create): an empty name is refused at the schema layer, writing nothing.
     try {
-      await callTool("actual_account_groups_create", { name: "" });
+      await callTool("manage_accounts", { action: "create", entity: "account_group", name: "" });
       fail("account_groups_create NEGATIVE: an empty name was accepted (expected a schema refusal)");
     } catch (err) {
       console.log("  \u2713 NEGATIVE: account_groups_create refuses an empty name");
@@ -254,13 +259,13 @@ export async function accountTests(client, context) {
 
     // NEGATIVE: a group that does not exist is refused, and the message says how to list them.
     const ghost = "00000000-0000-4000-8000-000000000999";
-    for (const tool of ["actual_account_groups_update", "actual_account_groups_delete"]) {
+    for (const tool of ["manage_accounts update account_group", "manage_accounts delete account_group"]) {
       const args = tool.endsWith("update") ? { id: ghost, name: "nope" } : { id: ghost };
       try {
         await callTool(tool, args);
         fail(`${tool} NEGATIVE: a nonexistent group was accepted (expected refusal)`);
       } catch (err) {
-        if (/not found/i.test(err.message) && err.message.includes("actual_account_groups_list")) {
+        if (/not found/i.test(err.message) && err.message.includes("list_entities with type account_group")) {
           console.log(`  \u2713 NEGATIVE: ${tool} refuses a nonexistent group and names the listing tool`);
         } else {
           fail(`${tool} NEGATIVE: refused, but the message is not actionable: ${err.message.slice(0, 140)}`);
@@ -269,8 +274,8 @@ export async function accountTests(client, context) {
     }
 
     // DELETE, then verify it is gone. Leaves zero residue.
-    await callTool("actual_account_groups_delete", { id: groupId });
-    const afterDelete = await callTool("actual_account_groups_list", {});
+    await callTool("manage_accounts", { action: "delete", entity: "account_group", id: groupId });
+    const afterDelete = await callTool("list_entities", { type: "account_group" });
     const stillThere = Array.isArray(afterDelete) ? afterDelete.find(g => g.id === groupId) : null;
     if (stillThere) fail("account_groups_delete: the group is still listed after deletion");
     else console.log("  \u2713 read-back: the group is gone after deletion (zero residue)");

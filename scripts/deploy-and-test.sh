@@ -77,8 +77,7 @@ if [ "${MCP_TEST_BANK_SYNC:-}" = "true" ]; then
   BANK_SYNC_FLAG="true"
 fi
 HEALTH_RETRIES=30          # × 3s = 90s max wait
-# Count registered tools directly from source, stays correct automatically
-EXPECTED_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts")
+# EXPECTED_TOOL_COUNT is computed after Step 6 (#681): it depends on the surface the container publishes.
 
 # ── Colours ────────────────────────────────────────────────────────────────
 GREEN='\033[0;32m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
@@ -198,6 +197,43 @@ for i in $(seq 1 "$HEALTH_RETRIES"); do
   sleep 3
 done
 
+# ── 6b. Work out the expected tool count for the surface the container publishes (#681) ──
+# The count depends on MCP_TOOL_SURFACE (legacy 85, compact 15, all 100), so it is computed
+# only now, from the RUNNING container's own configuration, not from the source alone. The
+# container is pinned in the local-env config (outside this repository). The suite assumes the
+# full set is published, so a narrowed set is refused rather than counted wrongly.
+container_env() { docker exec actual-mcp-bearer-backend printenv "$1" 2>/dev/null | tr 'A-Z' 'a-z' || true; }
+TOOL_SURFACE="$(container_env MCP_TOOL_SURFACE)"
+if [ -z "$TOOL_SURFACE" ]; then
+  err "MCP_TOOL_SURFACE is not set on actual-mcp-bearer-backend: pin it in the local-env config (outside the repository)"
+  exit 1
+fi
+CONT_TOOLSETS="$(container_env MCP_TOOLSETS)"
+if [ -n "$CONT_TOOLSETS" ] && [ "$CONT_TOOLSETS" != "all" ]; then
+  err "MCP_TOOLSETS is '$CONT_TOOLSETS' on actual-mcp-bearer-backend: the suite needs it empty or 'all'"
+  exit 1
+fi
+if [ -n "$(container_env MCP_TOOLS)" ]; then
+  err "MCP_TOOLS is set on actual-mcp-bearer-backend: the suite needs the full tool set, so unset MCP_TOOLS"
+  exit 1
+fi
+if [ "$(container_env MCP_READ_ONLY)" = "true" ]; then
+  err "MCP_READ_ONLY is true on actual-mcp-bearer-backend: the suite writes, so it must be unset or false"
+  exit 1
+fi
+LEGACY_TOOL_COUNT=$(grep -c "^\s*'actual_" "$DEV_DIR/src/actualToolsManager.ts" || true)
+COMPACT_TOOL_COUNT=$(grep -m1 '^export const COMPACT_TOOLS' "$DEV_DIR/src/compact/registry.ts" \
+  | sed -E 's/.*= *\[(.*)\].*/\1/' | awk -F',' '{ n = 0; for (i = 1; i <= NF; i++) if ($i ~ /[A-Za-z0-9_]/) n++; print n }')
+case "$LEGACY_TOOL_COUNT" in ''|0|*[!0-9]*) err "could not count legacy tools in src/actualToolsManager.ts (got '$LEGACY_TOOL_COUNT')"; exit 1 ;; esac
+case "$COMPACT_TOOL_COUNT" in ''|0|*[!0-9]*) err "could not count COMPACT_TOOLS in src/compact/registry.ts (got '$COMPACT_TOOL_COUNT')"; exit 1 ;; esac
+case "$TOOL_SURFACE" in
+  legacy)  EXPECTED_TOOL_COUNT="$LEGACY_TOOL_COUNT" ;;
+  compact) EXPECTED_TOOL_COUNT="$COMPACT_TOOL_COUNT" ;;
+  all)     EXPECTED_TOOL_COUNT=$((LEGACY_TOOL_COUNT + COMPACT_TOOL_COUNT)) ;;
+  *)       err "MCP_TOOL_SURFACE='$TOOL_SURFACE' on actual-mcp-bearer-backend is not legacy, compact or all"; exit 1 ;;
+esac
+ok "Tool surface: surface=${TOOL_SURFACE}, tools=${EXPECTED_TOOL_COUNT}"
+
 # ── 7. Run the integration suite over HTTP (bearer instance, port 3601) ────
 # #280: this is HALF the gate. Step 8 runs the SAME suite over stdio. A promotion to
 # main requires both, because a defect in stdio framing under a write-heavy sequence
@@ -244,7 +280,7 @@ else
   echo "  Residue sweep DISABLED: no budget designated disposable (MCP_TEST_BUDGET_SYNC_ID unset)."
 fi
 
-info "Step 7/9: HTTP integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, tools=${EXPECTED_TOOL_COUNT})..."
+info "Step 7/9: HTTP integration tests against bearer instance port 3601 (level=${TEST_LEVEL}${BANK_SYNC_LABEL}, surface=${TOOL_SURFACE}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
 set +e
 EXPECTED_TOOL_COUNT="$EXPECTED_TOOL_COUNT" \
@@ -270,7 +306,7 @@ echo ""
 # READ-ONLY calls). It now runs the identical level-gated module suite through
 # `docker exec ... --stdio`, so both transports have equal write-path coverage.
 # The old smoke is still used at sanity/smoke levels, where the full suite does not run.
-info "Step 8/9: stdio integration tests against ${STDIO_CONTAINER} (level=${TEST_LEVEL}, tools=${EXPECTED_TOOL_COUNT})..."
+info "Step 8/9: stdio integration tests against ${STDIO_CONTAINER} (level=${TEST_LEVEL}, surface=${TOOL_SURFACE}, tools=${EXPECTED_TOOL_COUNT})..."
 echo ""
 STDIO_EXIT=0
 case "$TEST_LEVEL" in

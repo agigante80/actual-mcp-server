@@ -27,7 +27,7 @@ export async function transactionTests(client, context) {
   // by the offbudget=true flag set in the account regression test (account.js).
   // Do NOT write txAccountId to context: it is local to this test block.
   const txAcctName = `MCP-Tx-${timestamp}`;
-  const txAcctResult = await callTool("actual_accounts_create", { name: txAcctName, balance: 0 });
+  const txAcctResult = await callTool("manage_accounts", { action: "create", entity: "account", name: txAcctName, balance: 0 });
   const txAccountId = txAcctResult.id || txAcctResult.result || txAcctResult;
   console.log(`\n  ✓ Created dedicated transaction test account: ${txAcctName} (${txAccountId})`);
 
@@ -48,13 +48,14 @@ export async function transactionTests(client, context) {
   }
 
   console.log("\nCreating test transaction with MCP payee and category...");
-  const txn = await callTool("actual_transactions_create", txnParams);
+  const txn = await callTool("manage_transactions", { action: "create", ...txnParams });
   console.log("✓ Created transaction (finding via notes filter...)");
 
-  // actual_transactions_create does not return an ID: locate it by notes filter
+  // manage_transactions create does not return an ID: locate it by notes filter
   console.log("\nVerifying create: searching by notes...");
-  const noteFilter = await callTool("actual_transactions_filter", {
-    accountId: txAccountId,
+  const noteFilter = await callTool("search_transactions", {
+    by: "filter",
+    account_id: txAccountId,
     notes: `MCP-Transaction-${timestamp}`,
   });
   const noteResults = Array.isArray(noteFilter) ? noteFilter : (noteFilter.result || []);
@@ -79,7 +80,8 @@ export async function transactionTests(client, context) {
   {
     const today = new Date().toISOString().split('T')[0];
     try {
-      const badTxn = await callTool("actual_transactions_create", {
+      const badTxn = await callTool("manage_transactions", {
+        action: "create",
         account: '00000000-0000-0000-0000-000000000000',
         date: today,
         amount: -100,
@@ -98,12 +100,13 @@ export async function transactionTests(client, context) {
   // Get and update using the recovered ID
   if (context.transactionId) {
     console.log("\nUpdating transaction amount...");
-    await callTool("actual_transactions_update", { id: context.transactionId, fields: { amount: -7500 } });
+    await callTool("manage_transactions", { action: "update", id: context.transactionId, amount: -7500 });
     console.log("✓ Transaction updated");
 
     // Verify update: re-filter by notes since there's no get-by-id tool
-    const updateFilter = await callTool("actual_transactions_filter", {
-      accountId: txAccountId,
+    const updateFilter = await callTool("search_transactions", {
+      by: "filter",
+      account_id: txAccountId,
       notes: `MCP-Transaction-${timestamp}`,
     });
     const updateResults = Array.isArray(updateFilter) ? updateFilter : (updateFilter.result || []);
@@ -119,14 +122,15 @@ export async function transactionTests(client, context) {
     // FIXED(#212): update / update_batch must surface a non-existent id, not report success.
     console.log("\nNEGATIVE (#212): transactions_update with a non-existent id...");
     try {
-      const nilUpd = await callTool("actual_transactions_update", {
+      const nilUpd = await callTool("manage_transactions", {
+        action: "update",
         id: '00000000-0000-0000-0000-000000000000',
-        fields: { notes: 'repro-212' },
+        notes: 'repro-212',
       });
       fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilUpd).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes('not found') && msg.includes('actual_transactions_get')) {
+      if (msg.includes('not found') && msg.includes('search_transactions account')) {
         console.log(`  ✓ FIXED(#212): transactions_update nil-id throws actionable error: ${msg.slice(0, 120)}`);
       } else {
         fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
@@ -135,7 +139,7 @@ export async function transactionTests(client, context) {
 
     console.log("\nNEGATIVE (#212): update_batch with a valid + non-existent id...");
     {
-      const batch = await callTool("actual_transactions_update_batch", { updates: [
+      const batch = await callTool("manage_transactions", { action: "update_batch", updates: [
         { id: context.transactionId, fields: { notes: `MCP-Transaction-${timestamp}` } },
         { id: '00000000-0000-0000-0000-000000000000', fields: { notes: 'repro-212' } },
       ] });
@@ -154,12 +158,13 @@ export async function transactionTests(client, context) {
     const today = new Date().toISOString().split('T')[0];
     const splitNotes = `MCP-Split-${timestamp}`;
     const readParent = async () => {
-      const got = await callTool("actual_transactions_get", { accountId: txAccountId, startDate: today, endDate: today });
+      const got = await callTool("search_transactions", { by: "account", account_id: txAccountId, start_date: today, end_date: today });
       const rows = got.transactions || got.result || (Array.isArray(got) ? got : []);
       return rows.find(t => t.is_parent === true && (t.notes || '').includes(splitNotes));
     };
 
-    await callTool("actual_transactions_create", {
+    await callTool("manage_transactions", {
+      action: "create",
       account: txAccountId, date: today, amount: -3000, notes: splitNotes,
       subtransactions: [{ amount: -2000 }, { amount: -1000 }],
     });
@@ -173,7 +178,7 @@ export async function transactionTests(client, context) {
       else fail(`Verify split create: expected 2 children summing to -3000, got ${subs.length} summing to ${sum}`);
 
       // Edit the existing split's children (only amount needed; account/date derived).
-      await callTool("actual_transactions_update", { id: parent.id, fields: { subtransactions: [{ amount: -2500 }, { amount: -500 }] } });
+      await callTool("manage_transactions", { action: "update", id: parent.id, subtransactions: [{ amount: -2500 }, { amount: -500 }] });
       const edited = await readParent();
       const editedSubs = (edited && edited.subtransactions) || [];
       const editedSum = editedSubs.reduce((a, s) => a + s.amount, 0);
@@ -183,7 +188,7 @@ export async function transactionTests(client, context) {
 
     // NEGATIVE: children do not sum to the parent amount (rejected before the write).
     try {
-      await callTool("actual_transactions_create", { account: txAccountId, date: today, amount: -3000, notes: `${splitNotes}-bad`, subtransactions: [{ amount: -2000 }, { amount: -500 }] });
+      await callTool("manage_transactions", { action: "create", account: txAccountId, date: today, amount: -3000, notes: `${splitNotes}-bad`, subtransactions: [{ amount: -2000 }, { amount: -500 }] });
       fail("Expected a sum-mismatch rejection on create but it succeeded");
     } catch (err) {
       if (/sum to the parent amount/i.test(err.message || '')) console.log("  ✓ NEGATIVE: mismatched split sum rejected on create");
@@ -197,11 +202,11 @@ export async function transactionTests(client, context) {
     {
       const plainNotes = `MCP-PlainToSplit-${timestamp}`;
       const readPlain = async () => {
-        const got = await callTool("actual_transactions_get", { accountId: txAccountId, startDate: today, endDate: today });
+        const got = await callTool("search_transactions", { by: "account", account_id: txAccountId, start_date: today, end_date: today });
         const rows = got.transactions || got.result || (Array.isArray(got) ? got : []);
         return rows.find(t => !t.parent_id && (t.notes || '') === plainNotes);
       };
-      await callTool("actual_transactions_create", { account: txAccountId, date: today, amount: -4000, notes: plainNotes });
+      await callTool("manage_transactions", { action: "create", account: txAccountId, date: today, amount: -4000, notes: plainNotes });
       const plain = await readPlain();
       if (!plain) {
         fail("Plain-to-split: the plain transaction was not found after create");
@@ -209,13 +214,13 @@ export async function transactionTests(client, context) {
         try {
           // NEGATIVE first: a sum mismatch is refused and leaves the transaction plain.
           try {
-            await callTool("actual_transactions_update", { id: plain.id, fields: { subtransactions: [{ amount: -3000 }, { amount: -500 }] } });
+            await callTool("manage_transactions", { action: "update", id: plain.id, subtransactions: [{ amount: -3000 }, { amount: -500 }] });
             fail("Plain-to-split: a mismatched sum was accepted");
           } catch (err) {
             if (/sum to the parent amount/i.test(err.message || '')) console.log("  ✓ NEGATIVE: mismatched split sum rejected on a plain target");
             else fail(`Plain-to-split: rejected with an unexpected message: ${(err.message || '').slice(0, 120)}`);
           }
-          const res = await callTool("actual_transactions_update", { id: plain.id, fields: { subtransactions: [{ amount: -2500 }, { amount: -1500 }] } });
+          const res = await callTool("manage_transactions", { action: "update", id: plain.id, subtransactions: [{ amount: -2500 }, { amount: -1500 }] });
           const after = await readPlain();
           const kids = (after && after.subtransactions) || [];
           const kidSum = kids.reduce((n, c) => n + c.amount, 0);
@@ -226,7 +231,7 @@ export async function transactionTests(client, context) {
             fail(`Plain-to-split: expected the same id as a split with 2 children, got ${JSON.stringify({ id: after && after.id, is_parent: after && after.is_parent, kids: kids.length, kidSum, split: res && res.split })}`);
           }
         } finally {
-          try { await callTool("actual_transactions_delete", { id: plain.id }); }
+          try { await callTool("manage_transactions", { action: "delete", id: plain.id }); }
           catch (err) { fail(`Plain-to-split teardown: ${(err.message || '').slice(0, 120)}`); }
         }
       }
@@ -240,7 +245,7 @@ export async function transactionTests(client, context) {
     const leftover = await readParent();
     if (leftover) {
       try {
-        await callTool("actual_transactions_delete", { id: leftover.id });
+        await callTool("manage_transactions", { action: "delete", id: leftover.id });
         const gone = await readParent();
         if (gone) fail("Split teardown: parent still present after delete (account balance will not return to zero)");
         else console.log("  ✓ Split teardown: parent and children deleted, balance back to zero");
@@ -250,15 +255,16 @@ export async function transactionTests(client, context) {
     }
   }
 
-  // Get transactions by date range (actual_transactions_get)
-  console.log("\nGetting transactions by date range (actual_transactions_get)...");
+  // Get transactions by date range (search_transactions account)
+  console.log("\nGetting transactions by date range (search_transactions account)...");
   {
     const today = new Date().toISOString().split('T')[0];
     const yearStart = `${new Date().getFullYear()}-01-01`;
-    const getTxnsResult = await callTool("actual_transactions_get", {
-      accountId: txAccountId,
-      startDate: yearStart,
-      endDate: today,
+    const getTxnsResult = await callTool("search_transactions", {
+      by: "account",
+      account_id: txAccountId,
+      start_date: yearStart,
+      end_date: today,
     });
     const getTxnsArr = Array.isArray(getTxnsResult) ? getTxnsResult
       : Array.isArray(getTxnsResult?.result) ? getTxnsResult.result : null;
@@ -281,10 +287,11 @@ export async function transactionTests(client, context) {
     const today = new Date().toISOString().split('T')[0];
     const yearStart = `${new Date().getFullYear()}-01-01`;
     try {
-      const badGet = await callTool("actual_transactions_get", {
-        accountId: '00000000-0000-0000-0000-000000000000',
-        startDate: yearStart,
-        endDate: today,
+      const badGet = await callTool("search_transactions", {
+        by: "account",
+        account_id: '00000000-0000-0000-0000-000000000000',
+        start_date: yearStart,
+        end_date: today,
       });
       // #281's ledger, not a warning. Both branches below used to print and move on, so BUG-7
       // was only ever "observed", never asserted: the tool could have regressed to returning an
@@ -293,7 +300,7 @@ export async function transactionTests(client, context) {
       fail(`T4: expected a not-found refusal but tool returned: ${JSON.stringify(badGet).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes('not found') && msg.includes('actual_accounts_list')) {
+      if (msg.includes('not found') && msg.includes('list_entities with type account')) {
         console.log(`  ✓ FIXED(BUG-7): transactions_get nil-UUID throws an actionable refusal: ${msg.slice(0, 120)}`);
       } else {
         fail(`T4: threw but the message is not actionable: ${msg.slice(0, 120)}`);
@@ -303,7 +310,7 @@ export async function transactionTests(client, context) {
 
   // Filter (with correct param name and count assertion)
   console.log("\nFiltering transactions for account...");
-  const filteredTxns = await callTool("actual_transactions_filter", { accountId: txAccountId });
+  const filteredTxns = await callTool("search_transactions", { by: "filter", account_id: txAccountId });
   const filteredArr = Array.isArray(filteredTxns) ? filteredTxns : (filteredTxns.result || []);
   if (filteredArr.length >= 1) console.log(`  ✓ Found ${filteredArr.length} transaction(s) for account`);
   else fail("Filter returned 0 transactions (expected at least 1 after create)");
@@ -313,8 +320,9 @@ export async function transactionTests(client, context) {
   const importDate = new Date().toISOString().split('T')[0];
   const importAmount = -3300; // -$33.00, distinctive value
   const importNotes = `MCP-Import-${timestamp}`;
-  const importResult = await callTool("actual_transactions_import", {
-    accountId: txAccountId,
+  const importResult = await callTool("manage_transactions", {
+    action: "import",
+    account_id: txAccountId,
     txs: [
       {
         date: importDate,
@@ -334,8 +342,9 @@ export async function transactionTests(client, context) {
 
   // T6: read-back: confirm imported transaction is present
   {
-    const afterImport = await callTool("actual_transactions_filter", {
-      accountId: txAccountId,
+    const afterImport = await callTool("search_transactions", {
+      by: "filter",
+      account_id: txAccountId,
       notes: importNotes,
     });
     const afterArr = Array.isArray(afterImport) ? afterImport : (afterImport.result || []);
@@ -344,7 +353,7 @@ export async function transactionTests(client, context) {
       console.log(`  ✓ T6 Verify import read-back: found imported txn id="${imported.id}" amount=${imported.amount}`);
       // Delete the imported transaction so it doesn't pollute the account
       try {
-        await callTool("actual_transactions_delete", { id: imported.id });
+        await callTool("manage_transactions", { action: "delete", id: imported.id });
         console.log(`  ✓ Cleaned up imported transaction`);
       } catch (_) { /* best effort */ }
     } else if (afterArr.length >= 1) {
@@ -355,20 +364,21 @@ export async function transactionTests(client, context) {
   }
 
   // transactions_delete: negative UUID test then real delete + verify.
-  // FIXED(BUG-8): actual_transactions_delete with a non-existent id now throws an
+  // FIXED(BUG-8): manage_transactions delete with a non-existent id now throws an
   // actionable "not found" error. The adapter pre-flights existence with a targeted
   // ActualQL query, since the raw Actual API silently no-ops (CRDT) and would otherwise
   // report success for a delete that removed nothing.
   console.log("\nTesting transactions_delete (negative UUID)...");
   {
     try {
-      const nilResult = await callTool("actual_transactions_delete", {
+      const nilResult = await callTool("manage_transactions", {
+        action: "delete",
         id: '00000000-0000-0000-0000-000000000000',
       });
       fail(`Expected a not-found error but the tool returned: ${JSON.stringify(nilResult).slice(0, 120)}`);
     } catch (err) {
       const msg = err.message || String(err);
-      if (msg.includes('not found') && msg.includes('actual_transactions_get')) {
+      if (msg.includes('not found') && msg.includes('search_transactions account')) {
         console.log(`  ✓ FIXED(BUG-8): transactions_delete nil-UUID throws actionable error: ${msg.slice(0, 120)}`);
       } else {
         fail(`Threw, but the message is not actionable: ${msg.slice(0, 120)}`);
@@ -379,12 +389,13 @@ export async function transactionTests(client, context) {
   if (context.transactionId) {
     console.log("\nDeleting test transaction...");
     try {
-      await callTool("actual_transactions_delete", { id: context.transactionId });
+      await callTool("manage_transactions", { action: "delete", id: context.transactionId });
       console.log("✓ Delete call completed");
 
       // Verify deletion
-      const afterDelete = await callTool("actual_transactions_filter", {
-        accountId: txAccountId,
+      const afterDelete = await callTool("search_transactions", {
+        by: "filter",
+        account_id: txAccountId,
         notes: `MCP-Transaction-${timestamp}`,
       });
       const afterArr = Array.isArray(afterDelete) ? afterDelete : (afterDelete.result || []);
@@ -402,12 +413,12 @@ export async function transactionTests(client, context) {
     skip("Skipping delete (no transactionId in context)");
   }
 
-  // ── actual_transactions_uncategorized tests ───────────────────────────────
-  console.log("\n--- actual_transactions_uncategorized ---");
+  // ── search_transactions uncategorized tests ───────────────────────────────
+  console.log("\n--- search_transactions uncategorized ---");
 
   // Positive: summary only (default mode)
   {
-    const summary = await callTool("actual_transactions_uncategorized", {});
+    const summary = await callTool("search_transactions", { by: "uncategorized" });
     if (typeof summary?.totalCount !== 'number') {
       fail("summary: totalCount not a number");
     } else if (typeof summary?.totalAmount !== 'number') {
@@ -423,8 +434,9 @@ export async function transactionTests(client, context) {
 
   // Positive: with transactions (includeTransactions:true)
   {
-    const listResult = await callTool("actual_transactions_uncategorized", {
-      includeTransactions: true,
+    const listResult = await callTool("search_transactions", {
+      by: "uncategorized",
+      include_transactions: true,
       limit: 5,
     });
     if (!Array.isArray(listResult?.transactions)) {
@@ -441,7 +453,7 @@ export async function transactionTests(client, context) {
   // Negative: non-existent accountId → totalCount:0, byAccount:[]
   {
     const nilId = '00000000-0000-0000-0000-000000000000';
-    const nilResult = await callTool("actual_transactions_uncategorized", { accountId: nilId });
+    const nilResult = await callTool("search_transactions", { by: "uncategorized", account_id: nilId });
     if (nilResult?.totalCount !== 0) {
       fail(`negative accountId: expected totalCount:0, got ${nilResult?.totalCount}`);
     } else if (!Array.isArray(nilResult?.byAccount) || nilResult.byAccount.length !== 0) {
@@ -451,7 +463,7 @@ export async function transactionTests(client, context) {
     }
   }
 
-  // ── TRANSFERS (#366): actual_transfers_create had NO integration coverage ─────
+  // ── TRANSFERS (#366): manage_transactions transfer had NO integration coverage ─────
   //
   // It had a unit test and nothing else. The only E2E reference lived in
   // tests/e2e/suites/transactions.ts, which never executes, and that call passes
@@ -460,7 +472,7 @@ export async function transactionTests(client, context) {
   {
     console.log("\n-- Transfers --");
     const destName = `MCP-Tx-Dest-${timestamp}`;
-    const destResult = await callTool("actual_accounts_create", { name: destName, balance: 0 });
+    const destResult = await callTool("manage_accounts", { action: "create", entity: "account", name: destName, balance: 0 });
     const destAccountId = destResult?.result ?? destResult?.id ?? destResult;
 
     if (typeof destAccountId !== "string") {
@@ -471,10 +483,11 @@ export async function transactionTests(client, context) {
         const transferDate = new Date().toISOString().slice(0, 10);
 
         // The uncategorized count must not move: a transfer is not a spending gap (#119).
-        const uncatBefore = await callTool("actual_transactions_uncategorized", {});
+        const uncatBefore = await callTool("search_transactions", { by: "uncategorized" });
         const countBefore = uncatBefore?.totalCount ?? 0;
 
-        const created = await callTool("actual_transfers_create", {
+        const created = await callTool("manage_transactions", {
+          action: "transfer",
           from_account: txAccountId,
           to_account: destAccountId,
           amount: transferAmount,
@@ -489,8 +502,8 @@ export async function transactionTests(client, context) {
         }
 
         // Both legs must exist, with opposite signs, on their own accounts.
-        const fromTxns = await callTool("actual_transactions_get", { accountId: txAccountId });
-        const toTxns = await callTool("actual_transactions_get", { accountId: destAccountId });
+        const fromTxns = await callTool("search_transactions", { by: "account", account_id: txAccountId });
+        const toTxns = await callTool("search_transactions", { by: "account", account_id: destAccountId });
         const fromList = fromTxns?.result ?? fromTxns ?? [];
         const toList = toTxns?.result ?? toTxns ?? [];
         const debit = (Array.isArray(fromList) ? fromList : []).find(
@@ -516,7 +529,7 @@ export async function transactionTests(client, context) {
           }
         }
 
-        const uncatAfter = await callTool("actual_transactions_uncategorized", {});
+        const uncatAfter = await callTool("search_transactions", { by: "uncategorized" });
         const countAfter = uncatAfter?.totalCount ?? 0;
         if (countAfter !== countBefore) {
           fail(`transfers [#119]: transfer changed the uncategorized count (before=${countBefore}, after=${countAfter})`);
@@ -532,7 +545,7 @@ export async function transactionTests(client, context) {
         const refusal = async (args, label, pattern) => {
           let res;
           try {
-            res = await callTool("actual_transfers_create", args);
+            res = await callTool("manage_transactions", { action: "transfer", ...args });
           } catch (err) {
             // A throw is also a refusal; accept it, but only for the right reason.
             const msg = err?.message ?? String(err);
@@ -563,7 +576,8 @@ export async function transactionTests(client, context) {
 
         // Negative: a non-positive amount is a schema error, not a zero-value transfer.
         try {
-          await callTool("actual_transfers_create", {
+          await callTool("manage_transactions", {
+            action: "transfer",
             from_account: txAccountId,
             to_account: destAccountId,
             amount: 0,
@@ -575,20 +589,20 @@ export async function transactionTests(client, context) {
         }
       } finally {
         // Zero residue, and it needs care since v0.12.0. The transfer leaves the SOURCE
-        // account with a non-zero balance, and actual_accounts_close now correctly refuses
+        // account with a non-zero balance, and manage_accounts close now correctly refuses
         // to close such an account without a transferAccountId (#357). The module teardown
         // below is close-then-delete, so leaving the balance behind made the whole run fail
         // its zero-residue assertion. Remove the debit leg here to put the source account
         // back at zero, then drop the destination account and its credit leg with it.
         try {
-          const srcTxns = await callTool("actual_transactions_get", { accountId: txAccountId });
+          const srcTxns = await callTool("search_transactions", { by: "account", account_id: txAccountId });
           const srcList = srcTxns?.result ?? srcTxns ?? [];
           for (const t of Array.isArray(srcList) ? srcList : []) {
             if (t?.amount === -1234) {
-              await callTool("actual_transactions_delete", { id: t.id });
+              await callTool("manage_transactions", { action: "delete", id: t.id });
             }
           }
-          await callTool("actual_accounts_delete", { id: destAccountId });
+          await callTool("manage_accounts", { action: "delete", entity: "account", id: destAccountId });
           console.log(`  ✓ transfers: cleaned up, source account back to a zero balance`);
         } catch (err) {
           fail(`transfers: could not clean up: ${err.message?.slice(0, 120)}. That is residue.`);
@@ -598,10 +612,11 @@ export async function transactionTests(client, context) {
   }
 
   // #424: deterministic aggregation, exercised over BOTH transports by the dual-transport gate.
-  console.log("\n#424: actual_transactions_aggregate...");
+  console.log("\n#424: summarize_transactions grouped...");
   try {
-    const aggRaw = await callTool("actual_transactions_aggregate", {
-      startDate: "2000-01-01", endDate: "2100-01-01", groupBy: "month", accountIds: [txAccountId],
+    const aggRaw = await callTool("summarize_transactions", {
+      report: "grouped",
+      start_date: "2000-01-01", end_date: "2100-01-01", group_by: "month", account_ids: [txAccountId],
     });
     const agg = aggRaw?.result ?? aggRaw;
     if (!agg || !agg.totals || typeof agg.totals.expenseOutflow !== "number") {
@@ -616,14 +631,15 @@ export async function transactionTests(client, context) {
   // ignored, not a bare Invalid uuid). Self-contained: creates and deletes its own group + category.
   let aggGrpId, aggCatId;
   try {
-    const grpRaw = await callTool("actual_category_groups_create", { name: `AggGrp-${Date.now()}` });
+    const grpRaw = await callTool("manage_categories", { action: "create", entity: "category_group", name: `AggGrp-${Date.now()}` });
     aggGrpId = grpRaw?.groupId || grpRaw?.id || grpRaw?.result || grpRaw;
     const aggCatName = `AggCat-${Date.now()}`;
-    const catRaw = await callTool("actual_categories_create", { name: aggCatName, group_id: aggGrpId });
+    const catRaw = await callTool("manage_categories", { action: "create", entity: "category", name: aggCatName, group_id: aggGrpId });
     aggCatId = catRaw?.categoryId || catRaw?.id || catRaw?.result || catRaw;
     try {
-      await callTool("actual_transactions_aggregate", {
-        startDate: "2000-01-01", endDate: "2100-01-01", groupBy: "category", categoryIds: [aggCatName],
+      await callTool("summarize_transactions", {
+        report: "grouped",
+        start_date: "2000-01-01", end_date: "2100-01-01", group_by: "category", category_ids: [aggCatName],
       });
       fail("aggregate: a category NAME filter should be refused, but the call succeeded");
     } catch (err) {
@@ -635,31 +651,32 @@ export async function transactionTests(client, context) {
       }
     }
   } finally {
-    if (aggCatId) await callTool("actual_categories_delete", { id: aggCatId }).catch(() => {});
-    if (aggGrpId) await callTool("actual_category_groups_delete", { id: aggGrpId }).catch(() => {});
+    if (aggCatId) await callTool("manage_categories", { action: "delete", entity: "category", id: aggCatId }).catch(() => {});
+    if (aggGrpId) await callTool("manage_categories", { action: "delete", entity: "category_group", id: aggGrpId }).catch(() => {});
   }
 
   // #426: recurring-expense detection, exercised over BOTH transports by the dual-transport gate.
-  // Uses its OWN disposable account, not the shared txAccountId: actual_transactions_create does not
+  // Uses its OWN disposable account, not the shared txAccountId: manage_transactions create does not
   // return an id in this runner (the main flow above locates its txn by notes), so the seeded charges
   // cannot be deleted individually to zero the balance, and a non-zero balance makes accounts_close
   // fail (transferAccountId required). accounts_delete force-removes an account WITH transactions and
   // its rows in one call (proven by the #425 account_flow manual block), so a dedicated account is
   // torn down cleanly regardless of balance and leaves zero residue.
-  console.log("\n#426: actual_recurring_expenses_summary...");
+  console.log("\n#426: summarize_transactions recurring...");
   let recAccountId, recPayeeId, recPayeeName;
   const recAcctName = `MCP-Rec-${Date.now()}`;
   try {
-    const recAcctRaw = await callTool("actual_accounts_create", { name: recAcctName, balance: 0 });
+    const recAcctRaw = await callTool("manage_accounts", { action: "create", entity: "account", name: recAcctName, balance: 0 });
     recAccountId = recAcctRaw.id || recAcctRaw.result || recAcctRaw;
     recPayeeName = `RecPayee-${Date.now()}`;
-    const payeeRaw = await callTool("actual_payees_create", { name: recPayeeName });
+    const payeeRaw = await callTool("manage_payees", { action: "create", name: recPayeeName });
     recPayeeId = payeeRaw?.id || payeeRaw?.result || payeeRaw;
     for (const date of ["2025-06-15", "2025-07-15", "2025-08-15"]) {
-      await callTool("actual_transactions_create", { account: recAccountId, date, amount: -1599, payee: recPayeeId });
+      await callTool("manage_transactions", { action: "create", account: recAccountId, date, amount: -1599, payee: recPayeeId });
     }
-    const recRaw = await callTool("actual_recurring_expenses_summary", {
-      startDate: "2025-01-01", endDate: "2025-08-31", accountIds: [recAccountId], minOccurrences: 3, includeInactive: true,
+    const recRaw = await callTool("summarize_transactions", {
+      report: "recurring",
+      start_date: "2025-01-01", end_date: "2025-08-31", account_ids: [recAccountId], min_occurrences: 3, include_inactive: true,
     });
     const rec = recRaw?.result ?? recRaw;
     const found = Array.isArray(rec?.series) ? rec.series.find(sery => sery.payeeName === recPayeeName) : null;
@@ -670,7 +687,7 @@ export async function transactionTests(client, context) {
     }
     // NEGATIVE (#388/#426): an account NAME is refused with its resolved id.
     try {
-      await callTool("actual_recurring_expenses_summary", { startDate: "2025-01-01", endDate: "2025-12-31", accountIds: [recAcctName] });
+      await callTool("summarize_transactions", { report: "recurring", start_date: "2025-01-01", end_date: "2025-12-31", account_ids: [recAcctName] });
       fail("recurring: an account NAME filter should be refused, but the call succeeded");
     } catch (err) {
       const msg = err.message || String(err);
@@ -681,25 +698,25 @@ export async function transactionTests(client, context) {
     fail(`recurring: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
   } finally {
     // accounts_delete removes the account and its seeded transactions in one call; then the payee.
-    if (recAccountId) await callTool("actual_accounts_delete", { id: recAccountId }).catch(() => {});
-    if (recPayeeId) await callTool("actual_payees_delete", { id: recPayeeId }).catch(() => {});
+    if (recAccountId) await callTool("manage_accounts", { action: "delete", entity: "account", id: recAccountId }).catch(() => {});
+    if (recPayeeId) await callTool("manage_payees", { action: "delete", id: recPayeeId }).catch(() => {});
   }
 
-  // #514: actual_transactions_merge on a disposable account. actual_transactions_create returns no
+  // #514: manage_transactions merge on a disposable account. manage_transactions create returns no
   // id in the runner, so both rows are located by listing the account and told apart by DATE.
   console.log("\nTesting transactions_merge...");
   let mergeAcctId = null;
   try {
-    const mergeAcct = await callTool("actual_accounts_create", { name: `MCP-Merge-${timestamp}`, balance: 0 });
+    const mergeAcct = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-Merge-${timestamp}`, balance: 0 });
     mergeAcctId = mergeAcct.id || mergeAcct.result || mergeAcct;
     const listMerge = async () => {
-      const r = await callTool("actual_transactions_filter", { accountId: mergeAcctId });
+      const r = await callTool("search_transactions", { by: "filter", account_id: mergeAcctId });
       return Array.isArray(r) ? r : (r.result || []);
     };
     // Rows to be KEPT carry empty notes: upstream fills only empty fields from the dropped row.
-    await callTool("actual_transactions_create", { account: mergeAcctId, date: '2026-10-01', amount: -1800, notes: '' });
-    await callTool("actual_transactions_create", { account: mergeAcctId, date: '2026-10-03', amount: -1800, notes: `MCP-Merge-Dropped-${timestamp}` });
-    await callTool("actual_transactions_create", { account: mergeAcctId, date: '2026-10-05', amount: -2000, notes: `MCP-Merge-Other-${timestamp}` });
+    await callTool("manage_transactions", { action: "create", account: mergeAcctId, date: '2026-10-01', amount: -1800, notes: '' });
+    await callTool("manage_transactions", { action: "create", account: mergeAcctId, date: '2026-10-03', amount: -1800, notes: `MCP-Merge-Dropped-${timestamp}` });
+    await callTool("manage_transactions", { action: "create", account: mergeAcctId, date: '2026-10-05', amount: -2000, notes: `MCP-Merge-Other-${timestamp}` });
     const before = await listMerge();
     const early = before.find(t => t.date === '2026-10-01' && t.amount === -1800);
     const late = before.find(t => t.date === '2026-10-03' && t.amount === -1800);
@@ -709,7 +726,7 @@ export async function transactionTests(client, context) {
     } else {
       // NEGATIVE first: different amounts are refused naming both amounts, and both rows survive.
       try {
-        await callTool("actual_transactions_merge", { ids: [early.id, other.id] });
+        await callTool("manage_transactions", { action: "merge", ids: [early.id, other.id] });
         fail("merge: different amounts should be refused, but the call succeeded");
       } catch (err) {
         const msg = err.message || String(err);
@@ -722,7 +739,7 @@ export async function transactionTests(client, context) {
 
       // POSITIVE: no imported_id on either, so the earlier date is kept. The earlier row is passed
       // FIRST so the second-id fallback would pick the other one: only the date rule passes this.
-      const res = await callTool("actual_transactions_merge", { ids: [early.id, late.id] });
+      const res = await callTool("manage_transactions", { action: "merge", ids: [early.id, late.id] });
       if (res?.success === true && res.keptId === early.id && res.deletedId === late.id) console.log(`  \u2713 merge: the earlier-dated row is kept (keptId=${res.keptId})`);
       else fail(`merge: expected keptId=${early.id} deletedId=${late.id}, got ${JSON.stringify(res).slice(0, 160)}`);
       const after = await listMerge();
@@ -737,7 +754,7 @@ export async function transactionTests(client, context) {
     fail(`merge: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
   } finally {
     // accounts_delete removes the account and its transactions in one call.
-    if (mergeAcctId) await callTool("actual_accounts_delete", { id: mergeAcctId }).catch(() => {});
+    if (mergeAcctId) await callTool("manage_accounts", { action: "delete", entity: "account", id: mergeAcctId }).catch(() => {});
   }
 
   // #514: merging two TRANSFERS. The docker E2E skips this path (its server runs NODE_ENV=test,
@@ -747,24 +764,24 @@ export async function transactionTests(client, context) {
   let xferSrcId = null;
   let xferDstId = null;
   try {
-    const srcAcct = await callTool("actual_accounts_create", { name: `MCP-MergeXfer-Src-${timestamp}`, balance: 0 });
+    const srcAcct = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-MergeXfer-Src-${timestamp}`, balance: 0 });
     xferSrcId = srcAcct.id || srcAcct.result || srcAcct;
-    const dstAcct = await callTool("actual_accounts_create", { name: `MCP-MergeXfer-Dst-${timestamp}`, balance: 0 });
+    const dstAcct = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-MergeXfer-Dst-${timestamp}`, balance: 0 });
     xferDstId = dstAcct.id || dstAcct.result || dstAcct;
     const debitIds = [];
     for (const date of ['2026-10-01', '2026-10-03']) {
-      const t = await callTool("actual_transfers_create", { from_account: xferSrcId, to_account: xferDstId, amount: 2500, date });
+      const t = await callTool("manage_transactions", { action: "transfer", from_account: xferSrcId, to_account: xferDstId, amount: 2500, date });
       const r = t?.result ?? t;
       if (r?.from_id) debitIds.push(r.from_id);
     }
     const list = async (accountId) => {
-      const r = await callTool("actual_transactions_filter", { accountId });
+      const r = await callTool("search_transactions", { by: "filter", account_id: accountId });
       return Array.isArray(r) ? r : (r.result || []);
     };
     if (debitIds.length !== 2) {
       fail(`merge transfers: expected two transfer debits, got ${debitIds.length}`);
     } else {
-      const res = await callTool("actual_transactions_merge", { ids: debitIds });
+      const res = await callTool("manage_transactions", { action: "merge", ids: debitIds });
       const merged = res?.result ?? res;
       if (merged?.success === true && debitIds.includes(merged.keptId)) console.log(`  \u2713 merge transfers: merged (keptId=${merged.keptId})`);
       else fail(`merge transfers: unexpected result ${JSON.stringify(res).slice(0, 160)}`);
@@ -779,8 +796,8 @@ export async function transactionTests(client, context) {
   } catch (err) {
     fail(`merge transfers: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
   } finally {
-    if (xferSrcId) await callTool("actual_accounts_delete", { id: xferSrcId }).catch(() => {});
-    if (xferDstId) await callTool("actual_accounts_delete", { id: xferDstId }).catch(() => {});
+    if (xferSrcId) await callTool("manage_accounts", { action: "delete", entity: "account", id: xferSrcId }).catch(() => {});
+    if (xferDstId) await callTool("manage_accounts", { action: "delete", entity: "account", id: xferDstId }).catch(() => {});
   }
 
   // #514: a plain categorised row merged with a transfer to an ON-BUDGET account. Upstream keeps
@@ -792,19 +809,19 @@ export async function transactionTests(client, context) {
   let mixGroupId = null;
   let mixCatId = null;
   try {
-    const src = await callTool("actual_accounts_create", { name: `MCP-MergeMix-Src-${timestamp}`, balance: 0 });
+    const src = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-MergeMix-Src-${timestamp}`, balance: 0 });
     mixSrcId = src.id || src.result || src;
-    const dst = await callTool("actual_accounts_create", { name: `MCP-MergeMix-Dst-${timestamp}`, balance: 0 });
+    const dst = await callTool("manage_accounts", { action: "create", entity: "account", name: `MCP-MergeMix-Dst-${timestamp}`, balance: 0 });
     mixDstId = dst.id || dst.result || dst;
-    const group = await callTool("actual_category_groups_create", { name: `MCP-MergeMix-Group-${timestamp}` });
+    const group = await callTool("manage_categories", { action: "create", entity: "category_group", name: `MCP-MergeMix-Group-${timestamp}` });
     mixGroupId = group.id || group.result || group;
-    const cat = await callTool("actual_categories_create", { name: `MCP-MergeMix-Cat-${timestamp}`, group_id: mixGroupId });
+    const cat = await callTool("manage_categories", { action: "create", entity: "category", name: `MCP-MergeMix-Cat-${timestamp}`, group_id: mixGroupId });
     mixCatId = cat.categoryId || cat.id || cat.result || cat;
-    await callTool("actual_transactions_create", { account: mixSrcId, date: '2026-10-01', amount: -1200, category: mixCatId });
-    const t = await callTool("actual_transfers_create", { from_account: mixSrcId, to_account: mixDstId, amount: 1200, date: '2026-10-03' });
+    await callTool("manage_transactions", { action: "create", account: mixSrcId, date: '2026-10-01', amount: -1200, category: mixCatId });
+    const t = await callTool("manage_transactions", { action: "transfer", from_account: mixSrcId, to_account: mixDstId, amount: 1200, date: '2026-10-03' });
     const debitId = (t?.result ?? t)?.from_id;
     const list = async () => {
-      const r = await callTool("actual_transactions_filter", { accountId: mixSrcId });
+      const r = await callTool("search_transactions", { by: "filter", account_id: mixSrcId });
       return (Array.isArray(r) ? r : (r.result || [])).filter(x => x.amount === -1200);
     };
     const plain = (await list()).find(x => !x.transfer_id);
@@ -813,7 +830,7 @@ export async function transactionTests(client, context) {
     } else if (plain.category !== mixCatId) {
       fail(`merge plain+transfer: the plain row was not seeded with the category (got ${plain.category})`);
     } else {
-      await callTool("actual_transactions_merge", { ids: [plain.id, debitId] });
+      await callTool("manage_transactions", { action: "merge", ids: [plain.id, debitId] });
       const after = await list();
       if (after.length === 1 && after[0].transfer_id && (after[0].category ?? null) === null) {
         console.log(`  \u2713 merge plain+transfer [read-back]: one row left, still a transfer, category cleared`);
@@ -824,10 +841,10 @@ export async function transactionTests(client, context) {
   } catch (err) {
     fail(`merge plain+transfer: unexpected error: ${(err.message || String(err)).slice(0, 140)}`);
   } finally {
-    if (mixSrcId) await callTool("actual_accounts_delete", { id: mixSrcId }).catch(() => {});
-    if (mixDstId) await callTool("actual_accounts_delete", { id: mixDstId }).catch(() => {});
-    if (mixCatId) await callTool("actual_categories_delete", { id: mixCatId }).catch(() => {});
-    if (mixGroupId) await callTool("actual_category_groups_delete", { id: mixGroupId }).catch(() => {});
+    if (mixSrcId) await callTool("manage_accounts", { action: "delete", entity: "account", id: mixSrcId }).catch(() => {});
+    if (mixDstId) await callTool("manage_accounts", { action: "delete", entity: "account", id: mixDstId }).catch(() => {});
+    if (mixCatId) await callTool("manage_categories", { action: "delete", entity: "category", id: mixCatId }).catch(() => {});
+    if (mixGroupId) await callTool("manage_categories", { action: "delete", entity: "category_group", id: mixGroupId }).catch(() => {});
   }
 
   // Teardown: close then delete the dedicated transaction test account.
@@ -835,8 +852,8 @@ export async function transactionTests(client, context) {
   // transactions on close(), making them unrecoverable. We need close() to set
   // closed=1 before delete() removes the record cleanly.
   try {
-    await callTool("actual_accounts_close", { id: txAccountId });
-    await callTool("actual_accounts_delete", { id: txAccountId });
+    await callTool("manage_accounts", { action: "close", id: txAccountId });
+    await callTool("manage_accounts", { action: "delete", entity: "account", id: txAccountId });
     console.log(`\n  ✓ Cleaned up transaction test account (${txAccountId})`);
   } catch (err) {
     fail(`Teardown: could not clean up the transaction test account (${txAccountId}): ${err.message?.slice(0, 120)}. That is residue.`);

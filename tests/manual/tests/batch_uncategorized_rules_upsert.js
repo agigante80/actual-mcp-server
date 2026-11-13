@@ -4,9 +4,9 @@ import { borrowCategory } from '../context.js';
  * tests/batch_uncategorized_rules_upsert.js
  *
  * Tests for three new tools ported from the ZanzyTHEbar fork:
- *   1. actual_transactions_uncategorized: list transactions with no category
- *   2. actual_transactions_update_batch: update multiple transactions in one call
- *   3. actual_rules_create_or_update: idempotent rule upsert
+ *   1. search_transactions uncategorized: list transactions with no category
+ *   2. manage_transactions update_batch: update multiple transactions in one call
+ *   3. manage_rules upsert: idempotent rule upsert
  *
  * Reads from context:  accountId (required), categoryId (optional: creates disposable if absent)
  * Writes to context:   rulesUpsertId  (cleaned up by runner.js cleanup phase)
@@ -38,7 +38,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
   try {
 
     if (!context.categoryId) {
-      const catData = await callTool("actual_categories_get", {});
+      const catData = await callTool("list_entities", { type: "category" });
       const raw = catData.result || catData.categories || catData;
       const flatCats = Array.isArray(raw)
         ? raw.filter(g => !g.is_income).flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
@@ -49,11 +49,13 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
         console.log(`  ℹ Using existing category for batch/upsert tests: "${firstCat.name}" (${firstCat.id})`);
       } else {
         console.log("  ℹ No expense category found: creating disposable category group + category for batch/upsert tests...");
-        const newGroup = await callTool("actual_category_groups_create", { name: `MCP-BuRU-Group-${timestamp}` });
+        const newGroup = await callTool("manage_categories", { action: "create", entity: "category_group", name: `MCP-BuRU-Group-${timestamp}` });
         buruOwnedGroupId = newGroup.id || newGroup.result || newGroup;
         console.log(`  ✓ Created disposable category group: ${buruOwnedGroupId}`);
 
-        const newCat = await callTool("actual_categories_create", {
+        const newCat = await callTool("manage_categories", {
+          action: "create",
+          entity: "category",
           name: `MCP-BuRU-Cat-${timestamp}`,
           group_id: buruOwnedGroupId,
         });
@@ -64,14 +66,15 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 1. actual_transactions_uncategorized
+    // 1. search_transactions uncategorized
     // ──────────────────────────────────────────────────────────────────────────
-    console.log("\n=== actual_transactions_uncategorized ===");
+    console.log("\n=== search_transactions uncategorized ===");
 
     // Create an uncategorized transaction so we know at least one exists
     const uncatNotes = `MCP-Uncat-${timestamp}`;
     console.log("\nCreating uncategorized test transaction...");
-    await callTool("actual_transactions_create", {
+    await callTool("manage_transactions", {
+      action: "create",
       account: context.accountId,
       date: today,
       amount: -1234,
@@ -81,13 +84,14 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     console.log("✓ Uncategorized transaction created");
 
     // List uncategorized transactions (default: all-time).
-    // NOTE: Since #121, actual_transactions_uncategorized returns only a summary
+    // NOTE: Since #121, search_transactions uncategorized returns only a summary
     // by default (totalCount, totalAmount, byAccount, dateRange). Pass
     // includeTransactions:true to also receive the paginated transactions[] we
     // need for the find-by-notes assertions below.
     console.log("\nListing uncategorized transactions (default: all-time)...");
-    const uncatResult = await callTool("actual_transactions_uncategorized", {
-      includeTransactions: true,
+    const uncatResult = await callTool("search_transactions", {
+      by: "uncategorized",
+      include_transactions: true,
       limit: 1000,
     });
     const uncatTxns = uncatResult?.transactions ?? [];
@@ -95,9 +99,9 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     const uncatCount = uncatResult?.totalCount ?? uncatTxns.length;
     const uncatTotalAmount = uncatResult?.totalAmount;
     if (Array.isArray(uncatTxns)) {
-      console.log(`  ✓ actual_transactions_uncategorized: count=${uncatCount}, totalAmount=${uncatTotalAmount}`);
+      console.log(`  ✓ search_transactions uncategorized: count=${uncatCount}, totalAmount=${uncatTotalAmount}`);
     } else {
-      fail(`actual_transactions_uncategorized: expected transactions array, got ${JSON.stringify(uncatResult).slice(0, 120)}`);
+      fail(`search_transactions uncategorized: expected transactions array, got ${JSON.stringify(uncatResult).slice(0, 120)}`);
     }
 
     // Verify our newly created transaction appears in the uncategorized list
@@ -114,8 +118,9 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     // NEGATIVE: non-existent account ID should return empty list (not error)
     console.log("\nNEGATIVE: listing uncategorized for __nonexistent_MCP_test_value__ account...");
     try {
-      const negResult = await callTool("actual_transactions_uncategorized", {
-        accountId: "__nonexistent_MCP_test_value__",
+      const negResult = await callTool("search_transactions", {
+        by: "uncategorized",
+        account_id: "__nonexistent_MCP_test_value__",
       });
       const negTxns = negResult?.transactions ?? [];
       if (Array.isArray(negTxns) && negTxns.length === 0) {
@@ -130,9 +135,10 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
     // EDGE CASE: date range guaranteed to have zero uncategorized transactions
     console.log("\nEDGE CASE: listing uncategorized for far-future date range (expect empty list)...");
-    const emptyRangeResult = await callTool("actual_transactions_uncategorized", {
-      startDate: "2099-01-01",
-      endDate: "2099-01-31",
+    const emptyRangeResult = await callTool("search_transactions", {
+      by: "uncategorized",
+      start_date: "2099-01-01",
+      end_date: "2099-01-31",
     });
     const emptyRangeTxns = emptyRangeResult?.transactions ?? [];
     if (Array.isArray(emptyRangeTxns) && emptyRangeTxns.length === 0) {
@@ -148,7 +154,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     }
 
     // ── Off-budget filtering regression (issue #80) ───────────────────────────
-    // actual_transactions_uncategorized must NOT include transactions from
+    // search_transactions uncategorized must NOT include transactions from
     // off-budget accounts (investment, HSA, etc.) because those transactions
     // can never have categories assigned: any update is silently discarded.
     //
@@ -161,8 +167,10 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     const offBudgetAccountName = `MCP-OffBudget-${timestamp}`;
     try {
       // 1. Create a named account, then update to set offbudget=true
-      // (actual_accounts_create does not accept offbudget at creation time)
-      const createAcctResult = await callTool("actual_accounts_create", {
+      // (manage_accounts create account does not accept offbudget at creation time)
+      const createAcctResult = await callTool("manage_accounts", {
+        action: "create",
+        entity: "account",
         name: offBudgetAccountName,
       });
       offBudgetAccountId = createAcctResult?.id ?? createAcctResult?.result ?? createAcctResult;
@@ -170,14 +178,16 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
         throw new Error(`Failed to create off-budget account: got: ${JSON.stringify(createAcctResult)}`);
       }
       // Set offbudget=true via update (API does not support it at creation time)
-      await callTool("actual_accounts_update", {
+      await callTool("manage_accounts", {
+        action: "update",
+        entity: "account",
         id: offBudgetAccountId,
-        fields: { offbudget: true },
+        offbudget: true,
       });
       console.log(`  ✓ Off-budget account created: "${offBudgetAccountName}" (${offBudgetAccountId})`);
 
       // Verify it is marked off-budget
-      const allAccounts = await callTool("actual_accounts_list", {});
+      const allAccounts = await callTool("list_entities", { type: "account" });
       const createdAcct = Array.isArray(allAccounts) ? allAccounts.find(a => a.id === offBudgetAccountId) : null;
       if (createdAcct?.offbudget === true) {
         console.log(`  ✓ Verified account.offbudget=true`);
@@ -187,7 +197,8 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
       // 2. Create a transaction in the off-budget account (no category)
       const offBudgetNotes = `MCP-OffBudget-Txn-${timestamp}`;
-      await callTool("actual_transactions_create", {
+      await callTool("manage_transactions", {
+        action: "create",
         account: offBudgetAccountId,
         date: today,
         amount: -9999,
@@ -196,11 +207,11 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       });
       console.log(`  ✓ Off-budget transaction created (notes="${offBudgetNotes}")`);
 
-      // Locate the transaction ID via actual_transactions_get (which, unlike transactions_filter,
+      // Locate the transaction ID via search_transactions account (which, unlike transactions_filter,
       // does not exclude off-budget accounts). We need it for teardown: closing an account with a
       // non-zero balance requires deleting the transaction first so the balance reaches zero.
       try {
-        const offTxns = await callTool("actual_transactions_get", { accountId: offBudgetAccountId });
+        const offTxns = await callTool("search_transactions", { by: "account", account_id: offBudgetAccountId });
         const offTxnsArr = Array.isArray(offTxns) ? offTxns : (offTxns?.result ?? []);
         const offTxn = offTxnsArr.find(t => t?.notes === offBudgetNotes);
         offBudgetTxnId = offTxn?.id ?? null;
@@ -208,8 +219,9 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
       // 3. List uncategorized: off-budget transaction must NOT appear.
       // Same #121 shape note: includeTransactions:true is required to get the array.
-      const offBudgetUncatResult = await callTool("actual_transactions_uncategorized", {
-        includeTransactions: true,
+      const offBudgetUncatResult = await callTool("search_transactions", {
+        by: "uncategorized",
+        include_transactions: true,
         limit: 1000,
       });
       const offBudgetUncatTxns = offBudgetUncatResult?.transactions ?? [];
@@ -231,12 +243,14 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
         // 4. Also document the silent write discard if the bug is present and we have a category
         if (context.categoryId) {
-          await callTool("actual_transactions_update", {
+          await callTool("manage_transactions", {
+            action: "update",
             id: offBudgetTxnFound.id,
-            fields: { category: context.categoryId },
+            category: context.categoryId,
           });
-          const readBack = await callTool("actual_transactions_uncategorized", {
-            includeTransactions: true,
+          const readBack = await callTool("search_transactions", {
+            by: "uncategorized",
+            include_transactions: true,
             limit: 1000,
           });
           const stillPresent = (readBack?.transactions ?? []).find(t => t?.id === offBudgetTxnFound.id);
@@ -251,17 +265,17 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       fail(`OFF-BUDGET REGRESSION: error during test: ${err.message}`);
     } finally {
       // 5. Clean up the off-budget account.
-      // actual_accounts_close requires zero balance: delete the transaction first so the
+      // manage_accounts close requires zero balance: delete the transaction first so the
       // balance reaches zero, then close() tombstones the account cleanly (zero-transaction
       // accounts are hard-deleted on close, which is fine for test cleanup).
       if (offBudgetAccountId) {
         if (offBudgetTxnId) {
           try {
-            await callTool("actual_transactions_delete", { id: offBudgetTxnId });
+            await callTool("manage_transactions", { action: "delete", id: offBudgetTxnId });
           } catch (_) { /* best effort */ }
         }
         try {
-          await callTool("actual_accounts_close", { id: offBudgetAccountId });
+          await callTool("manage_accounts", { action: "close", id: offBudgetAccountId });
           console.log(`  ✓ Off-budget test account closed: "${offBudgetAccountName}" (${offBudgetAccountId})`);
         } catch (closeErr) {
           fail(`Could not close the off-budget test account (${offBudgetAccountId}): ${closeErr.message}. An object this suite created and could not remove is residue, which the dual-transport gate asserts is zero.`);
@@ -271,16 +285,17 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     // ── End off-budget regression ──────────────────────────────────────────────
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 2. actual_transactions_update_batch
+    // 2. manage_transactions update_batch
     // ──────────────────────────────────────────────────────────────────────────
-    console.log("\n=== actual_transactions_update_batch ===");
+    console.log("\n=== manage_transactions update_batch ===");
 
     if (!uncatTxnId) {
       skip("Skipping batch update (no uncategorized transaction ID available)");
     } else {
       const batchNotes = `MCP-Batch-${timestamp}`;
       console.log(`\nBatch-updating 1 transaction (id=${uncatTxnId})...`);
-      const batchResult = await callTool("actual_transactions_update_batch", {
+      const batchResult = await callTool("manage_transactions", {
+        action: "update_batch",
         updates: [
           { id: uncatTxnId, fields: { notes: batchNotes, category: context.categoryId } },
         ],
@@ -289,9 +304,9 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       const succeeded = batchResult?.succeeded ?? [];
       const failed = batchResult?.failed ?? [];
       if (batchResult?.total === 1 && batchResult?.successCount === 1 && batchResult?.failureCount === 0) {
-        console.log(`  ✓ actual_transactions_update_batch: total=1 successCount=1 failureCount=0`);
+        console.log(`  ✓ manage_transactions update_batch: total=1 successCount=1 failureCount=0`);
       } else {
-        fail(`actual_transactions_update_batch: unexpected result: ${JSON.stringify(batchResult).slice(0, 120)}`);
+        fail(`manage_transactions update_batch: unexpected result: ${JSON.stringify(batchResult).slice(0, 120)}`);
       }
       if (Array.isArray(succeeded) && succeeded.length === 1 && succeeded[0]?.id === uncatTxnId) {
         console.log(`  ✓ succeeded list contains the expected transaction ID`);
@@ -305,8 +320,9 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       }
 
       // Verify: read back and confirm note + category were applied
-      const verifyFilter = await callTool("actual_transactions_filter", {
-        accountId: context.accountId,
+      const verifyFilter = await callTool("search_transactions", {
+        by: "filter",
+        account_id: context.accountId,
         notes: batchNotes,
       });
       const verifyRows = Array.isArray(verifyFilter)
@@ -326,7 +342,8 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
       // NEGATIVE: batch with a non-existent transaction ID should report partial failure
       console.log("\nNEGATIVE: batch update with __nonexistent_MCP_test_value__ ID...");
-      const negBatch = await callTool("actual_transactions_update_batch", {
+      const negBatch = await callTool("manage_transactions", {
+        action: "update_batch",
         updates: [{ id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } }],
       });
       if (negBatch?.failureCount === 1 && negBatch?.successCount === 0) {
@@ -352,7 +369,8 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       // does NOT abort on failure; the valid item must still appear in succeeded[].
       console.log("\nPARTIAL FAILURE: mixed batch (1 valid + 1 bad ID): valid should still succeed...");
       const mixedNotes = `${batchNotes}-mixed`;
-      const mixedBatch = await callTool("actual_transactions_update_batch", {
+      const mixedBatch = await callTool("manage_transactions", {
+        action: "update_batch",
         updates: [
           { id: uncatTxnId, fields: { notes: mixedNotes } },
           { id: "00000000-0000-0000-0000-000000000000", fields: { notes: "should-fail" } },
@@ -383,9 +401,9 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // 3. actual_rules_create_or_update (idempotent upsert)
+    // 3. manage_rules upsert (idempotent upsert)
     // ──────────────────────────────────────────────────────────────────────────
-    console.log("\n=== actual_rules_create_or_update (idempotent upsert) ===");
+    console.log("\n=== manage_rules upsert (idempotent upsert) ===");
 
     const upsertMarker = `MCP-RulesUpsert-${timestamp}`;
     const upsertConditions = [{ field: "notes", op: "contains", value: upsertMarker }];
@@ -393,9 +411,10 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
     // First call: should CREATE a new rule
     console.log("\nFirst call (expect create)...");
-    const firstResult = await callTool("actual_rules_create_or_update", {
+    const firstResult = await callTool("manage_rules", {
+      action: "upsert",
       stage: "pre",
-      conditionsOp: "and",
+      conditions_op: "and",
       conditions: upsertConditions,
       actions: upsertActions,
     });
@@ -409,13 +428,13 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
     // Verify: the rule appears in the live rules list
     {
-      const rd = await callTool("actual_rules_get", {});
+      const rd = await callTool("list_entities", { type: "rule" });
       const allRules = rd?.rules ?? rd?.result ?? rd ?? [];
       const found = Array.isArray(allRules) ? allRules.find(r => r.id === upsertRuleId) : null;
       if (found) {
-        console.log(`  ✓ Verify create: rule found in actual_rules_get list (id=${upsertRuleId})`);
+        console.log(`  ✓ Verify create: rule found in list_entities rule list (id=${upsertRuleId})`);
       } else {
-        fail(`Verify create: rule NOT found in actual_rules_get list (id=${upsertRuleId})`);
+        fail(`Verify create: rule NOT found in list_entities rule list (id=${upsertRuleId})`);
       }
     }
 
@@ -425,9 +444,10 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
       { op: "set", field: "category", value: context.categoryId },
       { op: "append-notes", value: " [auto-categorized]" },
     ];
-    const secondResult = await callTool("actual_rules_create_or_update", {
+    const secondResult = await callTool("manage_rules", {
+      action: "upsert",
       stage: "pre",
-      conditionsOp: "and",
+      conditions_op: "and",
       conditions: upsertConditions, // identical conditions
       actions: updatedActions,       // changed actions
     });
@@ -439,7 +459,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
 
     // Verify: still only one rule with that marker (no duplicates)
     {
-      const rd = await callTool("actual_rules_get", {});
+      const rd = await callTool("list_entities", { type: "rule" });
       const allRules = rd?.rules ?? rd?.result ?? rd ?? [];
       const matchingRules = Array.isArray(allRules)
         ? allRules.filter(r => r?.conditions?.some(c => c?.value === upsertMarker))
@@ -454,7 +474,8 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     // NEGATIVE: invalid field operator combination should be rejected
     console.log("\nNEGATIVE: invalid operator for field type...");
     try {
-      await callTool("actual_rules_create_or_update", {
+      await callTool("manage_rules", {
+        action: "upsert",
         conditions: [{ field: "payee", op: "contains", value: "__nonexistent_MCP_test_value__" }],
         actions: [{ op: "set", field: "category", value: context.categoryId }],
       });
@@ -470,7 +491,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     // Clean up any disposable category/group we created at the start of this test.
     if (buruOwnedCatId) {
       try {
-        await callTool("actual_categories_delete", { id: buruOwnedCatId });
+        await callTool("manage_categories", { action: "delete", entity: "category", id: buruOwnedCatId });
         console.log(`\n✓ Cleaned up disposable batch/upsert test category (${buruOwnedCatId})`);
       } catch (err) {
         fail(`Could not delete the disposable category ${buruOwnedCatId}: ${err.message}. That is residue.`);
@@ -479,7 +500,7 @@ export async function batchUncategorizedRulesUpsertTests(client, context) {
     }
     if (buruOwnedGroupId) {
       try {
-        await callTool("actual_category_groups_delete", { id: buruOwnedGroupId });
+        await callTool("manage_categories", { action: "delete", entity: "category_group", id: buruOwnedGroupId });
         console.log(`✓ Cleaned up disposable batch/upsert test category group (${buruOwnedGroupId})`);
       } catch (err) {
         fail(`Could not delete the disposable category group ${buruOwnedGroupId}: ${err.message}. That is residue.`);

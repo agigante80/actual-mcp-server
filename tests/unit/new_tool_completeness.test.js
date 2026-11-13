@@ -15,10 +15,18 @@
 // (one whose tool now appears anyway, or whose tool no longer exists) is itself a failure,
 // so the list cannot rot into a blanket opt-out.
 //
+// #681: the e2e, manual-integration and llm-prompt surfaces are no longer asked about the 85
+// legacy names. The suites call the COMPACT tools (15 of them), so those three surfaces are
+// checked per (compact tool, action) pair: every pair in COMPACT_TOOLS must be called by name
+// with its selector value in the spec, in a manual module, and described on one line of a
+// prompt. The two session tools have no compact tool and keep a legacy-name check. The
+// tool-file, index-export and tools-reference surfaces stay per legacy tool.
+//
 // Run: node tests/unit/new_tool_completeness.test.js
+// (needs `npm run build` first: the compact registry is read from dist/)
 
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -31,6 +39,22 @@ const check = (name, fn) => {
   catch (err) { console.error(`  FAIL: ${name}\n    ${err.message}`); failed += 1; }
 };
 const fail = (msg) => { throw new Error(msg); };
+
+const { COMPACT_TOOLS } = await import(pathToFileURL(join(ROOT, 'dist/src/compact/registry.js')).href);
+
+// The session tools manage the connection pool, not budget data, and no compact tool wraps them.
+// They are the only legacy names the e2e, manual and prompt surfaces still have to carry.
+const OUT_OF_SCOPE = ['actual_session_list', 'actual_session_close'];
+
+// One entry per (compact tool, action). A tool with `selector: null` has one entry, its default.
+const PAIRS = [];
+for (const spec of COMPACT_TOOLS) {
+  const selector = spec.selector === undefined ? 'action' : spec.selector;
+  for (const action of spec.actions.keys()) {
+    PAIRS.push({ tool: spec.name, selector, action, isDefault: action === spec.defaultAction });
+  }
+}
+const pairLabel = (pr) => `${pr.tool}.${pr.action}`;
 
 const TOOLS = (read('src/actualToolsManager.ts').match(/^\s*'(actual_[A-Za-z0-9_]+)'/gm) || [])
   .map((l) => l.trim().replace(/'/g, '').replace(/,$/, ''));
@@ -47,6 +71,52 @@ const TOOLS = (read('src/actualToolsManager.ts').match(/^\s*'(actual_[A-Za-z0-9_
 // reported 70 of 81 tools "missing", all false. A guard that cannot distinguish a real
 // omission from a tool that legitimately needs no entry is worse than no guard, so the
 // smoke test is left to its own iteration.
+const manualModules = () => readdirSync(join(ROOT, 'tests/manual/tests'))
+  .filter((f) => f.endsWith('.js'))
+  .map((f) => readFileSync(join(ROOT, 'tests/manual/tests', f), 'utf8'));
+const promptFiles = () => readdirSync(join(ROOT, 'tests/manual-prompt'))
+  .filter((f) => f.startsWith('prompt-'))
+  .map((f) => readFileSync(join(ROOT, 'tests/manual-prompt', f), 'utf8'));
+const escapeRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// A call site: the tool name as a string literal, then an object literal holding the selector.
+// A call that omits the selector counts for the tool's default action; a tool with no selector
+// needs the name only.
+const callsPair = (text, pr) => {
+  const tool = escapeRe(pr.tool);
+  if (pr.selector === null) return new RegExp(`['"]${tool}['"]`).test(text);
+  const sel = escapeRe(pr.selector);
+  const explicit = new RegExp(`['"]${tool}['"],\\s*\\{[^}]*\\b${sel}:\\s*['"]${escapeRe(pr.action)}['"]`);
+  if (explicit.test(text)) return true;
+  if (!pr.isDefault) return false;
+  return new RegExp(`['"]${tool}['"]\\s*(?:\\)|,\\s*\\{(?:(?!\\b${sel}\\s*:)[^}])*\\})`).test(text);
+};
+// A prompt line: the tool name and the action word on one line (the default action needs the name).
+const describesPair = (text, pr) => text.split('\n').some((line) => {
+  if (!new RegExp(`\\b${escapeRe(pr.tool)}\\b`).test(line)) return false;
+  return pr.isDefault || new RegExp(`\\b${escapeRe(pr.action)}\\b`).test(line);
+});
+
+/** The per-pair surfaces: each pair of each compact tool must reach every one. */
+const PAIR_SURFACES = [
+  {
+    id: 'e2e',
+    what: 'called in tests/e2e/docker-all-tools.e2e.spec.ts or compact-surface.e2e.spec.ts',
+    find: (pr) => ['tests/e2e/docker-all-tools.e2e.spec.ts', 'tests/e2e/compact-surface.e2e.spec.ts']
+      .some((f) => callsPair(read(f) || '', pr)),
+  },
+  {
+    id: 'manual-integration',
+    what: 'called in a tests/manual/tests/*.js module',
+    find: (pr) => manualModules().some((text) => callsPair(text, pr)),
+  },
+  {
+    id: 'llm-prompt',
+    what: 'described on one line of a tests/manual-prompt/prompt-*.txt file',
+    find: (pr) => promptFiles().some((text) => describesPair(text, pr)),
+  },
+];
+
 const SURFACES = [
   {
     id: 'tool-file',
@@ -65,22 +135,21 @@ const SURFACES = [
   },
   {
     id: 'e2e',
-    what: 'exercised in tests/e2e/docker-all-tools.e2e.spec.ts',
+    what: 'the session tools are exercised in tests/e2e/docker-all-tools.e2e.spec.ts',
     find: (t) => (read('tests/e2e/docker-all-tools.e2e.spec.ts') || '').includes(t),
+    only: OUT_OF_SCOPE,
   },
   {
     id: 'manual-integration',
-    what: 'exercised in a tests/manual/tests/*.js module',
-    find: (t) => readdirSync(join(ROOT, 'tests/manual/tests'))
-      .filter((f) => f.endsWith('.js'))
-      .some((f) => readFileSync(join(ROOT, 'tests/manual/tests', f), 'utf8').includes(t)),
+    what: 'the session tools are exercised in a tests/manual/tests/*.js module',
+    find: (t) => manualModules().some((text) => text.includes(t)),
+    only: OUT_OF_SCOPE,
   },
   {
     id: 'llm-prompt',
-    what: 'described in a tests/manual-prompt/prompt-*.txt file',
-    find: (t) => readdirSync(join(ROOT, 'tests/manual-prompt'))
-      .filter((f) => f.startsWith('prompt-'))
-      .some((f) => readFileSync(join(ROOT, 'tests/manual-prompt', f), 'utf8').includes(t)),
+    what: 'the session tools are described in a tests/manual-prompt/prompt-*.txt file',
+    find: (t) => promptFiles().some((text) => text.includes(t)),
+    only: OUT_OF_SCOPE,
   },
 ];
 
@@ -108,12 +177,32 @@ check('IMPLEMENTED_TOOLS parsed', () => {
 
 for (const surface of SURFACES) {
   check(`every tool: ${surface.what}`, () => {
-    const missing = TOOLS.filter((t) => !surface.find(t) && !(`${surface.id}:${t}` in EXCEPTIONS));
+    const scope = surface.only ? TOOLS.filter((t) => surface.only.includes(t)) : TOOLS;
+    if (surface.only && scope.length !== surface.only.length) fail('an OUT_OF_SCOPE tool is no longer registered');
+    const missing = scope.filter((t) => !surface.find(t) && !(`${surface.id}:${t}` in EXCEPTIONS));
     if (missing.length) {
       fail(
         `${missing.length} tool(s) missing from this surface:\n      ` +
         missing.join('\n      ') +
         `\n    Fix the file, or add "${surface.id}:<tool>": "<reason>" to EXCEPTIONS in this test.` +
+        `\n    See docs/development/new-tool-checklist.md.`,
+      );
+    }
+  });
+}
+
+check('COMPACT_TOOLS parsed into (tool, action) pairs', () => {
+  if (PAIRS.length < 60) fail(`expected the full compact registry, parsed ${PAIRS.length} pairs`);
+});
+
+for (const surface of PAIR_SURFACES) {
+  check(`every compact (tool, action) pair: ${surface.what}`, () => {
+    const missing = PAIRS.filter((pr) => !surface.find(pr) && !(`${surface.id}:${pairLabel(pr)}` in EXCEPTIONS));
+    if (missing.length) {
+      fail(
+        `${missing.length} pair(s) missing from surface "${surface.id}":\n      ` +
+        missing.map((pr) => `${pairLabel(pr)} (${surface.id})`).join('\n      ') +
+        `\n    Add a call naming the tool and its selector value, or "${surface.id}:<tool>.<action>": "<reason>" to EXCEPTIONS.` +
         `\n    See docs/development/new-tool-checklist.md.`,
       );
     }
@@ -164,9 +253,8 @@ check('every prompt tally block adds up', () => {
 // caught the guard passing over the one file that ticket had left wrong (the table summed to 82
 // while the total below it still said 68). A guard that misses the document it was written for
 // is worse than none, so the README is now checked on its own terms.
-// It also compares that ONE stated grand total against the canonical registered count (#524):
-// the table can be self-consistent and still wrong. The earlier rule (never derive counts from
-// prompt BODIES) still holds; only the README's stated total is compared to TOOLS.length.
+// #681: it is compared only against the sum of its own table rows. The prompts now count
+// compact (tool, action) scenarios, not the 85 legacy tools, so no registered count applies.
 check('the prompt README grand total matches its own table', () => {
   const text = read('tests/manual-prompt/README.md') || '';
   const stated = /\*\*Total:\s*(\d+)\s*tools across 3 prompts\*\*/.exec(text);
@@ -184,9 +272,6 @@ check('the prompt README grand total matches its own table', () => {
   if (sum !== Number(stated[1])) {
     fail(`README says "${stated[1]} tools across 3 prompts" but its ${rows} table rows sum to ${sum}`);
   }
-  if (Number(stated[1]) !== TOOLS.length) {
-    fail(`README says "${stated[1]} tools across 3 prompts" but ${TOOLS.length} tools are registered`);
-  }
 });
 
 check('no EXCEPTION is stale (a silenced entry that no longer needs silencing)', () => {
@@ -196,7 +281,14 @@ check('no EXCEPTION is stale (a silenced entry that no longer needs silencing)',
   const stale = [];
   for (const key of Object.keys(EXCEPTIONS)) {
     const [surfaceId, tool] = key.split(':');
-    const surface = SURFACES.find((s) => s.id === surfaceId);
+    const pair = PAIRS.find((pr) => pairLabel(pr) === tool);
+    if (pair) {
+      const ps = PAIR_SURFACES.find((x) => x.id === surfaceId);
+      if (!ps) stale.push(`${key} (no such surface "${surfaceId}")`);
+      else if (ps.find(pair)) stale.push(`${key} (the pair IS present now; drop the exception)`);
+      continue;
+    }
+    const surface = SURFACES.find((x) => x.id === surfaceId);
     if (!surface) { stale.push(`${key} (no such surface "${surfaceId}")`); continue; }
     if (!TOOLS.includes(tool)) { stale.push(`${key} (tool no longer registered)`); continue; }
     if (surface.find(tool)) stale.push(`${key} (the tool IS present now; drop the exception)`);
@@ -234,6 +326,15 @@ check('SELF-CHECK: the guard can actually fail', () => {
   const ghost = 'actual_this_tool_does_not_exist_xyz';
   for (const surface of SURFACES) {
     if (surface.find(ghost)) fail(`surface "${surface.id}" claims a nonexistent tool is present`);
+  }
+  const ghostPair = { tool: 'this_tool_does_not_exist_xyz', selector: 'action', action: 'create', isDefault: false };
+  for (const surface of PAIR_SURFACES) {
+    if (surface.find(ghostPair)) fail(`pair surface "${surface.id}" claims a nonexistent pair is present`);
+  }
+  // A real tool with an action nobody calls must also be rejected: the action is part of the key.
+  const wrongAction = { tool: 'manage_tags', selector: 'action', action: 'no_such_action_xyz', isDefault: false };
+  for (const surface of PAIR_SURFACES) {
+    if (surface.find(wrongAction)) fail(`pair surface "${surface.id}" accepts a made-up action`);
   }
 });
 

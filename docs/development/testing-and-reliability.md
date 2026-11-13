@@ -51,6 +51,7 @@ tests/
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
 │   ├── docker.e2e.spec.ts                 # Docker smoke integration (full stack)
 │   ├── docker-all-tools.e2e.spec.ts       # All-tools Docker E2E (85 tools)
+│   ├── compact-surface.e2e.spec.ts        # Compact-surface E2E (15 tools, project docker-e2e-compact-stdio, #681)
 │   └── run-docker-e2e.sh                  # Docker test orchestrator
 └── manual/                  # Live integration tests (real Actual Budget)
     ├── index.js              # Entry point, level-gated execution
@@ -141,6 +142,7 @@ npx playwright test tests/e2e/docker-all-tools.e2e.spec.ts
 **Test Suites:**
 - **docker.e2e.spec.ts**: Basic smoke tests (11 tests)
 - **docker-all-tools.e2e.spec.ts**: Comprehensive all-tools test (85 tools, 80+ test cases)
+- **compact-surface.e2e.spec.ts** (#681): the compact leg. Playwright project `docker-e2e-compact-stdio`, run as Step 6c of `run-docker-e2e.sh` over stdio with `MCP_E2E_TOOL_SURFACE=compact` (the stdio client passes it to the server as `MCP_TOOL_SURFACE`). It checks the published 15-tool list, the `get_context` version, a `manage_accounts` create with its `list_entities` read-back and delete, and the refusal of a direct legacy call. Per-action coverage of the compact tools is in `docker-all-tools.e2e.spec.ts`
 
 ### Multi-user ACL E2E (`scripts/acl-e2e.sh`)
 
@@ -313,6 +315,10 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `compact_manage_budget_months.test.js` | #678: `manage_budget_months`: seven actions map to the exact legacy name and arguments, `set_note` builds `budget-<month>`; missing and foreign keys, decimal amounts, hold and transfer amount 0, month 2026-13, same-category transfer, batch item rules refused with nothing called; a legacy name in an error is rewritten; read-only hides all seven |
 | `compact_manage_budget_files.test.js` | #678: `manage_budget_files`: three actions map to the exact legacy name and arguments, no default `type` injected; unsafe budget name, both or neither import source, bad base64, unsafe export filename, foreign keys refused with nothing called; the description states the destructive semantics; read-only hides all three |
 | `compact_manage_transactions.test.js` | #675: `manage_transactions`: each of the seven actions maps to the exact legacy name and arguments; per-action required fields, null only for update, strict id, date and amount rules, batch bounds, merge ids and transfer refusals name `manage_transactions`; read-only hides it; annotations are destructive |
+| `compact_mapping_parity.test.js` (ceiling pin) | #681: the compact registry holds at most 15 tools (decision 3 of the design record); a 16th tool fails the check naming the ceiling unless another compact tool left in the same change |
+| `new_tool_completeness.test.js` | #681 (redefined): the surface guard iterates the compact registry. Every (tool, selector value) pair needs a compact E2E row with its negative, a `tests/manual/tests/*.js` call and a prompt line naming the tool and the value together; selector-less tools need only the tool name. A prompt naming a legacy `actual_*` tool fails, except the two session tools inside the block marked `[legacy or all surface only: skip on compact]`. Prompt and README tallies must sum |
+| `e2e_uses_compact_names.test.js` | #681: the e2e specs, the manual modules, `scripts/stdio-smoke.mjs` and the manual prompts call compact tool names; a legacy `actual_*` name is allowed only in the 14-row legacy smoke block, for the two session tools, in the compact refusal row, in prompt 3's session block and in the deprecated alias row |
+| `tests/e2e/compact-surface.e2e.spec.ts` | #681: the compact-surface E2E spec (Playwright project `docker-e2e-compact-stdio`, run by Step 6c of `run-docker-e2e.sh`): the published `tools/list` is the 15 compact tools, plus the version, an account round trip and the legacy refusal, over stdio with `MCP_E2E_TOOL_SURFACE=compact` |
 | `startup_record.test.js` | #623: the pure `sys_startup` builder: keys exactly the allowlist on HTTP, stdio and OIDC; no secret, name, bind address or URL path; auth mode, posture, bearer and principal facts; `bindScope`; paths and logging fields; version and count parity with `actual_server_info` |
 | `startup_record_child.test.js` | #623: the built entrypoint: the record on stderr at info under stdio with a clean stdout before the first frame, the real port on HTTP, and no record when the port is taken (exit 1, `sys_crash`) or a weak token refuses a non-loopback bind |
 | `http_shutdown_handler.test.js` | #632: every branch of `createShutdownHandler` with injected effects: close, wait for in-flight requests and queued writes, cleanup, then exit 0; shutting-down state from the first signal (the 503 gate reads it); a second signal, a failing cleanup or listener close, in-flight work past its budget (the deadline minus 2 s, never under half) and the deadline each exit 1; a cleanup error logs only its class; two handlers share no state; the 503 gate refuses every route during shutdown, counts admitted requests but not the SSE GET, and is the first `app.use`; `awaitInFlight` waits for the request count, then for queued writes |

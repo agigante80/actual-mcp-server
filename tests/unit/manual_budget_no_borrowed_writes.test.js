@@ -17,7 +17,7 @@
 //      module created deleted (nothing to restore: it is gone), and the pre-existing category
 //      untouched.
 //
-// The stub's actual_categories_get returns the FLAT list the real tool returns (adapter
+// The stub's list_entities category call returns the FLAT list the real tool returns (adapter
 // getCategories: one entry per category with group_id and is_income). An earlier draft of this
 // fix read that listing as groups; a stub in the shape the code expected could not catch it.
 //
@@ -73,79 +73,80 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
     return { success: true };
   };
 
-  const callTool = async (name, args) => {
+  // The module calls the compact tools: a call is (tool, selector value in `action`, `type` or `by`),
+  // and the stub dispatches, throws and drifts on that `tool/selector` key.
+  const callTool = async (tool, args) => {
+    const name = `${tool}/${args.action ?? args.type ?? args.by ?? ''}`;
     if (name === throwOn) throw new Error(`stub: ${name} failed`);
     // Simulates a write that lands on the pre-existing category through a path the writes log
     // does not see (another tool, a server-side side effect): only the drift check can catch it.
     if (name === driftOn) cell(new Date().toISOString().slice(0, 7), PRE.id).budgeted = 1;
     switch (name) {
-      case 'actual_categories_get':
+      case 'list_entities/category':
         return { result: [...groups.values()].flatMap(g => g.categories.map(c => ({ ...c, is_income: g.is_income }))) };
-      case 'actual_category_groups_create': {
-        const id = `grp-created-${++seq}`;
-        groups.set(id, { id, name: args.name, is_income: false, categories: [] });
-        return { id };
-      }
-      case 'actual_categories_create': {
+      case 'manage_categories/create': {
+        if (args.entity === 'category_group') {
+          const id = `grp-created-${++seq}`;
+          groups.set(id, { id, name: args.name, is_income: false, categories: [] });
+          return { id };
+        }
         if (!groups.has(args.group_id)) throw new Error(`group ${args.group_id} not found`);
         const id = `cat-created-${++seq}`;
         groups.get(args.group_id).categories.push({ id, name: args.name, group_id: args.group_id });
         return { id };
       }
-      case 'actual_categories_delete':
+      case 'manage_categories/delete':
+        if (args.entity === 'category_group') {
+          groups.delete(args.id);
+          return { success: true };
+        }
         for (const g of groups.values()) g.categories = g.categories.filter(c => c.id !== args.id);
         return { success: true };
-      case 'actual_category_groups_delete':
-        groups.delete(args.id);
-        return { success: true };
-      case 'actual_budgets_list_available':
+      case 'list_entities/budget_file':
         return { budgets: [{ name: 'Test', syncId: 's', serverUrl: 'http://x', hasEncryption: false }], count: 1 };
-      case 'actual_budgets_switch':
-        if (args.budgetName !== 'Test') return { error: `Budget "${args.budgetName}" not found` };
+      case 'manage_budget_files/switch':
+        if (args.budget_name !== 'Test') return { error: `Budget "${args.budget_name}" not found` };
         return { success: true, budgetName: 'Test', budgetId: 'b', serverUrl: 'http://x' };
-      case 'actual_transactions_filter':
+      case 'search_transactions/filter':
         return [];
-      case 'actual_budgets_get_all':
-        return [];
-      case 'actual_budgets_get_month':
-        return month(args.month);
-      case 'actual_budgets_get_months':
-        return [month(args.start)];
-      case 'actual_budgets_set_amount':
-        return setAmount(args.month, args.categoryId, args.amount);
-      case 'actual_budgets_set_carryover':
-        writes.push(args.categoryId);
-        cell(args.month, args.categoryId).carryover = args.flag;
+      case 'list_budget_months/':
+        // list_budget_months has no selector: a `month` picks one month, no key lists them.
+        return args.month ? month(args.month) : [month(thisMonth)];
+      case 'manage_budget_months/set_amount':
+        return setAmount(args.month, args.category_id, args.amount);
+      case 'manage_budget_months/set_carryover':
+        writes.push(args.category_id);
+        cell(args.month, args.category_id).carryover = args.flag;
         return { success: true };
-      case 'actual_accounts_create': {
+      case 'manage_accounts/create': {
         const id = `acct-${++seq}`;
         accounts.set(id, args.balance ?? 0);
         return id;
       }
-      case 'actual_accounts_delete':
+      case 'manage_accounts/delete':
         accounts.delete(args.id);
         return { success: true };
-      case 'actual_budgets_hold_for_next_month':
+      case 'manage_budget_months/hold':
         buffer.set(args.month, (buffer.get(args.month) ?? 0) + args.amount);
         return { held: args.amount, partial: false };
-      case 'actual_budgets_reset_hold':
+      case 'manage_budget_months/reset_hold':
         buffer.set(args.month, 0);
         return { success: true };
-      case 'actual_budgets_transfer': {
-        writes.push(args.fromCategoryId, args.toCategoryId);
-        if (args.fromCategoryId === args.toCategoryId) throw new Error('Source and target categories must be different');
-        const from = cell(args.month, args.fromCategoryId);
+      case 'manage_budget_months/transfer': {
+        writes.push(args.from_category_id, args.to_category_id);
+        if (args.from_category_id === args.to_category_id) throw new Error('Source and target categories must be different');
+        const from = cell(args.month, args.from_category_id);
         if (from.budgeted < args.amount) throw new Error('Insufficient budget in source category');
         from.budgeted -= args.amount;
-        cell(args.month, args.toCategoryId).budgeted += args.amount;
+        cell(args.month, args.to_category_id).budgeted += args.amount;
         return { success: true };
       }
-      case 'actual_budget_updates_batch':
+      case 'manage_budget_months/set_amount_batch':
         if (args.operations.some(o => !/^\d{4}-\d{2}$/.test(o.month))) throw new Error('month must be YYYY-MM');
         for (const o of args.operations) setAmount(o.month, o.categoryId, o.amount);
         return { success: true, count: args.operations.length };
       default:
-        throw new Error(`stub: unexpected tool ${name}`);
+        throw new Error(`stub: unexpected call ${name}`);
     }
   };
   return { client: { callTool }, writes, month, groups, exists };
@@ -211,8 +212,8 @@ assertUntouched(await run({ preExisting: true }), 'B1');
 // it), every group and category the module created is still deleted, and the pre-existing
 // category was never written.
 {
-  const r = await run({ preExisting: true, throwOn: 'actual_budgets_set_carryover' });
-  assert.ok(r.thrown && /actual_budgets_set_carryover failed/.test(r.thrown.message), `B3: the stub throw propagated, got ${r.thrown?.message}`);
+  const r = await run({ preExisting: true, throwOn: 'manage_budget_months/set_carryover' });
+  assert.ok(r.thrown && /manage_budget_months\/set_carryover failed/.test(r.thrown.message), `B3: the stub throw propagated, got ${r.thrown?.message}`);
   assert.ok(r.writes.length > 0, 'B3: the module had written before the throw');
   assert.ok(!r.writes.includes(PRE.id), 'B3: no write targeted the pre-existing category');
   assertCleanedUp(r, 'B3');
@@ -221,7 +222,7 @@ assertUntouched(await run({ preExisting: true }), 'B1');
 // B4 (negative): a pre-existing amount changes during the run by a path no write targets. The
 // module's before/after snapshot (the check the live `full` run relies on) records the drift.
 {
-  const r = await run({ preExisting: true, driftOn: 'actual_budgets_reset_hold' });
+  const r = await run({ preExisting: true, driftOn: 'manage_budget_months/reset_hold' });
   assert.strictEqual(r.thrown, null, `B4: the module did not throw (${r.thrown?.message})`);
   const drift = r.added.filter(f => /changed 1 pre-existing category cell/.test(JSON.stringify(f)));
   assert.strictEqual(drift.length, 1, `B4: the drift was recorded once, got ${JSON.stringify(r.added)}`);

@@ -13,30 +13,51 @@ import assert from 'assert';
 import { batchUncategorizedRulesUpsertTests } from '../manual/tests/batch_uncategorized_rules_upsert.js';
 import { failureList } from '../manual/assert.js';
 
-// opts.throwOn: { toolName: Error }; opts.categories: payload for actual_categories_get.
+// opts.throwOn: { key: Error }; opts.categories: payload for the category listing.
+// #681: the module calls the compact tools, so the stub keys each call by tool and selector
+// (and entity for manage_categories). The keys below are the only names this test uses.
+const keyOf = (name, args = {}) => {
+  if (name === 'list_entities') return `list_entities:${args.type}`;
+  if (name === 'manage_categories') return `manage_categories:${args.action}:${args.entity}`;
+  if (name === 'search_transactions') return `search_transactions:${args.by}`;
+  return `${name}:${args.action}`;
+};
+const K = {
+  listCategories: 'list_entities:category',
+  createGroup: 'manage_categories:create:category_group',
+  createCategory: 'manage_categories:create:category',
+  deleteCategory: 'manage_categories:delete:category',
+  deleteGroup: 'manage_categories:delete:category_group',
+  updateBatch: 'manage_transactions:update_batch',
+  uncategorized: 'search_transactions:uncategorized',
+  createTransaction: 'manage_transactions:create',
+  upsertRule: 'manage_rules:upsert',
+};
+
 function makeClient(opts) {
   const calls = [];
   let notes = null;
   const throwOn = opts.throwOn || {};
   // Plain closure, no `this`: the module destructures callTool.
   const callTool = async (name, args) => {
-    calls.push([name, args]);
-    if (throwOn[name]) throw throwOn[name];
-    switch (name) {
-      case 'actual_categories_get':
+    const key = keyOf(name, args);
+    calls.push([key, args]);
+    if (throwOn[key]) throw throwOn[key];
+    switch (key) {
+      case K.listCategories:
         return opts.categories;
-      case 'actual_category_groups_create':
+      case K.createGroup:
         return { id: 'grp-1' };
-      case 'actual_categories_create':
+      case K.createCategory:
         return { id: 'cat-1' };
-      case 'actual_transactions_create':
+      case K.createTransaction:
         notes = args.notes;
         return {};
-      case 'actual_transactions_uncategorized':
-        return args && args.includeTransactions
+      case K.uncategorized:
+        return args && args.include_transactions
           ? { transactions: [{ id: 'txn-1', notes }], totalCount: 1 }
           : { transactions: [] };
-      case 'actual_rules_create_or_update':
+      case K.upsertRule:
         if ((args.conditions || []).some(c => c.field === 'payee')) throw new Error('operator');
         return {};
       default:
@@ -70,11 +91,11 @@ const rateLimited = () => new Error('MCP Error -32603: rate limited');
 
 // U1: disposable objects are removed (category first) after a throwing batch call.
 {
-  const r = await run({ categories: NO_CATS, throwOn: { actual_transactions_update_batch: rateLimited() } });
+  const r = await run({ categories: NO_CATS, throwOn: { [K.updateBatch]: rateLimited() } });
   assert.ok(r.error && /rate limited/.test(r.error.message), 'U1: original error propagates');
-  const b = idx(r.calls, 'actual_transactions_update_batch');
-  const c = idx(r.calls, 'actual_categories_delete', 'cat-1');
-  const g = idx(r.calls, 'actual_category_groups_delete', 'grp-1');
+  const b = idx(r.calls, K.updateBatch);
+  const c = idx(r.calls, K.deleteCategory, 'cat-1');
+  const g = idx(r.calls, K.deleteGroup, 'grp-1');
   assert.ok(b >= 0 && b < c && c < g, `U1: order batch < cat delete < group delete (${b},${c},${g})`);
   assert.strictEqual(r.context.categoryId, null, 'U1: categoryId reset');
 }
@@ -83,19 +104,19 @@ const rateLimited = () => new Error('MCP Error -32603: rate limited');
 {
   const r = await run({
     categories: NO_CATS,
-    throwOn: { actual_transactions_update_batch: rateLimited(), actual_categories_delete: new Error('delete failed') },
+    throwOn: { [K.updateBatch]: rateLimited(), [K.deleteCategory]: new Error('delete failed') },
   });
   assert.ok(r.error && /rate limited/.test(r.error.message) && !/delete failed/.test(r.error.message), 'U2: original error wins');
-  assert.ok(idx(r.calls, 'actual_category_groups_delete', 'grp-1') >= 0, 'U2: group delete still attempted');
+  assert.ok(idx(r.calls, K.deleteGroup, 'grp-1') >= 0, 'U2: group delete still attempted');
   assert.ok(r.added.some(m => /cat-1.*residue/.test(m)), 'U2: category residue recorded via fail()');
 }
 
 // U3: group exists but the category create throws: group removed, no category delete.
 {
-  const r = await run({ categories: NO_CATS, throwOn: { actual_categories_create: new Error('create failed') } });
+  const r = await run({ categories: NO_CATS, throwOn: { [K.createCategory]: new Error('create failed') } });
   assert.ok(r.error && /create failed/.test(r.error.message), 'U3: create error propagates');
-  assert.ok(idx(r.calls, 'actual_category_groups_delete', 'grp-1') >= 0, 'U3: group deleted');
-  assert.ok(!has(r.calls, 'actual_categories_delete'), 'U3: no category delete');
+  assert.ok(idx(r.calls, K.deleteGroup, 'grp-1') >= 0, 'U3: group deleted');
+  assert.ok(!has(r.calls, K.deleteCategory), 'U3: no category delete');
   assert.strictEqual(r.context.categoryId, undefined, 'U3: categoryId left unset');
 }
 
@@ -103,14 +124,14 @@ const rateLimited = () => new Error('MCP Error -32603: rate limited');
 {
   const r = await run({ categories: EXISTING });
   assert.strictEqual(r.error, null, 'U4: resolves');
-  assert.ok(!has(r.calls, 'actual_categories_delete') && !has(r.calls, 'actual_category_groups_delete'), 'U4: no deletes');
+  assert.ok(!has(r.calls, K.deleteCategory) && !has(r.calls, K.deleteGroup), 'U4: no deletes');
 }
 
 // U5: borrowed category, batch throws: still no deletes (never remove what we did not create).
 {
-  const r = await run({ categories: EXISTING, throwOn: { actual_transactions_update_batch: rateLimited() } });
+  const r = await run({ categories: EXISTING, throwOn: { [K.updateBatch]: rateLimited() } });
   assert.ok(r.error && /rate limited/.test(r.error.message), 'U5: rejects');
-  assert.ok(!has(r.calls, 'actual_categories_delete') && !has(r.calls, 'actual_category_groups_delete'), 'U5: no deletes');
+  assert.ok(!has(r.calls, K.deleteCategory) && !has(r.calls, K.deleteGroup), 'U5: no deletes');
 }
 
 console.log('batch_uncategorized_cleanup.test.js: all cases passed');

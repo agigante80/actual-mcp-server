@@ -27,7 +27,7 @@ export async function notesTests(client, context) {
   // Positive: round-trip set and get a budget month note
   // --------------------------------------------------------------------------
   try {
-    const setRes = await callTool('actual_notes_update', { id: TEST_MONTH, note: UNIQUE_NOTE });
+    const setRes = await callTool('manage_budget_months', { action: 'set_note', month: TEST_MONTH.replace('budget-', ''), note: UNIQUE_NOTE });
     const setOk = setRes?.success === true || setRes?.result?.success === true;
     if (setOk) {
       console.log(`  ok notes_update [set budget month note]: success`);
@@ -35,7 +35,7 @@ export async function notesTests(client, context) {
       fail(`notes_update [set budget month note]: ${JSON.stringify(setRes).slice(0, 200)}`);
     }
 
-    const getRes = await callTool('actual_notes_get', { id: TEST_MONTH });
+    const getRes = await callTool('list_entities', { type: 'note', id: TEST_MONTH });
     const data = getRes?.result ?? getRes;
     const noteText = data?.note;
     if (noteText === UNIQUE_NOTE) {
@@ -51,7 +51,7 @@ export async function notesTests(client, context) {
   // Positive: clear the note (empty string), then verify cleared state
   // --------------------------------------------------------------------------
   try {
-    const clearRes = await callTool('actual_notes_update', { id: TEST_MONTH, note: '' });
+    const clearRes = await callTool('manage_budget_months', { action: 'set_note', month: TEST_MONTH.replace('budget-', ''), note: '' });
     const clearOk = clearRes?.success === true || clearRes?.result?.success === true;
     if (clearOk) {
       console.log(`  ok notes_update [clear note]: success`);
@@ -60,7 +60,7 @@ export async function notesTests(client, context) {
     }
 
     // After clearing, getNote returns { id, note: "" } (not null).
-    const getRes = await callTool('actual_notes_get', { id: TEST_MONTH });
+    const getRes = await callTool('list_entities', { type: 'note', id: TEST_MONTH });
     const data = getRes?.result ?? getRes;
     const noteText = data?.note;
     if (noteText === '' || noteText === null || data?.found === false) {
@@ -78,8 +78,8 @@ export async function notesTests(client, context) {
   try {
     const TEMPLATE_MONTH = 'budget-2026-02';
     const TEMPLATE_NOTE = '#template 250';
-    await callTool('actual_notes_update', { id: TEMPLATE_MONTH, note: TEMPLATE_NOTE });
-    const getRes = await callTool('actual_notes_get', { id: TEMPLATE_MONTH });
+    await callTool('manage_budget_months', { action: 'set_note', month: TEMPLATE_MONTH.replace('budget-', ''), note: TEMPLATE_NOTE });
+    const getRes = await callTool('list_entities', { type: 'note', id: TEMPLATE_MONTH });
     const data = getRes?.result ?? getRes;
     if (data?.note === TEMPLATE_NOTE) {
       console.log(`  ok notes [template directive round-trip]: "${data.note}"`);
@@ -87,7 +87,7 @@ export async function notesTests(client, context) {
       fail(`notes [template directive]: expected "${TEMPLATE_NOTE}", got ${JSON.stringify(data).slice(0, 200)}`);
     }
     // Cleanup
-    await callTool('actual_notes_update', { id: TEMPLATE_MONTH, note: '' });
+    await callTool('manage_budget_months', { action: 'set_note', month: TEMPLATE_MONTH.replace('budget-', ''), note: '' });
   } catch (err) {
     fail(`notes template test: ${err.message}`);
   }
@@ -98,14 +98,14 @@ export async function notesTests(client, context) {
   if (context.accountId) {
     try {
       const ACCOUNT_NOTE = `MCP-AccountNote-${Date.now()}`;
-      const setRes = await callTool('actual_notes_update', { id: context.accountId, note: ACCOUNT_NOTE });
+      const setRes = await callTool('manage_accounts', { action: 'set_note', id: context.accountId, note: ACCOUNT_NOTE });
       const setOk = setRes?.success === true || setRes?.result?.success === true;
       if (setOk) {
         console.log(`  ok notes_update [account note set]: success`);
       } else {
         fail(`notes_update [account note set]: ${JSON.stringify(setRes).slice(0, 200)}`);
       }
-      const getRes = await callTool('actual_notes_get', { id: context.accountId });
+      const getRes = await callTool('list_entities', { type: 'note', id: context.accountId });
       const data = getRes?.result ?? getRes;
       if (data?.note === ACCOUNT_NOTE) {
         console.log(`  ok notes_get [account note read-back]: "${data.note}"`);
@@ -113,7 +113,7 @@ export async function notesTests(client, context) {
         fail(`notes_get [account note read-back]: got ${JSON.stringify(data).slice(0, 200)}`);
       }
       // Cleanup
-      await callTool('actual_notes_update', { id: context.accountId, note: '' });
+      await callTool('manage_accounts', { action: 'set_note', id: context.accountId, note: '' });
       console.log(`  ok notes_update [account note cleared]`);
     } catch (err) {
       fail(`notes account test: ${err.message}`);
@@ -123,11 +123,44 @@ export async function notesTests(client, context) {
   }
 
   // --------------------------------------------------------------------------
+  // Positive: category and payee notes, each set by the tool of its entity kind
+  // --------------------------------------------------------------------------
+  for (const [tool, listType, label] of [['manage_categories', 'category', 'category'], ['manage_payees', 'payee', 'payee']]) {
+    try {
+      const listed = await callTool('list_entities', { type: listType });
+      const rows = (listed?.result ?? listed);
+      const flat = Array.isArray(rows) ? rows : (rows?.groups ?? rows?.payees ?? rows?.categories ?? []);
+      const pool = flat.flatMap((r) => (Array.isArray(r?.categories) ? r.categories : [r]));
+      const target = pool.find((r) => r?.id && !r.transfer_acct);
+      if (!target) {
+        console.log(`  info notes [${label} note]: skipped (no ${label} in budget)`);
+        continue;
+      }
+      const NOTE = `MCP-${label}-Note-${Date.now()}`;
+      const res = tool === 'manage_categories'
+        ? await callTool('manage_categories', { action: 'set_note', id: target.id, note: NOTE })
+        : await callTool('manage_payees', { action: 'set_note', id: target.id, note: NOTE });
+      const ok = res?.success === true || res?.result?.success === true;
+      if (!ok) fail(`notes_update [${label} note set]: ${JSON.stringify(res).slice(0, 200)}`);
+      const getRes = await callTool('list_entities', { type: 'note', id: target.id });
+      const data = getRes?.result ?? getRes;
+      if (data?.note === NOTE) console.log(`  ok notes_get [${label} note read-back]: "${data.note}"`);
+      else fail(`notes_get [${label} note read-back]: got ${JSON.stringify(data).slice(0, 200)}`);
+      if (tool === 'manage_categories') await callTool('manage_categories', { action: 'set_note', id: target.id, note: '' });
+      else await callTool('manage_payees', { action: 'set_note', id: target.id, note: '' });
+      console.log(`  ok notes_update [${label} note cleared]`);
+    } catch (err) {
+      fail(`notes ${label} test: ${err.message}`);
+    }
+  }
+
+  // --------------------------------------------------------------------------
   // Negative: id that resolves to no known entity and is not budget-YYYY-MM
   // --------------------------------------------------------------------------
   try {
-    const res = await callTool('actual_notes_update', {
-      id: '__nonexistent_MCP_test_entity_id__',
+    const res = await callTool('manage_accounts', {
+      action: 'set_note',
+      id: '00000000-0000-4000-8000-000000000000',
       note: 'should not be written',
     });
     const data = res?.result ?? res;
@@ -135,7 +168,7 @@ export async function notesTests(client, context) {
     if (data?.error || text.includes('not found') || text.includes('Entity')) {
       console.log(`  ok notes_update [orphan id guard]: correctly returned error`);
     } else {
-      // GAP(error-messages): actual_notes_update with orphan id silently accepted
+      // GAP(error-messages): manage_accounts set_note with orphan id silently accepted
       fail(`notes_update [orphan id guard]: did not return the expected error: ${text.slice(0, 200)}`);
     }
   } catch (err) {
@@ -151,7 +184,7 @@ export async function notesTests(client, context) {
   // --------------------------------------------------------------------------
   try {
     const NEVER_HAD_NOTE_ID = 'budget-1970-01';
-    const getRes = await callTool('actual_notes_get', { id: NEVER_HAD_NOTE_ID });
+    const getRes = await callTool('list_entities', { type: 'note', id: NEVER_HAD_NOTE_ID });
     const data = getRes?.result ?? getRes;
     const text = JSON.stringify(data);
     if (data?.found === false || data?.note === null || data?.note === '') {

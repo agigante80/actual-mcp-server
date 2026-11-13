@@ -1,7 +1,7 @@
 ─────────────────────────────────────────────────────────────────────────────────
 PROMPT 3 OF 3: ADVANCED + FULL CLEANUP
-  Tests budget management, summaries, query engine, session management, and
-  cleans up ALL test data created in Prompts 1 to 3.
+  Tests summaries, budgets, the query engine, notes, preferences, export/import and
+  cleans up ALL test data created in Prompts 1 to 3, on the DEFAULT compact tool surface.
   Paste into the SAME chat session after Prompt 2 passes.
 
 PRE-CONDITIONS
@@ -15,13 +15,13 @@ HOW TO USE
   3. Review the final summary for any ✗ failures or ℹ informational items.
 
 WHAT IT TESTS
-  Phase 7:   Transaction Summaries   (5 tools)
-  Phase 8:   Budgets                 (11 tools)
-  Phase 9:   Advanced Query & Sync   (2 tools)
-  Phase 9b: Notes                   (2 tools)
-  Phase 9c: Preferences              (1 tool)
-  Phase 9d: Export / Import          (2 tools)
-  Phase 10:  Session Management      (2 tools)
+  Phase 7:   Transaction Summaries   (5 operations)
+  Phase 8:   Budgets                 (11 operations)
+  Phase 9:   Advanced Query & Sync   (2 operations)
+  Phase 9b: Notes                   (2 operations)
+  Phase 9c: Preferences              (1 operation)
+  Phase 9d: Export / Import          (2 operations)
+  Phase 10:  Session Management      (2 operations, legacy or all surface only)
   Phase 11:  Concurrency             (optional, skipped by default)
   Phase 12:  Full Cleanup            (non-blocking)
 ─────────────────────────────────────────────────────────────────────────────────
@@ -30,103 +30,110 @@ WHAT IT TESTS
 **Continuing from Prompt 2: {TS} and all active IDs are still in scope.**
 
 Use the SAME testing rules:
-- ONE tool at a time, wait for each response, continue automatically
+- ONE operation at a time, wait for each response, continue automatically
 - ONLY STOP on actual failure
-- One status line per tool: [Phase X] tool_name: ✓/✗/ℹ
+- One status line per operation: [Phase X] tool_name selector_value: ✓/✗/ℹ
 - ACTUALLY INVOKE each tool: do not simulate
 - NEVER call tools in parallel
 
+Compact surface reminders: the selector is `report` for summarize_transactions, `action` for
+every manage_* tool, `type` for list_entities and `topic` for get_context. list_budget_months
+and run_query take no selector. Arguments are flat snake_case.
+
 ---
 
-**Phase 7: Transaction Summaries (5 tools):**
+**Phase 7: Transaction Summaries (5 operations):**
 
-- actual_transactions_summary_by_category
-  Input: no required parameters (defaults to all months or current period)
+- summarize_transactions, report: "by_category"
+  Input: { report: "by_category" } (no other parameters, defaults to all months or current period)
   Expect: array of category summary objects (possibly empty if no categorised transactions)
   Report count as ✓ informational
 
-- actual_transactions_summary_by_payee
-  Input: no required parameters
+- summarize_transactions, report: "by_payee"
+  Input: { report: "by_payee" }
   Expect: array of payee summary objects (possibly empty)
   Report count as ✓ informational
 
 ---
 
-- actual_transactions_aggregate
-  Input: { startDate: "<first day of last month, YYYY-MM-DD>",
-           endDate: "<today, YYYY-MM-DD>", groupBy: "month" }
+- summarize_transactions, report: "grouped"
+  Input: { report: "grouped", start_date: "<first day of last month, YYYY-MM-DD>",
+           end_date: "<today, YYYY-MM-DD>", group_by: "month" }
   Expect: aggregated rows (possibly empty). Amounts are integer CENTS, never decimal dollars.
   Report count as informational
 
-NEGATIVE for this tool:
-- actual_transactions_aggregate with endDate BEFORE startDate
-  Expect: a validation error saying endDate must be on or after startDate, NOT an empty result.
+NEGATIVE for this report:
+- summarize_transactions, report: "grouped" with end_date BEFORE start_date
+  Expect: a validation error saying end_date must be on or after start_date, NOT an empty result.
           An empty result would be indistinguishable from "no matching transactions", which is
           why this negative is worth running.
 
-- actual_account_flow_summary
-  Input: { startDate: "<first day of last month, YYYY-MM-DD>", endDate: "<today, YYYY-MM-DD>" }
+- summarize_transactions, report: "account_flow"
+  Input: { report: "account_flow", start_date: "<first day of last month, YYYY-MM-DD>",
+           end_date: "<today, YYYY-MM-DD>", account_ids: ["{txn_acct_id}"] }
   Expect: per-account inflow and outflow totals (possibly empty on a quiet budget)
   Report count as informational
 
-NEGATIVE for this tool:
-- actual_account_flow_summary with endDate BEFORE startDate
-  Expect: a validation error naming endDate.
+NEGATIVE for this report:
+- summarize_transactions, report: "account_flow" with end_date BEFORE start_date
+  Expect: a validation error naming end_date.
 
-- actual_recurring_expenses_summary
-  Input: { months: 3 }
+- summarize_transactions, report: "recurring"
+  Input: { report: "recurring", months: 3 }
   Expect: detected recurring expenses (an EMPTY array is a legitimate PASS: it needs repeated
           transactions across months, which a fresh test budget will not have)
   Report count as informational
 
-NEGATIVE for this tool:
-- actual_recurring_expenses_summary with BOTH { startDate: "2026-01-01", months: 12 }
-  Expect: a validation error saying to use startDate or months, not both.
+NEGATIVE for this report:
+- summarize_transactions, report: "recurring" with BOTH { start_date: "2026-01-01", months: 12 }
+  Expect: a validation error saying to use start_date or months, not both.
 
 ---
 
-**Phase 8: Budgets (11 tools):**
+**Phase 8: Budgets (11 operations):**
 
-Select a category to work with: use the first category returned by actual_categories_get.
+Select a category to work with: use the first category returned by list_entities with type "category".
 Save as `{budget_cat_id}`.
-Select a second different category for transfer test. Save as `{budget_cat2_id}`.
+Select a second different category for the transfer test. Save as `{budget_cat2_id}`.
 
-- actual_budgets_list_available
+- list_entities, type: "budget_file"
+  Input: { type: "budget_file" }
   Expect: object with `budgets` array and `count` number; each entry has `name`, `syncId`, `serverUrl`, `hasEncryption`
   Save the name of the first budget as `{first_budget_name}`
+  Extra scenario (reuses the listing operation): { type: "budget_file", scope: "server" }
+    Expect: the budgets stored on the Actual server, no error
 
-- actual_budgets_switch (positive)
-  Input: { budgetName: "{first_budget_name}" }  ← use the name from list_available
+- manage_budget_files, action: "switch" (positive)
+  Input: { action: "switch", budget_name: "{first_budget_name}" }  ← use the name from the budget_file listing
   Expect: { success: true, budgetName: string, budgetId: UUID, serverUrl: string }
 
-- actual_budgets_switch (negative)
-  Input: { budgetName: "__nonexistent_budget_MCP_test__" }
+- manage_budget_files, action: "switch" (negative)
+  Input: { action: "switch", budget_name: "__nonexistent_budget_MCP_test__" }
   Expect: error or response containing "not found" or an `available` list (✓ pass);
   if response contains no error context → ✗ fail
 
-- actual_budgets_get_all
-  Expect: budget data for all months, no error
+- list_budget_months (no selector, all months)
+  Input: {} (no month)
+  Expect: the list of budget months, no error
 
-- actual_budgets_get_month
-  Input: month = current month (YYYY-MM format)
+- list_budget_months (one month)
+  Input: { month: current month (YYYY-MM format) }
   Expect: budget data object for the month
+  Extra scenario (reuses the same operation): request three consecutive months including the
+  current one with one call each; expect each a budget data object (≥ 1 month in total)
 
-- actual_budgets_get_months
-  Input: months array = [3 consecutive months including current]
-  Expect: array of month budget objects (≥ 1 item)
-
-- actual_budgets_set_amount
-  Input: { month: current month, category: "{budget_cat_id}", amount: 50000 }
+- manage_budget_months, action: "set_amount"
+  Input: { action: "set_amount", month: current month, category_id: "{budget_cat_id}", amount: 50000 }
   Expect: success (50000 cents = $500.00 budgeted)
-  Verify: re-fetch month budget and confirm budgeted=50000 for that category
+  Verify: re-fetch with list_budget_months and confirm budgeted=50000 for that category
 
-- actual_budgets_set_carryover
-  Input: { month: current month, category: "{budget_cat_id}", carryover: true }
+- manage_budget_months, action: "set_carryover"
+  Input: { action: "set_carryover", month: current month, category_id: "{budget_cat_id}", flag: true }
   Expect: success
-  Verify: carryover field=true in month budget for that category
+  Verify: carryover field=true in the month budget for that category
 
-- actual_budgets_hold_for_next_month
-  Input: { month: current month, amount: 10000 }
+- manage_budget_months, action: "hold"
+  Input: { action: "hold", month: current month, amount: 10000 }
   Expect: EITHER success (holds $100.00 for next month) OR a refusal saying "nothing was
     held" when that month has no positive To Budget left. Both are correct answers and
     which one you get depends on the budget's state. A refusal is NOT a failure of this
@@ -134,31 +141,33 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
   Verify: on success, toBudget for the month decreased by 10000 cents. On refusal,
     toBudget is unchanged.
 
-- actual_budgets_reset_hold
-  Input: { month: current month }
+- manage_budget_months, action: "reset_hold"
+  Input: { action: "reset_hold", month: current month }
   Expect: success (hold released)
   Verify: toBudget restored to pre-hold value
 
-- actual_budgets_transfer
-  Input: { month: current month, from: "{budget_cat_id}", to: "{budget_cat2_id}", amount: 5000 }
+- manage_budget_months, action: "transfer"
+  Input: { action: "transfer", month: current month, from_category_id: "{budget_cat_id}",
+           to_category_id: "{budget_cat2_id}", amount: 5000 }
   Expect: success
   Verify: source budgeted decreased by 5000, destination increased by 5000
 
-- actual_budget_updates_batch
-  Input: batch of 2+ budget operations for current month using {budget_cat_id} and {budget_cat2_id}
+- manage_budget_months, action: "set_amount_batch"
+  Input: { action: "set_amount_batch", operations: [ { month: current month, categoryId: "{budget_cat_id}", amount: 40000 },
+           { month: current month, categoryId: "{budget_cat2_id}", amount: 20000 } ] }
   Expect: { success: true, totalOperations: N, successful: N, failed: 0 }
 
 ---
 
-**Phase 9: Advanced Query & Sync (2 tools):**
+**Phase 9: Advanced Query & Sync (2 operations):**
 
-- actual_bank_sync
-  Input: { account: "{txn_acct_id}" }
+- manage_accounts, action: "bank_sync"
+  Input: { action: "bank_sync", account_id: "{txn_acct_id}" }
   If no bank connection: report ✓ informational "no bank connection": NOT a failure
   If bank connected: expect result "Bank sync completed" with newTransactions, matchedTransactions and updatedAccounts as { count, ids }, and truncated
 
-- actual_query_run
-  Run these 3 queries sequentially (each unsupported syntax → ✓ informational, not ✗ failure):
+- run_query
+  Run these 3 queries sequentially with { query: "<SQL>" } (each unsupported syntax → ✓ informational, not ✗ failure):
 
   Query 1 (simple count):
     "SELECT COUNT(*) as total FROM transactions WHERE date >= '2026-01-01'"
@@ -173,66 +182,74 @@ Select a second different category for transfer test. Save as `{budget_cat2_id}`
 
 ---
 
-**Phase 9b: Notes (2 tools):**
+**Phase 9b: Notes (2 operations):**
 
-- actual_notes_update
-  Input: { id: "budget-2026-01", note: "#template 250 MCP-Notes-{TS}" }
-  Positive: expect success=true, id="budget-2026-01"
-  Negative: call with id="not-a-real-entity-MCP", note="x"
+- manage_budget_months, action: "set_note"
+  Input: { action: "set_note", month: "2026-01", note: "#template 250 MCP-Notes-{TS}" }
+  (the note id is built as budget-2026-01)
+  Positive: expect result.success=true, id="budget-2026-01"
+  Negative: call manage_accounts, action: "set_note" with id="not-a-real-entity-MCP", note="x"
     Expect: error field present mentioning entity not found
 
-- actual_notes_get
-  Input: { id: "budget-2026-01" }
+- list_entities, type: "note"
+  Input: { type: "note", id: "budget-2026-01" }
   Positive: expect found=true, note contains "MCP-Notes-{TS}"
-  Then call actual_notes_update with note="" to clear (cleanup)
-  Negative: call with id="budget-1970-01" (very old month, likely no note)
+  Then call manage_budget_months, action: "set_note" with note="" to clear (cleanup)
+  Negative: call with { type: "note", id: "budget-1970-01" } (very old month, likely no note)
     Expect: found=false with a clear message (no error thrown)
 
 ---
 
-**Phase 9c: Preferences (1 tool):**
+**Phase 9c: Preferences (1 operation):**
 
-- actual_preferences_get
-  Input: {}
+- get_context, topic: "preferences"
+  Input: { topic: "preferences" }
   Positive: expect an object with preferences (an object, never an array), keys (an array),
     and count equal to the number of keys. Report the dateFormat and numberFormat values.
-  Negative: call with an unexpected argument, e.g. { budgetId: "x" }
+  Negative: call with an unexpected argument, e.g. { topic: "preferences", budgetId: "x" }
     Expect: the call still succeeds OR is rejected cleanly. Either is acceptable;
     report which happened. Do NOT treat a clean rejection as a failure.
 
 ---
 
-**Phase 9d: Export / Import (2 tools):**
+**Phase 9d: Export / Import (2 operations):**
 
-WARNING, read before running. actual_budgets_import CREATES a budget on the Actual
-server AND LOADS it, so the active budget for this session changes and the new budget
-is NOT in the configured budget list. Run the import step ONLY against a disposable
+WARNING, read before running. manage_budget_files with action "import" CREATES a budget on
+the Actual server AND LOADS it, so the active budget for this session changes and the new
+budget is NOT in the configured budget list. Run the import step ONLY against a disposable
 test budget. If this is a real budget, run the export half and report the import half
 as skipped.
 
-- actual_budgets_export
-  Input: { filename: "MCP-Prompt-Export-{TS}.zip" }
+- manage_budget_files, action: "export"
+  Input: { action: "export", filename: "MCP-Prompt-Export-{TS}.zip" }
   Positive: expect success=true, a path string, bytes greater than 100, and a
     sha256 that is exactly 64 lowercase hex characters. Record the path.
-  Negative: call with { filename: "../escape.zip" }
+  Negative: call with { action: "export", filename: "../escape.zip" }
     Expect: rejected with a validation error naming the filename rules.
     A filename that is ACCEPTED here is a FAILURE, report it prominently.
 
-- actual_budgets_import  (DISPOSABLE BUDGET ONLY)
-  First call actual_accounts_list and record the account count as N.
-  Input: { path: "<the path recorded above>", type: "actual" }
+- manage_budget_files, action: "import"  (DISPOSABLE BUDGET ONLY)
+  First call list_entities with type "account" and record the account count as N.
+  Input: { action: "import", path: "<the path recorded above>", type: "actual" }
   Positive: expect success=true and a budgetId string. The message MUST mention
-    actual_budgets_switch; if it does not, report that as a failure.
-  Then call actual_accounts_list again and expect the SAME count N.
+    switching with manage_budget_files; if it does not, report that as a failure.
+  Then call list_entities with type "account" again and expect the SAME count N.
     This is the round-trip assertion: it proves the export was restorable.
-  Then call actual_budgets_list_available and actual_budgets_switch back to the
-    ORIGINAL budget name before continuing. Confirm the switch returned success=true.
-  Negative: call with {} (no source at all)
+  Then call list_entities with type "budget_file" and manage_budget_files with
+    action "switch" back to the ORIGINAL budget name before continuing. Confirm the
+    switch returned success=true.
+  Negative: call with { action: "import" } (no source at all)
     Expect: rejected, mentioning that exactly one of path or base64 is required.
 
 ---
 
-**Phase 10: Session Management (2 tools):**
+[legacy or all surface only: skip on compact]
+
+**Phase 10: Session Management (2 operations):**
+
+These two tools exist only on the legacy and all surfaces (MCP_TOOL_SURFACE=legacy or all).
+On the default compact surface they are not listed: report both as
+"[Phase 10] session tools: ℹ skipped (compact surface)" and go straight to Phase 11.
 
 - actual_session_list
   Expect: { totalSessions: N, activeSessions: N, maxConcurrent: N }
@@ -243,14 +260,16 @@ as skipped.
   If error "only current session active" or "no other sessions": report ✓ informational (expected)
   If another session was closed: report ✓ success
 
+[end legacy or all surface only]
+
 ---
 
 **Phase 11: Concurrency Test (SKIP by default; only run if explicitly requested):**
 
 If requested: create 10 transactions simultaneously in {txn_acct_id}:
   Amounts: -1000, -2000, -3000, -4000, -5000, -6000, -7000, -8000, -9000, -10000 (cents)
-  Call them ONE AT A TIME sequentially (server enforces sequential writes)
-  Verify all 10 are present in actual_transactions_filter
+  Call manage_transactions with action "create" ONE AT A TIME sequentially (server enforces sequential writes)
+  Verify all 10 are present with search_transactions, by: "account" and account_id "{txn_acct_id}"
 By default: output "[Phase 11] concurrency: ℹ skipped (not requested)" and proceed to Phase 12.
 
 ---
@@ -265,13 +284,13 @@ If any individual cleanup operation fails:
 
 Cleanup order (dependencies first):
 
-1. actual_transactions_delete: delete {txn1_id}, {txn2_id}
-2. actual_rules_delete: delete {upsert_rule_id}
-3. actual_payees_delete: delete {payee_id}
-4. actual_accounts_delete: delete {txn_acct_id}
-5. Verify: actual_accounts_list does not contain any "MCP-*-{TS}" entries
-6. Verify: actual_payees_get does not contain any "MCP-Payee-{TS}" entries
-7. Verify: actual_rules_get does not contain any rules with "MCP-Upsert-{TS}" marker
+1. manage_transactions, action: "delete": delete {txn1_id}, {txn2_id}
+2. manage_rules, action: "delete": delete {upsert_rule_id}
+3. manage_payees, action: "delete": delete {payee_id}
+4. manage_accounts, action: "delete" with entity "account": delete {txn_acct_id}
+5. Verify: list_entities with type "account" does not contain any "MCP-*-{TS}" entries
+6. Verify: list_entities with type "payee" does not contain any "MCP-Payee-{TS}" entries
+7. Verify: list_entities with type "rule" does not contain any rules with "MCP-Upsert-{TS}" marker
 
 ---
 
@@ -294,7 +313,7 @@ PROMPT 2 (Core CRUD):
   Phase 5  Rules:                     X / 4
   Phase 5b Batch/Uncategorized/Ups.:  X / 4
   Phase 6  Transactions:              X / 12
-  Phase 6b Schedules:                 X / 4
+  Phase 6b Schedules:                 X / 5
   Phase 6c Tags:                      X / 4
 
 PROMPT 3 (Advanced):
@@ -308,12 +327,15 @@ PROMPT 3 (Advanced):
   Phase 11 Concurrency:               Skipped / Ran (X/10)
 
 ─────────────────────────────────────────────
-  Total Tools Tested:   X / 84
+  Total Tools Tested:   X / 85
   Passed (✓):           X
   Failed (✗):           X
   Informational (ℹ):    X
   Cleanup:              Complete / Partial
 ─────────────────────────────────────────────
+
+On the compact surface Phase 10 is skipped, so the reachable maximum is 83 and the
+Phase 10 line reads "Skipped".
 
 FAILURES (if any):
   [Phase X] tool_name: ✗ failure: <error>

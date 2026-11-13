@@ -5,7 +5,7 @@
 // The HTTP integration suite (tests/manual/index.js) only exercises the HTTP
 // bearer container, so stdio had no functional coverage. This drives the same
 // server over stdin/stdout and does a real round-trip against the live Actual
-// server: initialize, tools/list, and two read-only tool calls.
+// server: initialize, tools/list, and two read-only compact tool calls (get_context, list_entities).
 //
 // It runs the server INSIDE the already-healthy bearer container via
 // `docker exec` so it reuses that container's exact config and network access
@@ -57,16 +57,19 @@ try {
   }
   console.log(`  ok tools/list: ${tools.length} tools${EXPECTED != null ? ` (expected ${EXPECTED})` : ''}`);
 
-  const ver = await withTimeout(client.callTool({ name: 'actual_server_get_version', arguments: {} }), 'actual_server_get_version');
-  if (ver.isError) fail(`actual_server_get_version returned isError: ${textOf(ver)}`);
+  // #681: compact calls. The smoke server runs the surface the container is pinned to; the
+  // compact tools are published on `compact` and `all`, and the deploy script refuses a legacy
+  // surface count mismatch via EXPECTED_TOOL_COUNT above.
+  const ver = await withTimeout(client.callTool({ name: 'get_context', arguments: { topic: 'version' } }), 'get_context topic=version');
+  if (ver.isError) fail(`get_context topic=version returned isError: ${textOf(ver)}`);
   const verText = textOf(ver);
-  if (!/\d+\.\d+\.\d+/.test(verText)) fail(`actual_server_get_version gave no version string: ${verText}`);
-  console.log(`  ok actual_server_get_version: ${verText}`);
+  if (!/\d+\.\d+\.\d+/.test(verText)) fail(`get_context topic=version gave no version string: ${verText}`);
+  console.log(`  ok get_context topic=version: ${verText}`);
 
-  const acc = await withTimeout(client.callTool({ name: 'actual_accounts_list', arguments: {} }), 'actual_accounts_list');
-  if (acc.isError) fail(`actual_accounts_list returned isError: ${textOf(acc)}`);
+  const acc = await withTimeout(client.callTool({ name: 'list_entities', arguments: { type: 'account' } }), 'list_entities type=account');
+  if (acc.isError) fail(`list_entities type=account returned isError: ${textOf(acc)}`);
   const accCount = (textOf(acc).match(/"id"/g) || []).length;
-  console.log(`  ok actual_accounts_list: ${accCount} account(s)`);
+  console.log(`  ok list_entities type=account: ${accCount} account(s)`);
 
   await client.close();
   console.log('\n✓ STDIO SMOKE: PASS');

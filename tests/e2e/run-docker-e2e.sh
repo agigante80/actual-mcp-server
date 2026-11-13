@@ -393,6 +393,46 @@ if [ "$TEST_LEVEL" = "full" ] && [ $TEST_EXIT_CODE -eq 0 ] && [ "${RUN_STDIO_E2E
   echo ""
 fi
 
+# Step 6c (#681): the compact tool surface, over stdio, on the HOST like Step 6b.
+#
+# Independent of 6b: it needs the stack, not the 6b result, so a 6b failure does not hide a
+# compact-leg failure (and the other way round). It runs at the full level whenever
+# RUN_STDIO_E2E is not false, and gates under STDIO_E2E_GATING exactly as 6b does. It reuses 6b's
+# dedicated stdio Actual server and budget; the legs are sequential, so nothing is shared at once.
+# MCP_E2E_TOOL_SURFACE=compact makes tests/e2e/stdio-client.ts exec the server with
+# MCP_TOOL_SURFACE=compact: the only run of the compact-only dispatch path.
+if [ "$TEST_LEVEL" != "full" ]; then
+  log_info "Step 6c skipped: the compact leg runs only at the full level (level is $TEST_LEVEL)"
+elif [ "${RUN_STDIO_E2E:-true}" = "false" ]; then
+  log_info "Step 6c skipped: RUN_STDIO_E2E=false"
+else
+  export MCP_STDIO_SERVER_URL="${MCP_STDIO_SERVER_URL:-http://actual-budget-stdio-test:5006}"
+  export MCP_STDIO_SYNC_ID_FILE="${MCP_STDIO_SYNC_ID_FILE:-/tmp-stdio/actual-sync-id.txt}"
+
+  log_info "Step 6c: Running the compact surface leg over STDIO (host-side, docker exec)..."
+  echo ""
+  if MCP_TEST_TRANSPORT=stdio MCP_E2E_TOOL_SURFACE=compact npx playwright test \
+    --config=tests/e2e/playwright.config.docker.ts --project=docker-e2e-compact-stdio; then
+    COMPACT_EXIT_CODE=0
+  else
+    COMPACT_EXIT_CODE=$?
+  fi
+  if [ $COMPACT_EXIT_CODE -ne 0 ]; then
+    if [ "${STDIO_E2E_GATING:-true}" = "true" ]; then
+      log_error "Compact surface leg FAILED."
+      log_info "Re-run just it with:"
+      log_info "  MCP_STDIO_SERVER_URL=http://actual-budget-stdio-test:5006 MCP_STDIO_SYNC_ID_FILE=/tmp-stdio/actual-sync-id.txt \\"
+      log_info "  MCP_TEST_TRANSPORT=stdio MCP_E2E_TOOL_SURFACE=compact npx playwright test --config=tests/e2e/playwright.config.docker.ts --project=docker-e2e-compact-stdio"
+      TEST_EXIT_CODE=$COMPACT_EXIT_CODE
+    else
+      log_warn "Compact surface leg had failures (advisory: STDIO_E2E_GATING=false)."
+    fi
+  else
+    log_success "Compact surface leg passed"
+  fi
+  echo ""
+fi
+
 # Check results
 if [ $TEST_EXIT_CODE -eq 0 ]; then
   log_success "=========================================="

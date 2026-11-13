@@ -1,7 +1,9 @@
 ─────────────────────────────────────────────────────────────────────────────────
 PROMPT 2 OF 3: CORE CRUD
-  Tests ~39 tools covering accounts, categories, payees, rules, transactions,
-  and schedules. Paste this into the SAME chat session after Prompt 1 passes.
+  Tests ~51 operations covering accounts, categories, payees, rules, transactions,
+  schedules and tags, on the DEFAULT compact tool surface (manage_* tools take an
+  `action` selector, list_entities a `type`, search_transactions a `by`).
+  Paste this into the SAME chat session after Prompt 1 passes.
 
 PRE-CONDITIONS
   - Prompt 1 already passed in this session
@@ -13,413 +15,437 @@ HOW TO USE
      the "─── PROMPT START" line.
   2. The AI will resume with Phase 2, using the {TS} from Prompt 1.
   3. If ALL phases in this prompt pass → paste prompt-3-advanced.txt.
-  4. If any tool fails → fix and re-paste this prompt (start fresh from Phase 2).
+  4. If any operation fails → fix and re-paste this prompt (start fresh from Phase 2).
 
 WHAT IT TESTS
-  Phase 2:   Accounts                        (6 tools)
-  Phase 2b: Account Groups                  (4 tools)
-  Phase 3:   Category Groups & Categories    (6 tools)
-  Phase 4:   Payees                          (6 tools)
-  Phase 5:   Rules                           (4 tools)
-  Phase 5b:  Batch, Uncategorized, Upsert    (4 tools)
-  Phase 6:   Transactions                   (12 tools)
-  Phase 6b:  Schedules                       (5 tools)
-  Phase 6c:  Tags                            (4 tools)
+  Phase 2:   Accounts                        (6 operations)
+  Phase 2b: Account Groups                  (4 operations)
+  Phase 3:   Category Groups & Categories    (6 operations)
+  Phase 4:   Payees                          (6 operations)
+  Phase 5:   Rules                           (4 operations)
+  Phase 5b:  Batch, Uncategorized, Upsert    (4 operations)
+  Phase 6:   Transactions                   (12 operations)
+  Phase 6b:  Schedules                       (5 operations)
+  Phase 6c:  Tags                            (4 operations)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
 
 **Continuing from Prompt 1: {TS} and all saved IDs from Phase 1 are still active.**
 
 Use the SAME testing rules as Prompt 1:
-- ONE tool at a time, wait for each response, continue automatically
+- ONE operation at a time, wait for each response, continue automatically
 - ONLY STOP on actual failure
-- One status line per tool: [Phase X] tool_name: ✓/✗/ℹ
+- One status line per operation: [Phase X] tool_name selector_value: ✓/✗/ℹ
 - ACTUALLY INVOKE each tool: do not simulate
 - NEVER call multiple tools in parallel
 
+Compact surface reminders: the selector is `action` for every manage_* tool (with `entity`
+choosing account or account_group, category or category_group), `type` for list_entities and
+`by` for search_transactions. Arguments are flat snake_case. A create that returns no id
+(manage_transactions create often returns id null) is followed by a search_transactions
+lookup on the notes marker to recover the id.
+
 ---
 
-**Phase 2: Accounts (6 tools):**
+**Phase 2: Accounts (6 operations):**
 
-- actual_accounts_create
-  Input: { name: "MCP-Account-{TS}" }
-  Expect: created account object with id
+- manage_accounts, action: "create"
+  Input: { action: "create", entity: "account", name: "MCP-Account-{TS}" }
+  Expect: created account id
   Save as `{acct_id}`
 
-- actual_accounts_get_balance
-  Input: { id: "{acct_id}" }
+- summarize_transactions, report: "balance"
+  Input: { report: "balance", account_id: "{acct_id}" }
   Expect: { balance: 0 } (new account)
 
-- actual_accounts_update
-  Input: { id: "{acct_id}", name: "MCP-Account-{TS}-Updated", offbudget: true }
+- manage_accounts, action: "update"
+  Input: { action: "update", entity: "account", id: "{acct_id}", name: "MCP-Account-{TS}-Updated", offbudget: true }
   Expect: success with updated fields
-  Verify with actual_accounts_list: confirm name and offbudget fields changed
+  Verify with list_entities type "account": confirm name and offbudget fields changed
+  Extra scenario (reuses the update operation): manage_accounts, action: "set_note"
+    Input: { action: "set_note", id: "{acct_id}", note: "MCP-Note-{TS}" }
+    Expect: { result: { success: true, id, note, cleared: false } }
+    Verify: list_entities with { type: "note", id: "{acct_id}" } returns found true and that note
+    Then clear it: { action: "set_note", id: "{acct_id}", note: "" } expects cleared true
 
-- actual_accounts_close
+- manage_accounts, action: "close"
   First add a $0 dummy transaction to prevent tombstone issue:
-    actual_transactions_create: { account: "{acct_id}", amount: 0, date: today in YYYY-MM-DD, payee_name: "MCP-Dummy" }
-  Then: actual_accounts_close { id: "{acct_id}" }
+    manage_transactions, action: "create": { action: "create", account: "{acct_id}", amount: 0, date: today in YYYY-MM-DD, payee_name: "MCP-Dummy" }
+  Then: manage_accounts, action: "close": { action: "close", id: "{acct_id}" }
   Expect: account closed=true
 
-- actual_accounts_reopen
-  Input: { id: "{acct_id}" }
+- manage_accounts, action: "reopen"
+  Input: { action: "reopen", id: "{acct_id}" }
   Expect: account closed=false
 
-- actual_accounts_delete
-  Input: { id: "{acct_id}" }
+- manage_accounts, action: "delete"
+  Input: { action: "delete", entity: "account", id: "{acct_id}" }
   Expect: success
-  Verify with actual_accounts_list: "{acct_id}" no longer present
+  Verify with list_entities type "account": "{acct_id}" no longer present
 
 ---
 
-**Phase 2b: Account Groups (4 tools, Actual 26.9.0+):**
+**Phase 2b: Account Groups (4 operations, Actual 26.9.0+):**
 
-- actual_account_groups_list
-  Input: {}
+- list_entities, type: "account_group"
+  Input: { type: "account_group" }
   Expect: an array (possibly empty on a fresh budget)
 
-- actual_account_groups_create
-  Input: { name: "MCP-Group-{TS}" }
+- manage_accounts, action: "create" with entity: "account_group"
+  Input: { action: "create", entity: "account_group", name: "MCP-Group-{TS}" }
   Expect: an object with an id
   Save as `{group_id}`
-  Verify with actual_account_groups_list: confirm the group appears with that name
+  Verify with list_entities type "account_group": confirm the group appears with that name
 
-- actual_account_groups_update
-  Input: { id: "{group_id}", name: "MCP-Group-{TS}-Renamed" }
+- manage_accounts, action: "update" with entity: "account_group"
+  Input: { action: "update", entity: "account_group", id: "{group_id}", name: "MCP-Group-{TS}-Renamed" }
   Expect: success
-  Verify with actual_account_groups_list: confirm the NEW name is listed
-  NEGATIVE: actual_account_groups_update { id: "00000000-0000-4000-8000-000000000999", name: "x" }
-    Expect: a not-found error that names actual_account_groups_list. Nothing is written.
+  Verify with list_entities type "account_group": confirm the NEW name is listed
+  NEGATIVE: manage_accounts, action: "update": { action: "update", entity: "account_group", id: "00000000-0000-4000-8000-000000000999", name: "x" }
+    Expect: a not-found error that names list_entities with type account_group. Nothing is written.
 
-- actual_account_groups_delete
-  Input: { id: "{group_id}" }
+- manage_accounts, action: "delete" with entity: "account_group"
+  Input: { action: "delete", entity: "account_group", id: "{group_id}" }
   Expect: success
-  Verify with actual_account_groups_list: the group is gone
-  NEGATIVE: actual_account_groups_delete { id: "00000000-0000-4000-8000-000000000999" }
-    Expect: a not-found error that names actual_account_groups_list
+  Verify with list_entities type "account_group": the group is gone
+  NEGATIVE: manage_accounts, action: "delete": { action: "delete", entity: "account_group", id: "00000000-0000-4000-8000-000000000999" }
+    Expect: a not-found error that names list_entities with type account_group
   NOTE: deleting a group does NOT delete its accounts, they become ungrouped. An account
   still pointing at a deleted group is expected under sync and means ungrouped, not an error.
 
-**Phase 3: Category Groups & Categories (6 tools):**
+**Phase 3: Category Groups & Categories (6 operations):**
 
-- actual_category_groups_create
-  Input: { name: "MCP-Group-{TS}" }
+- manage_categories, action: "create" with entity: "category_group"
+  Input: { action: "create", entity: "category_group", name: "MCP-Group-{TS}" }
   Expect: created with id
   Save as `{group_id}`
 
-- actual_category_groups_update
-  Input: { id: "{group_id}", name: "MCP-Group-{TS}-Updated" }
+- manage_categories, action: "update" with entity: "category_group"
+  Input: { action: "update", entity: "category_group", id: "{group_id}", name: "MCP-Group-{TS}-Updated" }
   Expect: success
-  Verify: confirm name changed in actual_category_groups_get
+  Verify: confirm name changed in list_entities type "category_group"
 
-- actual_categories_create
-  Input: { name: "MCP-Cat-{TS}", group_id: "{group_id}" }
+- manage_categories, action: "create" with entity: "category"
+  Input: { action: "create", entity: "category", name: "MCP-Cat-{TS}", group_id: "{group_id}" }
   Expect: created with id
   Save as `{cat_id}`
 
-- actual_categories_update
-  Input: { id: "{cat_id}", name: "MCP-Cat-{TS}-Updated" }
+- manage_categories, action: "update" with entity: "category"
+  Input: { action: "update", entity: "category", id: "{cat_id}", name: "MCP-Cat-{TS}-Updated" }
   Expect: success
-  Verify: confirm name changed in actual_categories_get
+  Verify: confirm name changed in list_entities type "category"
+  Extra scenario (reuses the update operation): manage_categories, action: "set_note"
+    Input: { action: "set_note", id: "{cat_id}", note: "MCP-Note-{TS}" }
+    Expect: { result: { success: true, id, note, cleared: false } }
+    Then clear it: { action: "set_note", id: "{cat_id}", note: "" } expects cleared true
 
-- actual_categories_delete
-  Input: { id: "{cat_id}" }
+- manage_categories, action: "delete" with entity: "category"
+  Input: { action: "delete", entity: "category", id: "{cat_id}" }
   Expect: success (category deleted or tombstoned)
 
-- actual_category_groups_delete
-  Input: { id: "{group_id}" }
+- manage_categories, action: "delete" with entity: "category_group"
+  Input: { action: "delete", entity: "category_group", id: "{group_id}" }
   Expect: success
-  Verify both deletions with actual_category_groups_get and actual_categories_get
+  Verify both deletions with list_entities type "category_group" and list_entities type "category"
 
 ---
 
-**Phase 4: Payees (6 tools):**
+**Phase 4: Payees (6 operations):**
 
-- actual_payees_create
-  Input: { name: "MCP-Payee-{TS}" }
+- manage_payees, action: "create"
+  Input: { action: "create", name: "MCP-Payee-{TS}" }
   Expect: created with id
   Save as `{payee_id}`
 
-- actual_payees_create (second)
-  Input: { name: "MCP-Payee2-{TS}" }
+- manage_payees, action: "create" (second)
+  Input: { action: "create", name: "MCP-Payee2-{TS}" }
   Expect: created with id
   Save as `{payee2_id}`
 
-- actual_payees_update
-  Input: { id: "{payee_id}", fields: { name: "MCP-Payee-{TS}-Updated" } }
+- manage_payees, action: "update"
+  Input: { action: "update", id: "{payee_id}", name: "MCP-Payee-{TS}-Updated" }
   Expect: success
-  Verify name changed in actual_payees_get
+  Verify name changed in list_entities type "payee"
+  Extra scenario (reuses the update operation): manage_payees, action: "set_note"
+    Input: { action: "set_note", id: "{payee_id}", note: "MCP-Note-{TS}" }
+    Expect: { result: { success: true, id, note, cleared: false } }
+    Then clear it: { action: "set_note", id: "{payee_id}", note: "" } expects cleared true
 
-- actual_payees_update (set default category via rules)
-  Input: { id: "{payee_id}", fields: { category: "{category_id}" } }
+- manage_payees, action: "update" (set default category via rules)
+  Input: { action: "update", id: "{payee_id}", category: "{category_id}" }
   Expect: success (adapter creates a "payee is X → set category" rule internally)
-  Verify: call actual_payee_rules_get with { payeeId: "{payee_id}" } and confirm
+  Verify: call list_entities with { type: "rule", payee_id: "{payee_id}" } and confirm
           at least one rule has actions containing { op: "set", field: "category", value: "{category_id}" }
 
-- actual_payees_update (clear default category)
-  Input: { id: "{payee_id}", fields: { category: null } }
+- manage_payees, action: "update" (clear default category)
+  Input: { action: "update", id: "{payee_id}", category: null }
   Expect: success (adapter deletes the "set category" rule)
-  Verify: call actual_payee_rules_get and confirm no rule with action field=category remains
+  Verify: call list_entities with { type: "rule", payee_id: "{payee_id}" } and confirm no rule with action field=category remains
 
-- actual_payee_rules_get
-  Input: { id: "{payee_id}" }
+- list_entities, type: "rule" with payee_id
+  Input: { type: "rule", payee_id: "{payee_id}" }
   Expect: rules array (possibly empty for new payee)
 
-- actual_payees_merge
-  Input: merge "{payee2_id}" into "{payee_id}"
-  Expect: success; verify payee2 no longer in actual_payees_get list
+- manage_payees, action: "merge"
+  Input: { action: "merge", target_id: "{payee_id}", merge_ids: ["{payee2_id}"] }
+  Expect: success; verify payee2 no longer in the list_entities type "payee" list
 
-- actual_payees_common_list
-  Input: {}
+- list_entities, type: "payee" with sort: "frequency"
+  Input: { type: "payee", sort: "frequency" }
   Expect: array of payees. It may be EMPTY on a fresh budget: "common" is derived from recent
           transaction frequency, so an empty result is a PASS, not a failure.
-  Verify: every id returned also appears in actual_payees_get
+  Verify: every id returned also appears in list_entities type "payee"
   Report count as informational
 
-Note: actual_payees_delete will be handled in Phase 12 cleanup (after payee is used in transactions).
+Note: manage_payees, action: "delete" will be handled in Phase 12 cleanup (after payee is used in transactions).
 
 ---
 
-**Phase 5: Rules (4 tools):**
+**Phase 5: Rules (4 operations):**
 
-- actual_rules_get
+- list_entities, type: "rule"
+  Input: { type: "rule" }
   Expect: rules array (possibly empty), no error
 
-- actual_rules_create
-  Input: create rule with condition: field=notes, op=contains, value="MCP-Rule-{TS}"
-         action: op=set, field=notes, value="MCP-Rule-{TS}-matched"
+- manage_rules, action: "create"
+  Input: { action: "create", conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-{TS}" }],
+           actions: [{ op: "set", field: "notes", value: "MCP-Rule-{TS}-matched" }] }
   Expect: created with id
   Save as `{rule_id}`
-  Verify: confirm rule appears in actual_rules_get with the condition value
+  Verify: confirm rule appears in list_entities type "rule" with the condition value
 
-- actual_rules_update
-  Input: { id: "{rule_id}", conditions updated to value="MCP-Rule-{TS}-updated" }
+- manage_rules, action: "update"
+  Input: { action: "update", id: "{rule_id}", conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-{TS}-updated" }] }
   Expect: success
-  Verify: updated condition value reflected in actual_rules_get
+  Verify: updated condition value reflected in list_entities type "rule"
 
-- actual_rules_delete
-  Input: { id: "{rule_id}" }
+- manage_rules, action: "delete"
+  Input: { action: "delete", id: "{rule_id}" }
   Expect: success
 
 ---
 
-**Phase 5b: Batch, Uncategorized & Rules-Upsert (4 tools):**
+**Phase 5b: Batch, Uncategorized & Rules-Upsert (4 operations):**
 
-- actual_transactions_uncategorized (summary mode: default)
-  Input: no parameters (defaults to all-time)
+- search_transactions, by: "uncategorized" (summary mode: default)
+  Input: { by: "uncategorized" } (no other parameters, defaults to all-time)
   Expect: { totalCount: N, totalAmount: N, byAccount: [...], dateRange: {...} }
   Verify: totalCount is a number ≥ 0, byAccount is an array, transactions key is absent
   Report totalCount as ✓ informational
 
-- actual_transactions_uncategorized (list mode)
-  Input: { includeTransactions: true, limit: 5 }
+- search_transactions, by: "uncategorized" (list mode)
+  Input: { by: "uncategorized", include_transactions: true, limit: 5 }
   Expect: { totalCount, totalAmount, byAccount, transactions: [...], count, hasMore, offset, limit }
   Verify: transactions is an array, hasMore is a boolean, count ≤ 5
 
-- actual_transactions_update_batch
-  Use first existing transaction ID from actual_accounts_list result (or any visible from earlier calls):
-  Input: { updates: [{ id: "<any existing txn id>", fields: { notes: "MCP-Batch-{TS}" } }] }
+- manage_transactions, action: "update_batch"
+  Use first existing transaction ID from a search_transactions by account result (or any visible from earlier calls):
+  Input: { action: "update_batch", updates: [{ id: "<any existing txn id>", fields: { notes: "MCP-Batch-{TS}" } }] }
   Expect: { succeeded: [...], failed: [...], total: 1, successCount: 1, failureCount: 0 }
 
-- actual_rules_create_or_update (idempotent upsert: 2 sub-calls, counts as 1 tool):
-  First call: create rule with condition notes contains "MCP-Upsert-{TS}"
+- manage_rules, action: "upsert" (idempotent upsert: 2 sub-calls, counts as 1 operation):
+  First call: { action: "upsert", conditions: [{ field: "notes", op: "contains", value: "MCP-Upsert-{TS}" }], actions: [{ op: "set", field: "notes", value: "MCP-Upsert-{TS}-matched" }] }
     Expect: { created: true, id: "<new-uuid>" }
     Save as `{upsert_rule_id}`
   Second call: same conditions again
     Expect: { created: false, id: "{upsert_rule_id}" } (same id, no duplicate)
-  Verify: actual_rules_get contains exactly 1 rule with that marker
+  Verify: list_entities type "rule" contains exactly 1 rule with that marker
 
-- actual_rules_create_batch (best-effort batch of rules)
-  Positive: { rules: [ { conditions: [{field: "notes", op: "contains", value: "MCP-RuleBatch-{TS}"}],
+- manage_rules, action: "create_batch" (best-effort batch of rules)
+  Positive: { action: "create_batch",
+              rules: [ { conditions: [{field: "notes", op: "contains", value: "MCP-RuleBatch-{TS}"}],
                          actions: [{op: "set", field: "notes", value: "MCP-RuleBatch-{TS}-matched"}] },
                        { conditions: [{field: "bogus_field", op: "is", value: "x"}],
                          actions: [{op: "set", field: "notes", value: "MCP-RuleBatch-{TS}-bad"}] } ] }
   Expect: total 2, successCount 1, failureCount 1; succeeded[0] has index 0 and an id (save as `{batch_rule_id}`);
           failed[0] has index 1 and a readable error (not "[object Object]")
-  Verify: actual_rules_get contains `{batch_rule_id}` and no rule for the second item
-  Negative: { rules: [ { conditions: [{field: "notes", op: "contains", value: "MCP-RuleBatch-{TS}"}],
+  Verify: list_entities type "rule" contains `{batch_rule_id}` and no rule for the second item
+  Negative: { action: "create_batch",
+              rules: [ { conditions: [{field: "notes", op: "contains", value: "MCP-RuleBatch-{TS}"}],
                          actions: [{op: "set", field: "category", value: "19999999-0000-4000-8000-000000000009"}] } ] }
   Expect: successCount 0 and failed[0].error says the category was not found and names that id; no rule created
-  Cleanup: actual_rules_delete { id: "{batch_rule_id}" }
+  Cleanup: manage_rules, action: "delete": { action: "delete", id: "{batch_rule_id}" }
 
 ---
 
-**Phase 6: Transactions (12 tools):**
+**Phase 6: Transactions (12 operations):**
 
 Note: Phase 2 deleted {acct_id}. Create a fresh account for transactions:
 
-- actual_accounts_create
-  Input: { name: "MCP-Txn-{TS}" }
+- manage_accounts, action: "create" (fresh account for transactions)
+  Input: { action: "create", entity: "account", name: "MCP-Txn-{TS}" }
   Save as `{txn_acct_id}`
 
-- actual_transactions_create (expense)
-  Input: { account: "{txn_acct_id}", amount: -5000, date: today YYYY-MM-DD, notes: "MCP-Txn-Expense-{TS}" }
-  Expect: created with id
-  Save as `{txn1_id}`
+- manage_transactions, action: "create" (expense)
+  Input: { action: "create", account: "{txn_acct_id}", amount: -5000, date: today YYYY-MM-DD, notes: "MCP-Txn-Expense-{TS}" }
+  Expect: success true; the id may come back null
+  Save the id as `{txn1_id}`. If it is null, recover it with search_transactions by account (below) and the notes marker.
 
-- actual_transactions_create (income)
-  Input: { account: "{txn_acct_id}", amount: 10000, date: today YYYY-MM-DD, notes: "MCP-Txn-Income-{TS}" }
-  Save as `{txn2_id}`
+- manage_transactions, action: "create" (income)
+  Input: { action: "create", account: "{txn_acct_id}", amount: 10000, date: today YYYY-MM-DD, notes: "MCP-Txn-Income-{TS}" }
+  Save the id as `{txn2_id}` (same recovery rule)
 
-- actual_transactions_get
-  Input: { id: "{txn1_id}" }
-  Expect: transaction object with amount=-5000
+- search_transactions, by: "account"
+  Input: { by: "account", account_id: "{txn_acct_id}" }
+  Expect: array containing {txn1_id} (amount=-5000) and {txn2_id}; this is also where a null create id is recovered from
 
-- actual_transactions_filter
-  Input: filter by account="{txn_acct_id}"
+- search_transactions, by: "filter"
+  Input: { by: "filter", account_id: "{txn_acct_id}" }
   Expect: array containing at least {txn1_id} and {txn2_id}
 
-- actual_transactions_update
-  Input: { id: "{txn1_id}", fields: { amount: -7500, notes: "MCP-Txn-Updated-{TS}" } }
-  Expect: success; verify amount changed by re-fetching
+- manage_transactions, action: "update"
+  Input: { action: "update", id: "{txn1_id}", amount: -7500, notes: "MCP-Txn-Updated-{TS}" }
+  Expect: success; verify amount changed by re-fetching with search_transactions by account
 
-- actual_transactions_search_by_amount
-  Input: search around -7500 cents (±500 tolerance)
+- search_transactions, by: "amount"
+  Input: { by: "amount", account_id: "{txn_acct_id}", min_amount: -8000, max_amount: -7000 } (around -7500 cents, ±500 tolerance)
   Expect: array containing {txn1_id}
 
-- actual_transactions_search_by_category
-  Input: use first available category from Phase 1
+- search_transactions, by: "category"
+  Input: { by: "category", category_name: "{cat1_name}" } (the first available category from Phase 1)
   Expect: array (possibly empty if no match), no error
 
-- actual_transactions_search_by_month
-  Input: month = current month (YYYY-MM)
+- search_transactions, by: "month"
+  Input: { by: "month", month: current month (YYYY-MM) }
   Expect: array containing recently created transactions
 
-- actual_transactions_search_by_payee
-  Input: use first available payee name from Phase 1
+- search_transactions, by: "payee"
+  Input: { by: "payee", payee_name: "{payee1_name}" } (the first available payee name from Phase 1)
   Expect: array (possibly empty if no match), no error
 
-- actual_transactions_import
-  Input: accountId = the account from Phase 1, txs = a one-item array with date (today, YYYY-MM-DD), amount = -4321, payee_name = "Manual-Import", and imported_id = a unique string
+- manage_transactions, action: "import"
+  Input: { action: "import", account_id: "{account1_id}", txs: [one item with date (today, YYYY-MM-DD), amount: -4321, payee_name: "Manual-Import", and imported_id: a unique string] }
   Expect: success with added length 1 (the typed, non-empty import adds exactly one transaction)
 
-- actual_transactions_import (negative)
-  Input: accountId set, txs = empty array []
+- manage_transactions, action: "import" (negative)
+  Input: { action: "import", account_id: "{account1_id}", txs: [] }
   Expect: a validation error stating txs must be at least 1 item (an empty import is rejected, not a silent no-op)
 
-Split transactions (#305). These reuse the two tools already counted above, so the
-tool count for this phase is unchanged; they add capability scenarios, not new tools.
+Split transactions (#305). These reuse the two operations already counted above, so the
+operation count for this phase is unchanged; they add capability scenarios, not new operations.
 
-- actual_transactions_create (split, positive)
-  Input: { account: "{txn_acct_id}", amount: -3000, date: today YYYY-MM-DD, notes: "MCP-Txn-Split-{TS}", subtransactions: [ { amount: -1800 }, { amount: -1200 } ] }
-  Expect: created with id; the children sum to the parent amount
-  Save as `{split_id}`
+- manage_transactions, action: "create" (split, positive)
+  Input: { action: "create", account: "{txn_acct_id}", amount: -3000, date: today YYYY-MM-DD, notes: "MCP-Txn-Split-{TS}", subtransactions: [ { amount: -1800 }, { amount: -1200 } ] }
+  Expect: created; the children sum to the parent amount
+  Save the id as `{split_id}` (recover it by the notes marker if null)
 
-- actual_transactions_create (split, negative: sum mismatch)
+- manage_transactions, action: "create" (split, negative: sum mismatch)
   Input: same as above but subtransactions = [ { amount: -1800 }, { amount: -1000 } ]
   Expect: rejected before any write, error naming expected -3000 vs actual -2800
 
-- actual_transactions_create (split, negative: parent category)
+- manage_transactions, action: "create" (split, negative: parent category)
   Input: a split whose parent also sets a category
   Expect: rejected, stating a split parent carries no category of its own (categories go on the children)
 
-- actual_transactions_update (edit an existing split, positive)
-  Input: { id: "{split_id}", fields: { subtransactions: [ { amount: -2500 }, { amount: -500 } ] } }
+- manage_transactions, action: "update" (edit an existing split, positive)
+  Input: { action: "update", id: "{split_id}", subtransactions: [ { amount: -2500 }, { amount: -500 } ] }
   Expect: success; re-fetch shows the two children replaced and still summing to -3000
 
-- actual_transactions_update (split a plain transaction, negative: children do not sum to the parent)
-  Input: { id: "{txn2_id}", fields: { subtransactions: [ { amount: 6000 }, { amount: 1000 } ] } }
+- manage_transactions, action: "update" (split a plain transaction, negative: children do not sum to the parent)
+  Input: { action: "update", id: "{txn2_id}", subtransactions: [ { amount: 6000 }, { amount: 1000 } ] }
   Expect: rejected before any write, naming the expected 10000 and actual 7000 sums; re-fetch shows {txn2_id} still a plain transaction (not a split parent, no subtransactions)
 
-- actual_transactions_update (split a plain transaction in place, positive)
-  Input: { id: "{txn2_id}", fields: { subtransactions: [ { amount: 6000 }, { amount: 4000 } ] } }
+- manage_transactions, action: "update" (split a plain transaction in place, positive)
+  Input: { action: "update", id: "{txn2_id}", subtransactions: [ { amount: 6000 }, { amount: 4000 } ] }
   Expect: success with split.parent equal to {txn2_id}; re-fetch shows the SAME id as a split with two children summing to the parent amount
 
-- actual_transactions_merge (positive, #514)
-  Input: create two transactions in {txn_acct_id} with the same amount -1800, dated 2026-10-01 (notes "") and 2026-10-03 (notes "MCP-Txn-Merge-{TS}"), then { ids: [{earlier_id}, {later_id}] } (earlier FIRST, so only the date rule, not the second-id fallback, keeps it)
+- manage_transactions, action: "merge" (positive, #514)
+  Input: create two transactions in {txn_acct_id} with the same amount -1800, dated 2026-10-01 (notes "") and 2026-10-03 (notes "MCP-Txn-Merge-{TS}"), then { action: "merge", ids: [{earlier_id}, {later_id}] } (earlier FIRST, so only the date rule, not the second-id fallback, keeps it)
   Expect: success true, keptId = the 2026-10-01 id, deletedId = the 2026-10-03 id; re-fetch shows only the kept one, carrying the notes "MCP-Txn-Merge-{TS}"
 
-- actual_transactions_merge (negative, #514)
-  Input: { ids: [{earlier_id}, {txn1_id}] } where the amounts differ, and { ids: ["{txn1_id}", "99999999-9999-4999-8999-999999999999"] }
-  Expect: the first is refused naming both amounts, the second is refused as not found naming the missing id and actual_transactions_get; re-fetch shows both original transactions unchanged
+- manage_transactions, action: "merge" (negative, #514)
+  Input: { action: "merge", ids: [{earlier_id}, {txn1_id}] } where the amounts differ, and { action: "merge", ids: ["{txn1_id}", "99999999-9999-4999-8999-999999999999"] }
+  Expect: the first is refused naming both amounts, the second is refused as not found naming the missing id and pointing at search_transactions; re-fetch shows both original transactions unchanged
 
-Note: actual_transactions_delete will be handled in Phase 12 cleanup.
+Note: manage_transactions, action: "delete" will be handled in Phase 12 cleanup.
 
 ---
 
-- actual_transfers_create
-  Input: { fromAccountId: "{txn_acct_id}", toAccountId: "{account1_id}", amount: 2500,
+- manage_transactions, action: "transfer"
+  Input: { action: "transfer", from_account: "{txn_acct_id}", to_account: "{account1_id}", amount: 2500,
            date: "<today, YYYY-MM-DD>", notes: "MCP-Transfer-{TS}" }
   Expect: success, and TWO linked transactions are created (one per account)
-  Verify: actual_transactions_get on BOTH accounts shows a matching entry, with opposite signs
+  Verify: search_transactions by account on BOTH accounts shows a matching entry, with opposite signs
           (amount is in integer cents: 2500 is $25.00 out of one account and into the other)
   Note: a transfer creates the payee-side link automatically. Do NOT create a payee for it.
 
 NEGATIVE for this phase:
-- actual_transfers_create with fromAccountId equal to toAccountId
-  Expect: a validation or refusal error naming the problem, NOT a success and NOT a
-          self-transfer that has to be cleaned up afterwards
+- manage_transactions, action: "transfer" with from_account equal to to_account
+  Expect: a validation or refusal error naming the problem (result.success false or an error), NOT a
+          success and NOT a self-transfer that has to be cleaned up afterwards
 
-**Phase 6b: Schedules (5 tools):**
+**Phase 6b: Schedules (5 operations):**
 
-- actual_schedules_get
+- list_entities, type: "schedule"
+  Input: { type: "schedule" }
   Expect: schedules array (possibly empty), no error
   Save count as `{sched_count_before}`
 
-- actual_schedules_create
+- manage_schedules, action: "create"
   Input: one-off schedule:
-    { name: "MCP-Schedule-{TS}", date: "2026-06-15", account: "{txn_acct_id}", amount: -2000 }
+    { action: "create", name: "MCP-Schedule-{TS}", date: "2026-06-15", account: "{txn_acct_id}", amount: -2000 }
   Expect: created with id
   Save as `{sched_id}`
-  Verify: actual_schedules_get returns count = {sched_count_before} + 1
+  Verify: list_entities type "schedule" returns count = {sched_count_before} + 1
 
-- actual_schedules_update
-  Input: { id: "{sched_id}", name: "MCP-Schedule-{TS}-Updated" }
+- manage_schedules, action: "update"
+  Input: { action: "update", id: "{sched_id}", name: "MCP-Schedule-{TS}-Updated" }
   Expect: success
-  Verify: updated name visible in actual_schedules_get
+  Verify: updated name visible in list_entities type "schedule"
 
-- actual_schedules_dates
-  Input: { schedule_id: "{sched_id}", start: "2026-06-01", count: 3 }
+- list_entities, type: "schedule" with schedule_id (upcoming dates)
+  Input: { type: "schedule", schedule_id: "{sched_id}", start: "2026-06-01", count: 3 }
   Expect: dates = ["2026-06-15"] (a one-off schedule falls on one date), count = 1,
           truncated = false
-  NEGATIVE: Input { schedule_id: "{sched_id}", start: "2026-07-01", end: "2026-06-01" }
+  NEGATIVE: Input { type: "schedule", schedule_id: "{sched_id}", start: "2026-07-01", end: "2026-06-01" }
   Expect: an error that says end is before start and tells you to check start and end,
           NOT a success with an empty list
 
-- actual_schedules_delete
-  Input: { id: "{sched_id}" }
+- manage_schedules, action: "delete"
+  Input: { action: "delete", id: "{sched_id}" }
   Expect: success
-  Verify: actual_schedules_get returns count = {sched_count_before} (restored)
+  Verify: list_entities type "schedule" returns count = {sched_count_before} (restored)
 
 ---
 
-**Phase 6c: Tags (4 tools):**
+**Phase 6c: Tags (4 operations):**
 
 Tags are self-contained: no account, category or transaction is needed. The tag WORD is stored
 WITHOUT a leading "#".
 
-- actual_tags_list
+- list_entities, type: "tag"
+  Input: { type: "tag" }
   Expect: array (possibly empty), no error
   Save count as `{tag_count_before}`
 
-- actual_tags_create
-  Input: { tag: "MCP-Tag-{TS}", color: "#33aa33", description: "Prompt suite fixture" }
+- manage_tags, action: "create"
+  Input: { action: "create", tag: "MCP-Tag-{TS}", color: "#33aa33", description: "Prompt suite fixture" }
   Expect: created with id
   Save as `{tag_id}`
-  Verify: actual_tags_list now contains it
+  Verify: list_entities type "tag" now contains it
 
-- actual_tags_create (SAME word again, documented upsert)
-  Input: { tag: "MCP-Tag-{TS}" }
-  Expect: the SAME id as `{tag_id}` comes back, and actual_tags_list does NOT grow.
-          This tool is an upsert on the word, so a second create is not a duplicate.
+- manage_tags, action: "create" (SAME word again, documented upsert)
+  Input: { action: "create", tag: "MCP-Tag-{TS}" }
+  Expect: the SAME id as `{tag_id}` comes back, and list_entities type "tag" does NOT grow.
+          This operation is an upsert on the word, so a second create is not a duplicate.
 
-- actual_tags_update
-  Input: { id: "{tag_id}", tag: "MCP-Tag-{TS}-renamed", color: "#112233" }
+- manage_tags, action: "update"
+  Input: { action: "update", id: "{tag_id}", tag: "MCP-Tag-{TS}-renamed", color: "#112233" }
   Expect: success
-  Verify: the new word appears in actual_tags_list
+  Verify: the new word appears in list_entities type "tag"
 
-- actual_tags_delete
-  Input: { id: "{tag_id}" }
+- manage_tags, action: "delete"
+  Input: { action: "delete", id: "{tag_id}" }
   Expect: success
-  Verify: the tag is ABSENT from actual_tags_list. The delete is a soft delete (tombstone),
+  Verify: the tag is ABSENT from list_entities type "tag". The delete is a soft delete (tombstone),
           so absence from the list is the correct check, not an error on re-read.
 
 NEGATIVES for this phase:
-- actual_tags_update with { id: "00000000-0000-0000-0000-000000000000", tag: "x" }
+- manage_tags, action: "update" with { action: "update", id: "00000000-0000-0000-0000-000000000000", tag: "x" }
   Expect: a not-found error. A silent success would mean the pre-flight guard is gone.
-- actual_tags_update with only an id and no fields
+- manage_tags, action: "update" with only an id and no fields
   Expect: a validation error saying at least one of tag, color or description is required.
-- actual_tags_delete with { id: "00000000-0000-0000-0000-000000000000" }
+- manage_tags, action: "delete" with { action: "delete", id: "00000000-0000-0000-0000-000000000000" }
   Expect: a not-found error.
 
 ---

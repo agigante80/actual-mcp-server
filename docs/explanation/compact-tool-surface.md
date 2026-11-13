@@ -25,6 +25,8 @@ That conclusion rested on the rule that no tool mixes reads and writes. The comp
 
 Why: at 85 tools Glama scores Tool Count 1 and Disambiguation 2, and no description edit moves a count. Its rubric gives Tool Count 5 only to "typically 3-15 tools" and Naming 5 only to a "consistent verb_noun pattern throughout".
 
+Decision 3 (#681), the 15-tool ceiling: the compact surface stays at 15 tools. A 16th tool is forbidden unless another compact tool is merged or retired in the same change, because Glama's Tool Count dimension scores 5 only for roughly 3 to 15 tools. New capability arrives as an action or route on an existing compact tool (see [the new-tool checklist](../development/new-tool-checklist.md#compact-flow)). `tests/unit/compact_mapping_parity.test.js` pins the ceiling, and `tests/unit/tools_list_size_budget.test.js` bounds the published size.
+
 Alternatives rejected:
 
 - Toolset trimming only: it hides tools, but the 85 stay the default and the score page lists all of them.

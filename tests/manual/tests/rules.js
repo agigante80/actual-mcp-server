@@ -27,14 +27,14 @@ export async function rulesTests(client, context) {
   // first available (default) budget before trying to fetch categories.
   if (!context.categoryId) {
     try {
-      const avail = await callTool("actual_budgets_list_available", {});
+      const avail = await callTool("list_entities", { type: "budget_file" });
       if (Array.isArray(avail?.budgets) && avail.budgets.length > 0) {
-        await callTool("actual_budgets_switch", { budgetName: avail.budgets[0].name });
+        await callTool("manage_budget_files", { action: "switch", budget_name: avail.budgets[0].name });
         console.log(`  ℹ Reset to first budget "${avail.budgets[0].name}" before fetching categories`);
       }
     } catch (_) { /* best-effort: ignore if multi-budget not configured */ }
 
-    const catData = await callTool("actual_categories_get", {});
+    const catData = await callTool("list_entities", { type: "category" });
     const raw = catData.result || catData.categories || catData;
     const flatCats = Array.isArray(raw)
       ? raw.flatMap(g => g.categories || [g]).filter(c => c && c.id && !c.hidden)
@@ -47,11 +47,13 @@ export async function rulesTests(client, context) {
       // No category found at all: create a disposable one so the test can run.
       console.log("  ℹ No category found: creating disposable category group + category for rules tests...");
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const newGroup = await callTool("actual_category_groups_create", { name: `MCP-RulesTest-Group-${ts}` });
+      const newGroup = await callTool("manage_categories", { action: "create", entity: "category_group", name: `MCP-RulesTest-Group-${ts}` });
       rulesOwnedGroupId = newGroup.id || newGroup.result || newGroup;
       console.log(`  ✓ Created disposable category group: ${rulesOwnedGroupId}`);
 
-      const newCat = await callTool("actual_categories_create", {
+      const newCat = await callTool("manage_categories", {
+        action: "create",
+        entity: "category",
         name: `MCP-RulesTest-Cat-${ts}`,
         group_id: rulesOwnedGroupId,
       });
@@ -63,7 +65,7 @@ export async function rulesTests(client, context) {
 
   // List existing rules
   console.log("\nGetting all rules...");
-  const rulesData = await callTool("actual_rules_get", {});
+  const rulesData = await callTool("list_entities", { type: "rule" });
   const rules = rulesData.rules || rulesData.result || rulesData || [];
   console.log("✓ Rules found:", Array.isArray(rules) ? rules.length : 0);
 
@@ -73,15 +75,16 @@ export async function rulesTests(client, context) {
   // rules silently out-ranked the user's own UI rules.
   console.log("\n#342: Creating rule with NO stage (must persist as null, not 'pre')...");
   try {
-    const noStage = await callTool("actual_rules_create", {
-      conditionsOp: "and",
+    const noStage = await callTool("manage_rules", {
+      action: "create",
+      conditions_op: "and",
       conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-stage-342" }],
       actions: [{ op: "set", field: "category", value: context.categoryId }],
     });
     const noStageId = noStage.id || noStage.result || noStage;
     // #585: recorded before the read-back, so a read-back that throws still leaves it deletable.
     context.ruleStage342Id = noStageId;
-    const back = await callTool("actual_rules_get", {});
+    const back = await callTool("list_entities", { type: "rule" });
     const all = back.rules || back.result || back || [];
     const created = (Array.isArray(all) ? all : []).find((r) => r && r.id === noStageId);
     if (!created) {
@@ -100,9 +103,10 @@ export async function rulesTests(client, context) {
   // refuse it up front rather than forwarding it and surfacing a raw upstream error.
   console.log("\n#342: Creating rule with stage='default' (must be REJECTED)...");
   try {
-    const res = await callTool("actual_rules_create", {
+    const res = await callTool("manage_rules", {
+      action: "create",
       stage: "default",
-      conditionsOp: "and",
+      conditions_op: "and",
       conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-stage-342-bad" }],
       actions: [{ op: "set", field: "category", value: context.categoryId }],
     });
@@ -118,9 +122,10 @@ export async function rulesTests(client, context) {
 
   // REGRESSION: create rule without 'op' field: should default to 'set'
   console.log("\nREGRESSION: Creating rule without 'op' field (should default to 'set')...");
-  const ruleWithoutOp = await callTool("actual_rules_create", {
+  const ruleWithoutOp = await callTool("manage_rules", {
+    action: "create",
     stage: "pre",
-    conditionsOp: "and",
+    conditions_op: "and",
     conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-no-op-test" }],
     actions: [{ field: "category", value: context.categoryId }], // no 'op': should default to 'set'
   });
@@ -130,7 +135,7 @@ export async function rulesTests(client, context) {
 
   // Verify ruleWithoutOp: action should have op='set' defaulted by the server
   {
-    const rd = await callTool("actual_rules_get", {});
+    const rd = await callTool("list_entities", { type: "rule" });
     const allRules = rd.rules || rd.result || rd || [];
     const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleWithoutOpId) : null;
     if (!found) {
@@ -144,9 +149,10 @@ export async function rulesTests(client, context) {
 
   // Create rule with explicit 'op'
   console.log("\nCreating test rule...");
-  const newRule = await callTool("actual_rules_create", {
+  const newRule = await callTool("manage_rules", {
+    action: "create",
     stage: "pre",
-    conditionsOp: "and",
+    conditions_op: "and",
     conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-test-marker" }],
     actions: [{ op: "set", field: "category", value: context.categoryId }],
   });
@@ -156,7 +162,7 @@ export async function rulesTests(client, context) {
 
   // Verify create
   {
-    const rd = await callTool("actual_rules_get", {});
+    const rd = await callTool("list_entities", { type: "rule" });
     const allRules = rd.rules || rd.result || rd || [];
     const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleId) : null;
     if (!found) {
@@ -170,20 +176,19 @@ export async function rulesTests(client, context) {
 
   // Update
   console.log("\nUpdating rule...");
-  await callTool("actual_rules_update", {
+  await callTool("manage_rules", {
+    action: "update",
     id: ruleId,
-    fields: {
-      stage: "pre",
-      conditionsOp: "and",
-      conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-updated-marker" }],
-      actions: [{ op: "set", field: "category", value: context.categoryId }],
-    },
+    stage: "pre",
+    conditions_op: "and",
+    conditions: [{ field: "notes", op: "contains", value: "MCP-Rule-updated-marker" }],
+    actions: [{ op: "set", field: "category", value: context.categoryId }],
   });
   console.log("✓ Rule updated");
 
   // Verify update
   {
-    const rd = await callTool("actual_rules_get", {});
+    const rd = await callTool("list_entities", { type: "rule" });
     const allRules = rd.rules || rd.result || rd || [];
     const found = Array.isArray(allRules) ? allRules.find(r => r.id === ruleId) : null;
     if (!found) {
@@ -195,19 +200,20 @@ export async function rulesTests(client, context) {
     }
   }
 
-  // #485: actual_rules_create_batch. One good rule and one rule upstream rejects (unknown
+  // #485: manage_rules create_batch. One good rule and one rule upstream rejects (unknown
   // condition field), then a dangling category reference, which both create tools now refuse.
-  console.log("\n#485: actual_rules_create_batch (one good, one upstream-rejected)...");
+  console.log("\n#485: manage_rules create_batch (one good, one upstream-rejected)...");
   {
     const stamp = Date.now();
     const batchMarker = `MCP-Rule-Batch-${stamp}`;
     const countRules = async () => {
-      const rd = await callTool("actual_rules_get", {});
+      const rd = await callTool("list_entities", { type: "rule" });
       const arr = rd.rules || rd.result || rd || [];
       return Array.isArray(arr) ? arr : [];
     };
     const before = (await countRules()).length;
-    const out = await callTool("actual_rules_create_batch", {
+    const out = await callTool("manage_rules", {
+      action: "create_batch",
       rules: [
         { conditions: [{ field: "notes", op: "contains", value: batchMarker }], actions: [{ op: "set", field: "category", value: context.categoryId }] },
         { conditions: [{ field: "bogus_field", op: "is", value: "x" }], actions: [{ op: "set", field: "notes", value: batchMarker }] },
@@ -229,14 +235,14 @@ export async function rulesTests(client, context) {
       fail(`Batch read-back: expected rule ${createdId} present and count ${before + 1}, got count ${after.length}`);
     }
     if (createdId) {
-      try { await callTool("actual_rules_delete", { id: createdId }); } catch (err) { fail(`Could not delete the batch-created rule ${createdId}: ${err.message}. That is residue.`); }
+      try { await callTool("manage_rules", { action: "delete", id: createdId }); } catch (err) { fail(`Could not delete the batch-created rule ${createdId}: ${err.message}. That is residue.`); }
     }
 
     // Negative: a category id that does not exist is refused by BOTH create tools.
     const ghost = "19999999-0000-4000-8000-000000000009";
     const ghostRule = { conditions: [{ field: "notes", op: "contains", value: batchMarker }], actions: [{ op: "set", field: "category", value: ghost }] };
     // callTool already unwraps the {result} envelope; accept both shapes, as the positive block above does.
-    const ghostOut = await callTool("actual_rules_create_batch", { rules: [ghostRule] });
+    const ghostOut = await callTool("manage_rules", { action: "create_batch", rules: [ghostRule] });
     const batchGhost = ghostOut?.result || ghostOut;
     const bge = batchGhost?.failed?.[0]?.error ?? "";
     if (batchGhost?.successCount === 0 && /not found/i.test(bge) && /available/i.test(bge) && bge.includes(ghost)) {
@@ -245,10 +251,10 @@ export async function rulesTests(client, context) {
       fail(`Batch negative: expected a not-found failure naming ${ghost}, got ${JSON.stringify(batchGhost).slice(0, 200)}`);
     }
     try {
-      const single = await callTool("actual_rules_create", ghostRule);
-      fail(`actual_rules_create accepted a dangling category id: ${JSON.stringify(single).slice(0, 120)}`);
+      const single = await callTool("manage_rules", { action: "create", ...ghostRule });
+      fail(`manage_rules create accepted a dangling category id: ${JSON.stringify(single).slice(0, 120)}`);
       const strayId = single.id || single.result?.id;
-      if (strayId) await callTool("actual_rules_delete", { id: strayId });
+      if (strayId) await callTool("manage_rules", { action: "delete", id: strayId });
     } catch (err) {
       const msg = String(err.message);
       if (/not found/i.test(msg) && /available/i.test(msg) && msg.includes(ghost)) console.log("  ok rules_create negative: dangling category refused with the available list");
@@ -258,10 +264,11 @@ export async function rulesTests(client, context) {
   }
 
   // rules_delete: negative UUID test then real delete(s) + verify
-  // FIXED(BUG-9): actual_rules_delete with nil-UUID now throws an actionable not-found error
+  // FIXED(BUG-9): manage_rules delete with nil-UUID now throws an actionable not-found error
   console.log("\nTesting rules_delete (negative UUID)...");
   try {
-    const nilResult = await callTool("actual_rules_delete", {
+    const nilResult = await callTool("manage_rules", {
+      action: "delete",
       id: '00000000-0000-0000-0000-000000000000',
     });
     const success = nilResult?.success ?? nilResult?.result?.success;
@@ -276,7 +283,7 @@ export async function rulesTests(client, context) {
 
   // Helper to list all rule IDs
   async function allRuleIds() {
-    const rd = await callTool("actual_rules_get", {});
+    const rd = await callTool("list_entities", { type: "rule" });
     const arr = rd.rules || rd.result || rd || [];
     return Array.isArray(arr) ? arr.map(r => r.id) : [];
   }
@@ -288,7 +295,7 @@ export async function rulesTests(client, context) {
     if (!id) { skip(`Skipping delete of ${label} (not in context)`); continue; }
     console.log(`\nDeleting ${label} (${id})...`);
     try {
-      await callTool("actual_rules_delete", { id });
+      await callTool("manage_rules", { action: "delete", id });
       console.log("✓ Delete call completed");
       const ids = await allRuleIds();
       if (ids.includes(id)) {
@@ -305,7 +312,7 @@ export async function rulesTests(client, context) {
   // Clean up disposable category/group created at the top of this function (if any).
   if (rulesOwnedCatId) {
     try {
-      await callTool("actual_categories_delete", { id: rulesOwnedCatId });
+      await callTool("manage_categories", { action: "delete", entity: "category", id: rulesOwnedCatId });
       context.categoryId = null;
       console.log("  ✓ Cleaned up disposable rules-test category");
     } catch (err) {
@@ -314,7 +321,7 @@ export async function rulesTests(client, context) {
   }
   if (rulesOwnedGroupId) {
     try {
-      await callTool("actual_category_groups_delete", { id: rulesOwnedGroupId });
+      await callTool("manage_categories", { action: "delete", entity: "category_group", id: rulesOwnedGroupId });
       console.log("  ✓ Cleaned up disposable rules-test category group");
     } catch (err) {
       fail(`Could not clean up the disposable rules-test category group: ${err.message}. That is residue.`);

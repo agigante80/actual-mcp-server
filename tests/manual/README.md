@@ -69,6 +69,8 @@ npm run test:integration:full
 npm run test:integration:cleanup
 ```
 
+The modules call the compact tools, so a direct `npm run test:integration:*` run against a non-legacy server (`MCP_TOOL_SURFACE=compact` publishes 15 tools, `all` publishes 100) must set `EXPECTED_TOOL_COUNT`.
+
 ### Direct invocation
 
 ```bash

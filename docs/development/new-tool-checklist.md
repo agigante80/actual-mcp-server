@@ -550,6 +550,25 @@ When implementing a new lookup tool, the `call` function should:
 
 ---
 
+## Compact flow
+
+The default surface is `compact`: 15 tools over 85 operations (the prose says "15 tools over 85 operations"; the anchored literals stay 85, #680 R6, so `npm run tool-count -- --fix` leaves no diff). Design record: [../explanation/compact-tool-surface.md](../explanation/compact-tool-surface.md). Steps 1 to 9 above still apply to the legacy tool; the compact layer adds the following. The prompt files in `tests/manual-prompt/` name compact tools and selector values, not `actual_*` names, so read Step 6 with that substitution.
+
+### (a) A new operation on an existing compact tool
+
+1. Add the legacy tool as today: `src/tools/<name>.ts` with `createTool()`, the export in `src/tools/index.ts`, `IMPLEMENTED_TOOLS`, and `src/lib/toolsets.ts` (`TOOLSETS`, plus `WRITE_CAPABLE` if it writes). It stays registered, hidden under `compact`, until #682.
+2. Add an action row or route with its `legacy` mapping in `src/compact/tools/<tool>.ts`, and list the action in that tool's description.
+3. Run `node tests/unit/compact_mapping_parity.test.js`; it must be green.
+4. Add a compact E2E row to `tests/e2e/docker-all-tools.e2e.spec.ts` with its negative, a call in a `tests/manual/tests/*.js` module, and a prompt scenario naming the tool and its selector value on one line (for example `manage_tags, action: "create"`). The completeness guard (`tests/unit/new_tool_completeness.test.js`) enforces all three.
+5. If `tests/unit/tools_list_size_budget.test.js` fails, raise `COMPACT_TOTAL_CEILING` by the measured growth, with a comment saying why.
+6. Update `docs/reference/tools.md`, run `npm run build && npm run docs:gen`, run `npm run tool-count`, and update the mapping table in section 7 of the design record.
+
+### (b) A new compact tool
+
+Forbidden unless another compact tool is merged or retired in the same change (decision 3, the 15-tool ceiling; a 16th tool would cost the Glama Tool Count score). When it is allowed, also touch `src/compact/registry.ts`, add a title in `src/lib/tool-titles.ts`, and update section 8 of the design record.
+
+---
+
 ## 📎 Files to Touch: Summary Table
 
 | File | What to change |
