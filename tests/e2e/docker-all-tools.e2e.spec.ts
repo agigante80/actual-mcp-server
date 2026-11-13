@@ -2765,6 +2765,42 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     const back = await mcp.call('actual_budgets_switch', { budgetName: originalName });
     expect(back?.success).toBe(true);
   });
+
+  // #678: the compact manage_budget_files rows live here, after the legacy round trip, for the
+  // same reason: they switch and import. The switch-back is registered as teardown FIRST.
+  test('manage_budget_files switch, export and import round trip', async ({ mcp, cleanup }) => {
+    const availableBefore = await mcp.call('actual_budgets_list_available');
+    const originalName = (Array.isArray(availableBefore) ? availableBefore : availableBefore?.budgets)?.[0]?.name;
+    expect(originalName, 'the configured budget must be resolvable before a switch').toBeTruthy();
+    cleanup.add(CLEANUP_ORDER.activeBudget, `restore active budget ${originalName}`, async () => {
+      await mcp.call('actual_budgets_switch', { budgetName: originalName });
+    });
+
+    const switched = JSON.parse((await mcp.raw('manage_budget_files', { action: 'switch', budget_name: originalName })).content[0].text);
+    expect(switched.success).toBe(true);
+
+    const exported = JSON.parse((await mcp.raw('manage_budget_files', { action: 'export', filename: 'e2e-compact-export' })).content[0].text);
+    expect(exported.result.success).toBe(true);
+    expect(exported.result.filename).toBe('e2e-compact-export.zip');
+    expect(exported.result.bytes).toBeGreaterThan(100);
+
+    const imported = JSON.parse((await mcp.raw('manage_budget_files', { action: 'import', path: exported.result.path })).content[0].text);
+    expect(imported.result.success).toBe(true);
+    expect(imported.result.source).toBe('path');
+
+    const back = JSON.parse((await mcp.raw('manage_budget_files', { action: 'switch', budget_name: originalName })).content[0].text);
+    expect(back.success).toBe(true);
+  });
+
+  test('manage_budget_files - ERROR: an unknown budget, both import sources and an unsafe export name are refused', async ({ mcp }) => {
+    const say = async (input: Record<string, unknown>): Promise<string> => {
+      try { await mcp.call('manage_budget_files', input); } catch (e: any) { return String(e?.message ?? e); }
+      return '';
+    };
+    expect(await say({ action: 'switch', budget_name: 'no-such-budget' })).toMatch(/not found in configuration/);
+    expect(await say({ action: 'import', path: '/a.zip', base64: 'QUJD' })).toMatch(/exactly one of/);
+    expect(await say({ action: 'export', filename: '../x' })).toMatch(/filename must start with a letter or digit/);
+  });
 });
 
 // ==================== COMPACT SURFACE (#672) ====================
@@ -3494,5 +3530,100 @@ test.describe('Docker E2E - compact manage_schedules (#677)', () => {
     expect(await refusal(() => mcp.call('manage_schedules', { action: 'update', name: 'x' }))).toMatch(/id.*required for action: update/);
     expect(await refusal(() => mcp.call('manage_schedules', { action: 'create', date: '13/11/2026' }))).toMatch(/date must be/);
     expect(await refusal(() => mcp.call('manage_schedules', { action: 'create', date: today(), amount: -100, amount_op: 'isbetween' }))).toMatch(/amount_op 'isbetween' needs amount/);
+  });
+});
+
+
+// #678: the compact manage_budget_months tool. Every write is read back through the legacy
+// actual_budgets_get_month and the touched amount, carryover, hold or note is restored by a
+// teardown registered before the write. mcp.raw is used so the assertion is on the exact
+// payload the compact tool returned (extractResult would unwrap { result }).
+test.describe('Docker E2E - compact manage_budget_months (#678)', () => {
+  const parse = (raw: any): any => JSON.parse(raw.content[0].text);
+  const catOf = async (mcp: any, id: string): Promise<any> => {
+    const month = await mcp.call('actual_budgets_get_month', { month: currentMonth() });
+    return ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []).find((c: any) => c?.id === id);
+  };
+  const restoreCategory = (cleanup: any, mcp: any, id: string) =>
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${id}`, async () => {
+      await mcp.call('actual_budgets_set_amount', { month: currentMonth(), categoryId: id, amount: 0 }).catch(() => undefined);
+      await mcp.call('actual_budgets_set_carryover', { month: currentMonth(), categoryId: id, flag: false }).catch(() => undefined);
+    });
+
+  test('manage_budget_months set_amount, set_amount_batch and set_carryover', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    restoreCategory(cleanup, mcp, category.id);
+    const month = currentMonth();
+
+    const set = parse(await mcp.raw('manage_budget_months', { action: 'set_amount', month, category_id: category.id, amount: 12300 }));
+    expect(set.success).not.toBe(false);
+    expect((await catOf(mcp, category.id))?.budgeted).toBe(12300);
+
+    const batch = parse(await mcp.raw('manage_budget_months', { action: 'set_amount_batch', operations: [{ month, categoryId: category.id, amount: 4500 }] }));
+    expect(batch.successCount).toBe(1);
+    expect(batch.failureCount).toBe(0);
+    expect((await catOf(mcp, category.id))?.budgeted).toBe(4500);
+
+    const co = parse(await mcp.raw('manage_budget_months', { action: 'set_carryover', month, category_id: category.id, flag: true }));
+    expect(co.success).toBe(true);
+    expect((await catOf(mcp, category.id))?.carryover).toBe(true);
+  });
+
+  test('manage_budget_months hold and reset_hold', async ({ mcp, makeAccount, cleanup }) => {
+    const month = currentMonth();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `reset hold for ${month}`, async () => {
+      await mcp.call('actual_budgets_reset_hold', { month });
+    });
+    await makeAccount({ balance: 500_000 });
+    const before = await mcp.call('actual_budgets_get_month', { month });
+    const heldBefore = Number(before?.forNextMonth ?? 0);
+
+    const held = parse(await mcp.raw('manage_budget_months', { action: 'hold', month, amount: 10000 }));
+    expect(held.held).toBe(10000);
+    const after = await mcp.call('actual_budgets_get_month', { month });
+    expect(Number(after?.forNextMonth ?? 0) - heldBefore).toBe(10000);
+
+    const reset = parse(await mcp.raw('manage_budget_months', { action: 'reset_hold', month }));
+    expect(reset.success).toBe(true);
+    const released = await mcp.call('actual_budgets_get_month', { month });
+    expect(Number(released?.forNextMonth ?? 0)).toBe(0);
+  });
+
+  test('manage_budget_months transfer', async ({ mcp, makeCategory, cleanup }) => {
+    const source = await makeCategory();
+    const target = await makeCategory({ group: { id: source.groupId, name: 'reused' } });
+    restoreCategory(cleanup, mcp, source.id);
+    restoreCategory(cleanup, mcp, target.id);
+    const month = currentMonth();
+    await mcp.call('manage_budget_months', { action: 'set_amount', month, category_id: source.id, amount: 20000 });
+
+    const moved = parse(await mcp.raw('manage_budget_months', { action: 'transfer', month, from_category_id: source.id, to_category_id: target.id, amount: 5000 }));
+    expect(moved.result.success).toBe(true);
+    expect(moved.result.transferred).toBe(5000);
+    expect((await catOf(mcp, source.id))?.budgeted).toBe(15000);
+    expect((await catOf(mcp, target.id))?.budgeted).toBe(5000);
+  });
+
+  test('manage_budget_months set_note', async ({ mcp, cleanup }) => {
+    const id = `budget-${currentMonth()}`;
+    const note = `E2E-MonthNote678-${uniqueSuffix()}`;
+    cleanup.add(CLEANUP_ORDER.note, `note on ${id}`, async () => {
+      await mcp.call('actual_notes_update', { id, note: '' });
+    });
+    const set = parse(await mcp.raw('manage_budget_months', { action: 'set_note', month: currentMonth(), note }));
+    expect(set.result.success).toBe(true);
+    expect(set.result.id).toBe(id);
+    expect((await mcp.call('actual_notes_get', { id })).note).toBe(note);
+
+    const cleared = parse(await mcp.raw('manage_budget_months', { action: 'set_note', month: currentMonth(), note: '' }));
+    expect(cleared.result.cleared).toBe(true);
+    expect((await mcp.call('actual_notes_get', { id })).found).toBe(false);
+  });
+
+  test('manage_budget_months - ERROR: a decimal amount, a zero hold and month 2026-13 are refused', async ({ mcp, makeCategory }) => {
+    const category = await makeCategory();
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: category.id, amount: 10.5 }))).toMatch(/amount/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'hold', month: currentMonth(), amount: 0 }))).toMatch(/amount must be greater than 0/);
+    expect(await refusal(() => mcp.call('manage_budget_months', { action: 'set_note', month: '2026-13', note: 'x' }))).toMatch(/month must be in YYYY-MM format/);
   });
 });

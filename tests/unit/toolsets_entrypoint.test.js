@@ -196,7 +196,7 @@ await check('an invalid MCP_TOOL_SURFACE value exits 1, naming the variable and 
 await check('MCP_TOOL_SURFACE=compact publishes exactly the compact tools over stdio, with annotations and titles (#672)', async () => {
   const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact' }, [INIT, INITIALIZED, LIST]);
   const tools = res.get(2).result.tools;
-  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags', 'manage_rules', 'manage_schedules']);
+  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags', 'manage_rules', 'manage_schedules', 'manage_budget_months', 'manage_budget_files']);
   for (const t of tools) {
     assert.strictEqual(t.annotations.readOnlyHint, !t.name.startsWith('manage_'), `${t.name} readOnlyHint (the manage_ tools write, #675, #676)`);
     assert.ok(typeof t.title === 'string' && t.title.length > 0, `${t.name} title`);

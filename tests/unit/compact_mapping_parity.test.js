@@ -40,17 +40,8 @@ console.log('\n[compact-mapping-parity]');
 
 const OUT_OF_SCOPE = ['actual_session_list', 'actual_session_close'];
 
-const PENDING = [
-  'actual_budget_updates_batch',
-  'actual_budgets_export',
-  'actual_budgets_hold_for_next_month',
-  'actual_budgets_import',
-  'actual_budgets_reset_hold',
-  'actual_budgets_set_amount',
-  'actual_budgets_set_carryover',
-  'actual_budgets_switch',
-  'actual_budgets_transfer',
-];
+// #678 mapped the last pending tools: every legacy tool is now mapped or out of scope.
+const PENDING = [];
 
 /** Returns the list of problems (empty means parity holds). */
 function parityProblems({ legacyNames, compactTools, outOfScope, pending, shared = new Map() }) {
@@ -160,6 +151,11 @@ await check('NEGATIVE: a route naming an unregistered tool is reported', () => {
   const specs = [{ name: 'actual_fx', actions: new Map([['a', { ...row('actual_accounts_list'), routes: [{ ...row('actual_nope_nothing'), triggers: ['q'] }] }]]) }];
   const problems = parityProblems({ legacyNames, compactTools: specs, outOfScope: OUT_OF_SCOPE, pending: without(FX_PENDING, 'actual_accounts_list') });
   assert.ok(problems.some((p) => /actual_nope_nothing/.test(p)), problems.join('; '));
+});
+
+await check('PENDING is empty: the compact surface covers every legacy tool but the session tools', () => {
+  assert.deepStrictEqual(PENDING, []);
+  assert.deepStrictEqual(OUT_OF_SCOPE, ['actual_session_list', 'actual_session_close']);
 });
 
 await check('shipped: entities_search and get_id_by_name are counted once, under list_entities', () => {

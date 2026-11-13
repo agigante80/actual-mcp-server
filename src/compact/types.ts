@@ -35,6 +35,12 @@ export interface CompactTarget {
   wrap?: { into: string; top: readonly string[] };
   /** Compact keys the compact layer consumes itself and never forwards (a default-valued switch). */
   drop?: readonly string[];
+  /**
+   * A value hook (#678): runs on the VALIDATED compact arguments, before rename, drop, wrap and
+   * `fixed`, and returns the arguments to shape. For a value translation a key rename cannot
+   * express, such as turning `month: "2026-11"` into `id: "budget-2026-11"`. Never sees unvalidated input.
+   */
+  build?: (args: Readonly<Record<string, unknown>>) => Record<string, unknown>;
   /** Legacy arguments the compact layer sets itself (a value translation such as `type: "accounts"`). Win over a caller key. */
   fixed?: Readonly<Record<string, unknown>>;
 }

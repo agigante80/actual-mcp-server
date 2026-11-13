@@ -120,6 +120,9 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   manage_tags: 'Manage tags',
   manage_rules: 'Manage rules',
   manage_schedules: 'Manage schedules',
+  // Compact tools (#678).
+  manage_budget_months: 'Manage budget months',
+  manage_budget_files: 'Manage budget files',
 };
 
 /** The display title for a tool, or undefined when it has none (the builder then omits it). */

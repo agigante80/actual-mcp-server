@@ -126,6 +126,8 @@ const DESTRUCTIVE = new Set<string>([
   'manage_tags',
   'manage_rules',
   'manage_schedules',
+  // Compact tools (#678): manage_budget_files imports and exports (both destructive today); manage_budget_months only sets fields in place, so it is ADDITIVE.
+  'manage_budget_files',
   'actual_account_groups_delete',
   'actual_accounts_close',
   'actual_accounts_delete',
@@ -213,6 +215,7 @@ const ADDITIVE = new Set<string>([
   'actual_tags_create',
   'actual_tags_update',
   'actual_notes_update',
+  'manage_budget_months',
 ]);
 
 /**

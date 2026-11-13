@@ -306,6 +306,8 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `compact_manage_tags.test.js` | #676: `manage_tags`: three actions map to the exact legacy name and arguments, flat update; empty update keeps the legacy refusal message, unknown fields, bad ids and empty tags refused; read-only hides it; not open-world |
 | `compact_manage_rules.test.js` | #677: `manage_rules`: five actions map to the exact legacy name and arguments with no injected default; `conditions_op` renamed, camelCase kept inside batch items and a snake_case item key refused; update action without `op`, 51 rules, delete with conditions refused; a legacy validation error and the rewrite of a legacy name pass through; read-only hides all five |
 | `compact_manage_schedules.test.js` | #677: `manage_schedules`: three actions map to the exact legacy name and arguments; `amount_op` and `reset_next_date` renamed, no default injected; bad date, isbetween without a range (the translated #527 text), null on create and on non-clearable keys, delete with extra keys refused; the published `type` arrays carry no `anyOf`; read-only hides all three |
+| `compact_manage_budget_months.test.js` | #678: `manage_budget_months`: seven actions map to the exact legacy name and arguments, `set_note` builds `budget-<month>`; missing and foreign keys, decimal amounts, hold and transfer amount 0, month 2026-13, same-category transfer, batch item rules refused with nothing called; a legacy name in an error is rewritten; read-only hides all seven |
+| `compact_manage_budget_files.test.js` | #678: `manage_budget_files`: three actions map to the exact legacy name and arguments, no default `type` injected; unsafe budget name, both or neither import source, bad base64, unsafe export filename, foreign keys refused with nothing called; the description states the destructive semantics; read-only hides all three |
 | `compact_manage_transactions.test.js` | #675: `manage_transactions`: each of the seven actions maps to the exact legacy name and arguments; per-action required fields, null only for update, strict id, date and amount rules, batch bounds, merge ids and transfer refusals name `manage_transactions`; read-only hides it; annotations are destructive |
 | `startup_record.test.js` | #623: the pure `sys_startup` builder: keys exactly the allowlist on HTTP, stdio and OIDC; no secret, name, bind address or URL path; auth mode, posture, bearer and principal facts; `bindScope`; paths and logging fields; version and count parity with `actual_server_info` |
 | `startup_record_child.test.js` | #623: the built entrypoint: the record on stderr at info under stdio with a clean stdout before the first frame, the real port on HTTP, and no record when the port is taken (exit 1, `sys_crash`) or a weak token refuses a non-loopback bind |
@@ -1014,8 +1016,8 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `toolsets.test.js` | Toolset policy: partition, preset, read-only set and its call-graph guard, refusal, fail-closed (#483); alias policy (#652) | 58 |
 | `toolsets_entrypoint.test.js` | Entrypoint spawn: filtered list over stdio and HTTP, refusal, startup failures (#483) | 10 |
 | `config_tool_surface.test.js` | `MCP_TOOL_SURFACE` parsing and its exclusion of `MCP_TOOLSETS` and `MCP_TOOLS` under `compact` (#671) | 19 |
-| `compact_dispatch.test.js` | Compact surface: resolver, dispatcher, routes, 4b rewrite, `callOperation` bypass, import guard (#671, #672) | 51 |
-| `compact_mapping_parity.test.js` | Every legacy tool mapped, out of scope or pending exactly once; routes counted under one compact tool, `notes_update` shared from `set_note` (#671, #672, #676, #677) | 12 |
+| `compact_dispatch.test.js` | Compact surface: resolver, dispatcher, routes, 4b rewrite, `callOperation` bypass, import guard, `build` hook (#671, #672, #678) | 61 |
+| `compact_mapping_parity.test.js` | Every legacy tool mapped, out of scope or pending exactly once; routes counted under one compact tool, `notes_update` shared from `set_note`, PENDING empty (#671, #672, #676, #677, #678) | 13 |
 | `compact_get_context.test.js` | Compact `get_context`: routing, refusals, schema shape (#672) | 19 |
 | `compact_list_entities.test.js` | Compact `list_entities`: defaults, routes, refusals, 4b rewrite (#672) | 51 |
 | `compact_search_transactions.test.js` | Compact `search_transactions`: seven rows, refusals, schema shape, 4b rewrite (#673) | 30 |
@@ -1029,6 +1031,8 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `compact_manage_tags.test.js` | Compact `manage_tags`: three actions, refusals, read-only, size, annotations (#676) | 19 |
 | `compact_manage_rules.test.js` | Compact `manage_rules`: five actions, refusals, batch item keys, legacy passthrough, read-only (#677) | 33 |
 | `compact_manage_schedules.test.js` | Compact `manage_schedules`: three actions, date and amount unions, refusals, read-only (#677) | 27 |
+| `compact_manage_budget_months.test.js` | Compact `manage_budget_months`: seven actions, refusals, rewrite, read-only (#678) | 28 |
+| `compact_manage_budget_files.test.js` | Compact `manage_budget_files`: three actions, refusals, destructive description, read-only (#678) | 21 |
 | `startup_record.test.js` | `sys_startup` builder: allowlist, privacy, auth facts, `actual_server_info` parity (#623) | 19 |
 | `startup_record_child.test.js` | Entrypoint spawn: record on stdio and HTTP, none on a taken port or a refused start (#623) | 5 |
 | `http_shutdown_handler.test.js` | Shutdown factory and 503 gate: order, in-flight wait, state, second signal, failing cleanup and close, deadline, per-instance state, gate refusal and counting, mount order, drain wiring (#632) | 17 |

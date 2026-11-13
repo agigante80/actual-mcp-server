@@ -21,7 +21,8 @@ function unknownActionError(selector: string, spec: CompactToolSpec, got: unknow
 }
 
 /** Rename, drop, wrap and fix one already-validated payload into the legacy tool's argument shape. */
-function shapeArgs(target: CompactTarget, parsed: Record<string, unknown>): Record<string, unknown> {
+function shapeArgs(target: CompactTarget, validated: Record<string, unknown>): Record<string, unknown> {
+  const parsed = target.build ? target.build(validated) : validated;
   const rename = target.rename ?? {};
   const drop = new Set(target.drop ?? []);
   const renamed: Record<string, unknown> = {};

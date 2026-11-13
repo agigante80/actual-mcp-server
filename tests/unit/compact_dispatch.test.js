@@ -199,6 +199,35 @@ await check('dispatch: wrap always sends the wrapper object, even with nothing i
   assert.deepStrictEqual(calls[0].args, { id: 'a1', fields: {} });
 });
 
+const withBuild = {
+  name: 'actual_fixture_build',
+  description: 'Fixture compact tool with a build hook.',
+  actions: new Map([
+    [
+      'update',
+      {
+        legacy: UPDATE,
+        fields: z.object({ month: z.string(), note: z.string() }),
+        build: (a) => ({ id: `budget-${String(a.month)}`, note: a.note }),
+      },
+    ],
+  ]),
+};
+
+await check('dispatch: build derives the legacy arguments from the validated ones', async () => {
+  await init({ surface: 'all' }, [withBuild]);
+  calls.length = 0;
+  await manager.callTool(withBuild.name, { action: 'update', month: '2026-11', note: 'n' });
+  assert.deepStrictEqual(calls, [{ n: UPDATE, args: { id: 'budget-2026-11', note: 'n' } }]);
+});
+
+await check('NEGATIVE: build never runs on arguments that fail validation, nothing is called', async () => {
+  await init({ surface: 'all' }, [withBuild]);
+  calls.length = 0;
+  await assert.rejects(() => manager.callTool(withBuild.name, { action: 'update', month: '2026-11' }), /note/);
+  assert.strictEqual(calls.length, 0);
+});
+
 await check('dispatch: defaultAction runs when the selector is absent', async () => {
   await init({ surface: 'all' }, [withDefault]);
   calls.length = 0;
@@ -549,7 +578,7 @@ await check('NEGATIVE: flat typing: two different name objects still publish an 
 // ---- registry and source guards ----
 
 await check('the shipped registry holds exactly the eleven compact tools so far (#672 to #676)', () => {
-  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags', 'manage_rules', 'manage_schedules']);
+  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees', 'manage_tags', 'manage_rules', 'manage_schedules', 'manage_budget_months', 'manage_budget_files']);
 });
 
 await check('src/compact/ never imports the adapter or @actual-app/api, and never calls .call(', () => {
