@@ -267,16 +267,18 @@ test.describe('Docker E2E - tool surface', () => {
   // ==================== INITIALIZE INSTRUCTIONS (#560) ====================
   // The two legs run in separate Playwright invocations, so "stdio equals HTTP" is proven by
   // both legs equalling this one expected text: buildServerInstructions() for the full registry,
-  // not read-only, which is what this stack runs. The builder names the LEGACY context and query
-  // tools only when the legacy set is published (the compact surface has neither), so the names
-  // are taken from this session's own tool list rather than written here, and the text is right
-  // under every MCP_TOOL_SURFACE. A change to the builder text fails BOTH legs here until this
+  // not read-only, which is what this stack runs. The builder names the compact context and query
+  // tools when they are published and the legacy ones otherwise (#680), so the names are taken
+  // from this session's own tool list rather than written here, and the text is right under
+  // every MCP_TOOL_SURFACE. A change to the builder text fails BOTH legs here until this
   // is updated, which is the point. The per-preset and read-only texts are unit-level only
   // (tests/unit/server_instructions.test.js).
   const expectedInstructions = (toolNames: string[]): string => {
-    const pick = (suffix: string) => toolNames.find((n) => n.startsWith('actual_') && n.endsWith(suffix));
-    const ctx = pick('_get_context');
-    const query = pick('_query_run');
+    // #680: the builder names the compact tool when it is published, else the legacy one.
+    const pick = (compact: string, legacy: string) =>
+      toolNames.includes(compact) ? compact : toolNames.includes(legacy) ? legacy : undefined;
+    const ctx = pick('get_context', 'actual_get_context');
+    const query = pick('run_query', 'actual_query_run');
     let text = 'This server exposes an Actual Budget through MCP tools. ' +
       'Amounts are integer cents (5000 is 50.00, negative is an outflow) and dates are YYYY-MM-DD strings.';
     if (ctx) {
