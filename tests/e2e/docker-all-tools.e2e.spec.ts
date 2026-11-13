@@ -83,10 +83,10 @@ test.describe('Docker E2E - ALL 85 TOOLS', () => {
     expect(ann('actual_accounts_delete')?.destructiveHint).toBe(true);
 
     // The default this server corrects 73 times out of 74: the spec defaults openWorldHint
-    // to TRUE, and this server's domain is one Actual instance. Only bank sync reaches a
-    // third party.
+    // to TRUE, and this server's domain is one Actual instance. Only bank sync, and
+    // manage_accounts whose bank_sync action is the same call (#676), reaches a third party.
     const open = tools.filter((t: any) => t.annotations?.openWorldHint).map((t: any) => t.name);
-    expect(open).toEqual(['actual_bank_sync']);
+    expect([...open].sort()).toEqual(['actual_bank_sync', 'manage_accounts']);
 
     // Idempotence matches what the write-effect audit established, rather than being guessed:
     // upstream ADDS to the hold buffer, so repeating the call holds twice (#355).
@@ -3143,5 +3143,205 @@ test.describe('Docker E2E - compact manage_transactions (#675)', () => {
       message = String((err as Error).message);
     }
     expect(message).toMatch(/\bid\b/);
+  });
+});
+
+// #676: the compact manage_accounts, manage_categories and manage_payees tools. Entities are made
+// through the compact tool and registered for cleanup BEFORE any assertion; reads go through the
+// legacy readers, which are a separate code path from the writes under test.
+const refusal = async (fn: () => Promise<any>): Promise<string> => {
+  try {
+    const r = await fn();
+    return r?.success === false ? String(r.error ?? 'refused') : '';
+  } catch (err) {
+    return String((err as Error).message);
+  }
+};
+
+test.describe('Docker E2E - compact manage_accounts (#676)', () => {
+  test('manage_accounts create and delete - an account is made and removed', async ({ mcp, cleanup }) => {
+    const name = `E2E-Acct676-${uniqueSuffix()}`;
+    const id = await mcp.call('manage_accounts', { action: 'create', entity: 'account', name, balance: 0 });
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.account, `account ${name}`, async () => {
+      await mcp.call('actual_accounts_delete', { id }).catch(() => undefined);
+    });
+    const listed = (await mcp.call('actual_accounts_list')) as any[];
+    expect(listed.some((a: any) => a?.id === id && a?.name === name)).toBe(true);
+    await mcp.call('manage_accounts', { action: 'delete', entity: 'account', id });
+    const after = (await mcp.call('actual_accounts_list')) as any[];
+    expect(after.some((a: any) => a?.id === id)).toBe(false);
+  });
+
+  test('manage_accounts update - renames the account', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const name = `E2E-Acct676-Renamed-${uniqueSuffix()}`;
+    await mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, name });
+    const listed = (await mcp.call('actual_accounts_list')) as any[];
+    expect(listed.find((a: any) => a?.id === account.id)?.name).toBe(name);
+  });
+
+  test('manage_accounts close and reopen - an account with a transaction is closed then reopened', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount({ seedTransaction: true });
+    await mcp.call('manage_accounts', { action: 'close', id: account.id });
+    const closed = ((await mcp.call('actual_accounts_list')) as any[]).find((a: any) => a?.id === account.id);
+    expect(closed?.closed).toBeTruthy();
+    await mcp.call('manage_accounts', { action: 'reopen', id: account.id });
+    const reopened = ((await mcp.call('actual_accounts_list')) as any[]).find((a: any) => a?.id === account.id);
+    expect(reopened?.closed).toBeFalsy();
+  });
+
+  test('manage_accounts account_group - create, update and delete a group', async ({ mcp, cleanup }) => {
+    const name = `E2E-AcctGroup676-${uniqueSuffix()}`;
+    const data = await mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name });
+    const id = typeof data === 'string' ? data : (data as any)?.id;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
+      await mcp.call('actual_account_groups_delete', { id }).catch(() => undefined);
+    });
+    const renamed = `${name}-renamed`;
+    await mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id, name: renamed });
+    const groups = ((await mcp.call('actual_account_groups_list')) ?? []) as any[];
+    expect(groups.find((g: any) => g?.id === id)?.name).toBe(renamed);
+    await mcp.call('manage_accounts', { action: 'delete', entity: 'account_group', id });
+    const after = ((await mcp.call('actual_account_groups_list')) ?? []) as any[];
+    expect(after.some((g: any) => g?.id === id)).toBe(false);
+  });
+
+  test('manage_accounts set_note - writes the note, readable through actual_notes_get', async ({ mcp, makeAccount, cleanup }) => {
+    const account = await makeAccount();
+    cleanup.add(CLEANUP_ORDER.note, `note ${account.id}`, async () => {
+      await mcp.call('actual_notes_update', { id: account.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_accounts', { action: 'set_note', id: account.id, note: 'note-676' });
+    expect((await mcp.call('actual_notes_get', { id: account.id }))?.note).toBe('note-676');
+  });
+
+  test('manage_accounts bank_sync - ERROR: an unknown account and a local account are refused', async ({ mcp, makeAccount }) => {
+    const unknown = await refusal(() => mcp.call('manage_accounts', { action: 'bank_sync', account_id: '00000000-0000-4000-8000-000000000000' }));
+    expect(unknown).toMatch(/not found|not configured|local account/i);
+    const account = await makeAccount();
+    const local = await refusal(() => mcp.call('manage_accounts', { action: 'bank_sync', account_id: account.id }));
+    expect(local).toMatch(/not found|not configured|local account|linked/i);
+  });
+
+  test('manage_accounts - ERROR: an unknown action, a missing entity and a wrong entity key name the problem', async ({ mcp }) => {
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'frobnicate' }))).toMatch(/action/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', name: 'x' }))).toMatch(/entity/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name: 'x', balance: 5 }))).toMatch(/balance/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account_group', id: '00000000-0000-4000-8000-000000000000' }))).toMatch(/close accepts only account/);
+  });
+});
+
+test.describe('Docker E2E - compact manage_categories (#676)', () => {
+  test('manage_categories category_group create, update and delete', async ({ mcp, cleanup }) => {
+    const name = `E2E-CatGroup676-${uniqueSuffix()}`;
+    const data = await mcp.call('manage_categories', { action: 'create', entity: 'category_group', name });
+    const id = typeof data === 'string' ? data : (data as any)?.id;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.categoryGroup, `category group ${name}`, async () => {
+      await mcp.call('actual_category_groups_delete', { id }).catch(() => undefined);
+    });
+    const renamed = `${name}-renamed`;
+    await mcp.call('manage_categories', { action: 'update', entity: 'category_group', id, name: renamed });
+    const groups = (await mcp.call('actual_category_groups_get')) as any;
+    const list = (Array.isArray(groups) ? groups : (groups?.groups ?? [])) as any[];
+    expect(list.find((g: any) => g?.id === id)?.name).toBe(renamed);
+    await mcp.call('manage_categories', { action: 'delete', entity: 'category_group', id });
+    const after = (await mcp.call('actual_category_groups_get')) as any;
+    expect(((Array.isArray(after) ? after : (after?.groups ?? [])) as any[]).some((g: any) => g?.id === id)).toBe(false);
+  });
+
+  test('manage_categories category create, update and delete', async ({ mcp, makeCategoryGroup, cleanup }) => {
+    const group = await makeCategoryGroup();
+    const name = `E2E-Cat676-${uniqueSuffix()}`;
+    const raw = await mcp.call('manage_categories', { action: 'create', entity: 'category', name, group_id: group.id });
+    const id = (typeof raw === 'string' ? raw : (raw?.categoryId ?? raw?.id)) as string;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.category, `category ${name}`, async () => {
+      await mcp.call('actual_categories_delete', { id }).catch(() => undefined);
+    });
+    const renamed = `${name}-renamed`;
+    await mcp.call('manage_categories', { action: 'update', entity: 'category', id, name: renamed });
+    const read = async () => {
+      const d = (await mcp.call('actual_categories_get')) as any;
+      return (Array.isArray(d) ? d : (d?.categories ?? d?.result ?? [])) as any[];
+    };
+    expect((await read()).find((c: any) => c?.id === id)?.name).toBe(renamed);
+    await mcp.call('manage_categories', { action: 'delete', entity: 'category', id });
+    expect((await read()).some((c: any) => c?.id === id)).toBe(false);
+  });
+
+  test('manage_categories set_note - writes the note, readable through actual_notes_get', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.note, `note ${category.id}`, async () => {
+      await mcp.call('actual_notes_update', { id: category.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: 'cat-note-676' });
+    expect((await mcp.call('actual_notes_get', { id: category.id }))?.note).toBe('cat-note-676');
+  });
+
+  test('manage_categories - ERROR: missing entity, missing group_id, hidden on a category and an empty update', async ({ mcp }) => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'create', name: 'x' }))).toMatch(/entity/);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'create', entity: 'category', name: 'x' }))).toMatch(/group_id/);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'create', entity: 'category', name: 'x', group_id: id, hidden: true }))).toMatch(/hidden/);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'update', entity: 'category', id }))).toMatch(/at least one of/);
+    expect(await refusal(() => mcp.call('manage_categories', { action: 'set_note', id: 'budget-2026-01', note: 'x' }))).toMatch(/id/);
+  });
+});
+
+test.describe('Docker E2E - compact manage_payees (#676)', () => {
+  const payeesOf = async (mcp: any): Promise<any[]> => {
+    const d = await mcp.call('actual_payees_get');
+    return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+  };
+
+  test('manage_payees create, update and delete', async ({ mcp, cleanup }) => {
+    const name = `E2E-Payee676-${uniqueSuffix()}`;
+    const id = (await mcp.call('manage_payees', { action: 'create', name })) as string;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.payee, `payee ${name}`, async () => {
+      await mcp.call('actual_payees_delete', { id }).catch(() => undefined);
+    });
+    expect((await payeesOf(mcp)).some((p: any) => p?.id === id && p?.name === name)).toBe(true);
+    const renamed = `${name}-renamed`;
+    await mcp.call('manage_payees', { action: 'update', id, name: renamed });
+    expect((await payeesOf(mcp)).find((p: any) => p?.id === id)?.name).toBe(renamed);
+    await mcp.call('manage_payees', { action: 'delete', id });
+    expect((await payeesOf(mcp)).some((p: any) => p?.id === id)).toBe(false);
+  });
+
+  test('manage_payees merge - the sources are gone and the target stays', async ({ mcp, makePayee }) => {
+    const target = await makePayee();
+    const doomed = await makePayee();
+    await mcp.call('manage_payees', { action: 'merge', target_id: target.id, merge_ids: [doomed.id] });
+    const rows = await payeesOf(mcp);
+    expect(rows.some((p: any) => p?.id === target.id)).toBe(true);
+    expect(rows.some((p: any) => p?.id === doomed.id)).toBe(false);
+  });
+
+  test('manage_payees merge - ERROR: a target that is also a source is refused', async ({ mcp, makePayee }) => {
+    const target = await makePayee();
+    const message = await refusal(() => mcp.call('manage_payees', { action: 'merge', target_id: target.id, merge_ids: [target.id] }));
+    expect(message).toMatch(/both the merge target and a merge source|target/i);
+    expect((await payeesOf(mcp)).some((p: any) => p?.id === target.id)).toBe(true);
+  });
+
+  test('manage_payees set_note - writes the note, readable through actual_notes_get', async ({ mcp, makePayee, cleanup }) => {
+    const payee = await makePayee();
+    cleanup.add(CLEANUP_ORDER.note, `note ${payee.id}`, async () => {
+      await mcp.call('actual_notes_update', { id: payee.id, note: '' }).catch(() => undefined);
+    });
+    await mcp.call('manage_payees', { action: 'set_note', id: payee.id, note: 'payee-note-676' });
+    expect((await mcp.call('actual_notes_get', { id: payee.id }))?.note).toBe('payee-note-676');
+  });
+
+  test('manage_payees - ERROR: an unknown action, an empty update, an empty merge list and a bad id name the problem', async ({ mcp }) => {
+    const id = '00000000-0000-4000-8000-000000000000';
+    expect(await refusal(() => mcp.call('manage_payees', { action: 'frobnicate' }))).toMatch(/action/);
+    expect(await refusal(() => mcp.call('manage_payees', { action: 'update', id }))).toMatch(/at least one of/);
+    expect(await refusal(() => mcp.call('manage_payees', { action: 'merge', target_id: id, merge_ids: [] }))).toMatch(/merge_ids/);
+    expect(await refusal(() => mcp.call('manage_payees', { action: 'delete', id: 'nope' }))).toMatch(/\bid\b/);
   });
 });

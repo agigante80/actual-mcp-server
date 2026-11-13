@@ -13,6 +13,11 @@
 // may be the target of several rows or routes of the SAME compact tool (actual_entities_search
 // and actual_get_id_by_name serve every list_entities type) but never of two compact tools.
 //
+// #676: `actual_notes_update` is the one legacy tool several compact tools may map, because notes
+// belong to many entity types (design record section 7, row 83). The SHARED map names the only
+// action it may be mapped from, `set_note`; mapped from any other action by a second tool it is
+// still "mapped twice".
+//
 // The check is defined here, then run twice: on the real registry, and on fixtures that
 // prove it can fail (it must name the missing tool).
 //
@@ -36,15 +41,6 @@ console.log('\n[compact-mapping-parity]');
 const OUT_OF_SCOPE = ['actual_session_list', 'actual_session_close'];
 
 const PENDING = [
-  'actual_account_groups_create',
-  'actual_account_groups_delete',
-  'actual_account_groups_update',
-  'actual_accounts_close',
-  'actual_accounts_create',
-  'actual_accounts_delete',
-  'actual_accounts_reopen',
-  'actual_accounts_update',
-  'actual_bank_sync',
   'actual_budget_updates_batch',
   'actual_budgets_export',
   'actual_budgets_hold_for_next_month',
@@ -54,17 +50,6 @@ const PENDING = [
   'actual_budgets_set_carryover',
   'actual_budgets_switch',
   'actual_budgets_transfer',
-  'actual_categories_create',
-  'actual_categories_delete',
-  'actual_categories_update',
-  'actual_category_groups_create',
-  'actual_category_groups_delete',
-  'actual_category_groups_update',
-  'actual_notes_update',
-  'actual_payees_create',
-  'actual_payees_delete',
-  'actual_payees_merge',
-  'actual_payees_update',
   'actual_rules_create',
   'actual_rules_create_batch',
   'actual_rules_create_or_update',
@@ -79,21 +64,26 @@ const PENDING = [
 ];
 
 /** Returns the list of problems (empty means parity holds). */
-function parityProblems({ legacyNames, compactTools, outOfScope, pending }) {
+function parityProblems({ legacyNames, compactTools, outOfScope, pending, shared = new Map() }) {
   const problems = [];
   const legacy = new Set(legacyNames);
-  const mapped = new Map(); // legacy name -> the one compact tool that owns it
+  const uses = new Map(); // legacy name -> [{ tool, action }] in registry order
   for (const spec of compactTools) {
     for (const [action, row] of spec.actions) {
       const targets = [row, ...(row.routes ?? [])];
       for (const t of targets) {
-        const where = `${spec.name}.${action}`;
-        if (!legacy.has(t.legacy)) problems.push(`${where} maps to unregistered tool ${t.legacy}`);
-        const owner = mapped.get(t.legacy);
-        if (owner !== undefined && owner !== spec.name) problems.push(`${t.legacy} is mapped twice: ${owner} and ${spec.name}`);
-        mapped.set(t.legacy, owner ?? spec.name);
+        if (!legacy.has(t.legacy)) problems.push(`${spec.name}.${action} maps to unregistered tool ${t.legacy}`);
+        uses.set(t.legacy, [...(uses.get(t.legacy) ?? []), { tool: spec.name, action }]);
       }
     }
+  }
+  const mapped = new Set(uses.keys());
+  for (const [name, list] of uses) {
+    const tools = [...new Set(list.map((u) => u.tool))];
+    if (tools.length < 2) continue;
+    // A shared operation is fine only when EVERY use is from its allowed action.
+    if (shared.has(name) && list.every((u) => u.action === shared.get(name))) continue;
+    problems.push(`${name} is mapped twice: ${tools[0]} and ${tools[1]}`);
   }
   const out = new Set(outOfScope);
   const pend = new Set(pending);
@@ -111,9 +101,10 @@ const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
 await manager.initialize();
 const legacyNames = manager.getToolNames();
 const { z } = await import('zod');
+const SHARED = new Map([['actual_notes_update', 'set_note']]);
 
 await check('the real registry accounts for every legacy tool exactly once', () => {
-  const problems = parityProblems({ legacyNames, compactTools: COMPACT_TOOLS, outOfScope: OUT_OF_SCOPE, pending: PENDING });
+  const problems = parityProblems({ legacyNames, compactTools: COMPACT_TOOLS, outOfScope: OUT_OF_SCOPE, pending: PENDING, shared: SHARED });
   assert.deepStrictEqual(problems, []);
 });
 
@@ -142,6 +133,26 @@ await check('NEGATIVE: a tool mapped by two different compact tools is reported'
   ];
   const problems = parityProblems({ legacyNames, compactTools: specs, outOfScope: OUT_OF_SCOPE, pending: without(FX_PENDING, 'actual_accounts_list') });
   assert.ok(problems.some((p) => /actual_accounts_list is mapped twice: actual_fx and actual_fy/.test(p)), problems.join('; '));
+});
+
+const notesFx = (a, b) => [
+  { name: 'actual_fx', actions: new Map([[a, row('actual_notes_update')]]) },
+  { name: 'actual_fy', actions: new Map([[b, row('actual_notes_update')]]) },
+];
+const notesPending = without(FX_PENDING, 'actual_notes_update');
+
+await check('a shared operation may be mapped by several tools from its allowed action', () => {
+  assert.deepStrictEqual(parityProblems({ legacyNames, compactTools: notesFx('set_note', 'set_note'), outOfScope: OUT_OF_SCOPE, pending: notesPending, shared: SHARED }), []);
+});
+
+await check('NEGATIVE: a shared operation mapped from another action by a second tool is reported', () => {
+  const problems = parityProblems({ legacyNames, compactTools: notesFx('set_note', 'update'), outOfScope: OUT_OF_SCOPE, pending: notesPending, shared: SHARED });
+  assert.ok(problems.some((p) => /actual_notes_update is mapped twice: actual_fx and actual_fy/.test(p)), problems.join('; '));
+});
+
+await check('NEGATIVE: an operation not in the shared map is still mapped twice', () => {
+  const problems = parityProblems({ legacyNames, compactTools: notesFx('set_note', 'set_note'), outOfScope: OUT_OF_SCOPE, pending: notesPending });
+  assert.ok(problems.some((p) => /actual_notes_update is mapped twice/.test(p)), problems.join('; '));
 });
 
 await check('one compact tool may map a legacy tool from several rows and routes (counted once)', () => {

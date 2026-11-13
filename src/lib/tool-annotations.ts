@@ -38,10 +38,10 @@
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js';
 
 /**
- * The ONLY tool that reaches outside this Actual instance. Bank sync calls a third-party
+ * The tools that reach outside this Actual instance: bank sync (and manage_accounts, whose bank_sync action is the same call, #676) calls a third-party
  * aggregator (GoCardless / SimpleFIN), which is the textbook "open world".
  */
-const OPEN_WORLD = new Set<string>(['actual_bank_sync']);
+const OPEN_WORLD = new Set<string>(['actual_bank_sync', 'manage_accounts']);
 
 /**
  * Tools that provably change NOTHING. Verified mechanically by
@@ -119,6 +119,10 @@ const READ_ONLY = new Set<string>([
 const DESTRUCTIVE = new Set<string>([
   // Compact tool (#675): delete and merge remove rows, so the tool is destructive as a whole.
   'manage_transactions',
+  // Compact tools (#676): each has a delete action (accounts also close, payees also merge).
+  'manage_accounts',
+  'manage_categories',
+  'manage_payees',
   'actual_account_groups_delete',
   'actual_accounts_close',
   'actual_accounts_delete',

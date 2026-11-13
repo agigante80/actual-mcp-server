@@ -196,15 +196,15 @@ await check('an invalid MCP_TOOL_SURFACE value exits 1, naming the variable and 
 await check('MCP_TOOL_SURFACE=compact publishes exactly the compact tools over stdio, with annotations and titles (#672)', async () => {
   const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact' }, [INIT, INITIALIZED, LIST]);
   const tools = res.get(2).result.tools;
-  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions']);
+  assert.deepStrictEqual(tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions', 'manage_accounts', 'manage_categories', 'manage_payees']);
   for (const t of tools) {
-    assert.strictEqual(t.annotations.readOnlyHint, t.name !== 'manage_transactions', `${t.name} readOnlyHint (manage_transactions writes, #675)`);
+    assert.strictEqual(t.annotations.readOnlyHint, !t.name.startsWith('manage_'), `${t.name} readOnlyHint (the manage_ tools write, #675, #676)`);
     assert.ok(typeof t.title === 'string' && t.title.length > 0, `${t.name} title`);
     assert.strictEqual(t.outputSchema, undefined, `${t.name} has no outputSchema`);
   }
 });
 
-await check('MCP_TOOL_SURFACE=compact under MCP_READ_ONLY=true publishes every compact tool except the writer manage_transactions (#672, #673, #675)', async () => {
+await check('MCP_TOOL_SURFACE=compact under MCP_READ_ONLY=true publishes every compact tool except the manage_ writers (#672, #673, #675, #676)', async () => {
   const res = await stdioSession({ MCP_TOOL_SURFACE: 'compact', MCP_READ_ONLY: 'true' }, [INIT, INITIALIZED, LIST]);
   assert.deepStrictEqual(res.get(2).result.tools.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
 });

@@ -171,8 +171,14 @@ check('every compact tool is annotated read-only, idempotent and closed-world ex
     const a = annotationsFor(t.name);
     assert.strictEqual(a.readOnlyHint, writes.length === 0, `${t.name}: readOnlyHint vs write-capable targets [${writes.join(', ')}]`);
     if (a.readOnlyHint) assert.strictEqual(a.idempotentHint, true, `${t.name}: a read-only tool is idempotent`);
-    assert.notStrictEqual(a.openWorldHint, true, `${t.name}: no open-world target`);
+    const open = compactLegacyNames(t).some((n) => annotationsFor(n).openWorldHint);
+    assert.strictEqual(a.openWorldHint, open, `${t.name}: openWorldHint is true exactly when a target is open-world (#676)`);
   }
+});
+
+check('manage_accounts is open-world (bank_sync) and the other compact writers are not (#676)', () => {
+  assert.strictEqual(annotationsFor('manage_accounts').openWorldHint, true);
+  for (const n of ['manage_categories', 'manage_payees', 'manage_transactions']) assert.strictEqual(annotationsFor(n).openWorldHint, false, n);
 });
 
 check('NEGATIVE: a compact name nobody classified publishes no safety claim', () => {

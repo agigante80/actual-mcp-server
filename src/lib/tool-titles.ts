@@ -113,6 +113,10 @@ export const TOOL_TITLES: Readonly<Record<string, string>> = {
   run_query: 'Run read-only budget query',
   // Compact tools (#675).
   manage_transactions: 'Manage transactions',
+  // Compact tools (#676).
+  manage_accounts: 'Manage accounts and groups',
+  manage_categories: 'Manage categories and groups',
+  manage_payees: 'Manage payees',
 };
 
 /** The display title for a tool, or undefined when it has none (the builder then omits it). */

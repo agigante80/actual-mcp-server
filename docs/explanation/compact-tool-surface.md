@@ -1,6 +1,6 @@
 # Compact tool surface
 
-**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. #673 ships `search_transactions` and `summarize_transactions`. #674 ships `list_budget_months` and `run_query`, the first tools with no selector (`selector: null` in the spec; a route trigger or the single action decides). #675 ships `manage_transactions` (rows 37 to 43), the first write tool: destructive, hidden under `MCP_READ_ONLY`, `null` accepted only for `update`, its strict id, date and amount rules enforced per action by the row refines because the published entry must stay under the 3900 byte cap; the section 4b rewrite of `result.error` was already in the dispatcher. The other 8 tools are still to come. The stale `listTool` in the adapter is still not corrected.
+**Status:** design record for #670, implemented by #671 to #682. #671 is implemented: the `MCP_TOOL_SURFACE` setting, the registry, the dispatcher and `callOperation`. #672 ships the first two compact tools, `get_context` and `list_entities`, plus routes (section 4d) and the section 4b rewrite of legacy names in error text. #673 ships `search_transactions` and `summarize_transactions`. #674 ships `list_budget_months` and `run_query`, the first tools with no selector (`selector: null` in the spec; a route trigger or the single action decides). #675 ships `manage_transactions` (rows 37 to 43), the first write tool: destructive, hidden under `MCP_READ_ONLY`, `null` accepted only for `update`, its strict id, date and amount rules enforced per action by the row refines because the published entry must stay under the 3900 byte cap; the section 4b rewrite of `result.error` was already in the dispatcher. #676 ships `manage_accounts`, `manage_categories` and `manage_payees` (rows 44 to 62 and `notes_update` from action `set_note`): destructive, hidden under `MCP_READ_ONLY`, `entity` routes to the group tools and is never forwarded, `manage_accounts` is the one open-world compact tool (bank sync), and `notes_update` is the one legacy tool several compact tools may map, allowed by the parity test only from `set_note`. The other 5 tools are still to come. The stale `listTool` in the adapter is still not corrected.
 
 The compact surface is a second public tool list of 15 tools with no `actual_` prefix, named `verb_noun` in snake_case, each fronting a group of the 85 existing tools through one dispatcher. The implementation tickets (#671 to #678, #679, #680, #681) cite this page for the mapping, the schemas and the naming rules. The delivery plan is in `docs/plans/compact-tool-surface.md`.
 
@@ -298,8 +298,8 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `create` | `accounts_create / account_groups_create` | entity, name | balance (account), sort_order (account_group) | `entity` is `account` or `account_group` |
-| `update` | `accounts_update / account_groups_update` | entity, id | name, offbudget, closed (account); name, sort_order (account_group) | account: non-id properties wrapped into legacy `fields`; account_group: legacy is flat |
-| `close` | `accounts_close` | id | transfer_account_id, transfer_category_id | `entity` must be omitted or `account` |
+| `update` | `accounts_update / account_groups_update` | entity, id; at least one field | name, offbudget, closed (account); name, sort_order (account_group) | account: non-id properties wrapped into legacy `fields`; account_group: legacy is flat; an update naming nothing to change is refused (`update needs at least one of: ...`) |
+| `close` | `accounts_close` | id | transfer_account_id, transfer_category_id | `entity` must be omitted or `account` (otherwise `entity: close accepts only account`); `transfer_account_id` may not equal `id`; an account with no transactions is removed rather than closed |
 | `reopen` | `accounts_reopen` | id | none |  |
 | `delete` | `accounts_delete / account_groups_delete` | entity, id | none |  |
 | `bank_sync` | `bank_sync` | none | account_id | omit `account_id` to sync every linked open account |
@@ -309,8 +309,8 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `create` | `categories_create / category_groups_create` | entity, name | group_id (category, required), is_income, hidden (category_group) | `entity` is `category` or `category_group` |
-| `update` | `categories_update / category_groups_update` | entity, id | name, group_id (category), is_income, hidden | non-id properties wrapped into legacy `fields` |
+| `create` | `categories_create / category_groups_create` | entity, name; group_id (category) | is_income (both), hidden (category_group only) | `entity` is `category` or `category_group`; `hidden` on a category is refused because the legacy category tool has none |
+| `update` | `categories_update / category_groups_update` | entity, id; at least one field | name, group_id (category only), is_income, hidden | non-id properties wrapped into legacy `fields`; an empty update is refused |
 | `delete` | `categories_delete / category_groups_delete` | entity, id | none |  |
 | `set_note` | `notes_update` | id, note | none | id resolves to a category or category group itself, so `entity` must be omitted |
 
@@ -319,9 +319,9 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `create` | `payees_create` | name | notes |  |
-| `update` | `payees_update` | id | name, transfer_acct, category | wrapped into legacy `fields`; see #651 (inherited behaviour) |
+| `update` | `payees_update` | id; at least one field | name, transfer_acct, category | wrapped into legacy `fields`; `category: null` clears the default category and is forwarded as null (`nullAsAbsent` is off); see #651 (inherited behaviour, neither fixed nor worked around) |
 | `delete` | `payees_delete` | id | none |  |
-| `merge` | `payees_merge` | target_id, merge_ids | none | legacy `targetId`, `mergeIds` |
+| `merge` | `payees_merge` | target_id, merge_ids (1 to 50) | none | legacy `targetId`, `mergeIds`; a target that is also a source is refused by the adapter |
 | `set_note` | `notes_update` | id, note | none |  |
 
 **`manage_tags`** (selector `action`, required)
