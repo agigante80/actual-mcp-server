@@ -72,6 +72,15 @@ await check('surface matrix: compact read-only offers neither (manage_transactio
   assert.deepStrictEqual(await offeredFor({ surface: 'compact', readOnly: true }), []);
 });
 
+await check('published vs unpublished set: the manage_* prompt is absent under compact read-only and present under compact', async () => {
+  await manager.initialize({ toolsets: 'all', tools: '', readOnly: true, surface: 'compact' }, COMPACT_TOOLS);
+  const published = new Set(manager.getPublishedToolNames());
+  assert.ok(!published.has('manage_transactions'));
+  assert.deepStrictEqual(resolveOfferedPrompts([C], published), []);
+  await manager.initialize({ toolsets: 'all', tools: '', readOnly: false, surface: 'compact' }, COMPACT_TOOLS);
+  assert.deepStrictEqual(resolveOfferedPrompts([C], new Set(manager.getPublishedToolNames())).map((d) => d.name), ['compact_prompt']);
+});
+
 // ---------------------------------------------------------------- assertPromptNames
 await check('assertPromptNames accepts a snake_case name', () => {
   assertPromptNames([def()]);
@@ -122,6 +131,26 @@ await check('assertArgsBounded rejects an unbounded string, naming prompt and ar
     () => assertArgsBounded([def({ argsSchema: z.strictObject({ note: z.string() }) })]),
     /monthly_review.*note/,
   );
+});
+await check('assertArgsBounded rejects a union with an unbounded string option', () => {
+  assert.throws(() => assertArgsBounded([def({ argsSchema: z.strictObject({ f: z.union([z.string(), z.literal('all')]) }) })]), /unbounded/);
+});
+await check('assertArgsBounded rejects string.or(number)', () => {
+  assert.throws(() => assertArgsBounded([def({ argsSchema: z.strictObject({ f: z.string().or(z.number()) }) })]), /unbounded/);
+});
+await check('assertArgsBounded rejects a lazy string', () => {
+  assert.throws(() => assertArgsBounded([def({ argsSchema: z.strictObject({ f: z.lazy(() => z.string()) }) })]), /unbounded/);
+});
+await check('assertArgsBounded fails closed on an unrecognised node type', () => {
+  assert.throws(() => assertArgsBounded([def({ argsSchema: z.strictObject({ f: z.any() }) })]), /unbounded/);
+});
+await check('assertArgsBounded accepts a bounded string under a union and under default wrappers', () => {
+  assertArgsBounded([def({ argsSchema: z.strictObject({
+    a: z.string().regex(/^#[0-9a-f]{6}$/).max(7).default('#000000'),
+    b: z.union([z.string().max(5), z.literal('all')]),
+    c: z.string().max(5).nullable().optional(),
+    d: z.boolean().default(false),
+  }) })]);
 });
 await check('assertArgsBounded sees through optional, default and pipe wrappers', () => {
   for (const f of [z.string().optional(), z.string().default('x'), z.string().transform((s) => s), z.array(z.string())]) {

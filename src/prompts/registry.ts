@@ -76,17 +76,28 @@ function isBoundedString(node: ZodNode): boolean {
   });
 }
 
-/** Walk through wrappers to every string leaf; true when one is unbounded. */
+/** Node types that can never carry a string: safe leaves for the walk. */
+const STRING_FREE = new Set(['number', 'int', 'boolean', 'bigint', 'literal', 'enum', 'null', 'undefined', 'date', 'nan']);
+
+/**
+ * Walk through wrappers to every string leaf; true when one is unbounded. FAILS CLOSED: a node
+ * type this walk does not understand (any, unknown, custom, a deeper nesting than the depth cap)
+ * counts as unbounded, so a new schema shape cannot slip past the guard silently.
+ */
 function hasUnboundedString(node: ZodNode | undefined, depth = 0): boolean {
   const def = node?._zod?.def;
-  if (!def || depth > 12) return false;
+  if (!def || depth > 12) return true;
+  if (STRING_FREE.has(def.type)) return false;
   switch (def.type) {
     case 'string': return !isBoundedString(node as ZodNode);
     case 'optional': case 'nullable': case 'default': case 'prefault': case 'readonly': case 'catch':
+    case 'nonoptional': case 'success':
       return hasUnboundedString(def.innerType, depth + 1);
     case 'pipe': return hasUnboundedString(def.in, depth + 1);
     case 'array': return hasUnboundedString(def.element, depth + 1);
-    default: return false;
+    case 'union': return (def.options as ZodNode[]).some((o) => hasUnboundedString(o, depth + 1));
+    case 'lazy': return hasUnboundedString(def.getter?.(), depth + 1);
+    default: return true;
   }
 }
 

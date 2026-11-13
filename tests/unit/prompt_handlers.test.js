@@ -116,6 +116,37 @@ await check('a hostile unknown argument key is refused, cleaned and capped', asy
   assert.ok(e.message.length < 600, `message length ${e.message.length}`);
 });
 
+// Raw requests: the SDK validates the REQUEST against its own schema before our handler runs, so a
+// malformed prompts/get used to answer -32603 with the raw ZodError (hostile key echoed uncapped).
+const rawGet = (c, params) => errorOf(c.request({ method: 'prompts/get', ...(params === undefined ? {} : { params }) }, z.looseObject({})));
+await check('malformed prompts/get: hostile argument key under an unknown name is -32602, bounded, key capped', async () => {
+  const c = await connect([review]);
+  const key = `EVIL\nKEY${'x'.repeat(300)}`;
+  const e = await rawGet(c, { name: 'no_such_prompt', arguments: { [key]: 5 } });
+  assert.strictEqual(e.code, -32602, e.message);
+  assert.ok(e.message.length < 300, `message length ${e.message.length}`);
+  assert.ok(!e.message.includes('x'.repeat(65)), 'hostile key capped at 64');
+  assert.ok(!/\n/.test(e.message), 'no newline');
+});
+await check('malformed prompts/get: a non-string name is -32602 and the value is not echoed', async () => {
+  const c = await connect([review]);
+  const e = await rawGet(c, { name: 12345 });
+  assert.strictEqual(e.code, -32602, e.message);
+  assert.ok(!e.message.includes('12345'), e.message);
+  assert.ok(e.message.includes('Unknown prompt'), e.message);
+});
+await check('malformed prompts/get: missing params is -32602, not a crash', async () => {
+  const c = await connect([review]);
+  const e = await rawGet(c, undefined);
+  assert.strictEqual(e.code, -32602, e.message);
+});
+await check('malformed prompts/get: a non-object arguments value is -32602 on a real prompt', async () => {
+  const c = await connect([review]);
+  const e = await rawGet(c, { name: 'monthly_review', arguments: 'EVIL' });
+  assert.strictEqual(e.code, -32602, e.message);
+  assert.ok(!e.message.includes('EVIL'), e.message);
+});
+
 // ---------------------------------------------------------------- wiring
 const CALL = 'registerPromptHandlers(server, offeredPrompts)';
 const hasCall = (src) => stripTsComments(src).includes(CALL);
@@ -165,6 +196,38 @@ await check('src/index.ts passes offeredPrompts at all three start calls', () =>
 await check('src/index.ts resolves the offered list once', () => {
   const code = stripTsComments(read('src/index.ts'));
   assert.strictEqual(code.split('resolveOfferedPrompts(').length - 1, 1);
+});
+
+// The second argument must come from the PUBLISHED tool list: the variable that is also handed to
+// every tools/list path (`implementedTools`, from getPublishedToolNames()). getToolNames() is the
+// unpublished set and would offer a prompt whose tool tools/list hides.
+function resolveSecondArg(src) {
+  const code = stripTsComments(src);
+  const i = code.indexOf('resolveOfferedPrompts(');
+  assert.ok(i >= 0, 'resolveOfferedPrompts call present');
+  let depth = 0;
+  let j = i + 'resolveOfferedPrompts'.length;
+  for (; j < code.length; j++) {
+    if (code[j] === '(') depth++;
+    else if (code[j] === ')' && --depth === 0) break;
+  }
+  return { second: code.slice(i + 'resolveOfferedPrompts('.length, j).split(',').slice(1).join(',').trim(), code };
+}
+const publishedVar = (code) => /const\s+(\w+)\s*=\s*actualToolsManager\.getPublishedToolNames\(\)/.exec(code)?.[1];
+const fromPublished = (src) => {
+  const { second, code } = resolveSecondArg(src);
+  const v = publishedVar(code);
+  return !!v && new RegExp(`^new Set\\(\\s*${v}\\s*\\)$`).test(second);
+};
+await check('src/index.ts builds the offered set from the published tool list', () => {
+  assert.ok(fromPublished(read('src/index.ts')));
+});
+await check('the published-set assertion can fail: the unpublished set and a stray variable are detected', () => {
+  const base = read('src/index.ts');
+  const bad = base.replace('new Set(implementedTools))', 'new Set(actualToolsManager.getToolNames()))');
+  assert.notStrictEqual(bad, base, 'mutation applied');
+  assert.ok(!fromPublished(bad));
+  assert.ok(!fromPublished(base.replace('new Set(implementedTools))', 'new Set(otherTools))')));
 });
 
 console.log(`\n[prompt-handlers] Results: ${passed} passed, ${failed} failed`);
