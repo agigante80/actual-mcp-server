@@ -40,11 +40,10 @@ const check = (name, fn) => {
 };
 const fail = (msg) => { throw new Error(msg); };
 
-const { COMPACT_TOOLS } = await import(pathToFileURL(join(ROOT, 'dist/src/compact/registry.js')).href);
+const { COMPACT_TOOLS, OUT_OF_SCOPE } = await import(pathToFileURL(join(ROOT, 'dist/src/compact/registry.js')).href);
 
 // The session tools manage the connection pool, not budget data, and no compact tool wraps them.
 // They are the only legacy names the e2e, manual and prompt surfaces still have to carry.
-const OUT_OF_SCOPE = ['actual_session_list', 'actual_session_close'];
 
 // One entry per (compact tool, action). A tool with `selector: null` has one entry, its default.
 const PAIRS = [];

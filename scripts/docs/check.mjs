@@ -31,8 +31,9 @@ import * as configDrift from './config-drift.mjs';
 import * as docsIndex from './index.mjs';
 import * as tools from './tools.mjs';
 import * as readmeSize from './readme-size.mjs';
+import * as migration from './migration.mjs';
 
-const MODULES = [links, markers, configDrift, docsIndex, tools, readmeSize];
+const MODULES = [links, markers, configDrift, docsIndex, tools, readmeSize, migration];
 
 /** GitHub sets CI=true in every job. "false" and "0" are treated as unset. */
 function ciIsSet(env) {
@@ -81,7 +82,7 @@ export async function run({ root, modules = MODULES, env = {} }) {
   return { exitCode, lines };
 }
 
-/** Run every module's optional generate(). The tools module (#603) is the only one that defines one. */
+/** Run every module's optional generate(). The tools (#603) and migration (#669) modules define one. */
 export async function generate({ root, modules = MODULES }) {
   const lines = [];
   for (const mod of modules) {

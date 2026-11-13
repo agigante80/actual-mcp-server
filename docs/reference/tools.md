@@ -193,7 +193,7 @@ These two manage the session pool itself, not budget data.
 
 ## Compact surface
 
-Fifteen compact tools ship (#672 to #678). They are listed under `MCP_TOOL_SURFACE=compact` (the default) or `all`, carry no `actual_` prefix and no `outputSchema`, and are the six read tools stay published under `MCP_READ_ONLY=true` and the nine `manage_*` tools are hidden whole. Each call reaches one legacy tool and returns its result unchanged. The full 85-row mapping is in the [design record](../explanation/compact-tool-surface.md#7-full-mapping-of-the-85-tools).
+Fifteen compact tools ship (#672 to #678). They are listed under `MCP_TOOL_SURFACE=compact` (the default) or `all`, carry no `actual_` prefix and no `outputSchema`, and are the six read tools stay published under `MCP_READ_ONLY=true` and the nine `manage_*` tools are hidden whole. Each call reaches one legacy tool and returns its result unchanged. The full 85-row mapping is in the [migration guide](../guides/migrating-to-compact-tools.md#legacy-tool-to-compact-call).
 
 | Tool | Description |
 |------|-------------|
@@ -215,9 +215,4 @@ Fifteen compact tools ship (#672 to #678). They are listed under `MCP_TOOL_SURFA
 
 ### Migrating from the `actual_*` names (#680)
 
-Since #680 the default surface is compact, so a client that calls `actual_accounts_list` and its siblings gets a refusal naming `MCP_TOOL_SURFACE`. Two ways forward:
-
-- Change the calls to the compact tools. Each legacy tool is one `action` (or `type`, `topic`, `by`, `report`) value of a compact tool; the [mapping table](../explanation/compact-tool-surface.md#7-full-mapping-of-the-85-tools) has one row per legacy tool. `actual_server_info` and `actual_server_get_version` are `get_context` with `topic` `server` and `version`.
-- Opt out: set `MCP_TOOL_SURFACE=legacy` (Docker: `-e MCP_TOOL_SURFACE=legacy`) or pin the previous image tag.
-
-`actual_session_list` and `actual_session_close` have no compact home, so they exist only under `MCP_TOOL_SURFACE=legacy` or `all`. `MCP_TOOLSETS` works as before and decides which operations a compact tool may call; `MCP_TOOLS` takes compact names under the default surface.
+See the [migration guide](../guides/migrating-to-compact-tools.md): the full legacy-to-compact table, the `MCP_TOOL_SURFACE=legacy` escape hatch and how to re-select saved tool choices.

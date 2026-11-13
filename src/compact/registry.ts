@@ -21,3 +21,10 @@ import { summarizeTransactions } from './tools/summarize_transactions.js';
  * or src/tools/index.ts: the legacy registry stays 85 tools.
  */
 export const COMPACT_TOOLS: readonly CompactToolSpec[] = [getContext, listEntities, searchTransactions, summarizeTransactions, listBudgetMonths, runQuery, manageTransactions, manageAccounts, manageCategories, managePayees, manageTags, manageRules, manageSchedules, manageBudgetMonths, manageBudgetFiles];
+
+/**
+ * Legacy tools no compact tool wraps, on purpose (#669): the session tools administer the
+ * connection pool, not budget data. The one list the parity test, the new-tool completeness test
+ * and the migration table generator (scripts/docs/migration.mjs) all import, so there is no second copy.
+ */
+export const OUT_OF_SCOPE: readonly string[] = ['actual_session_list', 'actual_session_close'];

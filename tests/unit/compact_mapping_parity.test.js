@@ -38,7 +38,6 @@ async function check(label, fn) {
 
 console.log('\n[compact-mapping-parity]');
 
-const OUT_OF_SCOPE = ['actual_session_list', 'actual_session_close'];
 
 // #678 mapped the last pending tools: every legacy tool is now mapped or out of scope.
 const PENDING = [];
@@ -77,7 +76,7 @@ function parityProblems({ legacyNames, compactTools, outOfScope, pending, shared
 }
 
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
-const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+const { COMPACT_TOOLS, OUT_OF_SCOPE } = await import('../../dist/src/compact/registry.js');
 await manager.initialize();
 const legacyNames = manager.getToolNames();
 const { z } = await import('zod');

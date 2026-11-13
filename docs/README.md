@@ -17,6 +17,7 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 - [guides/authentication.md](guides/authentication.md): choose an HTTP auth mode and see which budgets each one reaches.
 - [guides/multiple-budgets.md](guides/multiple-budgets.md): configure several budgets and switch between them.
 - [guides/upgrading.md](guides/upgrading.md): upgrade steps, requirements, and changes that can stop a server from starting.
+- [guides/migrating-to-compact-tools.md](guides/migrating-to-compact-tools.md): moving from the 85 `actual_*` tools to the 15 compact tools: the generated name table, the `MCP_TOOL_SURFACE=legacy` escape hatch and re-selecting saved tool choices.
 - [guides/troubleshooting.md](guides/troubleshooting.md): common symptoms with their cause and fix.
 
 ## Reference: look something up
