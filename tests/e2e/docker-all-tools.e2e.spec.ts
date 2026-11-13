@@ -3037,3 +3037,111 @@ test.describe('Docker E2E - compact list_budget_months and run_query (#674)', ()
     expect(message).not.toContain('actual_query_run');
   });
 });
+
+test.describe('Docker E2E - compact manage_transactions (#675)', () => {
+  const rowsOf = async (mcp: any, accountId: string) => {
+    const d = await mcp.call('actual_transactions_get', { accountId });
+    return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+  };
+
+  test('manage_transactions create - adds a transaction readable through the legacy getter', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const res = await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1111, notes: `e2e-${uniqueSuffix()}` });
+    expect(res).toBeTruthy();
+    const rows = await rowsOf(mcp, account.id);
+    expect(rows.some((t: any) => t?.amount === -1111)).toBe(true);
+  });
+
+  test('manage_transactions update - changes the notes', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const tx = await makeTransaction({ account, amount: -2000, date: today() });
+    await mcp.call('manage_transactions', { action: 'update', id: tx.id, notes: 'changed-675' });
+    const row = (await rowsOf(mcp, account.id)).find((t: any) => t?.id === tx.id);
+    expect(row?.notes).toBe('changed-675');
+  });
+
+  test('manage_transactions update_batch - updates two transactions', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const a = await makeTransaction({ account, amount: -300, date: today() });
+    const b = await makeTransaction({ account, amount: -400, date: today() });
+    await mcp.call('manage_transactions', {
+      action: 'update_batch',
+      updates: [{ id: a.id, fields: { notes: 'batch-a' } }, { id: b.id, fields: { notes: 'batch-b' } }],
+    });
+    const rows = await rowsOf(mcp, account.id);
+    expect(rows.find((t: any) => t?.id === a.id)?.notes).toBe('batch-a');
+    expect(rows.find((t: any) => t?.id === b.id)?.notes).toBe('batch-b');
+  });
+
+  test('manage_transactions delete - removes the transaction', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const tx = await makeTransaction({ account, amount: -500, date: today() });
+    await mcp.call('manage_transactions', { action: 'delete', id: tx.id });
+    expect((await rowsOf(mcp, account.id)).find((t: any) => t?.id === tx.id)).toBeUndefined();
+  });
+
+  test('manage_transactions import - adds exactly one row', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const res = await mcp.call('manage_transactions', {
+      action: 'import',
+      account_id: account.id,
+      txs: [{ date: today(), amount: -4321, payee_name: 'E2E-Import-675', imported_id: `e2e-675-${uniqueSuffix()}` }],
+    });
+    expect(Array.isArray(res?.added)).toBe(true);
+    expect(res.added.length).toBe(1);
+  });
+
+  test('manage_transactions merge - the imported row wins and keeps the manual notes', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const manual = await makeTransaction({ account, amount: -2500, date: '2026-10-01', notes: 'lunch' });
+    const imported = await makeTransaction({ account, amount: -2500, date: '2026-10-03', notes: '', imported_id: `E2E-imp-${uniqueSuffix()}` });
+    const res = await mcp.call('manage_transactions', { action: 'merge', ids: [imported.id, manual.id] });
+    expect(res?.success).toBe(true);
+    expect(res?.keptId).toBe(imported.id);
+    const rows = await rowsOf(mcp, account.id);
+    expect(rows.find((t: any) => t?.id === manual.id)).toBeUndefined();
+    expect(rows.find((t: any) => t?.id === imported.id)?.notes).toBe('lunch');
+  });
+
+  test('manage_transactions transfer - creates a linked pair', async ({ mcp, makeAccount }) => {
+    const src = await makeAccount({ name: `E2E-Xfer675-Src-${uniqueSuffix()}` });
+    const dst = await makeAccount({ name: `E2E-Xfer675-Dst-${uniqueSuffix()}` });
+    const res = await mcp.call('manage_transactions', { action: 'transfer', from_account: src.id, to_account: dst.id, amount: 1234, date: today() });
+    expect(res?.success).toBeTruthy();
+    const debit = (await rowsOf(mcp, src.id)).find((t: any) => t?.amount === -1234);
+    const credit = (await rowsOf(mcp, dst.id)).find((t: any) => t?.amount === 1234);
+    expect(debit?.transfer_id).toBe(credit?.id);
+    expect(credit?.transfer_id).toBe(debit?.id);
+  });
+
+  test('manage_transactions transfer - ERROR: same account is refused', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    let refused = false;
+    try {
+      refused = (await mcp.call('manage_transactions', { action: 'transfer', from_account: account.id, to_account: account.id, amount: 100, date: today() }))?.success === false;
+    } catch {
+      refused = true;
+    }
+    expect(refused).toBe(true);
+  });
+
+  test('manage_transactions - ERROR: an unknown action names the action', async ({ mcp }) => {
+    let message = '';
+    try {
+      await mcp.call('manage_transactions', { action: 'frobnicate' });
+    } catch (err) {
+      message = String((err as Error).message);
+    }
+    expect(message).toMatch(/action/);
+  });
+
+  test('manage_transactions update - ERROR: missing id names id', async ({ mcp }) => {
+    let message = '';
+    try {
+      await mcp.call('manage_transactions', { action: 'update', notes: 'x' });
+    } catch (err) {
+      message = String((err as Error).message);
+    }
+    expect(message).toMatch(/\bid\b/);
+  });
+});

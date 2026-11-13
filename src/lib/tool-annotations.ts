@@ -117,6 +117,8 @@ const READ_ONLY = new Set<string>([
  * and in #357), so a close can be a delete.
  */
 const DESTRUCTIVE = new Set<string>([
+  // Compact tool (#675): delete and merge remove rows, so the tool is destructive as a whole.
+  'manage_transactions',
   'actual_account_groups_delete',
   'actual_accounts_close',
   'actual_accounts_delete',

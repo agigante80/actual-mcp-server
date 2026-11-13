@@ -132,7 +132,7 @@ await check('publication: compact surface publishes both tools, including under 
   const names = manager.getToolNames();
   const meta = COMPACT_TOOLS.map((c) => ({ name: c.name, legacy: c.actions ? [...c.actions.values()].flatMap((r) => [r.legacy, ...(r.routes ?? []).map((x) => x.legacy)]) : [] }));
   const ro = resolvePublishedToolNames(names, { toolsets: 'all', tools: '', readOnly: true, surface: 'compact' }, meta);
-  assert.deepStrictEqual([...ro.published], ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
+  assert.deepStrictEqual([...ro.published], ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);  // manage_transactions writes, so read-only hides it (#675)
   const legacy = resolvePublishedToolNames(names, { toolsets: 'all', tools: '', readOnly: false, surface: 'legacy' }, meta);
   assert.ok(!legacy.published.includes('get_context'), 'hidden on the legacy surface');
   assert.strictEqual(legacy.published.length, 85);

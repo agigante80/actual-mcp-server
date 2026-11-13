@@ -526,7 +526,7 @@ await check('startup validation rejects a route whose legacy tool is not registe
 // ---- registry and source guards ----
 
 await check('the shipped registry holds exactly the six compact tools so far (#672 to #674)', () => {
-  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);
+  assert.deepStrictEqual(COMPACT_TOOLS.map((t) => t.name), ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query', 'manage_transactions']);
 });
 
 await check('src/compact/ never imports the adapter or @actual-app/api, and never calls .call(', () => {
