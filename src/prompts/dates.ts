@@ -18,6 +18,28 @@ export function today(): string {
   return `${currentMonth()}-${pad2(now.getDate())}`;
 }
 
+/**
+ * The month before the server's local current month, YYYY-MM. getMonth() is 0 based, so it is
+ * already the previous month's 1 based number; January rolls back to December of last year.
+ * Never setMonth or getMonth() - 1 on a Date (on a 31st that overflows into the wrong month).
+ */
+export function previousMonth(): string {
+  const now = new Date();
+  const m = now.getMonth();
+  return m === 0 ? `${now.getFullYear() - 1}-12` : `${now.getFullYear()}-${pad2(m)}`;
+}
+
+/**
+ * The first day of the month that opens a span of `count` months ending with `endMonth`:
+ * monthStart('2026-10', 6) is 2026-05-01, monthStart('2026-01', 3) is 2025-11-01. Integer month
+ * index arithmetic only.
+ */
+export function monthStart(endMonth: string, count: number): string {
+  const [y, m] = endMonth.split('-').map(Number) as [number, number];
+  const idx = y * 12 + (m - 1) - (count - 1);
+  return `${Math.floor(idx / 12)}-${pad2((idx % 12) + 1)}-01`;
+}
+
 /** Days in a YYYY-MM month: 2024-02 gives 29, 2026-12 gives 31. */
 export function daysInMonth(month: string): number {
   const [y, m] = month.split('-').map(Number) as [number, number];

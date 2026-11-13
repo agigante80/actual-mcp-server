@@ -3744,6 +3744,26 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.message).toContain('date');
   });
 
+  test('prompts/get spending_patterns - the default range is concrete and fully filled (#663)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('spending_patterns', {});
+    expect(out.error).toBeUndefined();
+    expect(out.result.messages).toHaveLength(1);
+    expect(out.result.messages[0].role).toBe('user');
+    expect(out.result.messages[0].content.type).toBe('text');
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('summarize_transactions');
+    expect(text).toContain('last 6 full months');
+    expect(text).toMatch(/start_date \d{4}-\d{2}-01/);
+    expect(text).not.toContain('{');
+  });
+
+  test('prompts/get spending_patterns - ERROR: months out of range is -32602 (#663)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('spending_patterns', { months: '25' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('months');
+  });
+
   test('prompts/get - ERROR: an unknown prompt is -32602 "Unknown prompt"', async ({ mcp }) => {
     const out = await mcp.getPrompt('no_such_prompt');
     expect(out.result).toBeUndefined();
