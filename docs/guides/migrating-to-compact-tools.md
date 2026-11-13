@@ -10,6 +10,8 @@ The server used to publish 85 tools named `actual_<category>_<action>`; it now p
 
 One row per legacy tool. When several compact actions reach one legacy tool, the row lists all of them. The third column is what the compact layer does to your arguments before calling the legacy tool: a renamed key, keys it does not forward, keys it moves under a wrapper, and values it sets itself.
 
+On `manage_accounts` and `manage_categories`, `entity` is required for `create`, `update` and `delete`: send `entity: "account"` or `"category"` for the plain entity, and `"account_group"` or `"category_group"` for a group. Leaving it out is refused, and the wrong value acts on the wrong kind of entity.
+
 <!-- BEGIN GENERATED: tool-migration -->
 <!-- Generated from dist/src/compact/registry.js by `npm run docs:gen`. Do not edit. -->
 | Legacy tool | Compact call | What the compact layer changes |
@@ -21,14 +23,14 @@ One row per legacy tool. When several compact actions reach one legacy tool, the
 | `actual_accounts_delete` | `manage_accounts` (`action: "delete"`) | `entity` is not forwarded |
 | `actual_accounts_get_balance` | `summarize_transactions` (`report: "balance"`) | `account_id` is sent as `id` |
 | `actual_account_groups_list` | `list_entities` (`type: "account_group"`) | none |
-| `actual_account_groups_create` | `manage_accounts` (`action: "create"`), when `entity` is set | `entity` is not forwarded |
-| `actual_account_groups_update` | `manage_accounts` (`action: "update"`), when `entity` is set | `entity` is not forwarded |
-| `actual_account_groups_delete` | `manage_accounts` (`action: "delete"`), when `entity` is set | `entity` is not forwarded |
+| `actual_account_groups_create` | `manage_accounts` (`action: "create"`), when `entity: "account_group"` | `entity` is not forwarded |
+| `actual_account_groups_update` | `manage_accounts` (`action: "update"`), when `entity: "account_group"` | `entity` is not forwarded |
+| `actual_account_groups_delete` | `manage_accounts` (`action: "delete"`), when `entity: "account_group"` | `entity` is not forwarded |
 | `actual_accounts_list` | `list_entities` (`type: "account"`) | none |
 | `actual_accounts_reopen` | `manage_accounts` (`action: "reopen"`) | none |
 | `actual_accounts_update` | `manage_accounts` (`action: "update"`) | `entity` is not forwarded; keys other than `id` are sent under `fields` |
 | `actual_bank_sync` | `manage_accounts` (`action: "bank_sync"`) | `account_id` is sent as `accountId` |
-| `actual_budgets_get_all` | `list_entities` (`type: "budget_file"`), when `scope` is set | `scope` is not forwarded |
+| `actual_budgets_get_all` | `list_entities` (`type: "budget_file"`), when `scope: "server"` | `scope` is not forwarded |
 | `actual_budgets_list_available` | `list_entities` (`type: "budget_file"`) | `scope` is not forwarded |
 | `actual_budgets_switch` | `manage_budget_files` (`action: "switch"`) | `budget_name` is sent as `budgetName` |
 | `actual_budgets_get_month` | `list_budget_months`, when `month` is set | none |
@@ -43,10 +45,10 @@ One row per legacy tool. When several compact actions reach one legacy tool, the
 | `actual_categories_delete` | `manage_categories` (`action: "delete"`) | `entity` is not forwarded |
 | `actual_categories_get` | `list_entities` (`type: "category"`) | none |
 | `actual_categories_update` | `manage_categories` (`action: "update"`) | `entity` is not forwarded; keys other than `id` are sent under `fields` |
-| `actual_category_groups_create` | `manage_categories` (`action: "create"`), when `entity` is set | `entity` is not forwarded |
-| `actual_category_groups_delete` | `manage_categories` (`action: "delete"`), when `entity` is set | `entity` is not forwarded |
+| `actual_category_groups_create` | `manage_categories` (`action: "create"`), when `entity: "category_group"` | `entity` is not forwarded |
+| `actual_category_groups_delete` | `manage_categories` (`action: "delete"`), when `entity: "category_group"` | `entity` is not forwarded |
 | `actual_category_groups_get` | `list_entities` (`type: "category_group"`) | none |
-| `actual_category_groups_update` | `manage_categories` (`action: "update"`), when `entity` is set | `entity` is not forwarded; keys other than `id` are sent under `fields` |
+| `actual_category_groups_update` | `manage_categories` (`action: "update"`), when `entity: "category_group"` | `entity` is not forwarded; keys other than `id` are sent under `fields` |
 | `actual_payees_common_list` | `list_entities` (`type: "payee"`), when `sort` is set | `sort` is not forwarded |
 | `actual_payees_create` | `manage_payees` (`action: "create"`) | none |
 | `actual_payees_delete` | `manage_payees` (`action: "delete"`) | none |

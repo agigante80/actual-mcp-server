@@ -56,10 +56,13 @@ function collectUses(compactTools) {
   return uses;
 }
 
-/** The call as the compact tool takes it: `tool` with its selector value, and the route trigger. */
+/** The call as the compact tool takes it: `tool` with its selector value, and the route trigger (with its value when `when` selects on one). */
 function callCell(use) {
   const sel = use.selector === null ? '' : ` (${q(`${use.selector}: "${use.action}"`)})`;
-  const route = use.route ? `, when ${use.route.triggers.map(q).join(' or ')} is set` : '';
+  const r = use.route;
+  const route = !r ? '' : r.triggerValue !== undefined
+    ? `, when ${q(`${r.triggers[0]}: "${r.triggerValue}"`)}`
+    : `, when ${r.triggers.map(q).join(' or ')} is set`;
   return `${q(use.tool)}${sel}${route}`;
 }
 

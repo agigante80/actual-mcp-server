@@ -114,6 +114,7 @@ const noteFields = asFields(
 const groupRoute = (legacy: string, fields: CompactActionRow['fields']): CompactRoute => ({
   triggers: ['entity'],
   when: (call) => call.entity === 'account_group',
+  triggerValue: 'account_group',
   legacy,
   fields,
   drop: ['entity'],

@@ -99,7 +99,7 @@ export const listEntities: CompactToolSpec = {
     ])],
     ['note', { legacy: 'actual_notes_get', fields: z.object({ id }) }],
     ['budget_file', { legacy: 'actual_budgets_list_available', fields: scopeFields, drop: ['scope'], routes: [
-      { triggers: ['scope'], when: (call) => call.scope === 'server', phrase: 'scope server', legacy: 'actual_budgets_get_all', fields: scopeFields, drop: ['scope'] },
+      { triggers: ['scope'], when: (call) => call.scope === 'server', triggerValue: 'server', phrase: 'scope server', legacy: 'actual_budgets_get_all', fields: scopeFields, drop: ['scope'] },
     ] }],
   ]),
 };

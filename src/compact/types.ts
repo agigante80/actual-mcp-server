@@ -55,6 +55,8 @@ export interface CompactRoute extends CompactTarget {
   triggers: readonly string[];
   /** Optional extra condition on the call, for a trigger that selects only by value. */
   when?: (call: Readonly<Record<string, unknown>>) => boolean;
+  /** The value `when` selects on, for the migration table (#669): documentation data, never read by the dispatcher. Set it whenever `when` tests `triggers[0] === value`. */
+  triggerValue?: string;
   /** How error text names this route when the first trigger alone would mislead (`scope server`). Defaults to the first trigger. */
   phrase?: string;
 }

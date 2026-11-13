@@ -73,6 +73,29 @@ await check('a route row names its trigger and a fixed value is shown', () => {
   assert.ok(rowFor(block, 'actual_get_id_by_name').includes('sets `type: "accounts"`'));
 });
 
+await check('a route row states the trigger value when the route selects on one', () => {
+  assert.ok(rowFor(block, 'actual_account_groups_create').includes('account_group'));
+  assert.ok(rowFor(block, 'actual_category_groups_create').includes('category_group'));
+  assert.ok(rowFor(block, 'actual_budgets_get_all').includes('server'));
+  assert.ok(rowFor(block, 'actual_budgets_get_all').includes('`scope: "server"`'));
+});
+
+await check('every route with a when carries a triggerValue that when accepts and another value fails', () => {
+  let seen = 0;
+  for (const spec of COMPACT_TOOLS) {
+    for (const [action, row] of spec.actions) {
+      for (const r of row.routes ?? []) {
+        if (!r.when) continue;
+        seen++;
+        assert.ok(r.triggerValue, `${spec.name}.${action} route has when but no triggerValue`);
+        assert.ok(r.when({ [r.triggers[0]]: r.triggerValue }), `${spec.name}.${action}`);
+        assert.ok(!r.when({ [r.triggers[0]]: 'zz_other' }), `${spec.name}.${action}`);
+      }
+    }
+  }
+  assert.ok(seen >= 7);
+});
+
 await check('two runs give identical bytes', () => {
   assert.strictEqual(render(), block);
 });
