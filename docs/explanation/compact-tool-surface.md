@@ -68,7 +68,7 @@ Legacy names inside success result messages and field descriptions (for example 
 
 ### 4c. Field types
 
-Each compact property is at least as strict as the legacy validator for that field (`CommonSchemas` ids, `CommonSchemas.date`, integer cents for `amount`, `min_amount`, `max_amount` and `cutoff`), so the compact schema never accepts what the legacy schema rejects. The legacy schema still validates after normalisation.
+Each compact property is at least as strict as the legacy validator for that field (`CommonSchemas` ids, `CommonSchemas.date` for dates including `cutoff`, integer cents for `amount`, `min_amount` and `max_amount`), so the compact schema never accepts what the legacy schema rejects. The legacy schema still validates after normalisation.
 
 ## 5. Update-shape normalisation
 
