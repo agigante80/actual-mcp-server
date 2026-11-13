@@ -123,7 +123,7 @@ await check('NEGATIVE: create without account, date or amount names each', async
 await check('NEGATIVE: a field of another action is refused with the owners (account on delete)', () =>
   refused({ action: 'delete', id: T1, account: A }, /account.*not valid for action: delete; valid only for action: create, update/));
 await check('NEGATIVE: txs on create and ids on delete are refused', async () => {
-  await refused({ action: 'create', account: A, date: '2026-11-13', amount: 1, txs: [] }, /txs/);
+  await refused({ action: 'create', account: A, date: '2026-11-13', amount: 1, txs: [{ date: '2026-11-13', amount: 1 }] }, /txs.*not valid for action: create/);
   await refused({ action: 'delete', id: T1, ids: [T1, T2] }, /ids/);
 });
 await check('NEGATIVE: update with only id is refused with the exact message', () =>
@@ -178,6 +178,22 @@ await check('NEGATIVE: merge with one id, three ids, or the same id twice names 
 });
 await check('NEGATIVE: notes over 1000 characters are refused', () =>
   refused({ action: 'create', account: A, date: '2026-11-13', amount: 1, notes: 'x'.repeat(1001) }, /notes[^]*1000/));
+await check('NEGATIVE: transfer notes over 1000 characters are refused', () =>
+  refused({ action: 'transfer', from_account: A, to_account: B, amount: 5, date: '2026-11-13', notes: 'x'.repeat(1001) }, /notes[^]*1000/));
+await check('update and update_batch forward long notes, as the legacy tools accept them', async () => {
+  const long = 'x'.repeat(1001);
+  await expectCall({ action: 'update', id: T1, notes: long }, 'actual_transactions_update', { id: T1, fields: { notes: long } });
+  await expectCall({ action: 'update_batch', updates: [{ id: T1, fields: { notes: long } }] }, 'actual_transactions_update_batch', { updates: [{ id: T1, fields: { notes: long } }] });
+});
+await check('NEGATIVE: update refuses a bad date, a fractional amount and a non-UUID account or category', async () => {
+  await refused({ action: 'update', id: T1, date: '13/11/2026' }, /date/);
+  await refused({ action: 'update', id: T1, amount: 12.5 }, /amount/);
+  await refused({ action: 'update', id: T1, account: 'nope' }, /account/);
+  await refused({ action: 'update', id: T1, category: 'nope' }, /category/);
+  await refused({ action: 'update', id: 'nope', notes: 'x' }, /\bid\b/);
+});
+await check('NEGATIVE: update_batch refuses a bad date inside an item', () =>
+  refused({ action: 'update_batch', updates: [{ id: T1, fields: { date: '13/11/2026' } }] }, /updates/));
 await check('NEGATIVE: camelCase legacy keys are refused', () => refused({ action: 'import', accountId: A, txs: [{ date: '2026-11-13', amount: 1 }] }, /accountId/));
 
 // ---- real legacy transfer tool behind callOperation ----

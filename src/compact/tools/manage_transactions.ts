@@ -36,7 +36,7 @@ const payeeName = z.string().nullable().optional().describe('Payee name.');
 const importedPayee = z.string().nullable().optional().describe('Imported payee.');
 const category = z.string().nullable().optional().describe('Category id.');
 // No maxLength here: with it Zod publishes anyOf [string, null], which some function-schema
-// clients reject. REAL enforces the 1000 character cap.
+// clients reject. capNotes enforces the 1000 character cap where the legacy tool has one.
 const notes = z.string().nullable().optional().describe('Notes.');
 const cleared = z.boolean().nullable().optional().describe('Cleared flag.');
 const importedId = z.string().nullable().optional().describe('Source id.');
@@ -55,7 +55,6 @@ const REAL: Readonly<Record<string, z.ZodType>> = {
   date: CommonSchemas.date,
   amount: CommonSchemas.amountCents,
   subtransactions: CommonSchemas.subtransactions,
-  notes: z.string().max(1000, 'at most 1000 characters'),
 };
 
 /** The nine keys an update_batch item may change. Strict: an unknown key is refused. */
@@ -71,7 +70,7 @@ const BATCH_ITEM = z
         payee_name: z.string().nullable().optional(),
         imported_payee: z.string().nullable().optional(),
         category: CommonSchemas.categoryId.nullable().optional(),
-        notes: z.string().max(1000).nullable().optional(),
+        notes: z.string().nullable().optional(),
         cleared: z.boolean().nullable().optional(),
       })
       .strict(),
@@ -136,6 +135,14 @@ const strict = (ctx: z.RefinementCtx, v: Record<string, unknown>): void => {
   }
 };
 
+/**
+ * The legacy create and transfer tools cap notes at 1000 characters; the legacy update and
+ * update_batch tools do not, so the cap is applied only where the legacy tool would refuse.
+ */
+const capNotes = (ctx: z.RefinementCtx, v: Record<string, unknown>): void => {
+  if (typeof v.notes === 'string' && v.notes.length > 1000) issue(ctx, 'notes', 'at most 1000 characters');
+};
+
 const asFields = (schema: z.ZodType): CompactActionRow['fields'] => schema as unknown as CompactActionRow['fields'];
 
 const createFields = asFields(
@@ -146,6 +153,7 @@ const createFields = asFields(
       needs('create', ctx, v, ['account', 'date', 'amount']);
       noNulls('create', ctx, v);
       strict(ctx, v);
+      capNotes(ctx, v);
       if (typeof v.payee === 'string' && !CommonSchemas.payeeId.safeParse(v.payee).success) issue(ctx, 'payee', 'Invalid payee ID format (expected UUID)');
     }),
 );
@@ -187,6 +195,7 @@ const transferFields = asFields(
     needs('transfer', ctx, v, ['amount', 'date']);
     noNulls('transfer', ctx, v);
     strict(ctx, v);
+    capNotes(ctx, v);
     if (typeof v.amount === 'number' && Number.isInteger(v.amount) && v.amount <= 0) {
       issue(ctx, 'amount', 'amount must be a positive integer in cents (e.g. 5000 = $50.00)');
     }

@@ -43,7 +43,7 @@ const PER_TOOL_CEILING = 3900;
 // #673 (search_transactions, summarize_transactions) raised the four-tool total to 13558 bytes (each
 // new tool stays under the per-tool ceiling), so the ceiling is now that plus about 10%.
 // #674 (list_budget_months, run_query) raised the six-tool total to 16863 bytes, so the ceiling is that plus about 10%.
-// #675 (manage_transactions, 3946 bytes as measured here) raised the seven-tool total to 20809 bytes, so the ceiling is that plus about 10%.
+// #675 (manage_transactions, 3858 bytes as measured here) raised the seven-tool total to 20809 bytes, so the ceiling is that plus about 10%.
 // #676 (manage_accounts 2972, manage_categories 2000, manage_payees 1931 bytes) raised the ten-tool total to 27700 bytes, so the ceiling is that plus about 10%.
 // Each later compact ticket raises it by its own measured size, stated here.
 const COMPACT_TOTAL_CEILING = 30500;
