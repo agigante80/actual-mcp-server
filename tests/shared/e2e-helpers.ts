@@ -151,8 +151,9 @@ export async function callTool(
  * op + sync (2 requests) and a read is 1, so a write-heavy BLOCK (the transactions and budgets
  * runs) peaks near 1.8. At 300 calls that block reached ~540 requests and tripped the limiter
  * (#383: 2 stdio failures at spec lines 686 to 697, over the SYNC path, after #422 removed the
- * relogin cascade that had masked the real ratio). 230 calls at 1.8 is ~415 requests, inside
- * 500 with margin, at the cost of a longer wall clock. The stdio leg is the tighter one: it
+ * relogin cascade that had masked the real ratio). 230 calls at 1.8 is ~415 requests, which
+ * looked inside 500 with margin until #681 showed a denser block (see the constant below: the
+ * HTTP budget is 200 now, and 1.8 is NOT the peak). The stdio leg is the tighter one: it
  * runs host-side over docker exec and never reached the old 300 budget, so lowering it is what
  * actually engages the pacer there.
  */
@@ -187,7 +188,9 @@ const RATE_WINDOW_MS = 60_000;
 // #681: the HTTP budget went from 230 to 200. With the suite grown by the legacy smoke block and
 // the prompts rows, a run at 230 held the pacer 47 times and still tripped the limiter inside the
 // schedules block (a schedule write is the densest call the suite makes: op, rule and sync), which
-// then cascaded into 15 failures. 200 calls at the 1.8 peak ratio is ~360 requests.
+// then cascaded into 15 failures. Tripping 500 requests at 230 calls means that block runs at
+// 2.17 requests per call or more, above the 1.8 the comment further up took as the peak, so 200
+// calls is ~435 requests there: the margin is thin. Do not raise this back from these numbers.
 const RATE_MAX_CALLS_PER_WINDOW =
   process.env.MCP_TEST_TRANSPORT === 'stdio' ? 90 : 200;
 const recentCallTimes: number[] = [];
