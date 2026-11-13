@@ -3784,6 +3784,25 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.message).toContain('date');
   });
 
+  test('prompts/get categorize_uncategorized - the since date is filled in (#665)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('categorize_uncategorized', { since: '2026-10-01' });
+    expect(out.error).toBeUndefined();
+    expect(out.result.messages).toHaveLength(1);
+    expect(out.result.messages[0].role).toBe('user');
+    expect(out.result.messages[0].content.type).toBe('text');
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('search_transactions');
+    expect(text).toContain('update_batch');
+    expect(text).toContain('since 2026-10-01');
+  });
+
+  test('prompts/get categorize_uncategorized - ERROR: an impossible since is -32602 (#665)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('categorize_uncategorized', { since: '2026-02-30' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('since');
+  });
+
   test('prompts/get - ERROR: an unknown prompt is -32602 "Unknown prompt"', async ({ mcp }) => {
     const out = await mcp.getPrompt('no_such_prompt');
     expect(out.result).toBeUndefined();

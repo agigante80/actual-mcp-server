@@ -13,13 +13,17 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
  * YYYY-MM-DD calendar day, at most 10 characters, defaulting in the schema to the server's today.
  * CommonSchemas.date is not used: its pattern accepts 2026-02-31.
  */
-export const dayArgSchema = () =>
+const dayString = () =>
   z
     .string()
     .max(10)
     .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/)
-    .refine(isCalendarDay, 'must be a real calendar date')
-    .default(() => today());
+    .refine(isCalendarDay, 'must be a real calendar date');
+
+export const dayArgSchema = () => dayString().default(() => today());
+
+/** The same checked day with no default: omitted stays undefined (#665, `since`). */
+export const optionalDayArgSchema = () => dayString().optional();
 
 /** The server's local current month, YYYY-MM. */
 export function currentMonth(): string {

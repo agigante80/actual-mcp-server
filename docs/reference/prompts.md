@@ -12,6 +12,7 @@ Defaults that depend on the date (a month, a day) are resolved by the server's l
 | `spending_check` | Spending check | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_budget_months`, `summarize_transactions` |
 | `spending_patterns` | Spending patterns | `months` (optional, 1 to 24, default 6), `end_month` (optional, `YYYY-MM`, default the month before the server's current month) | `summarize_transactions`, `list_budget_months` |
 | `budget_cleanup` | Budget cleanup | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_entities`, `summarize_transactions`, `list_budget_months` |
+| `categorize_uncategorized` | Categorise uncategorised transactions | `since` (optional, `YYYY-MM-DD`, default none: all uncategorised transactions). Hidden under `MCP_READ_ONLY=true` and on `legacy` | `list_entities`, `search_transactions`, `summarize_transactions`, `manage_transactions`, `manage_rules` |
 
 ## monthly_review
 
@@ -45,3 +46,11 @@ A read-only structure review as of one day: duplicate and unused payees, rules t
 | Argument | Required | Validation |
 |----------|----------|------------|
 | `date` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-31` is refused), at most 10 characters. The default is the server's local today (UTC in the Docker image). An unknown key is refused. |
+
+## categorize_uncategorized
+
+Categorise uncategorised transactions: find them (50 per round), propose a category per payee from its history (the most frequent category, with the count as confidence, and "unsure" when there is no history, a tie or no payee), ask for confirmation, apply the confirmed ones in ONE `manage_transactions` `update_batch` call, then offer a rule for each payee confirmed to the same category three or more times. A rule is created only on a yes and an existing rule is never modified. The text is guidance only; enforcement stays in the tools. The prompt names write tools, so it is hidden under `MCP_READ_ONLY=true` (a model told to apply categories could only be refused) and on the `legacy` surface, and offered on `compact` and `all`.
+
+| Argument | Required | Validation |
+|----------|----------|------------|
+| `since` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-30` is refused), at most 10 characters. Omitted: all uncategorised transactions. There is no default, so the server clock is not read. An unknown key is refused. |
