@@ -23,6 +23,7 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 
 - [reference/configuration.md](reference/configuration.md): every environment variable, with type, default and source.
 - [reference/tools.md](reference/tools.md): every tool, grouped by domain, with its description and caveats.
+- [reference/prompts.md](reference/prompts.md): every MCP prompt, with its arguments, required tools and when it is offered.
 
 ## Explanation: understand how it works
 

@@ -3671,10 +3671,9 @@ test.describe('Docker E2E - compact manage_budget_months (#678)', () => {
 });
 
 test.describe('Docker E2E - MCP prompts (#660)', () => {
-  // The stack runs MCP_TOOL_SURFACE=all and #660 ships an empty PROMPT_DEFINITIONS, so this proves
-  // the capability and the empty-registry wiring on both transports. Offer and hide decisions are
-  // proven by tests/unit/prompt_registry.test.js. The first prompt ticket adds a positive
-  // prompts/get content assertion.
+  // The stack runs MCP_TOOL_SURFACE=all, so every prompt whose tools are published is offered.
+  // Offer and hide decisions per surface are proven by tests/unit/prompt_registry.test.js and one
+  // unit file per prompt; these rows prove the wire shape and the rendered text on both transports.
   test('initialize advertises prompts and prompts/list entries are well formed', async ({ mcp }) => {
     const caps = await mcp.serverCapabilities();
     expect(caps?.prompts, 'capabilities.prompts must be advertised').toBeTruthy();
@@ -3686,6 +3685,37 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
       expect(typeof p.description).toBe('string');
       expect(p.description.length).toBeGreaterThan(0);
     }
+    // #661: monthly_review is offered on this stack (surface all).
+    const review = prompts.find((p: any) => p.name === 'monthly_review');
+    expect(review, 'monthly_review must be listed').toBeTruthy();
+    expect(review.title).toBe('Monthly budget review');
+    expect(review.arguments).toEqual([expect.objectContaining({ name: 'month', required: false })]);
+  });
+
+  test('prompts/get monthly_review - default month renders a concrete month, never "this month" (#661)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('monthly_review', {});
+    expect(out.error).toBeUndefined();
+    expect(out.result.messages).toHaveLength(1);
+    expect(out.result.messages[0].role).toBe('user');
+    expect(out.result.messages[0].content.type).toBe('text');
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('get_context');
+    expect(text).toMatch(/\d{4}-\d{2}-01/);
+    expect(text).not.toContain('this month');
+  });
+
+  test('prompts/get monthly_review - an explicit month fills its first and last day (#661)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('monthly_review', { month: '2024-02' });
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('from 2024-02-01 to 2024-02-29');
+  });
+
+  test('prompts/get monthly_review - ERROR: a malformed month is -32602 and the value is not echoed (#661)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('monthly_review', { month: 'October' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('month');
+    expect(out.error?.message).not.toContain('October');
   });
 
   test('prompts/get - ERROR: an unknown prompt is -32602 "Unknown prompt"', async ({ mcp }) => {

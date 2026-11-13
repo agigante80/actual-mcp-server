@@ -104,10 +104,15 @@ for (const [label, env] of CONFIGS) {
     assert.strictEqual(typeof caps.prompts, 'object', JSON.stringify(caps));
     assert.ok(caps.prompts !== null);
   });
-  await check(`${label}: prompts/list returns an empty list (empty registry)`, async () => {
+  await check(`${label}: prompts/list follows the surface (legacy offers none, compact offers the read prompts)`, async () => {
     const res = await stdioSession(env, [INIT, INITIALIZED, LIST]);
     assert.ok(!res.get(2).error, JSON.stringify(res.get(2)));
-    assert.deepStrictEqual(res.get(2).result, { prompts: [] });
+    if (env.MCP_TOOL_SURFACE === 'compact') {
+      // #661: monthly_review needs only read tools, so it is offered with or without MCP_READ_ONLY.
+      assert.ok(res.get(2).result.prompts.some((p) => p.name === 'monthly_review'), JSON.stringify(res.get(2).result));
+    } else {
+      assert.deepStrictEqual(res.get(2).result, { prompts: [] });
+    }
   });
 }
 

@@ -299,7 +299,8 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `compact_get_context.test.js` | #672: `get_context`: every topic and option routes to the exact legacy tool and arguments through a stubbed `callOperation`; refusals call nothing; flat schema has no `oneOf`/`anyOf` and no `outputSchema`; read-only publication |
 | `prompt_registry.test.js` | #660: prompt registry: offer filter, the surface matrix through the real tool policy, name, required-tool and bounded-argument validators fed bad fixtures, `renderPrompt` |
 | `prompt_handlers.test.js` | #660: `registerPromptHandlers` over an in-memory SDK client (list, get, `-32602` for unknown, hidden, malformed and missing arguments, name cleaning) and the wiring assertions for both transports and the three start calls |
-| `prompts_entrypoint.test.js` | #660: the built entrypoint over stdio: `initialize` advertises prompts, `prompts/list` is `[]` on three configurations, `prompts/get` of an unknown name is `-32602` |
+| `prompts_entrypoint.test.js` | #660: the built entrypoint over stdio: `initialize` advertises prompts, `prompts/list` is `[]` on the default (legacy) surface and holds `monthly_review` on compact and compact read-only, `prompts/get` of an unknown name is `-32602` |
+| `prompt_monthly_review.test.js` | #661: the `monthly_review` prompt: the four required tools, the `month` schema (malformed, hostile and unknown-key refusals), exact first and last day (leap year included), the schema default month, the read-only text, and the offer matrix through the real tool policy |
 | `compact_list_entities.test.js` | #672: `list_entities`: every type default and every route (query, name, sort, payee_id, schedule_id, scope) with exact legacy name and arguments; mutual exclusion, required-with and not-valid-for-type refusals; the 4b rewrite keeps a `NotFoundRefusal` a `NotFoundRefusal` |
 | `tdqs_capture_env.test.js` | #679: the TDQS harness `captureEnv`: `compact` and `legacy` always set the surface, `MCP_TOOLSETS=all`, empty `MCP_TOOLS` and `MCP_READ_ONLY=false` so a repo `.env` cannot leak into a capture; an unknown, `all` or missing surface throws naming `legacy` and `compact`; importing the module runs no CLI command; `capture --surface bogus` exits 2 with usage and writes no file |
 | `compact_search_transactions.test.js` | #673: `search_transactions`: one positive per `by` row with exact legacy name and renamed arguments (no defaults sent); not-valid-for-row, bad date, month, amount, limit, offset and null refusals call nothing; flat schema, description, read-only annotation and the 4b rewrite |
@@ -1032,6 +1033,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `prompt_registry.test.js` | Prompt registry offer filter, surface matrix, validators (#660) | 20 |
 | `prompt_handlers.test.js` | `prompts/list` and `prompts/get` over an in-memory client, transport wiring guards (#660) | 13 |
 | `prompts_entrypoint.test.js` | Built entrypoint over stdio: prompts capability, empty list, `-32602` (#660) | 8 |
+| `prompt_monthly_review.test.js` | `monthly_review` prompt: schema, month boundaries, default month, read-only text, offer matrix (#661) | 8 |
 | `compact_list_entities.test.js` | Compact `list_entities`: defaults, routes, refusals, 4b rewrite (#672) | 51 |
 | `tdqs_capture_env.test.js` | TDQS harness capture env and `--surface` refusal (#679) | 7 |
 | `compact_search_transactions.test.js` | Compact `search_transactions`: seven rows, refusals, schema shape, 4b rewrite (#673) | 30 |
