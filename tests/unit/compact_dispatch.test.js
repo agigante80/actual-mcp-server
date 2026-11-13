@@ -286,10 +286,19 @@ await check('all surface + MCP_TOOLSETS: callOperation on a toolset-hidden legac
   assert.strictEqual(calls.length, 0);
 });
 
-await check('legacy surface: callOperation on a compact-hidden legacy tool is NOT bypassed (the bypass needs the compact surface)', async () => {
+await check('legacy surface: callOperation refuses a tool MCP_TOOLSETS hides', async () => {
   await init({ surface: 'legacy', toolsets: 'query' });
   const e = await reason(() => manager.callOperation(LIST, {}));
   assert.ok(e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS', String(e));
+});
+
+// config.ts rejects compact plus a narrowed MCP_TOOLSETS at startup today; this pins the
+// resolver as a second guard, so relaxing that refine (#680) cannot open a bypass.
+await check('NEGATIVE: compact surface: callOperation still refuses a tool MCP_TOOLSETS hides', async () => {
+  await init({ surface: 'compact', toolsets: 'query' });
+  const e = await reason(() => manager.callOperation(LIST, {}));
+  assert.ok(e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS', String(e));
+  assert.strictEqual(calls.length, 0);
 });
 
 await check('NEGATIVE: callOperation never accepts a compact name or an unknown name', async () => {

@@ -381,7 +381,8 @@ function resolveLegacy(registeredNames: readonly string[], settings: ToolsetSett
  *
  * Surfaces (#671), over the legacy names and the compact tools:
  *   legacy   today's algorithm on the legacy names; every compact tool is hidden (MCP_TOOL_SURFACE).
- *   compact  every legacy name is hidden (MCP_TOOL_SURFACE); a compact tool is published unless
+ *   compact  every legacy name is hidden (MCP_TOOL_SURFACE, or its legacy reason when
+ *            MCP_TOOLSETS or MCP_READ_ONLY hides it anyway); a compact tool is published unless
  *            MCP_READ_ONLY=true and one of its actions maps to a WRITE_CAPABLE tool.
  *   all      the legacy result plus the compact tools under the same read-only rule.
  * MCP_TOOLSETS and MCP_TOOLS select among LEGACY names only and never hide a compact tool.
@@ -403,8 +404,12 @@ export function resolvePublishedToolNames(
   const hidden = new Map<string, ToolUnavailableSetting>();
 
   for (const name of registeredNames) {
-    if (surface === 'compact') hidden.set(name, 'MCP_TOOL_SURFACE');
-    else if (legacy.hidden.has(name)) hidden.set(name, legacy.hidden.get(name)!);
+    // The legacy reason wins over the surface reason, also under `compact`: callOperation
+    // waves through ONLY a tool whose sole hide is the surface, so a tool that MCP_TOOLSETS or
+    // MCP_READ_ONLY would hide anyway stays refused even if config.ts stops rejecting the
+    // combination (#680 plans to relax that refine).
+    if (legacy.hidden.has(name)) hidden.set(name, legacy.hidden.get(name)!);
+    else if (surface === 'compact') hidden.set(name, 'MCP_TOOL_SURFACE');
     else published.push(name);
   }
   for (const tool of compactTools) {
