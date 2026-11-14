@@ -253,3 +253,42 @@ The first scoring left coherence at 4 on Disambiguation and Completeness. Two of
 - **Coherence is 4, not 5, on Disambiguation and Completeness** (median of 3, both before and after tuning). Disambiguation: the justifications cite the read overlap among `get_context`, `list_entities`, `run_query`, `search_transactions`, `summarize_transactions` and `list_budget_months`, which the descriptions already bound by naming the sibling to use instead; the run-to-run result is 4, 4, 5 (before) and 5, 4, 4 (after), so one more rewording cannot be told from noise. Completeness: the cited gaps are not description defects but missing operations: creating or deleting budget files, assigning a tag to a transaction, merging categories, transaction attachments. Closing them needs new actions, which this ticket does not allow, and no description sentence can state an operation that does not exist. Tuning stopped after one round because the two remaining dimensions are either scorer noise or outside what a description edit may change.
 - **Minimum TDQS is met (4.5)**; the weakest dimension in the set is `list_budget_months` parameter semantics (3 in every run, one parameter, `month`, already described in the schema).
 - **Not comparable with a Glama-hosted score**, as stated in Deviations above. Coherence run scores vary by 0.7 across three runs, so a one-run coherence figure is not a reliable difference.
+
+## Glama's own scores for the compact surface (v0.30.0)
+
+Read from Glama's admin score pages on 2026-11-14, after Glama built and scored release 0.30.0 (main `1cce9f7b`, compact default, 15 public tools). This is Glama's scorer, not the local DeepSeek harness, so these figures are the measurement the local estimates above were standing in for.
+
+| | v0.29.0 (85 legacy tools) | v0.30.0 (15 compact tools) |
+| :--- | ---: | ---: |
+| Server coherence grade | B | A |
+| Disambiguation | 2 | 5 |
+| Naming consistency | 4 | 5 |
+| Tool count | 2 | 5 |
+| Completeness | 5 | 4 |
+| TDQS average | 4.3 | 4.8 |
+| TDQS lowest tool | 3.3 | 4.4 |
+| Tools scored | 85 of 85 | 15 of 15 |
+
+Per tool (v0.30.0):
+
+| Tool | Glama TDQS |
+| :--- | ---: |
+| `manage_rules` | 5.0 |
+| `manage_accounts` | 4.9 |
+| `manage_payees` | 4.9 |
+| `manage_transactions` | 4.9 |
+| `run_query` | 4.9 |
+| `search_transactions` | 4.9 |
+| `manage_budget_months` | 4.8 |
+| `manage_schedules` | 4.8 |
+| `manage_tags` | 4.8 |
+| `get_context` | 4.7 |
+| `manage_categories` | 4.7 |
+| `list_entities` | 4.6 |
+| `summarize_transactions` | 4.6 |
+| `list_budget_months` | 4.4 |
+| `manage_budget_files` | 4.4 |
+
+**What is left.** Completeness is the only coherence dimension below 5. Glama's stated reason: tags can be created and deleted, but no tool assigns a tag to a transaction (the transaction fields omit tags), and notes can be set per entity but not listed or deleted on their own; it adds that `run_query` and the entity tools are a workaround for both. Both are missing operations, not description defects, which matches the local Completeness gap recorded above. On TDQS the two lowest tools are `list_budget_months` and `manage_budget_files` at 4.4; because the worst tool carries 40% of description quality, they are the next rewrite targets.
+
+**Local estimate against Glama.** The local DeepSeek harness put the compact surface at 4.6 with a 4.5 minimum and coherence 4 on Disambiguation; Glama scored 4.8, 4.4 and 5. The weakest dimension in the local set was `list_budget_months` parameter semantics, and that tool is also at the bottom of Glama's list.
