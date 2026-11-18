@@ -6,16 +6,18 @@
  * WHY THIS IS GATED, AND GATED HARD.
  *
  * manage_budget_files import does not just read a file: upstream importBudget CREATES a
- * budget file on the Actual server AND LOADS it, so the session's active budget
- * changes to the new copy. Two consequences drive the guards below:
+ * budget file on the Actual server. It does NOT move the session (#687): the next call
+ * from every session reloads that session's own configured budget. Two consequences
+ * drive the guards below:
  *
  *   1. It leaves a budget behind on the server. That is residue this suite cannot
  *      sweep (there is no delete-budget tool), so the import half only runs when
  *      MCP_TEST_BUDGET_SYNC_ID marks the target budget as DISPOSABLE. Without that
  *      marker the import is skipped and only the read-only export half runs.
- *   2. Every later test would silently run against the imported copy. This module
- *      therefore switches back to the original configured budget before returning,
- *      and the runner schedules it LAST.
+ *   2. The import closes the open budget for every session while it runs, so the
+ *      runner schedules this module LAST to keep that reload out of the other
+ *      modules. The switch call at the end is a plain check of `switch`, not a
+ *      rescue: the session is already on its configured budget.
  *
  * The export half is safe unconditionally: it only reads, and it writes a zip
  * inside the SERVER's export directory, never into the repo.
@@ -55,7 +57,7 @@ export async function roundtripTests(client, _context) {
   }
 
   // --------------------------------------------------------------------------
-  // Remember where we started, so the import half can put the session back.
+  // Remember the configured budget name, for the switch check after the import.
   // --------------------------------------------------------------------------
   let originalBudgetName = null;
   try {
@@ -128,9 +130,9 @@ export async function roundtripTests(client, _context) {
   // The destructive half. Only against a budget explicitly marked disposable.
   // --------------------------------------------------------------------------
   // #348 removed the stdio transport guard that used to live here. The round trip
-  // switches back to the configured budget at the end, which stdio could not do
-  // until it was given a synthetic session id, so this half was skipped over stdio.
-  // It now runs on both transports.
+  // ends with a switch call, which stdio could not make until it was given a
+  // synthetic session id, so this half was skipped over stdio. It now runs on both
+  // transports.
 
   const disposable = (process.env.MCP_TEST_BUDGET_SYNC_ID || '').trim();
   if (!disposable) {
@@ -146,45 +148,39 @@ export async function roundtripTests(client, _context) {
   }
 
   try {
-    const beforeAccounts = unwrap(await callTool('list_entities', { type: 'account' }));
-    const beforeCount = Array.isArray(beforeAccounts) ? beforeAccounts.length : 0;
-
     const res = unwrap(await callTool('manage_budget_files', { action: 'import', path: exportedPath, type: 'actual' }));
     if (res?.success !== true || typeof res?.budgetId !== 'string') {
       fail(`budgets_import: expected { success: true, budgetId }, got ${JSON.stringify(res).slice(0, 160)}`);
     } else {
-      console.log(`  ok budgets_import: restored ${exportedBytes} bytes as budget ${res.budgetId}`);
-
-      // THE ROUND-TRIP ASSERTION. The imported budget is now loaded, so this reads
-      // the restored copy. Equal account counts is what proves the export was
-      // actually RESTORABLE rather than merely well-formed.
-      const afterAccounts = unwrap(await callTool('list_entities', { type: 'account' }));
-      const afterCount = Array.isArray(afterAccounts) ? afterAccounts.length : 0;
-      if (afterCount !== beforeCount) {
-        fail(`round trip: account count changed across export/import (${beforeCount} before, ${afterCount} after)`);
+      // Upstream rejects an archive it cannot load, so success plus an id is the proof
+      // the export was importable. An account-count comparison used to follow; it
+      // compared the configured budget with itself and could not fail (#687).
+      console.log(`  ok budgets_import: imported ${exportedBytes} bytes as new local budget ${res.budgetId}`);
+      const message = String(res?.message ?? '');
+      if (/LOADED|action switch|budgets_switch/.test(message) || !message.includes('stays on its configured budget')) {
+        fail(`budgets_import: the message must say the session stays on its configured budget, got: ${message.slice(0, 200)}`);
       } else {
-        console.log(`  ok round trip verified: ${beforeCount} account(s) preserved through export and re-import`);
+        console.log('  ok budgets_import: the message says the session stays on its configured budget');
       }
     }
   } catch (err) {
     fail(['budgets_import round trip:', err.message].map(String).join(' '));
   } finally {
-    // Always put the session back on a CONFIGURED budget, even if the assertions
-    // above failed. Leaving it on the imported copy would corrupt the cleanup
-    // phase, which deletes test entities by id.
+    // A plain check that `switch` to the configured budget works after an import. The
+    // session never left that budget (#687), so this is not a rescue.
     if (originalBudgetName) {
       try {
         const back = unwrap(await callTool('manage_budget_files', { action: 'switch', budget_name: originalBudgetName }));
         if (back?.success === true) {
-          console.log(`  ok switched back to the configured budget "${originalBudgetName}"`);
+          console.log(`  ok switch to the configured budget "${originalBudgetName}"`);
         } else {
-          fail(`round trip: could not switch back to "${originalBudgetName}": ${JSON.stringify(back).slice(0, 160)}`);
+          fail(`round trip: could not switch to "${originalBudgetName}": ${JSON.stringify(back).slice(0, 160)}`);
         }
       } catch (err) {
         fail(['round trip switch-back:', err.message].map(String).join(' '));
       }
     } else {
-      fail('round trip: the original budget name was never resolved, so the session was left on the imported budget.');
+      fail('round trip: the original budget name was never resolved, so the switch check could not run.');
     }
   }
 }

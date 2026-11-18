@@ -220,11 +220,11 @@ export async function run() {
       guard.setLastCompleted('extendedTests');
       await fullTests(client, context, testOpts);
       guard.setLastCompleted('fullTests');
-      // #332/#334: LAST, and only at `full`. manage_budget_files import LOADS the
-      // imported budget, so anything running after it would silently target the
-      // imported copy. The module switches back before returning, but running it
-      // last is the primary defence and the switch-back is the backstop. Its own
-      // destructive half additionally gates on MCP_TEST_BUDGET_SYNC_ID.
+      // #332/#334: LAST, and only at `full`. manage_budget_files import closes the open
+      // budget for every session while it runs and leaves a server budget file nothing
+      // here can delete. It does NOT move the session (#687); running it last keeps the
+      // reload out of the other modules. Its own destructive half additionally gates on
+      // MCP_TEST_BUDGET_SYNC_ID.
       await roundtripTests(client, context);
       guard.setLastCompleted('roundtripTests');
     }

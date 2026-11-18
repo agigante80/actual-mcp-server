@@ -5,19 +5,23 @@ import adapter from '../lib/actual-adapter.js';
 /**
  * #334: expose `@actual-app/api`'s `importBudget()`.
  *
- * TWO SIDE EFFECTS EVERY CALLER MUST KNOW, both verified against `importActual` in
- * the installed `@actual-app/api` and against a live server in the Docker E2E run:
+ * WHAT A CALL DOES, verified against `importActual` and `importBuffer` in the installed
+ * `@actual-app/api` and against a live server (#687, 2026-11-18):
  *
- * 1. IT CAN OVERWRITE AN EXISTING BUDGET'S LOCAL COPY. The local budget directory is
- *    keyed by the id the ARCHIVE carries, so re-importing an export of budget X
- *    replaces X's local data. On the SERVER it never overwrites anything (#570):
- *    `importActual` clears the cloud file and group ids and uploads the result as a
- *    NEW budget file (best effort; a failed upload leaves it local only).
+ * 1. IT ADDS A BUDGET AND REPLACES NOTHING. `importActual` passes no local id, so the
+ *    archive lands in a NEW local directory under a fresh id (a YNAB import derives
+ *    its id from the budget name), next to the copy it was exported from. On the
+ *    SERVER it never overwrites anything either (#570): the cloud file and group ids
+ *    are cleared and the result is uploaded as a NEW budget file (best effort; a
+ *    failed upload leaves it local only). No tool here removes that file.
  *    A session with a restricted budget ACL is refused this tool outright (#570).
- * 2. IT CHANGES THE ACTIVE BUDGET. The imported budget is loaded, so the session
- *    switches to it. If the archive's id is not in the `BUDGET_N_*` registry, that
- *    budget is also outside whatever set the ACL resolved for this request, and
- *    `actual_budgets_switch` cannot reach it by name.
+ * 2. THE SESSION DOES NOT MOVE. Upstream closes the open budget and loads the
+ *    imported one, but `importBudgetTracked` records an `imported:` sentinel, so the
+ *    next operation of EVERY session (this one included) reloads that session's own
+ *    configured budget. A write sent after the import lands in the configured
+ *    budget. The imported budget has a Sync ID no `BUDGET_N_*` entry names, so
+ *    `actual_budgets_switch` cannot reach it: an operator has to add that Sync ID to
+ *    the configuration and restart. The returned id is the LOCAL id, not a Sync ID.
  *
  * The write queue enforces the budget ACL when this is enqueued, so this cannot be
  * used to reach a budget the caller was already denied. It does mean a budget
@@ -77,12 +81,11 @@ export default createTool({
   name: 'actual_budgets_import',
   description:
     'Restore or import a budget from an Actual Budget ".zip" export or a YNAB4/YNAB5 export. ' +
-    'DESTRUCTIVE: the budget id comes from the archive, so re-importing an export REPLACES that ' +
-    'budget\'s local copy, and the result is uploaded to the server as a new budget file. Never call this to "have a look at" a file. Confirm ' +
-    'with the user before importing over a budget that holds real data. ' +
-    'It also LOADS the imported budget, so the active budget for this session changes; if the archive\'s ' +
-    'budget is not in the configured list, call actual_budgets_list_available and actual_budgets_switch ' +
-    'afterwards to go back. Provide exactly one of "path" (a file on the server) or "base64" (inline contents).',
+    'It ADDS a budget and replaces none: each import makes a new local copy and normally uploads it to the ' +
+    'Actual server as a NEW budget file that no tool here can remove. Never call this to "have a look at" a file; ' +
+    'confirm with the user first. This session STAYS on its own configured budget: later calls do not reach the ' +
+    'imported budget. To use it, an operator adds its Sync ID to the server configuration and restarts. ' +
+    'Provide exactly one of "path" (a file on the server) or "base64" (inline contents).',
   schema: InputSchema,
   handler: async (input: z.infer<typeof InputSchema>) => {
     const source = input.path
@@ -107,9 +110,10 @@ export default createTool({
       type: input.type,
       source: input.path ? 'path' : 'base64',
       message:
-        `Imported the budget as id ${result.id}. This budget is now LOADED and active for this session, ` +
-        'and it is not in the server\'s configured budget list. Use actual_budgets_list_available and ' +
-        'actual_budgets_switch to return to a configured budget.',
+        `Imported the budget as a new local copy (id ${result.id}); it is normally also uploaded to the Actual ` +
+        'server as a new budget file. This session stays on its configured budget: later calls do NOT reach the ' +
+        'imported budget, and nothing was replaced. To use the imported budget, an operator adds its Sync ID ' +
+        '(in Actual: Settings, Advanced settings) to this server\'s configuration and restarts it.',
     };
   },
   examples: [

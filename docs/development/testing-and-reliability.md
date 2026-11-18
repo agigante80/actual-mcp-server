@@ -1252,7 +1252,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 > silently reuse a previous run's row and the create assertion would pass having created nothing.
 > The delete is verified by ABSENCE from `actual_tags_list`, since it is a soft delete.
 
-> **`roundtrip.js` runs LAST and only at the `full` level (#332/#334).** `actual_budgets_import` creates a budget on the Actual server AND loads it, so anything scheduled after it would silently target the imported copy. The module switches back to the original configured budget before returning, but running it last is the primary defence. Its destructive half additionally requires `MCP_TEST_BUDGET_SYNC_ID` to be set, because the budget it creates is residue this suite has no tool to delete. Without that marker only the read-only export half runs.
+> **`roundtrip.js` runs LAST and only at the `full` level (#332/#334).** `actual_budgets_import` creates a budget on the Actual server and closes the open budget for every session while it runs. It does not move the session: the next call reloads the session's own configured budget (#687). Running it last keeps that reload out of the other modules. Its destructive half additionally requires `MCP_TEST_BUDGET_SYNC_ID` to be set, because the budget it creates is residue this suite has no tool to delete. Without that marker only the read-only export half runs.
 
 **Test Levels:**
 

@@ -451,15 +451,19 @@ every other operation is. A `MCP_STATIC_TOKENS` principal (#572) is restricted t
 
 `actual_budgets_import` wraps `@actual-app/api`'s `importBudget()`, which does not
 merely read a file. Read from `importActual` and `cloud-storage` in the installed
-package: it closes the current budget, restores the archive into the local directory
-named by **the budget id the archive itself carries**, clears its cloud file and group
-ids, loads it, and uploads it as a new budget file. Three consequences follow, all
-accepted behaviour rather than defects:
+package: it closes the current budget, restores the archive into a **new** local
+directory (no local id is passed, so a fresh one is taken; a YNAB import derives its
+id from the budget name), clears its cloud file and group ids, loads it, and uploads
+it as a new budget file. This server then makes every session reload its own
+configured budget on its next call, so no session stays on the imported copy
+(verified live for #687). Three consequences follow, all accepted behaviour rather
+than defects:
 
-1. **It can OVERWRITE an existing budget's LOCAL copy.** Re-importing an export of
-   budget X replaces X's local data, which this process serves until X is next
-   downloaded. On the server it never overwrites another budget: the upload always
-   creates a new file (best effort; a failed upload leaves the budget local only).
+1. **It adds a budget and never overwrites one.** Re-importing an export of budget X
+   leaves X's local copy and X's server file untouched and adds another copy beside
+   them. The upload always creates a new server file (best effort; a failed upload
+   leaves the budget local only), and no tool here can remove it. To use the imported
+   budget, an operator adds its Sync ID to the server configuration and restarts.
 2. **A budget the import creates is outside the ACL.** `AUTH_BUDGET_ACL` maps
    principals to budget sync IDs that exist when the ACL is evaluated, so a budget
    that first appears mid-session has no ACL entry covering it. A session with a

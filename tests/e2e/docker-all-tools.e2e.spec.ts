@@ -2736,14 +2736,10 @@ payee: payee.id,
 
   // ==================== EXPORT / IMPORT ROUND TRIP (2 tools) ====================
   //
-  // Deliberately the LAST tests in this file. manage_budget_files import LOADS the imported
-  // budget, so the session's active budget changes and any test running after it would
-  // silently run against the imported copy. The import test switches back at the end,
-  // but ordering is the primary defence and the switch-back is the backstop.
-  //
-  // These are the one place where a shared MCP session is genuinely visible to the test:
-  // the fixtures make each test provision its own DATA, and the session-level active
-  // budget is not data any factory owns.
+  // Deliberately the LAST tests in this file. An import does NOT move the session (#687:
+  // the next call reloads the session's own configured budget), but it closes the open
+  // budget for every session while it runs and leaves a server budget file that no tool
+  // here can delete, so the file takes as few imports as it can and takes them last.
   //
   // The whole round trip stays server-side: the zip never crosses the transport. The
   // export tool returns a path inside the container, and the import tool reads that same
@@ -2781,57 +2777,40 @@ payee: payee.id,
     expect(drift).toBeLessThan(0.5);
   });
 
-  test('manage_budget_files import - should restore the export and preserve its accounts', async ({ mcp, cleanup }) => {
-    // Resolve the budget to come back to, and register the switch-back as TEARDOWN before
-    // importing anything. Doing it inline at the end of the test (as this used to) means a
-    // failed assertion above leaves the session pointed at the imported budget for the
-    // rest of the process, which is precisely the cross-test contamination #375 removes.
-    // The name is asserted rather than guarded with `if`, so an unexpected shape fails
-    // here instead of silently skipping the restore.
-    const availableBefore = await mcp.call('list_entities', { type: 'budget_file' });
-    const originalName = (Array.isArray(availableBefore) ? availableBefore : availableBefore?.budgets)?.[0]?.name;
-    expect(originalName, 'the configured budget must be resolvable before an import').toBeTruthy();
-    cleanup.add(CLEANUP_ORDER.activeBudget, `restore active budget ${originalName}`, async () => {
-      await mcp.call('manage_budget_files', { action: 'switch', budget_name: originalName });
-    });
-
-    // Take the export this test will restore, rather than reading a path an earlier test
+  test('manage_budget_files import - adds a budget and leaves the session on its configured budget (#687)', async ({ mcp, makeCategory }) => {
+    // Take the export this test will import, rather than reading a path an earlier test
     // happened to leave behind.
     const exported = await mcp.call('manage_budget_files', { action: 'export', filename: 'e2e-import-source.zip' });
     expect(typeof exported?.path).toBe('string');
 
-    // Capture what the CURRENT budget looks like, so we can assert the restore.
-    const beforeAccounts = await mcp.call('list_entities', { type: 'account' });
-    const beforeCount = Array.isArray(beforeAccounts) ? beforeAccounts.length : 0;
+    // Created AFTER the export and BEFORE the import, so the order matters: the configured
+    // budget holds this marker and the imported copy, built from the earlier archive, does not.
+    const marker = await makeCategory({ name: `e2e-687-marker-${Date.now()}` });
 
     const data = await mcp.call('manage_budget_files', { action: 'import', path: exported.path, type: 'actual' });
 
+    // Upstream rejects an archive it cannot load, so success plus an id is the proof the
+    // export was importable. (An account-count comparison used to stand here; it compared
+    // the configured budget with itself and could not fail.)
     expect(data?.success).toBe(true);
     expect(typeof data?.budgetId).toBe('string');
     expect(data?.source).toBe('path');
-    // The side-effect warning is part of the contract, not decoration: an assistant that
-    // misses it operates on the wrong budget for the rest of the session.
-    // The message key is not one the compact layer rewrites, so it may still carry the legacy
-    // wording; either phrasing names the switch step.
-    expect(String(data?.message)).toMatch(/budgets_switch|manage_budget_files with action switch/);
+    // The message must not claim the session moved: a model that believes it sends the
+    // writes it means for the imported copy into the configured budget.
+    expect(String(data?.message)).not.toMatch(/budgets_switch|manage_budget_files with action switch|LOADED/);
+    expect(String(data?.message)).toContain('stays on its configured budget');
 
-    // THE ROUND-TRIP ASSERTION. The imported budget is now loaded, so a plain
-    // accounts_list reads the restored copy. Matching account counts is what proves the
-    // export was actually restorable, rather than merely well-formed.
-    const afterAccounts = await mcp.call('list_entities', { type: 'account' });
-    const afterCount = Array.isArray(afterAccounts) ? afterAccounts.length : 0;
-    expect(afterCount).toBe(beforeCount);
-
-    // Restore the session to a CONFIGURED budget and assert it worked. The registered
-    // teardown above is the backstop that runs even if an assertion fails; this is the
-    // assertion that the switch itself is honoured, which teardown deliberately cannot
-    // make because it swallows its own errors.
-    const back = await mcp.call('manage_budget_files', { action: 'switch', budget_name: originalName });
-    expect(back?.success).toBe(true);
+    // WHICH BUDGET THE SESSION IS ON AFTER AN IMPORT. A session left on the imported copy
+    // would not see the marker, because the archive predates it. Seeing it proves the
+    // session reads its configured budget, so no switch-back is needed.
+    const listed = await mcp.call('list_entities', { type: 'category' });
+    const categories = (Array.isArray(listed) ? listed : listed?.categories ?? []) as any[];
+    expect(categories.find((c: any) => c?.id === marker.id)).toBeTruthy();
   });
 
   // #678: the compact manage_budget_files rows live here, after the legacy round trip, for the
-  // same reason: they switch and import. The switch-back is registered as teardown FIRST.
+  // same reason: they import. The switch here targets the budget the session is already on, so its
+  // teardown is only a backstop.
   test('manage_budget_files switch, export and import round trip', async ({ mcp, cleanup }) => {
     const availableBefore = await mcp.call('list_entities', { type: 'budget_file' });
     const originalName = (Array.isArray(availableBefore) ? availableBefore : availableBefore?.budgets)?.[0]?.name;

@@ -188,7 +188,7 @@ src/tools/
 ├── budgets_hold_for_next_month.ts
 ├── budgets_reset_hold.ts
 ├── budgets_export.ts                    # #332: writes a zip to ACTUAL_EXPORT_DIR
-├── budgets_import.ts                    # #334: LOADS the imported budget (active budget changes)
+├── budgets_import.ts                    # #334: ADDS a budget file; the session stays on its own (#687)
 ├── budget_updates_batch.ts
 ├── preferences_get.ts                   # Preferences (#333)
 ├── categories_get.ts                   # Categories

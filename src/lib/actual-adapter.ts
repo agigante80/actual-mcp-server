@@ -5228,17 +5228,18 @@ export async function exportBudget(): Promise<Uint8Array> {
  * budget rather than returning the first one's id. Guarded by
  * `tests/unit/adapter_nonidempotent_no_retry.test.js`.
  *
- * Side effect worth knowing at every call site: upstream `importBudget` LOADS the
- * imported budget, so the session's active budget changes to the new file. It is
- * therefore outside the `BUDGET_N_*` registry and outside whatever budget the ACL
- * resolved for this request. The resulting budget is un-ACL'd because it did not
- * exist when the ACL was built, so a RESTRICTED caller is refused outright (#570),
- * before any lock or upstream call. Wildcard and unrestricted callers can still
- * import; the write queue also enforces the ACL on their active budget.
+ * What a call does (#687, verified live): upstream `importBudget` closes the open
+ * budget and loads the imported one, but only for the duration. `importBudgetTracked`
+ * records an `imported:` sentinel, so the next operation of every session reloads
+ * that session's own configured budget: the session's active budget does NOT change.
+ * The imported budget is outside the `BUDGET_N_*` registry and un-ACL'd, because it
+ * did not exist when the ACL was built, so a RESTRICTED caller is refused outright
+ * (#570), before any lock or upstream call. Wildcard and unrestricted callers can
+ * still import; the write queue also enforces the ACL on their active budget.
  *
- * Upstream creates a NEW cloud file for the import (fresh id, best-effort upload),
- * so it never overwrites another budget on the server. The local copy is keyed by
- * the archive's own id, so an archive of budget X replaces X's LOCAL copy.
+ * Nothing is overwritten. Upstream passes no local id, so the archive lands in a NEW
+ * local directory beside the existing copies, and it creates a NEW cloud file
+ * (best-effort upload), so it never replaces another budget locally or on the server.
  */
 export async function importBudget(
   input: string | Uint8Array,

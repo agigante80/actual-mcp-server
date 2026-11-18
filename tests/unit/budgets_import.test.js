@@ -2,10 +2,9 @@
 //
 // #334: unit tests for actual_budgets_import.
 //
-// This is the most side-effecting tool in the set: upstream importBudget creates a
-// budget file AND loads it, so the session's active budget changes and the new
-// budget is outside the BUDGET_N_* registry. The tests below therefore assert on
-// three things beyond the happy path:
+// The import ADDS a budget file (a new local copy, normally a new server file) and
+// leaves the session on its configured budget (#687). The tests below therefore
+// assert on three things beyond the happy path:
 //
 //   1. The exactly-one-of path/base64 contract, in both failing directions. A
 //      schema that accepted both would silently pick one and ignore the other.
@@ -13,9 +12,10 @@
 //      Uint8Array, not forwarded as a string (a string means "filesystem path" to
 //      upstream, so getting this wrong would try to open a file named after the
 //      base64 blob).
-//   3. That the result MESSAGE tells the caller the active budget changed. That
-//      warning is the only thing standing between an assistant and silently
-//      operating on the wrong budget for the rest of the session.
+//   3. That the result MESSAGE says the session STAYS on its configured budget.
+//      Until #687 it said the opposite ("now LOADED and active", "switch back"),
+//      which sent a caller's next writes, meant for the imported copy, into the
+//      configured budget.
 //
 // Run: node tests/unit/budgets_import.test.js
 
@@ -79,13 +79,22 @@ const PAYLOAD_B64 = PAYLOAD.toString('base64');
     check(seen?.opts?.type === 'ynab4', 'type ynab4 forwarded');
   }
 
-  console.log('\n[budgets_import] positive: the result WARNS that the active budget changed');
+  console.log('\n[budgets_import] positive: the result says where later calls land (#687)');
   {
     const r = (await tool.call({ path: '/tmp/x.zip' }))?.result;
     const m = String(r?.message ?? '');
-    check(/active/i.test(m), 'message says the budget is now active');
-    check(/actual_budgets_switch/.test(m), 'message points at actual_budgets_switch to get back');
     check(m.includes(NEW_ID), 'message includes the new budget id');
+    check(m.includes('stays on its configured budget'), 'message says the session stays on its configured budget');
+    check(/Sync ID/.test(m), 'message says how the imported budget is reached');
+  }
+
+  console.log('\n[budgets_import] negative: the result never claims the session moved (#687)');
+  {
+    const r = (await tool.call({ path: '/tmp/x.zip' }))?.result;
+    const m = String(r?.message ?? '');
+    check(!/LOADED/.test(m), 'message does not say the imported budget is LOADED');
+    check(!/active for this session/.test(m), 'message does not say the imported budget is active');
+    check(!/actual_budgets_switch/.test(m), 'message does not send the caller to actual_budgets_switch');
   }
 
   console.log('\n[budgets_import] negative: the exactly-one-of contract');
@@ -148,7 +157,9 @@ const PAYLOAD_B64 = PAYLOAD.toString('base64');
   console.log('\n[budgets_import] metadata');
   {
     check(tool.name === 'actual_budgets_import', 'tool name matches the registry entry');
-    check(/active budget/i.test(tool.description), 'the description warns about the active-budget side effect');
+    check(tool.description.includes('STAYS on its own configured budget'), 'the description says the session stays put (#687)');
+    check(tool.description.includes('NEW budget file'), 'the description says a NEW budget file is added');
+    check(!/REPLACES|DESTRUCTIVE|LOADS/.test(tool.description), 'the description claims no replacement and no load (#687)');
   }
 
   adapter.importBudget = orig;

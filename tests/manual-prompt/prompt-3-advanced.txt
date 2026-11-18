@@ -229,15 +229,12 @@ as skipped.
     A filename that is ACCEPTED here is a FAILURE, report it prominently.
 
 - manage_budget_files, action: "import"  (DISPOSABLE BUDGET ONLY)
-  First call list_entities with type "account" and record the account count as N.
   Input: { action: "import", path: "<the path recorded above>", type: "actual" }
-  Positive: expect success=true and a budgetId string. The message MUST mention
-    switching with manage_budget_files; if it does not, report that as a failure.
-  Then call list_entities with type "account" again and expect the SAME count N.
-    This is the round-trip assertion: it proves the export was restorable.
-  Then call list_entities with type "budget_file" and manage_budget_files with
-    action "switch" back to the ORIGINAL budget name before continuing. Confirm the
-    switch returned success=true.
+  Positive: expect success=true and a budgetId string. The message MUST say the
+    session stays on its configured budget; if it tells you to switch back, or says
+    the imported budget is now active, report that as a failure.
+  Do NOT switch afterwards: the session is still on its configured budget, and the
+    imported copy is not reachable from here.
   Negative: call with { action: "import" } (no source at all)
     Expect: rejected, mentioning that exactly one of path or base64 is required.
 

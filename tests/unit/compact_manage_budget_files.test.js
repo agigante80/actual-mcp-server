@@ -155,8 +155,17 @@ await check('read-only: every action is refused with MCP_READ_ONLY and runs noth
     } finally { legacy.call = original; }
   }
 });
-await check('description states the destructive and side-effect semantics', () => {
-  for (const w of ['DESTRUCTIVE', 'REPLACES', 'NEW server budget file', 'LOADS', 'OVERWRITES', 'this session only']) assert.ok(spec.description.includes(w), w);
+await check('description states the side-effect semantics', () => {
+  for (const w of ['ADDS a budget', 'replaces nothing', 'NEW server budget file', 'OVERWRITES', 'this session only']) assert.ok(spec.description.includes(w), w);
+});
+// #687: the import overwrites nothing and loads nothing for the session; the old wording said
+// both, and a model that believed it wrote into the configured budget by mistake.
+const FALSE_IMPORT_CLAIM = /REPLACES|import is DESTRUCTIVE|LOADS the imported/;
+await check('NEGATIVE #687: the description claims no replacement and no load', () => {
+  assert.ok(!FALSE_IMPORT_CLAIM.test(spec.description), spec.description);
+});
+await check('NEGATIVE #687: the pre-#687 import line is caught by that check', () => {
+  assert.ok(FALSE_IMPORT_CLAIM.test("import is DESTRUCTIVE: importing an export REPLACES that budget's local copy"));
 });
 
 // ---- #684: behaviour facts the annotations cannot carry ----

@@ -64,7 +64,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 9 | Prompt 3 | 2 | Advanced query + bank sync: `run_query`, `manage_accounts` action bank_sync |
 | 9b | Prompt 3 | 2 | Notes (get + set): `list_entities` type note, the `set_note` actions |
 | 9c | Prompt 3 | 1 | Preferences (synced display settings, #333): `get_context` topic preferences |
-| 9d | Prompt 3 | 2 | Budget export + import round trip (#332/#334). **Import half needs a disposable budget**: it creates and loads a new budget |
+| 9d | Prompt 3 | 2 | Budget export + import round trip (#332/#334). **Import half needs a disposable budget**: it adds a new budget file to the server that no tool here can remove |
 | 10 | Prompt 3 | 2 | Session management (`actual_session_list`, `actual_session_close`). **Legacy or all surface only**: the block is skipped on compact, so it is counted separately from the compact total |
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |

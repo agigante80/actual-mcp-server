@@ -126,7 +126,7 @@ const DESTRUCTIVE = new Set<string>([
   'manage_tags',
   'manage_rules',
   'manage_schedules',
-  // Compact tools (#678): manage_budget_files imports and exports (both destructive today); manage_budget_months only sets fields in place, so it is ADDITIVE.
+  // Compact tools (#678): manage_budget_files exports (overwrites a same-named file) and imports (#687: adds a server budget file no tool here removes, so irreversible; it replaces nothing); manage_budget_months only sets fields in place, so it is ADDITIVE.
   'manage_budget_files',
   'actual_account_groups_delete',
   'actual_accounts_close',
@@ -144,6 +144,8 @@ const DESTRUCTIVE = new Set<string>([
   // judgement call rather than a derivation.
   'actual_bank_sync',
   'actual_budgets_export',
+  // #687: the import replaces nothing, but it is irreversible from here (it adds a server budget
+  // file no tool removes), so the hint stays to make a client ask first.
   'actual_budgets_import',
   'actual_categories_delete',
   'actual_category_groups_delete',
