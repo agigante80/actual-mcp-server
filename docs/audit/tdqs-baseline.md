@@ -346,3 +346,18 @@ Net growth is 443 bytes of description and 444 of entry (cap 500); `COMPACT_TOTA
 **Not published**, per the ticket: the import timeout value, the export directory, the fact that `path` is not restricted to a directory, any typed-refusal wording, and the upstream behaviours not checkable here (in-flight calls during a switch, encryption of an export, partial replacement on a failed import).
 
 **After scores.** Read from Glama's admin TDQS page on 2026-11-18 for release 0.30.1: Behavior 3 to 5, TDQS 4.4 to 4.9 (Conciseness 4, every other dimension 5). The reviewer's Behavior reason cites the facts this ticket added: the upload becomes a new server file that nothing removes, the reload after an import applies to every session, a load failure can surface on the next call, and the timeout risk. It also cites "REPLACES that budget's local copy", the older import wording that #687 holds to be false; if #687 confirms that and the wording is corrected, this score was partly earned by a wrong sentence and should be read again.
+
+## Scores after the corrected import wording and the by_payee fix (v0.30.3)
+
+Read from Glama's admin TDQS page on 2026-11-18, after Glama built and scored release 0.30.3 (main `216bc481`, 15 of 15 tools). Glama never built 0.30.2, so this one build measures both description changes since 0.30.1: #687 in `manage_budget_files` (an import ADDS a budget, it does not replace one) and #685 with #686 in `summarize_transactions` (the `by_payee` line now states the order and what `limit` keeps).
+
+| Tool | TDQS v0.30.1 | TDQS v0.30.3 | Behavior | Conciseness | Completeness | Parameters | Purpose | Usage |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `manage_budget_files` | 4.9 | 4.8 | 5 | 4 | 5 | 4 | 5 | 5 |
+| `summarize_transactions` | 4.9 | 4.9 | 5 | 4 | 5 | 5 | 5 | 5 |
+
+`manage_budget_files` answers the question the #684 note left open. Behavior stays 5 with the false "REPLACES" sentence gone: the reviewer now cites "imports ADD a new local/server copy rather than replacing" among the disclosed side effects, so the score was not resting on the wrong sentence. The 0.1 drop comes from Parameters, 5 to 4, with the reason that the description "mostly reinforces rather than extends the schema" (schema coverage 83%). The #687 change did not touch the parameter text, so this is within the run-to-run spread of the scorer (up to 0.4, see the known risk above) and not a regression to chase.
+
+`summarize_transactions` is unchanged on every dimension. Conciseness stays 4 for the same reason as before: the per-report block is dense and hard to scan.
+
+Server level: TDQS average 4.8 over 15 tools, lowest tool `list_entities` at 4.6, both unchanged. The other 13 tools kept their 0.30.1 ratings because unchanged definitions share the same evaluation.
