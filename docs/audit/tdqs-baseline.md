@@ -308,7 +308,18 @@ Bytes are the UTF-8 length of the description and the size of the `tools/list` e
 
 The 15 compact entries went from 41,000 to 41,112 bytes (112 more, under the ticket's 400 cap and the unchanged `COMPACT_TOTAL_CEILING` of 45,119). Most of the growth is the three `summarize_transactions` facts.
 
-**After scores.** Recorded here, per dimension for the four tools, once Glama builds and scores the next release.
+**After scores.** Read from Glama's admin TDQS page on 2026-11-18, after Glama built and scored release 0.30.1 (main `2b2d87c9`, 15 of 15 tools). `manage_budget_files` also carries the #684 change, so its row measures both tickets together.
+
+| Tool | TDQS before | TDQS after | Behavior | Conciseness | Completeness | Parameters | Purpose | Usage |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `list_budget_months` | 4.4 | 4.7 | 4 | 5 | 5 | 4 | 5 | 5 |
+| `manage_budget_files` | 4.4 | 4.9 | 5 | 4 | 5 | 5 | 5 | 5 |
+| `list_entities` | 4.6 | 4.6 | 4 | 4 | 5 | 4 | 5 | 5 |
+| `summarize_transactions` | 4.6 | 4.9 | 5 | 4 | 5 | 5 | 5 | 5 |
+
+Conciseness moved on one tool of four (`list_budget_months`, 4 to 5). The other three stayed at 4, now with different reasons: `list_entities` for per-type prose that repeats schema constraints, `manage_budget_files` for the "import is DESTRUCTIVE" framing that repeats the annotation, and `summarize_transactions` for restated defaults and a "dense run-on formatting" that the reviewer still finds harder to scan than a list, although the description is now one line per report. So the layout was not the whole of what Glama penalised, as the known risk below said. The TDQS gains on `list_budget_months` and `summarize_transactions` come from other dimensions as much as from layout, and a single scorer run varies by up to 0.4, so they are not attributed to the layout alone.
+
+Server level: TDQS average 4.8 (unchanged at one decimal; the mean of the per-tool figures went from 4.75 to 4.83), lowest tool 4.4 to 4.6 (`list_entities`). Coherence is unchanged: A, with Disambiguation 5, Naming 5, Tool count 5, Completeness 4. Glama's Completeness reason changed: it now names the missing tool to delete an uploaded budget file (the #684 description states that nothing removes it) and no direct read of one transaction by id outside `run_query`. By the published formula (0.7 times description quality, itself 0.6 mean plus 0.4 minimum, plus 0.3 times coherence) the overall works out at about 4.74, from about 4.65; Glama shows only the letter grades, so those two figures are computed here, not read.
 
 **Known risk.** Layout may not be what Glama penalised: `manage_rules` is also one paragraph (1,419 bytes, no line breaks) and scored Conciseness 5, and single runs of this kind of scorer differ by up to 0.4. The increment is done when the rewrite ships and the scores are recorded, whichever way they move.
 
@@ -334,4 +345,4 @@ Net growth is 443 bytes of description and 444 of entry (cap 500); `COMPACT_TOTA
 
 **Not published**, per the ticket: the import timeout value, the export directory, the fact that `path` is not restricted to a directory, any typed-refusal wording, and the upstream behaviours not checkable here (in-flight calls during a switch, encryption of an export, partial replacement on a failed import).
 
-**After scores.** Recorded here once Glama builds and scores the next release (Behavior and TDQS for this tool).
+**After scores.** Read from Glama's admin TDQS page on 2026-11-18 for release 0.30.1: Behavior 3 to 5, TDQS 4.4 to 4.9 (Conciseness 4, every other dimension 5). The reviewer's Behavior reason cites the facts this ticket added: the upload becomes a new server file that nothing removes, the reload after an import applies to every session, a load failure can surface on the next call, and the timeout risk. It also cites "REPLACES that budget's local copy", the older import wording that #687 holds to be false; if #687 confirms that and the wording is corrected, this score was partly earned by a wrong sentence and should be read again.
