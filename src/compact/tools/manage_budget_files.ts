@@ -82,11 +82,12 @@ export const manageBudgetFiles: CompactToolSpec = {
   summary: 'Switch the active budget, import a budget file or export the active budget.',
   examplePrompt: 'Export my budget to a file.',
   description:
-    'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. Writes. To list the configured budget names use list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused.\n' +
-    'switch: budget_name; this session only, other sessions keep their budget; also remembered as the caller\'s preferred budget; an unconfigured or not permitted name is refused.\n' +
-    'import: exactly one of path (a file on the server) or base64; optional type (actual, ynab4, ynab5; default actual), filename (base64 only); a caller limited to some budgets is refused.\n' +
-    'import is DESTRUCTIVE: the budget id comes from the archive, so importing an export of a budget REPLACES that budget\'s local copy; the result is uploaded as a NEW server budget file; it LOADS the imported budget, so this session\'s active budget changes to one outside the configured list; confirm before importing over real data.\n' +
-    'export: optional filename; writes the active budget as a .zip into the server\'s export directory and OVERWRITES a file of the same name; the file contents are not returned.\n' +
+    'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. To list the configured budget names use list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused.\n' +
+    'switch: budget_name; this session only, other sessions keep their budget; also remembered as the caller\'s preferred budget; an unconfigured or not permitted name is refused. It loads the target budget, and a load failure can surface on the next call instead; undo it by switching back.\n' +
+    'import: exactly one of path (a file on the server, max 4096 characters) or base64 (max 67108864 characters); optional type (actual, ynab4, ynab5; default actual), filename (base64 only); a caller limited to some budgets is refused; a long import can time out.\n' +
+    'import is DESTRUCTIVE: the budget id comes from the archive, so importing an export of a budget REPLACES that budget\'s local copy; the result is uploaded as a NEW server budget file; it LOADS the imported budget only while importing; confirm before importing over real data.\n' +
+    'After an import, success or failure, the next call from every session (this one included) reloads that session\'s own configured budget, so later calls do not reach the imported budget. Nothing removes the uploaded server file.\n' +
+    'export: optional filename; writes the whole active budget (every account and transaction) as a .zip into the server\'s export directory and OVERWRITES a file of the same name; the file contents are not returned; only deleting the file on the server host removes it.\n' +
     'Returns { success, budgetName, budgetId, serverUrl, message } (switch), { result: { success, budgetId, type, source, message } } (import), { result: { success, path, filename, directory, bytes, sha256, message } } (export).',
   selector: 'action',
   actions: new Map<string, CompactActionRow>([

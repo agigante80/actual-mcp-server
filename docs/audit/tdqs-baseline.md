@@ -311,3 +311,27 @@ The 15 compact entries went from 41,000 to 41,112 bytes (112 more, under the tic
 **After scores.** Recorded here, per dimension for the four tools, once Glama builds and scores the next release.
 
 **Known risk.** Layout may not be what Glama penalised: `manage_rules` is also one paragraph (1,419 bytes, no line breaks) and scored Conciseness 5, and single runs of this kind of scorer differ by up to 0.4. The increment is done when the rewrite ships and the scores are recorded, whichever way they move.
+
+## Behaviour disclosure for manage_budget_files (#684)
+
+Glama scored `manage_budget_files` Behavior 3 (TDQS 4.4, tied lowest) on v0.30.0. The reviewer named no missing fact; its reason was that the headline safety traits repeat the annotations. #684 adds the behaviour facts the annotations cannot carry, each re-read in the code on develop `2ee2720d` before it was written, and drops the bare "Writes." that only restated `readOnlyHint: false`. Every existing fact and capitalised warning token stays. `missingBehaviourFacts` in `tests/unit/compact_manage_budget_files.test.js` (one regular expression per fact) was red on the #683 description with all six facts missing and returns `[]` after; the same file checks the switch line keeps "unconfigured or not permitted" as one case (#570) and that the description matches no configured value or path scope.
+
+| | Description bytes | Entry bytes | Compact total |
+| :--- | ---: | ---: | ---: |
+| Before (#683 layout) | 1,342 | 2,527 | 41,112 |
+| After | 1,785 | 2,971 | 41,556 |
+
+Net growth is 443 bytes of description and 444 of entry (cap 500); `COMPACT_TOTAL_CEILING` (45,119) and the per-tool ceiling (3,900) are unchanged.
+
+**Facts shipped, and what proved each one:**
+
+1. Import reversibility ("Nothing removes the uploaded server file"). Rests on an absence: `grep` over `src/` finds no `unlink`, `rm` or `delete-budget` call, and no tool fronts upstream `deleteBudget`. The first draft also said the import replaced a local copy that only a re-import could restore. The review dropped that: in the installed `@actual-app/api` 26.11.0 `importActual` passes no local id and `importBuffer` then takes a fresh one (`node_modules/@actual-app/api/dist/index.js` 130355 and 62451), so re-importing an export only adds another server file. The older "REPLACES" wording on the line above it predates this ticket, rests on the same premise and is tracked in #687.
+2. Switch and export reversibility ("undo it by switching back"; "only deleting the file on the server host removes it"). A switch only rewrites the session slot and preference (`src/lib/actual-adapter.ts` 4886 to 4911 and 4936 to 4938), so a second switch reverses it. The export is a plain `writeFile` (`src/tools/budgets_export.ts` 102), and the same absence check as fact 1 shows no tool removes it.
+3. Switch load ("a load failure can surface on the next call instead"). Same server: the reload is awaited, so it fails the switch (`src/lib/actual-adapter.ts` 4900). Different server: a failed pool load is only logged (4964 to 4976). stdio: no load at switch time (4956 to 4960); the next operation's precondition loads it (287 to 304).
+4. Export contents ("the whole active budget (every account and transaction)"). Upstream `exportBuffer` zips the budget's entire `db.sqlite` plus `metadata.json` (`node_modules/@actual-app/api/dist/index.js` 62394 to 62425, v26.11.0); `src/tools/budgets_export.ts` 14 states the same.
+5. Limits ("max 4096 characters", "max 67108864 characters", "a long import can time out"). `src/compact/tools/manage_budget_files.ts` 33 and 41 (base64 and path caps); the import runs under its own bound (`src/lib/actual-adapter.ts` 5309). The bound's value is not published.
+6. After an import ("success or failure, the next call from every session (this one included) reloads that session's own configured budget, so later calls do not reach the imported budget"). Before the import every pool entry is set to `imported:pending` (`src/lib/actual-adapter.ts` 5291); on success `importBudgetTracked` records an `imported:` sentinel no configured sync id can equal (`src/lib/budgetLoader.ts` 461 to 480), and on failure `trackBudgetMutation` marks the api uninitialised (418). Either way the per-operation precondition re-selects the session's own budget (`src/lib/actual-adapter.ts` 280 to 310, called at 736, 806 and 960). The ticket asked for the failed case only; the review showed the conditional wording told a model that a successful import leaves later calls on the imported budget, so follow-up writes would land in the configured budget unnoticed. The old clause "so this session's active budget changes to one outside the configured list" was replaced by "only while importing" for the same reason.
+
+**Not published**, per the ticket: the import timeout value, the export directory, the fact that `path` is not restricted to a directory, any typed-refusal wording, and the upstream behaviours not checkable here (in-flight calls during a switch, encryption of an export, partial replacement on a failed import).
+
+**After scores.** Recorded here once Glama builds and scores the next release (Behavior and TDQS for this tool).

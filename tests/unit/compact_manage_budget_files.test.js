@@ -159,5 +159,58 @@ await check('description states the destructive and side-effect semantics', () =
   for (const w of ['DESTRUCTIVE', 'REPLACES', 'NEW server budget file', 'LOADS', 'OVERWRITES', 'this session only']) assert.ok(spec.description.includes(w), w);
 });
 
+// ---- #684: behaviour facts the annotations cannot carry ----
+//
+// One entry per shipped fact, each verified in the code (see docs/audit/tdqs-baseline.md,
+// "Behaviour disclosure for manage_budget_files (#684)"). Pure: returns the names whose
+// expression does not match, so a fixture proves each entry can fail.
+const BEHAVIOUR_FACTS = [
+  ['import reversibility', /nothing removes the uploaded server file/i],
+  ['switch and export reversibility', /undo it by switching back[\s\S]*only deleting the file on the server host removes it/i],
+  ['switch load', /loads the target budget[^\n]*load failure can surface on the next call/i],
+  ['export contents', /whole active budget \(every account and transaction\)/i],
+  ['limits', /path[^\n]*max 4096 characters[\s\S]*base64[^\n]*max 67108864 characters[\s\S]*long import can time out/i],
+  // Unconditional on purpose: the re-selection happens after a successful import too (review of
+  // #684), so a conditional wording would tell a model that later calls reach the imported budget.
+  ['after import', /success or failure, the next call from every session[^\n]*reloads that session's own configured budget[^\n]*do not reach the imported budget/i],
+];
+function missingBehaviourFacts(description) {
+  return BEHAVIOUR_FACTS.filter(([, re]) => !re.test(description)).map(([name]) => name);
+}
+// The Decision's must-not-publish list: the import timeout value, the export directory variable
+// and any wording that advertises the scope of `path` (a file-existence probe, see #684).
+const LEAK = /600000|ACTUAL_IMPORT_TIMEOUT_MS|ACTUAL_EXPORT_DIR|not restricted|unrestricted|anywhere|absolute path|any file|any (server )?path/i;
+const LEAK_MESSAGE = 'manage_budget_files description reveals a configured value or path scope';
+
+await check('#684: every shipped behaviour fact appears in the published description', () => {
+  const missing = missingBehaviourFacts(spec.description);
+  assert.deepStrictEqual(missing, [], `manage_budget_files description missing fact: ${missing.join(', ')}`);
+});
+await check('NEGATIVE #684: a description missing a fact is reported by name', () => {
+  const copy = spec.description.replace(/nothing removes the uploaded server file/i, '');
+  const missing = missingBehaviourFacts(copy);
+  assert.deepStrictEqual(missing, ['import reversibility'], `manage_budget_files description missing fact: ${missing.join(', ')}`);
+});
+await check('NEGATIVE #684: every fact entry can fail on its own', () => {
+  for (const [name, re] of BEHAVIOUR_FACTS) {
+    assert.ok(!re.test('Switch, import or export a budget file. Returns nothing.'), `${name} matched an unrelated text`);
+  }
+  assert.deepStrictEqual(missingBehaviourFacts(''), BEHAVIOUR_FACTS.map(([name]) => name));
+});
+await check('#684: the switch line keeps "unconfigured or not permitted" as one refused case (#570)', () => {
+  const line = spec.description.split('\n').find((l) => l.startsWith('switch:'));
+  assert.ok(line, 'a line starts with switch:');
+  assert.ok(line.includes('an unconfigured or not permitted name is refused'), line);
+});
+await check('#684: the description reveals no configured value or path scope', () => {
+  assert.ok(!LEAK.test(spec.description), LEAK_MESSAGE);
+});
+await check('NEGATIVE #684: a path-scope sentence is caught by the no-leak check', () => {
+  const copy = `${spec.description} path may be any server path.`;
+  let e;
+  try { assert.ok(!LEAK.test(copy), LEAK_MESSAGE); } catch (x) { e = x; }
+  assert.ok(e && e.message === LEAK_MESSAGE, `expected "${LEAK_MESSAGE}", got ${e && e.message}`);
+});
+
 console.log(`\n[compact-manage-budget-files] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

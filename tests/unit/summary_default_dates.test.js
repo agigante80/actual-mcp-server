@@ -18,18 +18,21 @@ const check = (name, fn) => {
   catch (e) { failed++; console.log(`  FAIL: ${name} -> ${e.message}`); }
 };
 
-const now = new Date();
 const pad = (n) => String(n).padStart(2, '0');
-const expectedStart = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
-const expectedEnd = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+// The tool takes its own `new Date()`, so a run that straddles local midnight sees a different
+// day than a single reading taken here. Bracket the call and accept either side.
+const startOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-01`;
+const dayOf = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 for (const file of ['transactions_summary_by_category', 'transactions_summary_by_payee']) {
   const tool = (await import(`../../dist/src/tools/${file}.js`)).default;
+  const before = new Date();
   const r = await tool.call({});
+  const after = new Date();
   check(`${file}: default start is the first day of the local month`, () =>
-    assert.equal(r.dateRange.startDate, expectedStart));
+    assert.ok([startOf(before), startOf(after)].includes(r.dateRange.startDate), r.dateRange.startDate));
   check(`${file}: default end is the local today`, () =>
-    assert.equal(r.dateRange.endDate, expectedEnd));
+    assert.ok([dayOf(before), dayOf(after)].includes(r.dateRange.endDate), r.dateRange.endDate));
   const given = await tool.call({ startDate: '2026-01-05', endDate: '2026-01-20' });
   check(`${file}: NEGATIVE: given dates are passed through unchanged`, () =>
     assert.deepEqual(given.dateRange, { startDate: '2026-01-05', endDate: '2026-01-20' }));

@@ -1067,7 +1067,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `compact_manage_rules.test.js` | Compact `manage_rules`: five actions, refusals, batch item keys, legacy passthrough, read-only (#677) | 34 |
 | `compact_manage_schedules.test.js` | Compact `manage_schedules`: three actions, date and amount unions, refusals, read-only (#677) | 28 |
 | `compact_manage_budget_months.test.js` | Compact `manage_budget_months`: seven actions, refusals, rewrite, read-only (#678) | 28 |
-| `compact_manage_budget_files.test.js` | Compact `manage_budget_files`: three actions, refusals, destructive description, read-only (#678) | 21 |
+| `compact_manage_budget_files.test.js` | Compact `manage_budget_files`: three actions, refusals, destructive description, read-only (#678); behaviour facts and no-leak check (#684) | 27 |
 | `startup_record.test.js` | `sys_startup` builder: allowlist, privacy, auth facts, `actual_server_info` parity (#623) | 19 |
 | `startup_record_child.test.js` | Entrypoint spawn: record on stdio and HTTP, none on a taken port or a refused start (#623) | 5 |
 | `http_shutdown_handler.test.js` | Shutdown factory and 503 gate: order, in-flight wait, state, second signal, failing cleanup and close, deadline, per-instance state, gate refusal and counting, mount order, drain wiring (#632) | 17 |
