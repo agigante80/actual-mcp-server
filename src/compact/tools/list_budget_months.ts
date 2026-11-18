@@ -23,13 +23,10 @@ export const listBudgetMonths: CompactToolSpec = {
   summary: 'Read the list of budget months, or one month with budgeted, spent and balance per category.',
   examplePrompt: 'Which categories are overspent in October 2026?',
   description:
-    'List the budget months, or read one month\'s budget when `month` is given. Read-only. ' +
-    'Returns { result: [YYYY-MM, ...] }, the budget months and nothing else, when `month` is omitted. ' +
-    'Returns { result } holding that month\'s budget when `month` (YYYY-MM) is given: totals (totalIncome, totalBudgeted, totalSpent, toBudget, forNextMonth, totalBalance) and categoryGroups; ' +
-    'an expense category carries budgeted, spent and balance, an income category received; amounts are integer cents. ' +
-    'Use it for budgeted versus spent per category; for actual spending totals use summarize_transactions, for ids use list_entities, ' +
-    'for individual transactions use search_transactions. To change a budgeted amount use manage_budget_months. ' +
-    'The only input is `month`; any other property is refused by name.',
+    'List the budget months, or read one month\'s budget when `month` is given. Read-only. Use it for budgeted versus spent per category; for actual spending totals use summarize_transactions, for ids use list_entities, for individual transactions use search_transactions. To change a budgeted amount use manage_budget_months.\n' +
+    'month: optional, YYYY-MM; the only input, any other property is refused by name.\n' +
+    'Returns { result: [YYYY-MM, ...] }, the budget months and nothing else, when `month` is omitted.\n' +
+    'Returns { result } holding that month\'s budget when `month` is given: totals (totalIncome, totalBudgeted, totalSpent, toBudget, forNextMonth, totalBalance) and categoryGroups; an expense category carries budgeted, spent and balance, an income category received; amounts are integer cents.',
   selector: null,
   defaultAction: 'list',
   actions: new Map([

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
+import { localIsoDate } from '../lib/localDate.js';
 import adapter from '../lib/actual-adapter.js';
 
 const InputSchema = z.object({
@@ -25,11 +26,11 @@ const tool: ToolDefinition = {
     const api = await import('@actual-app/api');
     const q = (api as any).q;
     
-    // Default to current month if dates not provided
+    // Default to the current month to date, as LOCAL calendar days (localIsoDate says why).
     const today = new Date();
     const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-    const startDate = input.startDate || firstDayOfMonth.toISOString().split('T')[0];
-    const endDate = input.endDate || today.toISOString().split('T')[0];
+    const startDate = input.startDate || localIsoDate(firstDayOfMonth);
+    const endDate = input.endDate || localIsoDate(today);
     
     // Start with date filter
     let query = q('transactions').filter({

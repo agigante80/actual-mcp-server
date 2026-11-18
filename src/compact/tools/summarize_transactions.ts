@@ -83,17 +83,15 @@ export const summarizeTransactions: CompactToolSpec = {
   summary: 'Total spending and income by category, payee, account or month, find recurring expenses and read account balances.',
   examplePrompt: 'How much did I spend on groceries each month this year?',
   description:
-    'Totals, not records: spending sums, grouped breakdowns, recurring expenses and account balance; pick one `report`. Read-only. ' +
-    'For individual transactions use search_transactions; for ids use list_entities; for budgeted versus spent use list_budget_months; for a custom query use run_query. ' +
-    'One the chosen `report` does not take is refused by name. Amounts are integer cents, outflows negative; dates YYYY-MM-DD. ' +
-    'by_category: start_date, end_date, account_id, include_income. ' +
-    'by_payee: start_date, end_date, account_id, limit. ' +
-    'grouped: requires start_date, end_date, group_by; optional account_ids, category_ids, category_group_ids, payee_ids, include_income, exclude_transfers. ' +
-    'account_flow: requires start_date, end_date, account_ids. ' +
-    'recurring: start_date or months, account_ids, min_occurrences, include_inactive. ' +
-    'balance: requires account_id; optional cutoff date. ' +
-    'Returns { summary: [{ categoryGroup, categoryName, totalAmount, transactionCount }], totalAmount, dateRange } for by_category; the same with payeeName for by_payee; ' +
-    'aggregated groups with totals for grouped and account_flow; repeating payees for recurring; { balance, accountName } in cents for balance.',
+    'Totals, not records: spending sums, grouped breakdowns, recurring expenses and account balance; pick one `report`. For individual transactions use search_transactions; for ids use list_entities; for budgeted versus spent use list_budget_months; for a custom query use run_query.\n' +
+    'A parameter the chosen `report` does not take is refused by name. Amounts are integer cents, outflows negative; dates YYYY-MM-DD.\n' +
+    'by_category: start_date (default first day of the current month), end_date (default today), account_id, include_income.\n' +
+    'by_payee: start_date, end_date (same defaults), account_id, limit (default 50).\n' +
+    'grouped: requires start_date, end_date, group_by; optional account_ids, category_ids, category_group_ids, payee_ids, include_income, exclude_transfers (default true).\n' +
+    'account_flow: requires start_date, end_date, account_ids.\n' +
+    'recurring: start_date or months, account_ids, min_occurrences, include_inactive.\n' +
+    'balance: requires account_id; optional cutoff date.\n' +
+    'Returns { summary: [{ categoryGroup, categoryName, totalAmount, transactionCount }], totalAmount, dateRange } for by_category; the same with payeeName for by_payee; aggregated groups with totals for grouped and account_flow; repeating payees for recurring; { balance, accountName } in cents for balance.',
   selector: 'report',
   actions: new Map<string, CompactActionRow>([
     ['by_category', row('actual_transactions_summary_by_category', { start_date: startDate, end_date: endDate, account_id: accountId, include_income: includeIncome }, 'by_category')],

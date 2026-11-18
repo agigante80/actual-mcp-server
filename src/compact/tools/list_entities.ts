@@ -67,16 +67,15 @@ export const listEntities: CompactToolSpec = {
   summary: 'List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id.',
   examplePrompt: 'List my payees whose name contains Market.',
   description:
-    'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note or budget_file. ' +
-    'Read-only: never creates, changes or deletes data. ' +
-    'For the whole budget structure, server details or preferences in one call use get_context instead. ' +
-    'With only type it lists every entity of that type. ' +
-    'account, category and payee take query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id. ' +
-    'schedule takes name to resolve its id, or schedule_id with start, end and count to list the dates it falls on. ' +
-    'payee also takes sort frequency (most used payees). rule takes payee_id to list that payee\'s rules. ' +
-    'note requires id (an entity UUID or budget-YYYY-MM). budget_file takes scope configured (default) or server. ' +
-    'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field. ' +
-    'A field the type does not take is refused naming the field. ' +
+    'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note or budget_file. Read-only: never creates, changes or deletes data. For the whole budget structure, server details or preferences in one call use get_context instead.\n' +
+    'With only type it lists every entity of that type. A field the type does not take is refused naming the field.\n' +
+    'account, category, payee: query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id.\n' +
+    'payee: also sort frequency (most used payees).\n' +
+    'schedule: name to resolve its id, or schedule_id with start, end and count to list the dates it falls on.\n' +
+    'rule: payee_id to list that payee\'s rules.\n' +
+    'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
+    'budget_file: scope configured (default) or server.\n' +
+    'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
     'Returns the entity list for the type; a query returns { matches, count }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
   selector: 'type',
   actions: new Map<string, CompactActionRow>([

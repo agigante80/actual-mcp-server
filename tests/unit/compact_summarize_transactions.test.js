@@ -130,9 +130,39 @@ await check('published schema: flat object, report required, no root oneOf or an
   assert.ok(!/oneOf|anyOf/.test(JSON.stringify({ ...js.properties, group_by: undefined })));
   assert.strictEqual(js.properties.account_ids.type, 'array');
 });
-await check('description: read-only, Returns, every report, siblings, no legacy name', () => {
-  for (const w of ['Read-only', 'Returns', 'search_transactions', 'list_entities', 'run_query', 'by_category:', 'by_payee:', 'grouped:', 'account_flow:', 'recurring:', 'balance:']) assert.ok(spec.description.includes(w), w);
+await check('description: Returns, every report, siblings, no legacy name', () => {
+  for (const w of ['Returns', 'search_transactions', 'list_entities', 'run_query', 'by_category:', 'by_payee:', 'grouped:', 'account_flow:', 'recurring:', 'balance:']) assert.ok(spec.description.includes(w), w);
   assert.ok(!/actual_/.test(spec.description));
+});
+// #683: the three facts Glama asked for, checked against the handlers (transactions_summary_by_category.ts
+// and transactions_summary_by_payee.ts default the range; by_payee caps at 50; only grouped takes
+// exclude_transfers, default true), and the Read-only the annotation already carries is not restated.
+const descriptionProblems = (description) => {
+  const problems = [];
+  const lines = description.split('\n');
+  const line = (prefix) => lines.find((l) => l.startsWith(prefix)) ?? '';
+  if (!line('by_category:').includes('first day of the current month') || !line('by_category:').includes('today')) {
+    problems.push('by_category must state the default range');
+  }
+  if (!/same defaults/.test(line('by_payee:'))) problems.push('by_payee must state the same default range');
+  if (!/limit \(default 50/.test(line('by_payee:'))) problems.push('by_payee must state limit with 50');
+  const withTransfers = lines.filter((l) => l.includes('exclude_transfers'));
+  if (withTransfers.length !== 1 || !withTransfers[0].startsWith('grouped:')) problems.push('exclude_transfers must appear only on the grouped: line');
+  if (!/exclude_transfers \(default true\)/.test(line('grouped:'))) problems.push('grouped must state exclude_transfers default true');
+  if (description.includes('Read-only')) problems.push('summarize_transactions must not restate Read-only');
+  return problems;
+};
+await check('description: default range, by_payee limit 50, exclude_transfers only on grouped, no Read-only', () => {
+  assert.deepStrictEqual(descriptionProblems(spec.description), []);
+  assert.ok(spec.description.includes('A parameter the chosen `report` does not take is refused by name.'));
+});
+await check('NEGATIVE: the description with Read-only. appended is rejected', () => {
+  const problems = descriptionProblems(spec.description + ' Read-only.');
+  assert.ok(problems.includes('summarize_transactions must not restate Read-only'), JSON.stringify(problems));
+});
+await check('NEGATIVE: exclude_transfers named on another line is rejected', () => {
+  const problems = descriptionProblems(spec.description.replace('by_payee: ', 'by_payee: exclude_transfers, '));
+  assert.ok(problems.includes('exclude_transfers must appear only on the grouped: line'), JSON.stringify(problems));
 });
 await check('annotations: read-only, and no row target is write-capable', () => {
   assert.strictEqual(annotationsFor('summarize_transactions').readOnlyHint, true);

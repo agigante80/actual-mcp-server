@@ -292,3 +292,22 @@ Per tool (v0.30.0):
 **What is left.** Completeness is the only coherence dimension below 5. Glama's stated reason: tags can be created and deleted, but no tool assigns a tag to a transaction (the transaction fields omit tags), and notes can be set per entity but not listed or deleted on their own; it adds that `run_query` and the entity tools are a workaround for both. Both are missing operations, not description defects, which matches the local Completeness gap recorded above. On TDQS the two lowest tools are `list_budget_months` and `manage_budget_files` at 4.4; because the worst tool carries 40% of description quality, they are the next rewrite targets.
 
 **Local estimate against Glama.** The local DeepSeek harness put the compact surface at 4.6 with a 4.5 minimum and coherence 4 on Disambiguation; Glama scored 4.8, 4.4 and 5. The weakest dimension in the local set was `list_budget_months` parameter semantics, and that tool is also at the bottom of Glama's list.
+
+## Short-line layout for four compact descriptions (#683)
+
+Glama gave the four lowest compact tools Conciseness 4 with the same reason each time: one dense paragraph of semicolon-chained clauses. #683 lays each description out as short lines separated by a newline: the first line holds purpose and sibling tools, then one line per action, type or report starting with its name and a colon, and the last line is the `Returns` sentence. No fact was removed except the restated "Read-only" in `summarize_transactions` (its annotation carries it). `summarize_transactions` also gained three facts checked against the handlers: the default range of `by_category` and `by_payee` (first day of the current month to today), the `by_payee` `limit` default of 50 ordered by total, and `exclude_transfers` default true, named only on the `grouped` line. `tests/unit/compact_description_layout.test.js` guards the layout.
+
+Bytes are the UTF-8 length of the description and the size of the `tools/list` entry (`Buffer.byteLength(JSON.stringify(entry))`, a newline costing 2 bytes):
+
+| Tool | Description before | Description after | Entry before | Entry after | Glama TDQS before | Conciseness before |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `list_budget_months` | 782 | 787 | 1,238 | 1,246 | 4.4 | 4 |
+| `manage_budget_files` | 1,332 | 1,342 | 2,512 | 2,527 | 4.4 | 4 |
+| `list_entities` | 1,256 | 1,230 | 3,711 | 3,694 | 4.6 | 4 |
+| `summarize_transactions` | 1,172 | 1,270 | 3,699 | 3,805 | 4.6 | 4 |
+
+The 15 compact entries went from 41,000 to 41,112 bytes (112 more, under the ticket's 400 cap and the unchanged `COMPACT_TOTAL_CEILING` of 45,119). Most of the growth is the three `summarize_transactions` facts.
+
+**After scores.** Recorded here, per dimension for the four tools, once Glama builds and scores the next release.
+
+**Known risk.** Layout may not be what Glama penalised: `manage_rules` is also one paragraph (1,419 bytes, no line breaks) and scored Conciseness 5, and single runs of this kind of scorer differ by up to 0.4. The increment is done when the rewrite ships and the scores are recorded, whichever way they move.
