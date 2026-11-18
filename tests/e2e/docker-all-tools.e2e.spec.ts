@@ -3023,6 +3023,27 @@ test.describe('Docker E2E - compact search_transactions and summarize_transactio
     expect(compact).toBeTruthy();
   });
 
+  // #685: account_id was validated and never applied, so the totals covered every account.
+  // #686: the limit was applied before the sort, so the rows were not the largest spenders.
+  test('summarize_transactions - by_payee keeps to the given account and ranks largest spending first (#685, #686)', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const first = await makeAccount();
+    const second = await makeAccount();
+    const small = await makePayee();
+    const big = await makePayee();
+    const refund = await makePayee();
+    const elsewhere = await makePayee();
+    await makeTransaction({ account: first, amount: -1100, payee: small.id });
+    await makeTransaction({ account: first, amount: -9900, payee: big.id });
+    await makeTransaction({ account: first, amount: 700, payee: refund.id });
+    await makeTransaction({ account: second, amount: -50000, payee: elsewhere.id });
+    const { start, end } = range();
+    const args = { report: 'by_payee', start_date: start, end_date: end, account_id: first.id };
+    const all = await mcp.call('summarize_transactions', args);
+    expect(all.summary.map((r: { payeeName: string }) => r.payeeName)).toEqual([big.name, small.name, refund.name]);
+    const top = await mcp.call('summarize_transactions', { ...args, limit: 1 });
+    expect(top.summary.map((r: { payeeName: string }) => r.payeeName)).toEqual([big.name]);
+  });
+
   test('summarize_transactions - grouped for a string and an array group_by', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     await makeTransaction({ account, amount: -1700 });

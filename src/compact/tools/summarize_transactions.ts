@@ -86,7 +86,7 @@ export const summarizeTransactions: CompactToolSpec = {
     'Totals, not records: spending sums, grouped breakdowns, recurring expenses and account balance; pick one `report`. For individual transactions use search_transactions; for ids use list_entities; for budgeted versus spent use list_budget_months; for a custom query use run_query.\n' +
     'A parameter the chosen `report` does not take is refused by name. Amounts are integer cents, outflows negative; dates YYYY-MM-DD.\n' +
     'by_category: start_date (default first day of the current month), end_date (default today), account_id, include_income.\n' +
-    'by_payee: start_date, end_date (same defaults), account_id, limit (default 50).\n' +
+    'by_payee: start_date, end_date (same defaults), account_id, limit (default 50); largest spending first, limit keeps the top and totalAmount sums the returned rows.\n' +
     'grouped: requires start_date, end_date, group_by; optional account_ids, category_ids, category_group_ids, payee_ids, include_income, exclude_transfers (default true).\n' +
     'account_flow: requires start_date, end_date, account_ids.\n' +
     'recurring: start_date or months, account_ids, min_occurrences, include_inactive.\n' +

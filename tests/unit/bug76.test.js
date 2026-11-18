@@ -98,7 +98,7 @@ function check(condition, label, detail = '') {
     });
 
     const result = await summaryByPayee.call({ startDate: '2025-01-01', endDate: '2025-12-31' });
-    // Tool sorts descending by totalAmount: -1500 > -50000, so Netflix comes first
+    // Order is not asserted here (largest spending first since #686); rows are found by name
     const kroger = result.summary.find(r => r.payeeName === 'Kroger');
     const netflix = result.summary.find(r => r.payeeName === 'Netflix');
     check(Array.isArray(result.summary),                  'summary is an array');
