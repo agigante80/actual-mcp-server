@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit is an ADVISORY first-pass reviewer for pull requests from outside
+# contributors (#693). It never gates a merge: no commit status fails on it and it
+# is in no branch protection. tests/unit/coderabbit_config.test.js pins the keys
+# below that keep it scoped and quiet; change both together.
+language: en-US
+tone_instructions: >-
+  Be brief and plain. Report concrete defects with the failing input or state.
+  Skip praise and style taste. Never use an em dash or an en dash: use a colon,
+  a comma or two sentences.
+early_access: false
+
+reviews:
+  profile: chill
+  # Advisory only: a finding never fails a commit status.
+  commit_status: true
+  fail_commit_status: false
+  high_level_summary: false
+  review_status: false
+  poem: false
+  in_progress_fortune: false
+  sequence_diagrams: false
+  suggested_reviewers: false
+  auto_assign_reviewers: false
+  suggested_labels: false
+  auto_apply_labels: false
+  auto_review:
+    enabled: true
+    drafts: false
+    # Outside pull requests target develop. The default branch (main) only moves in
+    # a release and is always in scope for the app; nothing is opened against it.
+    base_branches:
+      - '^develop$'
+    # Dependency pull requests go through the dependency pipeline, not this reviewer.
+    ignore_usernames:
+      - 'dependabot[bot]'
+      - 'actual-mcp-dependency-updater[bot]'
+  path_filters:
+    - '!package-lock.json'
+    - '!generated/**'
+    - '!dist/**'
+  path_instructions:
+    - path: 'src/tools/**'
+      instructions: >-
+        Tools call adapter.* methods only: flag a static import of @actual-app/api
+        or a raw write. A tool must not wrap an adapter.* call in a session of its
+        own (the api lock is not reentrant; the symptom is a 30 second stall).
+        Amounts are integer cents and dates are YYYY-MM-DD strings. Refusals are
+        typed (NotFoundRefusal, OutOfRangeRefusal), never decided by matching
+        message text. New tools use createTool() and are named
+        actual_<domain>_<action> in lower snake_case.
+    - path: 'src/lib/actual-adapter.ts'
+      instructions: >-
+        Every Actual API call goes through withActualApi. A read-then-write guard
+        and any batch of raw writes live inside one queueWriteOperation. Never nest
+        one adapter session inside another.
+    - path: 'src/**'
+      instructions: >-
+        Never write to stdout and never call console.*: under stdio, stdout is the
+        JSON-RPC channel. Use createModuleLogger from src/lib/loggerFactory.ts.
+        Nothing may branch on MCP tool annotations: they are hints, not
+        authorisation.
+    - path: 'tests/unit/**'
+      instructions: >-
+        A new unit test file must be appended to the test:unit-js chain in
+        package.json or it never runs. Each positive case needs a negative one.
+  tools:
+    # The repository uses neither linter; their defaults would be noise.
+    eslint:
+      enabled: false
+    biome:
+      enabled: false
+    actionlint:
+      enabled: true
+    shellcheck:
+      enabled: true
+    gitleaks:
+      enabled: true
+
+chat:
+  art: false
+
+# Issue comments in this repository are messages between people only.
+issue_enrichment:
+  auto_enrich:
+    enabled: false
+  planning:
+    enabled: false
+    auto_planning:
+      enabled: false

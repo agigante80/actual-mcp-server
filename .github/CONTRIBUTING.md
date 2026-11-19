@@ -150,6 +150,8 @@ The test layers and every test file are described in [docs/development/testing-a
 3. Fill in the pull request template and link the issue.
 4. Make sure CI passes, and answer review comments.
 
+An automated reviewer ([CodeRabbit](https://www.coderabbit.ai/), configured in [`.coderabbit.yaml`](../.coderabbit.yaml)) comments on pull requests against `develop`. It is advisory: it never blocks a pull request, you may disagree with it, and the maintainer makes the call.
+
 Keep a pull request to one concern, update the docs your change affects, and do not add dependencies without saying why.
 
 ## 🚀 How Your Change Reaches a Release
