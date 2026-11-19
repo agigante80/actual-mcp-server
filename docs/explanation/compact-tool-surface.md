@@ -234,7 +234,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `create` | `payees_create` | name | notes |  |
-| `update` | `payees_update` | id; at least one field | name, transfer_acct, category | wrapped into legacy `fields`; `category: null` clears the default category and is forwarded as null (`nullAsAbsent` is off); see #651 (inherited behaviour, neither fixed nor worked around) |
+| `update` | `payees_update` | id; at least one field | name, transfer_acct, category | wrapped into legacy `fields`; `category: null` clears the default category and is forwarded as null (`nullAsAbsent` is off); only the payee's own rule (default stage, one `payee is` condition, one set-category action) is edited or deleted, never a shared, exclusion, multi-action, pre or post stage rule |
 | `delete` | `payees_delete` | id | none |  |
 | `merge` | `payees_merge` | target_id, merge_ids (1 to 50) | none | legacy `targetId`, `mergeIds`; a target that is also a source is refused by the adapter |
 | `set_note` | `notes_update` | id, note | none |  |

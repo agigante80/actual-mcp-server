@@ -714,6 +714,59 @@ test.describe('Docker E2E - tool surface', () => {
     expect(remaining.length).toBe(0);
   });
 
+  test('manage_payees update - never edits or deletes a rule that excludes the payee (#651)', async ({ mcp, makePayee, makeCategory }) => {
+    const payee = await makePayee();
+    const categoryX = await makeCategory();
+    const categoryY = await makeCategory();
+
+    // makeRule cannot build a payee condition, so the exclusion rule is created here and
+    // deleted by id in finally, so a failed assertion cannot leak it.
+    const created = await mcp.call('manage_rules', {
+      action: 'create',
+      conditions_op: 'and',
+      conditions: [{ field: 'payee', op: 'isNot', value: payee.id }],
+      actions: [{ op: 'set', field: 'category', value: categoryX.id }],
+    });
+    const isNotId = (typeof created === 'string' ? created : created?.id) as string;
+    expect(isNotId, 'manage_rules create must return an id').toBeTruthy();
+
+    const readRules = async () => {
+      const data = await mcp.call('list_entities', { type: 'rule', payee_id: payee.id });
+      return (Array.isArray(data) ? data : data?.rules || []) as any[];
+    };
+    const categoryOf = (r: any) => r?.actions?.find((a: any) => a.op === 'set' && a.field === 'category')?.value;
+    const isOwnRule = (r: any) =>
+      r?.id !== isNotId &&
+      Array.isArray(r?.conditions) && r.conditions.length === 1 &&
+      r.conditions[0].field === 'payee' && r.conditions[0].op === 'is' && r.conditions[0].value === payee.id;
+
+    try {
+      await mcp.call('manage_payees', { action: 'update', id: payee.id, category: categoryY.id });
+
+      let rules = await readRules();
+      expect(rules.length, 'after the set, exactly two rules name the payee').toBe(2);
+      const isNotRule = rules.find((r: any) => r?.id === isNotId);
+      expect(isNotRule, 'the isNot rule must survive the set').toBeTruthy();
+      expect(isNotRule.conditions[0].op).toBe('isNot');
+      expect(categoryOf(isNotRule), 'the isNot rule keeps its original category').toBe(categoryX.id);
+      const ownRule = rules.find(isOwnRule);
+      expect(ownRule, 'a separate payee is rule carries the new category').toBeTruthy();
+      expect(categoryOf(ownRule)).toBe(categoryY.id);
+
+      await mcp.call('manage_payees', { action: 'update', id: payee.id, category: null });
+
+      rules = await readRules();
+      expect(rules.length, 'after the clear, only the isNot rule names the payee').toBe(1);
+      expect(rules[0].id).toBe(isNotId);
+      expect(rules[0].conditions[0].op).toBe('isNot');
+      expect(categoryOf(rules[0])).toBe(categoryX.id);
+    } finally {
+      await mcp.call('manage_rules', { action: 'delete', id: isNotId }).catch(() => {});
+      // Best effort: drop the payee's own rule too if an assertion failed before the clear.
+      await mcp.call('manage_payees', { action: 'update', id: payee.id, category: null }).catch(() => {});
+    }
+  });
+
   test('manage_payees update - ERROR: should reject invalid fields', async ({ mcp, makePayee }) => {
     const payee = await makePayee();
     // #206: unrecognized keys render as "unexpected field(s): X" via the central formatter.

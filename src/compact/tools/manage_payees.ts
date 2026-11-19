@@ -12,9 +12,9 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
  * (shared with the other manage_* tools, allowed in the parity test only from set_note).
  *
  * WRITE tool: `nullAsAbsent` is NOT set, because `category: null` clears the payee's default
- * category and is forwarded as null. `update` inherits the legacy behaviour unchanged,
- * including open bug #651 (category is stored as a payee rule); this ticket neither fixes
- * nor works around it. A merge whose target is also a source is refused by the adapter, not here.
+ * category and is forwarded as null. `update` forwards to the legacy tool unchanged; the
+ * category is stored as a payee rule, chosen in the adapter. A merge whose target is also a
+ * source is refused by the adapter, not here.
  *
  * Shared keys are ONE light optional schema object each; the strict formats and required-ness
  * are enforced by the per-target refines (see manage_accounts). `category` is the only key
@@ -84,7 +84,7 @@ export const managePayees: CompactToolSpec = {
     'Create, change, delete, merge or annotate payees; pick one `action`. Writes. ' +
     'To read or find ids use list_entities. Other fields are refused. ' +
     'create: name; optional notes. ' +
-    'update: id and at least one of name, transfer_acct, category (a default category, stored as a payee rule that may cover other payees; null deletes that whole rule). ' +
+    'update: id and at least one of name, transfer_acct, category (a default category, stored as a default-stage rule whose only condition is this payee; null deletes it; pre or post stage rules and rules shared with other payees or conditions are never touched). ' +
     'delete: id; DESTRUCTIVE, cannot be undone: transactions lose the payee; a transfer payee is refused. ' +
     'merge: target_id, merge_ids (1 to 50, never target_id itself); DESTRUCTIVE, cannot be undone: the sources\' transactions move to target_id and the sources are deleted; transfer payees are refused. ' +
     'set_note: id (a payee UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a category note through manage_categories. ' +

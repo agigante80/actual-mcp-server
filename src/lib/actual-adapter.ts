@@ -2872,6 +2872,34 @@ export async function deleteCategory(id: string): Promise<void> {
     );
   });
 }
+type RuleLike = { id?: string; stage?: unknown; conditions?: unknown[]; actions?: unknown[]; [key: string]: unknown };
+
+/**
+ * #651: pick the payee's default-category rule from upstream's getPayeeRules(payeeId) result.
+ * A rule qualifies only when its stage is null or absent, it has EXACTLY ONE condition
+ * `{ field: 'payee', op: 'is', value: payeeId }` and EXACTLY ONE action
+ * `{ op: 'set', field: 'category' }`. That is upstream's own default-category predicate
+ * (getIsSetterRules in loot-core transaction-rules.ts) restricted to `is`. Upstream's list also
+ * holds rules that EXCLUDE the payee (isNot, notOneOf), SHARE it (oneOf), pair it with another
+ * condition, carry a second action or run in the pre/post stage; editing or deleting any of
+ * those would change other payees or drop a hand-written action, so they never qualify. The
+ * first qualifying rule in the given (upstream) order wins.
+ */
+export function selectDefaultCategoryRule(rules: unknown, payeeId: string): RuleLike | undefined {
+  if (!Array.isArray(rules)) return undefined;
+  return (rules as RuleLike[]).find((rule) => {
+    if (!rule || typeof rule !== 'object') return false;
+    if (rule.stage != null) return false;
+    const conditions = rule.conditions;
+    const actions = rule.actions;
+    if (!Array.isArray(conditions) || conditions.length !== 1) return false;
+    if (!Array.isArray(actions) || actions.length !== 1) return false;
+    const c = conditions[0] as { field?: unknown; op?: unknown; value?: unknown } | null;
+    const a = actions[0] as { field?: unknown; op?: unknown } | null;
+    return c?.field === 'payee' && c.op === 'is' && c.value === payeeId &&
+      a?.op === 'set' && a.field === 'category';
+  });
+}
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.payees.update').catch(() => {});
   return queueWriteOperation(async () => {
@@ -2928,24 +2956,28 @@ export async function updatePayee(id: string, fields: Partial<components['schema
         retry(() => rawGetPayeeRules(id) as Promise<unknown[]>, { retries: 2, backoffMs: 200 })
       );
 
-      // Find an existing "set category" action rule for this payee
-      const setCategoryRule = (existingRules as any[]).find((rule: any) =>
-        Array.isArray(rule.actions) &&
-        rule.actions.some((a: any) => a.op === 'set' && a.field === 'category')
-      );
+      // #651: only the payee's OWN default-category rule may be edited or deleted. Upstream's
+      // getPayeeRules also returns rules that exclude this payee (isNot, notOneOf) or share it
+      // with others (oneOf), and narrower or multi-action rules; those are never touched.
+      const setCategoryRule = selectDefaultCategoryRule(existingRules, id);
 
       if (setCategoryRule) {
         if (categoryValue === null) {
-          // null = clear the default category — delete the rule
+          // null = clear the default category: delete the rule
           await withConcurrency(() => retry(() => rawDeleteRule(setCategoryRule.id) as Promise<void>, { retries: 0, backoffMs: 200 }));
           logger.debug(`[UPDATE PAYEE] Cleared default category rule for payee ${id}`);
         } else {
           // Update existing rule's category action value
           const updatedRule = {
             ...setCategoryRule,
-            actions: setCategoryRule.actions.map((a: any) =>
-              a.op === 'set' && a.field === 'category' ? { ...a, value: categoryValue } : a
-            ),
+            // Drop the action's options: upstream applies options.template or options.formula
+            // instead of `value`, so keeping them would report success and change nothing.
+            actions: (setCategoryRule.actions as any[]).map((a: any) => {
+              if (!(a.op === 'set' && a.field === 'category')) return a;
+              const next = { ...a, value: categoryValue };
+              delete next.options;
+              return next;
+            }),
           };
           await withConcurrency(() => retry(() => rawUpdateRule(updatedRule) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
           logger.debug(`[UPDATE PAYEE] Updated default category rule for payee ${id} to category ${categoryValue}`);

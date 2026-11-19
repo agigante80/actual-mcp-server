@@ -41,5 +41,4 @@ Not binding. In order:
 - Changing the default surface, remapping toolsets and the chat preset, and migrating the test suites (#680, #681: next phase).
 - MCP prompts and the README work (#660 to #669: next phase).
 - Removing the legacy surface (#682) and the camelCase aliases (#657).
-- The `payees_update` category bug (#651): the compact tool inherits today's behaviour.
 - Triggering a Glama rebuild: only the maintainer can do that in the Glama admin page.

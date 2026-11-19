@@ -16,7 +16,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_payees_update',
   description:
-    "Change one payee by id. fields takes name, transfer_acct (the account id, when this payee stands for a transfer to that account) or category (a default category for its transactions, null to clear); at least one is required. category is stored as a payee rule, not on the payee: a value creates or edits the first rule naming this payee with a set-category action, and null deletes that whole rule, its other actions included. That rule may also cover other payees, which change too (see actual_payee_rules_get). Find the id with actual_payees_get; to combine duplicates use actual_payees_merge. Returns { success: true, payeeId, updatedFields }.",
+    "Change one payee by id. fields takes name, transfer_acct (the account id, when this payee stands for a transfer to that account) or category (a default category for its transactions, null to clear); at least one is required. category is stored as a default-stage payee rule whose only condition is this payee and only action sets the category: a value edits that rule or creates it, and null deletes it. Rules naming this payee together with other payees, other conditions or other actions, and pre or post stage rules, are never touched. Find the id with actual_payees_get; to combine duplicates use actual_payees_merge. Returns { success: true, payeeId, updatedFields }.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206);
