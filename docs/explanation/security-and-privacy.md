@@ -536,6 +536,28 @@ merged outside the release path. If these rulesets are changed, update this sect
 between this record and `gh api repos/agigante80/actual-mcp-server/rulesets` output is a
 red flag.
 
+### Third-party GitHub Apps with write access (#693)
+
+The `coderabbitai` GitHub App is installed on this repository only ("Only select
+repositories"), as an advisory reviewer for pull requests from outside contributors. It is in
+neither ruleset's bypass list, so it cannot push to `main`. GitHub grants it read and write on
+code, pull requests, issues, checks, commit statuses and workflows; `.coderabbit.yaml` is what
+narrows its behaviour, and `tests/unit/coderabbit_config.test.js` pins that narrowing:
+
+- **No pushes.** Every finishing touch that commits or opens a branch (`unit_tests`, `autofix`,
+  `fix_ci`, `resolve_merge_conflict`) is off. They are on by schema default, and a branch
+  pushed into the repository runs workflows from that branch.
+- **No approvals, no failing status.** `auto_approvals` is off, an author cannot ask for an
+  approval, and `fail_commit_status` is false. A finding is input for the maintainer, never an
+  authorisation decision.
+- **No automatic issue writes.** Issue enrichment and planning are off.
+
+Residual risk the config cannot remove: anyone who mentions the app in a pull request comment
+can ask it to open a GitHub issue here, and no config key disables that. Such an issue is
+triaged like any outside report (a hypothesis, never ground truth) and closed when it is noise.
+The config is a behaviour setting, not a permission boundary: the boundary is the app's GitHub
+permissions, and uninstalling it (Settings, Applications) revokes all of them at once.
+
 ---
 
 ## 🛡️ Data Protection

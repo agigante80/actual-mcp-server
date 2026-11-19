@@ -40,31 +40,27 @@ reviews:
     - '!package-lock.json'
     - '!generated/**'
     - '!dist/**'
-  path_instructions:
-    - path: 'src/tools/**'
-      instructions: >-
-        Tools call adapter.* methods only: flag a static import of @actual-app/api
-        or a raw write. A tool must not wrap an adapter.* call in a session of its
-        own (the api lock is not reentrant; the symptom is a 30 second stall).
-        Amounts are integer cents and dates are YYYY-MM-DD strings. Refusals are
-        typed (NotFoundRefusal, OutOfRangeRefusal), never decided by matching
-        message text. New tools use createTool() and are named
-        actual_<domain>_<action> in lower snake_case.
-    - path: 'src/lib/actual-adapter.ts'
-      instructions: >-
-        Every Actual API call goes through withActualApi. A read-then-write guard
-        and any batch of raw writes live inside one queueWriteOperation. Never nest
-        one adapter session inside another.
-    - path: 'src/**'
-      instructions: >-
-        Never write to stdout and never call console.*: under stdio, stdout is the
-        JSON-RPC channel. Use createModuleLogger from src/lib/loggerFactory.ts.
-        Nothing may branch on MCP tool annotations: they are hints, not
-        authorisation.
-    - path: 'tests/unit/**'
-      instructions: >-
-        A new unit test file must be appended to the test:unit-js chain in
-        package.json or it never runs. Each positive case needs a negative one.
+  # No path_instructions on purpose: the app reads AGENTS.md and
+  # .github/instructions/*.instructions.md as guidelines by default
+  # (knowledge_base.code_guidelines), and tests/unit/contributor_docs.test.js keeps
+  # those true. A copy of the rules here would be a second source nothing checks.
+  # Nothing here may push a commit or a branch into the repository: a pushed branch
+  # runs workflows from that branch. All four are ON by schema default.
+  finishing_touches:
+    unit_tests:
+      enabled: false
+    autofix:
+      enabled: false
+    fix_ci:
+      enabled: false
+    resolve_merge_conflict:
+      enabled: false
+    simplify:
+      enabled: false
+  # The app never approves a pull request, and no author can ask it to.
+  auto_approvals:
+    enabled: false
+    allow_author_approval: false
   tools:
     # The repository uses neither linter; their defaults would be noise.
     eslint:
@@ -80,6 +76,16 @@ reviews:
 
 chat:
   art: false
+  # It answers only when mentioned.
+  auto_reply: false
+
+knowledge_base:
+  code_guidelines:
+    enabled: true
+  # Anyone commenting can teach the bot: a learning waits for the maintainer.
+  learnings:
+    scope: local
+    approval_delay: 30
 
 # Issue comments in this repository are messages between people only.
 issue_enrichment:
