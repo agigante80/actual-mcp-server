@@ -174,7 +174,7 @@ function mutate(anchor, replacement) {
 const PAYLOAD_LINE = "const payload = (req.body && Object.keys(req.body).length) ? req.body : {};";
 const COND_LINE = "if (method !== 'initialize' && method !== 'tools/list') {";
 const BODY_STMT = 'await transport.handleRequest(req, res, req.body);';
-const SESSION_RUN = `requestContext.run({ sessionId, requestId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {\n        ${BODY_STMT}\n      });`;
+const SESSION_RUN = `requestContext.run({ sessionId, requestId, ...requestBudgetAccess(req), principal: resolvePrincipal(req) }, async () => {\n        ${BODY_STMT}\n      });`;
 
 await check('U3a: exactly two POST-path calls pass req.body, one inside the session-bearing requestContext.run (comments stripped)', () => {
   assert.deepStrictEqual(u3Violations(STRIPPED), []);

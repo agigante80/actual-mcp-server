@@ -24,7 +24,19 @@ import { AsyncLocalStorage } from 'async_hooks';
  * falls back to its trusted-local short-circuit when AUTH_PROVIDER is not
  * 'oidc'.
  */
-export const requestContext = new AsyncLocalStorage<{
+export interface DiscoveredBudget {
+  syncId: string;
+  name: string;
+  encrypted: boolean;
+}
+
+export interface BudgetAccess {
+  allowed: string[];
+  discoveredBudgets?: DiscoveredBudget[];
+}
+
+export interface RequestStore {
+  discoveredBudgets?: DiscoveredBudget[];
   sessionId?: string;
   // Correlation id stamped on every log line (#221). Taken from an inbound
   // `X-Correlation-ID` header when present, otherwise generated per request.
@@ -48,4 +60,6 @@ export const requestContext = new AsyncLocalStorage<{
   // Keeping stdio off the pooled branch entirely is simpler and safer than
   // teaching the pool a second liveness model.
   transport?: 'http' | 'stdio';
-}>();
+}
+
+export const requestContext = new AsyncLocalStorage<RequestStore>();

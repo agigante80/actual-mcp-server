@@ -1,3 +1,4 @@
+import { showDiscoveredBudgets } from '../../lib/budgetSelector.js';
 import { z } from 'zod';
 import { SCHEDULE_DATES_CAP } from '../../lib/constants.js';
 import { CommonSchemas } from '../../lib/schemas/common.js';
@@ -36,7 +37,7 @@ const count = z.number().int().min(1).max(SCHEDULE_DATES_CAP).describe(`How many
 const id = z.string().min(1).describe('Required for type note: an account, category, category group or payee UUID, or budget-YYYY-MM.');
 const scope = z
   .enum(['configured', 'server'])
-  .describe('configured (default): budget files this server is configured with. server: files on the Actual server. Only for type budget_file.');
+  .describe('configured (default): ' + (showDiscoveredBudgets ? 'available budgets, including permitted shared files in discovery mode.' : 'budget files this server is configured with.') + ' server: files on the Actual server. Only for type budget_file.');
 
 const none = z.object({});
 const searchFields = z.object({ query, match_type: matchType.optional(), limit: limit.optional() });

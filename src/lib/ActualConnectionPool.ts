@@ -218,7 +218,8 @@ class ActualConnectionPool {
    */
   forgetSession(sessionId: string): void {
     this.registered.delete(sessionId);
-    this.admissions.delete(sessionId);
+    // A discovery-only session can end before getConnection takes over its slot.
+    this.releaseAdmission(sessionId);
   }
 
   /**
@@ -355,9 +356,8 @@ class ActualConnectionPool {
   }
 
   /**
-   * #577: give back everything an initialize that never registered took: its slot and its
-   * per-principal admission. Idempotent. A session that did register keeps its admission until
-   * `forgetSession`.
+   * Give back both the global reservation and any per-principal admission on failed
+   * initialize or session teardown. Idempotent after getConnection takes over the slot.
    */
   releaseAdmission(sessionId: string): void {
     this.reservations.delete(sessionId);

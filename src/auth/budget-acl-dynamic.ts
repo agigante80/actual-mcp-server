@@ -41,6 +41,7 @@ import adapter from '../lib/actual-adapter.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
 import { parseIdentityMap, type IdentityMap } from './identity-map.js';
 import { resolveIdentityFromUserInfo, _resetUserInfoCache } from './userinfo-identity.js';
+import type { BudgetAccess, DiscoveredBudget } from '../lib/requestContext.js';
 
 const log = createModuleLogger('ACL');
 
@@ -78,6 +79,8 @@ interface BudgetFileEntry {
   groupId?: string;
   /** NOT the sync id. Present on the entry but deliberately unused here. */
   cloudFileId?: string;
+  name?: string;
+  encryptKeyId?: string | null;
   usersWithAccess?: UserWithAccess[];
 }
 
@@ -90,7 +93,7 @@ interface BudgetFileEntry {
  * would reintroduce exactly the staleness it exists to remove.
  */
 const CACHE_TTL_MS = 60_000;
-const _cache = new Map<string, { at: number; allowed: string[] }>();
+const _cache = new Map<string, BudgetAccess & { at: number }>();
 
 /** Clear the resolver cache (test helper, and used when config is re-read). */
 export function _resetDynamicAclCache(): void {
@@ -463,7 +466,9 @@ export function matchAllowedFiles(files: unknown, principalValue: string): strin
     // "Sync ID" that _enforceBudgetAcl compares against.
     const syncId = entry.groupId;
     const access = entry.usersWithAccess;
-    if (!syncId || !Array.isArray(access)) continue;
+    // A Sync ID is a string. A malformed row (a number, an object) is skipped, never granted.
+    // '*' is the static ACL's "every budget" marker (#338): a file must never be able to grant it.
+    if (typeof syncId !== 'string' || !syncId || syncId === '*' || !Array.isArray(access)) continue;
 
     for (const u of access) {
       if (!u || typeof u !== 'object') continue;
@@ -503,20 +508,26 @@ export async function resolveAllowedBudgetsFromActual(
   principalValue: string | null,
   lastResolvedClaim?: string | null,
 ): Promise<string[]> {
+  return (await resolveBudgetAccess(principalValue, lastResolvedClaim)).allowed;
+}
+
+export async function resolveBudgetAccess(
+  principalValue: string | null, lastResolvedClaim?: string | null,
+): Promise<BudgetAccess> {
   if (!principalValue) {
     log.warn('dynamic ACL: no usable principal value; denying', { claim: config.AUTH_BUDGET_ACL_CLAIM });
-    return [];
+    return { allowed: [] };
   }
 
   const cached = _cache.get(principalValue);
-  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.allowed;
+  if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached;
 
   let files: unknown;
   try {
     files = await adapter.listRemoteBudgetFiles();
   } catch (err) {
     log.error('dynamic ACL: could not read the budget list; denying access', err as Error);
-    return [];
+    return { allowed: [] };
   }
 
   const allowed = matchAllowedFiles(files, principalValue);
@@ -549,6 +560,20 @@ export async function resolveAllowedBudgetsFromActual(
     log.debug('dynamic ACL: unmatched principal', { principal: principalValue });
   }
 
-  _cache.set(principalValue, { at: Date.now(), allowed });
-  return allowed;
+  const access: BudgetAccess = { allowed };
+  if (config.AUTH_BUDGET_DISCOVERY) {
+    const permitted = new Set(allowed);
+    const discovered = new Map<string, DiscoveredBudget>();
+    for (const file of Array.isArray(files) ? files as BudgetFileEntry[] : []) {
+      if (!file?.groupId || !permitted.has(file.groupId) ||
+          !Array.isArray(file.usersWithAccess) ||
+          !file.usersWithAccess.some(user => user?.userName === principalValue)) continue;
+      const name = typeof file.name === 'string' ? file.name.replace(/[\x00-\x1f\x7f-\x9f]/g, '').trim() : '';
+      discovered.set(file.groupId, { syncId: file.groupId, name: name.slice(0, 100).replace(/[\uD800-\uDBFF]$/, '') || file.groupId,
+        encrypted: Boolean(file.encryptKeyId) });
+    }
+    access.discoveredBudgets = [...discovered.values()];
+  }
+  _cache.set(principalValue, { at: Date.now(), ...access });
+  return access;
 }

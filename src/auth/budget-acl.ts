@@ -35,7 +35,8 @@ import type { Request, Response, NextFunction } from 'express';
 import config from '../config.js';
 import logger from '../logger.js';
 import { parseBudgetAcl, type BudgetAclMap } from './budget-acl-parse.js';
-import { resolveAllowedBudgetsFromActual, resolvePrincipalAsync } from './budget-acl-dynamic.js';
+import type { RequestStore } from '../lib/requestContext.js';
+import { resolveBudgetAccess, resolvePrincipalAsync } from './budget-acl-dynamic.js';
 
 // ---------------------------------------------------------------------------
 // ACL state (classified once from env, cached)
@@ -205,10 +206,12 @@ async function resolveDynamicAcl(req: Request, res: Response, next: NextFunction
     // default source behaves exactly as it did before both tickets.
     const token = auth?.token as string | undefined;
     const { value: principalValue, source } = await resolvePrincipalAsync(claims, subject, token);
-    const allowed = await resolveAllowedBudgetsFromActual(principalValue, source);
+    const { allowed, discoveredBudgets } = await resolveBudgetAccess(principalValue, source);
 
     if (allowed.length > 0) {
-      (req as Request & { allowedBudgets?: string[] }).allowedBudgets = allowed;
+      const scoped = req as Request & Pick<RequestStore, 'allowedBudgets' | 'discoveredBudgets'>;
+      scoped.allowedBudgets = allowed;
+      if (discoveredBudgets) scoped.discoveredBudgets = discoveredBudgets;
       next();
       return;
     }

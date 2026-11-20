@@ -70,7 +70,8 @@ const ISSUER = ${JSON.stringify(ISSUER)};
 const RESOURCE = ${JSON.stringify(RESOURCE)};
 const realFetch = globalThis.fetch;
 let tokenFor = null;
-if (MODE === 'oidc') {
+const oidc = process.env.AUTH_PROVIDER === 'oidc';
+if (oidc) {
   const { publicKey, privateKey } = await generateKeyPair('RS256');
   const jwk = await exportJWK(publicKey); jwk.alg = 'RS256'; jwk.kid = 'k1';
   globalThis.fetch = async (input, init) => {
@@ -85,7 +86,7 @@ if (MODE === 'oidc') {
     }
     return realFetch(input, init);
   };
-  tokenFor = (sub) => new SignJWT({ scope: 'openid' }).setProtectedHeader({ alg: 'RS256', kid: 'k1' })
+  tokenFor = (sub) => new SignJWT({ scope: 'openid', preferred_username: sub }).setProtectedHeader({ alg: 'RS256', kid: 'k1' })
     .setIssuer(ISSUER).setAudience(RESOURCE).setSubject(sub).setIssuedAt().setExpirationTime('5m').sign(privateKey);
 }
 
@@ -105,13 +106,18 @@ connectionPool.getConnection = async (sid) => {
 };
 const adapterMod = await import('./dist/src/lib/actual-adapter.js');
 adapterMod._setSkipApiInitForTests(true);
+if (MODE === 'discovery') {
+  const adapter = adapterMod.default;
+  const listing = 'listRemoteBudgetFiles' in adapter ? 'listRemoteBudgetFiles' : 'getBudgets';
+  adapter[listing] = async () => [{ groupId: 'shared', name: 'Household', usersWithAccess: [{ userName: 'sub-bob-577' }] }];
+}
 const { startHttpServer } = await import('./dist/src/server/httpServer.js');
 const mcp = { executeTool: async () => ({ ok: true }) };
 const { listener, cleanup } = await startHttpServer(mcp, 0, '/http', {}, ['actual_accounts_list'], 'desc', 'instr', {}, 'test', '127.0.0.1', undefined);
 if (!listener.listening) await new Promise((res, rej) => { listener.once('listening', res); listener.once('error', rej); });
 const base = 'http://127.0.0.1:' + listener.address().port + '/http';
 
-const T = MODE === 'oidc'
+const T = oidc
   ? { alice: await tokenFor('static-bearer'), bob: await tokenFor('sub-bob-577') }
   : { alice: ${JSON.stringify(TOK_ALICE)}, bob: ${JSON.stringify(TOK_BOB)}, legacy: ${JSON.stringify(TOK_LEGACY)}, none: null };
 const held = []; // { sid, who } of every admitted session, closed by reset()
@@ -222,6 +228,21 @@ if (MODE === 'oidc') {
   results.oidc = { third: third.status, data: third.body && third.body.error && third.body.error.data, bob: bob.status };
 }
 
+if (MODE === 'discovery') {
+  const first = await open('bob');
+  const pending = () => connectionPool.getStats().pendingReservations;
+  results.live = { opened: first.status, pending: pending(), second: (await open('bob')).status };
+  results.closed = { status: await close(first.sid), pending: pending() };
+  const idle = await open('bob');
+  if (idle.sid) {
+    connectionPool.registered.set(idle.sid, Date.now() - connectionPool.getIdleTimeoutMinutes() * 60_000 - 1);
+    await connectionPool.cleanupIdleConnections();
+  }
+  results.idle = { opened: idle.status, pending: pending(), next: (await open('bob')).status };
+  await cleanup();
+  results.shutdown = { pending: pending(), admissions: admissions().length, logins };
+}
+
 await new Promise((res) => listener.close(res));
 process.removeListener('SIGTERM', cleanup); process.removeListener('SIGINT', cleanup);
 process.stdout.write(${JSON.stringify(SENTINEL)} + JSON.stringify(results) + '\\n');
@@ -243,6 +264,8 @@ const ENV = {
   global: { ...staticEnv, MAX_SESSIONS_PER_PRINCIPAL: '5', MAX_CONCURRENT_SESSIONS: '2' },
   unset: { ...staticEnv, MAX_CONCURRENT_SESSIONS: '2' },
   open: { MCP_ALLOW_UNAUTHENTICATED: 'true', MAX_SESSIONS_PER_PRINCIPAL: '2', MAX_CONCURRENT_SESSIONS: '15' },
+  discovery: { AUTH_PROVIDER: 'oidc', OIDC_ISSUER: ISSUER, OIDC_RESOURCE: RESOURCE, AUTH_BUDGET_ACL_SOURCE: 'actual',
+    AUTH_BUDGET_DISCOVERY: 'true', MAX_SESSIONS_PER_PRINCIPAL: '1', MAX_CONCURRENT_SESSIONS: '1' },
   oidc: { AUTH_PROVIDER: 'oidc', OIDC_ISSUER: ISSUER, OIDC_RESOURCE: RESOURCE, MAX_SESSIONS_PER_PRINCIPAL: '2', MAX_CONCURRENT_SESSIONS: '15' },
 };
 function run(mode) {
@@ -343,6 +366,19 @@ const o = runs.open?.r;
 if (o) {
   check('open a request with no principal is bounded by the global cap only', () => {
     assert.deepStrictEqual(o.open, { statuses: [200, 200, 200, 200], admissions: 0 });
+  });
+}
+const discovery = runs.discovery?.r;
+if (discovery) {
+  check('a discovery-only session holds its slot until DELETE', () => {
+    assert.deepStrictEqual(discovery.live, { opened: 200, pending: 1, second: 503 });
+    assert.deepStrictEqual(discovery.closed, { status: 200, pending: 0 });
+  });
+  check('orphan eviction releases the slot for the next discovery-only session', () => {
+    assert.deepStrictEqual(discovery.idle, { opened: 200, pending: 0, next: 200 });
+  });
+  check('server shutdown releases an unopened session without logging in', () => {
+    assert.deepStrictEqual(discovery.shutdown, { pending: 0, admissions: 0, logins: 0 });
   });
 }
 const d = runs.oidc?.r;

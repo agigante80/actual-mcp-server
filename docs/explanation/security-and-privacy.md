@@ -437,6 +437,23 @@ every other operation is. A `MCP_STATIC_TOKENS` principal (#572) is restricted t
 `budgets` the same way. Wildcard sessions, `MCP_SSE_AUTHORIZATION`,
 `MCP_ALLOW_UNAUTHENTICATED` and stdio are unrestricted and see every budget.
 
+#### Discovery of permitted files
+
+Use Actual Server 26.7.0 or newer for multi-user discovery. This includes
+the fixes in [26.6.0](https://github.com/advisories/GHSA-cq9c-6w48-qmfg)
+and [26.7.0](https://github.com/actualbudget/actual/security/advisories/GHSA-23vm-ffgg-qvjr).
+The service login must be able to see the files users share. Discovery carries
+only the authenticated user's permitted file metadata into their request.
+The existing access check still applies to every budget operation.
+
+Discovery widens what the identity match decides. Without it a matched user reaches
+only the Sync IDs an operator configured; with it the match also lists every file
+Actual shares with that `userName`. The identity warning above therefore applies in
+full: if users can edit the claim that is matched (`preferred_username` at many
+IdPs), pin `AUTH_BUDGET_ACL_CLAIM` to one they cannot change before enabling it.
+An encrypted shared file is listed only when a configured entry carries its key
+(#690), and a saved budget preference restores configured budgets only (#689).
+
 #### Known limitation: `actual_budgets_import` creates an un-ACL'd budget (#334)
 
 `actual_budgets_import` wraps `@actual-app/api`'s `importBudget()`, which does not

@@ -230,6 +230,44 @@ const AUTHENTIK_TOKEN = {
     _resetDynamicAclCache();
   }
 
+  console.log('\n[budget-acl-dynamic] household sharing refreshes independently for each principal');
+  {
+    const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
+    const listing = 'listRemoteBudgetFiles' in adapter ? 'listRemoteBudgetFiles' : 'getBudgets';
+    const originalGetBudgets = adapter[listing];
+    const originalNow = Date.now;
+    let now = originalNow();
+    const household = {
+      groupId: 'household-sync', name: 'Household', state: 'remote',
+      usersWithAccess: [{ userName: ALICE, owner: true }],
+    };
+    try {
+      _resetDynamicAclCache();
+      Date.now = () => now;
+      adapter[listing] = async () => [...FILES, household];
+      async function expectAllowed(principal, expected, label) {
+        const actual = await resolveAllowedBudgetsFromActual(principal);
+        check(JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort()), label);
+      }
+      await expectAllowed(ALICE, [FILE_A, household.groupId], 'the owner sees her private and household budgets');
+      await expectAllowed(BOB, [FILE_B], 'the second principal starts with only his private budget');
+
+      household.usersWithAccess.push({ userName: BOB, owner: false });
+      now += 60_000;
+      await expectAllowed(BOB, [FILE_B, household.groupId], 'a new share reaches the second principal by cache expiry');
+      await expectAllowed(ALICE, [FILE_A, household.groupId], 'the owner still cannot see the other private budget');
+
+      household.usersWithAccess = household.usersWithAccess.filter(user => user.userName !== BOB);
+      now += 60_000;
+      await expectAllowed(BOB, [FILE_B], 'revoking the share removes it from the refreshed allowlist');
+      await expectAllowed(ALICE, [FILE_A, household.groupId], 'the owner retains access after the revocation');
+    } finally {
+      Date.now = originalNow;
+      adapter[listing] = originalGetBudgets;
+      _resetDynamicAclCache();
+    }
+  }
+
   console.log('\n[budget-acl-dynamic] defaults');
   {
     const cfg = (await import('../../dist/src/config.js')).default;

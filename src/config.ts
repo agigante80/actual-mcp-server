@@ -314,6 +314,9 @@ export const configSchema = z.object({
   // functions when that server runs in multi-user (OpenID) mode. Defaulting to
   // 'static' means no existing deployment changes posture on upgrade.
   AUTH_BUDGET_ACL_SOURCE: z.enum(['static', 'actual']).default('static'),
+  // #688: also offer each OIDC user the files Actual shares with them on ACTUAL_SERVER_URL, beside
+  // the configured budgets. Opt-in; refused below unless AUTH_PROVIDER=oidc and the source is 'actual'.
+  AUTH_BUDGET_DISCOVERY: z.enum(['true', 'false']).optional().transform(value => value === 'true'),
   // #338/#343: which token claim identifies the principal when
   // AUTH_BUDGET_ACL_SOURCE=actual. Default 'auto' walks Actual's OWN precedence
   // (preferred_username, login, email, id, sub) and matches the result against
@@ -382,6 +385,11 @@ export const configSchema = z.object({
       }
     }),
 })
+  // #688: discovery reads Actual's per-file access list, which only the OIDC + 'actual' pair resolves.
+  .refine(
+    cfg => !cfg.AUTH_BUDGET_DISCOVERY || (cfg.AUTH_PROVIDER === 'oidc' && cfg.AUTH_BUDGET_ACL_SOURCE === 'actual'),
+    { path: ['AUTH_BUDGET_DISCOVERY'], message: 'Budget discovery requires AUTH_PROVIDER=oidc and AUTH_BUDGET_ACL_SOURCE=actual' },
+  )
   // #343 UPGRADE GUARD. v0.11.0 and v0.11.1 shipped AUTH_BUDGET_ACL_CLAIM=sub as
   // the default AND the README told operators to keep it. That combination cannot
   // match anything: Actual stores no `sub`, so every principal resolves to zero

@@ -46,7 +46,7 @@ import * as fs from 'node:fs';
 // so adapter code can import it without a circular dependency on httpServer.
 // Re-exported here for backward compatibility with any callers that imported
 // `requestContext` from this module.
-import { requestContext } from '../lib/requestContext.js';
+import { requestContext, type RequestStore } from '../lib/requestContext.js';
 import { createShutdownGate, createShutdownHandler } from './shutdown.js';
 import { recordSessionOwner, forgetSessionOwner, sessionOwnerMatches } from '../lib/session-owners.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
@@ -101,6 +101,11 @@ export const HTTP_KEEP_ALIVE_TIMEOUT_MS = 65000;
  * default 10s stop grace, so the process ends itself before the SIGKILL.
  */
 const SHUTDOWN_DEADLINE_MS = 8000;
+
+function requestBudgetAccess(req: Request): Pick<RequestStore, 'allowedBudgets' | 'discoveredBudgets'> {
+  const { allowedBudgets, discoveredBudgets } = req as Request & RequestStore;
+  return { allowedBudgets, discoveredBudgets };
+}
 
 export async function startHttpServer(
   mcp: ActualMCPConnection,
@@ -758,15 +763,17 @@ export async function startHttpServer(
                 // #571: open on the session's own budget (a restored #189 preference may live on
                 // another server), not on the default one.
                 const budget = initialBudgetForSession(sid);
-                await connectToActualForSession(sid, {
-                  serverUrl: budget.serverUrl,
-                  password: budget.password || '',
-                  syncId: budget.syncId,
-                  encryptionPassword: budget.encryptionPassword,
-                });
-                // Only register the transport if the pool connection succeeded.
-                // The pool stamped lastActivity when it created the entry, so it
-                // is already the source of truth for this session's idle clock.
+                // A discovery-only user must be able to list and switch before opening a file (#689).
+                const discovery = requestContext.getStore()?.discoveredBudgets;
+                if (!discovery || getBudgetRegistry().some(entry => entry.syncId === budget.syncId)) {
+                  await connectToActualForSession(sid, {
+                    serverUrl: budget.serverUrl,
+                    password: budget.password || '',
+                    syncId: budget.syncId,
+                    encryptionPassword: budget.encryptionPassword,
+                  });
+                }
+                // Discovery-only sessions keep their reserved slot until they open a budget or end.
                 recordSessionOwner(sid, sessionOwner);
                 transports.set(sid, transport);
                 // #530: let the pool time this session even after its entry is recycled.
@@ -797,9 +804,8 @@ export async function startHttpServer(
           try {
             // Run in AsyncLocalStorage context so tools can access sessionId
             // and the adapter can enforce per-request budget ACL (#156).
-            const allowedBudgetsInit = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
             const requestId = resolveRequestId(req.get('x-correlation-id'));
-            await requestContext.run({ sessionId: undefined, requestId, allowedBudgets: allowedBudgetsInit, principal: resolvePrincipal(req) }, async () => {
+            await requestContext.run({ sessionId: undefined, requestId, ...requestBudgetAccess(req), principal: resolvePrincipal(req) }, async () => {
               await transport.handleRequest(req, res, req.body);
             });
           } catch (err: unknown) {
@@ -958,9 +964,8 @@ export async function startHttpServer(
 
       // Run in AsyncLocalStorage context so tools and the adapter can access
       // sessionId (pool branch, #134) and allowedBudgets (ACL enforcement, #156).
-      const allowedBudgets = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
       const requestId = resolveRequestId(req.get('x-correlation-id'));
-      await requestContext.run({ sessionId, requestId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {
+      await requestContext.run({ sessionId, requestId, ...requestBudgetAccess(req), principal: resolvePrincipal(req) }, async () => {
         await transport.handleRequest(req, res, req.body);
       });
     } catch (err: unknown) {
@@ -1102,9 +1107,8 @@ export async function startHttpServer(
         res.status(404).json(sessionNotFound);
         return;
       }
-      const allowedBudgets = (req as Request & { allowedBudgets?: string[] }).allowedBudgets;
       const requestId = resolveRequestId(req.get('x-correlation-id'));
-      await requestContext.run({ sessionId, requestId, allowedBudgets, principal: resolvePrincipal(req) }, async () => {
+      await requestContext.run({ sessionId, requestId, ...requestBudgetAccess(req), principal: resolvePrincipal(req) }, async () => {
         await transport.handleRequest(req, res);
       });
       if (res.statusCode !== 200) return;
@@ -1262,8 +1266,9 @@ export async function startHttpServer(
     // mutate it mid-iteration.
     for (const sessionId of [...transports.keys()]) {
       await shutdownActualForSession(sessionId);
+      // A session without a pool entry has no eviction callback to finish its teardown.
+      if (transports.has(sessionId)) teardownSession(sessionId, 'closed');
     }
-    transports.clear();
     sessionInitPromises.clear();
     sessionInitFailures.clear(); // #438
     // Also shut down the shared/pooled connections

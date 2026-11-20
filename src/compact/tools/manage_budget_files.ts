@@ -1,3 +1,4 @@
+import { budgetSelectorRule, showDiscoveredBudgets, validBudgetSelector } from '../../lib/budgetSelector.js';
 import { z } from 'zod';
 import { asFields, issue, needs, strict } from '../refine.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
@@ -19,7 +20,7 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
  * OpenAI function-schema validator).
  */
 
-const budgetName = z.string().optional().describe('Exact configured budget name (list with list_entities type budget_file), case-insensitive, max 120 characters.');
+const budgetName = z.string().optional().describe((showDiscoveredBudgets ? 'Exact budget name or, in discovery mode, Sync ID' : 'Exact configured budget name') + ' (list with list_entities type budget_file), case-insensitive, max 120 characters.');
 const path = z.string().optional().describe('import: path of the export file ON THE SERVER; give exactly one of path and base64.');
 const base64 = z.string().optional().describe('import: the export file contents, base64-encoded; give exactly one of path and base64.');
 const type = z.enum(['actual', 'ynab4', 'ynab5']).optional().describe('import: format; omit for actual (an Actual .zip export).');
@@ -28,7 +29,7 @@ const filename = z
   .optional()
   .describe('import: original file name, only with base64. export: output name without a directory, letters, digits, dot, underscore, hyphen; ".zip" is appended; omit for a timestamped name. Max 120.');
 
-const BUDGET_NAME_CHARS = /^[\p{L}\p{N} ._\-]+$/u;
+
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const MAX_BASE64_CHARS = 64 * 1024 * 1024;
 const SAFE_FILENAME = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
@@ -37,7 +38,7 @@ const BUDGET_NAME = z
   .string()
   .min(1, 'budget_name must not be empty')
   .max(120, 'budget_name must be at most 120 characters')
-  .refine((value) => BUDGET_NAME_CHARS.test(value), 'budget_name must contain only letters, digits, spaces, dots, underscores, and hyphens');
+  .refine(validBudgetSelector, budgetSelectorRule('budget_name'));
 const PATH = z.string().min(1, 'path must not be empty').max(4096, 'path must be at most 4096 characters');
 const BASE64_REAL = z
   .string()
@@ -82,7 +83,7 @@ export const manageBudgetFiles: CompactToolSpec = {
   summary: 'Switch the active budget, import a budget file or export the active budget.',
   examplePrompt: 'Export my budget to a file.',
   description:
-    'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. To list the configured budget names use list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused.\n' +
+    'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. To list the ' + (showDiscoveredBudgets ? 'available budget names use' : 'configured budget names use') + ' list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused.\n' +
     'switch: budget_name; this session only, other sessions keep their budget; also remembered as the caller\'s preferred budget; an unconfigured or not permitted name is refused. It loads the target budget, and a load failure can surface on the next call instead; undo it by switching back.\n' +
     'import: exactly one of path (a file on the server, max 4096 characters) or base64 (max 67108864 characters); optional type (actual, ynab4, ynab5; default actual), filename (base64 only); a caller limited to some budgets is refused; a long import can time out.\n' +
     'import ADDS a budget and replaces nothing: each import makes a new local copy and normally uploads it as a NEW server budget file (a failed upload leaves it local only); the returned budgetId is that local id, not a Sync ID; confirm before importing.\n' +
