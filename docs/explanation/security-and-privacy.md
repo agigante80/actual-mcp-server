@@ -409,22 +409,12 @@ explicit binding costs no network call and keeps working while the IdP is down.
 - Every failure path denies. An unreachable server, an unparseable response, or an
   unmatched principal all return no budgets, never a wildcard.
 
-#### Known limitation: the dynamic ACL resolves via a budget download (#338)
+#### Dynamic ACL file listing
 
-When `AUTH_BUDGET_ACL_SOURCE=actual`, the ACL is resolved with `adapter.getBudgets()`.
-Every adapter session init calls `downloadBudget(ACTUAL_BUDGET_SYNC_ID)`, so resolving
-the ACL also downloads the configured DEFAULT budget, even though the ACL only needs
-the file list.
-
-This is not a correctness problem: a working, downloadable default budget is already
-required for the server to serve any tool at all, so it introduces no failure mode that
-did not already exist. It is an efficiency cost, bounded by the resolver's 60 second
-per-principal cache, so it is one download per principal per minute at worst.
-
-The clean fix is a narrow adapter entry point that lists budget files without
-downloading one. It was deliberately not built, because it means touching
-`src/lib/actual-adapter.ts` (the modify-with-caution tier, and the owner of the
-non-reentrant session lock) for a performance gain rather than a correctness one.
+Startup preflight and permission refresh list files directly on the configured Actual
+server using its service login. A lookup never opens a budget. Concurrent lookups
+share the in-flight request. The login token stays in memory for up to 60 seconds.
+Redirects are refused. A failed lookup denies access and the next request retries.
 
 #### Listings, import and error text under a restricted ACL (#570)
 

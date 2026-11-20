@@ -34,26 +34,10 @@
 // blank or missing claim yields null, never '', and the matcher skips blank
 // candidates. Those two guards are load bearing; do not relax either.
 //
-// WHY THE RESOLUTION RUNS UNDER AN EXPLICIT WILDCARD CONTEXT.
-//
-// Resolving the ACL requires `adapter.getBudgets()`, and every adapter entry
-// point runs `_enforceBudgetAcl`, which refuses when the request context has no
-// allowedBudgets. Resolving the ACL would therefore be blocked by the ACL it is
-// trying to compute. We break that circularity by running ONLY this one call
-// inside `requestContext.run({ allowedBudgets: ['*'] }, ...)`. Since #570 the
-// wildcard matters twice: `getBudgets()` also FILTERS its result to the context's
-// allowedBudgets, so without it the resolver would see only the files the
-// caller's (not yet computed) list already permits.
-//
-// That is sound rather than a loophole: `getBudgets()` lists budget FILES
-// (name, id, who may access them). It reads no budget CONTENTS: no accounts, no
-// transactions, no balances. The wildcard is scoped to this single listing call
-// and never leaks into the caller's context, because AsyncLocalStorage restores
-// the previous store when the callback returns.
+// Both ACL consumers list remote file metadata under the configured service login.
 
 import config from '../config.js';
 import adapter from '../lib/actual-adapter.js';
-import { requestContext } from '../lib/requestContext.js';
 import { createModuleLogger } from '../lib/loggerFactory.js';
 import { parseIdentityMap, type IdentityMap } from './identity-map.js';
 import { resolveIdentityFromUserInfo, _resetUserInfoCache } from './userinfo-identity.js';
@@ -416,13 +400,12 @@ export function collectKnownUserNames(files: unknown): string[] {
  * turn a transient upstream outage into a boot loop. A failure is a warn and the
  * server starts anyway.
  *
- * It also warms the resolver cache for the first real request, since it performs
- * the same read.
+ * A successful preflight can reuse its service login for the first ACL lookup.
  */
 export async function runAclPreflight(): Promise<void> {
   let files: unknown;
   try {
-    files = await requestContext.run({ allowedBudgets: ['*'] }, () => adapter.getBudgets());
+    files = await adapter.listRemoteBudgetFiles();
   } catch (err) {
     log.warn('dynamic ACL preflight: could not read the budget list; continuing startup', {
       error: err instanceof Error ? err.message : String(err),
@@ -530,9 +513,7 @@ export async function resolveAllowedBudgetsFromActual(
 
   let files: unknown;
   try {
-    // The scoped wildcard described in the header. Nothing outside this call
-    // observes it.
-    files = await requestContext.run({ allowedBudgets: ['*'] }, () => adapter.getBudgets());
+    files = await adapter.listRemoteBudgetFiles();
   } catch (err) {
     log.error('dynamic ACL: could not read the budget list; denying access', err as Error);
     return [];

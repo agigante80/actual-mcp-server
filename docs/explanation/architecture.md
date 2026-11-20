@@ -19,6 +19,10 @@
 
 ---
 
+The dynamic OIDC ACL lists remote file metadata through the configured Actual
+service login. This path runs independently of the budget API singleton and its
+lock, so checking permissions preserves any budget another session has open.
+
 ## System Architecture
 
 ### High-Level Diagram

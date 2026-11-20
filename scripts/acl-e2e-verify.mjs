@@ -4,7 +4,7 @@
 // #343: end-to-end verification of the dynamic budget ACL against the live
 // environment built by scripts/acl-e2e.sh.
 //
-// WHY THIS EXISTS AS A SEPARATE STEP. The unit tests stub `adapter.getBudgets()`,
+// WHY THIS EXISTS AS A SEPARATE STEP. The unit tests stub `adapter.listRemoteBudgetFiles()`,
 // so they prove the MATCHING rules and nothing about the identifier join. The
 // defect this file was written for lived exactly there: v0.11.0 matched the OIDC
 // `sub` against Actual's `userId`, which no unit fixture could falsify because the
@@ -307,7 +307,7 @@ console.log('\n[acl-e2e] NEGATIVE: unknown and blank principals get nothing');
 // never exercised is worse than an absent one, so it is absent.
 //
 // That path is covered deterministically in tests/unit/budget_acl_dynamic.test.js,
-// where `adapter.getBudgets` is stubbed to throw and the resolver is asserted to
+// where `adapter.listRemoteBudgetFiles` is stubbed to throw and the resolver is asserted to
 // return [] rather than a wildcard. Simulated failure is the right tool for a
 // failure mode; a live environment is the right tool for the identifier join,
 // which is what this file is for.

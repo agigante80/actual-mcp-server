@@ -210,23 +210,23 @@ const AUTHENTIK_TOKEN = {
     check(nullResult.length === 0 && !nullResult.includes('*'), 'a null principal denies, never a wildcard');
 
     const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
-    const orig = adapterMod.default.getBudgets;
+    const orig = adapterMod.default.listRemoteBudgetFiles;
 
-    adapterMod.default.getBudgets = async () => { throw new Error('ECONNREFUSED'); };
+    adapterMod.default.listRemoteBudgetFiles = async () => { throw new Error('ECONNREFUSED'); };
     _resetDynamicAclCache();
     const errResult = await resolveAllowedBudgetsFromActual(ALICE);
     check(errResult.length === 0 && !errResult.includes('*'), 'an upstream failure denies, never a wildcard');
 
-    adapterMod.default.getBudgets = async () => FILES;
+    adapterMod.default.listRemoteBudgetFiles = async () => FILES;
     _resetDynamicAclCache();
     check(JSON.stringify(await resolveAllowedBudgetsFromActual(ALICE)) === JSON.stringify([FILE_A]),
       'resolves alice through the real code path');
 
-    adapterMod.default.getBudgets = async () => { throw new Error('should not be called'); };
+    adapterMod.default.listRemoteBudgetFiles = async () => { throw new Error('should not be called'); };
     check(JSON.stringify(await resolveAllowedBudgetsFromActual(ALICE)) === JSON.stringify([FILE_A]),
       'a second call is served from cache');
 
-    adapterMod.default.getBudgets = orig;
+    adapterMod.default.listRemoteBudgetFiles = orig;
     _resetDynamicAclCache();
   }
 
