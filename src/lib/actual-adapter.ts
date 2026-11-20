@@ -164,8 +164,22 @@ function setSessionBudget(sessionId: string, budget: BudgetConfig, discovery: bo
     return;
   }
   const name = budget.name.toLowerCase();
-  const configuredName = budgetRegistry.get(name) === budget ? budget.name : undefined;
+  const configuredName = isConfiguredBudget(budget) ? budget.name : undefined;
   sessionBudgetState.set(sessionId, discovery ? { syncId: budget.syncId, configuredName } : name);
+}
+
+export function pinSessionBudget(sessionId: string, budget: BudgetConfig): void {
+  setSessionBudget(sessionId, budget, true);
+}
+
+export function isConfiguredBudget(budget: BudgetConfig): boolean {
+  return budgetRegistry.get(budget.name.toLowerCase()) === budget;
+}
+
+// #689: a discovered file is named by its owner, who may be another user. Since a session can
+// now start on one without an explicit switch, log lines name operator-configured budgets only.
+function budgetLogName(budget: BudgetConfig): string {
+  return isConfiguredBudget(budget) ? budget.name : 'discovered file';
 }
 
 function requestBudgets(): BudgetConfig[] {
@@ -199,12 +213,12 @@ function getActiveBudgetConfig(): BudgetConfig {
   // env-default budget (first registry entry).
   const store = requestContext.getStore();
   const sessionId = store?.sessionId;
-  const discovery = config.AUTH_BUDGET_DISCOVERY && store?.discoveredBudgets !== undefined;
+  const discovered = config.AUTH_BUDGET_DISCOVERY ? store?.discoveredBudgets : undefined;
   if (sessionId) {
     const key = sessionBudgetState.get(sessionId);
     if (key) {
       if (typeof key !== 'string') {
-        if (!discovery) throw activeBudgetRefusal();
+        if (!discovered) throw activeBudgetRefusal();
         const selected = requestBudgets().find(entry => entry.syncId === key.syncId &&
           (key.configuredName === undefined || entry.name === key.configuredName));
         if (!selected) throw activeBudgetRefusal();
@@ -213,19 +227,39 @@ function getActiveBudgetConfig(): BudgetConfig {
       const found = budgetRegistry.get(key);
       if (found) return found;
     }
+  }
+
+  if (discovered && store) {
+    const selectable = requestBudgets();
+    const preferred = pickAllowedPreferredBudget(
+      getPreferredBudgetSyncId(store.principal), store.allowedBudgets, selectable,
+    );
+    if (preferred) return preferred;
+    const configured = selectable.find(isConfiguredBudget);
+    if (configured) return configured;
+
+    // Count permitted files before removing encrypted or configured rows. Another
+    // owner's share must not become the default just because it is the only usable file.
+    const allowed = new Set(store.allowedBudgets);
+    const permitted = discovered.filter(file => allowed.has(file.syncId));
+    if (permitted.length === 1 && selectable.length === 1) return selectable[0];
+    // The default sentinel preserves connection-free listing. The live ACL refuses its use.
+    return [...budgetRegistry.values()][0];
+  }
+
+  if (sessionId) {
     // #189 Phase 1: no in-session selection yet (e.g. a fresh session after a
     // server restart + client re-initialize). Restore the principal's persisted
     // budget, but ONLY if the live ACL still permits it (pickAllowedPreferredBudget
     // re-checks allowedBudgets, so a stale preference can never widen access).
     // Memoize into the session slot so subsequent calls take the fast path above.
-    // #689 extends saved preferences to discovered entries.
     const restored = pickAllowedPreferredBudget(
       getPreferredBudgetSyncId(store?.principal),
       store?.allowedBudgets,
       [...budgetRegistry.values()],
     );
-    if (restored && (!discovery || requestBudgets().includes(restored))) {
-      setSessionBudget(sessionId, restored, discovery);
+    if (restored) {
+      setSessionBudget(sessionId, restored, false);
       return restored;
     }
   }
@@ -238,12 +272,10 @@ function getActiveBudgetConfig(): BudgetConfig {
   // permitted, this is the default as before, and _enforceBudgetAcl then refuses.
   // Not memoised: a later switch writes the session slot, and the next call
   // recomputes the same answer from the same list.
-  // #689 owns first selection of a discovered budget. Filter unusable encrypted entries too.
   const values = [...budgetRegistry.values()];
   const restricting = restrictingAllowList(store?.allowedBudgets);
   if (restricting) {
-    const selectable = discovery ? new Set(requestBudgets()) : undefined;
-    const permitted = values.find(b => restricting.includes(b.syncId) && (!selectable || selectable.has(b)));
+    const permitted = values.find(b => restricting.includes(b.syncId));
     if (permitted) return permitted;
   }
   return values[0];
@@ -347,7 +379,7 @@ async function ensureLoadedBudgetMatchesSession(): Promise<void> {
   logger.warn('[ADAPTER] loaded budget does not match this session; re-selecting before the operation', {
     loadedSyncId: loaded ?? null,
     wantedSyncId: wanted.syncId,
-    budget: wanted.name,
+    budget: budgetLogName(wanted),
   });
 
   // Push anything pending for the budget we are about to close. Since #390 made re-selection
@@ -407,7 +439,7 @@ function loginOf(budget: BudgetConfig): { serverUrl: string; password: string } 
 async function loadBudgetOnItsServer(budget: BudgetConfig): Promise<void> {
   const login = loginOf(budget);
   if (!isApiLoggedInTo(login)) {
-    logger.info(`[ADAPTER] logging the api in to ${logSafeOrigin(budget.serverUrl)} before loading "${budget.name}"`);
+    logger.info(`[ADAPTER] logging the api in to ${logSafeOrigin(budget.serverUrl)} before loading "${budgetLogName(budget)}"`);
     await withAuthRetry(() => initApiLoggedIn(config.MCP_BRIDGE_DATA_DIR, login, 'init'));
   }
   await loadBudgetTracked(budget.syncId, budget.encryptionPassword);
@@ -1005,7 +1037,7 @@ async function initActualApiForOperation(): Promise<void> {
     const budget = getActiveBudgetConfig();
     const DATA_DIR = config.MCP_BRIDGE_DATA_DIR;
 
-    logger.debug(`[ADAPTER] Initializing Actual API for operation (budget: "${budget.name}", server: ${logSafeOrigin(budget.serverUrl)})`);
+    logger.debug(`[ADAPTER] Initializing Actual API for operation (budget: "${budgetLogName(budget)}", server: ${logSafeOrigin(budget.serverUrl)})`);
 
     // Wrap api.init in auth-rate-limit retry so a transient too-many-requests
     // doesn't surface to the caller (and doesn't trigger #132's crash path).
@@ -4970,7 +5002,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
     logger.info(
-      `[ADAPTER] switchBudget no-op for session ${sessionId}: already on "${found.name}" (${found.syncId})`,
+      `[ADAPTER] switchBudget no-op for session ${sessionId}: already on "${budgetLogName(found)}" (${found.syncId})`,
     );
     return { name: found.name, syncId: found.syncId, serverUrl: shownServerUrl };
   }
@@ -4979,7 +5011,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     // Same server + creds, different syncId. Reload budget file in place.
     logger.info(
       `[ADAPTER] switchBudget fast path for session ${sessionId}: ` +
-        `same server, reloading budget "${found.name}" (${found.syncId})`,
+        `same server, reloading budget "${budgetLogName(found)}" (${found.syncId})`,
     );
     if (_skipApiInitForTests) {
       // Skip the real downloadBudget call in tests; tests verify the fast
@@ -4997,7 +5029,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
     logger.info(
-      `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
+      `[ADAPTER] Active budget switched for session ${sessionId} to: "${budgetLogName(found)}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
     );
     return { name: found.name, syncId: found.syncId, serverUrl: shownServerUrl };
   }
@@ -5076,7 +5108,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   }
 
   logger.info(
-    `[ADAPTER] Active budget switched for session ${sessionId} to: "${found.name}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
+    `[ADAPTER] Active budget switched for session ${sessionId} to: "${budgetLogName(found)}" (${found.syncId}) on ${logSafeOrigin(found.serverUrl)}`,
   );
   return { name: found.name, syncId: found.syncId, serverUrl: shownServerUrl };
 }

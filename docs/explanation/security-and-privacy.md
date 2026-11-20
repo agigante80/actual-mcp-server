@@ -118,12 +118,14 @@ Known limitations:
   preference is re-checked against the live allow-list on every restore, so it grants
   nothing; it is not deleted from the preference file.
 
-**Behaviour change for OIDC (#572).** A session that has not switched and has no stored
+**Starting budget with discovery off (#572).** A session that has not switched and has no stored
 preference now starts on the first budget its allow-list permits, in registry order
 (default budget, then `BUDGET_1`, `BUDGET_2`, ...). Before, an OIDC principal whose list
 excluded the default budget got `Budget ACL:` on every call until it switched. Static and
 OIDC principals share this fallback; a wildcard principal still starts on the default
-budget.
+budget. With discovery on, the session restores a selectable preference, then tries a configured
+budget, then a sole permitted discovered file. Several discovered files require an explicit
+choice when there is no usable preference or configured budget.
 
 #### 2. **OIDC / JWT Authentication**
 
@@ -452,7 +454,9 @@ Actual shares with that `userName`. The identity warning above therefore applies
 full: if users can edit the claim that is matched (`preferred_username` at many
 IdPs), pin `AUTH_BUDGET_ACL_CLAIM` to one they cannot change before enabling it.
 An encrypted shared file is listed only when a configured entry carries its key
-(#690), and a saved budget preference restores configured budgets only (#689).
+(#690). A saved Sync ID can restore a configured or discovered budget only while it is
+selectable under the current grants. A successful session open pins that choice. Revocation
+blocks further data calls on the pinned budget until the user switches.
 
 #### Known limitation: `actual_budgets_import` creates an un-ACL'd budget (#334)
 
@@ -619,7 +623,7 @@ chown $USER:$USER ./actual-data
 - ✅ Log rotation with retention limits
 - ✅ Tool arguments and results are never written to the logs (#556), at any level
 - ✅ Tool error messages are never written to the logs (#559); the failure record carries the error class
-- ✅ The startup budget registry line carries counts and schemes only (#621); the adapter's login, operation and budget-switch lines print a server URL as its origin (no userinfo, path or query) but still name the budget involved. Login error messages still keep the URL path and query (userinfo is stripped). Logs written by earlier versions keep the old line until rotated
+- ✅ The startup budget registry line carries counts and schemes only (#621); the adapter's login, operation and budget-switch lines print a server URL as its origin (no userinfo, path or query) but still name the configured budget involved. A file found by budget discovery is never named in a log line (#689): it shows as `discovered file` with its Sync ID, because its name was chosen by its owner, who may be another user. A session that starts on a budget automatically in discovery mode logs one `Starting budget selected` line with the Sync ID and whether the budget was configured or discovered. Login error messages still keep the URL path and query (userinfo is stripped). Logs written by earlier versions keep the old line until rotated
 - ✅ `actual_budgets_list_available` and `actual_budgets_switch` show a budget's server as its origin only (#628), so a reverse-proxy credential written into `BUDGET_n_SERVER_URL` or `ACTUAL_SERVER_URL` never reaches the client or its model provider. A server under a subpath shows as its host
 
 **Tool content is never logged (#556).** Tool arguments and results are the user's budget data:

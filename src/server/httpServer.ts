@@ -18,7 +18,7 @@ import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, admitSession, releaseAdmission, isConnectionPoolEnabled } from '../actualConnection.js';
 import { connectionPool, type EvictionReason } from '../lib/ActualConnectionPool.js';
-import { clearSessionBudgetState, setSessionLivenessCheck, initialBudgetForSession, getBudgetRegistry, awaitWritesIdle } from '../lib/actual-adapter.js';
+import { clearSessionBudgetState, setSessionLivenessCheck, initialBudgetForSession, pinSessionBudget, isConfiguredBudget, getBudgetRegistry, awaitWritesIdle } from '../lib/actual-adapter.js';
 import { errorLogFields } from '../lib/errors.js';
 import observability from '../observability.js';
 import config from '../config.js';
@@ -763,19 +763,37 @@ export async function startHttpServer(
                 // #571: open on the session's own budget (a restored #189 preference may live on
                 // another server), not on the default one.
                 const budget = initialBudgetForSession(sid);
-                // A discovery-only user must be able to list and switch before opening a file (#689).
-                const discovery = requestContext.getStore()?.discoveredBudgets;
-                if (!discovery || getBudgetRegistry().some(entry => entry.syncId === budget.syncId)) {
-                  await connectToActualForSession(sid, {
-                    serverUrl: budget.serverUrl,
-                    password: budget.password || '',
-                    syncId: budget.syncId,
-                    encryptionPassword: budget.encryptionPassword,
-                  });
+                const discovery = requestContext.getStore()?.discoveredBudgets !== undefined && config.AUTH_BUDGET_DISCOVERY;
+                const selectable = !discovery || getBudgetRegistry().some(entry =>
+                  entry.syncId === budget.syncId && entry.serverUrl === logSafeOrigin(budget.serverUrl) && entry.name === budget.name);
+                let opened = false;
+                if (selectable) {
+                  try {
+                    await connectToActualForSession(sid, {
+                      serverUrl: budget.serverUrl,
+                      password: budget.password || '',
+                      syncId: budget.syncId,
+                      encryptionPassword: budget.encryptionPassword,
+                    });
+                    opened = true;
+                  } catch (err) {
+                    if (!discovery || isConfiguredBudget(budget)) throw err;
+                    logger.warn('[SESSION] Could not open the discovered starting budget', {
+                      syncId: budget.syncId, errorClass: err instanceof Error ? err.name : 'Unknown',
+                    });
+                    if (!admitSession(sid, capPrincipal(req)).admitted) throw err;
+                  }
                 }
-                // Discovery-only sessions keep their reserved slot until they open a budget or end.
                 recordSessionOwner(sid, sessionOwner);
                 transports.set(sid, transport);
+                if (discovery && opened) {
+                  pinSessionBudget(sid, budget);
+                  // Audit record of an automatic start: the Sync ID and where the choice came from,
+                  // never the file name (a discovered file is named by its owner).
+                  logger.info('[SESSION] Starting budget selected', {
+                    syncId: budget.syncId, source: isConfiguredBudget(budget) ? 'configured' : 'discovered',
+                  });
+                }
                 // #530: let the pool time this session even after its entry is recycled.
                 // Pooling off (USE_CONNECTION_POOL=false) has no sweep, so nothing to register.
                 if (isConnectionPoolEnabled()) connectionPool.registerSession(sid);

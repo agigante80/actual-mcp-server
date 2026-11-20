@@ -3,6 +3,7 @@ import path from 'path';
 import os from 'os';
 import api from '@actual-app/api';
 import { loadBudgetTracked } from './lib/budgetLoader.js';
+import { requestContext } from './lib/requestContext.js';
 import { withApiLock } from './lib/apiLock.js';
 import { initApiLoggedIn } from './lib/apiLogin.js';
 import logger from './logger.js';
@@ -155,6 +156,17 @@ export async function connectToActualForSession(
   budget?: { serverUrl: string; password: string; syncId: string; encryptionPassword?: string },
 ) {
   if (!useConnectionPool) {
+    // The shared connection uses the environment default. A discovery session may
+    // only open its selected file, including when connection pooling is disabled.
+    if (budget && config.AUTH_BUDGET_DISCOVERY && requestContext.getStore()?.discoveredBudgets) {
+      return withApiLock(async () => {
+        const dataDir = config.MCP_BRIDGE_DATA_DIR || DEFAULT_DATA_DIR;
+        fs.mkdirSync(dataDir, { recursive: true });
+        await initApiLoggedIn(dataDir, budget, 'discovery session open');
+        await loadBudgetTracked(budget.syncId, budget.encryptionPassword);
+        initialized = true;
+      });
+    }
     // Fallback to shared connection
     return connectToActual();
   }
