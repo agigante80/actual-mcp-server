@@ -85,7 +85,7 @@ import { checkServerVersionOnce } from './server-version-guard.js';
 import config from '../config.js';
 import { formatBudgetRegistrySummary, logSafeOrigin, parseBudgetRegistry, summarizeBudgetRegistry, type BudgetConfig, type BudgetRegistrySummary } from './budget-registry.js';
 import { getPreferredBudgetSyncId, setPreferredBudgetSyncId, pickAllowedPreferredBudget } from './budget-preference-store.js';
-import { requestContext } from './requestContext.js';
+import { requestContext, type RequestStore } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad, hasPendingBudgetLoad, isApiLoggedInTo, setLoginsSpanServers } from './apiState.js';
 import { initApiLoggedIn } from './apiLogin.js';
@@ -116,8 +116,8 @@ export function getBudgetRegistrySummary(): BudgetRegistrySummary {
 }
 
 /**
- * Per-session active budget. Map from sessionId to lowercased budget key
- * (matches the keys in budgetRegistry).
+ * Per-session active budget. Map from sessionId to a lowercased configured name,
+ * or to a Sync ID for a request using discovery.
  *
  * Issue #156: previously a single module-level `activeBudgetKey` was shared
  * across all sessions. In multi-user OIDC mode that meant one user's
@@ -164,6 +164,30 @@ function setSessionBudget(sessionId: string, key: string): void {
   sessionBudgetState.set(sessionId, key);
 }
 
+function requestBudgets(): BudgetConfig[] {
+  const entries = [...budgetRegistry.values()];
+  const store = requestContext.getStore();
+  if (!config.AUTH_BUDGET_DISCOVERY || !store?.discoveredBudgets) return entries;
+
+  const metadata = new Map(store.discoveredBudgets.map(file => [file.syncId, file]));
+  const allowed = new Set(store.allowedBudgets);
+  const selectable = entries.filter(entry => allowed.has(entry.syncId) &&
+    (!metadata.get(entry.syncId)?.encrypted || Boolean(entry.encryptionPassword)));
+  const configuredIds = new Set(entries.map(entry => entry.syncId));
+  for (const file of metadata.values()) {
+    if (!configuredIds.has(file.syncId) && !file.encrypted && allowed.has(file.syncId)) {
+      selectable.push({ syncId: file.syncId, name: file.name, serverUrl: config.ACTUAL_SERVER_URL,
+        password: config.ACTUAL_PASSWORD });
+    }
+  }
+  return selectable;
+}
+
+function activeBudgetRefusal(): Error {
+  return new Error("Budget ACL: the active budget is not in this session's allowedBudgets. " +
+    'Call actual_budgets_list_available and switch to a permitted budget.');
+}
+
 function getActiveBudgetConfig(): BudgetConfig {
   // _resolveSessionId is declared below; function declarations hoist so this
   // call works at runtime. If we're not in any requestContext.run scope (stdio,
@@ -171,9 +195,15 @@ function getActiveBudgetConfig(): BudgetConfig {
   // env-default budget (first registry entry).
   const store = requestContext.getStore();
   const sessionId = store?.sessionId;
+  const discovery = config.AUTH_BUDGET_DISCOVERY && store?.discoveredBudgets !== undefined;
   if (sessionId) {
     const key = sessionBudgetState.get(sessionId);
     if (key) {
+      if (discovery) {
+        const selected = requestBudgets().find(entry => entry.syncId === key);
+        if (!selected) throw activeBudgetRefusal();
+        return selected;
+      }
       const found = budgetRegistry.get(key);
       if (found) return found;
     }
@@ -182,13 +212,14 @@ function getActiveBudgetConfig(): BudgetConfig {
     // budget, but ONLY if the live ACL still permits it (pickAllowedPreferredBudget
     // re-checks allowedBudgets, so a stale preference can never widen access).
     // Memoize into the session slot so subsequent calls take the fast path above.
+    // #689 extends saved preferences to discovered entries.
     const restored = pickAllowedPreferredBudget(
       getPreferredBudgetSyncId(store?.principal),
       store?.allowedBudgets,
       [...budgetRegistry.values()],
     );
-    if (restored) {
-      setSessionBudget(sessionId, restored.name.toLowerCase());
+    if (restored && (!discovery || requestBudgets().some(b => b.syncId === restored.syncId))) {
+      setSessionBudget(sessionId, discovery ? restored.syncId : restored.name.toLowerCase());
       return restored;
     }
   }
@@ -201,10 +232,12 @@ function getActiveBudgetConfig(): BudgetConfig {
   // permitted, this is the default as before, and _enforceBudgetAcl then refuses.
   // Not memoised: a later switch writes the session slot, and the next call
   // recomputes the same answer from the same list.
+  // #689 owns first selection of a discovered budget. Filter unusable encrypted entries too.
   const values = [...budgetRegistry.values()];
   const restricting = restrictingAllowList(store?.allowedBudgets);
   if (restricting) {
-    const permitted = values.find((b) => restricting.includes(b.syncId));
+    const selectableIds = discovery ? new Set(requestBudgets().map(b => b.syncId)) : undefined;
+    const permitted = values.find(b => restricting.includes(b.syncId) && (!selectableIds || selectableIds.has(b.syncId)));
     if (permitted) return permitted;
   }
   return values[0];
@@ -434,7 +467,7 @@ function _affinityBudget(): string | undefined {
  * session. The operation would do exactly that anyway a moment later, so this only moves it.
  */
 export function resolveBatchBudget(
-  entries: Array<{ requestStore?: { sessionId?: string; allowedBudgets?: string[]; principal?: string } }>,
+  entries: Array<{ requestStore?: RequestStore }>,
 ): string | undefined {
   const budgets = new Set<string | undefined>(
     entries.map((e) => {
@@ -595,7 +628,9 @@ function _enforceBudgetAcl(toolName?: string): void {
   if (!allowedBudgets) return;
 
   const target = getActiveBudgetConfig();
-  if (!allowedBudgets.includes(target.syncId)) {
+  if (!allowedBudgets.includes(target.syncId) ||
+      (config.AUTH_BUDGET_DISCOVERY && requestContext.getStore()?.discoveredBudgets &&
+       !requestBudgets().some(entry => entry.syncId === target.syncId))) {
     logger.warn(
       JSON.stringify({
         event: 'acl_denied',
@@ -609,10 +644,7 @@ function _enforceBudgetAcl(toolName?: string): void {
     // #570: the name and syncId stay in the log above, never in the caller-facing
     // text. With no selection the active budget is the registry's first entry, so
     // naming it told a principal allowed only another budget what the default was.
-    throw new Error(
-      "Budget ACL: the active budget is not in this session's allowedBudgets. " +
-        'Call actual_budgets_list_available and switch to a permitted budget.',
-    );
+    throw activeBudgetRefusal();
   }
 }
 
@@ -1089,7 +1121,7 @@ interface WriteOperation<T> {
   // for the budget precondition, because getActiveBudgetConfig also consults `principal` for
   // the #189 preference restore and `allowedBudgets` for the ACL. The drain re-enters this
   // context per operation so each op resolves ITS OWN budget.
-  requestStore?: { sessionId?: string; allowedBudgets?: string[]; principal?: string };
+  requestStore?: RequestStore;
   // #378: entity listings this operation CANNOT change. Anything not named here is dropped
   // from the drain cache once the operation completes. The default (undefined) therefore
   // invalidates everything, which is the fail-safe direction: forgetting to annotate a new
@@ -4795,7 +4827,7 @@ export async function getBudgets(): Promise<unknown[]> {
 
 /**
  * Switch the active budget by name (case-insensitive, EXACT match only).
- * The budget must be pre-configured via BUDGET_n_NAME env vars.
+ * Discovery also accepts a permitted Sync ID or discovered name.
  *
  * Issue #156:
  *   * Per-session: writes to the per-session map keyed by current sessionId.
@@ -4829,14 +4861,28 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     );
   }
 
-  const key = name.toLowerCase();
-  const found: BudgetConfig | undefined = budgetRegistry.get(key);
+  const discovery = config.AUTH_BUDGET_DISCOVERY && store?.discoveredBudgets !== undefined;
+  const entries = requestBudgets();
+  const nameKey = name.toLowerCase();
+  let found = budgetRegistry.get(nameKey);
+  if (discovery) {
+    found = entries.find(b => b.syncId === name);
+    if (!found) {
+      const matches = entries.filter(b => b.name.toLowerCase() === nameKey);
+      if (matches.length > 1) throw new OutOfRangeRefusal(
+        `Ambiguous budget name. Switch by Sync ID: ${matches.map(b => b.syncId).join(', ')}.`, name);
+      found = matches[0];
+    }
+  }
+  const key = discovery && found ? found.syncId : nameKey;
   // #570: a restricted caller is told only about budgets it may use.
   const notFound = (): Error => {
     const permitted = restrictedAllowedBudgets('actual_budgets_switch');
-    const available = [...budgetRegistry.values()]
+    const available = entries
       .filter(b => !permitted || permitted.includes(b.syncId))
       .map(b => `"${b.name}"`).join(', ') || 'none permitted for this session';
+    if (discovery) return new NotFoundRefusal('Budget', name, 'actual_budgets_list_available', undefined,
+      `Budget not found. Available budgets: ${available}.`);
     return new Error(
       `Budget "${name}" not found in configuration. ` +
       `Available budgets: ${available}. ` +
@@ -5035,7 +5081,7 @@ export function clearSessionBudgetState(sessionId: string): void {
  */
 export function getBudgetRegistry(): Array<{ name: string; syncId: string; serverUrl: string; hasEncryption: boolean }> {
   const allowed = restrictedAllowedBudgets('actual_budgets_list_available');
-  return [...budgetRegistry.values()].filter(b => !allowed || allowed.includes(b.syncId)).map(b => ({
+  return requestBudgets().filter(b => !allowed || allowed.includes(b.syncId)).map(b => ({
     name: b.name,
     syncId: b.syncId,
     // #628: origin only; the registry entry itself keeps the raw URL for the login.

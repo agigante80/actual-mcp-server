@@ -313,6 +313,7 @@ export const configSchema = z.object({
   // reviewable config to data the UPSTREAM server returns at runtime, and it only
   // functions when that server runs in multi-user (OpenID) mode. Defaulting to
   // 'static' means no existing deployment changes posture on upgrade.
+  AUTH_BUDGET_DISCOVERY: z.enum(['true', 'false']).optional().transform(value => value === 'true'),
   AUTH_BUDGET_ACL_SOURCE: z.enum(['static', 'actual']).default('static'),
   // #338/#343: which token claim identifies the principal when
   // AUTH_BUDGET_ACL_SOURCE=actual. Default 'auto' walks Actual's OWN precedence
@@ -394,6 +395,10 @@ export const configSchema = z.object({
   // alternative is a silent, total denial that already survived two releases
   // undetected. Scoped narrowly to the exact broken pair, so no other deployment
   // is affected.
+  .refine(
+    cfg => !cfg.AUTH_BUDGET_DISCOVERY || (cfg.AUTH_PROVIDER === 'oidc' && cfg.AUTH_BUDGET_ACL_SOURCE === 'actual'),
+    { path: ['AUTH_BUDGET_DISCOVERY'], message: 'Budget discovery requires AUTH_PROVIDER=oidc and AUTH_BUDGET_ACL_SOURCE=actual' },
+  )
   .refine(
     (cfg) => !(cfg.AUTH_BUDGET_ACL_SOURCE === 'actual' && cfg.AUTH_BUDGET_ACL_CLAIM === 'sub'),
     {

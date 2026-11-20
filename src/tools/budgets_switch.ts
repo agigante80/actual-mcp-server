@@ -1,3 +1,4 @@
+import config from '../config.js';
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
@@ -25,11 +26,11 @@ const InputSchema = z.object({
     .min(1, 'budgetName must not be empty')
     .max(120, 'budgetName must be at most 120 characters')
     .refine(
-      (value) => BUDGET_NAME_CHARS.test(value),
+      (value) => (BUDGET_NAME_CHARS.test(value) || (config.AUTH_BUDGET_DISCOVERY && !/[\x00-\x1f\x7f-\x9f]/.test(value))),
       'budgetName must contain only letters, digits, spaces, dots, underscores, and hyphens',
     )
     .describe(
-      'The exact name of the budget to switch to, as configured via BUDGET_n_NAME environment variables. ' +
+      (config.AUTH_BUDGET_DISCOVERY ? 'The exact budget name, or a permitted Sync ID when OIDC budget discovery is enabled.' : 'The exact name of the budget to switch to, as configured via BUDGET_n_NAME environment variables.') + ' ' +
         'Use actual_budgets_list_available to see all available budget names. ' +
         'Matching is case-insensitive but exact (no partial / substring match).',
     ),
@@ -38,7 +39,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_budgets_switch',
   description:
-    'Switch to a different pre-configured budget for all subsequent operations in this session. ' +
+    'Switch to ' + (config.AUTH_BUDGET_DISCOVERY ? 'another available budget' : 'a different pre-configured budget') + ' for all subsequent operations in this session. ' +
     'Each budget can target a different Actual Budget server, sync ID, and encryption password. ' +
     'Call actual_budgets_list_available first to see the available budget names. ' +
     'The switch is per-session and takes effect immediately; no server restart required.',

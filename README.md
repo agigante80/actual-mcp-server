@@ -264,7 +264,7 @@ None yet: the server offers tools and prompts only.
 | `MCP_TOOLSETS` | No | Toolset groups and presets to publish; see [Reducing the tool surface](#reducing-the-tool-surface) |
 <!-- env-summary:end -->
 
-Every variable, with its type and default: [configuration reference](docs/reference/configuration.md). Several budgets: [multiple budgets](docs/guides/multiple-budgets.md). Auth modes, per-client tokens and OIDC: [authentication](docs/guides/authentication.md).
+Every variable, with its type and default: [configuration reference](docs/reference/configuration.md). OIDC users can opt into [discovery of shared budgets](docs/guides/multiple-budgets.md#discover-shared-budgets). Several budgets: [multiple budgets](docs/guides/multiple-budgets.md). Auth modes, per-client tokens and OIDC: [authentication](docs/guides/authentication.md).
 
 ## Documentation
 

@@ -1,3 +1,4 @@
+import config from '../../config.js';
 import { z } from 'zod';
 import { asFields, issue, needs, strict } from '../refine.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
@@ -19,7 +20,7 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
  * OpenAI function-schema validator).
  */
 
-const budgetName = z.string().optional().describe('Exact configured budget name (list with list_entities type budget_file), case-insensitive, max 120 characters.');
+const budgetName = z.string().optional().describe((config.AUTH_BUDGET_DISCOVERY ? 'Exact budget name or, in discovery mode, Sync ID' : 'Exact configured budget name') + ' (list with list_entities type budget_file), case-insensitive, max 120 characters.');
 const path = z.string().optional().describe('import: path of the export file ON THE SERVER; give exactly one of path and base64.');
 const base64 = z.string().optional().describe('import: the export file contents, base64-encoded; give exactly one of path and base64.');
 const type = z.enum(['actual', 'ynab4', 'ynab5']).optional().describe('import: format; omit for actual (an Actual .zip export).');
@@ -37,7 +38,7 @@ const BUDGET_NAME = z
   .string()
   .min(1, 'budget_name must not be empty')
   .max(120, 'budget_name must be at most 120 characters')
-  .refine((value) => BUDGET_NAME_CHARS.test(value), 'budget_name must contain only letters, digits, spaces, dots, underscores, and hyphens');
+  .refine((value) => (BUDGET_NAME_CHARS.test(value) || (config.AUTH_BUDGET_DISCOVERY && !/[\x00-\x1f\x7f-\x9f]/.test(value))), 'budget_name must contain only letters, digits, spaces, dots, underscores, and hyphens');
 const PATH = z.string().min(1, 'path must not be empty').max(4096, 'path must be at most 4096 characters');
 const BASE64_REAL = z
   .string()
@@ -82,7 +83,7 @@ export const manageBudgetFiles: CompactToolSpec = {
   summary: 'Switch the active budget, import a budget file or export the active budget.',
   examplePrompt: 'Export my budget to a file.',
   description:
-    'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. To list the configured budget names use list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused.\n' +
+    'Switch the active budget, import a budget file, or export the active budget to a file; pick one `action`. To list the ' + (config.AUTH_BUDGET_DISCOVERY ? 'available budget names use' : 'configured budget names use') + ' list_entities with type budget_file; budget months are manage_budget_months. Other fields are refused.\n' +
     'switch: budget_name; this session only, other sessions keep their budget; also remembered as the caller\'s preferred budget; an unconfigured or not permitted name is refused. It loads the target budget, and a load failure can surface on the next call instead; undo it by switching back.\n' +
     'import: exactly one of path (a file on the server, max 4096 characters) or base64 (max 67108864 characters); optional type (actual, ynab4, ynab5; default actual), filename (base64 only); a caller limited to some budgets is refused; a long import can time out.\n' +
     'import ADDS a budget and replaces nothing: each import makes a new local copy and normally uploads it as a NEW server budget file (a failed upload leaves it local only); the returned budgetId is that local id, not a Sync ID; confirm before importing.\n' +

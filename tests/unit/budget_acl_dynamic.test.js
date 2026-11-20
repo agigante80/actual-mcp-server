@@ -233,7 +233,8 @@ const AUTHENTIK_TOKEN = {
   console.log('\n[budget-acl-dynamic] household sharing refreshes independently for each principal');
   {
     const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
-    const originalGetBudgets = adapter.getBudgets;
+    const listing = 'listRemoteBudgetFiles' in adapter ? 'listRemoteBudgetFiles' : 'getBudgets';
+    const originalGetBudgets = adapter[listing];
     const originalNow = Date.now;
     let now = originalNow();
     const household = {
@@ -243,7 +244,7 @@ const AUTHENTIK_TOKEN = {
     try {
       _resetDynamicAclCache();
       Date.now = () => now;
-      adapter.getBudgets = async () => [...FILES, household];
+      adapter[listing] = async () => [...FILES, household];
       async function expectAllowed(principal, expected, label) {
         const actual = await resolveAllowedBudgetsFromActual(principal);
         check(JSON.stringify([...actual].sort()) === JSON.stringify([...expected].sort()), label);
@@ -262,7 +263,7 @@ const AUTHENTIK_TOKEN = {
       await expectAllowed(ALICE, [FILE_A, household.groupId], 'the owner retains access after the revocation');
     } finally {
       Date.now = originalNow;
-      adapter.getBudgets = originalGetBudgets;
+      adapter[listing] = originalGetBudgets;
       _resetDynamicAclCache();
     }
   }

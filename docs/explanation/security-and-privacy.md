@@ -409,6 +409,15 @@ explicit binding costs no network call and keeps working while the IdP is down.
 - Every failure path denies. An unreachable server, an unparseable response, or an
   unmatched principal all return no budgets, never a wildcard.
 
+#### Discovery of permitted files
+
+Use Actual Server 26.7.0 or newer for multi-user discovery. This includes
+the fixes in [26.6.0](https://github.com/advisories/GHSA-cq9c-6w48-qmfg)
+and [26.7.0](https://github.com/actualbudget/actual/security/advisories/GHSA-23vm-ffgg-qvjr).
+The service login must be able to see the files users share. Discovery carries
+only the authenticated user's permitted file metadata into their request.
+The existing access check still applies to every budget operation.
+
 #### Known limitation: the dynamic ACL resolves via a budget download (#338)
 
 When `AUTH_BUDGET_ACL_SOURCE=actual`, the ACL is resolved with `adapter.getBudgets()`.

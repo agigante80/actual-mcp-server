@@ -2,6 +2,21 @@
 
 Configure several Actual Budget files so the AI can switch between them at runtime with `manage_budget_files` (`switch`) and `list_entities` (`type: "budget_file"`); under `MCP_TOOL_SURFACE=legacy` those are `actual_budgets_switch` and `actual_budgets_list_available`. The variables are a dynamic family read by `src/lib/budget-registry.ts`; their reference rows are under "Multi-budget (dynamic family)" in [reference/configuration.md](../reference/configuration.md).
 
+## Discover shared budgets
+
+With `AUTH_PROVIDER=oidc` and `AUTH_BUDGET_ACL_SOURCE=actual`, set
+`AUTH_BUDGET_DISCOVERY=true` to list budgets shared with each user on
+`ACTUAL_SERVER_URL`. Keep the configured default Sync ID. A static entry
+takes precedence for the same Sync ID, including its name and encryption
+password. An encrypted remote file needs a matching static entry with its key.
+
+Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
+`action: "switch"` and the name or Sync ID. When names coincide, use the Sync ID.
+A fresh session with only discovered files must switch before its first data
+call. Sharing changes take effect on the next permission refresh (up to 60
+seconds). If an active share is revoked, the next data operation is refused
+until the user explicitly switches to an available budget.
+
 ## Variables
 
 `BUDGET_N_SERVER_URL` and `BUDGET_N_PASSWORD` fall back to `ACTUAL_SERVER_URL` and `ACTUAL_PASSWORD` when omitted.

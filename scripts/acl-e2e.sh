@@ -347,6 +347,7 @@ echo ""
 info "Running the ACL scenarios (positive AND negative)"
 if node "$ROOT/scripts/acl-e2e-verify.mjs" "$OUT"; then
   echo ""
+  node "$ROOT/scripts/acl-e2e-discovery.mjs" "$OUT"
   echo "ACL E2E: all scenarios passed."
 else
   die "ACL scenarios FAILED"
