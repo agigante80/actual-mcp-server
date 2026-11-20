@@ -15,6 +15,8 @@
 //   3. AGENTS.md exists, is not ignored, and stays short enough to be a map
 //   4. every .github/instructions/*.instructions.md defers to AGENTS.md and never cites
 //      CLAUDE.md
+//   5. AGENTS.md has the "Docs to update with a change" section (#697), and every row of
+//      its table links one or more documents, so check 2 keeps the table true
 //
 // AGENTS.md is REQUIRED here, deliberately unlike the local-only guards (tool-count,
 // compose_profile_sync, dual_transport_gate) that skip loudly when a file is absent.
@@ -168,6 +170,33 @@ function instructionsProblems(text) {
   return out;
 }
 
+// #697: the section that tells a contributor (and the advisory reviewer, which reads
+// AGENTS.md as guidelines) which docs a kind of change must update. The heading is matched
+// exactly: CONTRIBUTING.md and the PR template link its anchor, and the link check ignores
+// fragments, so a renamed heading would break those links unseen. A row must carry a markdown
+// link OUTSIDE code spans: a path in a code span is not checked by `brokenLinks`.
+const DOCS_SECTION_TITLE = 'Docs to update with a change';
+function docsToUpdateProblems(text) {
+  const lines = text.split(/\r?\n/); // a CRLF checkout must not read as "section missing"
+  const start = lines.indexOf(`## ${DOCS_SECTION_TITLE}`);
+  if (start === -1) return [`AGENTS.md: section "${DOCS_SECTION_TITLE}" is missing`];
+  const body = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^## /.test(line)) break;
+    body.push(line);
+  }
+  // Data rows: table lines after the header row, minus the `|---|---|` separator.
+  const rows = body.filter((l) => /^\s*\|/.test(l)).slice(1).filter((l) => !/^[\s|:-]+$/.test(l));
+  if (rows.length === 0) return [`AGENTS.md: section "${DOCS_SECTION_TITLE}" has no table rows`];
+  // Only the Update column counts, and only a link `brokenLinks` checks: a `#fragment` or a
+  // URL is skipped there, so a row holding nothing else would name no checked document.
+  const linksDoc = (row) => [...stripCode(row.split('|').slice(2).join('|')).matchAll(LINK_RE)]
+    .some((m) => !m[1].startsWith('#') && !m[1].startsWith('//') && !/^[a-z][a-z0-9+.-]*:/i.test(m[1]));
+  return rows
+    .filter((row) => !linksDoc(row))
+    .map((row) => `AGENTS.md: "${DOCS_SECTION_TITLE}" row "${row.split('|')[1].trim()}" has no link`);
+}
+
 console.log('\n[contributor-docs]');
 
 check('AGENTS.md exists at the repository root (public since #496, never local-only)', () => {
@@ -222,6 +251,10 @@ for (const doc of INSTRUCTIONS) {
     assert.deepStrictEqual(problems, [], `${doc} ${problems.join('; ')}`);
   });
 }
+
+check('AGENTS.md: the "Docs to update with a change" section links a document in every row (#697)', () => {
+  assert.deepStrictEqual(docsToUpdateProblems(read('AGENTS.md')), []);
+});
 
 // NEGATIVE fixtures: the same predicates must flag what the real scan is meant to catch.
 check('NEGATIVE: a missing script is reported by name; args and placeholders are not', () => {
@@ -321,6 +354,58 @@ check('#499: a tracked node target after flags or -- is not reported', () => {
   // Not vacuous: all three forms must actually be recognised, with the path in group 2.
   assert.deepStrictEqual([...text.matchAll(NODE_TARGET_RE)].map((m) => m[2]),
     ['scripts/ok.mjs', 'scripts/ok.mjs', 'scripts/ok.mjs']);
+});
+
+// #697: fixtures for the docs-to-update section check.
+const DOCS_SECTION_FIXTURE = [
+  '## Adding or changing a tool', '', 'Text.', '',
+  '## Docs to update with a change', '',
+  '| Change | Update |', '|--------|--------|',
+  '| New or changed tool | [checklist](docs/A.md) |',
+  '| Budget selection or multi-budget behaviour | [multiple-budgets](docs/guides/multiple-budgets.md) |',
+  '', 'A sentence.', '', '## Tests', '', '| Not | [a row](docs/A.md) |',
+].join('\n');
+
+check('#697: a section whose every row links a document reports nothing', () => {
+  assert.deepStrictEqual(docsToUpdateProblems(DOCS_SECTION_FIXTURE), []);
+});
+
+check('NEGATIVE (#697): a missing or renamed section heading is reported', () => {
+  const missing = ['AGENTS.md: section "Docs to update with a change" is missing'];
+  assert.deepStrictEqual(docsToUpdateProblems(DOCS_SECTION_FIXTURE.replace('## Docs to update with a change\n', '')), missing);
+  assert.deepStrictEqual(docsToUpdateProblems(DOCS_SECTION_FIXTURE.replace('## Docs to update with a change', '## Docs to update')), missing);
+});
+
+check('NEGATIVE (#697): a row that names its document only in a code span has no link', () => {
+  const text = DOCS_SECTION_FIXTURE.replace('[multiple-budgets](docs/guides/multiple-budgets.md)', '`docs/guides/multiple-budgets.md`');
+  assert.deepStrictEqual(docsToUpdateProblems(text),
+    ['AGENTS.md: "Docs to update with a change" row "Budget selection or multi-budget behaviour" has no link']);
+});
+
+check('NEGATIVE (#697): a fragment, a URL, or a link in the Change column only is not a document link', () => {
+  const row = (r) => `## Docs to update with a change\n\n| Change | Update |\n|---|---|\n${r}\n`;
+  const noLink = ['AGENTS.md: "Docs to update with a change" row "A" has no link'];
+  assert.deepStrictEqual(docsToUpdateProblems(row('| A | [here](#tests) |')), noLink);
+  assert.deepStrictEqual(docsToUpdateProblems(row('| A | [x](https://example.com) |')), noLink);
+  assert.deepStrictEqual(docsToUpdateProblems(row('| [A](docs/A.md) | nothing |')),
+    ['AGENTS.md: "Docs to update with a change" row "[A](docs/A.md)" has no link']);
+});
+
+check('#697: CRLF line endings do not hide the section', () => {
+  assert.deepStrictEqual(docsToUpdateProblems(DOCS_SECTION_FIXTURE.replace(/\n/g, '\r\n')), []);
+});
+
+check('NEGATIVE (#697): a heading with a header and separator row only has no table rows', () => {
+  const text = '## Docs to update with a change\n\n| Change | Update |\n|--------|--------|\n\n## Tests\n\n| x | [y](docs/A.md) |\n';
+  assert.deepStrictEqual(docsToUpdateProblems(text),
+    ['AGENTS.md: section "Docs to update with a change" has no table rows']);
+});
+
+check('NEGATIVE (#697): a row that links an untracked path is caught by the link check', () => {
+  const text = DOCS_SECTION_FIXTURE.replace('docs/guides/multiple-budgets.md', 'docs/guides/does-not-exist.md');
+  assert.deepStrictEqual(docsToUpdateProblems(text), []);
+  const tracked = trackedPredicate(new Set(['docs/A.md']));
+  assert.deepStrictEqual(brokenLinks(text, 'AGENTS.md', tracked), ['docs/guides/does-not-exist.md']);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

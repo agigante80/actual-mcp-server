@@ -51,6 +51,21 @@ There is no `lint` or `format` script. If `test:adapter` or `test:unit-js` compl
 
 Follow [docs/development/new-tool-checklist.md](docs/development/new-tool-checklist.md) end to end. New tools use `createTool()` from `src/lib/toolFactory.ts`, are named `actual_<domain>_<action>` in lower snake_case (never camelCase), take ids from `CommonSchemas` (`src/lib/schemas/common.ts`), and are added to `IMPLEMENTED_TOOLS` and `src/tools/index.ts`. Path-scoped conventions live in [.github/instructions/](.github/instructions/).
 
+## Docs to update with a change
+
+| Change | Update |
+|--------|--------|
+| New or changed tool | [new-tool-checklist](docs/development/new-tool-checklist.md) (it lists every doc) |
+| New or changed config variable | [.env.example](.env.example) and [configuration](docs/reference/configuration.md) |
+| Authentication, authorisation or another security behaviour | [security-and-privacy](docs/explanation/security-and-privacy.md), [authentication](docs/guides/authentication.md) |
+| Budget selection or multi-budget behaviour | [multiple-budgets](docs/guides/multiple-budgets.md) |
+| Transport or client connection | the client page listed in [clients](docs/guides/clients/README.md) and its example config |
+| Docker, compose or deployment | [deployment](docs/guides/deployment.md), [architecture](docs/explanation/architecture.md) |
+| User-facing feature or behaviour change | [README](README.md) when it changes what the README says; [upgrading](docs/guides/upgrading.md) when an operator must act |
+| New test file | the test-file tables in [testing-and-reliability](docs/development/testing-and-reliability.md) |
+
+A change that alters behaviour described in a doc updates that doc in the same pull request; run `npm run docs:check` after.
+
 ## Tests
 
 - **Unit** tests are `tests/unit/*.test.js`, plain Node scripts. A new file must be appended to the `test:unit-js` chain in `package.json`; there is no glob, so an unlisted file never runs (a unit test fails the build if one is missing).

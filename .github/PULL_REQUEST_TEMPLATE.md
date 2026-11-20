@@ -17,7 +17,7 @@ Run the validation commands listed in [AGENTS.md](../AGENTS.md) and say what you
 
 ## Checklist
 
-- [ ] The change is one concern, and the docs it affects are updated
+- [ ] The change is one concern, and [the docs it affects](../AGENTS.md#docs-to-update-with-a-change) are updated
 - [ ] A positive and a negative test cover new behaviour
 - [ ] No secrets, tokens, budget data or machine-specific paths (see [SECURITY.md](SECURITY.md))
 - [ ] No new dependency, or the reason is stated above
