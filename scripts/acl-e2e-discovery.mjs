@@ -87,6 +87,12 @@ try {
   }
   const call = (client, name, args = {}) => client.callTool({ name, arguments: args });
   const read = client => call(client, 'list_entities', { type: 'account' });
+  async function hasBobAccount(client) {
+    const response = await read(client);
+    assert.ok(!response.isError);
+    const payload = JSON.parse(response.content[0].text);
+    return (payload.result ?? payload).some(account => account.id === fx.bobAccountId);
+  }
   async function switchTo(client, syncId) {
     return call(client, 'manage_budget_files', { action: 'switch', budget_name: syncId });
   }
@@ -101,18 +107,18 @@ try {
   const bob = await connect('bob');
   await assertListing(alice, [fx.syncIds.alice]);
   await assertListing(bob, [fx.syncIds.bob]);
-  assert.ok(!(await read(bob)).isError);
+  assert.ok(await hasBobAccount(bob));
   await assert.rejects(switchTo(bob, fx.syncIds.alice), /Budget not found/);
 
   for (const userId of [fx.users.alice, fx.users.bob]) {
     await admin('POST', '/admin/access', { fileId: household.cloudFileId, userId });
   }
   refresh();
-  assert.ok(!(await read(bob)).isError); // A new share cannot change the pinned private budget.
+  assert.ok(await hasBobAccount(bob)); // A new share cannot change the pinned private budget.
   for (const [client, privateId] of [[alice, fx.syncIds.alice], [bob, fx.syncIds.bob]]) {
     await assertListing(client, [privateId, household.groupId]);
     assert.ok(!(await switchTo(client, household.groupId)).isError);
-    assert.ok(!(await read(client)).isError);
+    assert.equal(await hasBobAccount(client), false);
   }
   const accountName = 'Household queued write fixture';
   assert.ok(!(await call(bob, 'manage_accounts', { action: 'create', entity: 'account', name: accountName })).isError);

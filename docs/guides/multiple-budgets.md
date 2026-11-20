@@ -26,7 +26,7 @@ With OIDC budget discovery enabled, a fresh session chooses its starting budget 
 3. Otherwise open a discovered file automatically if it is the user's only permitted file and is selectable. Encrypted files count toward the total even when their key is unavailable.
 4. With several permitted files or only unusable files, the session can list files but must switch to a selectable one before reading or writing. A user with no grants receives HTTP 403 at initialize.
 
-A successful open pins that budget for the session. A new share or a rename leaves the choice in place.
+Opening a budget successfully during initialization pins it for the session. A new share or a rename leaves the choice in place.
 If the pinned budget loses access, data calls return `Budget ACL:` after the next permission refresh
 (up to 60 seconds), until the user switches. Only an explicit switch saves a preference for future sessions.
 

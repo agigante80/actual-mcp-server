@@ -298,6 +298,11 @@ await api.init({ dataDir, serverURL: url, password });
 const a = await api.importBudget(zip, { type: 'actual' });
 const b = await api.importBudget(zip, { type: 'actual' });
 const files = (await api.getBudgets()).filter(f => f.usersWithAccess);
+// The second file below is granted to Bob. Give it an account absent from the source zip.
+await api.downloadBudget(files[1].groupId);
+const bobAccountId = await api.createAccount({ name: 'Bob private fixture' });
+await api.sync();
+console.log('BOB_ACCOUNT_ID=' + bobAccountId);
 console.log('FILES=' + JSON.stringify(files.map(f => f.cloudFileId)));
 console.log('GROUPS=' + JSON.stringify(files.map(f => f.groupId)));
 console.log('IMPORTED=' + JSON.stringify([a.id, b.id]));
@@ -307,7 +312,9 @@ DATA_DIR="$(mktemp -d)"
 IMPORT_RAW=$(cd "$ROOT" && node "$IMPORT_JS" "$DATA_DIR" "http://localhost:$ACTUAL_PORT" "$PASSWORD" "$ZIP" 2>/dev/null || true)
 IMPORT_OUT=$(echo "$IMPORT_RAW" | grep '^FILES=' || true)
 GROUP_OUT=$(echo "$IMPORT_RAW" | grep '^GROUPS=' || true)
+BOB_ACCOUNT_ID=$(echo "$IMPORT_RAW" | sed -n 's/^BOB_ACCOUNT_ID=//p')
 rm -f "$IMPORT_JS"; rm -rf "$DATA_DIR"
+[ -n "$BOB_ACCOUNT_ID" ] || die "missing Bob private account fixture"
 [ -n "$IMPORT_OUT" ] || die "budget import produced no files"
 # Same guard as its sibling: without it an absent GROUPS= line makes the jqp call
 # raise a Python traceback under `set -e`, or writes "None" into the fixture and
@@ -337,6 +344,7 @@ cat > "$OUT" <<JSON
   "users": { "alice": "$ALICE_ID", "bob": "$BOB_ID" },
   "actualUserNames": { "alice": "$ALICE_NAME", "bob": "$BOB_NAME" },
   "subs": { "alice": "opaque-idp-sub-alice", "bob": "opaque-idp-sub-bob", "subonly": "opaque-idp-sub-subonly" },
+  "bobAccountId": "$BOB_ACCOUNT_ID",
   "files": { "alice": "$FILE_A", "bob": "$FILE_B" },
   "syncIds": { "alice": "$GROUP_A", "bob": "$GROUP_B" }
 }

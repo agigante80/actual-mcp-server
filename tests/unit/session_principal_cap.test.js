@@ -265,9 +265,10 @@ if (MODE === 'discovery') {
     if (downloads.length === 1) throw new Error('fixture download unavailable');
   };
   adapterMod._setSkipApiInitForTests(false);
-  const read = () => requestContext.run(retryContext(['shared']), () => adapterMod.withActualApi(async () => 'read'));
+  const read = (ids = ['shared']) => requestContext.run(retryContext(ids), () => adapterMod.withActualApi(async () => 'read'));
   results.heal = { first: await read().catch(err => err.message), second: await read(), downloads,
     pooled: connectionPool.connections.has(retry.sid) };
+  results.afterShareRead = await read(['private', 'shared']).catch(err => err.message);
   adapterMod._setSkipApiInitForTests(true);
   results.retry = { status: retry.status, registered: connectionPool.registered.has(retry.sid),
     pending: pending(), target: openTargets.at(-1), next: selection(['shared']),
@@ -437,6 +438,7 @@ if (discovery) {
       target: 'shared', next: 'shared', afterShare: 'alpha-sync', second: 503 });
   });
   check('data calls retry the unpinned file on the shared connection until it opens', () => {
+    assert.match(discovery.afterShareRead, /^Budget ACL:/);
     assert.deepStrictEqual(discovery.heal, { first: 'fixture download unavailable', second: 'read',
       downloads: ['shared', 'shared'], pooled: false });
   });
