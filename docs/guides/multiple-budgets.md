@@ -12,6 +12,8 @@ password. An encrypted remote file needs a matching static entry with its key.
 
 Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
 `action: "switch"` and the name or Sync ID. When names coincide, use the Sync ID.
+If configured budgets share a Sync ID across servers, switch by their distinct
+configured names. The session remembers which server you selected.
 A fresh session with only discovered files must switch before its first data
 call. Sharing changes take effect on the next permission refresh (up to 60
 seconds). If an active share is revoked, the next data operation is refused

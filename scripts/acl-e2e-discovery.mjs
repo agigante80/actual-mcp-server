@@ -19,32 +19,42 @@ Object.assign(process.env, {
 });
 
 const clients = [];
+const errors = [];
 let server;
+let token;
+let householdFileId;
+
+async function admin(method, path, body) {
+  const response = await fetch(fx.actualUrl + path, {
+    method, headers: { 'Content-Type': 'application/json', 'X-ACTUAL-TOKEN': token },
+    body: JSON.stringify(body),
+  });
+  assert.ok(response.ok, method + ' ' + path.split('?')[0] + ' returned ' + response.status);
+  return response;
+}
+
+async function cleanup(action) {
+  try { await action(); } catch (err) { errors.push(err); }
+}
+
 try {
-  const api = (await import('@actual-app/api')).default;
-  await api.init({ dataDir: dir, serverURL: fx.actualUrl, password: fx.password });
-  let household;
-  try {
-    await api.importBudget(fileURLToPath(new URL('../tests/fixtures/budgets/2026-01-08-Test Budget.zip', import.meta.url)), { type: 'actual' });
-    const files = await api.getBudgets();
-    const added = files.filter(f => f.usersWithAccess && !Object.values(fx.files).includes(f.cloudFileId));
-    assert.equal(added.length, 1);
-    household = added[0];
-  } finally {
-    await api.shutdown();
-  }
   const login = await fetch(fx.actualUrl + '/account/login', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ loginMethod: 'password', password: fx.password }),
   });
   assert.ok(login.ok);
-  const { data: { token } } = await login.json();
-  async function admin(method, path, body) {
-    const response = await fetch(fx.actualUrl + path, {
-      method, headers: { 'Content-Type': 'application/json', 'X-ACTUAL-TOKEN': token },
-      body: JSON.stringify(body),
-    });
-    assert.ok(response.ok, method + ' ' + path.split('?')[0] + ' returned ' + response.status);
+  token = (await login.json()).data.token;
+  const api = (await import('@actual-app/api')).default;
+  await api.init({ dataDir: dir, serverURL: fx.actualUrl, password: fx.password });
+  let household;
+  try {
+    const { id } = await api.importBudget(fileURLToPath(new URL('../tests/fixtures/budgets/2026-01-08-Test Budget.zip', import.meta.url)), { type: 'actual' });
+    household = (await api.getBudgets()).find(file => file.id === id);
+    assert.ok(household?.cloudFileId && !Object.values(fx.files).includes(household.cloudFileId));
+    householdFileId = household.cloudFileId;
+    assert.ok(household.groupId);
+  } finally {
+    await api.shutdown();
   }
   await admin('POST', '/sync/update-user-filename', { fileId: household.cloudFileId, name: 'Household' });
 
@@ -118,14 +128,24 @@ try {
   const defaultAccounts = await read(alice);
   assert.ok(!defaultAccounts.isError);
   assert.ok(!JSON.stringify(defaultAccounts.content).includes(accountName));
-  process.stdout.write('Shared Household discovery passed through two OIDC MCP sessions\n');
+} catch (err) {
+  errors.push(err);
 } finally {
   for (const { client, transport } of clients) {
-    try { await transport.terminateSession(); } finally { await client.close(); }
+    await cleanup(() => transport.terminateSession());
+    await cleanup(() => client.close());
   }
   if (server) {
-    await server.cleanup();
-    server.listener.close();
+    await cleanup(() => server.cleanup());
+    await cleanup(() => server.listener.close());
   }
-  await rm(dir, { recursive: true, force: true });
+  if (householdFileId) {
+    await cleanup(async () => {
+      const response = await admin('POST', '/sync/delete-user-file', { token, fileId: householdFileId });
+      assert.equal((await response.json()).status, 'ok', 'Household fixture deletion failed');
+    });
+  }
+  await cleanup(() => rm(dir, { recursive: true, force: true }));
 }
+if (errors.length) throw new AggregateError(errors, 'Household discovery or fixture cleanup failed');
+process.stdout.write('Shared Household discovery passed through two OIDC MCP sessions\n');

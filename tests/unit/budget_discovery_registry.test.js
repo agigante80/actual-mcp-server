@@ -10,6 +10,8 @@ Object.assign(process.env, {
   MCP_BRIDGE_DATA_DIR: dataDir,
   ACTUAL_SERVER_URL: 'https://discovery.example.test', ACTUAL_PASSWORD: 'fixture',
   ACTUAL_BUDGET_SYNC_ID: 'configured', BUDGET_DEFAULT_NAME: 'Home',
+  BUDGET_1_NAME: 'Original', BUDGET_1_SYNC_ID: 'copied', BUDGET_1_ENCRYPTION_PASSWORD: 'fixture-key',
+  BUDGET_2_NAME: 'Archive', BUDGET_2_SYNC_ID: 'copied', BUDGET_2_SERVER_URL: 'https://archive.example.test',
   AUTH_BUDGET_DISCOVERY: 'true', AUTH_PROVIDER: 'oidc', AUTH_BUDGET_ACL_SOURCE: 'actual',
 });
 const { configSchema } = await import('../../dist/src/config.js');
@@ -77,5 +79,22 @@ await assert.rejects(requestContext.run(revoked, () => adapter.getAccounts()), /
 await assert.rejects(requestContext.run(revoked, () => adapter.switchBudget('shared')), isPreflightRefusal);
 assert.deepEqual((await list(revoked)).map(b => b.syncId), ['private']);
 assert.deepEqual((await list(await ctx('alice'))).map(b => b.syncId), ['configured', 'shared']);
+// A copied budget can keep its Sync ID on a second configured server.
+const copied = file('copied', 'Original', ['carol']);
+rows.push(copied);
+const carol = await ctx('carol');
+await requestContext.run(carol, async () => {
+  await adapter.switchBudget('Archive');
+  const activeServer = async () => adapter._getActiveBudgetConfigForTests().serverUrl;
+  assert.equal(await adapter.withActualApi(activeServer), process.env.BUDGET_2_SERVER_URL);
+  assert.equal(await adapter.withWriteSession(activeServer), process.env.BUDGET_2_SERVER_URL);
+  await assert.rejects(adapter.switchBudget('copied'), error =>
+    isPreflightRefusal(error) && /Original/.test(error.message) && /Archive/.test(error.message));
+});
+copied.encryptKeyId = 'new-key'; // Only Original has a configured key.
+_resetDynamicAclCache();
+const refreshed = await ctx('carol');
+assert.deepEqual((await list(refreshed)).map(b => b.name), ['Original']);
+await assert.rejects(requestContext.run(refreshed, () => adapter.getAccounts()), /Budget ACL/);
 connectionPool.connections.delete(bob.sessionId);
 process.stdout.write('Discovery registry, switching, encryption and revocation checks passed\n');

@@ -117,7 +117,7 @@ export function getBudgetRegistrySummary(): BudgetRegistrySummary {
 
 /**
  * Per-session active budget. Map from sessionId to a lowercased configured name,
- * or to a Sync ID for a request using discovery.
+ * or, in discovery mode, a Sync ID plus the configured name when present.
  *
  * Issue #156: previously a single module-level `activeBudgetKey` was shared
  * across all sessions. In multi-user OIDC mode that meant one user's
@@ -139,7 +139,8 @@ export function getBudgetRegistrySummary(): BudgetRegistrySummary {
  * layer no longer holds, so a switch or a #189 restore that was in flight across
  * the teardown cannot re-create the entry after it was released.
  */
-const sessionBudgetState = new Map<string, string>();
+type SessionBudgetSelection = string | { syncId: string; configuredName?: string };
+const sessionBudgetState = new Map<string, SessionBudgetSelection>();
 
 /**
  * #564: is this session still held by its transport? The HTTP server registers
@@ -156,12 +157,14 @@ export function setSessionLivenessCheck(check: (sessionId: string) => boolean): 
   isSessionLive = check;
 }
 
-function setSessionBudget(sessionId: string, key: string): void {
+function setSessionBudget(sessionId: string, budget: BudgetConfig, discovery: boolean): void {
   if (!isSessionLive(sessionId)) {
     logger.debug(`[ADAPTER] Session ${sessionId} ended before its budget selection was committed; not recording it`);
     return;
   }
-  sessionBudgetState.set(sessionId, key);
+  const name = budget.name.toLowerCase();
+  const configuredName = budgetRegistry.get(name) === budget ? budget.name : undefined;
+  sessionBudgetState.set(sessionId, discovery ? { syncId: budget.syncId, configuredName } : name);
 }
 
 function requestBudgets(): BudgetConfig[] {
@@ -199,8 +202,10 @@ function getActiveBudgetConfig(): BudgetConfig {
   if (sessionId) {
     const key = sessionBudgetState.get(sessionId);
     if (key) {
-      if (discovery) {
-        const selected = requestBudgets().find(entry => entry.syncId === key);
+      if (typeof key !== 'string') {
+        if (!discovery) throw activeBudgetRefusal();
+        const selected = requestBudgets().find(entry => entry.syncId === key.syncId &&
+          (key.configuredName === undefined || entry.name === key.configuredName));
         if (!selected) throw activeBudgetRefusal();
         return selected;
       }
@@ -218,8 +223,8 @@ function getActiveBudgetConfig(): BudgetConfig {
       store?.allowedBudgets,
       [...budgetRegistry.values()],
     );
-    if (restored && (!discovery || requestBudgets().some(b => b.syncId === restored.syncId))) {
-      setSessionBudget(sessionId, discovery ? restored.syncId : restored.name.toLowerCase());
+    if (restored && (!discovery || requestBudgets().includes(restored))) {
+      setSessionBudget(sessionId, restored, discovery);
       return restored;
     }
   }
@@ -236,8 +241,8 @@ function getActiveBudgetConfig(): BudgetConfig {
   const values = [...budgetRegistry.values()];
   const restricting = restrictingAllowList(store?.allowedBudgets);
   if (restricting) {
-    const selectableIds = discovery ? new Set(requestBudgets().map(b => b.syncId)) : undefined;
-    const permitted = values.find(b => restricting.includes(b.syncId) && (!selectableIds || selectableIds.has(b.syncId)));
+    const selectable = discovery ? new Set(requestBudgets()) : undefined;
+    const permitted = values.find(b => restricting.includes(b.syncId) && (!selectable || selectable.has(b)));
     if (permitted) return permitted;
   }
   return values[0];
@@ -4866,7 +4871,10 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   const nameKey = name.toLowerCase();
   let found = budgetRegistry.get(nameKey);
   if (discovery) {
-    found = entries.find(b => b.syncId === name);
+    const byId = entries.filter(b => b.syncId === name);
+    if (byId.length > 1) throw new OutOfRangeRefusal(
+      `Ambiguous Sync ID. Switch by budget name: ${byId.map(b => b.name).join(', ')}.`, name);
+    found = byId[0];
     if (!found) {
       const matches = entries.filter(b => b.name.toLowerCase() === nameKey);
       if (matches.length > 1) throw new OutOfRangeRefusal(
@@ -4874,7 +4882,6 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
       found = matches[0];
     }
   }
-  const key = discovery && found ? found.syncId : nameKey;
   // #570: a restricted caller is told only about budgets it may use.
   const notFound = (): Error => {
     const permitted = restrictedAllowedBudgets('actual_budgets_switch');
@@ -4952,7 +4959,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
 
   if (sameAuth && currentEntry!.syncId === found.syncId) {
     // No-op: already on this exact budget. Keep session map consistent and return.
-    setSessionBudget(sessionId, key);
+    setSessionBudget(sessionId, found, discovery);
     setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
     logger.info(
@@ -4979,7 +4986,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
       });
     }
     connectionPool.updateLoadedSyncId(sessionId, found.syncId);
-    setSessionBudget(sessionId, key);
+    setSessionBudget(sessionId, found, discovery);
     setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
     logger.info(
@@ -5012,7 +5019,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
 
     // Update the per-session active-budget slot. Subsequent getActiveBudgetConfig
     // calls for this session now return the new budget.
-    setSessionBudget(sessionId, key);
+    setSessionBudget(sessionId, found, discovery);
     setPreferredBudgetSyncId(store?.principal, found.syncId); // #189: persist at commit
 
     // Materialise a fresh pool entry bound to the new budget. Without this, the

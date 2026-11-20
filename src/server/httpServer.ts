@@ -773,9 +773,7 @@ export async function startHttpServer(
                     encryptionPassword: budget.encryptionPassword,
                   });
                 }
-                // Only register the transport if the pool connection succeeded.
-                // The pool stamped lastActivity when it created the entry, so it
-                // is already the source of truth for this session's idle clock.
+                // Discovery-only sessions keep their reserved slot until they open a budget or end.
                 recordSessionOwner(sid, sessionOwner);
                 transports.set(sid, transport);
                 // #530: let the pool time this session even after its entry is recycled.
@@ -1268,8 +1266,9 @@ export async function startHttpServer(
     // mutate it mid-iteration.
     for (const sessionId of [...transports.keys()]) {
       await shutdownActualForSession(sessionId);
+      // A session without a pool entry has no eviction callback to finish its teardown.
+      if (transports.has(sessionId)) teardownSession(sessionId, 'closed');
     }
-    transports.clear();
     sessionInitPromises.clear();
     sessionInitFailures.clear(); // #438
     // Also shut down the shared/pooled connections
