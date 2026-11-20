@@ -15,7 +15,7 @@ Object.assign(process.env, {
   MCP_BRIDGE_DATA_DIR: dir, AUTH_PROVIDER: 'oidc', AUTH_BUDGET_ACL_SOURCE: 'actual',
   AUTH_BUDGET_DISCOVERY: 'true', OIDC_ISSUER: fx.idpUrl + '/default',
   OIDC_RESOURCE: 'http://127.0.0.1/http', OIDC_ACCEPTED_AUDIENCES: fx.audience,
-  MCP_TOOL_SURFACE: 'legacy',
+  MCP_TOOL_SURFACE: 'compact',
 });
 
 const clients = [];
@@ -73,12 +73,12 @@ try {
     return client;
   }
   const call = (client, name, args = {}) => client.callTool({ name, arguments: args });
-  const read = client => call(client, 'actual_accounts_list');
+  const read = client => call(client, 'list_entities', { type: 'account' });
   async function switchTo(client, syncId) {
-    return call(client, 'actual_budgets_switch', { budgetName: syncId });
+    return call(client, 'manage_budget_files', { action: 'switch', budget_name: syncId });
   }
   async function assertListing(client, expected) {
-    const result = await call(client, 'actual_budgets_list_available');
+    const result = await call(client, 'list_entities', { type: 'budget_file' });
     assert.ok(!result.isError);
     const listing = JSON.parse(result.content[0].text);
     assert.deepEqual(listing.budgets.map(b => b.syncId).sort(), expected.slice().sort());
@@ -103,7 +103,7 @@ try {
     assert.ok(!(await read(client)).isError);
   }
   const accountName = 'Household queued write fixture';
-  assert.ok(!(await call(bob, 'actual_accounts_create', { name: accountName })).isError);
+  assert.ok(!(await call(bob, 'manage_accounts', { action: 'create', entity: 'account', name: accountName })).isError);
   assert.ok(JSON.stringify((await read(alice)).content).includes(accountName));
   await admin('DELETE', '/admin/access?fileId=' + encodeURIComponent(household.cloudFileId), { ids: [fx.users.bob] });
   refresh();
