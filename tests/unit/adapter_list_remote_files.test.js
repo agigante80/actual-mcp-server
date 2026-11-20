@@ -69,6 +69,13 @@ try {
   Date.now = now;
 }
 
+// A file without a Sync ID cannot grant access, but valid sibling rows still count.
+listResponse = () => ok([...files, ...[{}, { groupId: null }].map(row => ({
+  ...row, usersWithAccess: [{ userName: 'alice' }],
+}))]);
+_resetDynamicAclCache();
+assert.deepEqual(await resolve('alice'), ['a', 'h']);
+
 // On each failure, the next lookup for the same principal must log in and list again.
 for (const failure of [
   () => { throw new Error('fixture network failure'); },
@@ -76,6 +83,7 @@ for (const failure of [
   () => new Response(null, { status: 500 }),
   () => Response.json({ status: 'error' }),
   () => Response.json({ status: 'ok', data: {} }),
+  () => ok([...files, { groupId: 123, usersWithAccess: [{ userName: 'alice' }] }]),
   () => new Response('invalid-json'),
   () => new Promise(() => {}),
 ]) {

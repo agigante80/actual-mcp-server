@@ -6,6 +6,11 @@ const TOKEN_TTL_MS = 60_000;
 let cachedToken: { value: string; expires: number } | undefined;
 let inFlight: Promise<unknown[]> | undefined;
 
+function isFileRow(row: unknown): boolean {
+  if (row === null || typeof row !== 'object' || Array.isArray(row)) return false;
+  return !('groupId' in row) || row.groupId === null || typeof row.groupId === 'string';
+}
+
 async function requestFiles(): Promise<unknown[]> {
   if (!config.ACTUAL_PASSWORD) {
     cachedToken = undefined;
@@ -37,7 +42,7 @@ async function requestFiles(): Promise<unknown[]> {
         if (response.status !== 200) throw new Error('File list unavailable');
         const body = await response.json();
         if (body?.status !== 'ok' || !Array.isArray(body.data) ||
-            !body.data.every((row: unknown) => row && typeof row === 'object' && !Array.isArray(row))) {
+            !body.data.every(isFileRow)) {
           throw new Error('Invalid file list');
         }
         return body.data.filter((row: { deleted?: unknown }) => !row.deleted);
