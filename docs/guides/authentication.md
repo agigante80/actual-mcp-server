@@ -67,8 +67,10 @@ With **`AUTH_BUDGET_ACL_SOURCE=actual`**, `AUTH_BUDGET_ACL` is not consulted at 
 ## OIDC multi-user setup
 
 For OIDC deployments using Actual's permissions, [budget discovery](multiple-budgets.md#discover-shared-budgets)
-can expose each user's shared files without configuring each Sync ID.
-
+can expose each user's shared files without configuring each Sync ID. A new session opens
+the user's last selected file if their current grants still permit it. With no usable preference
+or configured budget, one permitted, unencrypted file opens automatically. Users with several
+permitted files choose which one to open.
 
 > **This is inbound auth only.** `AUTH_PROVIDER=oidc` controls how MCP **clients** authenticate
 > **to this server**. It does not change how this server authenticates **to Actual Budget**, which

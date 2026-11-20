@@ -118,12 +118,14 @@ Known limitations:
   preference is re-checked against the live allow-list on every restore, so it grants
   nothing; it is not deleted from the preference file.
 
-**Behaviour change for OIDC (#572).** A session that has not switched and has no stored
+**Starting budget with discovery off (#572).** A session that has not switched and has no stored
 preference now starts on the first budget its allow-list permits, in registry order
 (default budget, then `BUDGET_1`, `BUDGET_2`, ...). Before, an OIDC principal whose list
 excluded the default budget got `Budget ACL:` on every call until it switched. Static and
 OIDC principals share this fallback; a wildcard principal still starts on the default
-budget.
+budget. With discovery on, the session restores a selectable preference, then tries a configured
+budget, then a sole permitted discovered file. Several discovered files require an explicit
+choice when there is no usable preference or configured budget.
 
 #### 2. **OIDC / JWT Authentication**
 
@@ -452,7 +454,9 @@ Actual shares with that `userName`. The identity warning above therefore applies
 full: if users can edit the claim that is matched (`preferred_username` at many
 IdPs), pin `AUTH_BUDGET_ACL_CLAIM` to one they cannot change before enabling it.
 An encrypted shared file is listed only when a configured entry carries its key
-(#690), and a saved budget preference restores configured budgets only (#689).
+(#690). A saved Sync ID can restore a configured or discovered budget only while it is
+selectable under the current grants. A successful session open pins that choice. Revocation
+blocks further data calls on the pinned budget until the user switches.
 
 #### Known limitation: `actual_budgets_import` creates an un-ACL'd budget (#334)
 

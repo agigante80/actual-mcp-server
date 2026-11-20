@@ -18,12 +18,22 @@ configured budget; a shared file that carries the same name is reached by its
 Sync ID, and so are two shared files with one name. If configured budgets share
 a Sync ID across servers, switch by their distinct configured names. The
 session remembers which server you selected.
-A fresh session with only discovered files must switch before its first data
-call, and again after a server restart: the saved budget preference restores
-configured budgets only (#689 tracks first selection and saved preferences for
-discovered files). Sharing changes take effect on the next permission refresh (up to 60
-seconds). If an active share is revoked, the next data operation is refused
-until the user explicitly switches to an available budget.
+
+With OIDC budget discovery enabled, a fresh session chooses its starting budget in this order:
+
+1. Restore the Sync ID from the user's last explicit switch if it is still selectable. If configured budgets on different servers share that ID, the first selectable match in registry order wins, even if the user last switched to the second.
+2. Otherwise open the first selectable configured budget (the default, then `BUDGET_1`, `BUDGET_2`, and so on).
+3. Otherwise open a discovered file automatically if it is the user's only permitted file and is selectable. Encrypted files count toward the total even when their key is unavailable.
+4. With several permitted files or only unusable files, the session can list files but must switch to a selectable one before reading or writing. A user with no grants receives HTTP 403 at initialize.
+
+A successful open pins that budget for the session. A new share or a rename leaves the choice in place.
+If the pinned budget loses access, data calls return `Budget ACL:` after the next permission refresh
+(up to 60 seconds), until the user switches. Only an explicit switch saves a preference for future sessions.
+
+If opening a discovered starting budget fails, the session keeps its reserved slot when available.
+You can still list and switch. Each data call retries the selected file and reports an open error
+if the retry fails. A successful retry uses the shared connection. An explicit switch then pins
+the budget. If the session cannot reclaim its slot, initialization fails.
 
 ## Variables
 

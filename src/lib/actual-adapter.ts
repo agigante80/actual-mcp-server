@@ -164,8 +164,16 @@ function setSessionBudget(sessionId: string, budget: BudgetConfig, discovery: bo
     return;
   }
   const name = budget.name.toLowerCase();
-  const configuredName = budgetRegistry.get(name) === budget ? budget.name : undefined;
+  const configuredName = isConfiguredBudget(budget) ? budget.name : undefined;
   sessionBudgetState.set(sessionId, discovery ? { syncId: budget.syncId, configuredName } : name);
+}
+
+export function pinSessionBudget(sessionId: string, budget: BudgetConfig): void {
+  setSessionBudget(sessionId, budget, true);
+}
+
+export function isConfiguredBudget(budget: BudgetConfig): boolean {
+  return budgetRegistry.get(budget.name.toLowerCase()) === budget;
 }
 
 function requestBudgets(): BudgetConfig[] {
@@ -199,12 +207,12 @@ function getActiveBudgetConfig(): BudgetConfig {
   // env-default budget (first registry entry).
   const store = requestContext.getStore();
   const sessionId = store?.sessionId;
-  const discovery = config.AUTH_BUDGET_DISCOVERY && store?.discoveredBudgets !== undefined;
+  const discovered = config.AUTH_BUDGET_DISCOVERY ? store?.discoveredBudgets : undefined;
   if (sessionId) {
     const key = sessionBudgetState.get(sessionId);
     if (key) {
       if (typeof key !== 'string') {
-        if (!discovery) throw activeBudgetRefusal();
+        if (!discovered) throw activeBudgetRefusal();
         const selected = requestBudgets().find(entry => entry.syncId === key.syncId &&
           (key.configuredName === undefined || entry.name === key.configuredName));
         if (!selected) throw activeBudgetRefusal();
@@ -213,19 +221,39 @@ function getActiveBudgetConfig(): BudgetConfig {
       const found = budgetRegistry.get(key);
       if (found) return found;
     }
+  }
+
+  if (discovered && store) {
+    const selectable = requestBudgets();
+    const preferred = pickAllowedPreferredBudget(
+      getPreferredBudgetSyncId(store.principal), store.allowedBudgets, selectable,
+    );
+    if (preferred) return preferred;
+    const configured = selectable.find(isConfiguredBudget);
+    if (configured) return configured;
+
+    // Count permitted files before removing encrypted or configured rows. Another
+    // owner's share must not become the default just because it is the only usable file.
+    const allowed = new Set(store.allowedBudgets);
+    const permitted = discovered.filter(file => allowed.has(file.syncId));
+    if (permitted.length === 1 && selectable.length === 1) return selectable[0];
+    // The default sentinel preserves connection-free listing. The live ACL refuses its use.
+    return [...budgetRegistry.values()][0];
+  }
+
+  if (sessionId) {
     // #189 Phase 1: no in-session selection yet (e.g. a fresh session after a
     // server restart + client re-initialize). Restore the principal's persisted
     // budget, but ONLY if the live ACL still permits it (pickAllowedPreferredBudget
     // re-checks allowedBudgets, so a stale preference can never widen access).
     // Memoize into the session slot so subsequent calls take the fast path above.
-    // #689 extends saved preferences to discovered entries.
     const restored = pickAllowedPreferredBudget(
       getPreferredBudgetSyncId(store?.principal),
       store?.allowedBudgets,
       [...budgetRegistry.values()],
     );
-    if (restored && (!discovery || requestBudgets().includes(restored))) {
-      setSessionBudget(sessionId, restored, discovery);
+    if (restored) {
+      setSessionBudget(sessionId, restored, false);
       return restored;
     }
   }
@@ -238,12 +266,10 @@ function getActiveBudgetConfig(): BudgetConfig {
   // permitted, this is the default as before, and _enforceBudgetAcl then refuses.
   // Not memoised: a later switch writes the session slot, and the next call
   // recomputes the same answer from the same list.
-  // #689 owns first selection of a discovered budget. Filter unusable encrypted entries too.
   const values = [...budgetRegistry.values()];
   const restricting = restrictingAllowList(store?.allowedBudgets);
   if (restricting) {
-    const selectable = discovery ? new Set(requestBudgets()) : undefined;
-    const permitted = values.find(b => restricting.includes(b.syncId) && (!selectable || selectable.has(b)));
+    const permitted = values.find(b => restricting.includes(b.syncId));
     if (permitted) return permitted;
   }
   return values[0];

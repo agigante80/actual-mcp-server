@@ -54,7 +54,7 @@ const TOK_BOB = 'bob-token-for-unit-test-577-bbbbbbbbbbbbbb';
 const TOK_LEGACY = 'legacy-token-for-unit-test-577-llllllllll';
 const STATIC = JSON.stringify({
   alice: { tokenEnv: 'MCP_TOKEN_ALICE', budgets: ['Alpha'] },
-  bob: { tokenEnv: 'MCP_TOKEN_BOB', budgets: ['Alpha'] },
+  bob: { tokenEnv: 'MCP_TOKEN_BOB', budgets: ['Beta'] },
 });
 
 let passed = 0, failed = 0;
@@ -93,23 +93,32 @@ if (oidc) {
 const { connectionPool } = await import('./dist/src/lib/ActualConnectionPool.js');
 let logins = 0;
 let failNext = false;
-connectionPool.getConnection = async (sid) => {
+let takeReleasedSlot = false;
+const openTargets = [];
+connectionPool.getConnection = async (sid, budget) => {
+  openTargets.push(budget.syncId);
   logins++;
   await new Promise((res) => setTimeout(res, 150));
-  if (failNext) { failNext = false; connectionPool.releaseReservation(sid); throw new Error('login refused (stub)'); }
+  if (failNext) {
+    failNext = false;
+    connectionPool.releaseReservation(sid);
+    if (takeReleasedSlot) connectionPool.reserveSession('other-session');
+    throw new Error('login refused (stub)');
+  }
   // The real getConnection hands the reservation over to the entry in one synchronous block.
   connectionPool.connections.set(sid, {
     sessionId: sid, initialized: true, lastActivity: Date.now(),
-    dataDir: '/nonexistent', serverUrl: 'http://x:5006', password: 'pw-x', syncId: 'alpha-sync',
+    dataDir: '/nonexistent', serverUrl: budget.serverUrl, password: budget.password, syncId: budget.syncId,
   });
   connectionPool.releaseReservation(sid);
 };
 const adapterMod = await import('./dist/src/lib/actual-adapter.js');
 adapterMod._setSkipApiInitForTests(true);
+let discoveryIds = ['shared', 'private'];
 if (MODE === 'discovery') {
   const adapter = adapterMod.default;
   const listing = 'listRemoteBudgetFiles' in adapter ? 'listRemoteBudgetFiles' : 'getBudgets';
-  adapter[listing] = async () => [{ groupId: 'shared', name: 'Household', usersWithAccess: [{ userName: 'sub-bob-577' }] }];
+  adapter[listing] = async () => discoveryIds.map(groupId => ({ groupId, name: groupId, usersWithAccess: [{ userName: 'sub-bob-577' }] }));
 }
 const { startHttpServer } = await import('./dist/src/server/httpServer.js');
 const mcp = { executeTool: async () => ({ ok: true }) };
@@ -147,6 +156,11 @@ const statuses = (rs) => rs.map((x) => x.status).sort();
 const results = {};
 
 if (MODE === 'static') {
+  const { setPreferredBudgetSyncId } = await import('./dist/src/lib/budget-preference-store.js');
+  setPreferredBudgetSyncId('bob', 'alpha-sync');
+  await open('bob');
+  results.restricted = openTargets.slice();
+  await reset();
   await open('alice'); await open('alice'); await open('bob');
   const third = await open('alice');
   const bob = await open('bob');
@@ -229,8 +243,53 @@ if (MODE === 'oidc') {
 }
 
 if (MODE === 'discovery') {
-  const first = await open('bob');
+  const { _resetDynamicAclCache } = await import('./dist/src/auth/budget-acl-dynamic.js');
+  const { requestContext } = await import('./dist/src/lib/requestContext.js');
   const pending = () => connectionPool.getStats().pendingReservations;
+  discoveryIds = ['shared'];
+  failNext = true;
+  const retry = await open('bob');
+  const retryContext = ids => ({
+    sessionId: retry.sid, principal: 'sub-bob-577', allowedBudgets: ids,
+    discoveredBudgets: ids.map(syncId => ({ syncId, name: syncId, encrypted: false })),
+  });
+  const selection = ids => requestContext.run(retryContext(ids), () => adapterMod.initialBudgetForSession(retry.sid).syncId);
+  const sdk = (await import('@actual-app/api')).default;
+  const downloads = [];
+  sdk.init = async () => {};
+  sdk.shutdown = async () => {};
+  sdk.getBudgetMonths = async () => [];
+  sdk.getServerVersion = async () => ({ version: '26.5.0' });
+  sdk.downloadBudget = async id => {
+    downloads.push(id);
+    if (downloads.length === 1) throw new Error('fixture download unavailable');
+  };
+  adapterMod._setSkipApiInitForTests(false);
+  const read = () => requestContext.run(retryContext(['shared']), () => adapterMod.withActualApi(async () => 'read'));
+  results.heal = { first: await read().catch(err => err.message), second: await read(), downloads,
+    pooled: connectionPool.connections.has(retry.sid) };
+  adapterMod._setSkipApiInitForTests(true);
+  results.retry = { status: retry.status, registered: connectionPool.registered.has(retry.sid),
+    pending: pending(), target: openTargets.at(-1), next: selection(['shared']),
+    afterShare: selection(['private', 'shared']), second: (await open('bob')).status };
+  await reset();
+
+  failNext = true;
+  takeReleasedSlot = true;
+  const lost = await open('bob');
+  const followUp = await realFetch(base, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream',
+      Authorization: 'Bearer ' + T.bob, 'mcp-session-id': lost.sid },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} }),
+  });
+  results.lost = { status: followUp.status, code: (await followUp.json()).error?.code,
+    registered: connectionPool.registered.has(lost.sid), pending: pending(), admissions: admissions().length };
+  connectionPool.releaseReservation('other-session');
+  takeReleasedSlot = false;
+  await reset();
+  discoveryIds = ['shared', 'private'];
+  _resetDynamicAclCache();
+  const first = await open('bob');
   results.live = { opened: first.status, pending: pending(), second: (await open('bob')).status };
   results.closed = { status: await close(first.sid), pending: pending() };
   const idle = await open('bob');
@@ -255,7 +314,7 @@ const baseEnv = {
   ACTUAL_SERVER_URL: 'http://127.0.0.1:5999',
   ACTUAL_PASSWORD: 'stub-password-for-unit-test',
   ACTUAL_BUDGET_SYNC_ID: 'alpha-sync',
-  BUDGET_DEFAULT_NAME: 'Alpha',
+  BUDGET_DEFAULT_NAME: 'Alpha', BUDGET_1_NAME: 'Beta', BUDGET_1_SYNC_ID: 'beta-sync',
   NODE_ENV: 'production',
 };
 const staticEnv = { MCP_STATIC_TOKENS: STATIC, MCP_TOKEN_ALICE: TOK_ALICE, MCP_TOKEN_BOB: TOK_BOB };
@@ -288,6 +347,9 @@ const PRINCIPAL_MSG = /^Max sessions per principal \(2\) reached\. Yours: 2\. Pl
 console.log('\n[#577 per-principal cap] MAX_SESSIONS_PER_PRINCIPAL=2 with static tokens');
 const s = runs.static?.r;
 if (s) {
+  check('discovery off: a stale preference opens only the permitted configured budget', () => {
+    assert.deepStrictEqual(s.restricted, ['beta-sync']);
+  });
   check('C-over (negative) alice\'s third session gets the per-principal 503 with only her own cap and count', () => {
     assert.strictEqual(s.over.third, 503);
     assert.strictEqual(s.over.body.jsonrpc, '2.0');
@@ -370,6 +432,17 @@ if (o) {
 }
 const discovery = runs.discovery?.r;
 if (discovery) {
+  check('failed discovered open keeps an unpinned session and takes back its slot', () => {
+    assert.deepStrictEqual(discovery.retry, { status: 200, registered: true, pending: 1,
+      target: 'shared', next: 'shared', afterShare: 'alpha-sync', second: 503 });
+  });
+  check('data calls retry the unpinned file on the shared connection until it opens', () => {
+    assert.deepStrictEqual(discovery.heal, { first: 'fixture download unavailable', second: 'read',
+      downloads: ['shared', 'shared'], pooled: false });
+  });
+  check('losing the reservation reports an initialize failure on the issued session', () => {
+    assert.deepStrictEqual(discovery.lost, { status: 404, code: -32001, registered: false, pending: 1, admissions: 0 });
+  });
   check('a discovery-only session holds its slot until DELETE', () => {
     assert.deepStrictEqual(discovery.live, { opened: 200, pending: 1, second: 503 });
     assert.deepStrictEqual(discovery.closed, { status: 200, pending: 0 });

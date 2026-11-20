@@ -78,8 +78,11 @@ try {
     const transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers: { Authorization: 'Bearer ' + access_token } },
     });
+    try { await client.connect(transport); } catch (err) {
+      await client.close();
+      throw err;
+    }
     clients.push({ client, transport });
-    await client.connect(transport);
     return client;
   }
   const call = (client, name, args = {}) => client.callTool({ name, arguments: args });
@@ -98,15 +101,14 @@ try {
   const bob = await connect('bob');
   await assertListing(alice, [fx.syncIds.alice]);
   await assertListing(bob, [fx.syncIds.bob]);
-  await assert.rejects(read(bob), /Budget ACL/);
-  await assert.rejects(switchTo(bob, fx.syncIds.alice), /Budget not found/);
-  assert.ok(!(await switchTo(bob, fx.syncIds.bob)).isError);
   assert.ok(!(await read(bob)).isError);
+  await assert.rejects(switchTo(bob, fx.syncIds.alice), /Budget not found/);
 
   for (const userId of [fx.users.alice, fx.users.bob]) {
     await admin('POST', '/admin/access', { fileId: household.cloudFileId, userId });
   }
   refresh();
+  assert.ok(!(await read(bob)).isError); // A new share cannot change the pinned private budget.
   for (const [client, privateId] of [[alice, fx.syncIds.alice], [bob, fx.syncIds.bob]]) {
     await assertListing(client, [privateId, household.groupId]);
     assert.ok(!(await switchTo(client, household.groupId)).isError);
@@ -128,6 +130,17 @@ try {
   const defaultAccounts = await read(alice);
   assert.ok(!defaultAccounts.isError);
   assert.ok(!JSON.stringify(defaultAccounts.content).includes(accountName));
+  const bobIndex = clients.findIndex(entry => entry.client === bob);
+  await clients[bobIndex].transport.terminateSession();
+  await bob.close();
+  clients.splice(bobIndex, 1);
+  await admin('DELETE', '/admin/access?fileId=' + encodeURIComponent(fx.files.bob), { ids: [fx.users.bob] });
+  try {
+    refresh();
+    await assert.rejects(connect('bob'), { code: 403, message: /Forbidden: no budget access configured for this user/ });
+  } finally {
+    await admin('POST', '/admin/access', { fileId: fx.files.bob, userId: fx.users.bob });
+  }
 } catch (err) {
   errors.push(err);
 } finally {
