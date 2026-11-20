@@ -1,69 +1,118 @@
-// #691: exercise the pinned SDK's login-only file listing with a local HTTP
-// fixture. No budget has been opened when permissions are resolved.
+// #691. Drive both ACL consumers through the adapter without contacting Actual.
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const serverURL = 'https://actual.test';
-const dataDir = await mkdtemp(join(tmpdir(), 'actual-list-files-'));
-const originalFetch = globalThis.fetch;
-const requests = [];
-let unavailable = false;
-const household = {
-  fileId: 'household-file', groupId: 'household-sync', name: 'Household',
-  deleted: 0, usersWithAccess: [{ userName: 'alice' }, { userName: 'bob' }],
-};
-
-globalThis.fetch = async (input, init) => {
-  const request = new Request(input, init);
-  const url = new URL(request.url);
-  assert.equal(url.origin, serverURL);
-  const route = request.method + ' ' + url.pathname;
-  requests.push(route);
-  switch (route) {
-    case 'POST /account/login':
-      return Response.json({ status: 'ok', data: { token: 'synthetic-session' } });
-    case 'GET /sync/list-user-files':
-      assert.equal(request.headers.get('X-ACTUAL-TOKEN'), 'synthetic-session');
-      if (unavailable) return new Response(null, { status: 503 });
-      return Response.json({ status: 'ok', data: [
-        household, { ...household, fileId: 'deleted-file', groupId: 'deleted-sync', deleted: 1 },
-      ] });
-    case 'POST /account/logout':
-      return Response.json({ status: 'ok', data: {} });
-    default:
-      throw new Error('Unexpected fixture request: ' + route);
-  }
-};
-
-try {
-  const api = (await import('@actual-app/api')).default;
-  await api.init({ dataDir, serverURL, password: 'fixture' });
-  try {
-    const files = await api.getBudgets();
-    assert.deepEqual(files.map(file => file.groupId), [household.groupId]);
-    assert.deepEqual(files[0].usersWithAccess, household.usersWithAccess);
-
-    // A local Sync ID can survive a remote lookup failure. Only remote
-    // membership is evidence that a principal may use the file.
-    const localDir = join(dataDir, 'local-household');
-    await mkdir(localDir);
-    await writeFile(join(localDir, 'metadata.json'), JSON.stringify({
-      budgetName: household.name, groupId: household.groupId, cloudFileId: household.fileId,
-    }));
-    unavailable = true;
-    const cached = await api.getBudgets();
-    assert.deepEqual(cached.map(file => file.groupId), [household.groupId]);
-    assert.ok(cached.every(file => !file.usersWithAccess));
-  } finally {
-    await api.shutdown();
-  }
-  assert.deepEqual(requests, [
-    'POST /account/login', 'GET /sync/list-user-files', 'GET /sync/list-user-files', 'POST /account/logout',
-  ], 'listing on a fresh login must not download a budget');
-  process.stdout.write('Login-only SDK listing checks passed\n');
-} finally {
-  globalThis.fetch = originalFetch;
-  await rm(dataDir, { recursive: true, force: true });
+Object.assign(process.env, {
+  ACTUAL_SERVER_URL: 'https://acl.example.test/base/',
+  ACTUAL_BUDGET_SYNC_ID: 'configured', ACTUAL_PASSWORD: 'fixture',
+  ACTUAL_OP_TIMEOUT_MS: '120',
+});
+const config = (await import('../../dist/src/config.js')).default;
+const api = (await import('@actual-app/api')).default;
+let apiCalls = 0;
+for (const method of ['init', 'shutdown', 'downloadBudget', 'getBudgets']) {
+  api[method] = () => { apiCalls++; throw new Error('Unexpected SDK call'); };
 }
+const { default: adapter } = await import('../../dist/src/lib/actual-adapter.js');
+const { resolveAllowedBudgetsFromActual: resolve, runAclPreflight, _resetDynamicAclCache } =
+  await import('../../dist/src/auth/budget-acl-dynamic.js');
+const state = await import('../../dist/src/lib/apiState.js');
+const otherLogin = { serverUrl: 'https://other.example.test', password: 'other' };
+state.setApiLogin(otherLogin);
+state.setLoadedBudgetSyncId('other-open-budget');
+
+const ok = data => Response.json({ status: 'ok', data });
+const files = [
+  { groupId: 'a', usersWithAccess: [{ userName: 'alice' }] },
+  { groupId: 'h', usersWithAccess: [{ userName: 'alice' }, { userName: 'bob' }] },
+  { groupId: 'old', deleted: 1, usersWithAccess: [{ userName: 'alice' }] },
+];
+let loginCount = 0, listCount = 0;
+let loginResponse = () => ok({ token: 'fixture-token' });
+let listResponse = () => ok(files);
+let lastSignal;
+const unexpectedUrls = [];
+globalThis.fetch = async (input, init) => {
+  const url = String(input);
+  assert.equal(init.redirect, 'manual');
+  if (url === 'https://acl.example.test/base/account/login') {
+    loginCount++;
+    return loginResponse();
+  }
+  if (url !== 'https://acl.example.test/base/sync/list-user-files') {
+    unexpectedUrls.push(url);
+    throw new Error('Unexpected URL');
+  }
+  assert.equal(new Headers(init.headers).get('x-actual-token'), 'fixture-token');
+  lastSignal = init.signal;
+  listCount++;
+  return listResponse();
+};
+
+assert.deepEqual(await resolve(null), []);
+assert.equal(loginCount + listCount, 0);
+assert.deepEqual(await Promise.all([resolve('alice'), resolve('bob')]), [['a', 'h'], ['h']]);
+assert.deepEqual([loginCount, listCount], [1, 1]);
+await runAclPreflight();
+assert.deepEqual([loginCount, listCount], [1, 2]);
+await resolve('third');
+assert.deepEqual([loginCount, listCount], [1, 3]);
+
+const now = Date.now;
+try {
+  Date.now = () => now() + 60_001;
+  await adapter.listRemoteBudgetFiles();
+  assert.deepEqual([loginCount, listCount], [2, 4]);
+} finally {
+  Date.now = now;
+}
+
+// On each failure, the next lookup for the same principal must log in and list again.
+for (const failure of [
+  () => { throw new Error('fixture network failure'); },
+  () => new Response(null, { status: 302, headers: { Location: 'https://redirect.example.test' } }),
+  () => new Response(null, { status: 500 }),
+  () => Response.json({ status: 'error' }),
+  () => Response.json({ status: 'ok', data: {} }),
+  () => new Response('invalid-json'),
+  () => new Promise(() => {}),
+]) {
+  _resetDynamicAclCache();
+  listResponse = failure;
+  assert.deepEqual(await resolve('alice'), []);
+  assert.ok(lastSignal.aborted);
+  const before = [loginCount, listCount];
+  listResponse = () => ok(files);
+  assert.deepEqual(await resolve('alice'), ['a', 'h']);
+  assert.deepEqual([loginCount, listCount], [before[0] + 1, before[1] + 1]);
+}
+listResponse = () => new Response(null, { status: 401 });
+await assert.rejects(adapter.listRemoteBudgetFiles());
+for (const succeeds of [false, true]) {
+  const before = [loginCount, listCount];
+  listResponse = () => succeeds && listCount === before[1] + 2 ? ok(files) : new Response(null, { status: 401 });
+  if (succeeds) assert.equal((await adapter.listRemoteBudgetFiles()).length, 2);
+  else await assert.rejects(adapter.listRemoteBudgetFiles());
+  assert.deepEqual([loginCount, listCount], [before[0] + 2, before[1] + 2]);
+}
+config.ACTUAL_PASSWORD = '';
+const before = loginCount + listCount;
+await assert.rejects(adapter.listRemoteBudgetFiles());
+assert.equal(loginCount + listCount, before);
+config.ACTUAL_PASSWORD = 'fixture';
+loginResponse = () => ok({ returnUrl: '/openid' });
+await assert.rejects(adapter.listRemoteBudgetFiles());
+assert.equal(loginCount + listCount, before + 1);
+assert.deepEqual(unexpectedUrls, []);
+assert.equal(apiCalls, 0);
+assert.ok(state.isApiLoggedInTo(otherLogin));
+assert.equal(state.getLoadedBudgetSyncId(), 'other-open-budget');
+for (const dir of ['tools', 'compact']) {
+  const root = fileURLToPath(new URL('../../src/' + dir, import.meta.url));
+  for (const file of await readdir(root, { recursive: true })) {
+    if (file.endsWith('.ts')) assert.doesNotMatch(await readFile(join(root, file), 'utf8'), /listRemoteBudgetFiles/);
+  }
+}
+process.stdout.write('Remote ACL listing tests passed\n');

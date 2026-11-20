@@ -198,7 +198,7 @@ const SUB_ONLY_TOKEN = { sub: 'opaque-idp-sub-alice' };
   console.log('\n[identity-map] preflight diagnostics');
   {
     const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
-    const orig = adapterMod.default.getBudgets;
+    const orig = adapterMod.default.listRemoteBudgetFiles;
     const logs = [];
     const loggerMod = await import('../../dist/src/lib/loggerFactory.js');
     const origCreate = loggerMod.createModuleLogger;
@@ -212,25 +212,25 @@ const SUB_ONLY_TOKEN = { sub: 'opaque-idp-sub-alice' };
       'duplicates across files are collapsed');
 
     // The preflight must never throw or block, whatever the upstream does.
-    adapterMod.default.getBudgets = async () => { throw new Error('upstream down'); };
+    adapterMod.default.listRemoteBudgetFiles = async () => { throw new Error('upstream down'); };
     let threw = false;
     try { await runAclPreflight(); } catch { threw = true; }
     check(threw === false, 'an unreachable Actual server does not make the preflight throw');
 
-    adapterMod.default.getBudgets = async () => FILES;
+    adapterMod.default.listRemoteBudgetFiles = async () => FILES;
     threw = false;
     try { await runAclPreflight(); } catch { threw = true; }
     check(threw === false, 'a healthy read completes without throwing');
 
     // The password-mode case: every userName blank, so nobody can ever resolve.
-    adapterMod.default.getBudgets = async () => [
+    adapterMod.default.listRemoteBudgetFiles = async () => [
       { groupId: FILE_A, usersWithAccess: [{ userId: SVC_UID, userName: '', owner: true }] },
     ];
     threw = false;
     try { await runAclPreflight(); } catch { threw = true; }
     check(threw === false, 'a password-mode server (all userNames blank) warns rather than throwing');
 
-    adapterMod.default.getBudgets = orig;
+    adapterMod.default.listRemoteBudgetFiles = orig;
     void origCreate; void logs;
     _resetDynamicAclCache();
   }

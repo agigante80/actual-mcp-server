@@ -89,6 +89,7 @@ import { requestContext } from './requestContext.js';
 import { connectionPool } from './ActualConnectionPool.js';
 import { isApiInitialized, setApiInitialized, getLoadedBudgetSyncId, awaitAbandonedBudgetLoad, hasPendingBudgetLoad, isApiLoggedInTo, setLoginsSpanServers } from './apiState.js';
 import { initApiLoggedIn } from './apiLogin.js';
+import { listRemoteBudgetFiles } from './remoteBudgetFiles.js';
 import { withApiLock } from './apiLock.js';
 import { loadBudgetTracked, importBudgetTracked } from './budgetLoader.js';
 
@@ -4781,9 +4782,7 @@ export async function getBudgets(): Promise<unknown[]> {
     const raw = await withConcurrency(() => retry(() => rawGetBudgets() as Promise<unknown>, { retries: 2, backoffMs: 200 }));
     const files = Array.isArray(raw) ? raw : [];
     // #570: a restricted caller sees only files whose groupId (the sync id) it may
-    // use. A file with no groupId was never uploaded and belongs to no list. The
-    // dynamic ACL resolver calls this under its own `allowedBudgets: ['*']`, so it
-    // still sees every file.
+    // use. A file with no groupId was never uploaded and belongs to no list.
     const allowed = restrictedAllowedBudgets('actual_budgets_get_all');
     if (!allowed) return files;
     return files.filter(f => {
@@ -5455,6 +5454,7 @@ export default {
   runQuery,
   runBankSync,
   getBudgets,
+  listRemoteBudgetFiles,
   switchBudget,
   getBudgetRegistry,
   getIDByName,

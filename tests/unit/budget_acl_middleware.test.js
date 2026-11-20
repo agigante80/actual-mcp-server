@@ -48,15 +48,15 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
   const dynamicMod = await import('../../dist/src/auth/budget-acl-dynamic.js');
   const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
 
-  // Tripwire: if the dynamic path runs, it must go through adapter.getBudgets().
+  // Tripwire: if the dynamic path runs, it must go through adapter.listRemoteBudgetFiles().
   // Counting calls there proves whether the new code executed at all.
-  let getBudgetsCalls = 0;
-  const origGetBudgets = adapter.getBudgets;
-  adapter.getBudgets = async () => { getBudgetsCalls++; return []; };
+  let listCalls = 0;
+  const originalList = adapter.listRemoteBudgetFiles;
+  adapter.listRemoteBudgetFiles = async () => { listCalls++; return []; };
 
   const origProvider = config.AUTH_PROVIDER;
   const origSource = config.AUTH_BUDGET_ACL_SOURCE;
-  const reset = () => { getBudgetsCalls = 0; dynamicMod._resetDynamicAclCache(); _resetAclForTests(); };
+  const reset = () => { listCalls = 0; dynamicMod._resetDynamicAclCache(); _resetAclForTests(); };
 
   // -------------------------------------------------------------------------
   console.log('\n[budget-acl-middleware] MOST COMMON: no OIDC at all (bearer token or stdio)');
@@ -71,7 +71,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
     check(state.nextCalled, `AUTH_PROVIDER=${provider}: request passes straight through`);
     check(res.statusCode === null, `AUTH_PROVIDER=${provider}: nothing is rejected`);
     check(req.allowedBudgets === undefined, `AUTH_PROVIDER=${provider}: no allowedBudgets is attached`);
-    check(getBudgetsCalls === 0, `AUTH_PROVIDER=${provider}: the dynamic resolver is NEVER called`);
+    check(listCalls === 0, `AUTH_PROVIDER=${provider}: the dynamic resolver is NEVER called`);
   }
 
   // -------------------------------------------------------------------------
@@ -87,7 +87,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
     budgetAclMiddleware(req, res, next);
     await settle();
     check(state.nextCalled, 'AUTH_BUDGET_ACL_SOURCE=actual without OIDC still passes through');
-    check(getBudgetsCalls === 0, 'and still never calls the dynamic resolver');
+    check(listCalls === 0, 'and still never calls the dynamic resolver');
     check(res.statusCode === null, 'and never rejects the request');
   }
 
@@ -106,7 +106,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
     await settle();
     check(a.state.nextCalled, 'unset ACL: request proceeds');
     check(JSON.stringify(a.req.allowedBudgets) === JSON.stringify(['*']), 'unset ACL: allowedBudgets is ["*"]');
-    check(getBudgetsCalls === 0, 'unset ACL: the dynamic resolver is NEVER called');
+    check(listCalls === 0, 'unset ACL: the dynamic resolver is NEVER called');
 
     // Populated ACL: the mapped principal gets exactly its budgets.
     reset();
@@ -116,7 +116,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
     await settle();
     check(b.state.nextCalled, 'mapped principal proceeds');
     check(JSON.stringify(b.req.allowedBudgets) === JSON.stringify(['sync-a']), 'mapped principal gets its own budgets');
-    check(getBudgetsCalls === 0, 'mapped principal: the dynamic resolver is NEVER called');
+    check(listCalls === 0, 'mapped principal: the dynamic resolver is NEVER called');
 
     // Unmapped principal is refused by the static path, exactly as before.
     reset();
@@ -126,7 +126,7 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
     await settle();
     check(!c.state.nextCalled, 'unmapped principal does NOT proceed');
     check(c.res.statusCode === 403, 'unmapped principal gets 403');
-    check(getBudgetsCalls === 0, 'unmapped principal: the dynamic resolver is NEVER called');
+    check(listCalls === 0, 'unmapped principal: the dynamic resolver is NEVER called');
   }
 
   // -------------------------------------------------------------------------
@@ -142,12 +142,12 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
     const d = makeCtx({ subject: 'alice-sub', claims: {} });
     budgetAclMiddleware(d.req, d.res, d.next);
     await settle();
-    check(getBudgetsCalls === 1, 'opt-in: the dynamic resolver IS called (proves the guards above are real)');
+    check(listCalls === 1, 'opt-in: the dynamic resolver IS called (proves the guards above are real)');
     check(!d.state.nextCalled, 'opt-in with no matching file: request does not proceed');
     check(d.res.statusCode === 403, 'opt-in with no matching file: 403 rather than fail-open');
   }
 
-  adapter.getBudgets = origGetBudgets;
+  adapter.listRemoteBudgetFiles = originalList;
   config.AUTH_PROVIDER = origProvider;
   config.AUTH_BUDGET_ACL_SOURCE = origSource;
   _resetAclForTests();
