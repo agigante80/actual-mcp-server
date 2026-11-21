@@ -450,7 +450,7 @@ jobs:
         run: npm ci
 
       # Playwright browsers are NOT installed on the host: tests run inside the
-      # mcr.microsoft.com/playwright:v1.64.1-jammy Docker container (e2e-test-runner
+      # mcr.microsoft.com/playwright:v1.65.1-jammy Docker container (e2e-test-runner
       # service in tests/e2e/compose.yaml) which already has Playwright pre-installed.
 
       - name: 🗄️ Restore Docker image cache
@@ -509,7 +509,7 @@ jobs:
           mkdir -p /tmp/docker-image-cache
           docker save actualbudget/actual-server:latest \
             -o /tmp/docker-image-cache/actual-server.tar 2>/dev/null || true
-          docker save "mcr.microsoft.com/playwright:v1.64.1-jammy" \
+          docker save "mcr.microsoft.com/playwright:v1.65.1-jammy" \
             -o /tmp/docker-image-cache/playwright-jammy.tar 2>/dev/null || true
 
       # #600: start the published image the way the README documents it. The step builds the
