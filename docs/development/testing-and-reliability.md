@@ -33,7 +33,7 @@
 |------|---------|---------|
 | **Node.js Built-in** | Native | Unit test runner |
 | **TypeScript** | ^6.0.3 | Type checking (compile-time testing) |
-| **Playwright** | ^1.64.1 | End-to-end testing |
+| **Playwright** | ^1.65.1 | End-to-end testing |
 | **Custom Adapter Tests** | N/A | Smoke tests for Actual API |
 | **npm audit** | Native | Security vulnerability scanning |
 
@@ -409,7 +409,7 @@ npm run test:adapter
 
 **Location**: `tests/e2e/` (Playwright)
 
-**Framework**: Playwright ^1.64.1
+**Framework**: Playwright ^1.65.1
 
 **Scenarios**:
 - MCP client connects to server
