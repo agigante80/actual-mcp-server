@@ -20,6 +20,8 @@ import { parse } from 'yaml';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BOTS = ['dependabot[bot]', 'actual-mcp-dependency-updater[bot]'];
 const NO_PUSH = ['unit_tests', 'autofix', 'fix_ci', 'resolve_merge_conflict', 'simplify'];
+// The heading the custom check's instructions name; it must exist in AGENTS.md.
+const TEST_REVIEW_HEADING = "What a review of a change's tests checks";
 const TONE_MAX = 250; // schema maxLength for tone_instructions
 // Built from code points so this file carries neither character itself.
 const DASHES = [0x2013, 0x2014].map((c) => String.fromCharCode(c));
@@ -66,6 +68,21 @@ export function checkConfig(cfg) {
   if ((cfg?.reviews?.path_instructions ?? []).length) {
     fail('reviews.path_instructions must stay empty (AGENTS.md is the one source)');
   }
+  // One custom pre-merge check, advisory: `error` mode can block a merge, and the criteria
+  // live in AGENTS.md, so the instructions must point there instead of copying them.
+  const pre = cfg?.reviews?.pre_merge_checks ?? {};
+  const checks = pre.custom_checks ?? [];
+  if (checks.length !== 1) fail('pre_merge_checks.custom_checks must hold exactly one check');
+  if (checks[0].mode !== 'warning') fail('the custom check must be in warning mode');
+  if (!String(checks[0].instructions ?? '').includes(TEST_REVIEW_HEADING)) {
+    fail('the custom check must point at the AGENTS.md test review list');
+  }
+  if (pre.override_requested_reviewers_only === true) {
+    fail('pre_merge_checks.override_requested_reviewers_only must not be true');
+  }
+  for (const builtin of ['title', 'description', 'issue_assessment']) {
+    if (pre[builtin]?.mode === 'error') fail(`pre_merge_checks.${builtin}.mode must not be error`);
+  }
   const tone = cfg?.tone_instructions ?? '';
   if (tone.length > TONE_MAX) fail(`tone_instructions exceeds ${TONE_MAX} characters`);
 }
@@ -84,6 +101,10 @@ console.log('coderabbit_config');
 check('the committed config passes', () => checkConfig(load()));
 check('no em or en dash in the config', () => {
   assert.ok(!DASHES.some((d) => raw.includes(d)), 'dash found in .coderabbit.yaml');
+});
+
+check('AGENTS.md carries the list the custom check points at', () => {
+  assert.ok(readFileSync(join(ROOT, 'AGENTS.md'), 'utf8').includes(TEST_REVIEW_HEADING), 'heading missing from AGENTS.md');
 });
 
 const refuses = (label, mutate, message) => check(`negative: ${label}`, () => {
@@ -115,6 +136,18 @@ refuses('a rule copy in path_instructions', (c) => { c.reviews.path_instructions
   'coderabbit config: reviews.path_instructions must stay empty (AGENTS.md is the one source)');
 refuses('an over-long tone', (c) => { c.tone_instructions = 'x'.repeat(TONE_MAX + 1); },
   `coderabbit config: tone_instructions exceeds ${TONE_MAX} characters`);
+refuses('the custom check in error mode', (c) => { c.reviews.pre_merge_checks.custom_checks[0].mode = 'error'; },
+  'coderabbit config: the custom check must be in warning mode');
+refuses('the custom check mode dropped', (c) => { delete c.reviews.pre_merge_checks.custom_checks[0].mode; },
+  'coderabbit config: the custom check must be in warning mode');
+refuses('a second custom check', (c) => { c.reviews.pre_merge_checks.custom_checks.push({ name: 'x', mode: 'warning', instructions: 'x' }); },
+  'coderabbit config: pre_merge_checks.custom_checks must hold exactly one check');
+refuses('the custom check removed', (c) => { delete c.reviews.pre_merge_checks; },
+  'coderabbit config: pre_merge_checks.custom_checks must hold exactly one check');
+refuses('criteria copied instead of pointing at AGENTS.md', (c) => { c.reviews.pre_merge_checks.custom_checks[0].instructions = 'Every src change needs a test.'; },
+  'coderabbit config: the custom check must point at the AGENTS.md test review list');
+refuses('a built-in check in error mode', (c) => { c.reviews.pre_merge_checks.title = { mode: 'error' }; },
+  'coderabbit config: pre_merge_checks.title.mode must not be error');
 
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);
