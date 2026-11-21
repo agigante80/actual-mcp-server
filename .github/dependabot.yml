@@ -86,7 +86,6 @@ updates:
       time: "09:00"
     labels:
       - "dependencies"
-      - "github-actions"
     commit-message:
       prefix: "ci"
   
@@ -100,6 +99,5 @@ updates:
       time: "09:00"
     labels:
       - "dependencies"
-      - "docker"
     commit-message:
       prefix: "chore(docker)"
