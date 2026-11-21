@@ -12,7 +12,7 @@ password. A granted encrypted file with no configured key appears after the usab
 budgets with `locked: true`. Listing it does not open it. A matching keyless static entry supplies its name and server origin.
 When several entries share that Sync ID, the first in registry order wins.
 Without a matching entry, the row uses the discovered name and the configured
-Actual server origin. Switching to the file explains which setting is missing.
+Actual server origin. The row's hint explains which setting is missing.
 
 An operator can add or complete a `BUDGET_n_*` entry for that Sync ID with
 `BUDGET_n_ENCRYPTION_PASSWORD`. Configure it only if every user Actual shares
@@ -20,13 +20,18 @@ the file with may read it through this server, including users who were never
 given the encryption password.
 
 Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
-`action: "switch"` and the name or Sync ID. Among usable files, a configured
-name takes precedence. If a configured budget and a shared file are both named
-`Home` and the configured budget is locked, switching to `Home` selects the
-usable shared file. Switching by the locked budget's Sync ID gives the missing-key
-refusal. Use the Sync IDs to distinguish shared files with the same name. If
-configured budgets share a Sync ID across servers, switch by their distinct
-configured names. The session remembers which server you selected.
+`action: "switch"` and the name or Sync ID. The switch searches usable budgets
+by configured name first, then by exact Sync ID, then by file name. Names match
+case-insensitively. If several usable files share a name, use an unambiguous
+Sync ID. If configured budgets share a Sync ID across servers, use their
+distinct configured names. The session remembers which server you selected.
+
+The switch checks locked files only after the usable lookup finds no match.
+An exact locked Sync ID or a unique locked name then gives the missing-key
+refusal. If a locked configured budget and a usable shared file are both named
+`Home`, switching to `Home` selects the usable share. If a locked file's
+Sync ID is `Home` and a usable configured budget is named `Home`, the same
+input selects the configured budget.
 
 With OIDC budget discovery enabled, a fresh session chooses its starting budget in this order:
 

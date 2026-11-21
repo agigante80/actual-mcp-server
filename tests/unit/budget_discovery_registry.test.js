@@ -132,13 +132,21 @@ await requestContext.run({ ...alice, sessionId: 'session-alice-name' }, async ()
   assert.equal(adapter._getActiveBudgetConfigForTests().syncId, 'configured');
 });
 // So does a configured name that a shared file carries as its Sync ID.
-rows.push(file('Home', 'Lookalike', ['alice']));
+const lookalike = file('Home', 'Lookalike', ['alice']);
+rows.push(lookalike);
 _resetDynamicAclCache();
 await requestContext.run({ ...(await ctx('alice')), sessionId: 'session-alice-id' }, async () => {
   await adapter.switchBudget('Home');
   assert.equal(adapter._getActiveBudgetConfigForTests().syncId, 'configured');
   await adapter.switchBudget('Lookalike');
   assert.equal(adapter._getActiveBudgetConfigForTests().syncId, 'Home');
+});
+lookalike.encryptKeyId = 'key';
+_resetDynamicAclCache();
+await requestContext.run(await ctx('alice'), async () => {
+  assert.equal((await adapter.switchBudget('Home')).syncId, 'configured');
+  await assert.rejects(adapter.switchBudget('Lookalike'), { refusalKind: 'locked', message: /^Budget Home / });
+  assert.equal(adapter._getActiveBudgetConfigForTests().syncId, 'configured');
 });
 rows.pop();
 _resetDynamicAclCache();
