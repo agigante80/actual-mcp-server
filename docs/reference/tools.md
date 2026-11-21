@@ -85,7 +85,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 
 `actual_tags_list` · `actual_tags_create` · `actual_tags_update` · `actual_tags_delete`
 
-**How tags work.** A tag is the `#word` in a transaction's notes. To tag a transaction, write the `#word` into its notes (`manage_transactions`, or `actual_transactions_create` and `actual_transactions_update`); no tag tool takes a transaction. The tag list these tools manage only holds a colour and a description per word, so a tag used only in notes is not listed, and renaming a list entry does not change the notes, which keep the old `#word`. A notes search is a case-insensitive substring match: `#trip` also finds `#tripod`. A rule can match on tags: on `notes`, the condition operators `hasTags` (every tag listed) and `hasAnyTag` (at least one) take one string of tags such as `"#trip #food"` and match whole tags in any case, so `#trip` does not match `#tripod`. The other text fields (`imported_payee`, `description`) refuse them, and a value with no tag in it is refused: upstream would store it and the rule would then act on every transaction that has notes.
+**How tags work.** A tag is the `#word` in a transaction's notes. To tag a transaction, write the `#word` into its notes (`manage_transactions`, or `actual_transactions_create` and `actual_transactions_update`); no tag tool takes a transaction. The tag list these tools manage only holds a colour and a description per word, so a tag used only in notes is not listed, and renaming a list entry does not change the notes, which keep the old `#word`. A notes search is a case-insensitive substring match: `#trip` also finds `#tripod`. A rule can match on tags: on `notes` and `payee_name`, the condition operators `hasTags` (every tag listed) and `hasAnyTag` (at least one) take one string of tags such as `"#trip #food"` and match whole tags in any case, so `#trip` does not match `#tripod`. `imported_payee` refuses them, and a value with no tag in it is refused: upstream would store it and the rule would then act on every transaction that has notes.
 
 | Tool | Description |
 |------|-------------|
@@ -143,7 +143,22 @@ Until v0.28.0 six budget tools had camelCase names. The old names still work as 
 
 `actual_rules_get` · `actual_rules_create` · `actual_rules_update` · `actual_rules_delete`
 
-**Condition values.** A condition is `{field, op, value}`. The value is text or a number for most operators. `oneOf` and `notOneOf` (on `payee`, `account`, `category`) take a non-empty array of ids, and an array on any other operator is refused. `cleared`, `reconciled`, `transfer` and `parent` take `is` with `true` or `false`; a boolean on any other field is refused. The same holds for `manage_rules`.
+**Condition values.** A condition is `{field, op, value}`. The value is text or a number for most operators. `oneOf` and `notOneOf` take a non-empty array: ids on `payee`, `account`, `category` and `category_group`, text on `imported_payee` and `payee_name`. An array on any other operator is refused. `cleared`, `reconciled`, `transfer` and `parent` take `is` with `true` or `false`; a boolean on any other field is refused. `amount` `isbetween` takes `{num1, num2}` in integer cents (the bounds in either order), and no other operator takes an object. `account` `onBudget` and `offBudget` take the value `""`. The same holds for `manage_rules`.
+
+**Condition fields and operators.** All four rule write tools and `manage_rules` check one map, equal to what the installed Actual accepts (a unit test compares the two on every run):
+
+| Field | Operators |
+|-------|-----------|
+| `imported_payee` | `is`, `isNot`, `contains`, `matches`, `doesNotContain`, `oneOf`, `notOneOf` |
+| `payee_name` | as `imported_payee`, plus `hasTags`, `hasAnyTag` |
+| `notes` | `is`, `isNot`, `contains`, `matches`, `doesNotContain`, `hasTags`, `hasAnyTag` |
+| `payee`, `category`, `category_group` | `is`, `isNot`, `oneOf`, `notOneOf` |
+| `account` | `is`, `isNot`, `oneOf`, `notOneOf`, `onBudget`, `offBudget` |
+| `amount` | `is`, `isapprox`, `isbetween`, `gt`, `gte`, `lt`, `lte` |
+| `date` | `is`, `isapprox`, `gt`, `gte`, `lt`, `lte` |
+| `cleared`, `reconciled`, `transfer`, `parent` | `is` |
+
+Any other field is refused with the list of valid ones; `description` and `saved` are not condition fields. Two differences from Actual are deliberate: `saved` is left out (Actual gives it no operator), and `contains`, `matches` and `doesNotContain` are refused on the id fields, because a rule compares the stored id and such a rule would never fire. To match a payee by name, use `payee_name` or `imported_payee`.
 
 | Tool | Description |
 |------|-------------|

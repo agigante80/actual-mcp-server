@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionValue, assertTagOperatorValue } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionValue, assertTagOperatorValue, idFieldPlural, isTextOnIdField } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one. The action schema stays private because `op`
 // is REQUIRED here (the shared one defaults it to "set"); only the describe text is shared.
@@ -13,22 +13,6 @@ const ActionSchema = z.object({
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
   options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
 });
-
-// Operator validation map
-const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
-  'imported_payee': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
-  'payee': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'account': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'category': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot', 'hasTags', 'hasAnyTag'] },
-  'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
-  'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
-  'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
-  'cleared': { type: 'boolean', operators: ['is'] },
-  'reconciled': { type: 'boolean', operators: ['is'] },
-  'transfer': { type: 'boolean', operators: ['is'] },
-  'parent': { type: 'boolean', operators: ['is'] },
-};
 
 const InputSchema = z.object({
   id: CommonSchemas.ruleId.describe('Rule ID to update'),
@@ -106,35 +90,21 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
     // Validate field usage to guide users toward correct field selection
     if (input.fields.conditions) {
       for (const condition of input.fields.conditions) {
-        const fieldInfo = Object.hasOwn(FIELD_OPERATORS, condition.field) ? FIELD_OPERATORS[condition.field] : undefined;
-        
-        // Validate operator is compatible with field type
-        if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
-          throw new Error(
-            `Invalid operator "${condition.op}" for field "${condition.field}". ` +
-            `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}. ` +
-            `Please use one of these operators instead.`
-          );
-        }
+        assertConditionOperator(condition);
         assertTagOperatorValue(condition);
         assertConditionValue(condition);
-        
-        // Check if using payee field with text value instead of ID
-        if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+        if (!isTextOnIdField(condition)) continue;
+        if (condition.field === 'payee') {
           throw new Error(
             `Field "payee" expects a payee ID (UUID), but got text value "${condition.value}". ` +
             `To match payee names with text, use "imported_payee" field instead. ` +
             `Example: {field: "imported_payee", op: "contains", value: "${condition.value}"}`
           );
         }
-        
-        // Similar validation for account and category
-        if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
-          throw new Error(
-            `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
-            `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
-          );
-        }
+        throw new Error(
+          `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
+          `Use the ${condition.field} UUID from your budget data. List ${idFieldPlural(condition.field)} to find the correct UUID.`
+        );
       }
     }
     

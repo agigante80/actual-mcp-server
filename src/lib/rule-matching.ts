@@ -24,6 +24,18 @@ export function canonicalize(obj: Record<string, unknown>): string {
   if ((sorted.op === 'oneOf' || sorted.op === 'notOneOf') && Array.isArray(sorted.value)) {
     sorted.value = [...sorted.value].sort();
   }
+  // #711: an isbetween range {num1, num2} matches the same amounts whichever bound comes first
+  // (upstream takes the min and max), so the key is built fresh as {num1: min, num2: max}.
+  // Again only the comparison key changes, never the stored value.
+  const range = sorted.value as { num1?: unknown; num2?: unknown } | null;
+  if (sorted.op === 'isbetween' && range && typeof range === 'object' &&
+      typeof range.num1 === 'number' && typeof range.num2 === 'number') {
+    sorted.value = { num1: Math.min(range.num1, range.num2), num2: Math.max(range.num1, range.num2) };
+  }
+  // #711: onBudget and offBudget take no value (upstream ignores it), so "" and any other
+  // value are the same condition. Without this an upsert that sends a different placeholder
+  // creates a second rule matching exactly the same transactions.
+  if (sorted.op === 'onBudget' || sorted.op === 'offBudget') sorted.value = '';
   return JSON.stringify(sorted);
 }
 

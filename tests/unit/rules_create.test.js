@@ -86,15 +86,13 @@ console.log('\n[#485] rules_create: imperative rejections');
   check(r.threw && r.message.startsWith('Action "prepend-notes" requires a string value, but got boolean.') && r.message.endsWith('"text to prepend"}'), 'prepend-notes with a boolean throws', r.message);
 
   r = await attempt(rule([{ field: 'amount', op: 'contains', value: 5 }], [okAct]));
-  check(r.threw && r.message === 'Invalid operator "contains" for field "amount". Field "amount" is a number field and only supports: is, gte, lte, gt, lt, isapprox. Please use one of these operators instead.', 'contains on amount throws', r.message);
+  check(r.threw && r.message === 'Invalid operator "contains" for field "amount". Field "amount" is a number field and only supports: is, isapprox, isbetween, gt, gte, lt, lte.', 'contains on amount throws', r.message);
   check(calls.length === 0, '  and createRule is never called');
 }
 
 console.log('\n[#485] rules_create: what is deliberately NOT rejected');
 {
-  const r = await attempt(rule([{ field: 'bogus', op: 'is', value: 'x' }], [{ op: 'set', field: 'notes', value: 'n' }]));
-  check(!r.threw, 'an unknown condition field with "is" does not throw', r.message);
-  check(calls.length === 1, '  and reaches createRule');
+  // #711: an unknown condition field used to pass here; it is now refused (see the #711 block).
   const r2 = await attempt(rule([okCond], [{ op: 'link-schedule', value: 'sched-1' }]));
   check(!r2.threw && calls.length === 1, 'link-schedule value is not validated');
 }
@@ -123,7 +121,7 @@ console.log('\n[#486] rules_create: still-rejected probes keep their exact error
     'stage "default" is a Zod invalid_value at stage', JSON.stringify(issues));
   check(calls.length === 0, '  and createRule is never called');
   const r = await attempt(rule([{ field: 'amount', op: 'contains', value: 5 }], [okAct]));
-  check(r.threw && r.message.startsWith('Invalid operator "contains" for field "amount". Field "amount" is a number field and only supports: is, gte, lte, gt, lt, isapprox.'),
+  check(r.threw && r.message === 'Invalid operator "contains" for field "amount". Field "amount" is a number field and only supports: is, isapprox, isbetween, gt, gte, lt, lte.',
     'amount with "contains" and a numeric value is an Invalid operator error', r.message);
 }
 
@@ -136,13 +134,14 @@ console.log('\n[#703] rules_create: tag operators on notes');
   check(!r.threw && calls.length === 1, 'notes hasAnyTag "#trip #food" is accepted', r.message);
 
   r = await attempt(rule([{ field: 'imported_payee', op: 'hasTags', value: '#trip' }], [okAct]));
-  check(r.threw && r.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: contains, matches, doesNotContain, is, isNot. Please use one of these operators instead.',
+  check(r.threw && r.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf.',
     'NEGATIVE: imported_payee hasTags is an Invalid operator error with the exact message', r.message);
   check(calls.length === 0, '  and createRule is never called');
   r = await attempt(rule([{ field: 'imported_payee', op: 'hasTags', value: '' }], [okAct]));
   check(r.threw && r.message.startsWith('Invalid operator "hasTags" for field "imported_payee".'), 'NEGATIVE: the operator check runs before the tag value check', r.message);
+  // #711: `description` is not an Actual field, so it is now refused as an unknown field.
   r = await attempt(rule([{ field: 'description', op: 'hasAnyTag', value: '#trip' }], [okAct]));
-  check(r.threw && r.message.startsWith('Invalid operator "hasAnyTag" for field "description".'), 'NEGATIVE: description hasAnyTag is refused', r.message);
+  check(r.threw && r.message.startsWith('Unknown condition field "description".'), 'NEGATIVE: description hasAnyTag is refused as an unknown field', r.message);
 
   for (const [label, value] of [['""', ''], ['"#"', '#'], ['"   "', '   '], ['"##"', '##'], ['a number', 5]]) {
     r = await attempt(rule([{ field: 'notes', op: 'hasTags', value }], [okAct]));
@@ -212,6 +211,81 @@ console.log('\n[#710] array values for oneOf and notOneOf, booleans for the flag
   r = await attempt(rule([{ field: 'amount', op: 'gte', value: false }], [okAct]));
   check(r.threw && r.message.includes('does not accept a boolean'), 'NEGATIVE: a boolean on amount is refused', r.message);
   check(calls.length === 0, '  and createRule is never called');
+}
+
+console.log('\n[#711] one operator map, equal to what Actual accepts');
+{
+  const A = '10000000-0000-4000-8000-00000000000a';
+  const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent';
+  const { CONDITION_FIELD_OPERATORS: MAP } = await import('../../dist/src/lib/schemas/rules.js');
+  check(MAP?.payee_name?.operators?.join() === 'is,isNot,contains,matches,doesNotContain,oneOf,notOneOf,hasTags,hasAnyTag',
+    'the exported map holds payee_name with its nine operators', JSON.stringify(MAP?.payee_name));
+  check(MAP?.category_group?.type === 'id' && MAP.category_group.operators.join() === 'is,isNot,oneOf,notOneOf',
+    'the exported map holds category_group with the four id operators', JSON.stringify(MAP?.category_group));
+  check(MAP && Object.keys(MAP).join(', ') === VALID, 'the map lists the fields in the documented order', MAP && Object.keys(MAP).join(', '));
+
+  // Accepted conditions, each written once and reaching the adapter as sent.
+  for (const [label, c] of [
+    ['account onBudget ""', { field: 'account', op: 'onBudget', value: '' }],
+    ['account offBudget ""', { field: 'account', op: 'offBudget', value: '' }],
+    ['amount isbetween {1000, 5000}', { field: 'amount', op: 'isbetween', value: { num1: 1000, num2: 5000 } }],
+    ['amount isbetween with negative cents', { field: 'amount', op: 'isbetween', value: { num1: -5000, num2: -1000 } }],
+    ['date isapprox "2026-11-01"', { field: 'date', op: 'isapprox', value: '2026-11-01' }],
+    ['imported_payee oneOf an array of text', { field: 'imported_payee', op: 'oneOf', value: ['AMAZON MKTP', 'AMZN'] }],
+    ['payee_name notOneOf an array of text', { field: 'payee_name', op: 'notOneOf', value: ['Amazon'] }],
+    ['payee_name contains "amazon"', { field: 'payee_name', op: 'contains', value: 'amazon' }],
+    ['payee_name hasTags "#trip"', { field: 'payee_name', op: 'hasTags', value: '#trip' }],
+    ['category_group is an id', { field: 'category_group', op: 'is', value: A }],
+    ['category_group oneOf [id]', { field: 'category_group', op: 'oneOf', value: [A] }],
+  ]) {
+    const r = await attempt(rule([c], [okAct]));
+    check(!r.threw && calls.length === 1, `${label} is accepted and written once`, r.message);
+    check(JSON.stringify(calls[0]?.conditions?.[0]) === JSON.stringify(c), '  and the condition reaches the adapter as written', JSON.stringify(calls[0]?.conditions?.[0]));
+  }
+
+  // Refused before the adapter, each with its exact message.
+  for (const [label, c, message] of [
+    ['category onBudget', { field: 'category', op: 'onBudget', value: '' },
+      'Invalid operator "onBudget" for field "category". Field "category" is a id field and only supports: is, isNot, oneOf, notOneOf.'],
+    ['payee_name gte', { field: 'payee_name', op: 'gte', value: 'x' },
+      'Invalid operator "gte" for field "payee_name". Field "payee_name" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf, hasTags, hasAnyTag.'],
+    ['date isbetween', { field: 'date', op: 'isbetween', value: { num1: 1, num2: 2 } },
+      'Invalid operator "isbetween" for field "date". Field "date" is a date field and only supports: is, isapprox, gt, gte, lt, lte.'],
+    ['payee contains (a text operator on an id field)', { field: 'payee', op: 'contains', value: 'amazon' },
+      'Invalid operator "contains" for field "payee". Field "payee" is a id field and only supports: is, isNot, oneOf, notOneOf. To match by name use "payee_name" or "imported_payee".'],
+    ['category matches', { field: 'category', op: 'matches', value: 'Food' },
+      'Invalid operator "matches" for field "category". Field "category" is a id field and only supports: is, isNot, oneOf, notOneOf. This field holds an id, so a text operator never matches in a rule.'],
+    ['category_group doesNotContain', { field: 'category_group', op: 'doesNotContain', value: 'x' },
+      'Invalid operator "doesNotContain" for field "category_group". Field "category_group" is a id field and only supports: is, isNot, oneOf, notOneOf. This field holds an id, so a text operator never matches in a rule.'],
+    ['nosuchfield', { field: 'nosuchfield', op: 'is', value: 'x' }, `Unknown condition field "nosuchfield". Valid fields: ${VALID}.`],
+    ['description', { field: 'description', op: 'contains', value: 'x' }, `Unknown condition field "description". Valid fields: ${VALID}.`],
+    ['saved', { field: 'saved', op: 'is', value: 'x' }, `Unknown condition field "saved". Valid fields: ${VALID}.`],
+    ['toString (a prototype key)', { field: 'toString', op: 'is', value: 'x' }, `Unknown condition field "toString". Valid fields: ${VALID}.`],
+    ['amount isbetween 5000', { field: 'amount', op: 'isbetween', value: 5000 },
+      'Operator "isbetween" requires {num1, num2} in integer cents, for example {"num1": 1000, "num2": 5000} (field: amount).'],
+    ['amount isbetween "1000-5000"', { field: 'amount', op: 'isbetween', value: '1000-5000' },
+      'Operator "isbetween" requires {num1, num2} in integer cents, for example {"num1": 1000, "num2": 5000} (field: amount).'],
+    ['amount gt {num1, num2}', { field: 'amount', op: 'gt', value: { num1: 1000, num2: 5000 } },
+      'Only "isbetween" takes a {num1, num2} value (field: amount, op: gt).'],
+    ['category_group oneOf ["Groceries"]', { field: 'category_group', op: 'oneOf', value: ['Groceries'] },
+      'Field "category_group" expects IDs (UUIDs) with operator "oneOf", but the array holds "Groceries". List the category groups to find the correct UUIDs.'],
+    ['category_group is "Groceries" (text on an id field)', { field: 'category_group', op: 'is', value: 'Groceries' },
+      'Field "category_group" expects an ID (UUID), but got text value "Groceries". Use the category_group UUID from your budget data. List category groups to find the correct UUID.'],
+    ['imported_payee oneOf []', { field: 'imported_payee', op: 'oneOf', value: [] },
+      'Operator "oneOf" requires a non-empty array of values (field: imported_payee). Example: {field: "imported_payee", op: "oneOf", value: ["uuid-1", "uuid-2"]}'],
+  ]) {
+    const r = await attempt(rule([c], [okAct]));
+    check(r.threw && r.message === message, `NEGATIVE: ${label} is refused with the exact message`, r.message);
+    check(calls.length === 0, '  and createRule is never called');
+  }
+  const r = await attempt(rule([{ field: 'description', op: 'contains', value: 'x' }], [okAct]));
+  const listed = r.message.split('Valid fields: ')[1] ?? '';
+  check(listed !== '' && !/\b(description|saved)\b/.test(listed), 'NEGATIVE: the valid-field list omits description and saved', listed);
+
+  // A fractional bound passes Zod (the schema publishes plain numbers) and is refused here.
+  const z = await attempt(rule([{ field: 'amount', op: 'isbetween', value: { num1: 10.5, num2: 20 } }], [okAct]));
+  check(z.threw && z.message === 'Operator "isbetween" requires {num1, num2} in integer cents, for example {"num1": 1000, "num2": 5000} (field: amount).' && calls.length === 0,
+    'NEGATIVE: isbetween with a fractional bound is refused with the exact message, before the adapter', z.message);
 }
 
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }

@@ -209,11 +209,11 @@ await check('#703: update and upsert pass a notes hasTags condition through', as
   await expectCall({ action: 'update', id: U1, conditions: [TAGC] }, 'actual_rules_update', { id: U1, fields: { conditions: [TAGC] } });
   await expectCall({ action: 'upsert', conditions: [TAGC], actions: [ACT] }, 'actual_rules_create_or_update', { conditions: [TAGC], actions: [ACT] });
 });
-await check('#703: the description names the tag operators for notes only', () => {
+await check('#703 #711: the description names the tag operators for notes and payee_name only', () => {
   const d = spec.description;
   assert.ok(d.includes('hasTags') && d.includes('hasAnyTag'));
   const sentence = d.split('. ').find((x) => x.includes('hasTags'));
-  assert.ok(/notes/.test(sentence), sentence);
+  assert.ok(/notes/.test(sentence) && /payee_name/.test(sentence), sentence);
   assert.ok(!/imported_payee|description/.test(sentence), sentence);
 });
 await check('#710: array and boolean condition values pass through every action unchanged', async () => {
@@ -245,6 +245,31 @@ await check('#710: the description names the list and flag forms', () => {
   const d = spec.description;
   assert.ok(/oneOf, notOneOf with an array of ids/.test(d), d);
   assert.ok(/cleared, reconciled, transfer, parent take is with true or false/.test(d), d);
+});
+await check('#711: the description names the new operators and fields, and no longer offers description', () => {
+  const d = spec.description;
+  for (const w of ['payee_name', 'category_group', 'onBudget', 'offBudget', 'isbetween', '{num1, num2}']) assert.ok(d.includes(w), w);
+  assert.ok(/date takes is, isapprox/.test(d), d);
+  assert.ok(!/\bdescription\)/.test(d) && !/\(imported_payee, notes, description\)/.test(d), d);
+});
+await check('#711: a new operator passes the compact schema and the real legacy handler', async () => {
+  let sent;
+  const t = buildCompactTool(spec, { callOperation: async (_n, a) => { sent = a; return legacyCreate.call(a); } }, phrases);
+  const original = (await import('../../dist/src/lib/actual-adapter.js')).default;
+  const savedCreate = original.createRule;
+  original.createRule = async () => 'rule-711';
+  try {
+    const RANGE = { field: 'amount', op: 'isbetween', value: { num1: 1000, num2: 5000 } };
+    const out = await t.call({ action: 'create', conditions: [RANGE], actions: [ACT] });
+    assert.deepStrictEqual(sent.conditions, [RANGE]);
+    assert.strictEqual(out.id, 'rule-711');
+  } finally { original.createRule = savedCreate; }
+});
+await check('#711 NEGATIVE: an unknown condition field is refused by the real legacy handler through the compact tool', async () => {
+  const t = buildCompactTool(spec, { callOperation: async (_n, a) => legacyCreate.call(a) }, phrases);
+  let e;
+  try { await t.call({ action: 'create', conditions: [{ field: 'description', op: 'contains', value: 'x' }], actions: [ACT] }); } catch (x) { e = x; }
+  assert.ok(e && e.message === 'Unknown condition field "description". Valid fields: imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent.', String(e && e.message));
 });
 console.log(`\n[compact-manage-rules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

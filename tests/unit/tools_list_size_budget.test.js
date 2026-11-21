@@ -34,7 +34,11 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   Total raised for #640 (the 10 lowest TDQS descriptions rewritten) from 116,100: the
 //   rewrites added 2,997 bytes net (the ticket caps them at 3,000), so the list is 118,125
 //   bytes, plus about 2%. The heaviest entry is unchanged, so the per-tool ceiling is too.
-const TOTAL_CEILING = 120500;
+//   Total raised for #711 (one condition operator map equal to Actual's: the rewritten operator
+//   help in three rule tools and the described isbetween range in the shared condition schema
+//   of four) from 120,500 by exactly the 1,455 bytes it added (120,492 to 121,947 measured), so
+//   the list is still 8 bytes under it. The heaviest entry is unchanged, so the per-tool ceiling is too.
+const TOTAL_CEILING = 121955;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The

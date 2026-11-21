@@ -15,8 +15,8 @@
  *
  * Adapted for this project's conventions:
  * - No wrapToolCall: uses the direct call() pattern
- * - Shares ConditionSchema with rules_create.ts (src/lib/schemas/rules.ts); ActionSchema and the
- *   FIELD_OPERATORS map are private copies of the same shape (#540 found them identical)
+ * - Shares ConditionSchema and (#711) the operator check assertConditionOperator with
+ *   rules_create.ts (src/lib/schemas/rules.ts); ActionSchema is a private copy of the same shape
  *
  * #376: the read-match-write cycle lives in `adapter.upsertRule` (identity rules in
  * `src/lib/rule-matching.ts`). This tool owns the schema, the operator/UUID validation and
@@ -26,7 +26,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionValue, assertTagOperatorValue } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionValue, assertTagOperatorValue, isTextOnIdField } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one; the action schema stays private (same shape as
 // the shared one) and only borrows the describe text.
@@ -37,22 +37,6 @@ const ActionSchema = z.object({
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
   options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
 });
-
-// Same operator validation map as rules_create.ts
-const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
-  'imported_payee': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
-  'payee': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'account': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'category': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot', 'hasTags', 'hasAnyTag'] },
-  'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
-  'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
-  'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
-  'cleared': { type: 'boolean', operators: ['is'] },
-  'reconciled': { type: 'boolean', operators: ['is'] },
-  'transfer': { type: 'boolean', operators: ['is'] },
-  'parent': { type: 'boolean', operators: ['is'] },
-};
 
 const InputSchema = z.object({
   // #342: see the long note in rules_create.ts. null is Actual's DEFAULT stage;
@@ -86,24 +70,17 @@ Returns: { id, created }, created true for a new rule, false for an updated one.
 
     // ── Validate conditions ──
     for (const condition of input.conditions) {
-      const fieldInfo = Object.hasOwn(FIELD_OPERATORS, condition.field) ? FIELD_OPERATORS[condition.field] : undefined;
-      if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
-        throw new Error(
-          `Invalid operator "${condition.op}" for field "${condition.field}". ` +
-          `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}.`,
-        );
-      }
+      assertConditionOperator(condition);
       assertTagOperatorValue(condition);
       assertConditionValue(condition);
-      if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+      if (!isTextOnIdField(condition)) continue;
+      if (condition.field === 'payee') {
         throw new Error(
           `Field "payee" expects a UUID, but got "${condition.value}". ` +
           `Use "imported_payee" for text matching instead.`,
         );
       }
-      if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
-        throw new Error(`Field "${condition.field}" expects a UUID, but got text "${condition.value}".`);
-      }
+      throw new Error(`Field "${condition.field}" expects a UUID, but got text "${condition.value}".`);
     }
 
     // ── Validate actions ──

@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 // #485: the rule input shape and its imperative checks, shared by actual_rules_create and
 // actual_rules_create_batch so both accept and reject exactly the same rules with the same
-// messages. actual_rules_create_or_update keeps its own copies on purpose (out of scope).
+// messages. #711: the condition operator check (CONDITION_FIELD_OPERATORS and
+// assertConditionOperator) is shared by all four rule write tools.
 
 // #486: describe strings shared by the rule tools. Only the TEXT is shared, never the object
 // schemas: actual_rules_update keeps its own ActionSchema (op required, no default) and
@@ -19,12 +20,67 @@ export const ACTION_DESCRIBE = {
 export const STAGE_DESCRIBE =
   'null is the normal stage (the UI default), "pre" runs before it, "post" after';
 
-// Operators per field type, for the rule tool descriptions that document conditions.
+// Operators per field, for the rule tool descriptions that document conditions. #711: it states
+// CONDITION_FIELD_OPERATORS below; change both together.
 export const CONDITION_OPERATORS_HELP =
-  'Condition operators: imported_payee, notes, description (text): contains, matches, doesNotContain, is, isNot. ' +
-  'payee, account, category (ids): is, isNot, oneOf, notOneOf. amount, date: is, gte, lte, gt, lt; amount also isapprox. ' +
-  'cleared, reconciled, transfer, parent: is true or false. ' +
-  'notes also: hasTags (all), hasAnyTag (any), value "#a #b", whole tags, any case.';
+  'Conditions: imported_payee, payee_name (text): is, isNot, contains, matches, doesNotContain, oneOf, notOneOf (array of text). ' +
+  'notes: is, isNot, contains, matches, doesNotContain. notes and payee_name also hasTags (all), hasAnyTag (any): value "#a #b", whole tags, any case. ' +
+  'payee, account, category, category_group (ids): is, isNot, oneOf, notOneOf (array of ids); account also onBudget, offBudget (value ""). ' +
+  'amount: is, isapprox, isbetween ({num1, num2} cents), gt, gte, lt, lte. date: is, isapprox, gt, gte, lt, lte. ' +
+  'cleared, reconciled, transfer, parent: is true or false.';
+
+/**
+ * #711: the ONE condition operator map, used by every rule write tool. It equals the tables of
+ * the installed @actual-app/api (TYPE_INFO and FIELD_INFO in its dist), which
+ * tests/unit/rules_operator_drift.test.js reads and compares on every unit run, with two
+ * recorded exceptions (kept in that test's EXCEPTIONS table, with the reasons):
+ *   - `saved` is omitted: its type has no operators upstream.
+ *   - contains, matches and doesNotContain stay refused on payee, account, category and
+ *     category_group. Upstream accepts them, but a rule compares the raw id, so such a rule is
+ *     saved and never fires.
+ * A field that is not a key here is refused ("Unknown condition field"); `description` is not
+ * an upstream condition field and was never one.
+ */
+export const CONDITION_FIELD_OPERATORS: Readonly<Record<string, { readonly type: string; readonly operators: readonly string[] }>> = {
+  imported_payee: { type: 'string', operators: ['is', 'isNot', 'contains', 'matches', 'doesNotContain', 'oneOf', 'notOneOf'] },
+  payee: { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
+  payee_name: { type: 'string', operators: ['is', 'isNot', 'contains', 'matches', 'doesNotContain', 'oneOf', 'notOneOf', 'hasTags', 'hasAnyTag'] },
+  account: { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf', 'onBudget', 'offBudget'] },
+  category: { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
+  category_group: { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
+  notes: { type: 'string', operators: ['is', 'isNot', 'contains', 'matches', 'doesNotContain', 'hasTags', 'hasAnyTag'] },
+  amount: { type: 'number', operators: ['is', 'isapprox', 'isbetween', 'gt', 'gte', 'lt', 'lte'] },
+  date: { type: 'date', operators: ['is', 'isapprox', 'gt', 'gte', 'lt', 'lte'] },
+  cleared: { type: 'boolean', operators: ['is'] },
+  reconciled: { type: 'boolean', operators: ['is'] },
+  transfer: { type: 'boolean', operators: ['is'] },
+  parent: { type: 'boolean', operators: ['is'] },
+};
+
+const TEXT_OPERATORS: ReadonlySet<string> = new Set(['contains', 'matches', 'doesNotContain']);
+
+/**
+ * #711: refuse an unknown field, or an operator its field does not take. Call it FIRST, before
+ * assertTagOperatorValue and assertConditionValue, so a wrong operator is named as such.
+ */
+export function assertConditionOperator(condition: { field: string; op: string }): void {
+  const { field, op } = condition;
+  const info = Object.hasOwn(CONDITION_FIELD_OPERATORS, field) ? CONDITION_FIELD_OPERATORS[field] : undefined;
+  if (!info) {
+    throw new Error(`Unknown condition field "${field}". Valid fields: ${Object.keys(CONDITION_FIELD_OPERATORS).join(', ')}.`);
+  }
+  if (info.operators.includes(op)) return;
+  let hint = '';
+  if (info.type === 'id' && TEXT_OPERATORS.has(op)) {
+    hint = field === 'payee'
+      ? ' To match by name use "payee_name" or "imported_payee".'
+      : ' This field holds an id, so a text operator never matches in a rule.';
+  }
+  throw new Error(
+    `Invalid operator "${op}" for field "${field}". ` +
+    `Field "${field}" is a ${info.type} field and only supports: ${info.operators.join(', ')}.${hint}`
+  );
+}
 
 /**
  * #703: `hasTags` and `hasAnyTag` take one string of tags separated by whitespace or "#".
@@ -43,8 +99,28 @@ export function assertTagOperatorValue(condition: { field: string; op: string; v
 
 const ARRAY_OPERATORS: ReadonlySet<string> = new Set(['oneOf', 'notOneOf']);
 const BOOLEAN_FIELDS: ReadonlySet<string> = new Set(['cleared', 'reconciled', 'transfer', 'parent']);
-const ID_FIELDS: ReadonlySet<string> = new Set(['payee', 'account', 'category']);
+const ID_FIELDS: ReadonlySet<string> = new Set(['payee', 'account', 'category', 'category_group']);
 const UUID_SHAPE = /^[0-9a-f-]{36}$/i;
+// #711: account onBudget and offBudget test the account's budget flag and take no id.
+const NO_VALUE_OPERATORS: ReadonlySet<string> = new Set(['onBudget', 'offBudget']);
+const PLURAL: Readonly<Record<string, string>> = { category: 'categories', category_group: 'category groups' };
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+/**
+ * #711: true when an id field (payee, account, category, category_group) carries a single text
+ * value that is not a UUID, on an operator that compares ids. Each tool words its own refusal.
+ */
+export function isTextOnIdField(condition: { field: string; op: string; value?: unknown }): condition is { field: string; op: string; value: string } {
+  return ID_FIELDS.has(condition.field) &&
+    !NO_VALUE_OPERATORS.has(condition.op) &&
+    typeof condition.value === 'string' &&
+    !UUID_SHAPE.test(condition.value);
+}
+
+/** The plural a refusal uses to tell the caller what to list. */
+export const idFieldPlural = (field: string): string => PLURAL[field] ?? `${field}s`;
 
 /**
  * #710: which KIND of value a condition may carry, shared by the three rule validators
@@ -57,6 +133,18 @@ const UUID_SHAPE = /^[0-9a-f-]{36}$/i;
  */
 export function assertConditionValue(condition: { field: string; op: string; value?: unknown }): void {
   const { field, op, value } = condition;
+  // #711: isbetween takes a range object, and only isbetween does.
+  if (op === 'isbetween') {
+    if (!isPlainObject(value) || !Number.isInteger(value.num1) || !Number.isInteger(value.num2)) {
+      throw new Error(
+        `Operator "isbetween" requires {num1, num2} in integer cents, for example {"num1": 1000, "num2": 5000} (field: ${field}).`
+      );
+    }
+    return;
+  }
+  if (isPlainObject(value)) {
+    throw new Error(`Only "isbetween" takes a {num1, num2} value (field: ${field}, op: ${op}).`);
+  }
   if (ARRAY_OPERATORS.has(op)) {
     if (!Array.isArray(value) || value.length === 0) {
       throw new Error(
@@ -79,7 +167,7 @@ export function assertConditionValue(condition: { field: string; op: string; val
       if (bad !== undefined) {
         throw new Error(
           `Field "${field}" expects IDs (UUIDs) with operator "${op}", but the array holds "${String(bad)}". ` +
-          `List the ${field === 'category' ? 'categories' : `${field}s`} to find the correct UUIDs.`
+          `List the ${idFieldPlural(field)} to find the correct UUIDs.`
         );
       }
     }
@@ -105,9 +193,18 @@ export const ConditionSchema = z.object({
   op: z.string().describe('Operator'),
   // #710: one flat union. Which kind a given field and operator takes is enforced by
   // assertConditionValue, not here: a nested schema per operator would publish oneOf.
+  // #711: the object member is the isbetween range. Integer cents are checked in
+  // assertConditionValue, not with .int() here: .int() publishes a minimum and maximum per bound
+  // in every rule tool's schema, which the tools/list size budget does not have room for.
   value: z
-    .union([z.string(), z.number(), z.boolean(), z.array(z.string())])
-    .describe('Value; an array of ids for oneOf, notOneOf'),
+    .union([
+      z.string(),
+      z.number(),
+      z.boolean(),
+      z.array(z.string()),
+      z.object({ num1: z.number().describe('Cents'), num2: z.number().describe('Cents') }),
+    ])
+    .describe('Value; an array for oneOf, notOneOf; {num1, num2} for isbetween'),
   type: z.string().optional().describe('Type hint, e.g. string, number, id'),
 });
 
@@ -118,22 +215,6 @@ export const ActionSchema = z.object({
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
   options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
 });
-
-// Operator validation map
-const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
-  'imported_payee': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
-  'payee': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'account': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'category': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot', 'hasTags', 'hasAnyTag'] },
-  'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
-  'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
-  'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
-  'cleared': { type: 'boolean', operators: ['is'] },
-  'reconciled': { type: 'boolean', operators: ['is'] },
-  'transfer': { type: 'boolean', operators: ['is'] },
-  'parent': { type: 'boolean', operators: ['is'] },
-};
 
 export const RuleItemSchema = z.object({
   // #342: three stages, and the default one is `null`, not a string.
@@ -216,34 +297,23 @@ export function validateRuleInput(input: RuleItem): void {
   
   // Validate field usage to guide users toward correct field selection
   for (const condition of input.conditions) {
-    const fieldInfo = Object.hasOwn(FIELD_OPERATORS, condition.field) ? FIELD_OPERATORS[condition.field] : undefined;
-    
-    // Validate operator is compatible with field type
-    if (fieldInfo && !fieldInfo.operators.includes(condition.op)) {
-      throw new Error(
-        `Invalid operator "${condition.op}" for field "${condition.field}". ` +
-        `Field "${condition.field}" is a ${fieldInfo.type} field and only supports: ${fieldInfo.operators.join(', ')}. ` +
-        `Please use one of these operators instead.`
-      );
-    }
+    assertConditionOperator(condition);
     assertTagOperatorValue(condition);
     assertConditionValue(condition);
     
     // Check if using payee field with text value instead of ID
-    if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
+    if (!isTextOnIdField(condition)) continue;
+    if (condition.field === 'payee') {
       throw new Error(
         `Field "payee" expects a payee ID (UUID), but got text value "${condition.value}". ` +
         `To match payee names with text, use "imported_payee" field instead. ` +
         `Example: {field: "imported_payee", op: "contains", value: "${condition.value}"}`
       );
     }
-    
-    // Similar validation for account and category
-    if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
-      throw new Error(
-        `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
-        `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
-      );
-    }
+    // account, category and (since #711) category_group
+    throw new Error(
+      `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
+      `Use the ${condition.field} UUID from your budget data. List ${idFieldPlural(condition.field)} to find the correct UUID.`
+    );
   }
 }
