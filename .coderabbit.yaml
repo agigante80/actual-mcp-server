@@ -4,7 +4,8 @@
 # those from outside contributors (#693) and, during the #715 trial, the maintainer's
 # own (the maintainer must stay out of ignore_usernames). It never gates a merge: no commit status fails on it and it
 # is in no branch protection. tests/unit/coderabbit_config.test.js pins the keys
-# below that keep it scoped and quiet; change both together.
+# below that keep it scoped and quiet; change both together. One custom pre-merge
+# check runs in warning mode (2026-11-21): a neutral check run, never a gate.
 language: en-US
 tone_instructions: >-
   Be brief and plain. Report concrete defects with the failing input or state.
@@ -62,6 +63,20 @@ reviews:
   auto_approvals:
     enabled: false
     allow_author_approval: false
+  # One custom check, in WARNING mode: a failure is a neutral check run and blocks
+  # nothing. It runs in a read-only sandbox, executes no test and pushes nothing.
+  # The criteria stay in AGENTS.md (one source); the instructions only point there.
+  pre_merge_checks:
+    custom_checks:
+      - name: 'Tests cover the change'
+        mode: warning
+        instructions: >-
+          Read the list "What a review of a change's tests checks" in the Tests
+          section of AGENTS.md and apply its points to this pull request. Pass
+          when the pull request changes no file under src/, or when every point
+          that applies is met. Otherwise fail, and for each unmet point name the
+          point, the changed file and the missing test. Judge only what the diff
+          shows: no test is run here, so never state that tests pass or fail.
   tools:
     # The repository uses neither linter; their defaults would be noise.
     eslint:
