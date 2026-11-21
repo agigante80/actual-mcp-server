@@ -61,7 +61,7 @@ export const manageTags: CompactToolSpec = {
   description:
     'Create, change or delete tags; pick one `action`. Writes. ' +
     'To read tags or find ids use list_entities with type tag. Other fields are refused. ' +
-    'create: tag (the word without "#"); optional color, description. An existing name, even a deleted one, is updated and its id returned. ' +
+    'create: tag (the word without "#"); optional color, description. An existing name returns its id and keeps the color and description not supplied; a deleted name is revived with only the supplied fields. ' +
     'update: id and at least one of tag, color, description; an unknown id is refused. ' +
     'delete: id; DESTRUCTIVE: the tag is soft-deleted and no longer listed; an unknown id is refused. ' +
     'Returns { result: id } (create), { result: { success: true } } (update, delete).',

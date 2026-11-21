@@ -5236,8 +5236,22 @@ export async function getTags(): Promise<any[]> {
 export async function createTag(tag: { tag: string; color?: string; description?: string }): Promise<string> {
   observability.incrementToolCall('actual.tags.create').catch(() => {});
   return queueWriteOperation(async () => {
+    // #700: upstream createTag is an upsert by name that writes colour and description as
+    // null when they are not supplied, so a bare repeat create wiped both. Fill each OMITTED
+    // field (=== undefined; an explicit '' replaces) from the live row with exactly this name
+    // (no trim, no case folding: the tags table is case sensitive). A deleted name is not
+    // listed, so it is revived with only the supplied fields. The listing sits OUTSIDE the
+    // retry around the raw create: a retried create must not list again.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const raw = await withConcurrency(() => retry(() => rawCreateTag(tag) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    const tags = await withConcurrency(() => retry(() => rawGetTags() as Promise<any[]>, { retries: 2, backoffMs: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const existing = (tags as any[]).find((t: any) => t.tag === tag.tag);
+    const payload = { ...tag };
+    if (existing) {
+      if (payload.color === undefined && typeof existing.color === 'string') payload.color = existing.color;
+      if (payload.description === undefined && typeof existing.description === 'string') payload.description = existing.description;
+    }
+    const raw = await withConcurrency(() => retry(() => rawCreateTag(payload) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return normalizeToId(raw);
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }

@@ -2724,14 +2724,53 @@ payee: payee.id,
     expect(tags.filter((t: any) => [hashy, spaced, coloured].includes(t?.tag))).toEqual([]);
   });
 
-  test('manage_tags create - upsert same name returns same id', async ({ mcp, cleanup }) => {
+  test('manage_tags create - a bare repeat create keeps colour and description and returns the same id (#700)', async ({ mcp, cleanup }) => {
     const tag = `mcp-e2e-upsert-tag-${uniqueSuffix()}`;
-    const id1 = await mcp.call('manage_tags', { action: 'create', tag });
-    const id2 = await mcp.call('manage_tags', { action: 'create', tag, color: '#0000ff' });
-    expect(id1).toEqual(id2);
+    const id1 = await mcp.call('manage_tags', { action: 'create', tag, color: '#33aa33', description: 'Food' });
+    expect(typeof id1).toBe('string');
     cleanup.add(CLEANUP_ORDER.tag, `tag ${tag}`, async () => {
       await mcp.call('manage_tags', { action: 'delete', id: id1 });
     });
+    const id2 = await mcp.call('manage_tags', { action: 'create', tag });
+    expect(id2).toEqual(id1);
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    const row = tags.find((t: any) => t?.id === id1);
+    expect(row?.color).toBe('#33aa33');
+    expect(row?.description).toBe('Food');
+  });
+
+  test('manage_tags create - a repeat create with a colour changes only the colour (#700)', async ({ mcp, cleanup }) => {
+    const tag = `mcp-e2e-upsert-colour-tag-${uniqueSuffix()}`;
+    const id1 = await mcp.call('manage_tags', { action: 'create', tag, color: '#33aa33', description: 'Food' });
+    expect(typeof id1).toBe('string');
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${tag}`, async () => {
+      await mcp.call('manage_tags', { action: 'delete', id: id1 });
+    });
+    const id2 = await mcp.call('manage_tags', { action: 'create', tag, color: '#112233' });
+    expect(id2).toEqual(id1);
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    const row = tags.find((t: any) => t?.id === id1);
+    expect(row?.color).toBe('#112233');
+    expect(row?.description).toBe('Food');
+  });
+
+  test('manage_tags create - a deleted name is revived with the same id and no old colour or description (#700)', async ({ mcp, cleanup }) => {
+    const tag = `mcp-e2e-revive-tag-${uniqueSuffix()}`;
+    const id1 = await mcp.call('manage_tags', { action: 'create', tag, color: '#33aa33', description: 'Food' });
+    expect(typeof id1).toBe('string');
+    // Registered before the delete: the revived tag has the same id, and a delete of an id
+    // that is already gone is swallowed so an early failure leaves nothing behind either.
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${tag}`, async () => {
+      await mcp.call('manage_tags', { action: 'delete', id: id1 }).catch(() => undefined);
+    });
+    await mcp.call('manage_tags', { action: 'delete', id: id1 });
+    const id2 = await mcp.call('manage_tags', { action: 'create', tag });
+    expect(id2).toEqual(id1);
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    const row = tags.find((t: any) => t?.id === id1);
+    expect(row).toBeTruthy();
+    expect(row?.color ?? null).toBeNull();
+    expect(row?.description ?? null).toBeNull();
   });
 
   test('manage_tags update - should update a tag', async ({ mcp, cleanup }) => {

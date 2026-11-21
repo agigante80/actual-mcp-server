@@ -8,8 +8,8 @@ export default createTool({
   description:
     'Create a new tag in Actual Budget. The "tag" field is the raw word WITHOUT a leading "#" character ' +
     '(e.g. use "groceries", not "#groceries"). ' +
-    'IMPORTANT: this operation is an upsert on the tag word. If a tag with the same name already exists ' +
-    '(including previously deleted ones), the existing tag is updated and its id is returned. ' +
+    'This is an upsert on the tag word: an existing tag returns its id and keeps the color and description ' +
+    'not supplied; a deleted name is revived with only the supplied fields. ' +
     'A name with "#" or whitespace, or a color that is not 6 digit hex, is refused.',
   schema: z.object({
     tag: CommonSchemas.tagName,
