@@ -29,6 +29,7 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 ## Explanation: understand how it works
 
 - [explanation/architecture.md](explanation/architecture.md): components, transports and data flow.
+- [architecture/README.md](architecture/README.md): architecture decision records (ADRs) and their index.
 - [explanation/security-and-privacy.md](explanation/security-and-privacy.md): auth model, threat model and hardening.
 - [explanation/compact-tool-surface.md](explanation/compact-tool-surface.md): the 15-tool compact surface: decision record, naming rules and the mapping of all 85 tools.
 
