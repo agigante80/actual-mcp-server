@@ -1,6 +1,6 @@
 {
   "compact": {
-    "bytes": 42315,
+    "bytes": 42458,
     "label": "Compact surface (default)",
     "tools": 15
   },
@@ -10,12 +10,12 @@
     "tools": 6
   },
   "compact-read-only": {
-    "bytes": 17232,
+    "bytes": 17337,
     "label": "Compact, `MCP_READ_ONLY=true`",
     "tools": 6
   },
   "legacy": {
-    "bytes": 120493,
+    "bytes": 120406,
     "label": "`MCP_TOOL_SURFACE=legacy`",
     "tools": 85
   },
@@ -25,7 +25,7 @@
     "tools": 12
   },
   "legacy-read-only": {
-    "bytes": 44657,
+    "bytes": 44570,
     "label": "Legacy, `MCP_READ_ONLY=true`",
     "tools": 37
   }

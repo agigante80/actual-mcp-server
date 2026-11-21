@@ -37,7 +37,9 @@ const count = z.number().int().min(1).max(SCHEDULE_DATES_CAP).describe(`How many
 const id = z.string().min(1).describe('Required for type note: an account, category, category group or payee UUID, or budget-YYYY-MM.');
 const scope = z
   .enum(['configured', 'server'])
-  .describe('configured (default): ' + (showDiscoveredBudgets ? 'available budgets, including permitted shared files in discovery mode.' : 'budget files this server is configured with.') + ' server: files on the Actual server. Only for type budget_file.');
+  .describe('For budget_file only. configured (default): ' +
+    (showDiscoveredBudgets ? 'permitted configured and shared files.' : 'configured files.') +
+    ' Locked rows are encrypted, lack a server key and cannot be switched to. server: Actual server files.');
 
 const none = z.object({});
 const searchFields = z.object({ query, match_type: matchType.optional(), limit: limit.optional() });
@@ -76,7 +78,7 @@ export const listEntities: CompactToolSpec = {
     'rule: payee_id to list that payee\'s rules.\n' +
     'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
-    'budget_file: scope configured (default) or server.\n' +
+    'budget_file: scope configured (default) or server. Locked rows are encrypted, lack a server key and cannot be switched to.\n' +
     'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
     'Returns the entity list for the type; a query returns { matches, count }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
   selector: 'type',

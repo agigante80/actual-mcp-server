@@ -118,7 +118,7 @@ let discoveryIds = ['shared', 'private'];
 if (MODE === 'discovery') {
   const adapter = adapterMod.default;
   const listing = 'listRemoteBudgetFiles' in adapter ? 'listRemoteBudgetFiles' : 'getBudgets';
-  adapter[listing] = async () => discoveryIds.map(groupId => ({ groupId, name: groupId, usersWithAccess: [{ userName: 'sub-bob-577' }] }));
+  adapter[listing] = async () => discoveryIds.map(groupId => ({ groupId, name: groupId, encryptKeyId: groupId === 'alpha-sync' ? 'fixture-key-id' : null, usersWithAccess: [{ userName: 'sub-bob-577' }] }));
 }
 const { startHttpServer } = await import('./dist/src/server/httpServer.js');
 const mcp = { executeTool: async () => ({ ok: true }) };
@@ -295,6 +295,11 @@ if (MODE === 'discovery') {
     afterShare: requestContext.run({ ...retryContext(['private', 'shared']), sessionId: pinned.sid },
       () => adapterMod.initialBudgetForSession(pinned.sid).syncId) };
   await reset();
+  discoveryIds = ['alpha-sync'];
+  _resetDynamicAclCache();
+  const lockedDefault = await open('bob');
+  results.lockedDefault = { status: lockedDefault.status, pending: pending(), logins };
+  await reset();
   discoveryIds = ['shared', 'private'];
   _resetDynamicAclCache();
   const first = await open('bob');
@@ -440,6 +445,9 @@ if (o) {
 }
 const discovery = runs.discovery?.r;
 if (discovery) {
+  check('a listed locked default initializes without a connection attempt', () => {
+    assert.deepStrictEqual(discovery.lockedDefault, { status: 200, pending: 1, logins: 0 });
+  });
   check('failed discovered open keeps an unpinned session and takes back its slot', () => {
     assert.deepStrictEqual(discovery.retry, { status: 200, registered: true, pending: 1,
       target: 'shared', next: 'shared', afterShare: 'alpha-sync', second: 503 });
