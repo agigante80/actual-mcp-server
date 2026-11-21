@@ -129,6 +129,12 @@ Makes the compact surface the default (a breaking change for clients that call `
 
 Outcome (2026-11-13): done. All twelve planned tickets (#660 to #669, #680, #681) shipped and were released together as v0.30.0 (a minor bump with a BREAKING section in the release notes: the default surface is now `compact`, and `legacy` and `all` stay selectable). The order differed from the plan: the prompts landed before the default flip, in the same release. The first two release-gate runs failed because the live suite's support code and the step 9 regression scripts still called `actual_*` names, which the compact default refuses; both were migrated and a unit guard now covers those files. The final HEAD had a green Docker E2E full run and a green full dual-transport run with zero residue. Nothing was moved out of the phase. Removing the legacy surface stays in Backlog (#682).
 
+## Phase: Tag correctness
+state: open
+plan: docs/plans/tag-correctness.md
+
+A live review of the tag tools on 2026-11-21 found that they work but describe something Actual does not do. A tag is the `#word` in a transaction's notes; the tags table only stores its colour and description. The tools accept names that can never match a note (#699), wipe a tag's colour and description on a repeated create (#700), leak a raw upstream error on a duplicate rename (#701), and never tell the model how a transaction gets a tag (#702). #703 adds the two tag operators upstream rules support, if the API accepts them. It comes before the dashboard work (#704 to #708, Backlog) because that work merges the tag tool into another one and should move correct behaviour, and because it does not wait on an upstream release.
+
 ## Phase: Backlog
 state: backlog
 
