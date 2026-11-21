@@ -35,7 +35,7 @@
  */
 const REFUSAL_BRAND = Symbol.for('actual-mcp-server.PreflightRefusal');
 
-export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict';
+export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict' | 'locked';
 
 /**
  * A pre-flight refusal: the operation was NOT attempted, because the request named
@@ -52,6 +52,19 @@ export class PreflightRefusal extends Error {
     // Restores the prototype chain when this is compiled down for an older target, so
     // `instanceof` keeps working on a subclass.
     Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+const lockedKeyRemedy = 'An operator can add or complete a BUDGET_n_* entry with this Sync ID and BUDGET_n_ENCRYPTION_PASSWORD, if every user the file is shared with may read it through this server.';
+
+/** Actual grants the file, but the server has no key to open it. */
+export class LockedRefusal extends PreflightRefusal {
+  static readonly hint = 'End-to-end encrypted and this server has no key for it. ' + lockedKeyRemedy;
+
+  constructor(syncId: string, count = 1) {
+    const message = `Budget ${syncId} is end-to-end encrypted and this server has no key for it. ${lockedKeyRemedy} Nothing was opened.`;
+    const suffix = count > 1 ? ` ${count - 1} more locked budgets are listed by actual_budgets_list_available.` : '';
+    super(message + suffix, 'locked');
   }
 }
 

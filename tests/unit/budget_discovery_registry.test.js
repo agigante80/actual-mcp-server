@@ -44,7 +44,7 @@ async function list(store) {
 }
 const alice = await ctx('alice');
 const bob = await ctx('bob');
-assert.deepEqual((await list(alice)).map(b => [b.syncId, b.name]), [['configured', 'Home'], ['shared', 'Home']]);
+assert.deepEqual((await list(alice)).map(b => [b.syncId, b.name]), [['configured', 'Home'], ['shared', 'Home'], ['locked', 'Locked']]);
 assert.deepEqual((await list(bob)).map(b => b.name), ['Home', 'x'.repeat(100)]);
 assert.deepEqual(await list(await ctx('mallory')), []);
 assert.deepEqual(await list(await ctx(null)), []);
@@ -58,7 +58,8 @@ await assert.rejects(requestContext.run(await ctx('alice'), () => adapter.switch
   e => isPreflightRefusal(e) && /shared-2, shared-3/.test(e.message));
 rows.splice(-2);
 _resetDynamicAclCache();
-await assert.rejects(requestContext.run(alice, () => adapter.switchBudget('locked')), isPreflightRefusal);
+await assert.rejects(requestContext.run(alice, () => adapter.switchBudget('locked')),
+  e => isPreflightRefusal(e) && e.refusalKind === 'locked');
 connectionPool.connections.set(bob.sessionId, {
   sessionId: bob.sessionId, serverUrl: process.env.ACTUAL_SERVER_URL, password: 'fixture',
   initialized: true, syncId: 'private', lastActivity: Date.now(),
@@ -75,7 +76,7 @@ assert.deepEqual(await Promise.all([queuedBudget(bob), queuedBudget(alice)]), ['
 shared.encryptKeyId = 'new-key';
 _resetDynamicAclCache();
 const encrypted = await ctx('bob');
-await assert.rejects(requestContext.run(encrypted, () => adapter.getAccounts()), /Budget ACL/);
+await assert.rejects(requestContext.run(encrypted, () => adapter.getAccounts()), { refusalKind: 'locked', message: /^Budget shared / });
 shared.encryptKeyId = null;
 shared.usersWithAccess = [{ userName: 'alice' }];
 _resetDynamicAclCache();
@@ -83,7 +84,7 @@ const revoked = await ctx('bob');
 await assert.rejects(requestContext.run(revoked, () => adapter.getAccounts()), /Budget ACL/);
 await assert.rejects(requestContext.run(revoked, () => adapter.switchBudget('shared')), isPreflightRefusal);
 assert.deepEqual((await list(revoked)).map(b => b.syncId), ['private']);
-assert.deepEqual((await list(await ctx('alice'))).map(b => b.syncId), ['configured', 'shared']);
+assert.deepEqual((await list(await ctx('alice'))).map(b => b.syncId), ['configured', 'shared', 'locked']);
 // A copied budget can keep its Sync ID on a second configured server.
 const copied = file('copied', 'Original', ['carol']);
 rows.push(copied);
@@ -163,8 +164,8 @@ assert.equal(await starts('erin'), 'Original');
 assert.equal(await starts('gina'), 'Original');
 _resetDynamicAclCache();
 const frank = { ...(await ctx('frank')), sessionId: 'session-frank' };
-assert.deepEqual(await list(frank), []);
-await assert.rejects(requestContext.run(frank, () => adapter.getAccounts()), /Budget ACL/);
+assert.deepEqual((await list(frank)).map(b => [b.syncId, b.locked]), [['configured', true]]);
+await assert.rejects(requestContext.run(frank, () => adapter.getAccounts()), { refusalKind: 'locked', message: /^Budget configured / });
 home.encryptKeyId = null;
 // The listing follows the allow-list of the request, not the file metadata alone.
 assert.deepEqual(await list({ ...alice, allowedBudgets: [] }), []);

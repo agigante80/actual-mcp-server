@@ -18,7 +18,7 @@ import { getLocalIp } from '../utils.js';
 import actualToolsManager from '../actualToolsManager.js';
 import { getConnectionState, connectToActualForSession, shutdownActualForSession, shutdownActual, admitSession, releaseAdmission, isConnectionPoolEnabled } from '../actualConnection.js';
 import { connectionPool, type EvictionReason } from '../lib/ActualConnectionPool.js';
-import { clearSessionBudgetState, setSessionLivenessCheck, initialBudgetForSession, pinSessionBudget, isConfiguredBudget, getBudgetRegistry, awaitWritesIdle } from '../lib/actual-adapter.js';
+import { clearSessionBudgetState, setSessionLivenessCheck, initialBudgetForSession, pinSessionBudget, isConfiguredBudget, isSelectableBudget, getBudgetRegistry, awaitWritesIdle } from '../lib/actual-adapter.js';
 import { errorLogFields } from '../lib/errors.js';
 import observability from '../observability.js';
 import config from '../config.js';
@@ -764,8 +764,7 @@ export async function startHttpServer(
                 // another server), not on the default one.
                 const budget = initialBudgetForSession(sid);
                 const discovery = requestContext.getStore()?.discoveredBudgets !== undefined && config.AUTH_BUDGET_DISCOVERY;
-                const selectable = !discovery || getBudgetRegistry().some(entry =>
-                  entry.syncId === budget.syncId && entry.serverUrl === logSafeOrigin(budget.serverUrl) && entry.name === budget.name);
+                const selectable = !discovery || isSelectableBudget(budget);
                 let opened = false;
                 if (selectable) {
                   try {

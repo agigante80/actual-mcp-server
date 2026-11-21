@@ -77,7 +77,7 @@ import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
 import { markInitFailure } from './init-failure.js';
-import { ConflictRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
+import { ConflictRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 import { amountOpMismatch } from './schemas/schedule-amount.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
@@ -201,7 +201,37 @@ function requestBudgets(): BudgetConfig[] {
   return selectable;
 }
 
+export function isSelectableBudget(budget: BudgetConfig): boolean {
+  return requestBudgets().some(entry => entry.syncId === budget.syncId && entry.name === budget.name);
+}
+
+type BudgetFile = Pick<BudgetConfig, 'syncId' | 'name' | 'serverUrl'>;
+
+/** Listing and refusals use this grant-filtered view. Only requestBudgets() determines what can open. */
+function lockedBudgets(): BudgetFile[] {
+  const store = requestContext.getStore();
+  if (!config.AUTH_BUDGET_DISCOVERY || !store?.discoveredBudgets) return [];
+  const allowed = new Set(store.allowedBudgets);
+  const entries = [...budgetRegistry.values()];
+  const keyed = new Set(entries.filter(entry => entry.encryptionPassword).map(entry => entry.syncId));
+  return store.discoveredBudgets
+    .filter(file => file.encrypted && allowed.has(file.syncId) && !keyed.has(file.syncId))
+    .map(file => {
+      const configured = entries.find(entry => entry.syncId === file.syncId);
+      return { syncId: file.syncId, name: configured?.name ?? file.name,
+        serverUrl: configured?.serverUrl ?? config.ACTUAL_SERVER_URL };
+    });
+}
+
 function activeBudgetRefusal(): Error {
+  const locked = lockedBudgets();
+  if (locked.length) {
+    const sessionId = requestContext.getStore()?.sessionId;
+    const pin = sessionId ? sessionBudgetState.get(sessionId) : undefined;
+    const pinnedId = typeof pin === 'string' ? budgetRegistry.get(pin)?.syncId : pin?.syncId;
+    if (pinnedId && locked.some(file => file.syncId === pinnedId)) return new LockedRefusal(pinnedId);
+    if (requestBudgets().length === 0) return new LockedRefusal(locked[0].syncId, locked.length);
+  }
   return new Error("Budget ACL: the active budget is not in this session's allowedBudgets. " +
     'Call actual_budgets_list_available and switch to a permitted budget.');
 }
@@ -4854,9 +4884,16 @@ export async function getBudgets(): Promise<unknown[]> {
     // use. A file with no groupId was never uploaded and belongs to no list.
     const allowed = restrictedAllowedBudgets('actual_budgets_get_all');
     if (!allowed) return files;
-    return files.filter(f => {
+    const permitted = files.filter(f => {
       const groupId = (f as { groupId?: unknown } | null)?.groupId;
       return typeof groupId === 'string' && allowed.includes(groupId);
+    });
+    if (!config.AUTH_BUDGET_DISCOVERY || !requestContext.getStore()?.discoveredBudgets) return permitted;
+    // The SDK server inventory also carries the raw key ID. Discovery exposes only the flag.
+    return permitted.map(file => {
+      if (!('encryptKeyId' in file)) return file;
+      const { encryptKeyId, ...rest } = file;
+      return { ...rest, hasEncryption: Boolean(encryptKeyId) };
     });
   });
 }
@@ -4935,7 +4972,14 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
       `Add BUDGET_n_NAME/SYNC_ID/SERVER_URL vars to configure additional budgets.`,
     );
   };
-  if (!found) throw notFound();
+  if (!found) {
+    const locked = lockedBudgets();
+    const byId = locked.find(file => file.syncId === name);
+    if (byId) throw new LockedRefusal(byId.syncId);
+    const byName = locked.filter(file => file.name.toLowerCase() === nameKey);
+    if (byName.length === 1) throw new LockedRefusal(byName[0].syncId);
+    throw notFound();
+  }
   // #628: tool results show the server origin only, never a userinfo credential, path or query.
   // `found` keeps the raw URL, which the login below still needs.
   const shownServerUrl = logSafeOrigin(found.serverUrl);
@@ -5123,20 +5167,20 @@ export function clearSessionBudgetState(sessionId: string): void {
   sessionBudgetState.delete(sessionId);
 }
 
-/**
- * Return the configured budgets this caller may use (for actual_budgets_list_available).
- * A restricted caller sees only its permitted entries (#570); the startup registry log
- * reads the Map directly and is not filtered.
- */
-export function getBudgetRegistry(): Array<{ name: string; syncId: string; serverUrl: string; hasEncryption: boolean }> {
+// #628: share the origin only. Connection paths keep the full URL and credentials.
+function displayedBudget(file: BudgetFile): BudgetFile {
+  return { name: file.name, syncId: file.syncId, serverUrl: logSafeOrigin(file.serverUrl) };
+}
+
+/** List usable budgets first, then granted encrypted files that need a server key. */
+export function getBudgetRegistry() {
   const allowed = restrictedAllowedBudgets('actual_budgets_list_available');
-  return requestBudgets().filter(b => !allowed || allowed.includes(b.syncId)).map(b => ({
-    name: b.name,
-    syncId: b.syncId,
-    // #628: origin only; the registry entry itself keeps the raw URL for the login.
-    serverUrl: logSafeOrigin(b.serverUrl),
-    hasEncryption: !!b.encryptionPassword,
+  const usable = requestBudgets().filter(b => !allowed || allowed.includes(b.syncId)).map(b => ({
+    ...displayedBudget(b), hasEncryption: !!b.encryptionPassword,
   }));
+  return [...usable, ...lockedBudgets().map(file => ({
+    ...displayedBudget(file), hasEncryption: true, locked: true as const, hint: LockedRefusal.hint,
+  }))];
 }
 
 /**

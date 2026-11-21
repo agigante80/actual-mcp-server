@@ -8,9 +8,16 @@ With `AUTH_PROVIDER=oidc` and `AUTH_BUDGET_ACL_SOURCE=actual`, set
 `AUTH_BUDGET_DISCOVERY=true` to list budgets shared with each user on
 `ACTUAL_SERVER_URL`. Keep the configured default Sync ID. A static entry
 takes precedence for the same Sync ID, including its name and encryption
-password. An encrypted remote file needs a matching static entry with its key;
-without one it is not listed and cannot be selected (#690 tracks keys for
-discovered files).
+password. A granted encrypted file with no configured key appears after the usable
+budgets with `locked: true`. Listing it does not open it. A matching keyless static entry supplies its name and server origin.
+When several entries share that Sync ID, the first in registry order wins.
+Without a matching entry, the row uses the discovered name and the configured
+Actual server origin. Switching to the file explains which setting is missing.
+
+An operator can add or complete a `BUDGET_n_*` entry for that Sync ID with
+`BUDGET_n_ENCRYPTION_PASSWORD`. Configure it only if every user Actual shares
+the file with may read it through this server, including users who were never
+given the encryption password.
 
 Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
 `action: "switch"` and the name or Sync ID. A configured name always selects the
