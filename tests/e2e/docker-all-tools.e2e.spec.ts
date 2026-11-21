@@ -2937,6 +2937,57 @@ payee: payee.id,
     expect((await notesSearch(mcp, account.id, `#${renamed}`)).length).toBe(0);
   });
 
+  // ==================== rules-tags: tag operators in rule conditions (#703) ====================
+  // hasTags (all) and hasAnyTag (any) are accepted on `notes` only and match whole tags.
+  const createTagRule = async (mcp: any, cleanup: any, op: string, value: string, categoryId: string) => {
+    const raw = await mcp.call('manage_rules', {
+      action: 'create',
+      conditions: [{ field: 'notes', op, value }],
+      actions: [{ op: 'set', field: 'category', value: categoryId }],
+    });
+    const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+    cleanup.add(CLEANUP_ORDER.rule, `rule ${op} ${value}`, async () => { await mcp.call('manage_rules', { action: 'delete', id }); });
+    return id;
+  };
+  const listedRule = async (mcp: any, id: string) => {
+    const data = await mcp.call('list_entities', { type: 'rule' });
+    const rules = (Array.isArray(data) ? data : (data?.rules ?? [])) as any[];
+    return rules.find((r: any) => r?.id === id);
+  };
+
+  test('rules-tags - a hasTags and a hasAnyTag condition on notes are stored as written', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const word = `rt${uniqueSuffix()}`;
+    const allId = await createTagRule(mcp, cleanup, 'hasTags', `#${word}`, category.id);
+    const anyId = await createTagRule(mcp, cleanup, 'hasAnyTag', `#${word}a #${word}b`, category.id);
+    const all = await listedRule(mcp, allId);
+    expect(all?.conditions?.[0]).toMatchObject({ field: 'notes', op: 'hasTags', value: `#${word}` });
+    const any = await listedRule(mcp, anyId);
+    expect(any?.conditions?.[0]).toMatchObject({ field: 'notes', op: 'hasAnyTag', value: `#${word}a #${word}b` });
+  });
+
+  test('rules-tags - a hasTags rule applies to the exact tag only, not to a longer tag', async ({ mcp, makeAccount, makeCategory, cleanup }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const word = `rt${uniqueSuffix()}`;
+    await createTagRule(mcp, cleanup, 'hasTags', `#${word}`, category.id);
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1700, notes: `trip #${word}` });
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1800, notes: `#${word}od` });
+    const rows = await notesSearch(mcp, account.id, `#${word}`);
+    expect(rows.length).toBe(2);
+    expect(rows.find((t: any) => t.notes === `trip #${word}`)?.category).toBe(category.id);
+    expect(rows.find((t: any) => t.notes === `#${word}od`)?.category ?? null).toBeNull();
+  });
+
+  test('rules-tags - a tag operator on another field, or with no tag in its value, is refused', async ({ mcp, makeCategory }) => {
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'imported_payee', op: 'hasTags', value: '#trip' }], actions }))
+      .rejects.toThrow(/Invalid operator "hasTags" for field "imported_payee"/);
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'notes', op: 'hasTags', value: '#' }], actions }))
+      .rejects.toThrow(/needs at least one tag in its value/);
+  });
+
   // ==================== PREFERENCES (1 tool) ====================
   test('get_context preferences - should read synced preferences', async ({ mcp }) => {
     const data = await mcp.call('get_context', { topic: 'preferences' });

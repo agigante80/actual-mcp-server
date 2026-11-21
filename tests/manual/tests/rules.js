@@ -147,6 +147,22 @@ export async function rulesTests(client, context) {
     }
   }
 
+  // #703: tag operators on notes. Created and deleted here, so nothing is left behind.
+  {
+    const tagRule = await callTool("manage_rules", {
+      action: "create",
+      conditions: [{ field: "notes", op: "hasAnyTag", value: "#mcp-rule-tag-a #mcp-rule-tag-b" }],
+      actions: [{ op: "set", field: "category", value: context.categoryId }],
+    });
+    const tagRuleId = tagRule.id || tagRule.result || tagRule;
+    const rd = await callTool("list_entities", { type: "rule" });
+    const allRules = rd.rules || rd.result || rd || [];
+    const found = Array.isArray(allRules) ? allRules.find(r => r.id === tagRuleId) : null;
+    if (found?.conditions?.[0]?.op === "hasAnyTag") console.log("  ok rules_create [notes hasAnyTag stored]");
+    else fail(`rules_create hasAnyTag: rule not listed with its operator (id: ${tagRuleId})`);
+    await callTool("manage_rules", { action: "delete", id: tagRuleId });
+  }
+
   // Create rule with explicit 'op'
   console.log("\nCreating test rule...");
   const newRule = await callTool("manage_rules", {

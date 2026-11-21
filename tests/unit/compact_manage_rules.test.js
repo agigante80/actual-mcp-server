@@ -203,5 +203,17 @@ await check('compactLegacyNames covers the five targets, all write-capable', () 
 await check('NEGATIVE: update with only id is refused and calls nothing', () =>
   refused({ action: 'update', id: U1 }, /update needs at least one of: stage, conditions_op, conditions, actions/));
 
+await check('#703: update and upsert pass a notes hasTags condition through', async () => {
+  const TAGC = { field: 'notes', op: 'hasTags', value: '#trip' };
+  await expectCall({ action: 'update', id: U1, conditions: [TAGC] }, 'actual_rules_update', { id: U1, fields: { conditions: [TAGC] } });
+  await expectCall({ action: 'upsert', conditions: [TAGC], actions: [ACT] }, 'actual_rules_create_or_update', { conditions: [TAGC], actions: [ACT] });
+});
+await check('#703: the description names the tag operators for notes only', () => {
+  const d = spec.description;
+  assert.ok(d.includes('hasTags') && d.includes('hasAnyTag'));
+  const sentence = d.split('. ').find((x) => x.includes('hasTags'));
+  assert.ok(/notes/.test(sentence), sentence);
+  assert.ok(!/imported_payee|description/.test(sentence), sentence);
+});
 console.log(`\n[compact-manage-rules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

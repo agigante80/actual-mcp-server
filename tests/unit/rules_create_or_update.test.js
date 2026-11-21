@@ -142,6 +142,26 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(!bad.success && bad.error.issues[0].code === 'invalid_value' && bad.error.issues[0].path.join('.') === 'stage', 'stage "default" is a Zod invalid_value at stage');
   }
 
+  console.log('\n[#703] rules_create_or_update: tag operators on notes');
+  {
+    reset();
+    const out = await tool.call({ ...validInput, conditions: [{ field: 'notes', op: 'hasTags', value: '#trip' }] });
+    check(out?.created === true && createCalls === 1, 'notes hasTags "#trip" is accepted on the upsert path');
+
+    reset();
+    let threw = null;
+    try { await tool.call({ ...validInput, conditions: [{ field: 'notes', op: 'hasTags', value: '' }] }); } catch (e) { threw = e; }
+    check(threw?.message === 'Operator "hasTags" needs at least one tag in its value, for example "#trip" (field: notes). Nothing was written.', 'NEGATIVE: an empty tag value is refused with the exact message', threw?.message);
+    check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
+
+    reset();
+    threw = null;
+    try { await tool.call({ ...validInput, conditions: [{ field: 'imported_payee', op: 'hasTags', value: '#trip' }] }); } catch (e) { threw = e; }
+    check(threw?.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: contains, matches, doesNotContain, is, isNot.',
+      'NEGATIVE: imported_payee hasTags is refused (no trailing sentence on this path)', threw?.message);
+    check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
+  }
+
   console.log('');
   if (failures === 0) console.log('[#142] All rules_create_or_update tests passed ✓');
   else { console.error(`[#142] ${failures} test(s) FAILED`); process.exit(2); }

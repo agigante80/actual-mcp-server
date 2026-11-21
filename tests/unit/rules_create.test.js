@@ -127,6 +127,36 @@ console.log('\n[#486] rules_create: still-rejected probes keep their exact error
     'amount with "contains" and a numeric value is an Invalid operator error', r.message);
 }
 
+console.log('\n[#703] rules_create: tag operators on notes');
+{
+  let r = await attempt(rule([{ field: 'notes', op: 'hasTags', value: '#trip' }], [okAct]));
+  check(!r.threw && calls.length === 1, 'notes hasTags "#trip" is accepted and written once', r.message);
+  check(calls[0]?.conditions?.[0]?.op === 'hasTags' && calls[0]?.conditions?.[0]?.value === '#trip', '  and the condition reaches the adapter unchanged');
+  r = await attempt(rule([{ field: 'notes', op: 'hasAnyTag', value: '#trip #food' }], [okAct]));
+  check(!r.threw && calls.length === 1, 'notes hasAnyTag "#trip #food" is accepted', r.message);
+
+  r = await attempt(rule([{ field: 'imported_payee', op: 'hasTags', value: '#trip' }], [okAct]));
+  check(r.threw && r.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: contains, matches, doesNotContain, is, isNot. Please use one of these operators instead.',
+    'NEGATIVE: imported_payee hasTags is an Invalid operator error with the exact message', r.message);
+  check(calls.length === 0, '  and createRule is never called');
+  r = await attempt(rule([{ field: 'imported_payee', op: 'hasTags', value: '' }], [okAct]));
+  check(r.threw && r.message.startsWith('Invalid operator "hasTags" for field "imported_payee".'), 'NEGATIVE: the operator check runs before the tag value check', r.message);
+  r = await attempt(rule([{ field: 'description', op: 'hasAnyTag', value: '#trip' }], [okAct]));
+  check(r.threw && r.message.startsWith('Invalid operator "hasAnyTag" for field "description".'), 'NEGATIVE: description hasAnyTag is refused', r.message);
+
+  for (const [label, value] of [['""', ''], ['"#"', '#'], ['"   "', '   '], ['"##"', '##'], ['a number', 5]]) {
+    r = await attempt(rule([{ field: 'notes', op: 'hasTags', value }], [okAct]));
+    check(r.threw && r.message === 'Operator "hasTags" needs at least one tag in its value, for example "#trip" (field: notes). Nothing was written.',
+      `NEGATIVE: notes hasTags with ${label} is refused with the exact message`, r.message);
+    check(calls.length === 0, '  and createRule is never called');
+  }
+  r = await attempt(rule([{ field: 'notes', op: 'hasAnyTag', value: ' # ' }], [okAct]));
+  check(r.threw && r.message === 'Operator "hasAnyTag" needs at least one tag in its value, for example "#trip" (field: notes). Nothing was written.',
+    'NEGATIVE: notes hasAnyTag with no tag names its own operator', r.message);
+  r = await attempt(rule([{ field: 'notes', op: 'contains', value: '#' }], [okAct]));
+  check(!r.threw, 'other operators keep accepting "#" as a value', r.message);
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_create characterisation checks passed');
 process.exit(0);

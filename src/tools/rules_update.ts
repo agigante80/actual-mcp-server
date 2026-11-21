@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertTagOperatorValue } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one. The action schema stays private because `op`
 // is REQUIRED here (the shared one defaults it to "set"); only the describe text is shared.
@@ -20,7 +20,7 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
   'payee': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
   'account': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
   'category': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
+  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot', 'hasTags', 'hasAnyTag'] },
   'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
   'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
   'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
@@ -47,7 +47,7 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_rules_update',
-  description: `Update an existing budget rule by ID. Only provide the fields you want to change; do not repeat the rule ID inside fields.
+  description: `Update an existing budget rule by ID. Only send the fields to change; do not repeat the rule ID inside fields.
 
 ${CONDITION_OPERATORS_HELP}
 Stage: omit it to leave the rule where it is, pass null for the normal stage, or 'pre' / 'post'. Do NOT pass "default"; Actual rejects it.`,
@@ -112,6 +112,7 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
             `Please use one of these operators instead.`
           );
         }
+        assertTagOperatorValue(condition);
         
         // Check if using payee field with text value instead of ID
         if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {

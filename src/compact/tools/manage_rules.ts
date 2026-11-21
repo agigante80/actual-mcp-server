@@ -95,7 +95,7 @@ export const manageRules: CompactToolSpec = {
   description:
     'Create, upsert, change or delete budget rules; pick one `action`. Writes. ' +
     'To read rules use list_entities with type rule. Other fields are refused. ' +
-    'Conditions match by field and op: text fields (imported_payee, notes, description) take contains, matches, doesNotContain, is, isNot; id fields (payee, account, category) take is, isNot; amount takes is, gte, lte, gt, lt, isapprox; date takes is, gte, lte, gt, lt. Ids must exist or the call is refused and nothing is written (ids in link-schedule actions are not checked). ' +
+    'Conditions match by field and op: text fields (imported_payee, notes, description) take contains, matches, doesNotContain, is, isNot; id fields (payee, account, category) take is, isNot; amount takes is, gte, lte, gt, lt, isapprox; date takes is, gte, lte, gt, lt. notes also takes hasTags (all) and hasAnyTag (any): value "#a #b", whole tags, any case. Ids must exist or the call is refused and nothing is written (ids in link-schedule actions are not checked). ' +
     'create: conditions, actions; optional stage, conditions_op. ' +
     'create_batch: rules (1 to 50, items with camelCase keys); NOT atomic, no rollback: a failing rule is reported in failed and the rest are still attempted; if the call itself fails, read the rules back before retrying. ' +
     'upsert: conditions, actions; optional stage, conditions_op; a rule with the same conditions and conditions_op (any order) has its actions replaced and its stage replaced only if sent, else a rule is created. ' +

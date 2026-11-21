@@ -1,6 +1,6 @@
 ─────────────────────────────────────────────────────────────────────────────────
 PROMPT 2 OF 3: CORE CRUD
-  Tests ~53 operations covering accounts, categories, payees, rules, transactions,
+  Tests ~54 operations covering accounts, categories, payees, rules, transactions,
   schedules and tags, on the DEFAULT compact tool surface (manage_* tools take an
   `action` selector, list_entities a `type`, search_transactions a `by`).
   Paste this into the SAME chat session after Prompt 1 passes.
@@ -26,7 +26,7 @@ WHAT IT TESTS
   Phase 5b:  Batch, Uncategorized, Upsert    (4 operations)
   Phase 6:   Transactions                   (12 operations)
   Phase 6b:  Schedules                       (5 operations)
-  Phase 6c:  Tags                            (6 operations)
+  Phase 6c:  Tags                            (7 operations)
 ─────────────────────────────────────────────────────────────────────────────────
 ─── PROMPT START ────────────────────────────────────────────────────────────────
 
@@ -408,10 +408,10 @@ NEGATIVE for this phase:
 
 ---
 
-**Phase 6c: Tags (6 operations):**
+**Phase 6c: Tags (7 operations):**
 
 A tag is the "#word" in a transaction's notes. The tag list (manage_tags) only holds a colour and a
-description per word, stored WITHOUT a leading "#". The first four operations need no account; the
+description per word, stored WITHOUT a leading "#". The first five operations need no account; the
 last two create one transaction in `{txn_acct_id}` and delete it again.
 
 - list_entities, type: "tag"
@@ -475,8 +475,8 @@ Phase 5  Rules:            X / 4
 Phase 5b Batch/Upsert:     X / 4
 Phase 6  Transactions:     X / 12
 Phase 6b Schedules:        X / 5
-Phase 6c Tags:             X / 6
-Total:                     X / 53
+Phase 6c Tags:             X / 7
+Total:                     X / 54
 Failed:        X
 Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}

@@ -21,8 +21,23 @@ export const STAGE_DESCRIBE =
 
 // Operators per field type, for the rule tool descriptions that document conditions.
 export const CONDITION_OPERATORS_HELP =
-  'Condition operators by field: imported_payee, notes, description (text): contains, matches, doesNotContain, is, isNot. ' +
-  'payee, account, category (ids): is, isNot, oneOf, notOneOf. amount: is, gte, lte, gt, lt, isapprox. date: is, gte, lte, gt, lt.';
+  'Condition operators: imported_payee, notes, description (text): contains, matches, doesNotContain, is, isNot. ' +
+  'payee, account, category (ids): is, isNot, oneOf, notOneOf. amount, date: is, gte, lte, gt, lt; amount also isapprox. ' +
+  'notes also: hasTags (all), hasAnyTag (any), value "#a #b", whole tags, any case.';
+
+/**
+ * #703: `hasTags` and `hasAnyTag` take one string of tags separated by whitespace or "#".
+ * Upstream accepts a value with no tag in it ("#", "   ") and the rule then matches nothing,
+ * so it is refused here. Call it AFTER the operator check, so a tag operator on a field that
+ * does not take it gets the "Invalid operator" refusal instead.
+ */
+export function assertTagOperatorValue(condition: { field: string; op: string; value?: unknown }): void {
+  if (condition.op !== 'hasTags' && condition.op !== 'hasAnyTag') return;
+  if (typeof condition.value === 'string' && /[^#\s]/.test(condition.value)) return;
+  throw new Error(
+    `Operator "${condition.op}" needs at least one tag in its value, for example "#trip" (field: ${condition.field}). Nothing was written.`
+  );
+}
 
 // Define the schema for rule conditions and actions
 export const ConditionSchema = z.object({
@@ -46,7 +61,7 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
   'payee': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
   'account': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
   'category': { type: 'id', operators: ['is', 'isNot', 'oneOf', 'notOneOf'] },
-  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
+  'notes': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot', 'hasTags', 'hasAnyTag'] },
   'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
   'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
   'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
@@ -143,6 +158,7 @@ export function validateRuleInput(input: RuleItem): void {
         `Please use one of these operators instead.`
       );
     }
+    assertTagOperatorValue(condition);
     
     // Check if using payee field with text value instead of ID
     if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
