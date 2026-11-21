@@ -2820,6 +2820,60 @@ payee: payee.id,
     expect(readBack?.found).toBe(false);
   });
 
+  test('manage_tags update - ERROR: a rename onto a live tag name is refused and both tags are unchanged (#701)', async ({ mcp, cleanup }) => {
+    const alpha = `mcp-e2e-conflict-a-${uniqueSuffix()}`;
+    const beta = `mcp-e2e-conflict-b-${uniqueSuffix()}`;
+    const alphaId = (await mcp.call('manage_tags', { action: 'create', tag: alpha })) as string;
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${alpha}`, async () => { await mcp.call('manage_tags', { action: 'delete', id: alphaId }); });
+    const betaId = (await mcp.call('manage_tags', { action: 'create', tag: beta })) as string;
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${beta}`, async () => { await mcp.call('manage_tags', { action: 'delete', id: betaId }); });
+
+    const err = await mcp.call('manage_tags', { action: 'update', id: betaId, tag: alpha }).then(() => null, (e: Error) => e);
+    expect(err?.message).toMatch(/already exists/i);
+    expect(err?.message).toContain(alpha);
+    expect(err?.message).toContain(alphaId);
+    expect(err?.message).not.toMatch(/SyncError/);
+
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    expect(tags.find((t: any) => t?.id === alphaId)?.tag).toBe(alpha);
+    expect(tags.find((t: any) => t?.id === betaId)?.tag).toBe(beta);
+  });
+
+  test('manage_tags update - ERROR: a rename onto a deleted tag name is refused (#701)', async ({ mcp, cleanup }) => {
+    const gamma = `mcp-e2e-conflict-g-${uniqueSuffix()}`;
+    const beta = `mcp-e2e-conflict-b-${uniqueSuffix()}`;
+    const gammaId = (await mcp.call('manage_tags', { action: 'create', tag: gamma })) as string;
+    // Registered before the delete, so a failed delete leaves no live row; an id already gone is swallowed.
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${gamma}`, async () => { await mcp.call('manage_tags', { action: 'delete', id: gammaId }).catch(() => undefined); });
+    await mcp.call('manage_tags', { action: 'delete', id: gammaId });
+    const betaId = (await mcp.call('manage_tags', { action: 'create', tag: beta })) as string;
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${beta}`, async () => { await mcp.call('manage_tags', { action: 'delete', id: betaId }); });
+
+    const err = await mcp.call('manage_tags', { action: 'update', id: betaId, tag: gamma }).then(() => null, (e: Error) => e);
+    expect(err?.message).toMatch(/deleted tag/i);
+    expect(err?.message).toContain(gamma);
+    expect(err?.message).not.toMatch(/SyncError/);
+
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    expect(tags.find((t: any) => t?.id === betaId)?.tag).toBe(beta);
+  });
+
+  test('manage_tags update - a rename to a free name and a rename to its own name with a new colour both succeed (#701)', async ({ mcp, cleanup }) => {
+    const beta = `mcp-e2e-rename-b-${uniqueSuffix()}`;
+    const delta = `mcp-e2e-rename-d-${uniqueSuffix()}`;
+    const id = (await mcp.call('manage_tags', { action: 'create', tag: beta, color: '#33aa33' })) as string;
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${beta}`, async () => { await mcp.call('manage_tags', { action: 'delete', id }); });
+
+    await mcp.call('manage_tags', { action: 'update', id, tag: beta, color: '#112233' });
+    let row = (((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[]).find((t: any) => t?.id === id);
+    expect(row?.tag).toBe(beta);
+    expect(row?.color).toBe('#112233');
+
+    await mcp.call('manage_tags', { action: 'update', id, tag: delta });
+    row = (((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[]).find((t: any) => t?.id === id);
+    expect(row?.tag).toBe(delta);
+  });
+
   test('manage_tags delete - should delete a tag', async ({ mcp }) => {
     const tag = `mcp-e2e-delete-tag-${uniqueSuffix()}`;
     const tagId = await mcp.call('manage_tags', { action: 'create', tag });

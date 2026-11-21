@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { stripTsComments } from './helpers/source-text.js';
 
 const { createProcessHandlers, categorizeError, errorRecordFields } = await import('../../dist/src/lib/processHandlers.js');
-const { NotFoundRefusal, OutOfRangeRefusal } = await import('../../dist/src/lib/errors.js');
+const { NotFoundRefusal, OutOfRangeRefusal, ConflictRefusal } = await import('../../dist/src/lib/errors.js');
 
 let passed = 0;
 let failed = 0;
@@ -217,6 +217,7 @@ class AbortError extends Error {}
 const table = [
   ['not-found refusal', errorRecordFields(new NotFoundRefusal('gone')).category, 'not_found'],
   ['out-of-range refusal', errorRecordFields(new OutOfRangeRefusal('far')).category, 'validation'],
+  ['conflict refusal', errorRecordFields(new ConflictRefusal('taken')).category, 'conflict'],
   ['401', categorizeError({ httpStatus: 401 }), 'auth'],
   ['403', categorizeError({ httpStatus: 403 }), 'auth'],
   ['404', categorizeError({ httpStatus: 404 }), 'not_found'],

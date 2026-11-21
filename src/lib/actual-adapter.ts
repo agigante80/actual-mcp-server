@@ -77,7 +77,7 @@ import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
 import { markInitFailure } from './init-failure.js';
-import { NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
+import { ConflictRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 import { amountOpMismatch } from './schemas/schedule-amount.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
@@ -5266,7 +5266,32 @@ export async function updateTag(id: string, fields: { tag?: string; color?: stri
     if (!exists) {
       throw new NotFoundRefusal('Tag', id, 'actual_tags_list');
     }
-    await withConcurrency(() => retry(() => rawUpdateTag(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    // #701: `tags.tag` is UNIQUE (case sensitive) and upstream's updateTag is a bare db update, so a
+    // rename onto a name another tag has used to surface the raw `SyncError: invalid-schema`.
+    // A LIVE holder of the name is in the listing above: refuse before the write. The tag's own
+    // current name is not a conflict.
+    const newName = fields.tag;
+    if (newName !== undefined) {
+      const holder = (tags as any[]).find((t: any) => t.id !== id && t.tag === newName);
+      if (holder) {
+        throw new ConflictRefusal(`A tag named "${newName}" already exists (id ${holder.id}). Choose another name. Nothing was written.`);
+      }
+    }
+    try {
+      await withConcurrency(() => retry(() => rawUpdateTag(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    } catch (err: any) {
+      // A DELETED tag keeps its name in the UNIQUE column and getTags never lists it, so that
+      // collision can only be recognised from the failed write. Upstream throws `invalid-schema`
+      // for EVERY failed local write; the SQLite constraint text in meta.error.message is the only
+      // discriminator it gives (probed on @actual-app/api 26.11.0), and `meta` may carry no `error`.
+      // A name another client created between the listing and this write would land here too and
+      // be reported as a deleted tag; the advice (choose another name) still holds.
+      const detail = err?.meta?.error?.message;
+      if (newName !== undefined && err?.reason === 'invalid-schema' && typeof detail === 'string' && detail.includes('UNIQUE')) {
+        throw new ConflictRefusal(`The tag name "${newName}" belongs to a deleted tag. Create a tag with that name to revive it, or choose another name. Nothing was written.`);
+      }
+      throw err;
+    }
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 

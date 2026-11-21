@@ -35,7 +35,7 @@
  */
 const REFUSAL_BRAND = Symbol.for('actual-mcp-server.PreflightRefusal');
 
-export type RefusalKind = 'not-found' | 'out-of-range';
+export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict';
 
 /**
  * A pre-flight refusal: the operation was NOT attempted, because the request named
@@ -91,6 +91,13 @@ export class OutOfRangeRefusal extends PreflightRefusal {
   constructor(message: string, value: string) {
     super(message, 'out-of-range');
     this.value = value;
+  }
+}
+
+/** The request is well-formed but collides with something that already exists (#701: a tag name). */
+export class ConflictRefusal extends PreflightRefusal {
+  constructor(message: string) {
+    super(message, 'conflict');
   }
 }
 

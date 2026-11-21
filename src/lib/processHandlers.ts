@@ -53,6 +53,7 @@ interface CategoryInput {
 export function categorizeError({ errorClass, refusalKind, code, httpStatus: s }: CategoryInput): ErrorCategory {
   if (refusalKind === 'not-found') return 'not_found';
   if (refusalKind === 'out-of-range') return 'validation';
+  if (refusalKind === 'conflict') return 'conflict';
   if (s === 401 || s === 403) return 'auth';
   if (s === 404) return 'not_found';
   if (s === 408 || s === 504 || code === 'ETIMEDOUT') return 'timeout';
