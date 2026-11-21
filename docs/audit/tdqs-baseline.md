@@ -361,3 +361,43 @@ Read from Glama's admin TDQS page on 2026-11-18, after Glama built and scored re
 `summarize_transactions` is unchanged on every dimension. Conciseness stays 4 for the same reason as before: the per-report block is dense and hard to scan.
 
 Server level: TDQS average 4.8 over 15 tools, lowest tool `list_entities` at 4.6, both unchanged. The other 13 tools kept their 0.30.1 ratings because unchanged definitions share the same evaluation.
+
+## Scores after the Tag correctness phase (v0.33.0)
+
+Read from Glama's admin score and TDQS pages on 2026-11-21, after Glama built and scored release 0.33.0 (main `bfc74fa3`, 15 of 15 tools). The phase (#699 to #703) changed the text of five tools: every one now says that a tag is the `#word` inside a transaction's notes, and `manage_rules` documents the `hasTags` and `hasAnyTag` operators. The other ten definitions are unchanged and kept their earlier evaluation.
+
+**Server level.**
+
+| Measure | v0.32.0 | v0.33.0 |
+| :--- | ---: | ---: |
+| Coherence: Disambiguation | 4 | 5 |
+| Coherence: Naming | 5 | 5 |
+| Coherence: Tool Count | 5 | 5 |
+| Coherence: Completeness | 4 | 5 |
+| TDQS average (as Glama shows it) | 4.8 | 4.8 |
+| TDQS per-tool mean | 4.82 | 4.77 |
+| TDQS lowest tool | 4.6 | 4.5 |
+| Discovery | 92% | 92% |
+
+Completeness reached 5 without a new operation. At v0.32.0 the reason for the 4 was "tags can be defined but no visible way to attach or remove tags on individual transactions". The operation always existed (write the `#word` into the notes); the texts did not say so. The v0.33.0 reason lists tags among the full-lifecycle entities and calls the one omission it names (deleting an uploaded budget file) "intentional or server-limited rather than agent-blocking". Disambiguation is back to 5: the overlaps the v0.32.0 run cited (`get_context` against `list_entities`, `search_transactions` against `run_query`) are now described as "called out and resolved in the descriptions". None of those four descriptions changed their routing sentences in this phase, so this move is scorer spread, not an effect of the change.
+
+**The five changed tools.**
+
+| Tool | TDQS v0.32.0 | TDQS v0.33.0 | Behavior | Conciseness | Completeness | Parameters | Purpose | Usage |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `search_transactions` | 4.9 | 4.5 | 3 | 4 | 5 | 5 | 5 | 5 |
+| `manage_tags` | 4.8 | 4.6 | 4 | 4 | 5 | 4 | 5 | 5 |
+| `manage_transactions` | 4.9 | 4.7 | 4 | 4 | 5 | 5 | 5 | 5 |
+| `list_entities` | 4.6 | 4.8 | 5 | 4 | 5 | 4 | 5 | 5 |
+| `manage_rules` | 5.0 | 4.9 | 5 | 4 | 5 | 5 | 5 | 5 |
+
+Glama's reasons for every score below 5:
+
+- `search_transactions` Behavior 3: the reviewer lists the disclosed behaviours as "valuable" (off-budget accounts excluded from `filter`, an unknown name returns an error field, the return shape varies by mode) and takes the points for placement: they are "compressed into the same dense block as the parameter lists rather than called out as distinct behaviors". No missing fact is named.
+- `manage_tags` Behavior 4 and `manage_transactions` Behavior 4: no statement of authentication or permission requirements or of rate limits; for `manage_tags` also whether a soft-deleted tag can be recovered other than by recreating it. `manage_tags` Parameters 4 comes with praise only (80% schema coverage is the stated baseline).
+- `list_entities` Parameters 4: the description "largely restates what the schema already says" (92% coverage).
+- Conciseness 4 on all five, and on every other tool except `list_budget_months`: one dense block, hard to scan per action or per mode; `list_entities`, `get_context` and `run_query` are also told that their "Read-only" sentence repeats the annotation.
+
+**Reading.** The three drops are on tools whose text grew by a tag sentence, and in each case the reason is the density of the block, not the new sentence. The `search_transactions` move from 4.9 to 4.5 is the full 0.4 single-run spread recorded above, on a description whose behaviour facts did not change. Under Glama's published weighting the description-quality term went from about 4.73 to 4.66 and the coherence term from 4.5 to 5.0, so the server total rose (about 4.66 to 4.76).
+
+**What the scores leave open.** Two things recur across all 15 tools and are the only route to more points: per-action or per-mode line layout (the #683 layout change moved Conciseness on one of four tools, so the evidence that layout pays is weak), and removing the "Read-only" sentence where the annotation already says it. Authentication and rate-limit statements are asked for on two write tools; the server has no per-tool permission model and no rate limit of its own, so there is no true sentence to add beyond what the server instructions already say. No ticket was filed from these scores.
