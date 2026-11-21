@@ -1,6 +1,6 @@
 {
   "compact": {
-    "bytes": 42754,
+    "bytes": 42960,
     "label": "Compact surface (default)",
     "tools": 15
   },
@@ -10,7 +10,7 @@
     "tools": 6
   },
   "compact-read-only": {
-    "bytes": 17232,
+    "bytes": 17438,
     "label": "Compact, `MCP_READ_ONLY=true`",
     "tools": 6
   },

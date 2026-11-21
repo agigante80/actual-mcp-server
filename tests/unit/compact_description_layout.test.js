@@ -1,6 +1,6 @@
 // tests/unit/compact_description_layout.test.js
 //
-// #683: four compact tool descriptions are laid out as short lines so they scan (Glama scored
+// #683 (and #712 for search_transactions): compact tool descriptions are laid out as short lines so they scan (Glama scored
 // each Conciseness 4, calling it one dense paragraph). First line: purpose and siblings; then one
 // line per action, type or report; last line: the `Returns` sentence. The check is a pure
 // function returning ALL problems, run here on the published descriptions (read the way
@@ -49,7 +49,7 @@ const compactMeta = (spec) => {
 const entries = buildToolListEntries(COMPACT_TOOLS.map((c) => c.name), (name) => compactMeta(COMPACT_TOOLS.find((c) => c.name === name)));
 const published = new Map(entries.map((e) => [e.name, e.description]));
 
-for (const name of ['list_budget_months', 'manage_budget_files', 'list_entities', 'summarize_transactions']) {
+for (const name of ['list_budget_months', 'manage_budget_files', 'list_entities', 'summarize_transactions', 'search_transactions']) {
   await check(`${name}: the published description is laid out as short lines`, () => {
     const description = published.get(name);
     assert.ok(typeof description === 'string', `${name} is published`);
