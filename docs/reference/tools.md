@@ -92,6 +92,8 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 | `actual_tags_update` | Update tag name, color, or description by UUID |
 | `actual_tags_delete` | Soft-delete a tag by UUID |
 
+> **How tags work:** A tag is the `#word` typed in a transaction's notes. To tag a transaction, write `#word` into its notes with `actual_transactions_create` or `actual_transactions_update` (the compact `manage_transactions` tool); the tag tools only set the color and description shown for that word. A tag works in notes with no row in the tag list, so `actual_tags_list` (the compact `list_entities` with type `tag`) is not the set of tags in use. `actual_tags_update` renames only the list row: transactions keep the old `#word` in their notes and its color and description stop applying, so renaming a tag everywhere means rewriting those notes too. Filtering transactions by `notes` is a substring match, so `#trip` also finds `#tripod`.
+
 ## Notes
 
 `actual_notes_get` · `actual_notes_update`
