@@ -1082,7 +1082,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `http_sigterm_exit_child.test.js` | Entrypoint spawn: HTTP exits on SIGTERM and SIGINT, with an idle keep-alive socket or an open connection, on a second signal, and not without one (#632) | 7 |
 | `http_compressed_body_refused.test.js` | Entrypoint spawn: compressed request bodies get 415 and never crash the server; plain and identity bodies parse (#633) | 7 |
 | `issue_templates_no_dashes.test.js` | Issue templates: YAML parses, no dashes, bold scenario labels, plus checker negatives (#635) | 10 |
-| `coderabbit_config.test.js` | CodeRabbit config: scoped to `develop`, bots ignored, issue planning off, advisory status, no pushes or approvals, plus checker negatives (#693) | 13 |
+| `coderabbit_config.test.js` | CodeRabbit config: scoped to `develop`, bots ignored, issue planning off, advisory status, no pushes or approvals, only the two bots ignored, plus checker negatives (#693, #715) | 14 |
 | `tool_description_checklist.test.js` | tool description checklist: Returns sentence, a named sibling, no filler, one fixture per rule (#650) | 8 |
 | `tools_list_size_budget.test.js` | tools/list size budget: total and per-tool ceilings, padded-description and 1-byte-under fixtures (#486) | 5 |
 | `tool_param_descriptions.test.js` | Every published input property is described at any depth; fixture self-test and no-validation-change pins (#639) | 10 |

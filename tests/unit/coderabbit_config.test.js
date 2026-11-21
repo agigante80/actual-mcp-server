@@ -1,11 +1,12 @@
 // tests/unit/coderabbit_config.test.js
 //
-// #693: .coderabbit.yaml keeps the CodeRabbit app an ADVISORY reviewer scoped to outside
-// pull requests against develop. The keys pinned here are the ones whose schema DEFAULT
+// #693: .coderabbit.yaml keeps the CodeRabbit app an ADVISORY reviewer scoped to pull
+// requests against develop: outside ones and, in the #715 trial, the maintainer's own, so
+// ignore_usernames must hold the two bots and nobody else. The keys pinned here are the ones whose schema DEFAULT
 // would break a project rule if the line were dropped: only the default branch is reviewed
 // without base_branches, bot pull requests are reviewed without ignore_usernames, and issue
 // planning is ON by default (ticket comments here are messages between people only), and
-// four finishing touches that can PUSH a commit or a branch into the repository are ON by
+// five finishing touches that can PUSH a commit or a branch into the repository are ON by
 // default (a pushed branch runs workflows from that branch).
 //
 // Run: node tests/unit/coderabbit_config.test.js
@@ -18,7 +19,7 @@ import { parse } from 'yaml';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BOTS = ['dependabot[bot]', 'actual-mcp-dependency-updater[bot]'];
-const NO_PUSH = ['unit_tests', 'autofix', 'fix_ci', 'resolve_merge_conflict'];
+const NO_PUSH = ['unit_tests', 'autofix', 'fix_ci', 'resolve_merge_conflict', 'simplify'];
 const TONE_MAX = 250; // schema maxLength for tone_instructions
 // Built from code points so this file carries neither character itself.
 const DASHES = [0x2013, 0x2014].map((c) => String.fromCharCode(c));
@@ -35,6 +36,9 @@ export function checkConfig(cfg) {
       fail(`ignore_usernames must contain ${bot}`);
     }
   }
+  // #715: anyone else here (the maintainer, say) silently loses their review. Order is free;
+  // a duplicate fails, because the length then differs from the two bots.
+  if (auto.ignore_usernames.length !== BOTS.length) fail('ignore_usernames must hold only the two bots');
   if (cfg?.reviews?.fail_commit_status !== false) fail('reviews.fail_commit_status must be false');
   if (cfg?.reviews?.auto_apply_labels !== false) fail('auto_apply_labels must be false');
   if (cfg?.issue_enrichment?.auto_enrich?.enabled !== false) {
@@ -95,6 +99,8 @@ refuses('no develop base branch', (c) => { c.reviews.auto_review.base_branches =
   'coderabbit config: base_branches must contain ^develop$');
 refuses('a bot login removed', (c) => { c.reviews.auto_review.ignore_usernames = ['dependabot[bot]']; },
   'coderabbit config: ignore_usernames must contain actual-mcp-dependency-updater[bot]');
+refuses('the maintainer excluded from review', (c) => { c.reviews.auto_review.ignore_usernames.push('agigante80'); },
+  'coderabbit config: ignore_usernames must hold only the two bots');
 refuses('a failing commit status', (c) => { c.reviews.fail_commit_status = true; },
   'coderabbit config: reviews.fail_commit_status must be false');
 refuses('a finishing touch that pushes commits', (c) => { c.reviews.finishing_touches.autofix.enabled = true; },

@@ -1,7 +1,8 @@
 # yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
 #
-# CodeRabbit is an ADVISORY first-pass reviewer for pull requests from outside
-# contributors (#693). It never gates a merge: no commit status fails on it and it
+# CodeRabbit is an ADVISORY first-pass reviewer for pull requests against develop:
+# those from outside contributors (#693) and, during the #715 trial, the maintainer's
+# own (the maintainer must stay out of ignore_usernames). It never gates a merge: no commit status fails on it and it
 # is in no branch protection. tests/unit/coderabbit_config.test.js pins the keys
 # below that keep it scoped and quiet; change both together.
 language: en-US
@@ -45,7 +46,7 @@ reviews:
   # (knowledge_base.code_guidelines), and tests/unit/contributor_docs.test.js keeps
   # those true. A copy of the rules here would be a second source nothing checks.
   # Nothing here may push a commit or a branch into the repository: a pushed branch
-  # runs workflows from that branch. All four are ON by schema default.
+  # runs workflows from that branch. All five are ON by schema default.
   finishing_touches:
     unit_tests:
       enabled: false
