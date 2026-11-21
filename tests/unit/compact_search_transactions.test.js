@@ -141,7 +141,9 @@ function modeLineProblems(description) {
   for (const [mode, r] of spec.actions) {
     const mine = lines.filter((l) => l.startsWith(`${mode}: `));
     if (mine.length !== 1) { problems.push(`${mode}: ${mine.length} lines start with "${mode}: ", expected 1`); continue; }
-    const listed = new Set((mine[0].slice(mode.length + 2).match(/[a-z]+(?:_[a-z]+)*/g) ?? []).filter((w) => ALL_FIELDS.has(w)));
+    // Only the list before any parenthesis counts: a prose aside such as "(no limit)" names a
+    // field without listing it.
+    const listed = new Set((mine[0].slice(mode.length + 2).split('(')[0].match(/[a-z]+(?:_[a-z]+)*/g) ?? []).filter((w) => ALL_FIELDS.has(w)));
     const taken = Object.keys(r.fields.shape);
     for (const f of taken) if (!listed.has(f)) problems.push(`${mode} is missing ${f}`);
     for (const f of listed) if (!taken.includes(f)) problems.push(`${mode} lists ${f}, which its row does not take`);
@@ -172,6 +174,11 @@ await check('#712 NEGATIVE: a field the account row does not take is reported', 
   const mutated = mutateLine('account: ', (l) => l.replace(/\.$/, ', limit.'));
   assert.notStrictEqual(mutated, spec.description);
   assert.deepStrictEqual(modeLineProblems(mutated), ['account lists limit, which its row does not take']);
+});
+await check('#712 NEGATIVE: a field named only in a parenthesis does not count as listed', () => {
+  const mutated = mutateLine('category: ', (l) => l.replace(', limit.', ' (no limit).'));
+  assert.notStrictEqual(mutated, spec.description);
+  assert.deepStrictEqual(modeLineProblems(mutated), ['category is missing limit']);
 });
 await check('#712: the behaviours sit on one Behavior line', () => {
   assert.deepStrictEqual(behaviorProblems(spec.description), []);
