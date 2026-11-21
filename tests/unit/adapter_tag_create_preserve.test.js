@@ -81,7 +81,7 @@ console.log('\n[#700] names that do not match a live row are untouched');
 
   stored = [];
   r = await run({ tag: 'probe' });
-  check(!r.err && same(created[0], { tag: 'probe' }), 'a deleted name is not listed, so nothing is carried over', JSON.stringify(created));
+  check(!r.err && same(created[0], { tag: 'probe' }), 'an empty listing adds no keys (a deleted name is never listed; the E2E revive test covers the real one)', JSON.stringify(created));
 
   stored = [{ id: TID, tag: 'bare', color: null, description: null }];
   r = await run({ tag: 'bare' });

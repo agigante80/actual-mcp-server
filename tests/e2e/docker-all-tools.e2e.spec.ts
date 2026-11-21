@@ -2732,6 +2732,8 @@ payee: payee.id,
       await mcp.call('manage_tags', { action: 'delete', id: id1 });
     });
     const id2 = await mcp.call('manage_tags', { action: 'create', tag });
+    // A create that returned another id left a second live row: register it too, so a failing run leaves no residue.
+    if (id2 !== id1) cleanup.add(CLEANUP_ORDER.tag, `tag ${tag} (second id)`, async () => { await mcp.call('manage_tags', { action: 'delete', id: id2 }); });
     expect(id2).toEqual(id1);
     const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
     const row = tags.find((t: any) => t?.id === id1);
@@ -2747,6 +2749,8 @@ payee: payee.id,
       await mcp.call('manage_tags', { action: 'delete', id: id1 });
     });
     const id2 = await mcp.call('manage_tags', { action: 'create', tag, color: '#112233' });
+    // A create that returned another id left a second live row: register it too, so a failing run leaves no residue.
+    if (id2 !== id1) cleanup.add(CLEANUP_ORDER.tag, `tag ${tag} (second id)`, async () => { await mcp.call('manage_tags', { action: 'delete', id: id2 }); });
     expect(id2).toEqual(id1);
     const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
     const row = tags.find((t: any) => t?.id === id1);
@@ -2765,6 +2769,8 @@ payee: payee.id,
     });
     await mcp.call('manage_tags', { action: 'delete', id: id1 });
     const id2 = await mcp.call('manage_tags', { action: 'create', tag });
+    // A create that returned another id left a second live row: register it too, so a failing run leaves no residue.
+    if (id2 !== id1) cleanup.add(CLEANUP_ORDER.tag, `tag ${tag} (second id)`, async () => { await mcp.call('manage_tags', { action: 'delete', id: id2 }); });
     expect(id2).toEqual(id1);
     const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
     const row = tags.find((t: any) => t?.id === id1);
