@@ -155,5 +155,8 @@ await check('4b: a returned top-level error string is rewritten', async () => {
   assert.ok(!/actual_/.test(r.error) && /search_transactions with by amount/.test(r.error), r.error);
 });
 
+await check('#702: the notes field warns that the match is a substring (#trip also finds #tripod)', () => {
+  assert.ok(z.toJSONSchema(tool.inputSchema).properties.notes.description.includes('#tripod'));
+});
 console.log(`\n[compact-search-transactions] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

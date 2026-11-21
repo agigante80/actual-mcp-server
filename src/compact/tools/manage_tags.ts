@@ -59,10 +59,11 @@ export const manageTags: CompactToolSpec = {
   summary: 'Create, change or delete tags.',
   examplePrompt: 'Create a tag called vacation with a blue color.',
   description:
-    'Create, change or delete tags; pick one `action`. Writes. ' +
+    'Create, change or delete entries of the tag list (a colour and description per tag); pick one `action`. Writes. ' +
+    'A tag is a "#word" in a transaction\'s notes: to tag a transaction, write the #word into its notes with manage_transactions; this tool takes no transaction. ' +
     'To read tags or find ids use list_entities with type tag. Other fields are refused. ' +
     'create: tag (the word without "#"); optional color, description. An existing name returns its id and keeps the color and description not supplied; a deleted name is revived with only the supplied fields. ' +
-    'update: id and at least one of tag, color, description; an unknown id is refused. ' +
+    'update: id and at least one of tag, color, description; an unknown id is refused; a rename does not change notes, so transactions keep the old #word. ' +
     'delete: id; DESTRUCTIVE: the tag is soft-deleted and no longer listed; an unknown id is refused. ' +
     'Returns { result: id } (create), { result: { success: true } } (update, delete).',
   selector: 'action',

@@ -170,5 +170,11 @@ await check('compactLegacyNames covers the targets, all write-capable', () => {
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
 
+await check('#702: the description says a tag is the #word in transaction notes, and never offers to assign one', () => {
+  for (const w of ['#word', 'notes', 'manage_transactions', 'rename does not change notes']) assert.ok(spec.description.includes(w), w);
+  assert.ok(!/\b(assign|attach)\w*\b/i.test(spec.description), 'no assign or attach wording');
+  const props = z.toJSONSchema(tool.inputSchema).properties;
+  assert.ok(!('transaction_id' in props) && !('transaction' in props), 'no field takes a transaction');
+});
 console.log(`\n[compact-manage-tags] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

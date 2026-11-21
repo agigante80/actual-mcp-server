@@ -5,8 +5,8 @@ import adapter from '../lib/actual-adapter.js';
 export default createTool({
   name: 'actual_tags_list',
   description:
-    'List all tags defined in Actual Budget. Tags are stored without a leading "#" character ' +
-    '(e.g. "groceries", not "#groceries"). Returns id, tag (the word), and optional color and description fields.',
+    'List the tag list of Actual Budget: id, tag (the word without "#"), optional color and description. ' +
+    'A tag is the "#word" in transaction notes; tags used only in notes are not listed.',
   schema: z.object({}),
   handler: async () => {
     return await adapter.getTags();

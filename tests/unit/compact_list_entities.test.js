@@ -194,5 +194,8 @@ await check('4b: a returned top-level error string is rewritten to the route phr
   assert.ok(!/actual_/.test(r.error) && /list_entities with type and query/.test(r.error), r.error);
 });
 
+await check('#702: the description says tags used only in notes are not listed', () => {
+  assert.ok(spec.description.includes('only in notes are not listed'));
+});
 console.log(`\n[compact-list-entities] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

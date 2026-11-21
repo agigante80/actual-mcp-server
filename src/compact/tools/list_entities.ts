@@ -74,6 +74,7 @@ export const listEntities: CompactToolSpec = {
     'payee: also sort frequency (most used payees).\n' +
     'schedule: name to resolve its id, or schedule_id with start, end and count to list the dates it falls on.\n' +
     'rule: payee_id to list that payee\'s rules.\n' +
+    'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
     'budget_file: scope configured (default) or server.\n' +
     'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +

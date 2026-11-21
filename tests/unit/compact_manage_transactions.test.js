@@ -278,5 +278,8 @@ await check('compactLegacyNames covers the seven targets, all write-capable', ()
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
 
+await check('#702: the notes field says a "#word" in notes tags the transaction', () => {
+  assert.ok(z.toJSONSchema(tool.inputSchema).properties.notes.description.includes('#'));
+});
 console.log(`\n[compact-manage-transactions] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

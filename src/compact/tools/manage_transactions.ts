@@ -37,7 +37,7 @@ const importedPayee = z.string().nullable().optional().describe('Imported payee.
 const category = z.string().nullable().optional().describe('Category id.');
 // No maxLength here: with it Zod publishes anyOf [string, null], which some function-schema
 // clients reject. capNotes enforces the 1000 character cap where the legacy tool has one.
-const notes = z.string().nullable().optional().describe('Notes.');
+const notes = z.string().nullable().optional().describe('Notes; "#word" tags it.');
 const cleared = z.boolean().nullable().optional().describe('Cleared flag.');
 const importedId = z.string().nullable().optional().describe('Source id.');
 const transferId = z.string().nullable().optional().describe('Transfer id.');

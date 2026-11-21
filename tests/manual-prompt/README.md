@@ -23,7 +23,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | File | Coverage | When to use |
 |------|----------|-------------|
 | [`prompt-1-smoke.txt`](./prompt-1-smoke.txt) | **Phase 1**: 9 read-only operations | Always run first. Confirms the server is up and connected. |
-| [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2 to 6c**: ~51 CRUD operations | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules, tags. |
+| [`prompt-2-core.txt`](./prompt-2-core.txt) | **Phases 2 to 6c**: ~53 CRUD operations | Paste after Prompt 1 passes. Tests accounts, categories, payees, rules, transactions, schedules, tags. |
 | [`prompt-3-advanced.txt`](./prompt-3-advanced.txt) | **Phases 7 to 12**: ~25 operations + full cleanup | Paste after Prompt 2 passes. Tests summaries, budgets, query engine, notes, preferences, the export/import round trip, and cleans up everything. Phase 10 (session management) sits in a block marked `[legacy or all surface only: skip on compact]`. |
 
 ---
@@ -58,7 +58,7 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 5b | Prompt 2 | 4 | Batch update, uncategorized, rules upsert, rules batch (#485) |
 | 6 | Prompt 2 | 12 | Transaction CRUD + search + splits (#305) + transfers (#451): `manage_transactions`, `search_transactions` |
 | 6b | Prompt 2 | 5 | Schedule CRUD + upcoming dates (#479): `manage_schedules` |
-| 6c | Prompt 2 | 4 | Tag CRUD (#184, covered here since #451): `manage_tags` |
+| 6c | Prompt 2 | 6 | Tag CRUD (#184, covered here since #451): `manage_tags`; tagging through notes and the substring notes search (#702): `manage_transactions`, `search_transactions` |
 | 7 | Prompt 3 | 5 | `summarize_transactions` reports by_category, by_payee, grouped, account_flow, recurring (#451) |
 | 8 | Prompt 3 | 11 | Budget management: `manage_budget_months`, `manage_budget_files`, `list_budget_months` |
 | 9 | Prompt 3 | 2 | Advanced query + bank sync: `run_query`, `manage_accounts` action bank_sync |
@@ -69,10 +69,10 @@ Because all three prompts run in the **same chat session**, the AI retains:
 | 11 | Prompt 3 |  | Concurrency (optional, skipped by default) |
 | 12 | Prompt 3 |  | Full cleanup |
 
-**Total: 85 tools across 3 prompts**
+**Total: 87 tools across 3 prompts**
 
-The 85 nominal operations include the 2 session operations of Phase 10. On the compact surface that
-block is skipped, so a compact run reaches at most 83.
+The 87 nominal operations include the 2 session operations of Phase 10. On the compact surface that
+block is skipped, so a compact run reaches at most 85.
 
 ---
 

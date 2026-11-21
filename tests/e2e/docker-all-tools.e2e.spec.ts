@@ -2886,6 +2886,57 @@ payee: payee.id,
     expect(tags.find((t: any) => t?.id === tagId)).toBeFalsy();
   });
 
+  // ==================== docs-tags: what a tag is (#702) ====================
+  // A tag is the "#word" in a transaction's notes; the tag list only holds a colour and a
+  // description per word. These four pin the behaviour the tool descriptions state.
+  const notesSearch = async (mcp: any, accountId: string, notes: string) =>
+    ((await mcp.call('search_transactions', { by: 'filter', account_id: accountId, notes })) ?? []) as any[];
+
+  test('docs-tags - a transaction is tagged by writing the #word into its notes', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const word = `e2etag${uniqueSuffix()}`;
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1200, notes: `lunch #${word}` });
+    const rows = await notesSearch(mcp, account.id, `#${word}`);
+    expect(rows.length).toBe(1);
+    expect(rows[0].notes).toBe(`lunch #${word}`);
+  });
+
+  test('docs-tags - a tag used only in notes is not in the tag list', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const word = `looseword${uniqueSuffix()}`;
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1300, notes: `#${word}` });
+    expect((await notesSearch(mcp, account.id, `#${word}`)).length).toBe(1);
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    expect(tags.find((t: any) => t?.tag === word)).toBeFalsy();
+  });
+
+  test('docs-tags - a notes search is a substring match, so a tag also finds a longer tag', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const word = `w${uniqueSuffix()}`;
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1400, notes: `#${word}` });
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1500, notes: `#${word}od` });
+    const short = await notesSearch(mcp, account.id, `#${word}`);
+    expect(short.map((t: any) => t.notes).sort()).toEqual([`#${word}`, `#${word}od`]);
+    const long = await notesSearch(mcp, account.id, `#${word}od`);
+    expect(long.map((t: any) => t.notes)).toEqual([`#${word}od`]);
+  });
+
+  test('docs-tags - renaming a tag list entry leaves the #word in notes alone', async ({ mcp, makeAccount, cleanup }) => {
+    const account = await makeAccount();
+    const suffix = uniqueSuffix();
+    const word = `e2etag${suffix}`;
+    const renamed = `e2erenamed${suffix}`;
+    const id = (await mcp.call('manage_tags', { action: 'create', tag: word })) as string;
+    cleanup.add(CLEANUP_ORDER.tag, `tag ${word}`, async () => { await mcp.call('manage_tags', { action: 'delete', id }); });
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: today(), amount: -1600, notes: `#${word}` });
+
+    await mcp.call('manage_tags', { action: 'update', id, tag: renamed });
+
+    const old = await notesSearch(mcp, account.id, `#${word}`);
+    expect(old.map((t: any) => t.notes)).toEqual([`#${word}`]);
+    expect((await notesSearch(mcp, account.id, `#${renamed}`)).length).toBe(0);
+  });
+
   // ==================== PREFERENCES (1 tool) ====================
   test('get_context preferences - should read synced preferences', async ({ mcp }) => {
     const data = await mcp.call('get_context', { topic: 'preferences' });
