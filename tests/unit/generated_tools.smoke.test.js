@@ -251,10 +251,10 @@ console.log('Running generated tools smoke tests');
   if (name.includes('payees_update')) inputExample.id = '00000000-0000-0000-0000-000000000001', inputExample.fields = { name: 'Updated' };
   if (name.includes('payees_merge')) inputExample.targetId = '11111111-1111-4111-8111-111111111111', inputExample.mergeIds = ['22222222-2222-4222-8222-222222222222', '33333333-3333-4333-8333-333333333333'];
   if (name.includes('payee_rules_get')) inputExample.payeeId = '40000000-0000-4000-8000-000000000001';
-  if (name.includes('rules_create') && !name.includes('or_update') && !name.includes('batch')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
+  if (name.includes('rules_create') && !name.includes('or_update') && !name.includes('batch')) inputExample.conditions = [{ field: 'notes', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   // #485: rules_create_batch takes an array of rules (the plain rules_create example above must not match it).
-  if (name.includes('rules_create_batch')) inputExample.rules = [{ conditions: [{ field: 'description', op: 'contains', value: 'test' }], actions: [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }] }];
-  if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'description', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
+  if (name.includes('rules_create_batch')) inputExample.rules = [{ conditions: [{ field: 'notes', op: 'contains', value: 'test' }], actions: [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }] }];
+  if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'notes', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_delete')) inputExample.id = '30000000-0000-4000-8000-000000000001'; // matches getRules stub: { id: '30000000-0000-4000-8000-000000000001' }
   if (name.includes('rules_update')) inputExample.id = '30000000-0000-4000-8000-000000000001', inputExample.fields = { conditions: [] };
   if (name.includes('budgets_set_amount')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.amount = 100;

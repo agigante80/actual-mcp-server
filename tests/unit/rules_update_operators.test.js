@@ -1,5 +1,5 @@
 // tests/unit/rules_update_operators.test.js
-// #703: actual_rules_update validates condition operators with its own map. This file pins
+// #703: actual_rules_update validates condition operators (#711: with the shared map). This file pins
 // that the map accepts the tag operators on notes, refuses them elsewhere, and refuses a
 // tag value with no tag in it, without reaching the adapter.
 //
@@ -37,7 +37,7 @@ console.log('\n[#703] rules_update: tag operators on notes');
   check(m === '' && calls.length === 1, 'notes hasTags without the leading # is accepted', m);
 
   m = await attempt([{ field: 'imported_payee', op: 'hasTags', value: '#trip' }]);
-  check(m === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: contains, matches, doesNotContain, is, isNot. Please use one of these operators instead.',
+  check(m === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf.',
     'NEGATIVE: imported_payee hasTags is refused with the exact message', m);
   check(calls.length === 0, '  and updateRule is never called');
 
@@ -73,6 +73,36 @@ console.log('\n[#710] rules_update: array and boolean condition values');
   check(m.startsWith('Invalid operator "isNot" for field "cleared".') && calls.length === 0, 'NEGATIVE: cleared isNot is refused', m);
   m = await attempt([{ field: 'imported_payee', op: 'is', value: false }]);
   check(m.includes('does not accept a boolean') && calls.length === 0, 'NEGATIVE: a boolean on a text field is refused', m);
+}
+
+console.log('\n[#711] rules_update: the shared operator map, same messages as actual_rules_create');
+{
+  const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent';
+  for (const [label, c] of [
+    ['account onBudget ""', { field: 'account', op: 'onBudget', value: '' }],
+    ['amount isbetween {1000, 5000}', { field: 'amount', op: 'isbetween', value: { num1: 1000, num2: 5000 } }],
+    ['date isapprox', { field: 'date', op: 'isapprox', value: '2026-11-01' }],
+    ['imported_payee oneOf an array of text', { field: 'imported_payee', op: 'oneOf', value: ['AMAZON MKTP', 'AMZN'] }],
+    ['payee_name contains', { field: 'payee_name', op: 'contains', value: 'amazon' }],
+  ]) {
+    const m = await attempt([c]);
+    check(m === '' && calls.length === 1 && JSON.stringify(calls[0].fields.conditions[0]) === JSON.stringify(c), `${label} is accepted and reaches the adapter as written`, m);
+  }
+  for (const [label, c, message] of [
+    ['payee_name gte', { field: 'payee_name', op: 'gte', value: 'x' },
+      'Invalid operator "gte" for field "payee_name". Field "payee_name" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf, hasTags, hasAnyTag.'],
+    ['payee contains', { field: 'payee', op: 'contains', value: 'amazon' },
+      'Invalid operator "contains" for field "payee". Field "payee" is a id field and only supports: is, isNot, oneOf, notOneOf. To match by name use "payee_name" or "imported_payee".'],
+    ['description', { field: 'description', op: 'contains', value: 'x' }, `Unknown condition field "description". Valid fields: ${VALID}.`],
+    ['saved', { field: 'saved', op: 'is', value: 'x' }, `Unknown condition field "saved". Valid fields: ${VALID}.`],
+    ['amount isbetween 5000', { field: 'amount', op: 'isbetween', value: 5000 },
+      'Operator "isbetween" requires {num1, num2} in integer cents, for example {"num1": 1000, "num2": 5000} (field: amount).'],
+    ['amount lt {num1, num2}', { field: 'amount', op: 'lt', value: { num1: 1, num2: 2 } }, 'Only "isbetween" takes a {num1, num2} value (field: amount, op: lt).'],
+  ]) {
+    const m = await attempt([c]);
+    check(m === message, `NEGATIVE: ${label} is refused with the exact message`, m);
+    check(calls.length === 0, '  and updateRule is never called');
+  }
 }
 
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }

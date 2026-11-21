@@ -3788,6 +3788,41 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
       .rejects.toThrow(/Field "cleared" must be true or false/);
   });
 
+  // #711: operators Actual accepts that the map used to refuse. Each rule is ANDed with a unique
+  // notes marker so it can never match a transaction another test creates. The negative is an
+  // operator the field does not take, and it must leave the rule count unchanged.
+  test('manage_rules create - account onBudget and amount isbetween are stored as written; payee_name gte is refused (#711)', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const marker = `E2E-Rule711-${uniqueSuffix()}`;
+    const note = { field: 'notes', op: 'contains', value: marker };
+    const create = async (label: string, conditions: any[]) => {
+      const raw = await mcp.call('manage_rules', { action: 'create', conditions, actions });
+      const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+      cleanup.add(CLEANUP_ORDER.rule, `rule 711 ${label} ${marker}`, async () => {
+        await mcp.call('manage_rules', { action: 'delete', id }).catch(() => undefined);
+      });
+      return id;
+    };
+    const budgetId = await create('onBudget', [{ field: 'account', op: 'onBudget', value: '' }, note]);
+    const rangeId = await create('isbetween', [{ field: 'amount', op: 'isbetween', value: { num1: -5000, num2: -1000 } }, note]);
+    const listRules = async () => {
+      const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+      return (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    };
+    const rules = await listRules();
+    const onBudget = rules.find((r: any) => r?.id === budgetId)?.conditions?.find((c: any) => c?.field === 'account');
+    expect(onBudget).toMatchObject({ field: 'account', op: 'onBudget' });
+    const range = rules.find((r: any) => r?.id === rangeId)?.conditions?.find((c: any) => c?.field === 'amount');
+    expect(range).toMatchObject({ field: 'amount', op: 'isbetween', value: { num1: -5000, num2: -1000 } });
+
+    const before = rules.length;
+    const conditions = [{ field: 'payee_name', op: 'gte', value: marker }];
+    await expect(mcp.call('manage_rules', { action: 'create', conditions, actions }))
+      .rejects.toThrow(/Invalid operator "gte" for field "payee_name"\. Field "payee_name" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf, hasTags, hasAnyTag\./);
+    expect((await listRules()).length).toBe(before);
+  });
+
   test('manage_rules upsert - the same conditions twice: created, then updated with the same id', async ({ mcp, makeCategory, cleanup }) => {
     const category = await makeCategory();
     const marker = `E2E-Upsert677-${uniqueSuffix()}`;
@@ -4118,8 +4153,9 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
 // file that calls a legacy name, besides the two session tools and the deprecated alias row;
 // tests/unit/e2e_uses_compact_names.test.js pins that. Rows skip when the session publishes no
 // legacy tool (the compact surface), they never retry.
-// #710 adds the one WRITE row here: the legacy rule create with an id list and a flag condition,
-// because the legacy and compact rule schemas are separate text and both are published.
+// #710 adds the WRITE rows here: the legacy rule create with an id list and a flag condition,
+// because the legacy and compact rule schemas are separate text and both are published. #711
+// adds the second (the new operators and a refused one) for the same reason.
 test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
   test.beforeEach(async ({ mcp }) => {
     const names = (await mcp.listTools()).map((t: any) => t.name);
@@ -4189,6 +4225,41 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       .rejects.toThrow(/requires a non-empty array of values \(field: payee\)/);
     await expect(mcp.call('actual_rules_create', { conditions: [{ field: 'cleared', op: 'is', value: 'true' }], actions }))
       .rejects.toThrow(/Field "cleared" must be true or false/);
+  });
+
+  // #711: operators Actual accepts that the map used to refuse. Each rule is ANDed with a unique
+  // notes marker so it can never match a transaction another test creates. The negative is an
+  // operator the field does not take, and it must leave the rule count unchanged.
+  test('actual_rules_create create - account onBudget and amount isbetween are stored as written; payee_name gte is refused (#711)', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const marker = `E2E-Rule711-${uniqueSuffix()}`;
+    const note = { field: 'notes', op: 'contains', value: marker };
+    const create = async (label: string, conditions: any[]) => {
+      const raw = await mcp.call('actual_rules_create', { conditions, actions });
+      const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+      cleanup.add(CLEANUP_ORDER.rule, `rule 711 ${label} ${marker}`, async () => {
+        await mcp.call('manage_rules', { action: 'delete', id }).catch(() => undefined);
+      });
+      return id;
+    };
+    const budgetId = await create('onBudget', [{ field: 'account', op: 'onBudget', value: '' }, note]);
+    const rangeId = await create('isbetween', [{ field: 'amount', op: 'isbetween', value: { num1: -5000, num2: -1000 } }, note]);
+    const listRules = async () => {
+      const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+      return (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    };
+    const rules = await listRules();
+    const onBudget = rules.find((r: any) => r?.id === budgetId)?.conditions?.find((c: any) => c?.field === 'account');
+    expect(onBudget).toMatchObject({ field: 'account', op: 'onBudget' });
+    const range = rules.find((r: any) => r?.id === rangeId)?.conditions?.find((c: any) => c?.field === 'amount');
+    expect(range).toMatchObject({ field: 'amount', op: 'isbetween', value: { num1: -5000, num2: -1000 } });
+
+    const before = rules.length;
+    const conditions = [{ field: 'payee_name', op: 'gte', value: marker }];
+    await expect(mcp.call('actual_rules_create', { conditions, actions }))
+      .rejects.toThrow(/Invalid operator "gte" for field "payee_name"\. Field "payee_name" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf, hasTags, hasAnyTag\./);
+    expect((await listRules()).length).toBe(before);
   });
 
   test('actual_schedules_get - answers', async ({ mcp }) => {

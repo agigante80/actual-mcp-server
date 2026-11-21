@@ -161,8 +161,8 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     reset();
     threw = null;
     try { await tool.call({ ...validInput, conditions: [{ field: 'imported_payee', op: 'hasTags', value: '#trip' }] }); } catch (e) { threw = e; }
-    check(threw?.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: contains, matches, doesNotContain, is, isNot.',
-      'NEGATIVE: imported_payee hasTags is refused (no trailing sentence on this path)', threw?.message);
+    check(threw?.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf.',
+      'NEGATIVE: imported_payee hasTags is refused with the shared message (#711)', threw?.message);
     check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
   }
 
@@ -206,6 +206,70 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
       check(threw?.message?.includes(part), `NEGATIVE: ${label} is refused`, threw?.message);
       check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
     }
+  }
+
+  console.log('\n[#711] rules_create_or_update: the shared operator map, same messages as actual_rules_create');
+  {
+    const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent';
+    for (const [label, c] of [
+      ['account onBudget ""', { field: 'account', op: 'onBudget', value: '' }],
+      ['amount isbetween {1000, 5000}', { field: 'amount', op: 'isbetween', value: { num1: 1000, num2: 5000 } }],
+      ['date isapprox', { field: 'date', op: 'isapprox', value: '2026-11-01' }],
+      ['payee_name oneOf an array of text', { field: 'payee_name', op: 'oneOf', value: ['Amazon', 'AMZN'] }],
+    ]) {
+      reset();
+      let out = null;
+      let threw = null;
+      try { out = await tool.call({ ...validInput, conditions: [c] }); } catch (e) { threw = e; }
+      check(out?.created === true && createCalls === 1, `${label} is accepted on the upsert path`, threw?.message);
+    }
+    for (const [label, c, message] of [
+      ['payee_name gte', { field: 'payee_name', op: 'gte', value: 'x' },
+        'Invalid operator "gte" for field "payee_name". Field "payee_name" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf, hasTags, hasAnyTag.'],
+      ['payee contains', { field: 'payee', op: 'contains', value: 'amazon' },
+        'Invalid operator "contains" for field "payee". Field "payee" is a id field and only supports: is, isNot, oneOf, notOneOf. To match by name use "payee_name" or "imported_payee".'],
+      ['description', { field: 'description', op: 'contains', value: 'x' }, `Unknown condition field "description". Valid fields: ${VALID}.`],
+      ['saved', { field: 'saved', op: 'is', value: 'x' }, `Unknown condition field "saved". Valid fields: ${VALID}.`],
+      ['amount isbetween 5000', { field: 'amount', op: 'isbetween', value: 5000 },
+        'Operator "isbetween" requires {num1, num2} in integer cents, for example {"num1": 1000, "num2": 5000} (field: amount).'],
+      ['amount gte {num1, num2}', { field: 'amount', op: 'gte', value: { num1: 1, num2: 2 } }, 'Only "isbetween" takes a {num1, num2} value (field: amount, op: gte).'],
+    ]) {
+      reset();
+      let threw = null;
+      try { await tool.call({ ...validInput, conditions: [c] }); } catch (e) { threw = e; }
+      check(threw?.message === message, `NEGATIVE: ${label} is refused with the exact message`, threw?.message);
+      check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
+    }
+  }
+
+  console.log('\n[#711] rules_create_or_update: reversed isbetween bounds are the same rule');
+  {
+    const { canonicalize } = await import('../../dist/src/lib/rule-matching.js');
+    const key = (v) => canonicalize({ field: 'amount', op: 'isbetween', value: v });
+    check(key({ num1: 1000, num2: 5000 }) === key({ num1: 5000, num2: 1000 }), 'canonicalize treats {1000, 5000} and {5000, 1000} as one range');
+    check(key({ num2: 5000, num1: 1000 }) === key({ num1: 1000, num2: 5000 }), '  and does not depend on the key order');
+    check(key({ num1: 1000, num2: 5000 }) !== key({ num1: 1000, num2: 6000 }), 'NEGATIVE: a different range stays a different key');
+
+    const budget = (op, value) => canonicalize({ field: 'account', op, value });
+    check(budget('onBudget', '') === budget('onBudget', 'x') && budget('offBudget', '') === budget('offBudget', 7), 'canonicalize ignores the value of onBudget and offBudget (upstream does too)');
+    check(budget('onBudget', '') !== budget('offBudget', ''), 'NEGATIVE: onBudget and offBudget stay different keys');
+    check(canonicalize({ field: 'account', op: 'is', value: 'a' }) !== canonicalize({ field: 'account', op: 'is', value: 'b' }), 'NEGATIVE: the value of any other operator still counts');
+
+    const amountCond = (num1, num2) => ({ field: 'amount', op: 'isbetween', value: { num1, num2 } });
+    const existing = () => [{ id: 'existing-rule-id', stage: 'pre', conditionsOp: 'and',
+      conditions: [amountCond(1000, 5000)], actions: [{ op: 'set', field: 'notes', value: 'old' }] }];
+    reset();
+    rulesResponse = existing();
+    const countBefore = rulesResponse.length;
+    const out = await tool.call({ ...validInput, conditions: [amountCond(5000, 1000)] });
+    check(out?.id === 'existing-rule-id' && out?.created === false, 'reversed bounds return the existing id with created false', JSON.stringify(out));
+    check(updateCalls === 1 && createCalls === 0 && rulesResponse.length === countBefore, '  one update, no create: the rule count is unchanged');
+    check(JSON.stringify(updatedRule?.conditions?.[0]?.value) === JSON.stringify({ num1: 5000, num2: 1000 }), '  and the rule is written with the bounds as last sent, not reordered', JSON.stringify(updatedRule?.conditions));
+
+    reset();
+    rulesResponse = existing();
+    const other = await tool.call({ ...validInput, conditions: [amountCond(1000, 6000)] });
+    check(other?.created === true && createCalls === 1 && updateCalls === 0, 'NEGATIVE: a different range creates a new rule');
   }
 
   console.log('');
