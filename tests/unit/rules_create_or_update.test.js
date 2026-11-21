@@ -31,6 +31,10 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
   apiDefault.getRules = async () => { witness?.noteRead(); return rulesResponse; };
   apiDefault.createRule = async (_data) => { witness?.noteWrite(); createCalls++; return createReturns; };
   apiDefault.updateRule = async (rule) => { witness?.noteWrite(); updateCalls++; updatedRule = rule; };
+  // #710: the adapter's reference guard (#485) lists payees for an id condition. The adapter
+  // binds the raw call at import, so the stub has to exist before the import below.
+  const PAYEES = ['10000000-0000-4000-8000-00000000000a', '10000000-0000-4000-8000-00000000000b'];
+  apiDefault.getPayees = async () => { witness?.noteRead(); return PAYEES.map((id) => ({ id, name: id })); };
 
   const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
   const [tool, adapterMod] = await Promise.all([
@@ -160,6 +164,48 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(threw?.message === 'Invalid operator "hasTags" for field "imported_payee". Field "imported_payee" is a string field and only supports: contains, matches, doesNotContain, is, isNot.',
       'NEGATIVE: imported_payee hasTags is refused (no trailing sentence on this path)', threw?.message);
     check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
+  }
+
+  console.log('\n[#710] rules_create_or_update: array and boolean condition values');
+  {
+    const [A, B] = PAYEES;
+    reset();
+    let out = await tool.call({ ...validInput, conditions: [{ field: 'payee', op: 'oneOf', value: [A, B] }] });
+    check(out?.created === true && createCalls === 1, 'payee oneOf [a, b] with no match is created');
+
+    reset();
+    rulesResponse = [{ id: 'existing-rule-id', stage: 'pre', conditionsOp: 'and',
+      conditions: [{ field: 'payee', op: 'oneOf', value: [A, B] }], actions: [{ op: 'set', field: 'notes', value: 'old' }] }];
+    const reordered = [B, A];
+    out = await tool.call({ ...validInput, conditions: [{ field: 'payee', op: 'oneOf', value: reordered }] });
+    check(out?.created === false && out?.id === 'existing-rule-id' && updateCalls === 1 && createCalls === 0,
+      'the same ids in another order match the existing rule (update, no duplicate)', JSON.stringify(out));
+    check(reordered.join() === `${B},${A}` && updatedRule?.conditions?.[0]?.value?.join() === `${B},${A}`, '  and the caller\'s array is written in the order given, not sorted');
+
+    reset();
+    rulesResponse = [{ id: 'existing-rule-id', stage: 'pre', conditionsOp: 'and',
+      conditions: [{ field: 'payee', op: 'oneOf', value: [A] }], actions: [{ op: 'set', field: 'notes', value: 'old' }] }];
+    out = await tool.call({ ...validInput, conditions: [{ field: 'payee', op: 'oneOf', value: [A, B] }] });
+    check(out?.created === true && createCalls === 1 && updateCalls === 0, 'NEGATIVE: a different id list does not match (a new rule is created)');
+
+    reset();
+    out = await tool.call({ ...validInput, conditions: [{ field: 'cleared', op: 'is', value: true }] });
+    check(out?.created === true && createCalls === 1, 'cleared is true is accepted on the upsert path');
+
+    for (const [label, conditions, part] of [
+      ['oneOf []', [{ field: 'payee', op: 'oneOf', value: [] }], 'requires a non-empty array'],
+      ['an array on is', [{ field: 'payee', op: 'is', value: [A] }], 'does not accept an array'],
+      ['cleared is "true"', [{ field: 'cleared', op: 'is', value: 'true' }], 'must be true or false'],
+      ['a boolean on notes', [{ field: 'notes', op: 'is', value: true }], 'does not accept a boolean'],
+      ['a non-UUID element', [{ field: 'payee', op: 'oneOf', value: ['Amazon'] }], 'expects IDs (UUIDs)'],
+      ['cleared isNot', [{ field: 'cleared', op: 'isNot', value: true }], 'Invalid operator "isNot" for field "cleared"'],
+    ]) {
+      reset();
+      let threw = null;
+      try { await tool.call({ ...validInput, conditions }); } catch (e) { threw = e; }
+      check(threw?.message?.includes(part), `NEGATIVE: ${label} is refused`, threw?.message);
+      check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and nothing is written');
+    }
   }
 
   console.log('');

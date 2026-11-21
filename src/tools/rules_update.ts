@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertTagOperatorValue } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionValue, assertTagOperatorValue } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one. The action schema stays private because `op`
 // is REQUIRED here (the shared one defaults it to "set"); only the describe text is shared.
@@ -24,6 +24,10 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
   'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
   'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
   'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
+  'cleared': { type: 'boolean', operators: ['is'] },
+  'reconciled': { type: 'boolean', operators: ['is'] },
+  'transfer': { type: 'boolean', operators: ['is'] },
+  'parent': { type: 'boolean', operators: ['is'] },
 };
 
 const InputSchema = z.object({
@@ -113,6 +117,7 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
           );
         }
         assertTagOperatorValue(condition);
+        assertConditionValue(condition);
         
         // Check if using payee field with text value instead of ID
         if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
@@ -128,14 +133,6 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
           throw new Error(
             `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
             `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
-          );
-        }
-        
-        // Validate oneOf/notOneOf operators expect array values
-        if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
-          throw new Error(
-            `Operator "${condition.op}" expects an array of values, but got ${typeof condition.value}. ` +
-            `Example: {field: "${condition.field}", op: "${condition.op}", value: ["uuid-1", "uuid-2"]}`
           );
         }
       }

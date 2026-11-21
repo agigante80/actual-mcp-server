@@ -178,7 +178,8 @@ await check('read-only: all five actions are refused with MCP_READ_ONLY and run 
 await check('published schema: flat, action required, no oneOf or anyOf, every property typed and described', () => {
   const js = z.toJSONSchema(tool.inputSchema);
   assert.strictEqual(js.type, 'object');
-  assert.ok(!/oneOf|anyOf/.test(JSON.stringify(js)), 'no oneOf or anyOf at any depth');
+  // #710: match the KEYWORD (a JSON key), not the text: a description now names the oneOf operator.
+  assert.ok(!/"(oneOf|anyOf)":/.test(JSON.stringify(js)), 'no oneOf or anyOf at any depth');
   assert.deepStrictEqual(js.required, ['action']);
   assert.deepStrictEqual(js.properties.action.enum, ['create', 'create_batch', 'upsert', 'update', 'delete']);
   assert.deepStrictEqual(js.properties.stage.type, ['string', 'null']);
@@ -214,6 +215,36 @@ await check('#703: the description names the tag operators for notes only', () =
   const sentence = d.split('. ').find((x) => x.includes('hasTags'));
   assert.ok(/notes/.test(sentence), sentence);
   assert.ok(!/imported_payee|description/.test(sentence), sentence);
+});
+await check('#710: array and boolean condition values pass through every action unchanged', async () => {
+  const LIST = { field: 'payee', op: 'oneOf', value: [U1, U2] };
+  const FLAG = { field: 'cleared', op: 'is', value: true };
+  await expectCall({ action: 'create', conditions: [LIST, FLAG], actions: [ACT] }, 'actual_rules_create', { conditions: [LIST, FLAG], actions: [ACT] });
+  await expectCall({ action: 'upsert', conditions: [LIST], actions: [ACT] }, 'actual_rules_create_or_update', { conditions: [LIST], actions: [ACT] });
+  await expectCall({ action: 'update', id: U1, conditions: [FLAG] }, 'actual_rules_update', { id: U1, fields: { conditions: [FLAG] } });
+  await expectCall({ action: 'create_batch', rules: [{ conditions: [LIST], actions: [ACT] }] }, 'actual_rules_create_batch', { rules: [{ conditions: [LIST], actions: [ACT] }] });
+});
+await check('#710 NEGATIVE: an object or a nested array as a condition value is refused by the schema', async () => {
+  await refused({ action: 'create', conditions: [{ field: 'payee', op: 'oneOf', value: { a: 1 } }], actions: [ACT] }, /conditions/);
+  await refused({ action: 'create', conditions: [{ field: 'payee', op: 'oneOf', value: [[U1]] }], actions: [ACT] }, /conditions/);
+});
+await check('#710: the real legacy handler refuses the bad shapes through the compact tool', async () => {
+  const t = buildCompactTool(spec, { callOperation: async (_n, a) => legacyCreate.call(a) }, phrases);
+  for (const [c, re] of [
+    [{ field: 'payee', op: 'oneOf', value: [] }, /requires a non-empty array/],
+    [{ field: 'payee', op: 'is', value: [U1] }, /does not accept an array/],
+    [{ field: 'cleared', op: 'is', value: 'true' }, /must be true or false/],
+    [{ field: 'notes', op: 'is', value: true }, /does not accept a boolean/],
+  ]) {
+    let e;
+    try { await t.call({ action: 'create', conditions: [c], actions: [ACT] }); } catch (x) { e = x; }
+    assert.ok(e && re.test(e.message), `${re} vs ${e && e.message}`);
+  }
+});
+await check('#710: the description names the list and flag forms', () => {
+  const d = spec.description;
+  assert.ok(/oneOf, notOneOf with an array of ids/.test(d), d);
+  assert.ok(/cleared, reconciled, transfer, parent take is with true or false/.test(d), d);
 });
 console.log(`\n[compact-manage-rules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

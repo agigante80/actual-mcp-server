@@ -26,12 +26,12 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertTagOperatorValue } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionValue, assertTagOperatorValue } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one; the action schema stays private (same shape as
 // the shared one) and only borrows the describe text.
 const ActionSchema = z.object({
-  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default "set"`),
+  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default set`),
   field: z.string().optional().describe(ACTION_DESCRIBE.field),
   value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
@@ -48,6 +48,10 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
   'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
   'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
   'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
+  'cleared': { type: 'boolean', operators: ['is'] },
+  'reconciled': { type: 'boolean', operators: ['is'] },
+  'transfer': { type: 'boolean', operators: ['is'] },
+  'parent': { type: 'boolean', operators: ['is'] },
 };
 
 const InputSchema = z.object({
@@ -90,6 +94,7 @@ Returns: { id, created }, created true for a new rule, false for an updated one.
         );
       }
       assertTagOperatorValue(condition);
+      assertConditionValue(condition);
       if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
         throw new Error(
           `Field "payee" expects a UUID, but got "${condition.value}". ` +
@@ -98,9 +103,6 @@ Returns: { id, created }, created true for a new rule, false for an updated one.
       }
       if (['account', 'category'].includes(condition.field) && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
         throw new Error(`Field "${condition.field}" expects a UUID, but got text "${condition.value}".`);
-      }
-      if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
-        throw new Error(`Operator "${condition.op}" expects an array of values.`);
       }
     }
 

@@ -143,6 +143,8 @@ Until v0.28.0 six budget tools had camelCase names. The old names still work as 
 
 `actual_rules_get` · `actual_rules_create` · `actual_rules_update` · `actual_rules_delete`
 
+**Condition values.** A condition is `{field, op, value}`. The value is text or a number for most operators. `oneOf` and `notOneOf` (on `payee`, `account`, `category`) take a non-empty array of ids, and an array on any other operator is refused. `cleared`, `reconciled`, `transfer` and `parent` take `is` with `true` or `false`; a boolean on any other field is refused. The same holds for `manage_rules`.
+
 | Tool | Description |
 |------|-------------|
 | `actual_rules_create_or_update` | Idempotent upsert: create a rule, or update the existing one that matches the same conditions, in a single call. Use this instead of get-then-create when re-running a categorisation setup, so repeated runs do not pile up duplicate rules |

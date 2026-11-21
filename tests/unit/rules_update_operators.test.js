@@ -51,6 +51,30 @@ console.log('\n[#703] rules_update: tag operators on notes');
   check(calls.length === 0, '  and updateRule is never called');
 }
 
+console.log('\n[#710] rules_update: array and boolean condition values');
+{
+  const A = '10000000-0000-4000-8000-00000000000a';
+  let m = await attempt([{ field: 'payee', op: 'oneOf', value: [A, ID] }]);
+  check(m === '' && calls.length === 1 && Array.isArray(calls[0].fields.conditions[0].value), 'payee oneOf [id, id] is accepted and reaches the adapter as an array', m);
+  m = await attempt([{ field: 'cleared', op: 'is', value: true }]);
+  check(m === '' && calls[0]?.fields?.conditions?.[0]?.value === true, 'cleared is true is accepted', m);
+
+  m = await attempt([{ field: 'account', op: 'oneOf', value: [] }]);
+  check(m === 'Operator "oneOf" requires a non-empty array of values (field: account). Example: {field: "account", op: "oneOf", value: ["uuid-1", "uuid-2"]}',
+    'NEGATIVE: oneOf [] is refused with the exact message', m);
+  check(calls.length === 0, '  and updateRule is never called');
+  m = await attempt([{ field: 'account', op: 'oneOf', value: ['Checking'] }]);
+  check(m.includes('expects IDs (UUIDs)') && m.includes('"Checking"') && calls.length === 0, 'NEGATIVE: a non-UUID array element is refused', m);
+  m = await attempt([{ field: 'payee', op: 'isNot', value: [A] }]);
+  check(m.includes('does not accept an array') && calls.length === 0, 'NEGATIVE: an array on isNot is refused', m);
+  m = await attempt([{ field: 'parent', op: 'is', value: 'yes' }]);
+  check(m.includes('must be true or false') && calls.length === 0, 'NEGATIVE: parent is "yes" is refused', m);
+  m = await attempt([{ field: 'cleared', op: 'isNot', value: true }]);
+  check(m.startsWith('Invalid operator "isNot" for field "cleared".') && calls.length === 0, 'NEGATIVE: cleared isNot is refused', m);
+  m = await attempt([{ field: 'imported_payee', op: 'is', value: false }]);
+  check(m.includes('does not accept a boolean') && calls.length === 0, 'NEGATIVE: a boolean on a text field is refused', m);
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_update operator checks passed');
 process.exit(0);

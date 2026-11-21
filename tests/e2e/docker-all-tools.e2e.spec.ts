@@ -3756,6 +3756,38 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
     expect((await rulesOf(mcp)).some((r: any) => r?.id === id)).toBe(false);
   });
 
+  // #710: a list of ids for oneOf / notOneOf and a boolean for the flag fields, created inline
+  // (makeRule only builds a notes condition). The flag rule is ANDed with a unique notes marker so
+  // it can never match a transaction another test creates.
+  test('manage_rules create - a oneOf id list and a cleared flag condition are stored as written (#710)', async ({ mcp, makePayee, makeCategory, cleanup }) => {
+    const [a, b] = [await makePayee(), await makePayee()];
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const marker = `E2E-Rule710-${uniqueSuffix()}`;
+    const create = async (label: string, conditions: any[]) => {
+      const raw = await mcp.call('manage_rules', { action: 'create', conditions, actions });
+      const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+      cleanup.add(CLEANUP_ORDER.rule, `rule 710 ${label} ${marker}`, async () => {
+        await mcp.call('manage_rules', { action: 'delete', id }).catch(() => undefined);
+      });
+      return id;
+    };
+    const listId = await create('list', [{ field: 'payee', op: 'oneOf', value: [a.id, b.id] }]);
+    const flagId = await create('flag', [{ field: 'cleared', op: 'is', value: true }, { field: 'notes', op: 'contains', value: marker }]);
+    const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+    const rules = (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    const list = rules.find((r: any) => r?.id === listId)?.conditions?.[0];
+    expect(list).toMatchObject({ field: 'payee', op: 'oneOf' });
+    expect([...(list.value as string[])].sort()).toEqual([a.id, b.id].sort());
+    const flag = rules.find((r: any) => r?.id === flagId)?.conditions?.find((c: any) => c?.field === 'cleared');
+    expect(flag).toMatchObject({ field: 'cleared', op: 'is', value: true });
+
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'payee', op: 'oneOf', value: a.id }], actions }))
+      .rejects.toThrow(/requires a non-empty array of values \(field: payee\)/);
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'cleared', op: 'is', value: 'true' }], actions }))
+      .rejects.toThrow(/Field "cleared" must be true or false/);
+  });
+
   test('manage_rules upsert - the same conditions twice: created, then updated with the same id', async ({ mcp, makeCategory, cleanup }) => {
     const category = await makeCategory();
     const marker = `E2E-Upsert677-${uniqueSuffix()}`;
@@ -4086,6 +4118,8 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
 // file that calls a legacy name, besides the two session tools and the deprecated alias row;
 // tests/unit/e2e_uses_compact_names.test.js pins that. Rows skip when the session publishes no
 // legacy tool (the compact surface), they never retry.
+// #710 adds the one WRITE row here: the legacy rule create with an id list and a flag condition,
+// because the legacy and compact rule schemas are separate text and both are published.
 test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
   test.beforeEach(async ({ mcp }) => {
     const names = (await mcp.listTools()).map((t: any) => t.name);
@@ -4123,6 +4157,38 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
   test('actual_rules_get - answers', async ({ mcp }) => {
     expect(await mcp.call('actual_rules_get')).toBeTruthy();
+  });
+
+  // #710: a list of ids for oneOf / notOneOf and a boolean for the flag fields, created inline
+  // (makeRule only builds a notes condition). The flag rule is ANDed with a unique notes marker so
+  // it can never match a transaction another test creates.
+  test('actual_rules_create create - a oneOf id list and a cleared flag condition are stored as written (#710)', async ({ mcp, makePayee, makeCategory, cleanup }) => {
+    const [a, b] = [await makePayee(), await makePayee()];
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const marker = `E2E-Rule710-${uniqueSuffix()}`;
+    const create = async (label: string, conditions: any[]) => {
+      const raw = await mcp.call('actual_rules_create', { conditions, actions });
+      const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+      cleanup.add(CLEANUP_ORDER.rule, `rule 710 ${label} ${marker}`, async () => {
+        await mcp.call('manage_rules', { action: 'delete', id }).catch(() => undefined);
+      });
+      return id;
+    };
+    const listId = await create('list', [{ field: 'payee', op: 'oneOf', value: [a.id, b.id] }]);
+    const flagId = await create('flag', [{ field: 'cleared', op: 'is', value: true }, { field: 'notes', op: 'contains', value: marker }]);
+    const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+    const rules = (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    const list = rules.find((r: any) => r?.id === listId)?.conditions?.[0];
+    expect(list).toMatchObject({ field: 'payee', op: 'oneOf' });
+    expect([...(list.value as string[])].sort()).toEqual([a.id, b.id].sort());
+    const flag = rules.find((r: any) => r?.id === flagId)?.conditions?.find((c: any) => c?.field === 'cleared');
+    expect(flag).toMatchObject({ field: 'cleared', op: 'is', value: true });
+
+    await expect(mcp.call('actual_rules_create', { conditions: [{ field: 'payee', op: 'oneOf', value: a.id }], actions }))
+      .rejects.toThrow(/requires a non-empty array of values \(field: payee\)/);
+    await expect(mcp.call('actual_rules_create', { conditions: [{ field: 'cleared', op: 'is', value: 'true' }], actions }))
+      .rejects.toThrow(/Field "cleared" must be true or false/);
   });
 
   test('actual_schedules_get - answers', async ({ mcp }) => {

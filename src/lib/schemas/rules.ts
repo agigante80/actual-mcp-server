@@ -9,10 +9,10 @@ import { z } from 'zod';
 // actual_rules_create_or_update keeps its own stage (no default, #342), so neither can reuse
 // ActionSchema or RuleItemSchema without changing what it accepts.
 export const ACTION_DESCRIBE = {
-  op: 'One of "set", "set-split-amount", "link-schedule", "prepend-notes", "append-notes"',
-  field: 'Field to modify, required for "set": category, payee, notes, cleared, account',
+  op: 'One of set, set-split-amount, link-schedule, prepend-notes, append-notes',
+  field: 'Field to modify, required for set: category, payee, notes, cleared, account',
   value: 'Value to assign: a UUID for category, payee and account, text for notes, a number for amounts',
-  type: 'Value type hint: "id", "string", "number" or "boolean"',
+  type: 'Value type hint: id, string, number or boolean',
   options: 'Additional options for the action',
 };
 
@@ -23,6 +23,7 @@ export const STAGE_DESCRIBE =
 export const CONDITION_OPERATORS_HELP =
   'Condition operators: imported_payee, notes, description (text): contains, matches, doesNotContain, is, isNot. ' +
   'payee, account, category (ids): is, isNot, oneOf, notOneOf. amount, date: is, gte, lte, gt, lt; amount also isapprox. ' +
+  'cleared, reconciled, transfer, parent: is true or false. ' +
   'notes also: hasTags (all), hasAnyTag (any), value "#a #b", whole tags, any case.';
 
 /**
@@ -40,16 +41,78 @@ export function assertTagOperatorValue(condition: { field: string; op: string; v
   );
 }
 
+const ARRAY_OPERATORS: ReadonlySet<string> = new Set(['oneOf', 'notOneOf']);
+const BOOLEAN_FIELDS: ReadonlySet<string> = new Set(['cleared', 'reconciled', 'transfer', 'parent']);
+const ID_FIELDS: ReadonlySet<string> = new Set(['payee', 'account', 'category']);
+const UUID_SHAPE = /^[0-9a-f-]{36}$/i;
+
+/**
+ * #710: which KIND of value a condition may carry, shared by the three rule validators
+ * (validateRuleInput here, actual_rules_update, actual_rules_create_or_update) so they refuse
+ * the same input with the same words. Call it AFTER the operator check.
+ *
+ * Two refusals are deliberately stricter than upstream, which accepts both: an empty array
+ * (`notOneOf []` matches every transaction, `oneOf []` none) and an array on a single-value
+ * operator (it never matches anything). Do not relax them.
+ */
+export function assertConditionValue(condition: { field: string; op: string; value?: unknown }): void {
+  const { field, op, value } = condition;
+  if (ARRAY_OPERATORS.has(op)) {
+    if (!Array.isArray(value) || value.length === 0) {
+      throw new Error(
+        `Operator "${op}" requires a non-empty array of values (field: ${field}). ` +
+        `Example: {field: "${field}", op: "${op}", value: ["uuid-1", "uuid-2"]}`
+      );
+    }
+    // An empty element is dropped upstream (filter(Boolean)), which would turn notOneOf [""] into
+    // the match-everything empty list refused above. A repeated element would make the same set
+    // of ids two different rules for the upsert match.
+    if (value.some((element) => typeof element !== 'string' || element.trim() === '')) {
+      throw new Error(`Operator "${op}" does not accept an empty value in its array (field: ${field}).`);
+    }
+    const repeated = value.find((element, index) => value.indexOf(element) !== index);
+    if (repeated !== undefined) {
+      throw new Error(`Operator "${op}" lists "${String(repeated)}" more than once (field: ${field}).`);
+    }
+    if (ID_FIELDS.has(field)) {
+      const bad = value.find((element) => typeof element !== 'string' || !UUID_SHAPE.test(element));
+      if (bad !== undefined) {
+        throw new Error(
+          `Field "${field}" expects IDs (UUIDs) with operator "${op}", but the array holds "${String(bad)}". ` +
+          `List the ${field === 'category' ? 'categories' : `${field}s`} to find the correct UUIDs.`
+        );
+      }
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    throw new Error(
+      `Operator "${op}" does not accept an array (field: ${field}). Use "oneOf" or "notOneOf" for a list of values.`
+    );
+  }
+  if (BOOLEAN_FIELDS.has(field)) {
+    if (typeof value !== 'boolean') {
+      throw new Error(`Field "${field}" must be true or false with operator "${op}", but got ${typeof value}.`);
+    }
+  } else if (typeof value === 'boolean') {
+    throw new Error(`Field "${field}" does not accept a boolean value (operator: ${op}).`);
+  }
+}
+
 // Define the schema for rule conditions and actions
 export const ConditionSchema = z.object({
-  field: z.string().describe('Field to match, e.g. "payee", "notes", "amount", "category"'),
-  op: z.string().describe('Operator, e.g. "is", "contains", "gte"'),
-  value: z.union([z.string(), z.number()]).describe('Value to match against'),
-  type: z.string().optional().describe('Type hint, e.g. "string", "number", "id"'),
+  field: z.string().describe('Field to match'),
+  op: z.string().describe('Operator'),
+  // #710: one flat union. Which kind a given field and operator takes is enforced by
+  // assertConditionValue, not here: a nested schema per operator would publish oneOf.
+  value: z
+    .union([z.string(), z.number(), z.boolean(), z.array(z.string())])
+    .describe('Value; an array of ids for oneOf, notOneOf'),
+  type: z.string().optional().describe('Type hint, e.g. string, number, id'),
 });
 
 export const ActionSchema = z.object({
-  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default "set"`),
+  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default set`),
   field: z.string().optional().describe(ACTION_DESCRIBE.field),
   value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
@@ -66,6 +129,10 @@ const FIELD_OPERATORS: Record<string, { type: string; operators: string[] }> = {
   'description': { type: 'string', operators: ['contains', 'matches', 'doesNotContain', 'is', 'isNot'] },
   'amount': { type: 'number', operators: ['is', 'gte', 'lte', 'gt', 'lt', 'isapprox'] },
   'date': { type: 'date', operators: ['is', 'gte', 'lte', 'gt', 'lt'] },
+  'cleared': { type: 'boolean', operators: ['is'] },
+  'reconciled': { type: 'boolean', operators: ['is'] },
+  'transfer': { type: 'boolean', operators: ['is'] },
+  'parent': { type: 'boolean', operators: ['is'] },
 };
 
 export const RuleItemSchema = z.object({
@@ -160,6 +227,7 @@ export function validateRuleInput(input: RuleItem): void {
       );
     }
     assertTagOperatorValue(condition);
+    assertConditionValue(condition);
     
     // Check if using payee field with text value instead of ID
     if (condition.field === 'payee' && typeof condition.value === 'string' && !condition.value.match(/^[0-9a-f-]{36}$/i)) {
@@ -175,14 +243,6 @@ export function validateRuleInput(input: RuleItem): void {
       throw new Error(
         `Field "${condition.field}" expects an ID (UUID), but got text value "${condition.value}". ` +
         `Use the ${condition.field} UUID from your budget data. List ${condition.field === 'account' ? 'accounts' : 'categories'} to find the correct UUID.`
-      );
-    }
-    
-    // Validate oneOf/notOneOf operators expect array values
-    if (['oneOf', 'notOneOf'].includes(condition.op) && !Array.isArray(condition.value)) {
-      throw new Error(
-        `Operator "${condition.op}" expects an array of values, but got ${typeof condition.value}. ` +
-        `Example: {field: "${condition.field}", op: "${condition.op}", value: ["uuid-1", "uuid-2"]}`
       );
     }
   }
