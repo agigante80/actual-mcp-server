@@ -92,6 +92,33 @@ export const tagIdSchema = z
   .describe('Tag UUID');
 
 /**
+ * Tag name (#699). A tag is the `#word` written in a transaction's notes, and upstream
+ * extracts it with `/(?<!#)#([^#\s]+)/g`, so a name holding "#" or whitespace can never
+ * match a note. The pattern is the one upstream's own rename uses (`/^[^#\s]+$/`). No
+ * trimming: " a " is refused, not silently rewritten. Applied on create and on the NEW
+ * name of an update only, never on a lookup by id, so a bad row that already exists can
+ * still be renamed and deleted.
+ */
+export const TAG_NAME_PATTERN = /^[^#\s]+$/;
+export const tagNameSchema = z
+  .string()
+  .regex(TAG_NAME_PATTERN, 'tag must be one word: no "#" and no whitespace')
+  .describe('Tag word, no "#", no spaces');
+
+/**
+ * Tag colour (#699): "#" plus exactly six hex digits. The upstream API stores any string, but
+ * the Actual UI accepts only this form (TagCreationRow.tsx tests /^#[0-9a-fA-F]{6}$/ and the
+ * tag editor writes the picker's hex string), so anything else is a colour the UI itself could
+ * never have produced. On create, "no colour" is expressed by omitting the field; on update an
+ * omitted colour keeps the stored one, and no tool can clear a colour (not supported).
+ */
+export const TAG_COLOR_PATTERN = /^#[0-9a-fA-F]{6}$/;
+export const tagColorSchema = z
+  .string()
+  .regex(TAG_COLOR_PATTERN, 'color must be a 6 digit hex colour such as "#33aa33"')
+  .describe('6 digit hex, e.g. "#33aa33"');
+
+/**
  * Schedule UUID validation
  * Used for: schedule management operations (update, delete)
  *
@@ -272,6 +299,8 @@ export const CommonSchemas = {
   ruleId: ruleIdSchema,
   accountGroupId: accountGroupIdSchema,
   tagId: tagIdSchema,
+  tagName: tagNameSchema,
+  tagColor: tagColorSchema,
   scheduleId: scheduleIdSchema,
 
   // Dates

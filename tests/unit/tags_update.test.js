@@ -96,6 +96,25 @@ const NONEXISTENT_ID = '11111111-1111-1111-1111-111111111111';
     check(!threw, 'valid input accepted by schema');
   }
 
+  console.log('\n[tags_update] #699: a new name with "#" or whitespace, or a non-hex colour, is refused by the schema');
+  for (const bad of ['#hashy', 'two words', ' lead', 'trail ']) {
+    let threw = false;
+    try { tool.inputSchema.parse({ id: EXISTING_ID, tag: bad }); } catch (_) { threw = true; }
+    check(threw, `refuses name ${JSON.stringify(bad)}`);
+  }
+  for (const bad of ['not-a-colour', 'red', '33aa33', '#12345', '#abc']) {
+    let threw = false;
+    try { tool.inputSchema.parse({ id: EXISTING_ID, color: bad }); } catch (_) { threw = true; }
+    check(threw, `refuses colour ${JSON.stringify(bad)}`);
+  }
+
+  console.log('\n[tags_update] #699: an update without a tag field passes (the name stays optional)');
+  {
+    let threw = false;
+    try { tool.inputSchema.parse({ id: EXISTING_ID, description: 'd' }); tool.inputSchema.parse({ id: EXISTING_ID, color: '#112233' }); } catch (_) { threw = true; }
+    check(!threw, 'description-only and colour-only updates accepted');
+  }
+
   adapter.updateTag = origUpdateTag;
 
   console.log('');

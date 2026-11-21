@@ -89,6 +89,31 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(threw, 'empty tag string rejected by schema');
   }
 
+  console.log('\n[tags_create] #699: a name with "#" or whitespace is refused before the adapter');
+  for (const bad of ['#hashy', 'two words', ' lead', 'trail ', 'mid#dle']) {
+    reset();
+    let threw = null;
+    try { await tool.call({ tag: bad }); } catch (e) { threw = e; }
+    check(threw instanceof Error && /tag must be one word/.test(threw.message), `refuses ${JSON.stringify(bad)} with the tag message`);
+    check(createCallCount === 0, `adapter.createTag NOT called for ${JSON.stringify(bad)}`);
+  }
+
+  console.log('\n[tags_create] #699: a colour that is not 6 digit hex is refused before the adapter');
+  for (const bad of ['not-a-colour', 'red', '33aa33', '#12345', '#abc', '#33AA33FF']) {
+    reset();
+    let threw = null;
+    try { await tool.call({ tag: 'ok', color: bad }); } catch (e) { threw = e; }
+    check(threw instanceof Error && /6 digit hex/.test(threw.message), `refuses colour ${JSON.stringify(bad)} with the colour message`);
+    check(createCallCount === 0, `adapter.createTag NOT called for colour ${JSON.stringify(bad)}`);
+  }
+
+  console.log('\n[tags_create] #699: 6 digit hex passes in either case');
+  for (const good of ['#33aa33', '#33AA33']) {
+    let threw = false;
+    try { tool.inputSchema.parse({ tag: 'ok', color: good }); } catch (_) { threw = true; }
+    check(!threw, `accepts colour ${good}`);
+  }
+
   adapter.createTag = origCreateTag;
 
   console.log('');

@@ -1,6 +1,6 @@
 {
   "compact": {
-    "bytes": 41779,
+    "bytes": 41740,
     "label": "Compact surface (default)",
     "tools": 15
   },
@@ -15,7 +15,7 @@
     "tools": 6
   },
   "legacy": {
-    "bytes": 120476,
+    "bytes": 120407,
     "label": "`MCP_TOOL_SURFACE=legacy`",
     "tools": 85
   },

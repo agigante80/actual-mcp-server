@@ -144,6 +144,24 @@ export async function tagTests(client, context) {
       }
     }
 
+    // --- NEGATIVE (#699): a name that can never match a note, and a colour that is not hex ---
+    console.log("\nNEGATIVE: manage_tags refuses a bad name or colour...");
+    for (const [label, args, re] of [
+      ['create "#name"', { action: "create", tag: `#${TAG_WORD}-bad` }, /one word/i],
+      ['create "two words"', { action: "create", tag: `${TAG_WORD} bad` }, /one word/i],
+      ['update to "two words"', { action: "update", id: tagId, tag: `${TAG_WORD} bad` }, /one word/i],
+      ['update colour "banana"', { action: "update", id: tagId, color: 'banana' }, /6 digit hex/i],
+    ]) {
+      try {
+        const res = await callTool("manage_tags", args);
+        fail(`${label}: expected a refusal, got: ${JSON.stringify(res).slice(0, 120)}`);
+      } catch (err) {
+        const msg = err.message || String(err);
+        if (re.test(msg)) console.log(`  ✓ ${label} refused: ${msg.slice(0, 100)}`);
+        else fail(`${label}: threw, but not with the expected message: ${msg.slice(0, 120)}`);
+      }
+    }
+
     // --- NEGATIVE: update with no fields (schema refine) ---
     console.log("\nNEGATIVE: tags_update with no fields to change...");
     try {

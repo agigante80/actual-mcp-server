@@ -18,13 +18,14 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
  */
 
 const id = z.string().optional().describe('Tag id.');
-const tag = z.string().optional().describe('Tag word without a leading "#", at least 1 character.');
-const color = z.string().optional().describe('Color string, by convention CSS hex such as "#33aa33".');
+const tag = z.string().optional().describe('Tag word: no "#", no whitespace.');
+const color = z.string().optional().describe('6 digit hex color such as "#33aa33".');
 const description = z.string().optional().describe('Tag description.');
 
 const REAL: Readonly<Record<string, z.ZodType>> = {
   id: CommonSchemas.tagId,
-  tag: z.string().min(1, 'tag must not be empty'),
+  tag: CommonSchemas.tagName,
+  color: CommonSchemas.tagColor,
 };
 
 type V = Record<string, unknown>;

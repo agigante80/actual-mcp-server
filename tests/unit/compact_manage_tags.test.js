@@ -89,8 +89,33 @@ await check('NEGATIVE: update with only id is refused with the legacy message an
 await check('NEGATIVE: malformed id and empty tag are refused', async () => {
   await refused({ action: 'delete', id: 'nope' }, /Invalid tag ID format/);
   await refused({ action: 'update', id: 'nope', tag: 'x' }, /Invalid tag ID format/);
-  await refused({ action: 'create', tag: '' }, /tag must not be empty/);
-  await refused({ action: 'update', id: U1, tag: '' }, /tag must not be empty/);
+  await refused({ action: 'create', tag: '' }, /tag must be one word/);
+  await refused({ action: 'update', id: U1, tag: '' }, /tag must be one word/);
+});
+// #699: a tag is the `#word` in a note, so a name with "#" or whitespace can never match one.
+await check('NEGATIVE (#699): a name with "#" or whitespace is refused on create and update, calling nothing', async () => {
+  for (const bad of ['#hashy', 'mid#dle', 'two words', ' lead', 'trail ', '  padded  ', 'tab\tbed', 'new\nline']) {
+    await refused({ action: 'create', tag: bad }, /tag must be one word/);
+    await refused({ action: 'update', id: U1, tag: bad }, /tag must be one word/);
+  }
+});
+await check('NEGATIVE (#699): a colour that is not 6 digit hex is refused on create and update, calling nothing', async () => {
+  for (const bad of ['not-a-colour', 'red', '33aa33', '#abc', '#ABCD', '#12345', '#1234567', '#33AA33ff', '#gggggg', '', ' #33aa33']) {
+    await refused({ action: 'create', tag: 't', color: bad }, /color must be a 6 digit hex colour/);
+    await refused({ action: 'update', id: U1, color: bad }, /color must be a 6 digit hex colour/);
+  }
+});
+await check('POSITIVE (#699): one-word names of any other shape and 6 digit hex in either case passes', async () => {
+  for (const good of ['groceries', 'Caf\u00e9', 'a-b_c.d/e', '2026', '\u65c5\u884c']) {
+    await expectCall({ action: 'create', tag: good }, 'actual_tags_create', { tag: good });
+  }
+  for (const good of ['#33aa33', '#33AA33', '#AbCdEf']) {
+    await expectCall({ action: 'update', id: U1, color: good }, 'actual_tags_update', { id: U1, color: good });
+  }
+});
+await check('POSITIVE (#699): delete and an update without a tag field pass (the name stays optional)', async () => {
+  await expectCall({ action: 'delete', id: U1 }, 'actual_tags_delete', { id: U1 });
+  await expectCall({ action: 'update', id: U1, description: 'd' }, 'actual_tags_update', { id: U1, description: 'd' });
 });
 await check('NEGATIVE: null is refused for every field', async () => {
   await refused({ action: 'create', tag: 't', color: null }, /color/);

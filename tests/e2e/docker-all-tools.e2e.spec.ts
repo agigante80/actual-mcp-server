@@ -2712,6 +2712,18 @@ payee: payee.id,
     expect(tags.find((t: any) => t?.id === id || t?.tag === tag)).toBeTruthy();
   });
 
+  test('manage_tags create - ERROR: a name with "#" or whitespace, or a non-hex colour, is refused and nothing is created (#699)', async ({ mcp }) => {
+    const suffix = uniqueSuffix();
+    const hashy = `#mcp-e2e-bad-tag-${suffix}`;
+    const spaced = `mcp-e2e bad tag ${suffix}`;
+    const coloured = `mcp-e2e-bad-colour-tag-${suffix}`;
+    await expect(mcp.call('manage_tags', { action: 'create', tag: hashy })).rejects.toThrow(/tag must be one word/);
+    await expect(mcp.call('manage_tags', { action: 'create', tag: spaced })).rejects.toThrow(/tag must be one word/);
+    await expect(mcp.call('manage_tags', { action: 'create', tag: coloured, color: 'not-a-colour' })).rejects.toThrow(/6 digit hex/);
+    const tags = ((await mcp.call('list_entities', { type: 'tag' })) ?? []) as any[];
+    expect(tags.filter((t: any) => [hashy, spaced, coloured].includes(t?.tag))).toEqual([]);
+  });
+
   test('manage_tags create - upsert same name returns same id', async ({ mcp, cleanup }) => {
     const tag = `mcp-e2e-upsert-tag-${uniqueSuffix()}`;
     const id1 = await mcp.call('manage_tags', { action: 'create', tag });

@@ -31,6 +31,7 @@ process.env.ACTUAL_PASSWORD ??= 'stub-password-for-unit-test';
 
 const toolsIndex = await import('../../dist/src/tools/index.js');
 const { UUID_PATTERN } = await import('../../dist/src/lib/constants.js');
+const { TAG_COLOR_PATTERN } = await import('../../dist/src/lib/schemas/common.js');
 const { getCanonicalCount } = await import('../../scripts/tool-count.mjs');
 
 /** The fixed id of the default Income category group in Actual's bundled `default-db.sqlite`. */
@@ -117,7 +118,9 @@ check('every registered tool is walked (a silent skip is the failure mode here)'
  * follows UUID_PATTERN wherever it is used) AND any hex-class pattern by shape (so a hand-written
  * lowercase-only id regex, the exact #588 defect written locally, is still held to the Income id).
  */
-const isHexShaped = (re) => /a-f|A-F/.test(re.source);
+// #699: the tag colour pattern is hex shaped but is a CSS colour, not an id. It is exempted by
+// identity, so any OTHER hex-class pattern is still held to the Income id.
+const isHexShaped = (re) => /a-f|A-F/.test(re.source) && re.source !== TAG_COLOR_PATTERN.source;
 const uuidLeaves = leaves.filter(([, , cd]) => cd.pattern instanceof RegExp && (cd.pattern.source === UUID_PATTERN.source || isHexShaped(cd.pattern)));
 
 // ---------------------------------------------------------------------------------------------
