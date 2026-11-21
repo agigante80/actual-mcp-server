@@ -125,6 +125,20 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(cycles() === 0,                                        'the write queue is never reached');
   }
 
+  console.log('\n[#711] rules_create_or_update: text on an id field is refused with the exact message');
+  for (const field of ['account', 'category', 'category_group', 'payee']) {
+    reset();
+    let threw = null;
+    try {
+      await tool.call({ ...validInput, conditions: [{ field, op: 'is', value: 'Groceries' }] });
+    } catch (e) { threw = e; }
+    const expected = field === 'payee'
+      ? 'Field "payee" expects a UUID, but got "Groceries". Use "imported_payee" for text matching instead.'
+      : `Field "${field}" expects a UUID, but got text "Groceries".`;
+    check(threw?.message === expected,                           `NEGATIVE: text on ${field} is refused with the exact message`);
+    check(cycles() === 0 && createCalls === 0 && updateCalls === 0, '  and no write cycle runs');
+  }
+
   console.log('\n[#142] rules_create_or_update: schema rejection (missing actions)');
   {
     reset();

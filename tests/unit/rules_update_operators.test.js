@@ -105,6 +105,21 @@ console.log('\n[#711] rules_update: the shared operator map, same messages as ac
   }
 }
 
+console.log('\n[#711] rules_update: text on an id field is refused with the exact message');
+{
+  const plural = { account: 'accounts', category: 'categories', category_group: 'category groups' };
+  for (const field of ['account', 'category', 'category_group']) {
+    const m = await attempt([{ field, op: 'is', value: 'Groceries' }]);
+    check(m === `Field "${field}" expects an ID (UUID), but got text value "Groceries". Use the ${field} UUID from your budget data. List ${plural[field]} to find the correct UUID.`,
+      `NEGATIVE: text on ${field} is refused with the exact message`, m);
+    check(calls.length === 0, '  and updateRule is never called');
+  }
+  const m = await attempt([{ field: 'payee', op: 'is', value: 'Amazon' }]);
+  check(m === 'Field "payee" expects a payee ID (UUID), but got text value "Amazon". To match payee names with text, use "imported_payee" field instead. Example: {field: "imported_payee", op: "contains", value: "Amazon"}',
+    'NEGATIVE: text on payee is refused with the exact message', m);
+  check(calls.length === 0, '  and updateRule is never called');
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_update operator checks passed');
 process.exit(0);
