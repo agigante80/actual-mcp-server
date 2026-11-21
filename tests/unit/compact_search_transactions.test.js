@@ -124,9 +124,74 @@ await check('published schema: flat object, by required, no oneOf or anyOf, ever
   assert.ok(/d\{4\}-/.test(js.properties.start_date.pattern), 'dates keep the YYYY-MM-DD pattern');
   assert.strictEqual(js.properties.limit.type, 'integer');
 });
-await check('description: read-only, Returns, every action, siblings, no legacy name', () => {
-  for (const w of ['Read-only', 'Returns', 'summarize_transactions', 'list_entities', 'run_query', 'account:', 'filter:', 'amount:', 'category:', 'month:', 'payee:', 'uncategorized:']) assert.ok(spec.description.includes(w), w);
+await check('description: Returns, every action, siblings, no legacy name', () => {
+  for (const w of ['Returns', 'summarize_transactions', 'list_entities', 'run_query', 'account:', 'filter:', 'amount:', 'category:', 'month:', 'payee:', 'uncategorized:']) assert.ok(spec.description.includes(w), w);
   assert.ok(!/actual_/.test(spec.description));
+});
+
+// #712: the description is one line per `by` mode, the behaviours on a line of their own, and
+// the readOnlyHint annotation is not restated. Each check is a pure function over a description
+// string, so the negatives below can feed it a mutated description and prove it can fail.
+const ALL_FIELDS = new Set([...spec.actions.values()].flatMap((r) => Object.keys(r.fields.shape)));
+/** Field names on a mode line: whole snake_case words that are a field of some row. `month` is
+ *  both a mode and a field, so the `<mode>: ` prefix is cut off before the words are read. */
+function modeLineProblems(description) {
+  const problems = [];
+  const lines = description.split('\n');
+  for (const [mode, r] of spec.actions) {
+    const mine = lines.filter((l) => l.startsWith(`${mode}: `));
+    if (mine.length !== 1) { problems.push(`${mode}: ${mine.length} lines start with "${mode}: ", expected 1`); continue; }
+    const listed = new Set((mine[0].slice(mode.length + 2).match(/[a-z]+(?:_[a-z]+)*/g) ?? []).filter((w) => ALL_FIELDS.has(w)));
+    const taken = Object.keys(r.fields.shape);
+    for (const f of taken) if (!listed.has(f)) problems.push(`${mode} is missing ${f}`);
+    for (const f of listed) if (!taken.includes(f)) problems.push(`${mode} lists ${f}, which its row does not take`);
+  }
+  return problems;
+}
+const BEHAVIOR_FACTS = ['off-budget', 'no limit', 'default 100', 'default 50', 'unbounded scan', 'error field'];
+function behaviorProblems(description) {
+  const mine = description.split('\n').filter((l) => l.startsWith('Behavior:'));
+  if (mine.length === 0) return ['no line starts with "Behavior:"'];
+  if (mine.length > 1) return [`${mine.length} lines start with "Behavior:", expected 1`];
+  return BEHAVIOR_FACTS.filter((fact) => !mine[0].includes(fact)).map((fact) => `the Behavior line does not say "${fact}"`);
+}
+function restatementProblems(description) {
+  return /read-only/i.test(description) ? ['search_transactions must not restate Read-only'] : [];
+}
+const mutateLine = (prefix, fn) => spec.description.split('\n').map((l) => (l.startsWith(prefix) ? fn(l) : l)).join('\n');
+
+await check('#712: every mode has one line listing exactly the fields of its row', () => {
+  assert.deepStrictEqual(modeLineProblems(spec.description), []);
+});
+await check('#712 NEGATIVE: a field dropped from the filter line is reported', () => {
+  const mutated = mutateLine('filter: ', (l) => l.replace(' payee_id,', ''));
+  assert.notStrictEqual(mutated, spec.description);
+  assert.deepStrictEqual(modeLineProblems(mutated), ['filter is missing payee_id']);
+});
+await check('#712 NEGATIVE: a field the account row does not take is reported', () => {
+  const mutated = mutateLine('account: ', (l) => l.replace(/\.$/, ', limit.'));
+  assert.notStrictEqual(mutated, spec.description);
+  assert.deepStrictEqual(modeLineProblems(mutated), ['account lists limit, which its row does not take']);
+});
+await check('#712: the behaviours sit on one Behavior line', () => {
+  assert.deepStrictEqual(behaviorProblems(spec.description), []);
+});
+await check('#712 NEGATIVE: a description with no Behavior line is reported', () => {
+  const mutated = spec.description.split('\n').filter((l) => !l.startsWith('Behavior:')).join('\n');
+  assert.deepStrictEqual(behaviorProblems(mutated), ['no line starts with "Behavior:"']);
+});
+await check('#712 NEGATIVE: a Behavior line that loses a fact is reported', () => {
+  const mutated = mutateLine('Behavior:', (l) => l.replace('default 50', 'a default'));
+  assert.deepStrictEqual(behaviorProblems(mutated), ['the Behavior line does not say "default 50"']);
+});
+await check('#712: the readOnlyHint annotation is not restated in the description', () => {
+  assert.deepStrictEqual(restatementProblems(spec.description), []);
+  assert.strictEqual(annotationsFor('search_transactions').readOnlyHint, true);
+});
+await check('#712 NEGATIVE: a restated Read-only is reported', () => {
+  const lines = spec.description.split('\n');
+  lines[0] += ' Read-only.';
+  assert.deepStrictEqual(restatementProblems(lines.join('\n')), ['search_transactions must not restate Read-only']);
 });
 await check('annotations: read-only, and no row target is write-capable', () => {
   assert.strictEqual(annotationsFor('search_transactions').readOnlyHint, true);
