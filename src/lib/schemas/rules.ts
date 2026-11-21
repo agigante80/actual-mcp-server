@@ -27,8 +27,9 @@ export const CONDITION_OPERATORS_HELP =
 
 /**
  * #703: `hasTags` and `hasAnyTag` take one string of tags separated by whitespace or "#".
- * Upstream accepts a value with no tag in it ("#", "   ") and the rule then matches nothing,
- * so it is refused here. Call it AFTER the operator check, so a tag operator on a field that
+ * Upstream accepts a value with no tag in it ("#", "   "). When rules run, `hasTags` with no
+ * tag is then true for EVERY transaction that has notes (and `hasAnyTag` for none), so the
+ * rule would act on everything. Do not relax this refusal. Call it AFTER the operator check, so a tag operator on a field that
  * does not take it gets the "Invalid operator" refusal instead.
  */
 export function assertTagOperatorValue(condition: { field: string; op: string; value?: unknown }): void {
