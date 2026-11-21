@@ -4939,7 +4939,7 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
   const nameKey = name.toLowerCase();
   let found = budgetRegistry.get(nameKey);
   if (discovery) {
-    // A configured name always selects the configured budget, also when a shared file carries
+    // A usable configured budget wins by name, including when a shared file carries
     // that name, or carries it as its Sync ID: otherwise anyone who can share a file could
     // redirect or block a configured name, and a configured budget whose Sync ID is shared (one
     // file copied to a second server) has no other selector. The file stays reachable by its

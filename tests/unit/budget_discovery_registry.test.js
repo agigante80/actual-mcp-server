@@ -166,6 +166,14 @@ _resetDynamicAclCache();
 const frank = { ...(await ctx('frank')), sessionId: 'session-frank' };
 assert.deepEqual((await list(frank)).map(b => [b.syncId, b.locked]), [['configured', true]]);
 await assert.rejects(requestContext.run(frank, () => adapter.getAccounts()), { refusalKind: 'locked', message: /^Budget configured / });
+// #690 decision 6: a locked configured Home and a usable shared Home are both visible.
+await requestContext.run(await ctx('alice'), async () => {
+  const homes = adapter.getBudgetRegistry().filter(budget => budget.name === 'Home');
+  assert.deepEqual(homes.map(budget => [budget.syncId, budget.locked]), [['shared', undefined], ['configured', true]]);
+  assert.equal((await adapter.switchBudget('Home')).syncId, 'shared');
+  await assert.rejects(adapter.switchBudget('configured'), { refusalKind: 'locked', message: /^Budget configured / });
+  assert.equal(adapter._getActiveBudgetConfigForTests().syncId, 'shared');
+});
 home.encryptKeyId = null;
 // The listing follows the allow-list of the request, not the file metadata alone.
 assert.deepEqual(await list({ ...alice, allowedBudgets: [] }), []);

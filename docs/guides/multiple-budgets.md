@@ -20,11 +20,13 @@ the file with may read it through this server, including users who were never
 given the encryption password.
 
 Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
-`action: "switch"` and the name or Sync ID. A configured name always selects the
-configured budget; a shared file that carries the same name is reached by its
-Sync ID, and so are two shared files with one name. If configured budgets share
-a Sync ID across servers, switch by their distinct configured names. The
-session remembers which server you selected.
+`action: "switch"` and the name or Sync ID. Among usable files, a configured
+name takes precedence. If a configured budget and a shared file are both named
+`Home` and the configured budget is locked, switching to `Home` selects the
+usable shared file. Switching by the locked budget's Sync ID gives the missing-key
+refusal. Use the Sync IDs to distinguish shared files with the same name. If
+configured budgets share a Sync ID across servers, switch by their distinct
+configured names. The session remembers which server you selected.
 
 With OIDC budget discovery enabled, a fresh session chooses its starting budget in this order:
 
