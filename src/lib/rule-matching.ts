@@ -12,11 +12,17 @@
  * not create a duplicate, which is the whole point of the tool.
  */
 
-/** Canonical JSON for one object: keys sorted, `undefined` values dropped. */
+/** Canonical JSON for one object: keys sorted, `undefined` values dropped, a oneOf or notOneOf array sorted. */
 export function canonicalize(obj: Record<string, unknown>): string {
   const sorted: Record<string, unknown> = {};
   for (const key of Object.keys(obj).sort()) {
     if (obj[key] !== undefined) sorted[key] = obj[key];
+  }
+  // #710: a oneOf or notOneOf value is a SET of ids, so [a, b] and [b, a] are the same
+  // condition. Compare a sorted COPY; the stored value is never reordered. Without this an
+  // upsert with the ids in another order creates a duplicate rule.
+  if ((sorted.op === 'oneOf' || sorted.op === 'notOneOf') && Array.isArray(sorted.value)) {
+    sorted.value = [...sorted.value].sort();
   }
   return JSON.stringify(sorted);
 }

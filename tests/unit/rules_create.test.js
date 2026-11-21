@@ -74,7 +74,7 @@ console.log('\n[#485] rules_create: imperative rejections');
   check(r.threw && r.message.endsWith('List accounts to find the correct UUID.'), 'account condition with a non-UUID value throws', r.message);
 
   r = await attempt(rule([{ field: 'category', op: 'oneOf', value: CAT }], [okAct]));
-  check(r.threw && r.message === 'Operator "oneOf" expects an array of values, but got string. Example: {field: "category", op: "oneOf", value: ["uuid-1", "uuid-2"]}', 'oneOf with a non-array value throws', r.message);
+  check(r.threw && r.message === 'Operator "oneOf" requires a non-empty array of values (field: category). Example: {field: "category", op: "oneOf", value: ["uuid-1", "uuid-2"]}', 'oneOf with a non-array value throws', r.message);
 
   r = await attempt(rule([okCond], [{ op: 'set', value: 'x' }]));
   check(r.threw && r.message === 'Action with op="set" requires a "field" property (e.g., "category", "payee", "notes", "cleared")', 'set without a field throws', r.message);
@@ -155,6 +155,63 @@ console.log('\n[#703] rules_create: tag operators on notes');
     'NEGATIVE: notes hasAnyTag with no tag names its own operator', r.message);
   r = await attempt(rule([{ field: 'notes', op: 'contains', value: '#' }], [okAct]));
   check(!r.threw, 'other operators keep accepting "#" as a value', r.message);
+}
+
+console.log('\n[#710] array values for oneOf and notOneOf, booleans for the flag fields');
+{
+  const A = '10000000-0000-4000-8000-00000000000a';
+  const B = '10000000-0000-4000-8000-00000000000b';
+  let r = await attempt(rule([{ field: 'payee', op: 'oneOf', value: [A, B] }], [okAct]));
+  check(!r.threw && calls.length === 1, 'payee oneOf [id, id] is accepted and written once', r.message);
+  check(Array.isArray(calls[0]?.conditions?.[0]?.value) && calls[0].conditions[0].value.join() === `${A},${B}`, '  and the array reaches the adapter unchanged');
+  r = await attempt(rule([{ field: 'category', op: 'notOneOf', value: [A] }], [okAct]));
+  check(!r.threw && calls.length === 1, 'category notOneOf [id] is accepted', r.message);
+  r = await attempt(rule([{ field: 'cleared', op: 'is', value: true }], [okAct]));
+  check(!r.threw && calls[0]?.conditions?.[0]?.value === true, 'cleared is true is accepted and stays a boolean', r.message);
+  r = await attempt(rule([{ field: 'transfer', op: 'is', value: false }], [okAct]));
+  check(!r.threw && calls[0]?.conditions?.[0]?.value === false, 'transfer is false is accepted', r.message);
+
+  for (const [label, value] of [['an empty array', []], ['a string', A]]) {
+    r = await attempt(rule([{ field: 'payee', op: 'notOneOf', value }], [okAct]));
+    check(r.threw && r.message === 'Operator "notOneOf" requires a non-empty array of values (field: payee). Example: {field: "payee", op: "notOneOf", value: ["uuid-1", "uuid-2"]}',
+      `NEGATIVE: payee notOneOf with ${label} is refused with the exact message`, r.message);
+    check(calls.length === 0, '  and createRule is never called');
+  }
+  // Review of #710: upstream drops an empty element, so [""] would become the match-everything
+  // empty list; a repeated id would make one set of ids two rules for the upsert match.
+  for (const value of [[''], ['Amazon', '  ']]) {
+    r = await attempt(rule([{ field: 'payee_name', op: 'notOneOf', value }], [okAct]));
+    check(r.threw && r.message === 'Operator "notOneOf" does not accept an empty value in its array (field: payee_name).',
+      `NEGATIVE: an empty array element is refused (${JSON.stringify(value)})`, r.message);
+    check(calls.length === 0, '  and createRule is never called');
+  }
+  r = await attempt(rule([{ field: 'payee', op: 'oneOf', value: [A, B, A] }], [okAct]));
+  check(r.threw && r.message === `Operator "oneOf" lists "${A}" more than once (field: payee).`,
+    'NEGATIVE: a repeated array element is refused naming it', r.message);
+  check(calls.length === 0, '  and createRule is never called');
+  r = await attempt(rule([{ field: 'payee', op: 'oneOf', value: [A, 'Amazon'] }], [okAct]));
+  check(r.threw && r.message === 'Field "payee" expects IDs (UUIDs) with operator "oneOf", but the array holds "Amazon". List the payees to find the correct UUIDs.',
+    'NEGATIVE: a non-UUID array element is refused naming it', r.message);
+  r = await attempt(rule([{ field: 'category', op: 'oneOf', value: ['Food'] }], [okAct]));
+  check(r.threw && r.message.endsWith('List the categories to find the correct UUIDs.'), 'NEGATIVE: category oneOf ["Food"] names categories', r.message);
+  r = await attempt(rule([{ field: 'payee', op: 'is', value: [A] }], [okAct]));
+  check(r.threw && r.message === 'Operator "is" does not accept an array (field: payee). Use "oneOf" or "notOneOf" for a list of values.',
+    'NEGATIVE: an array on a single-value operator is refused', r.message);
+  r = await attempt(rule([{ field: 'notes', op: 'contains', value: ['a'] }], [okAct]));
+  check(r.threw && r.message.includes('does not accept an array'), 'NEGATIVE: notes contains [..] is refused', r.message);
+  r = await attempt(rule([{ field: 'cleared', op: 'is', value: 'true' }], [okAct]));
+  check(r.threw && r.message === 'Field "cleared" must be true or false with operator "is", but got string.',
+    'NEGATIVE: cleared is "true" (a string) is refused', r.message);
+  r = await attempt(rule([{ field: 'reconciled', op: 'is', value: 1 }], [okAct]));
+  check(r.threw && r.message.includes('must be true or false'), 'NEGATIVE: reconciled is 1 is refused', r.message);
+  r = await attempt(rule([{ field: 'cleared', op: 'isNot', value: true }], [okAct]));
+  check(r.threw && r.message.startsWith('Invalid operator "isNot" for field "cleared". Field "cleared" is a boolean field and only supports: is.'),
+    'NEGATIVE: cleared isNot is an Invalid operator error', r.message);
+  r = await attempt(rule([{ field: 'notes', op: 'is', value: true }], [okAct]));
+  check(r.threw && r.message === 'Field "notes" does not accept a boolean value (operator: is).', 'NEGATIVE: a boolean on a text field is refused', r.message);
+  r = await attempt(rule([{ field: 'amount', op: 'gte', value: false }], [okAct]));
+  check(r.threw && r.message.includes('does not accept a boolean'), 'NEGATIVE: a boolean on amount is refused', r.message);
+  check(calls.length === 0, '  and createRule is never called');
 }
 
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }

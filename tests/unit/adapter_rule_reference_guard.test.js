@@ -106,6 +106,8 @@ console.log('\n[#485] list values and unreferenced fields');
   check(r.err && isPreflightRefusal(r.err) && r.err.message.includes(GHOST) && !r.err.message.includes(CAT) && createCalls === 0, '(h) oneOf [known, unknown] is refused naming the unknown id', String(r.err?.message));
   r = await attempt(mk([{ field: 'category', op: 'notOneOf', value: [CAT] }], [NOTE]));
   check(!r.err && createCalls === 1, 'notOneOf with only known ids is created');
+  r = await attempt(mk([{ field: 'category', op: 'notOneOf', value: [CAT, GHOST] }], [NOTE]));
+  check(r.err && isPreflightRefusal(r.err) && r.err.message.includes(GHOST) && createCalls === 0, '#710 NEGATIVE: notOneOf [known, unknown] is refused naming the unknown id', String(r.err?.message));
   r = await attempt(mk([{ field: 'imported_payee', op: 'is', value: GHOST }, { field: 'notes', op: 'is', value: GHOST }], [{ op: 'append-notes', value: GHOST }]));
   check(!r.err && createCalls === 1 && reads.categories + reads.payees + reads.accounts === 0, 'string fields and notes actions are not references, and nothing is read');
   r = await attempt(mk([{ field: 'imported_payee', op: 'is', value: 'x' }], [{ op: 'link-schedule', value: GHOST }]));

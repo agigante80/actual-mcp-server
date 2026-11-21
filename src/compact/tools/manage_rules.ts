@@ -31,7 +31,7 @@ const id = z.string().optional().describe('Rule id.');
 const stage = z.string().nullable().optional().describe('null or omitted: normal stage. "pre" runs before the normal stage, "post" after. On update, omit to keep the current stage.');
 const conditionsOp = z.enum(['and', 'or']).optional().describe('How conditions combine; default and.');
 const condition = z.looseObject({ field: z.string(), op: z.string() });
-const conditions = z.array(condition).optional().describe('Items {field, op, value[, type]}; value is a string or number.');
+const conditions = z.array(condition).optional().describe('Items {field, op, value[, type]}; value is text, a number, true or false, or an array of ids (oneOf, notOneOf).');
 const action = z.looseObject({ op: z.string().optional(), field: z.string().optional() });
 const actions = z.array(action).optional().describe('Items {op, field, value[, type, options]}; op defaults to set on create and upsert, required on update.');
 const rules = z
@@ -95,7 +95,7 @@ export const manageRules: CompactToolSpec = {
   description:
     'Create, upsert, change or delete budget rules; pick one `action`. Writes. ' +
     'To read rules use list_entities with type rule. Other fields are refused. ' +
-    'Conditions match by field and op: text fields (imported_payee, notes, description) take contains, matches, doesNotContain, is, isNot; id fields (payee, account, category) take is, isNot; amount takes is, gte, lte, gt, lt, isapprox; date takes is, gte, lte, gt, lt. notes also takes hasTags (all) and hasAnyTag (any): value "#a #b", whole tags, any case. Ids must exist or the call is refused and nothing is written (ids in link-schedule actions are not checked). ' +
+    'Conditions match by field and op: text fields (imported_payee, notes, description) take contains, matches, doesNotContain, is, isNot; id fields (payee, account, category) take is, isNot, and oneOf, notOneOf with an array of ids; cleared, reconciled, transfer, parent take is with true or false; amount takes is, gte, lte, gt, lt, isapprox; date takes is, gte, lte, gt, lt. notes also takes hasTags (all) and hasAnyTag (any): value "#a #b", whole tags, any case. Ids must exist or the call is refused and nothing is written (ids in link-schedule actions are not checked). ' +
     'create: conditions, actions; optional stage, conditions_op. ' +
     'create_batch: rules (1 to 50, items with camelCase keys); NOT atomic, no rollback: a failing rule is reported in failed and the rest are still attempted; if the call itself fails, read the rules back before retrying. ' +
     'upsert: conditions, actions; optional stage, conditions_op; a rule with the same conditions and conditions_op (any order) has its actions replaced and its stage replaced only if sent, else a rule is created. ' +

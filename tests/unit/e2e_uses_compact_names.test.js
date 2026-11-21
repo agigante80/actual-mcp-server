@@ -42,13 +42,14 @@ const ALIAS_KEYS = (read('src/lib/tool-aliases.ts').match(/^\s*\['(actual_[A-Za-
   .map((l) => /'(actual_[A-Za-z0-9_]+)'/.exec(l)[1]);
 const LEGACY_NAMES = new Set([...IMPLEMENTED_TOOLS, ...ALIAS_KEYS]);
 
-/** One read-only row per legacy family, called in the legacy smoke describe block. */
+/** One read-only row per legacy family (plus the #710 write row), called in the legacy smoke describe block. */
 const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',
   'actual_categories_get',
   'actual_payees_get',
   'actual_rules_get',
+  'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag
   'actual_schedules_get',
   'actual_budgets_get_months',
   'actual_budgets_list_available',
