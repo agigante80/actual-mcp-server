@@ -72,6 +72,11 @@ A change that alters behaviour described in a doc updates that doc in the same p
 - **E2E** coverage of the tool surface goes in `tests/e2e/docker-all-tools.e2e.spec.ts`, written against the provisioning fixtures in `tests/e2e/fixtures.ts`. It runs over HTTP and stdio. A new spec file is not collected unless a Playwright project matches it.
 - **Integration** modules live in `tests/manual/tests/` and need a live server.
 - **`npm run test:mcp-client`** starts the HTTP server and drives it as an MCP client. Past `initialize` it needs a live Actual server (a real `.env`), and `MCP_BRIDGE_PORT` (default 3600) must be free: another listener on that port answers instead.
+- **What a review of a change's tests checks** (people and review bots alike; decided 2026-11-21):
+  - A change under `src/` that alters behaviour carries a test change in the same pull request. A refactor with no behaviour change says so in its description.
+  - Every new refusal or validation error has a negative test that asserts the message, not only that something was thrown.
+  - A change to a tool's contract (inputs, outputs, refusals) carries a row in `tests/e2e/docker-all-tools.e2e.spec.ts` with its negative and its cleanup, for the compact tool and for the legacy tool it maps to.
+  - A test must be able to fail: it asserts on the result of running the changed code, and a guard that only reads source text is not the sole cover for a behaviour change.
 - Include a negative case for every positive one. Details: [docs/development/testing-and-reliability.md](docs/development/testing-and-reliability.md) and [tests/e2e/README.md](tests/e2e/README.md).
 
 ## Contributing a change
