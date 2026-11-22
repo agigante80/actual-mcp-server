@@ -235,6 +235,8 @@ function parseArgs(argv) {
     }
     throw new Error(`unknown argument: ${a}`);
   }
+  // Collection wipes and refills its directory, so it only ever uses the default one.
+  if (opts.collect && opts.coverageDir !== 'coverage/v8') throw new Error('--collect always writes coverage/v8; --coverage-dir is for report-only runs');
   return opts;
 }
 
@@ -259,12 +261,21 @@ function readDiff(opts) {
   return { text: r.stdout };
 }
 
-function report(opts, changed, partial = false) {
+// Collection leaves its outcome beside the coverage files, so a later report-only run over a
+// failed or interrupted collection still says the data is partial.
+const STATUS_FILE = 'collection-status.txt';
+
+export function collectionIsPartial(dir) {
+  const f = path.join(dir, STATUS_FILE);
+  return existsSync(f) && readFileSync(f, 'utf8').trim() !== '0';
+}
+
+function report(opts, changed) {
   const dir = path.resolve(opts.root, opts.coverageDir);
   if (!existsSync(dir)) { emit(opts, `skip: changed-line coverage: coverage directory ${opts.coverageDir} does not exist (run npm run test:coverage)`); return; }
   const cov = readCoverage(dir, opts.root);
   if (cov.withMaps === 0) { emit(opts, `skip: changed-line coverage: ${cov.files} coverage file(s) in ${opts.coverageDir} hold no source-mapped dist/src script (run npm run test:coverage)`); return; }
-  emit(opts, renderReport(buildRows(changed, cov.sources), { partial }));
+  emit(opts, renderReport(buildRows(changed, cov.sources), { partial: collectionIsPartial(dir) }));
 }
 
 function run(cmd, args, options) {
@@ -280,11 +291,13 @@ function collect(opts) {
   rmSync(covDir, { recursive: true, force: true });
   mkdirSync(covDir, { recursive: true });
   writeFileSync(logFile, '');
+  const statusFile = path.join(covDir, STATUS_FILE);
+  writeFileSync(statusFile, 'incomplete\n');
   let status = 0;
   try {
     // Coverage-only build: inline source maps into dist/, where the tests look.
     status = run('npm', ['run', 'build', '--', '--inlineSourceMap'], { cwd: root });
-    if (status !== 0) return status;
+    if (status !== 0) { writeFileSync(statusFile, `${status}\n`); return status; }
     const env = { ...process.env, NODE_V8_COVERAGE: covDir };
     // The chains run from their package.json text, not through `npm run`: npm is
     // a Node process too and would add its own coverage file, and test:adapter
@@ -302,6 +315,7 @@ function collect(opts) {
         process.stderr.write(`changed-line coverage: the ${name} chain failed under collection (exit ${r.status}); last lines:\n${tail}\nfull log: coverage/changed-line-coverage.log\n`);
       }
     }
+    writeFileSync(statusFile, `${status}\n`);
     return status;
   } finally {
     // Always leave dist/ as the normal build.
@@ -319,7 +333,7 @@ function main() {
   if (changed.size === 0) { emit(opts, 'changed-line coverage: no src/ line changed, nothing to measure'); return; }
   let status = 0;
   if (opts.collect) status = collect(opts);
-  report(opts, changed, status !== 0);
+  report(opts, changed);
   process.exitCode = status;
 }
 

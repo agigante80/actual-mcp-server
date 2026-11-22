@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  buildRows, changedSrcLines, compressLines, decodeMappings, lineHits, readCoverage, renderReport,
+  buildRows, changedSrcLines, collectionIsPartial, compressLines, decodeMappings, lineHits, readCoverage, renderReport,
 } from '../../scripts/changed-line-coverage.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -186,6 +186,25 @@ check('renderReport: a failed collection is flagged as partial above the table, 
   assert.match(partial[2], /^partial: a test chain failed during collection/);
   assert.ok(partial.indexOf('| File | Changed lines | Executable | Executed | Percent | Not executed |') > 2);
   assert.ok(!renderReport(rows).includes('partial:'), 'no partial line on a clean run');
+});
+
+check('collectionIsPartial: a failed or interrupted collection stays partial for a later report-only run', () => {
+  const dir = mkdtempSync(path.join(os.tmpdir(), 'clc-status-'));
+  try {
+    assert.strictEqual(collectionIsPartial(dir), false, 'no status file: coverage collected by hand');
+    writeFileSync(path.join(dir, 'collection-status.txt'), '0\n');
+    assert.strictEqual(collectionIsPartial(dir), false);
+    for (const v of ['1\n', 'incomplete\n']) {
+      writeFileSync(path.join(dir, 'collection-status.txt'), v);
+      assert.strictEqual(collectionIsPartial(dir), true, v.trim());
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+check('negative: --collect with another --coverage-dir is refused before anything runs', () => {
+  const r = spawnSync(process.execPath, [SCRIPT, '--collect', '--coverage-dir', 'coverage/other'], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 2);
+  assert.match(r.stderr, /--collect always writes coverage\/v8; --coverage-dir is for report-only runs/);
 });
 
 check('compressLines: runs of three or more become a range', () => {
