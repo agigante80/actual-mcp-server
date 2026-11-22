@@ -432,3 +432,11 @@ Glama's reasons for every score below 5 on the two changed tools:
 **What the scores leave open.** Three text changes are named by the reviewer: lay the `manage_rules` operator section out as one line per field group (the layout that just worked on `search_transactions`), drop the cents and date format line from `search_transactions` where the schema already says it, and state the result ordering of `search_transactions`. None is filed as a ticket: description tickets are not chained from Glama scores without the maintainer's decision.
 
 The "Read-only" sentence removal (#713) is on `develop` and is not in this release, so it is not reflected in these scores.
+
+## Layout of the remaining one-line descriptions: rescoped (2026-11-22, #714)
+
+#714 was written to lay out all ten one-line compact descriptions. The readings above do not support that: layout moved Conciseness on one of four tools in #683 and on none in #712, and one unchanged description moved 0.7 between two readings. The ticket was rescoped to `manage_rules` alone, the one description whose operator section a reviewer called a run-on, and the other nine stay one line by decision.
+
+`manage_rules` is now 14 lines (longest 216 characters) with one line per condition field group and one per action. The text is unchanged: with newlines replaced by spaces it equals the previous description character for character. Published size: compact 42,809 to 42,823 bytes.
+
+Reopen the ten-tool question only if a later reading shows Conciseness rising on the laid-out tools by more than the 0.4 scorer noise.
