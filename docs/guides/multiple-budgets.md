@@ -8,16 +8,31 @@ With `AUTH_PROVIDER=oidc` and `AUTH_BUDGET_ACL_SOURCE=actual`, set
 `AUTH_BUDGET_DISCOVERY=true` to list budgets shared with each user on
 `ACTUAL_SERVER_URL`. Keep the configured default Sync ID. A static entry
 takes precedence for the same Sync ID, including its name and encryption
-password. An encrypted remote file needs a matching static entry with its key;
-without one it is not listed and cannot be selected (#690 tracks keys for
-discovered files).
+password. A granted encrypted file with no configured key appears after the usable
+budgets with `locked: true`. Listing it does not open it. A matching keyless static entry supplies its name and server origin.
+When several entries share that Sync ID, the first in registry order wins.
+Without a matching entry, the row uses the discovered name and the configured
+Actual server origin. The row's hint explains which setting is missing.
+
+An operator can add or complete a `BUDGET_n_*` entry for that Sync ID with
+`BUDGET_n_ENCRYPTION_PASSWORD`. Configure it only if every user Actual shares
+the file with may read it through this server, including users who were never
+given the encryption password.
 
 Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
-`action: "switch"` and the name or Sync ID. A configured name always selects the
-configured budget; a shared file that carries the same name is reached by its
-Sync ID, and so are two shared files with one name. If configured budgets share
-a Sync ID across servers, switch by their distinct configured names. The
-session remembers which server you selected.
+`action: "switch"` and the name or Sync ID. The switch searches usable budgets
+by configured name first, then by exact Sync ID, then by file name. Names match
+case-insensitively. If several usable files share a name, use an unambiguous
+Sync ID. If configured budgets share a Sync ID across servers, use their
+distinct configured names. The session remembers which server you selected.
+
+The switch checks locked files only after the usable lookup finds no match.
+An exact locked Sync ID or a unique locked name then gives the missing-key
+refusal. If a locked budget and a usable shared file are both named `Home`,
+switching to `Home` is refused as ambiguous and lists both Sync IDs: switch by
+Sync ID instead. If a locked file's
+Sync ID is `Home` and a usable configured budget is named `Home`, the same
+input selects the configured budget.
 
 With OIDC budget discovery enabled, a fresh session chooses its starting budget in this order:
 

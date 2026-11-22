@@ -453,8 +453,14 @@ only the Sync IDs an operator configured; with it the match also lists every fil
 Actual shares with that `userName`. The identity warning above therefore applies in
 full: if users can edit the claim that is matched (`preferred_username` at many
 IdPs), pin `AUTH_BUDGET_ACL_CLAIM` to one they cannot change before enabling it.
-An encrypted shared file is listed only when a configured entry carries its key
-(#690). A saved Sync ID can restore a configured or discovered budget only while it is
+An encrypted shared file without a configured key appears as `locked: true`
+only for its grantees. It cannot be opened. A caller without the grant gets
+the same listing and switch refusal as for a missing file. An operator can add
+or complete a matching `BUDGET_n_*` entry with `BUDGET_n_ENCRYPTION_PASSWORD`.
+This lets every user Actual shares the file with read it through MCP, including
+anyone who was never given the encryption password.
+
+A saved Sync ID can restore a configured or discovered budget only while it is
 selectable under the current grants. A successful session open pins that choice. Revocation
 blocks further data calls on the pinned budget until the user switches.
 

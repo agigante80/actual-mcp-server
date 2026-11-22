@@ -113,7 +113,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 
 | Tool | Description |
 |------|-------------|
-| `actual_budgets_list_available` | List all configured budget files |
+| `actual_budgets_list_available` | List the budgets visible to this session. In discovery mode, a row marked `locked` is encrypted, has no key on this server and cannot be switched to. |
 | `actual_budgets_switch` | Switch active budget (multi-budget) |
 | `actual_budgets_get_all` | List available budget files |
 | `actual_budgets_get_months` | List budget months |
@@ -217,7 +217,7 @@ Fifteen compact tools ship (#672 to #678). They are listed under `MCP_TOOL_SURFA
 | Tool | Description |
 |------|-------------|
 | `get_context` | Budget structure or server details, chosen by `topic`: `structure` (default; accounts, categories with groups, payees; options `include_accounts`, `include_categories`, `include_payees`, `include_closed`, `payee_limit`), `server`, `version` or `preferences` |
-| `list_entities` | List, search or look up one entity `type` (account, account_group, category, category_group, payee, tag, rule, schedule, note, budget_file). Account, category and payee take `query` (with `match_type`, `limit`) or `name`; payee takes `sort: "frequency"`; rule takes `payee_id`; schedule takes `name` or `schedule_id` (with `start`, `end`, `count`); note requires `id`; budget_file takes `scope` |
+| `list_entities` | List, search or look up one entity `type` (account, account_group, category, category_group, payee, tag, rule, schedule, note, budget_file). Account, category and payee take `query` (with `match_type`, `limit`) or `name`; payee takes `sort: "frequency"`; rule takes `payee_id`; schedule takes `name` or `schedule_id` (with `start`, `end`, `count`); note requires `id`; budget_file takes `scope`. In the default `configured` scope, a row marked `locked` is encrypted, has no key on this server and cannot be switched to. |
 | `search_transactions` | Find transaction records, chosen by `by`: `account`, `filter` (id-based, with `notes`, `cleared`, `reconciled`), `amount` (range or `absolute_amount`; needs an account or a date), `category`, `month`, `payee` (by name) or `uncategorized` (with `include_transactions`, `limit`, `offset`). Read-only; a `null` field is treated as omitted |
 | `summarize_transactions` | Totals, chosen by `report`: `by_category`, `by_payee`, `grouped` (requires `start_date`, `end_date`, `group_by`, one grouping or an array of up to 5), `account_flow` (requires `start_date`, `end_date`, `account_ids`), `recurring` (`start_date` or `months`) or `balance` (requires `account_id`, optional `cutoff`). Read-only |
 | `list_budget_months` | List every budget month as `YYYY-MM`, or pass `month` for one month's budget (category groups and categories). No selector. Read-only; a `null` field is treated as omitted |
