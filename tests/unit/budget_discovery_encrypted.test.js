@@ -90,8 +90,15 @@ test('refuse a granted ID or unique name before any download or preference chang
     for (const selector of ['locked', 'LOCKED FILE']) await assert.rejects(adapter.switchBudget(selector), lockedError('locked'));
     assert.equal(getPreferredBudgetSyncId(requestContext.getStore().principal), undefined);
   });
-  await run([locked, file('twin', 'Locked FILE')], async () => {
-    assert.deepEqual(await notFound('Locked File'), await notFound('unused'));
+  assert.equal(downloads.length, 0);
+});
+
+test('two locked files with one name are ambiguous, not absent: the refusal lists both Sync IDs', async () => {
+  const twins = [file('locked-a', 'Twin'), file('locked-b', 'Twin'), plain];
+  await run(twins, async () => {
+    await assert.rejects(adapter.switchBudget('twin'), err => isPreflightRefusal(err) &&
+      err.refusalKind === 'out-of-range' && err.message === 'Ambiguous budget name. Switch by Sync ID: locked-a, locked-b.');
+    await assert.rejects(adapter.switchBudget('locked-b'), lockedError('locked-b'));
   });
   assert.equal(downloads.length, 0);
 });

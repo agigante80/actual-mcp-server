@@ -30,7 +30,8 @@ The switch checks locked files only after the usable lookup finds no match.
 An exact locked Sync ID or a unique locked name then gives the missing-key
 refusal. If a locked budget and a usable shared file are both named `Home`,
 switching to `Home` is refused as ambiguous and lists both Sync IDs: switch by
-Sync ID instead. If a locked file's
+Sync ID instead. Two locked files with one name are refused as ambiguous the
+same way. If a locked file's
 Sync ID is `Home` and a usable configured budget is named `Home`, the same
 input selects the configured budget.
 
