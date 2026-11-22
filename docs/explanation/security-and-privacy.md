@@ -562,9 +562,9 @@ narrows its behaviour, and `tests/unit/coderabbit_config.test.js` pins that narr
   approval, and `fail_commit_status` is false. A finding is input for the maintainer, never an
   authorisation decision.
 - **No automatic issue writes.** Issue enrichment and planning are off.
-- **Two advisory check runs.** Two custom pre-merge checks ("Tests cover the change" and "Docs
-  cover the change", #727) run in `warning` mode: a failure is a neutral check run that blocks
-  nothing. They run in a read-only sandbox, execute no test and push nothing, and their criteria
+- **Two advisory checks.** Two custom pre-merge checks ("Tests cover the change" and "Docs
+  cover the change", #727) run in `warning` mode: each result is a row in the pre-merge table of
+  the app's Walkthrough comment (no check run of its own), and a failure blocks nothing. They run in a read-only sandbox, execute no test and push nothing, and their criteria
   are the test review list and the "Docs to update with a change" section in `AGENTS.md`.
   `error` mode is refused by the pin test.
 
