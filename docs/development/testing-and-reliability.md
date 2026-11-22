@@ -376,6 +376,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `docs_check.test.js` | #602: the `npm run docs:check` orchestrator (`scripts/docs/check.mjs`) through its `run({ root, modules, env })` seam with stub modules (no lychee, no `PATH`, no real repo): an async module's problem is awaited and reported as `<module>: <problem>` with exit 1; a local skip prints `skip: links: lychee not installed`, exits 0, and the markers module after it still runs and its problem line still appears; with `CI` set the same skip exits 1 as `links: lychee required but not found`; a module that throws fails the run |
 | `docs_tools.test.js` | #603: the `tools` docs module (`scripts/docs/tools.mjs`) renders the README tools-summary block (toolset table, `chat` sentence, read-only sentence) from the registry: stub-data render, scope-key reconciliation both ways, idempotent `generate()` (`['README.md']` then `[]`), a stale block, a missing or duplicate marker (README left unchanged), no dist (skip locally, `tools: dist required: ...` under `CI`, `generate()` throws), an inert import (`process.env` unchanged), and a real-registry case that the README block is current and matches no `TOTAL_PATTERNS` entry. The hand-typed-count guard lives in `readme_stats_sync.test.js` |
 | `tools_list_sizes_sync.test.js` | #668: `scripts/docs/tools-list-sizes.json` (the README toolset size table source) equals a fresh offline measurement of every configuration (`scripts/measure-tools-list-size.mjs`, one child per configuration); a stale figure fails naming both byte counts; needs `npm run build` |
+| `changed_line_coverage.test.js` | #720: `scripts/changed-line-coverage.mjs` (the warn-only changed-line coverage report) against a fixture it compiles with `tsc --inlineSourceMap` and runs under `NODE_V8_COVERAGE`: an unexecuted changed line is named, fully executed lines read 100 percent, processes are merged, a type-only line is not executable, no `src/` change and a missing or empty coverage directory exit 0 with one line, a file no process loaded is reported as not loaded; plus the VLQ decoder, the range-to-line rule, the diff parser, and that the CI job stays `continue-on-error`, pull-request only, outside every `needs`, with no expression in its shell text |
 | `docs_migration.test.js` | #669: the `migration` docs module (`scripts/docs/migration.mjs`) renders the legacy-to-compact table in `docs/guides/migrating-to-compact-tools.md` from the compact registry: one row per `IMPLEMENTED_TOOLS` entry, `actual_notes_update` listing all four `set_note` actions, the session tools marked legacy only, byte-identical reruns, a stub with an unmapped tool or a `build` row without a note failing by name, `OUT_OF_SCOPE` imported (never redefined) in the generator and both tests, a guard that no client example names a registered `actual_*` tool without `MCP_TOOL_SURFACE=legacy` (with a fixture that fails), and the committed page being current |
 | `docs_readme_size.test.js` | #607: the `readme-size` docs module (`scripts/docs/readme-size.mjs`), which bounds the README as the Docker Hub long description. Against temp READMEs built to exact line and byte layouts: 23,900 bytes passes and 23,901 raw bytes plus one relative link (projected 24,001) fails; the first `<!-- runnable: <id> -->` fence on line 40 passes and on line 41 fails; an unmarked bash fence is not an install block; absolute, `mailto:` and same-page links are not counted; a missing README is a single problem; a reference-style link definition, a relative link inside any fence and `<details>` each fail with their line. Also the real README passes and the module is registered in `scripts/docs/check.mjs` |
 | `docs_markers.test.js` | #602: `scripts/docs/markers.mjs` on temp trees reports `frozen marker: docs/guides/x.md:3` for a nested numeric Version marker and `frozen marker: scripts/README.md:5` for a numeric Tool Count marker, and reports nothing for a marker inside the `version-bump.js` set (`README.md`, top-level `docs/*.md`, `.github/copilot-instructions.md`) or for the bare token in prose; the walk skips `node_modules` and `.git`, and on the real repo the enumerator takes the `git ls-files` path |
@@ -765,23 +766,24 @@ Planned integrations:
 
 ### Measuring Coverage
 
-**Future Enhancement**: Add coverage reporting
+**Changed-line coverage (#720, warn-only).** `npm run test:coverage` reports, for every `src/` line a change adds or edits, whether the unit and adapter suites executed it. It adds no dependency: Node writes raw V8 coverage when `NODE_V8_COVERAGE` is set, and `scripts/changed-line-coverage.mjs` maps it back to `src/` through the inline source maps of a coverage-only build.
 
 ```bash
-# Planned - not yet implemented
-npm run test:coverage
-
-# Would output:
-# File                 | % Stmts | % Branch | % Funcs | % Lines |
-# ---------------------|---------|----------|---------|---------|
-# src/tools/*.ts       |   85.2  |   78.5   |   92.1  |   86.7  |
-# src/lib/*.ts         |   91.3  |   88.2   |   94.5  |   92.1  |
+npm run test:coverage                          # diff against origin/develop
+npm run test:coverage -- --base v0.35.1        # diff against another ref
+node scripts/changed-line-coverage.mjs         # report again from coverage/v8, no re-run
 ```
 
-**Tool Options**:
-- `c8` - Built-in V8 coverage
-- `nyc` - Istanbul coverage
-- `jest` - Full test framework (if migrating)
+What it does and what the numbers mean:
+
+- `--collect` builds with `tsc --inlineSourceMap`, runs the `test:unit-js` chain and the adapter runner under `NODE_V8_COVERAGE=coverage/v8`, prints the table, then rebuilds plainly, so `dist/` is left as a normal build (an interrupted run, Ctrl+C included, skips that rebuild: run `npm run build`). If a suite fails during collection the table is still printed, headed by a `partial:` line, because the tests after the failure never ran. The suites' own output goes to `coverage/changed-line-coverage.log`.
+- A line counts as **executed** when any test process ran it. A changed line with no generated code (a type, a comment, a blank) is not executable and is left out. A changed file that no process loaded is reported as **not loaded**.
+- Only the unit and adapter suites are measured. A line that only the Docker E2E or the live integration run reaches reads as not executed here; that is a prompt to look, not proof it is untested.
+- A diff with no `src/` change prints one line and collects nothing. Missing data (no coverage directory, an unreachable base) prints a `skip:` line and exits 0.
+
+In CI it is its own job, `Changed-line coverage (warn-only)`, on pull requests only. The job is `continue-on-error`, no other job waits on it, and it writes the table to its job summary. It is separate from `Run Tests` because the second, instrumented run of both suites takes as long as the gating one (about 5 to 10 minutes) and must neither delay that job nor push it over its timeout. It is a report, never a gate: there is no threshold.
+
+**Trial exit rule (decided 2026-11-22).** The report is on trial for five code pull requests. It stays if it names at least one untested changed line that a reviewer then covered or consciously accepted; if it named nothing useful in five, the step and the script are removed. Turning it into a gate is a separate decision that needs its own ticket. The V8 source map cache the script reads is documented by Node as experimental; `tests/unit/changed_line_coverage.test.js` runs a real process under coverage, so a change in that shape fails there first.
 
 ---
 

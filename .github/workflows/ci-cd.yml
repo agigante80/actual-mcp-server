@@ -415,6 +415,57 @@ jobs:
           echo "- **Version**: \`${{ needs.version.outputs.version }}\`" >> $GITHUB_STEP_SUMMARY
 
   # --------------------------------------------------------------------------
+  # Job 3.2: Changed-line coverage (#720). A REPORT, never a gate.
+  # It rebuilds with inline source maps, re-runs the unit and adapter suites
+  # under NODE_V8_COVERAGE and writes which CHANGED src/ lines they executed to
+  # the job summary. It is its own job because that second run takes as long as
+  # the gating one (about 5 to 10 minutes): inside Run Tests it would delay the
+  # gate and could push it over its timeout, which no step-level
+  # continue-on-error survives. Nothing lists this job in `needs`, and
+  # continue-on-error keeps a failure or a timeout here from marking the run red.
+  # Pull requests only: the trial (docs/development/testing-and-reliability.md,
+  # "Measuring Coverage") is counted in pull requests. The base sha reaches the
+  # shell through env, never by interpolation.
+  # --------------------------------------------------------------------------
+  changed-line-coverage:
+    name: Changed-line coverage (warn-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v7
+
+      - name: 🔧 Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 📦 Install dependencies
+        run: npm ci
+
+      - name: 📊 Report changed-line coverage
+        env:
+          ACTUAL_SERVER_URL: http://localhost:5006
+          ACTUAL_PASSWORD: dummy-password-for-tests
+          ACTUAL_BUDGET_SYNC_ID: 00000000-0000-0000-0000-000000000000
+          COVERAGE_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -z "$COVERAGE_BASE_SHA" ]; then
+            echo "skip: changed-line coverage: this event has no base commit" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if ! git fetch --no-tags --depth 1 origin "$COVERAGE_BASE_SHA"; then
+            echo "skip: changed-line coverage: the base commit could not be fetched" | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          node scripts/changed-line-coverage.mjs --collect --base "$COVERAGE_BASE_SHA" --summary "$GITHUB_STEP_SUMMARY"
+
+  # --------------------------------------------------------------------------
   # Job 3.5: Docker E2E Tests (Runs in Parallel with Lint & Test)
   # --------------------------------------------------------------------------
   docker-e2e:
