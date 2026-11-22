@@ -401,3 +401,34 @@ Glama's reasons for every score below 5:
 **Reading.** The three drops are on tools whose text grew by a tag sentence, and in each case the reason is the density of the block, not the new sentence. The `search_transactions` move from 4.9 to 4.5 is the full 0.4 single-run spread recorded above, on a description whose behaviour facts did not change. Under Glama's published weighting the description-quality term went from about 4.73 to 4.66 and the coherence term from 4.5 to 5.0, so the server total rose (about 4.66 to 4.76).
 
 **What the scores leave open.** Two things recur across all 15 tools and are the only route to more points: per-action or per-mode line layout (the #683 layout change moved Conciseness on one of four tools, so the evidence that layout pays is weak), and removing the "Read-only" sentence where the annotation already says it. Authentication and rate-limit statements are asked for on two write tools; the server has no per-tool permission model and no rate limit of its own, so there is no true sentence to add beyond what the server instructions already say. No ticket was filed from these scores.
+
+## Scores after the search_transactions layout and the rule operator text (v0.34.2)
+
+Read from Glama's admin releases and TDQS pages on 2026-11-22, after Glama built release 0.34.2 (main `8271d651`, 15 of 15 tools). Since v0.33.0 two compact descriptions changed: `search_transactions` (#712: one line per mode plus a Behavior line) and `manage_rules` (#711: the operator sentence now lists every operator each condition field takes). The server-level Coherence scores were not re-read.
+
+| Measure | v0.33.0 | v0.34.2 |
+| :--- | ---: | ---: |
+| TDQS average | 4.8 | 4.7 |
+| TDQS lowest tool | 4.5 (`search_transactions`) | 4.2 (`manage_rules`) |
+
+| Tool | TDQS v0.33.0 | TDQS v0.34.2 | Behavior | Conciseness | Completeness | Parameters | Purpose | Usage |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `search_transactions` | 4.5 | 4.6 | 4 | 4 | 5 | 4 | 5 | 5 |
+| `manage_rules` | 4.9 | 4.2 | 3 | 4 | 5 | 3 | 5 | 5 |
+
+The other 13 tools, lowest first: `manage_tags` 4.6; `get_context`, `list_budget_months`, `manage_categories`, `manage_transactions` 4.7; `list_entities`, `manage_budget_files`, `manage_budget_months`, `manage_schedules` 4.8; `manage_accounts`, `manage_payees`, `run_query`, `summarize_transactions` 4.9.
+
+Glama's reasons for every score below 5 on the two changed tools:
+
+- `search_transactions` Behavior 4 (was 3): the behaviours are now credited (off-budget inclusion per mode, the two default limits, paging, the amount scan guard, the error field for an unknown name, refused fields named). The missing point is for result ordering and an example call.
+- `search_transactions` Conciseness 4: the layout is praised ("compact one-line-per-mode entries with no filler prose"); the only waste named is the amount and date format line, which repeats the schema.
+- `search_transactions` Parameters 4 (was 5): the mode-to-field mapping is credited; the same cents and `YYYY-MM-DD` lines are said to restate the schema (94% coverage).
+- `manage_rules` Behavior 3 (was 5): the reviewer lists the same disclosures as before (nothing written when ids are invalid, no rollback in `create_batch`, delete cannot be undone, schedule-owned rules refused) and then scores them as "additive-but-not-load-bearing" because the annotations carry the safety signal. The behaviour text did not change between the two releases.
+- `manage_rules` Conciseness 4: the operator section is "a dense run-on that a reader must parse field by field"; a bulleted structure is suggested.
+- `manage_rules` Parameters 3 (was 5): 86% schema coverage is called the baseline, and the operator mapping is described as real meaning the schema lacks, yet the score is 3.
+
+**Reading.** #712 did what it set out to do: Behavior on `search_transactions` went from 3 to 4 and the layout drew praise. The total moved only 0.1 because Parameters fell a point in the same run. The `manage_rules` drop of 0.7 is larger than the 0.4 single-run spread recorded above. Two of its three reasons contradict the score they come with (Behavior on unchanged text, Parameters with praise only), so part of the drop is scorer variance; the one concrete complaint is the density of the longer operator sentence, which #711 made longer on purpose so that the description matches what the server accepts.
+
+**What the scores leave open.** Three text changes are named by the reviewer: lay the `manage_rules` operator section out as one line per field group (the layout that just worked on `search_transactions`), drop the cents and date format line from `search_transactions` where the schema already says it, and state the result ordering of `search_transactions`. None is filed as a ticket: description tickets are not chained from Glama scores without the maintainer's decision.
+
+The "Read-only" sentence removal (#713) is on `develop` and is not in this release, so it is not reflected in these scores.
