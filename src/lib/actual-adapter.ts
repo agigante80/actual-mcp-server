@@ -4985,6 +4985,11 @@ export async function switchBudget(name: string): Promise<{ name: string; syncId
     if (byId) throw new LockedRefusal(byId.syncId);
     const byName = locked.filter(file => file.name.toLowerCase() === nameKey);
     if (byName.length === 1) throw new LockedRefusal(byName[0].syncId);
+    // Two locked files with one name: both are in this caller's listing, so "not found" (what the
+    // #690 spec said) would contradict it. Same refusal as every other ambiguous name; each
+    // Sync ID then gives the locked refusal. Only a grantee has locked rows.
+    if (byName.length > 1) throw new OutOfRangeRefusal(
+      `Ambiguous budget name. Switch by Sync ID: ${byName.map(file => file.syncId).join(', ')}.`, name);
     throw notFound();
   }
   // #628: tool results show the server origin only, never a userinfo credential, path or query.
