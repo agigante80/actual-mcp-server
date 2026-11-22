@@ -60,7 +60,10 @@ assert.equal(start(context([zeta, household])).syncId, 'Z');
 assert.equal(start(context([{ ...zeta, name: 'Renamed' }, household])).name, 'Renamed');
 assert.equal(existsSync(join(dir, 'budget-preferences.json')), false);
 
-for (const files of [[zeta, alpha], [zeta, household], [locked], [locked, alpha],
+const onlyLocked = context([locked], 'locked-only');
+assert.equal(start(onlyLocked).name, 'Default');
+await assert.rejects(requestContext.run(onlyLocked, () => adapter.getAccounts()), { refusalKind: 'locked', message: /^Budget L / });
+for (const files of [[zeta, alpha], [zeta, household], [locked, alpha],
   [{ ...defaultFile, encrypted: true }, alpha], []]) {
   const store = context(files, 'ambiguous');
   await noStart(store);

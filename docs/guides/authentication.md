@@ -70,7 +70,8 @@ For OIDC deployments using Actual's permissions, [budget discovery](multiple-bud
 can expose each user's shared files without configuring each Sync ID. A new session opens
 the user's last selected file if their current grants still permit it. With no usable preference
 or configured budget, one permitted, unencrypted file opens automatically. Users with several
-permitted files choose which one to open.
+permitted files choose which one to open. A granted encrypted file with no configured key
+shows up as locked. A session with only locked files can list them without opening one.
 
 > **This is inbound auth only.** `AUTH_PROVIDER=oidc` controls how MCP **clients** authenticate
 > **to this server**. It does not change how this server authenticates **to Actual Budget**, which

@@ -8,10 +8,11 @@ const InputSchema = z.object({});
 const tool: ToolDefinition = {
   name: 'actual_budgets_list_available',
   description:
-    (showDiscoveredBudgets ? 'List the available budgets' : 'List the pre-configured budgets') + ' this session may switch to (a session limited to some budgets sees only those). ' +
-    'Each entry shows the budget name, sync ID, server origin, and whether it uses E2E encryption. ' +
-    (showDiscoveredBudgets ? 'Includes permitted configured budgets and, when OIDC discovery is enabled, shared files.' : 'Budgets are configured via BUDGET_n_NAME / BUDGET_n_SYNC_ID / BUDGET_n_SERVER_URL env vars.') + ' ' +
-    'Pass the budget name to actual_budgets_switch to change the active budget.',
+    (showDiscoveredBudgets ? 'List configured and shared budgets visible to this session. ' :
+      'List pre-configured budgets visible to this session (BUDGET_n_NAME / BUDGET_n_SYNC_ID / BUDGET_n_SERVER_URL). ') +
+    'Rows show name, Sync ID, server origin and E2E encryption. ' +
+    (showDiscoveredBudgets ? 'Locked rows are encrypted, lack a server key and cannot be switched to. ' : '') +
+    'Pass a budget name to actual_budgets_switch.',
   inputSchema: InputSchema,
   call: async (_args: unknown) => {
     const budgets = await Promise.resolve(adapter.getBudgetRegistry());
