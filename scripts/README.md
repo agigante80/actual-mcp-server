@@ -71,6 +71,7 @@ bash scripts/deploy-and-test.sh full
 | Script | npm script | Purpose |
 |--------|-----------|---------|
 | `check-write-effect-audit.mjs` | `npm run audit:write-effect` | Reports when `docs/audit/write-effect-audit.md` was taken against an older `@actual-app/api` than the one installed, and names the dispositions that depend on upstream continuing to throw. **Exits 0 in every path, deliberately.** It runs in the NON-BLOCKING `api-surface-drift` lane and must never gate a build: a check whose result changes with no commit is exactly what killed the release train in #321. |
+| `changed-line-coverage.mjs` | `npm run test:coverage` | #720: warn-only report of which CHANGED `src/` lines the unit and adapter suites execute. `--collect` builds with inline source maps, runs both suites under `NODE_V8_COVERAGE=coverage/v8`, then rebuilds plainly; without it the script reports from an existing `--coverage-dir`. `--base <ref>` (default `origin/develop`) or `--diff-file <path>` picks the diff, `--summary <file>` appends the table (CI passes `$GITHUB_STEP_SUMMARY`). No dependency and no threshold; missing data prints `skip:` and exits 0. See [testing-and-reliability](../docs/development/testing-and-reliability.md#measuring-coverage) |
 
 ## Documentation checks (#602)
 
