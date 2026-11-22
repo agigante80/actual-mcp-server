@@ -563,6 +563,10 @@ The default surface is `compact`: 15 tools over 85 operations (the prose says "1
 5. If `tests/unit/tools_list_size_budget.test.js` fails, raise `COMPACT_TOTAL_CEILING` by the measured growth, with a comment saying why.
 6. Update `docs/reference/tools.md`, run `npm run build && npm run docs:gen`, run `npm run tool-count`, and update the mapping table in section 7 of the design record.
 
+### (a2) A change to a compact tool's description only
+
+No new operation, so steps 1 to 5 above do not apply. Run `npm run build && node scripts/measure-tools-list-size.mjs && npm run docs:gen`: the published `tools/list` bytes change with the text, and `tests/unit/tools_list_sizes_sync.test.js` fails on a stale `scripts/docs/tools-list-sizes.json` or README size table. If the tool is in the hand-kept list of `tests/unit/compact_description_layout.test.js`, keep that guard green; whether a tool joins that list is a decision, not a default (#714).
+
 ### (b) A new compact tool
 
 Forbidden unless another compact tool is merged or retired in the same change (decision 3, the 15-tool ceiling; a 16th tool would cost the Glama Tool Count score). When it is allowed, also touch `src/compact/registry.ts`, add a title in `src/lib/tool-titles.ts`, and update section 8 of the design record.

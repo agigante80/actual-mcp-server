@@ -62,6 +62,7 @@ for (const name of ['list_budget_months', 'manage_budget_files', 'list_entities'
   });
 }
 
+const MANAGE_RULES_LINES = 14;
 await check('#714: manage_rules has one line per action and one per condition field group', () => {
   const lines = published.get('manage_rules').split('\n');
   for (const action of ['create', 'create_batch', 'upsert', 'update', 'delete']) {
@@ -70,6 +71,15 @@ await check('#714: manage_rules has one line per action and one per condition fi
   for (const start of ['Conditions match by field and op: imported_payee, payee_name take ', 'notes takes ', 'id fields (', 'cleared, reconciled, transfer, parent take ', 'amount takes ', 'date takes ']) {
     assert.strictEqual(lines.filter((l) => l.startsWith(start)).length, 1, `one line starting "${start}"`);
   }
+  // The prefixes alone cannot see a group SPLIT over two lines (its first half still matches), so
+  // the line count is pinned too: purpose, 5 actions, 6 groups, the note and the Returns line.
+  assert.strictEqual(lines.length, MANAGE_RULES_LINES);
+});
+await check('#714 NEGATIVE: a condition group split over two lines changes the pinned line count', () => {
+  const split = published.get('manage_rules').replace('\namount takes is, ', '\namount takes is,\n');
+  assert.notStrictEqual(split, published.get('manage_rules'), 'the fixture really splits the amount group');
+  assert.deepStrictEqual(layoutProblems('manage_rules', split), [], 'the generic layout rules do not see the split');
+  assert.strictEqual(split.split('\n').length, MANAGE_RULES_LINES + 1);
 });
 await check('#714 NEGATIVE: manage_rules joined into one line is reported by name', () => {
   const problems = layoutProblems('manage_rules', published.get('manage_rules').replaceAll('\n', ' '));
