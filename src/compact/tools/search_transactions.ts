@@ -60,7 +60,7 @@ const bounded = (target: CompactActionRow): CompactActionRow => ({
   fields: target.fields.superRefine((value, ctx) => {
     const v = value as Record<string, unknown>;
     if (v.account_id === undefined && v.start_date === undefined && v.end_date === undefined) {
-      ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'by: amount needs at least one of account_id, start_date, end_date (unbounded scan refused)' });
+      ctx.addIssue({ code: 'custom', path: ['account_id'], message: 'by: amount needs at least one of account_id, start_date, end_date (an unbounded scan is refused)' });
     }
   }) as CompactActionRow['fields'],
 });
