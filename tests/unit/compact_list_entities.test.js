@@ -165,8 +165,9 @@ await check('published schema: no oneOf/anyOf outside the query union, no output
   for (const [k, v] of Object.entries(js.properties)) if (k !== 'type') assert.ok(v.description, `${k} has no description`);
   assert.deepStrictEqual(js.required, ['type']);
 });
-await check('description: read-only, Returns, every type, the sibling tool, no legacy name', () => {
-  for (const w of ['Read-only', 'Returns', 'get_context', ...Object.keys(DEFAULTS), 'note']) assert.ok(spec.description.includes(w), w);
+await check('description: no Read-only restatement, Returns, every type, the sibling tool, no legacy name', () => {
+  for (const w of ['Returns', 'get_context', ...Object.keys(DEFAULTS), 'note']) assert.ok(spec.description.includes(w), w);
+  assert.ok(!spec.description.includes('Read-only'), 'the readOnlyHint annotation is not restated (#713)');
   assert.ok(!/actual_/.test(spec.description));
 });
 await check('annotations: read-only, and no row or route target is write-capable', () => {
