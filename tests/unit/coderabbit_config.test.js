@@ -20,8 +20,13 @@ import { parse } from 'yaml';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const BOTS = ['dependabot[bot]', 'actual-mcp-dependency-updater[bot]'];
 const NO_PUSH = ['unit_tests', 'autofix', 'fix_ci', 'resolve_merge_conflict', 'simplify'];
-// The heading the custom check's instructions name; it must exist in AGENTS.md.
+// The AGENTS.md heading each custom check's instructions name; both must exist there.
 const TEST_REVIEW_HEADING = "What a review of a change's tests checks";
+const DOCS_HEADING = 'Docs to update with a change';
+const TESTS_CHECK = 'Tests cover the change';
+const DOCS_CHECK = 'Docs cover the change';
+// #727: checks are looked up by NAME, never by position, so reordering the list is free.
+const CHECK_HEADINGS = { [TESTS_CHECK]: TEST_REVIEW_HEADING, [DOCS_CHECK]: DOCS_HEADING };
 const TONE_MAX = 250; // schema maxLength for tone_instructions
 // Built from code points so this file carries neither character itself.
 const DASHES = [0x2013, 0x2014].map((c) => String.fromCharCode(c));
@@ -68,15 +73,34 @@ export function checkConfig(cfg) {
   if ((cfg?.reviews?.path_instructions ?? []).length) {
     fail('reviews.path_instructions must stay empty (AGENTS.md is the one source)');
   }
-  // One custom pre-merge check, advisory: `error` mode can block a merge, and the criteria
+  // Two custom pre-merge checks, advisory: `error` mode can block a merge, and the criteria
   // live in AGENTS.md, so the instructions must point there instead of copying them.
+  // Order of the tests: count and names first, then per check its mode, then its pointer.
   const pre = cfg?.reviews?.pre_merge_checks ?? {};
   const checks = pre.custom_checks ?? [];
-  if (checks.length !== 1) fail('pre_merge_checks.custom_checks must hold exactly one check');
-  if (checks[0].mode !== 'warning') fail('the custom check must be in warning mode');
-  if (!String(checks[0].instructions ?? '').includes(TEST_REVIEW_HEADING)) {
-    fail('the custom check must point at the AGENTS.md test review list');
+  const names = Object.keys(CHECK_HEADINGS);
+  const byName = (name) => checks.filter((c) => c?.name === name);
+  if (checks.length !== names.length || !names.every((n) => byName(n).length === 1)) {
+    fail('pre_merge_checks.custom_checks must hold exactly the two checks');
   }
+  for (const name of names) {
+    const [c] = byName(name);
+    if (c.mode !== 'warning') fail(`the custom check ${name} must be in warning mode`);
+    if (!String(c.instructions ?? '').includes(CHECK_HEADINGS[name])) {
+      fail(`the custom check ${name} must point at its AGENTS.md list`);
+    }
+  }
+  // The docs check applies the AGENTS.md section as it stands. These two phrases keep it from
+  // growing a pass condition of its own (an unconditioned row applies whenever the change is
+  // of that kind). They are a text guard only: instructions that keep both phrases and add an
+  // exemption beside them still pass here, so the wording itself is reviewed by a person.
+  const docs = String(byName(DOCS_CHECK)[0].instructions);
+  if (!docs.includes('as written') || !docs.includes('applies whenever')) {
+    fail(`the custom check ${DOCS_CHECK} must apply the AGENTS.md section as written`);
+  }
+  // A rough check for a copied table row: it sees a docs/ path, not a copied README or
+  // .env.example row.
+  if (docs.includes('docs/')) fail(`the custom check ${DOCS_CHECK} must not copy a doc path`);
   if (pre.override_requested_reviewers_only === true) {
     fail('pre_merge_checks.override_requested_reviewers_only must not be true');
   }
@@ -103,8 +127,12 @@ check('no em or en dash in the config', () => {
   assert.ok(!DASHES.some((d) => raw.includes(d)), 'dash found in .coderabbit.yaml');
 });
 
-check('AGENTS.md carries the list the custom check points at', () => {
-  assert.ok(readFileSync(join(ROOT, 'AGENTS.md'), 'utf8').includes(TEST_REVIEW_HEADING), 'heading missing from AGENTS.md');
+const agents = readFileSync(join(ROOT, 'AGENTS.md'), 'utf8');
+check('AGENTS.md carries the list the tests check points at', () => {
+  assert.ok(agents.includes(TEST_REVIEW_HEADING), 'heading missing from AGENTS.md');
+});
+check('AGENTS.md carries the section the docs check points at, as a heading line', () => {
+  assert.ok(agents.split('\n').includes(`## ${DOCS_HEADING}`), 'section heading missing from AGENTS.md');
 });
 
 const refuses = (label, mutate, message) => check(`negative: ${label}`, () => {
@@ -136,16 +164,31 @@ refuses('a rule copy in path_instructions', (c) => { c.reviews.path_instructions
   'coderabbit config: reviews.path_instructions must stay empty (AGENTS.md is the one source)');
 refuses('an over-long tone', (c) => { c.tone_instructions = 'x'.repeat(TONE_MAX + 1); },
   `coderabbit config: tone_instructions exceeds ${TONE_MAX} characters`);
-refuses('the custom check in error mode', (c) => { c.reviews.pre_merge_checks.custom_checks[0].mode = 'error'; },
-  'coderabbit config: the custom check must be in warning mode');
-refuses('the custom check mode dropped', (c) => { delete c.reviews.pre_merge_checks.custom_checks[0].mode; },
-  'coderabbit config: the custom check must be in warning mode');
-refuses('a second custom check', (c) => { c.reviews.pre_merge_checks.custom_checks.push({ name: 'x', mode: 'warning', instructions: 'x' }); },
-  'coderabbit config: pre_merge_checks.custom_checks must hold exactly one check');
-refuses('the custom check removed', (c) => { delete c.reviews.pre_merge_checks; },
-  'coderabbit config: pre_merge_checks.custom_checks must hold exactly one check');
-refuses('criteria copied instead of pointing at AGENTS.md', (c) => { c.reviews.pre_merge_checks.custom_checks[0].instructions = 'Every src change needs a test.'; },
-  'coderabbit config: the custom check must point at the AGENTS.md test review list');
+const custom = (c, name) => c.reviews.pre_merge_checks.custom_checks.find((k) => k.name === name);
+const TWO = 'coderabbit config: pre_merge_checks.custom_checks must hold exactly the two checks';
+refuses('the tests check in error mode', (c) => { custom(c, TESTS_CHECK).mode = 'error'; },
+  `coderabbit config: the custom check ${TESTS_CHECK} must be in warning mode`);
+refuses('the tests check mode dropped', (c) => { delete custom(c, TESTS_CHECK).mode; },
+  `coderabbit config: the custom check ${TESTS_CHECK} must be in warning mode`);
+refuses('the docs check mode dropped', (c) => { delete custom(c, DOCS_CHECK).mode; },
+  `coderabbit config: the custom check ${DOCS_CHECK} must be in warning mode`);
+refuses('a third custom check', (c) => { c.reviews.pre_merge_checks.custom_checks.push({ name: 'x', mode: 'warning', instructions: 'x' }); }, TWO);
+refuses('the custom checks removed', (c) => { delete c.reviews.pre_merge_checks; }, TWO);
+refuses('one of the pair renamed', (c) => { custom(c, DOCS_CHECK).name = 'Docs'; }, TWO);
+refuses('one name twice', (c) => { custom(c, DOCS_CHECK).name = TESTS_CHECK; }, TWO);
+refuses('test criteria copied instead of pointing at AGENTS.md', (c) => { custom(c, TESTS_CHECK).instructions = 'Every src change needs a test.'; },
+  `coderabbit config: the custom check ${TESTS_CHECK} must point at its AGENTS.md list`);
+refuses('the docs check losing the unconditioned-row sentence', (c) => {
+  const k = custom(c, DOCS_CHECK);
+  k.instructions = k.instructions.replace(/A row with no condition of its own applies whenever[^.]*\. /, '');
+}, `coderabbit config: the custom check ${DOCS_CHECK} must apply the AGENTS.md section as written`);
+refuses('a doc path copied into the docs check', (c) => { custom(c, DOCS_CHECK).instructions += ' docs/guides/deployment.md'; },
+  `coderabbit config: the custom check ${DOCS_CHECK} must not copy a doc path`);
+check('the custom checks pass in either order', () => {
+  const cfg = load();
+  cfg.reviews.pre_merge_checks.custom_checks.reverse();
+  checkConfig(cfg);
+});
 refuses('a built-in check in error mode', (c) => { c.reviews.pre_merge_checks.title = { mode: 'error' }; },
   'coderabbit config: pre_merge_checks.title.mode must not be error');
 
