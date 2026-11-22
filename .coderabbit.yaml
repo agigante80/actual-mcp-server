@@ -4,8 +4,8 @@
 # those from outside contributors (#693) and, since the #715 trial (ADR 0002), the maintainer's
 # own (the maintainer must stay out of ignore_usernames). It never gates a merge: no commit status fails on it and it
 # is in no branch protection. tests/unit/coderabbit_config.test.js pins the keys
-# below that keep it scoped and quiet; change both together. One custom pre-merge
-# check runs in warning mode (2026-11-21): a neutral check run, never a gate.
+# below that keep it scoped and quiet; change both together. Two custom pre-merge
+# checks run in warning mode (tests 2026-11-21, docs #727): neutral check runs, never a gate.
 language: en-US
 tone_instructions: >-
   Be brief and plain. Report concrete defects with the failing input or state.
@@ -63,8 +63,8 @@ reviews:
   auto_approvals:
     enabled: false
     allow_author_approval: false
-  # One custom check, in WARNING mode: a failure is a neutral check run and blocks
-  # nothing. It runs in a read-only sandbox, executes no test and pushes nothing.
+  # Two custom checks, in WARNING mode: a failure is a neutral check run and blocks
+  # nothing. They run in a read-only sandbox, execute no test and push nothing.
   # The criteria stay in AGENTS.md (one source); the instructions only point there.
   pre_merge_checks:
     custom_checks:
@@ -77,6 +77,16 @@ reviews:
           that applies is met. Otherwise fail, and for each unmet point name the
           point, the changed file and the missing test. Judge only what the diff
           shows: no test is run here, so never state that tests pass or fail.
+      - name: 'Docs cover the change'
+        mode: warning
+        instructions: >-
+          Read the section "Docs to update with a change" in AGENTS.md and apply
+          it to this pull request as written: the table, the conditions some rows
+          carry, and its closing sentence. A row with no condition of its own
+          applies whenever the pull request makes that kind of change. Pass when
+          no row applies, or when the pull request changes the document every
+          applying row names. Otherwise fail, and for each unmet row name the
+          row, the changed file and the document. Judge only what the diff shows.
   tools:
     # The repository uses neither linter; their defaults would be noise.
     eslint:
