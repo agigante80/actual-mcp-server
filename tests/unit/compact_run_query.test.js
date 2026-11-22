@@ -79,8 +79,9 @@ await check('published schema: flat, strict, query required and described, no se
   assert.strictEqual(tool.outputSchema, undefined);
 });
 await check('description keeps the legacy grammar and names the siblings, no legacy name', () => {
-  for (const w of ['Read-only', 'Returns', 'SELECT', 'WHERE', 'OR, REGEXP, NOT IN', 'is_parent = false', 'dot notation', 'cents', "date >= '2025-01-01'", 'hint', 'category_groups',
+  for (const w of ['Returns', 'SELECT', 'WHERE', 'OR, REGEXP, NOT IN', 'is_parent = false', 'dot notation', 'cents', "date >= '2025-01-01'", 'hint', 'category_groups',
     'search_transactions', 'summarize_transactions', 'list_entities', 'list_budget_months']) assert.ok(spec.description.includes(w), w);
+  assert.ok(!spec.description.includes('Read-only'), 'the readOnlyHint annotation is not restated (#713)');
   assert.ok(!/actual_/.test(spec.description));
 });
 await check('annotations: read-only, closed world, target not write-capable', () => {

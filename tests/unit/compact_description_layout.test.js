@@ -72,5 +72,25 @@ await check('NEGATIVE: a last line that does not start with Returns is reported'
   assert.ok(problems.includes('fixture_tool: last line must start with "Returns"'), JSON.stringify(problems));
 });
 
+// #713: a read tool's description must not restate its readOnlyHint annotation. Compact surface
+// only (the legacy tools are out of scope), case-sensitive so run_query's "read-only SQL query"
+// (what the tool does) is not flagged. Kept apart from layoutProblems, which covers five tools.
+const restatementProblems = (name, description) =>
+  description.includes('Read-only') ? [`${name}: restates the readOnlyHint annotation (contains "Read-only")`] : [];
+const READ_TOOLS = ['get_context', 'list_budget_months', 'list_entities', 'run_query', 'search_transactions', 'summarize_transactions'];
+const readOnlyEntries = entries.filter((e) => e.annotations?.readOnlyHint === true);
+
+await check('#713: the compact read tools are exactly the six expected (the check below is not vacuous)', () => {
+  assert.deepStrictEqual(readOnlyEntries.map((e) => e.name).sort(), READ_TOOLS);
+});
+await check('#713: no compact read tool restates its readOnlyHint annotation', () => {
+  assert.deepStrictEqual(readOnlyEntries.flatMap((e) => restatementProblems(e.name, e.description)), []);
+});
+await check('#713 NEGATIVE: a description with " Read-only." appended is reported by name', () => {
+  assert.deepStrictEqual(restatementProblems('list_entities', published.get('list_entities').replaceAll('Read-only', '') + ' Read-only.'), [
+    'list_entities: restates the readOnlyHint annotation (contains "Read-only")',
+  ]);
+});
+
 console.log(`\n[compact-description-layout] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

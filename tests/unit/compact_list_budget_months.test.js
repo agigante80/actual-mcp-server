@@ -91,8 +91,9 @@ await check('published schema: flat, strict, month the only property, nothing re
   assert.ok(js.properties.month.description);
   assert.strictEqual(tool.outputSchema, undefined);
 });
-await check('description: read-only, Returns, month, siblings, no legacy name', () => {
-  for (const w of ['Read-only', 'Returns', 'month', 'YYYY-MM', 'manage_budget_months', 'summarize_transactions', 'list_entities', 'search_transactions']) assert.ok(spec.description.includes(w), w);
+await check('description: no Read-only restatement, Returns, month, siblings, no legacy name', () => {
+  for (const w of ['Returns', 'month', 'YYYY-MM', 'manage_budget_months', 'summarize_transactions', 'list_entities', 'search_transactions']) assert.ok(spec.description.includes(w), w);
+  assert.ok(!spec.description.includes('Read-only'), 'the readOnlyHint annotation is not restated (#713)');
   assert.ok(!/actual_/.test(spec.description));
 });
 await check('annotations: read-only, closed world, no target is write-capable', () => {

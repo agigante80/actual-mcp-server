@@ -106,8 +106,9 @@ await check('published schema: no oneOf/anyOf, no outputSchema, every property d
   for (const [k, v] of Object.entries(js.properties)) if (k !== 'topic') assert.ok(v.description, `${k} has no description`);
   assert.ok(js.properties.topic.enum.includes('structure') && !js.required);
 });
-await check('description states read-only, a Returns sentence, every topic and the sibling tool', () => {
-  for (const w of ['Read-only', 'Returns', 'structure', 'server', 'version', 'preferences', 'list_entities']) assert.ok(spec.description.includes(w), w);
+await check('description states no Read-only restatement, a Returns sentence, every topic and the sibling tool', () => {
+  for (const w of ['Returns', 'structure', 'server', 'version', 'preferences', 'list_entities']) assert.ok(spec.description.includes(w), w);
+  assert.ok(!spec.description.includes('Read-only'), 'the readOnlyHint annotation is not restated (#713)');
   assert.ok(!/actual_/.test(spec.description), 'no legacy name in the description');
 });
 await check('annotations: read-only and no target is write-capable', () => {

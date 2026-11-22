@@ -45,7 +45,6 @@ export const getContext: CompactToolSpec = {
   examplePrompt: 'What accounts and categories do I have?',
   description:
     'Read the budget structure or the Actual server details in one call; start here to learn what exists before reading or changing anything. ' +
-    'Read-only: it never creates, changes or deletes data. ' +
     'Use list_entities instead to list or look up one kind of entity (accounts, categories, payees, rules, schedules, tags, notes, budget files) or to resolve a name to an id; ' +
     'this tool returns the whole structure at once. ' +
     'Pick one `topic` (default structure). ' +
