@@ -49,7 +49,11 @@ const compactMeta = (spec) => {
 const entries = buildToolListEntries(COMPACT_TOOLS.map((c) => c.name), (name) => compactMeta(COMPACT_TOOLS.find((c) => c.name === name)));
 const published = new Map(entries.map((e) => [e.name, e.description]));
 
-for (const name of ['list_budget_months', 'manage_budget_files', 'list_entities', 'summarize_transactions', 'search_transactions']) {
+// #714 (decided 2026-11-22): this list stays hand-kept. manage_rules joined it because its operator
+// section was one 1,878-character line; the other nine one-line descriptions stay as they are by
+// decision (layout did not move the Glama score beyond its 0.4 run-to-run noise). Do not turn this
+// into a loop over every published tool without new evidence.
+for (const name of ['list_budget_months', 'manage_budget_files', 'list_entities', 'summarize_transactions', 'search_transactions', 'manage_rules']) {
   await check(`${name}: the published description is laid out as short lines`, () => {
     const description = published.get(name);
     assert.ok(typeof description === 'string', `${name} is published`);
@@ -57,6 +61,24 @@ for (const name of ['list_budget_months', 'manage_budget_files', 'list_entities'
     assert.ok(description.includes('\n'), `${name}: no newline in the published description`);
   });
 }
+
+await check('#714: manage_rules has one line per action and one per condition field group', () => {
+  const lines = published.get('manage_rules').split('\n');
+  for (const action of ['create', 'create_batch', 'upsert', 'update', 'delete']) {
+    assert.strictEqual(lines.filter((l) => l.startsWith(`${action}: `)).length, 1, `one line starting "${action}: "`);
+  }
+  for (const start of ['Conditions match by field and op: imported_payee, payee_name take ', 'notes takes ', 'id fields (', 'cleared, reconciled, transfer, parent take ', 'amount takes ', 'date takes ']) {
+    assert.strictEqual(lines.filter((l) => l.startsWith(start)).length, 1, `one line starting "${start}"`);
+  }
+});
+await check('#714 NEGATIVE: manage_rules joined into one line is reported by name', () => {
+  const problems = layoutProblems('manage_rules', published.get('manage_rules').replaceAll('\n', ' '));
+  assert.deepStrictEqual(problems, [
+    'manage_rules: fewer than 3 lines',
+    'manage_rules: line 1 longer than 400 characters',
+    'manage_rules: last line must start with "Returns"',
+  ]);
+});
 
 await check('NEGATIVE: a single 1,200-character line is reported as fewer than 3 lines', () => {
   const problems = layoutProblems('fixture_tool', 'x'.repeat(1200));
