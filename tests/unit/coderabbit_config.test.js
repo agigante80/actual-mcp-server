@@ -1,7 +1,7 @@
 // tests/unit/coderabbit_config.test.js
 //
 // #693: .coderabbit.yaml keeps the CodeRabbit app an ADVISORY reviewer scoped to pull
-// requests against develop: outside ones and, in the #715 trial, the maintainer's own, so
+// requests against develop: outside ones and, since the #715 trial (ADR 0002), the maintainer's own, so
 // ignore_usernames must hold the two bots and nobody else. The keys pinned here are the ones whose schema DEFAULT
 // would break a project rule if the line were dropped: only the default branch is reviewed
 // without base_branches, bot pull requests are reviewed without ignore_usernames, and issue

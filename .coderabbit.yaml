@@ -1,7 +1,7 @@
 # yaml-language-server: $schema=https://www.coderabbit.ai/integrations/schema.v2.json
 #
 # CodeRabbit is an ADVISORY first-pass reviewer for pull requests against develop:
-# those from outside contributors (#693) and, during the #715 trial, the maintainer's
+# those from outside contributors (#693) and, since the #715 trial (ADR 0002), the maintainer's
 # own (the maintainer must stay out of ignore_usernames). It never gates a merge: no commit status fails on it and it
 # is in no branch protection. tests/unit/coderabbit_config.test.js pins the keys
 # below that keep it scoped and quiet; change both together. One custom pre-merge

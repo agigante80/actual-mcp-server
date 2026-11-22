@@ -31,6 +31,7 @@ Every page under `docs/` is listed here, grouped by what you came to do. `npm ru
 - [explanation/architecture.md](explanation/architecture.md): components, transports and data flow.
 - [architecture/README.md](architecture/README.md): architecture decision records (ADRs) and their index.
 - [architecture/0001-pr-per-code-ticket-trial-for-coderabbit-review.md](architecture/0001-pr-per-code-ticket-trial-for-coderabbit-review.md): ADR 0001, the five-ticket pull request trial for CodeRabbit review.
+- [architecture/0002-keep-the-pr-flow-for-code-tickets-maintainer-docs-stay-direct.md](architecture/0002-keep-the-pr-flow-for-code-tickets-maintainer-docs-stay-direct.md): ADR 0002, the pull request flow kept for code tickets, maintainer docs direct (supersedes ADR 0001).
 - [explanation/security-and-privacy.md](explanation/security-and-privacy.md): auth model, threat model and hardening.
 - [explanation/compact-tool-surface.md](explanation/compact-tool-surface.md): the 15-tool compact surface: decision record, naming rules and the mapping of all 85 tools.
 

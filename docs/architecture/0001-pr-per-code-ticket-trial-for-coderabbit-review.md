@@ -1,7 +1,8 @@
 # 0001. Trial: the maintainer's code tickets land through a pull request to develop so CodeRabbit reviews them
 
-- Status: accepted
+- Status: superseded
 - Date: 2026-11-21
+- Superseded by: 0002
 
 ## Context
 
