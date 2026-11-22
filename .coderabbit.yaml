@@ -5,7 +5,7 @@
 # own (the maintainer must stay out of ignore_usernames). It never gates a merge: no commit status fails on it and it
 # is in no branch protection. tests/unit/coderabbit_config.test.js pins the keys
 # below that keep it scoped and quiet; change both together. Two custom pre-merge
-# checks run in warning mode (tests 2026-11-21, docs #727): neutral check runs, never a gate.
+# checks run in warning mode (tests 2026-11-21, docs #727): rows in the Walkthrough comment, never a gate.
 language: en-US
 tone_instructions: >-
   Be brief and plain. Report concrete defects with the failing input or state.
@@ -63,7 +63,8 @@ reviews:
   auto_approvals:
     enabled: false
     allow_author_approval: false
-  # Two custom checks, in WARNING mode: a failure is a neutral check run and blocks
+  # Two custom checks, in WARNING mode: a failure is a warning row in the Walkthrough
+  # comment's pre-merge table (inline checks post no check run of their own) and blocks
   # nothing. They run in a read-only sandbox, execute no test and push nothing.
   # The criteria stay in AGENTS.md (one source); the instructions only point there.
   pre_merge_checks:
@@ -84,9 +85,10 @@ reviews:
           it to this pull request as written: the table, the conditions some rows
           carry, and its closing sentence. A row with no condition of its own
           applies whenever the pull request makes that kind of change. Pass when
-          no row applies, or when the pull request changes the document every
-          applying row names. Otherwise fail, and for each unmet row name the
-          row, the changed file and the document. Judge only what the diff shows.
+          neither a row nor the closing sentence applies, or when the pull
+          request changes the document each one that applies calls for.
+          Otherwise fail, and for each unmet row or the closing sentence name
+          it, the changed file and the document. Judge only what the diff shows.
   tools:
     # The repository uses neither linter; their defaults would be noise.
     eslint:
