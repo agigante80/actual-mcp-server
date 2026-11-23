@@ -60,8 +60,8 @@ await check('create account drops entity and forwards name and balance', () =>
   expectCall({ action: 'create', entity: 'account', name: 'Checking', balance: 10000 }, 'actual_accounts_create', { name: 'Checking', balance: 10000 }));
 await check('create account forwards offbudget (#767)', () =>
   expectCall({ action: 'create', entity: 'account', name: 'Mortgage', balance: 5000, offbudget: true }, 'actual_accounts_create', { name: 'Mortgage', balance: 5000, offbudget: true }));
-await check('create account_group routes to the group tool with sort_order', () =>
-  expectCall({ action: 'create', entity: 'account_group', name: 'Savings', sort_order: 2 }, 'actual_account_groups_create', { name: 'Savings', sort_order: 2 }));
+await check('create account_group routes to the group tool with the name only (#817)', () =>
+  expectCall({ action: 'create', entity: 'account_group', name: 'Savings' }, 'actual_account_groups_create', { name: 'Savings' }));
 await check('update account wraps everything but id under fields and drops entity', () =>
   expectCall({ action: 'update', entity: 'account', id: U1, name: 'N', offbudget: true }, 'actual_accounts_update', { id: U1, fields: { name: 'N', offbudget: true } }));
 await check('update account with account_group_id wraps it under fields, and null ungroups (#816)', async () => {
@@ -73,8 +73,8 @@ await check('NEGATIVE: a malformed account_group_id, and one on create, are refu
   await refused({ action: 'create', entity: 'account', name: 'x', account_group_id: U2 }, /account_group_id.*(not valid for action: create|cannot be used)/);
   await refused({ action: 'update', entity: 'account_group', id: U1, account_group_id: U2 }, /account_group_id/);
 });
-await check('update account_group is flat', () =>
-  expectCall({ action: 'update', entity: 'account_group', id: U1, name: 'G', sort_order: 1 }, 'actual_account_groups_update', { id: U1, name: 'G', sort_order: 1 }));
+await check('update account_group is flat and carries the name only (#817)', () =>
+  expectCall({ action: 'update', entity: 'account_group', id: U1, name: 'G' }, 'actual_account_groups_update', { id: U1, name: 'G' }));
 await check('close with entity omitted renames the transfer keys', () =>
   expectCall({ action: 'close', id: U1, transfer_account_id: U2, transfer_category_id: U3 }, 'actual_accounts_close', { id: U1, transferAccountId: U2, transferCategoryId: U3 }));
 await check('close with entity account is accepted and entity is not forwarded', () =>
@@ -114,8 +114,12 @@ await check('NEGATIVE: offbudget on an account_group create is refused (#767)', 
   refused({ action: 'create', entity: 'account_group', name: 'G', offbudget: true }, /offbudget.*cannot be used with the other fields given for action: create/));
 await check('NEGATIVE: a non-boolean offbudget on account create is refused (#767)', () =>
   refused({ action: 'create', entity: 'account', name: 'A', offbudget: 'yes' }, /offbudget/));
-await check('NEGATIVE: sort_order with entity account is refused', () =>
-  refused({ action: 'create', entity: 'account', name: 'A', sort_order: 1 }, /sort_order.*cannot be used with the other fields given for action: create/));
+await check('NEGATIVE: sort_order is refused on every create and update, nothing is called (#817)', async () => {
+  await refused({ action: 'create', entity: 'account', name: 'A', sort_order: 1 }, /sort_order/);
+  await refused({ action: 'create', entity: 'account_group', name: 'G', sort_order: 1 }, /sort_order/);
+  await refused({ action: 'update', entity: 'account_group', id: U1, name: 'G', sort_order: 2 }, /sort_order/);
+  await refused({ action: 'update', entity: 'account_group', id: U1, sort_order: 2 }, /sort_order/);
+});
 await check('NEGATIVE: an unknown entity is refused', () => refused({ action: 'create', entity: 'payee', name: 'A' }, /entity/));
 await check('NEGATIVE: close with entity account_group names the rule', () =>
   refused({ action: 'close', entity: 'account_group', id: U1 }, /entity.*close accepts only account/));
@@ -130,7 +134,7 @@ await check('NEGATIVE: update without entity, id, or any change is refused', asy
   await refused({ action: 'update', id: U1, name: 'x' }, /entity.*required for action: update/);
   await refused({ action: 'update', entity: 'account', name: 'x' }, /id.*required for action: update/);
   await refused({ action: 'update', entity: 'account', id: U1 }, /update needs at least one of: name, offbudget, closed, account_group_id/);
-  await refused({ action: 'update', entity: 'account_group', id: U1 }, /update needs at least one of: name, sort_order/);
+  await refused({ action: 'update', entity: 'account_group', id: U1 }, /name.*required for action: update/);
 });
 await check('NEGATIVE: offbudget on an account_group update is refused', () =>
   refused({ action: 'update', entity: 'account_group', id: U1, offbudget: true }, /offbudget.*cannot be used with the other fields given for action: update/));
@@ -210,6 +214,19 @@ await check('description: Returns, every action, DESTRUCTIVE, no legacy name', (
 await check('the published manage_accounts entry stays at or under the 3900 byte ceiling (#768)', () => {
   const entry = JSON.stringify({ name: spec.name, description: spec.description, inputSchema: z.toJSONSchema(tool.inputSchema) });
   assert.ok(Buffer.byteLength(entry) <= 3900, String(Buffer.byteLength(entry)));
+});
+await check('the legacy group tools publish no sort_order and group update requires name (#817)', async () => {
+  const create = (await import('../../dist/src/tools/account_groups_create.js')).default;
+  const update = (await import('../../dist/src/tools/account_groups_update.js')).default;
+  for (const t of [create, update]) {
+    const js = z.toJSONSchema(t.inputSchema);
+    assert.ok(!('sort_order' in js.properties), `${t.name} schema has no sort_order`);
+    assert.ok(!JSON.stringify(t.description).includes('sort_order') && !JSON.stringify(t.description).includes('position'), `${t.name} description`);
+    for (const ex of t.examples ?? []) assert.ok(!('sort_order' in ex.input), 'example');
+  }
+  assert.ok(z.toJSONSchema(update.inputSchema).required.includes('name'), 'update requires name');
+  assert.strictEqual(update.inputSchema.safeParse({ id: U1 }).success, false, 'update without name is a Zod failure');
+  assert.strictEqual(update.inputSchema.safeParse({ id: U1, name: 'G' }).success, true);
 });
 await check('annotations: destructive write tool, hints only', () => {
   assert.deepStrictEqual(annotationsFor('manage_accounts'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

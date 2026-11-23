@@ -4532,6 +4532,25 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     expect(await groupOf()).toBeNull();
   });
 
+  // #817: sort_order was never stored by Actual and is no longer accepted; a group update needs its name.
+  test('manage_accounts account_group - ERROR: sort_order is refused on create and update, and update without a name is refused (#817)', async ({ mcp, cleanup }) => {
+    const name = `E2E-GroupSort817-${uniqueSuffix()}`;
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name, sort_order: 1 }))).toMatch(/sort_order/);
+    const before = ((await mcp.call('list_entities', { type: 'account_group' })) ?? []) as any[];
+    expect(before.some((g: any) => g?.name === name)).toBe(false);
+    const created = await mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name });
+    const id = (typeof created === 'string' ? created : (created as any)?.id) as string;
+    cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
+      await mcp.call('manage_accounts', { action: 'delete', entity: 'account_group', id }).catch(() => undefined);
+    });
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id, sort_order: 2 }))).toMatch(/sort_order|name/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id }))).toMatch(/name/);
+    const renamed = `${name}-renamed`;
+    await mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id, name: renamed });
+    const groups = ((await mcp.call('list_entities', { type: 'account_group' })) ?? []) as any[];
+    expect(groups.find((g: any) => g?.id === id)?.name).toBe(renamed);
+  });
+
   test('manage_accounts update - ERROR: a malformed account_group_id is refused and an account_group_id on create is refused (#816)', async ({ mcp, makeAccount }) => {
     const account = await makeAccount();
     expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, account_group_id: 'not-a-uuid' }))).toMatch(/account_group_id/);
