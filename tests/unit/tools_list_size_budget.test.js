@@ -41,7 +41,13 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   schema of the legacy rule tools. Measured after the rebase on develop (which carries #711 and
 //   the other merged work) the legacy total is 122,862 bytes, so the ceiling is that plus 64.
 //   The default compact surface total (42,932 measured) and every per-tool ceiling are unchanged.
-const TOTAL_CEILING = 122926;
+//   Total raised for #745 (dates validated as real calendar days) from 122,926 to 123,709: the
+//   17 legacy date keys that were a bare string now publish the date pattern. Measured after the
+//   rebase on develop (which carries #761, #751 and #769) the legacy total is 123,701 bytes
+//   (122,862 on develop before this change, so 839 added, validation and not description
+//   growth), and the ceiling is that plus 8. The default compact surface total (42,932
+//   measured) and every per-tool ceiling are unchanged.
+const TOTAL_CEILING = 123709;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
