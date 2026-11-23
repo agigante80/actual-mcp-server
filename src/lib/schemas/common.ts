@@ -401,3 +401,11 @@ export const TX_UPDATE_NEEDS_A_FIELD = 'update needs at least one field to chang
  */
 export const hasFieldToChange = (v: Record<string, unknown>, except = 'id'): boolean =>
   Object.entries(v).some(([key, val]) => key !== except && val !== undefined);
+
+/**
+ * The keys a split child in an import row may carry (#749). Upstream's makeChild spreads the child
+ * over a default (so `amount` defaults to 0) and reads `category` and `payee` from it; `notes` is a
+ * column. Any other key reaches the database layer and throws `Field "x" does not exist`, so the
+ * legacy child schema and the compact import check close on this one list.
+ */
+export const TX_IMPORT_CHILD_KEYS = ['amount', 'category', 'notes', 'payee'] as const;

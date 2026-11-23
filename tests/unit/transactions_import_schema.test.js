@@ -45,6 +45,10 @@ const eq = (g, w, l) => ok(g === w, l, `got ${JSON.stringify(g)} want ${JSON.str
     ok(bad(allKeys).success, '#749: a row with all thirteen documented keys is accepted');
     eq(JSON.stringify(Object.keys(allKeys).sort()), JSON.stringify([...TX_IMPORT_ROW_KEYS].sort()), '#749: the fixture covers exactly TX_IMPORT_ROW_KEYS');
     eq(JSON.stringify(Object.keys(tool.inputSchema.shape.txs.element.shape).sort()), JSON.stringify([...TX_IMPORT_ROW_KEYS].sort()), '#749: the legacy row schema keys equal TX_IMPORT_ROW_KEYS (cannot drift)');
+    ok(!bad({ date: '2024-01-15', amount: 1, subtransactions: [{ amount: 1, bogus: 1 }] }).success, '#749: an unknown split child key is refused');
+    ok(bad({ date: '2024-01-15', amount: 1, subtransactions: [{ amount: 1, category: acct, notes: 'n', payee: acct }, { notes: 'no amount' }] }).success, '#749: every known child key, and a child without amount, are accepted');
+    const { TX_IMPORT_CHILD_KEYS } = await import('../../dist/src/lib/schemas/common.js');
+    eq(JSON.stringify([...TX_IMPORT_CHILD_KEYS].sort()), JSON.stringify(Object.keys(tool.inputSchema.shape.txs.element.shape.subtransactions.unwrap().element.shape).sort()), '#749: the child schema keys equal TX_IMPORT_CHILD_KEYS');
     ok(!tool.inputSchema.safeParse({ accountId: '00000000-0000-0000-0000-000000000001', txs: [{ amount: 100 }] }).success, 'item without date is rejected');
     ok(!tool.inputSchema.safeParse({ accountId: '00000000-0000-0000-0000-000000000001', txs: [] }).success, 'empty txs array is rejected');
     ok(!tool.inputSchema.safeParse({ txs: [{ date: '2024-01-15', amount: 1 }] }).success, 'missing accountId is rejected');
@@ -63,6 +67,8 @@ const eq = (g, w, l) => ok(g === w, l, `got ${JSON.stringify(g)} want ${JSON.str
       'date-less item gives an actionable, path-qualified error (not the cryptic adapter throw)');
     eq(await call({ accountId: acct, txs: [{ date: '2024-01-15', amount: 1, bogus: 1 }] }),
       'Validation error: unexpected field(s): bogus', 'an unknown key is refused by name (#749)');
+    eq(await call({ accountId: acct, txs: [{ date: '2024-01-15', amount: 1, subtransactions: [{ amount: 1, bogus: 1 }] }] }),
+      'Validation error: unexpected field(s): bogus', 'an unknown child key is refused by name (#749)');
     eq(await call({ accountId: acct, txs: [] }),
       'Validation error: txs: must be at least 1 item', 'empty array gives an actionable error');
     eq(await call({ txs: [{ date: '2024-01-15', amount: 1 }] }),
