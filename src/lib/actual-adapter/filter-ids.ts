@@ -28,6 +28,7 @@
  */
 
 import { UUID_PATTERN } from '../constants.js';
+import { OutOfRangeRefusal } from '../errors.js';
 
 /** The entity kinds that can appear as an optional filter id. */
 export type FilterIdKind = 'account' | 'category' | 'category_group' | 'payee';
@@ -64,21 +65,53 @@ export function isEntityId(value: string): boolean {
 }
 
 /**
- * Find the row whose NAME is what the caller passed.
+ * Every row whose NAME is what the caller passed.
  *
- * Case-insensitive and trimmed, matching the accommodation this generalises. Returns undefined
- * rather than throwing so the caller decides between "resolved" and "no such name", which are
- * two different messages.
+ * Case-insensitive and trimmed, matching the accommodation this generalises. Returns [] rather
+ * than throwing so the caller decides between "resolved", "ambiguous" and "no such name", which
+ * are three different messages.
  *
- * Ambiguity is resolved by taking the FIRST match, deliberately. Actual permits two categories
- * with the same name in different groups, so a name is not a key. Reporting the first is still
- * strictly better than the empty result set this replaces, and the message names the id it
- * chose, so a caller who meant the other one can see that it is not theirs.
+ * #801 reversed the earlier decision to take the FIRST match. Actual permits two categories (or
+ * payees, or accounts) with one name, so a name is not a key, and a quiet pick of one of them is
+ * how a later write lands on an entity the caller did not mean. The caller now refuses with the
+ * candidate ids (`ambiguousNameRefusal`). It is `OutOfRangeRefusal`, not a new class: the
+ * candidates are text rather than structure, so nothing a caller can branch on is lost, and the
+ * budget-name ambiguity in `switchBudget` and the payee ambiguity of #752 made the same call.
  */
-export function matchByName<T extends NamedRow>(rows: readonly T[], value: string): T | undefined {
+export function matchesByName<T extends NamedRow>(rows: readonly T[], value: string): T[] {
   const wanted = value.trim().toLowerCase();
-  if (wanted === '') return undefined;
-  return rows.find((r) => typeof r.name === 'string' && r.name.trim().toLowerCase() === wanted);
+  if (wanted === '') return [];
+  return rows.filter((r) => typeof r.name === 'string' && r.name.trim().toLowerCase() === wanted);
+}
+
+/** The most candidates the refusal lists before it turns the rest into a count. */
+const MAX_LISTED_CANDIDATES = 10;
+
+/** `category` to `categories`, `account` to `accounts`: the noun the refusal counts. */
+function pluralNoun(noun: string, n: number): string {
+  if (n === 1) return noun;
+  return noun.endsWith('y') ? `${noun.slice(0, -1)}ies` : `${noun}s`;
+}
+
+/**
+ * The refusal for a name that identifies SEVERAL entities (#801). Names no tool, so the compact
+ * dispatcher's `rewriteError` leaves it intact and the legacy surface reads the same.
+ */
+export function ambiguousNameRefusal(
+  noun: string,
+  name: string,
+  candidates: ReadonlyArray<{ id: string; detail?: string }>,
+): OutOfRangeRefusal {
+  const listed = candidates.slice(0, MAX_LISTED_CANDIDATES)
+    .map((c) => (c.detail ? `${c.id} (${c.detail})` : c.id))
+    .join(', ');
+  const rest = candidates.length - MAX_LISTED_CANDIDATES;
+  const more = rest > 0 ? ` and ${rest} more` : '';
+  return new OutOfRangeRefusal(
+    `Name "${name}" matches ${candidates.length} ${pluralNoun(noun, candidates.length)}, so it does not identify one: ` +
+      `${listed}${more}. Nothing was changed. Use the id of the one you mean.`,
+    name,
+  );
 }
 
 /**

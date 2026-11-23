@@ -23,7 +23,7 @@ This is useful when you know the human-readable name but need the ID for other A
 
 Allowed types: 'accounts', 'schedules', 'categories', 'payees'
 
-Returns the UUID string for the matching entity.
+Returns the UUID string for the matching entity. A name shared by several entities is refused with their ids; use one of them.
 
 Examples:
 - Find the ID for an account named "Checking Account"
