@@ -183,6 +183,12 @@ await check('normalizePromptArgs drops blank strings, trims the rest, leaves non
   normalizePromptArgs(input);
   assert.strictEqual(input.a, ' x ', 'the caller object is not mutated');
 });
+await check('a blank value under an unknown key is refused, not ignored (#772)', () => {
+  assert.deepStrictEqual(normalizePromptArgs({ a: '', zz: '', yy: ' v ' }, new Set(['a'])), { zz: '', yy: ' v ' });
+  for (const d of PROMPT_DEFINITIONS) {
+    for (const v of ['', '   ']) assert.throws(() => renderPrompt(d, { montth_typo: v }), ZodError, d.name);
+  }
+});
 await check('a JSON.parse __proto__ key survives normalisation as an own key and is still refused (#772)', () => {
   const hostile = JSON.parse('{"__proto__":{"a":1}}');
   const out = normalizePromptArgs(hostile);
