@@ -16,6 +16,8 @@ console.log('Running JS smoke tests for transactions_create');
   apiDefault.sync = async () => {};
   apiDefault.getAccounts = async () => rawAccounts;
   apiDefault.addTransactions = async () => { addCalls++; return 'ok'; };
+  apiDefault.getPayees = async () => [];
+  apiDefault.getCategories = async () => [];
 
   const mod = await import('../../dist/src/tools/transactions_create.js');
   const tool = mod.default;
@@ -101,6 +103,21 @@ console.log('Running JS smoke tests for transactions_create');
     gcheck(/actual_accounts_list/.test(message),      'names the listing tool');
     gcheck(addCalls === 0,
       'raw addTransactions NOT called: this is what prevents the orphan rows');
+  }
+
+  console.log('\n[#747] transactions_create: NEGATIVE, a payee id that does not exist');
+  {
+    rawAccounts = [{ id: A, name: 'Checking' }];
+    addCalls = 0;
+    const ghost = '00000000-0000-4000-8000-000000000000';
+    let threw = null;
+    let res = null;
+    try { res = await tool.call({ account: A, date: '2026-07-27', amount: -1000, payee: ghost }); } catch (e) { threw = e; }
+    gcheck(threw === null,         'a refusal is returned structurally, not thrown');
+    gcheck(res?.success === false, 'success is false');
+    gcheck(res?.id === null,       'no id is invented');
+    gcheck(typeof res?.error === 'string' && res.error.startsWith('Payee "' + ghost + '" not found. Use actual_payees_get to list available payees.'), 'names the payee and the listing tool', res && res.error);
+    gcheck(addCalls === 0,         'raw addTransactions NOT called');
   }
 
   console.log('\n[#359] transactions_create: a CLOSED account is still allowed');

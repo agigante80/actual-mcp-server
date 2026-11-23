@@ -2059,6 +2059,52 @@ async function assertAccountExists(accountId: string, detail: string): Promise<v
     throw new NotFoundRefusal('Account', accountId, 'actual_accounts_list', detail);
   }
 }
+/**
+ * #747: refuse a payee or category id that does not exist. Upstream never looks the id up: it is
+ * stored in the payee or category column and every read joins it to nothing, so the row reads
+ * back with a null payee or category while the tool said success. Same shape and place as
+ * assertAccountExists, reading the per-drain payees and categories listings (one read per kind
+ * per drain). A null or absent value reads nothing and a call with nothing to check reads no
+ * listing. Hidden categories and transfer payees exist; tombstoned payees and category GROUP ids
+ * do not. The list tool names are the legacy adapter names so the compact surface rewrites them.
+ * On update the caller must run this BEFORE any payee_name resolution, so a refusal never leaves
+ * a new payee behind. `payee_name` never reaches it. Order of checks: payee, category, then child
+ * categories, so the first miss in that order is the one named.
+ */
+const CREATE_UNKNOWN_REFERENCE_DETAIL =
+  'No transactions were created: Actual would otherwise have stored them with that payee or category empty.';
+const UPDATE_UNKNOWN_REFERENCE_DETAIL =
+  'The transaction was not changed: Actual would otherwise have saved it with that payee or category empty.';
+async function assertTransactionReferencesExist(
+  input: { payee?: unknown; category?: unknown; subtransactions?: unknown } | null | undefined,
+  detail: string,
+): Promise<void> {
+  if (!input || typeof input !== 'object') return;
+  const payeeId = typeof input.payee === 'string' ? input.payee : undefined;
+  const categoryIds: string[] = [];
+  if (typeof input.category === 'string') categoryIds.push(input.category);
+  if (Array.isArray(input.subtransactions)) {
+    for (const child of input.subtransactions as Array<{ category?: unknown } | null>) {
+      if (typeof child?.category === 'string') categoryIds.push(child.category);
+    }
+  }
+  if (payeeId !== undefined) {
+    const payees = await withConcurrency(() =>
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string; tombstone?: boolean }>>), { retries: 2, backoffMs: 200 })
+    );
+    const known = (Array.isArray(payees) ? payees : []).some((p) => !p?.tombstone && p?.id === payeeId);
+    if (!known) throw new NotFoundRefusal('Payee', payeeId, 'actual_payees_get', detail);
+  }
+  if (categoryIds.length > 0) {
+    const categories = await withConcurrency(() =>
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+    );
+    const known = new Set((Array.isArray(categories) ? categories : []).map((c) => c?.id));
+    for (const id of categoryIds) {
+      if (!known.has(id)) throw new NotFoundRefusal('Category', id, 'actual_categories_get', detail);
+    }
+  }
+}
 export async function getAccounts(): Promise<components['schemas']['Account'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.accounts.list').catch(() => {});
@@ -2092,6 +2138,8 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
 
     // #359: the account must exist (see assertAccountExists for the rationale).
     await assertAccountExists(accountId, CREATE_UNKNOWN_ACCOUNT_DETAIL);
+    // #747: an unknown payee or category id (also on a child) is refused before anything is written.
+    for (const t of txArray) await assertTransactionReferencesExist(t as any, CREATE_UNKNOWN_REFERENCE_DETAIL);
 
     // Remove account/accountId from transaction objects as they're passed separately
     const cleanedTxs = txArray.map(tx => {
@@ -2768,6 +2816,8 @@ export async function updateTransaction(
     // `account: null` or absent reads nothing.
     const targetAccount = (fields as { account?: unknown } | null)?.account;
     if (typeof targetAccount === 'string') await assertAccountExists(targetAccount, UPDATE_UNKNOWN_ACCOUNT_DETAIL);
+    // #747: an unknown payee or category id is refused here, before the split guards and any payee_name creation.
+    await assertTransactionReferencesExist(fields as any, UPDATE_UNKNOWN_REFERENCE_DETAIL);
 
     // Split guards, BEFORE the raw write:
     //   (a) a CHILD cannot itself be split: upstream nests one level only.
@@ -2922,6 +2972,8 @@ export async function updateTransactionBatch(
         // #744: same for an unknown account (one listing per drain), before any payee creation.
         const targetAccount = (fields as { account?: unknown } | null)?.account;
         if (typeof targetAccount === 'string') await assertAccountExists(targetAccount, UPDATE_UNKNOWN_ACCOUNT_DETAIL);
+        // #747: same for an unknown payee or category id, one listing per kind for the batch.
+        await assertTransactionReferencesExist(fields as any, UPDATE_UNKNOWN_REFERENCE_DETAIL);
         let payload = fields;
         if ((fields as { payee_name?: unknown } | null)?.payee_name !== undefined) {
           payeeListing ??= [...await withConcurrency(() =>
