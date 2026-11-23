@@ -4043,6 +4043,23 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
     expect(await mcp.call('list_entities', { type: 'rule', payee_id: payee.id })).toBeTruthy();
   });
 
+  test('list_entities - rule with an unknown payee_id is refused as not found, and a payee with no rules is an empty success (#818)', async ({ mcp, makePayee }) => {
+    const unknown = '00000000-0000-4000-8000-0000000000ff';
+    await expect(
+      mcp.call('list_entities', { type: 'rule', payee_id: unknown }),
+    ).rejects.toThrow(new RegExp(`Payee "${unknown}" not found`));
+    const raw = await mcp.raw('list_entities', { type: 'rule', payee_id: unknown });
+    expect(raw.isError).toBe(true);
+    expect(JSON.parse(raw.content[0].text).error ?? raw.content[0].text).toContain('list_entities with type payee');
+    // A real payee with no rules is a valid empty answer, not an error.
+    const payee = await makePayee();
+    const empty = await mcp.raw('list_entities', { type: 'rule', payee_id: payee.id });
+    expect(empty.isError).toBeFalsy();
+    const body = JSON.parse(empty.content[0].text);
+    expect(body.count).toBe(0);
+    expect(body.error).toBeUndefined();
+  });
+
   test('list_entities - schedule name and schedule_id each answer', async ({ mcp, makeSchedule }) => {
     const schedule = await makeSchedule();
     expect(JSON.stringify(await mcp.call('list_entities', { type: 'schedule', name: schedule.name }))).toContain(schedule.id);
@@ -5739,6 +5756,14 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       mcp.call('actual_notes_update', { id: orphan, note: 'should not be written' }),
     ).rejects.toThrow(new RegExp(`Entity "${orphan}" not found`));
     expect((await mcp.call('actual_notes_get', { id: orphan }))?.found).toBe(false);
+    // Nothing was created, so there is nothing to clean up.
+  });
+
+  test('actual_payee_rules_get - an unknown payee is refused as not found and nothing is created (#818)', async ({ mcp }) => {
+    const unknown = '00000000-0000-4000-8000-0000000000fe';
+    await expect(
+      mcp.call('actual_payee_rules_get', { payeeId: unknown }),
+    ).rejects.toThrow(new RegExp(`Payee "${unknown}" not found. Use actual_payees_get`));
     // Nothing was created, so there is nothing to clean up.
   });
 

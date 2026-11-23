@@ -76,7 +76,7 @@ console.log('Running generated tools smoke tests');
     createCategoryGroup: 'grp-new',
     deleteCategoryGroup: null,
     updateCategoryGroup: null,
-    getPayees: [{ id: 'p1', name: 'Kroger' }],
+    getPayees: [{ id: 'p1', name: 'Kroger' }, { id: '40000000-0000-4000-8000-000000000001', name: 'Rules Payee' }], // #818: the payee_rules_get fixture id must exist, an unknown payee is refused
     getCommonPayees: [{ id: 'p1', name: 'Kroger' }],
     getPayeeRules: [{ id: '30000000-0000-4000-8000-000000000001', conditions: [] }],
     createPayee: 'p-new',
