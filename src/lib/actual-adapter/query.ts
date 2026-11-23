@@ -133,6 +133,19 @@ function _isBooleanField(tableName: string | undefined, field: string): boolean 
   return tableName !== undefined && getFieldType(tableName, field) === 'boolean';
 }
 
+// #751: upstream's `$oneof` inlines every element as a quoted string and never casts it, so IN on an
+// integer, float or date column compiles to `IN ('1000')` and matches nothing. Those columns expand
+// to an `$or` of equalities instead, because equality goes through `castInput`. FAIL CLOSED: an
+// allow list of exactly these three types; an unknown, untyped or any other type keeps `$oneof`.
+const NUMBER_OR_DATE_TYPES: readonly string[] = ['integer', 'float', 'date'];
+const MAX_NUMBER_OR_DATE_IN_VALUES = 200;
+
+function _isNumberOrDateField(tableName: string | undefined, field: string): boolean {
+  if (tableName === undefined) return false;
+  const type = getFieldType(tableName, field);
+  return type !== undefined && NUMBER_OR_DATE_TYPES.includes(type);
+}
+
 // `tableName` is the FROM table, used to look up column types so boolean literals can be coerced
 // (#420). It is optional only so the many existing unit tests that assert non-boolean behaviour
 // need not all pass it; the production call site in actual-adapter.ts always does. When it is
@@ -206,6 +219,14 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
         const orConditions = rawValues.map((v) => ({ [field]: _coerceBoolean(field, v) }));
         query = query.filter({ $or: orConditions });
       } else {
+        const orPath = _isNumberOrDateField(tableName, field);
+        // #751: bound the `$or` (no body limit exists on stdio; SQLite's expression depth is 1000).
+        if (orPath && rawValues.length > MAX_NUMBER_OR_DATE_IN_VALUES) {
+          throw new Error(
+            `IN list for column "${field}" has ${rawValues.length} values; ` +
+            `at most ${MAX_NUMBER_OR_DATE_IN_VALUES} are allowed on a number or date column.`,
+          );
+        }
         // #421: every element must be safe before it reaches upstream's unescaped `$oneof`. Reject a
         // value that could terminate its own quote (single- OR double-quote wrapped) and smuggle
         // trailing SQL.
@@ -219,7 +240,26 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
             );
           }
         }
-        query = query.filter({ [field]: { $oneof: rawValues.map(_coerceInListValue) } });
+        if (orPath) {
+          // Convert like the `=` branch (not `_coerceInListValue`, whose doubled quotes are for
+          // `$oneof` text). A single quote is refused: no number or date contains one, and an
+          // unrefused one is the #567 breakout on a column upstream does not escape.
+          const values = rawValues.map((raw) => {
+            const v = _coerceWhereValue(raw);
+            if (typeof v === 'string' && v.includes("'")) {
+              throw new Error(
+                `Invalid value for column "${field}": a single quote is only allowed in a value ` +
+                `compared against a text column (for example payee.name = 'O''Brien').`,
+              );
+            }
+            return v;
+          });
+          query = query.filter(
+            values.length === 1 ? { [field]: values[0] } : { $or: values.map((v) => ({ [field]: v })) },
+          );
+        } else {
+          query = query.filter({ [field]: { $oneof: rawValues.map(_coerceInListValue) } });
+        }
       }
       continue;
     }

@@ -430,5 +430,87 @@ check('#421 STAYS CLOSED: a double-quoted element hiding a single quote is still
   assert.throws(() => filtersFor('notes IN ("x\' UNION SELECT 1 --")'), /Invalid value in IN list/i);
 });
 
+// #751: upstream's $oneof quotes every element and never casts it, so IN on an integer, float or
+// date column matched nothing. Those columns (allow list: integer, float, date) now expand to an
+// $or of equalities, which castInput converts. Anything else keeps $oneof.
+console.log('\n[query-where-operators] #751 IN on number and date columns');
+
+check('#751 integer IN expands to $or of equalities', () => {
+  assert.deepStrictEqual(
+    filtersForTable('amount IN (1000, -1000)', 'transactions'),
+    [{ $or: [{ amount: 1000 }, { amount: -1000 }] }],
+  );
+});
+
+check('#751 date IN expands to $or of equalities', () => {
+  assert.deepStrictEqual(
+    filtersForTable("date IN ('2019-03-01','2019-03-20')", 'transactions'),
+    [{ $or: [{ date: '2019-03-01' }, { date: '2019-03-20' }] }],
+  );
+});
+
+check('#751 one-element list is a plain equality', () => {
+  assert.deepStrictEqual(filtersForTable('amount IN (1000)', 'transactions'), [{ amount: 1000 }]);
+});
+
+check('#751 float column expands too', () => {
+  assert.deepStrictEqual(
+    filtersForTable('sort_order IN (1.5, 2)', 'transactions'),
+    [{ $or: [{ sort_order: 1.5 }, { sort_order: 2 }] }],
+  );
+});
+
+check('#751 string, id and joined name columns keep $oneof', () => {
+  assert.deepStrictEqual(
+    filtersForTable("notes IN ('groceries','rent')", 'transactions'),
+    [{ notes: { $oneof: ['groceries', 'rent'] } }],
+  );
+  assert.deepStrictEqual(
+    filtersForTable("payee IN ('11111111-1111-1111-1111-111111111111')", 'transactions'),
+    [{ payee: { $oneof: ['11111111-1111-1111-1111-111111111111'] } }],
+  );
+  assert.deepStrictEqual(
+    filtersForTable("account.name IN ('A','B')", 'transactions'),
+    [{ 'account.name': { $oneof: ['A', 'B'] } }],
+  );
+});
+
+check('#751 FAIL CLOSED: unknown field and no table name keep $oneof', () => {
+  assert.deepStrictEqual(
+    filtersForTable('bogus_col IN (1, 2)', 'transactions'),
+    [{ bogus_col: { $oneof: [1, 2] } }],
+  );
+  assert.deepStrictEqual(filtersFor('amount IN (100, 200)'), [{ amount: { $oneof: [100, 200] } }]);
+});
+
+check('#751 mixed with a name equality: both filters present', () => {
+  assert.deepStrictEqual(
+    filtersForTable("account.name = 'x' AND amount IN (1, 2)", 'transactions'),
+    [{ 'account.name': 'x' }, { $or: [{ amount: 1 }, { amount: 2 }] }],
+  );
+});
+
+check('#751 refusals keep their exact messages', () => {
+  assert.throws(
+    () => filtersForTable('amount IN (1000, abc)', 'transactions'),
+    /Invalid value in IN list for column "amount": "abc"\. Each value must be a number/,
+  );
+  assert.throws(
+    () => filtersForTable("date IN ('2019-03-01', 'x''y')", 'transactions'),
+    /Invalid value for column "date": a single quote is only allowed in a value compared against a text column/,
+  );
+  const many = (n) => Array.from({ length: n }, (_, i) => i + 1).join(', ');
+  assert.throws(
+    () => filtersForTable(`amount IN (${many(201)})`, 'transactions'),
+    /^Error: IN list for column "amount" has 201 values; at most 200 are allowed on a number or date column\.$/,
+  );
+  assert.doesNotThrow(() => filtersForTable(`amount IN (${many(200)})`, 'transactions'));
+});
+
+check('#751 the cap applies to number and date columns only, not $oneof', () => {
+  const many = Array.from({ length: 201 }, (_, i) => `'v${i}'`).join(', ');
+  assert.doesNotThrow(() => filtersForTable(`notes IN (${many})`, 'transactions'));
+});
+
 console.log(`\n[query-where-operators] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

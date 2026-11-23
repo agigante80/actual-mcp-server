@@ -1994,6 +1994,37 @@ payee: payee.id,
     }
   });
 
+  test('run_query - #751 IN on number and date columns matches rows, and bad elements are refused', async ({ mcp, makeAccount, makeTransaction }) => {
+    // Upstream's $oneof quotes every element without casting it, so these returned nothing.
+    const account = await makeAccount({ name: `E2E-IN-${uniqueSuffix()}` });
+    const t1 = await makeTransaction({ account, date: '2019-03-01', amount: -1000 });
+    const t2 = await makeTransaction({ account, date: '2019-03-20', amount: 1000 });
+    const t3 = await makeTransaction({ account, date: '2019-04-05', amount: -1000 });
+    await makeTransaction({ account, date: '2019-04-10', amount: 50000 });
+    type QueryRow = { id: string };
+    const ids = async (where: string) => {
+      const payload = await mcp.call('run_query', {
+        query: `SELECT id FROM transactions WHERE account = '${account.id}' AND ${where}`,
+      }) as QueryRow[] | { data?: QueryRow[]; result?: { data?: QueryRow[] } } | null;
+      const rows = Array.isArray(payload) ? payload : (payload?.data ?? payload?.result?.data ?? []);
+      return rows.map((row) => row.id).sort();
+    };
+    expect(await ids('amount IN (1000, -1000)')).toEqual([t1.id, t2.id, t3.id].sort());
+    expect(await ids('amount IN (1000, 1000, -1000)')).toEqual([t1.id, t2.id, t3.id].sort());
+    expect(await ids("date IN ('2019-03-01','2019-03-20')")).toEqual([t1.id, t2.id].sort());
+    expect(await ids('amount IN (1000)')).toEqual([t2.id]);
+    expect(await ids('amount IN (123)')).toEqual([]);
+    const refused: Array<[string, RegExp]> = [
+      ["amount IN (1000, 'abc')", /Can't convert string to integer/],
+      ["date IN ('2019-13-45')", /2019-13-45/],
+      ['amount IN (5.5)', /Can't convert float to integer/],
+      [`amount IN (${Array.from({ length: 201 }, (_, i) => i + 1).join(',')})`, /at most 200 are allowed/],
+    ];
+    for (const [where, message] of refused) {
+      await expect(ids(where), where.slice(0, 40)).rejects.toThrow(message);
+    }
+  });
+
   test('run_query - #566 NOT LIKE on a joined name runs and excludes the match', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
     // Before #566 the validator read NOT as a column after payee.name and refused the query.
     const suffix = uniqueSuffix();
@@ -4375,6 +4406,25 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
   test('actual_query_run - answers a read-only query', async ({ mcp }) => {
     expect(await mcp.call('actual_query_run', { query: 'SELECT id FROM accounts LIMIT 1' })).toBeTruthy();
+  });
+
+  test('actual_query_run - #751 IN on number and date columns matches rows, and a bad element is refused', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount({ name: `E2E-IN-Legacy-${uniqueSuffix()}` });
+    const t1 = await makeTransaction({ account, date: '2019-03-01', amount: -1000 });
+    const t2 = await makeTransaction({ account, date: '2019-03-20', amount: 1000 });
+    const t3 = await makeTransaction({ account, date: '2019-04-05', amount: -1000 });
+    await makeTransaction({ account, date: '2019-04-10', amount: 50000 });
+    type QueryRow = { id: string };
+    const ids = async (where: string) => {
+      const payload = await mcp.call('actual_query_run', {
+        query: `SELECT id FROM transactions WHERE account = '${account.id}' AND ${where}`,
+      }) as QueryRow[] | { data?: QueryRow[]; result?: { data?: QueryRow[] } } | null;
+      const rows = Array.isArray(payload) ? payload : (payload?.data ?? payload?.result?.data ?? []);
+      return rows.map((row) => row.id).sort();
+    };
+    expect(await ids('amount IN (1000, -1000)')).toEqual([t1.id, t2.id, t3.id].sort());
+    expect(await ids("date IN ('2019-03-01','2019-03-20')")).toEqual([t1.id, t2.id].sort());
+    await expect(ids("amount IN (1000, 'abc')")).rejects.toThrow(/Can't convert string to integer/);
   });
 
   test('actual_server_get_version - returns a version', async ({ mcp }) => {
