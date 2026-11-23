@@ -4979,13 +4979,31 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
   };
 
+  // Registered BEFORE a create, by the unique test name (a name prefix, so a rename still matches):
+  // a create that stores the payee and then fails on its note leaves the payee behind with no id
+  // in hand. The note is cleared first (its order is lower), then the payee is deleted; an absent
+  // payee is fine.
+  const guardPayeeByName = (cleanup: any, mcp: any, name: string) => {
+    const find = async () => (await payeesOf(mcp)).filter((p: any) => typeof p?.name === 'string' && p.name.startsWith(name));
+    cleanup.add(CLEANUP_ORDER.note, `note of payee ${name}`, async () => {
+      for (const row of await find()) await mcp.call('manage_payees', { action: 'set_note', id: row.id, note: '' }).catch(() => undefined);
+    });
+    cleanup.add(CLEANUP_ORDER.payee, `payee ${name}`, async () => {
+      for (const row of await find()) await mcp.call('manage_payees', { action: 'delete', id: row.id }).catch(() => undefined);
+    });
+  };
+
+  const categoryRulesOf = async (mcp: any, payeeId: string): Promise<any[]> => {
+    const d = await mcp.call('list_entities', { type: 'rule', payee_id: payeeId });
+    const rules = (Array.isArray(d) ? d : d?.rules ?? []) as any[];
+    return rules.filter((r: any) => Array.isArray(r.actions) && r.actions.some((x: any) => x.op === 'set' && x.field === 'category'));
+  };
+
   test('manage_payees create, update and delete', async ({ mcp, cleanup }) => {
     const name = `E2E-Payee676-${uniqueSuffix()}`;
+    guardPayeeByName(cleanup, mcp, name);
     const id = (await mcp.call('manage_payees', { action: 'create', name })) as string;
     expect(typeof id).toBe('string');
-    cleanup.add(CLEANUP_ORDER.payee, `payee ${name}`, async () => {
-      await mcp.call('manage_payees', { action: 'delete', id }).catch(() => undefined);
-    });
     expect((await payeesOf(mcp)).some((p: any) => p?.id === id && p?.name === name)).toBe(true);
     const renamed = `${name}-renamed`;
     await mcp.call('manage_payees', { action: 'update', id, name: renamed });
@@ -5053,27 +5071,19 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     const withNote = `E2E-PayeeNote765-${uniqueSuffix()}`;
     const without = `E2E-PayeeNoNote765-${uniqueSuffix()}`;
     const text = `note-765-${uniqueSuffix()}`;
-    const track = (id: string, name: string) => {
-      cleanup.add(CLEANUP_ORDER.note, `note of payee ${name}`, async () => {
-        await mcp.call('manage_payees', { action: 'set_note', id, note: '' }).catch(() => undefined);
-      });
-      cleanup.add(CLEANUP_ORDER.payee, `payee ${name}`, async () => {
-        await mcp.call('manage_payees', { action: 'delete', id }).catch(() => undefined);
-      });
-    };
+    guardPayeeByName(cleanup, mcp, withNote);
+    guardPayeeByName(cleanup, mcp, without);
     const id = (await mcp.call('manage_payees', { action: 'create', name: withNote, notes: text })) as string;
     expect(typeof id).toBe('string');
-    track(id, withNote);
     const plainId = (await mcp.call('manage_payees', { action: 'create', name: without })) as string;
     expect(typeof plainId).toBe('string');
-    track(plainId, without);
 
     expect((await payeesOf(mcp)).some((p: any) => p?.id === id && p?.name === withNote)).toBe(true);
     expect((await mcp.call('list_entities', { type: 'note', id }))?.note).toBe(text);
     expect((await mcp.call('list_entities', { type: 'note', id: plainId }))?.found).toBe(false);
   });
 
-  test('manage_payees update - ERROR: a transfer payee cannot be renamed, an ordinary payee and a default category still can (#765)', async ({ mcp, makeAccount, makePayee, makeCategory }) => {
+  test('manage_payees update - ERROR: a transfer payee cannot be renamed, an ordinary payee and a default category still can (#765)', async ({ mcp, makeAccount, makePayee, makeCategory, cleanup }) => {
     const account = await makeAccount();
     const category = await makeCategory();
     const ordinary = await makePayee();
@@ -5094,8 +5104,16 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     const renamed = `${ordinary.name}-r`;
     await mcp.call('manage_payees', { action: 'update', id: ordinary.id, name: renamed });
     expect((await payeesOf(mcp)).find((p: any) => p?.id === ordinary.id)?.name).toBe(renamed);
+    cleanup.add(CLEANUP_ORDER.rule, `default category of transfer payee ${transfer.id}`, async () => {
+      await mcp.call('manage_payees', { action: 'update', id: transfer.id, category: null }).catch(() => undefined);
+    });
+    expect(await categoryRulesOf(mcp, transfer.id), 'no default-category rule before').toHaveLength(0);
     await mcp.call('manage_payees', { action: 'update', id: transfer.id, category: category.id });
+    const set = await categoryRulesOf(mcp, transfer.id);
+    expect(set, 'the default-category rule is stored').toHaveLength(1);
+    expect(set[0].actions.find((x: any) => x.op === 'set' && x.field === 'category')?.value).toBe(category.id);
     await mcp.call('manage_payees', { action: 'update', id: transfer.id, category: null });
+    expect(await categoryRulesOf(mcp, transfer.id), 'clearing removes the default-category rule').toHaveLength(0);
   });
 });
 
