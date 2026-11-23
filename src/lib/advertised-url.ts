@@ -1,3 +1,5 @@
+import { isIPv6 } from 'node:net';
+
 /**
  * #777: the address /mcp-info advertises.
  *
@@ -37,6 +39,8 @@ export function validatedHost(hostHeader: string | undefined): string | undefine
   if (typeof hostHeader !== 'string' || hostHeader.length === 0 || hostHeader.length > MAX_HOST_HEADER_LENGTH) return undefined;
   const host = hostHeader.toLowerCase();
   if (!HOST_PATTERN.test(host)) return undefined;
+  // A bracketed literal must be a real IPv6 address, not merely brackets around allowed characters.
+  if (host.startsWith('[') && !isIPv6(host.slice(1, host.indexOf(']')))) return undefined;
   const colon = host.lastIndexOf(':');
   if (colon > host.lastIndexOf(']')) {
     const port = Number(host.slice(colon + 1));
