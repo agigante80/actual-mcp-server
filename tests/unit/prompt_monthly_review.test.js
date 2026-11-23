@@ -105,5 +105,27 @@ await check('offer matrix through the real policy: compact, all and compact read
   assert.ok(!(await offered({ surface: 'legacy' })).includes('monthly_review'));
 });
 
+// ---------------------------------------------------------------- #772
+const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
+const messageOf = (args) => {
+  try { render(args); } catch (err) { return formatZodError(err, def.argsSchema); }
+  throw new Error(`expected a refusal for ${JSON.stringify(args)}`);
+};
+const occurrences = (s, sub) => s.split(sub).length - 1;
+const NOISE = /pattern|at most|\^|\$/;
+await check('an empty or blank month is the default; a bad month is one readable message (#772)', () => {
+  const base = render({});
+  assert.strictEqual(render({ month: '' }), base);
+  assert.strictEqual(render({ month: '   ' }), base);
+  assert.ok(render({ month: ' 2024-02 ' }).includes('2024-02-29'));
+  for (const bad of ['October', '2026-13', '2026-1']) {
+    const m = messageOf({ month: bad });
+    assert.ok(m.includes('month: must be YYYY-MM'), m);
+    assert.strictEqual(occurrences(m, 'must'), 1, m);
+    assert.ok(!NOISE.test(m) && !m.includes(bad), m);
+  }
+  assert.throws(() => def.argsSchema.parse({ month: '' }));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -121,5 +121,26 @@ await check('offer matrix: compact and all offer it; legacy and read-only do not
   assert.ok(!names(all).includes('categorize_uncategorized'), 'without manage_rules it is not offered');
 });
 
+// ---------------------------------------------------------------- #772
+const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
+const messageOf = (args) => {
+  try { render(args); } catch (err) { return formatZodError(err, def.argsSchema); }
+  throw new Error(`expected a refusal for ${JSON.stringify(args)}`);
+};
+const occurrences = (s, sub) => s.split(sub).length - 1;
+const NOISE = /pattern|at most|\^|\$/;
+await check('an empty or blank since is omitted; a bad since is one readable message (#772)', () => {
+  const base = render({});
+  assert.strictEqual(render({ since: '' }), base);
+  assert.strictEqual(render({ since: '   ' }), base);
+  for (const bad of ['2026-13-01', '2026-02-31', 'yesterday', '2026-1-1']) {
+    const m = messageOf({ since: bad });
+    assert.ok(m.includes('since: must be YYYY-MM-DD, a real calendar day'), m);
+    assert.strictEqual(occurrences(m, 'must'), 1, m);
+    assert.ok(!NOISE.test(m) && !m.includes(bad), m);
+  }
+  assert.throws(() => def.argsSchema.parse({ since: '' }));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

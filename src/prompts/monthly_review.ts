@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
-import { currentMonth, daysInMonth } from './dates.js';
+import { currentMonth, daysInMonth, monthArgSchema } from './dates.js';
 
 /**
  * monthly_review (#661): budget versus actual for one month. A static numbered script that names
@@ -42,11 +42,7 @@ const monthly_review: PromptDefinition = {
   ],
   requiredTools: ['get_context', 'list_budget_months', 'summarize_transactions', 'search_transactions'],
   argsSchema: z.strictObject({
-    month: z
-      .string()
-      .max(7)
-      .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
-      .default(() => currentMonth()),
+    month: monthArgSchema().default(() => currentMonth()),
   }),
   render(args) {
     const month = args.month as string;

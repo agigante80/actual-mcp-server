@@ -4606,6 +4606,23 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(text).toContain('day 15 of 31');
   });
 
+  test('prompts/get monthly_review - an empty month means the default, a concrete YYYY-MM (#772)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('monthly_review', { month: '' });
+    expect(out.error).toBeUndefined();
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toMatch(/Review my budget for \d{4}-\d{2},/);
+  });
+
+  test('prompts/get spending_patterns - ERROR: a non-numeric months is one readable -32602, no regex, no echo, no prefix (#772)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('spending_patterns', { months: 'six' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('whole number from 1 to 24');
+    expect(out.error?.message).not.toContain('six');
+    expect(out.error?.message).not.toContain('pattern');
+    expect(out.error?.message).not.toContain('MCP error');
+  });
+
   test('prompts/get spending_check - the default date is concrete, never "this month" (#662)', async ({ mcp }) => {
     const out = await mcp.getPrompt('spending_check', {});
     expect(out.error).toBeUndefined();

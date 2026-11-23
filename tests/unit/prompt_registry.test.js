@@ -170,5 +170,41 @@ await check('renderPrompt throws a ZodError on a malformed value and on an unkno
   assert.throws(() => renderPrompt(def(), { month: '2026-10', extra: 'x' }), ZodError);
 });
 
+// ---------------------------------------------------------------- #772 normalisation
+const { normalizePromptArgs } = await import('../../dist/src/prompts/registry.js');
+await check('normalizePromptArgs drops blank strings, trims the rest, leaves non-strings and non-objects alone (#772)', () => {
+  assert.deepStrictEqual(normalizePromptArgs({ a: '', b: '  ', c: ' 3 ', d: 'x' }), { c: '3', d: 'x' });
+  assert.deepStrictEqual(normalizePromptArgs({ a: null, b: 5, c: { x: ' y ' } }), { a: null, b: 5, c: { x: ' y ' } });
+  assert.strictEqual(normalizePromptArgs('EVIL'), 'EVIL');
+  assert.strictEqual(normalizePromptArgs(null), null);
+  const arr = ['  '];
+  assert.strictEqual(normalizePromptArgs(arr), arr);
+  const input = { a: ' x ' };
+  normalizePromptArgs(input);
+  assert.strictEqual(input.a, ' x ', 'the caller object is not mutated');
+});
+await check('a JSON.parse __proto__ key survives normalisation as an own key and is still refused (#772)', () => {
+  const hostile = JSON.parse('{"__proto__":{"a":1}}');
+  const out = normalizePromptArgs(hostile);
+  assert.ok(Object.prototype.hasOwnProperty.call(out, '__proto__'));
+  for (const d of PROMPT_DEFINITIONS) assert.throws(() => renderPrompt(d, hostile), ZodError, d.name);
+});
+await check('every real prompt renders an empty or blank value for every argument as omitted (#772)', () => {
+  for (const d of PROMPT_DEFINITIONS) {
+    const baseline = renderPrompt(d, {});
+    for (const a of d.arguments) {
+      for (const blank of ['', '   ', '\t\n']) {
+        assert.strictEqual(renderPrompt(d, { [a.name]: blank }), baseline, `${d.name}.${a.name} = ${JSON.stringify(blank)}`);
+      }
+    }
+  }
+});
+await check('non-string values are still refused, not defaulted (#772)', () => {
+  const d = PROMPT_DEFINITIONS.find((x) => x.name === 'monthly_review');
+  for (const v of [null, 5, {}, []]) assert.throws(() => renderPrompt(d, { month: v }), ZodError, JSON.stringify(v));
+  assert.throws(() => renderPrompt(d, 'EVIL'), ZodError);
+  assert.doesNotThrow(() => renderPrompt(d, null), 'arguments: null still means defaults');
+});
+
 console.log(`\n[prompt-registry] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

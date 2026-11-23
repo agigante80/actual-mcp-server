@@ -6,7 +6,6 @@
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import {
   ListPromptsRequestSchema,
-  McpError,
   ErrorCode,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z, ZodError } from 'zod';
@@ -15,6 +14,23 @@ import { formatZodError, sanitizeKey } from './zod-error-format.js';
 import { renderPrompt, type PromptDefinition } from '../prompts/registry.js';
 
 const log = createModuleLogger('PROMPTS');
+
+/**
+ * A `-32602` protocol error for a prompts/get. Deliberately NOT an McpError (#772): the SDK builds
+ * the JSON-RPC error from `code` and `message` as they are, and McpError's own message already
+ * starts "MCP error -32602: " which the client's McpError then prefixes a second time. A plain
+ * Error with a numeric `code` reaches the wire as exactly `-32602` plus this text. Same rationale
+ * as InvalidToolCallError in tool-output.ts, kept separate so the prompt file does not import a
+ * tool-named class.
+ */
+class InvalidPromptCallError extends Error {
+  readonly code = ErrorCode.InvalidParams;
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidPromptCallError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
 
 /**
  * The SDK validates a request against the schema it was registered with BEFORE our handler runs,
@@ -47,7 +63,7 @@ export function registerPromptHandlers(server: Server, offeredPrompts: readonly 
       // A non-string name is echoed as nothing at all, never as its raw value.
       log.debug('unknown prompt');
       const shown = typeof rawName === 'string' ? sanitizeKey(rawName) : '(invalid name)';
-      throw new McpError(ErrorCode.InvalidParams, `Unknown prompt: ${shown}`);
+      throw new InvalidPromptCallError(`Unknown prompt: ${shown}`);
     }
     log.debug('prompts/get', { prompt: definition.name });
     let text: string;
@@ -55,7 +71,7 @@ export function registerPromptHandlers(server: Server, offeredPrompts: readonly 
       text = renderPrompt(definition, request.params?.arguments);
     } catch (err) {
       if (err instanceof ZodError) {
-        throw new McpError(ErrorCode.InvalidParams, formatZodError(err, definition.argsSchema));
+        throw new InvalidPromptCallError(formatZodError(err, definition.argsSchema));
       }
       throw err;
     }

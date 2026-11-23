@@ -230,5 +230,23 @@ await check('the published-set assertion can fail: the unpublished set and a str
   assert.ok(!fromPublished(base.replace('new Set(implementedTools))', 'new Set(otherTools))')));
 });
 
+// #772: the SDK client builds its McpError as `MCP error ${code}: ${message}`, so a server error
+// that is itself an McpError arrives with the prefix twice.
+const occurrences = (s, sub) => s.split(sub).length - 1;
+await check('a validation refusal reaches the client with one MCP error prefix and code -32602 (#772)', async () => {
+  const c = await connect([review]);
+  const e = await errorOf(c.getPrompt({ name: 'monthly_review', arguments: { month: 'October' } }));
+  assert.strictEqual(e.code, -32602);
+  assert.strictEqual(occurrences(e.message, 'MCP error -32602'), 1, e.message);
+  assert.ok(e.message.includes('Validation error'), e.message);
+});
+await check('an unknown prompt reaches the client with one MCP error prefix and code -32602 (#772)', async () => {
+  const c = await connect([review]);
+  const e = await errorOf(c.getPrompt({ name: 'no_such_prompt' }));
+  assert.strictEqual(e.code, -32602);
+  assert.strictEqual(occurrences(e.message, 'MCP error -32602'), 1, e.message);
+  assert.ok(e.message.endsWith('Unknown prompt: no_such_prompt'), e.message);
+});
+
 console.log(`\n[prompt-handlers] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
