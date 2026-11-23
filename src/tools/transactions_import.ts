@@ -24,7 +24,7 @@ const TxItemSchema = z.strictObject({
   subtransactions: z
     .array(
       z.strictObject({
-        amount: z.number().optional().describe('Child amount in cents (upstream defaults it to 0)'),
+        amount: CommonSchemas.amountCents.optional().describe('Child amount in cents (upstream defaults it to 0)'),
         category: CommonSchemas.categoryId.optional(),
         notes: CommonSchemas.notes,
         payee: CommonSchemas.payeeId.optional(),
