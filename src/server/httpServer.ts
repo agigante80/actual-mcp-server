@@ -545,7 +545,7 @@ export async function startHttpServer(
     // ensure capabilities.tools is an object mapping tool name -> {}
     const capabilitiesObj = capabilities && Object.keys(capabilities).length
       ? capabilities
-      : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}), prompts: {} };
+      : { tools: toolsList.reduce((acc: Record<string, object>, n: string) => { acc[n] = {}; return acc; }, {}), prompts: {}, completions: {} };
 
     // Only the two ServerOptions the MCP spec defines (#560). tools/list is served by the
     // request handler, not by these options; the SDK ignored the extra keys this once passed.

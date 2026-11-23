@@ -35,7 +35,7 @@ const review = {
   name: 'monthly_review',
   title: 'Monthly review',
   description: 'Review a month',
-  arguments: [{ name: 'month', description: 'YYYY-MM', required: true }],
+  arguments: [{ name: 'month', title: 'Month', description: 'YYYY-MM', required: true }],
   requiredTools: ['get_context'],
   argsSchema: z.strictObject({ month: z.string().regex(/^\d{4}-\d{2}$/) }),
   render: (a) => `Review ${a.month}`,
@@ -44,7 +44,7 @@ const second = { ...review, name: 'spending_check', title: 'Spending', descripti
 const hidden = { ...review, name: 'hidden_prompt' };
 
 async function connect(offered) {
-  const server = new Server({ name: 't', version: '1' }, { capabilities: { prompts: {} } });
+  const server = new Server({ name: 't', version: '1' }, { capabilities: { prompts: {}, completions: {} } });
   registerPromptHandlers(server, offered);
   const client = new Client({ name: 'c', version: '1' });
   const [a, b] = InMemoryTransport.createLinkedPair();
@@ -62,6 +62,8 @@ await check('prompts/list returns name, title, description, arguments in registr
   assert.deepStrictEqual(prompts.map((p) => p.name), ['monthly_review', 'spending_check']);
   assert.deepStrictEqual(prompts[0], {
     name: 'monthly_review', title: 'Monthly review', description: 'Review a month',
+    // Argument title is not asserted here: the SDK Client strips it on parse (its PromptArgument
+    // has none). prompts_completion.test.js reads the raw result instead (#775).
     arguments: [{ name: 'month', description: 'YYYY-MM', required: true }],
   });
 });

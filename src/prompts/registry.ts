@@ -8,7 +8,15 @@ import { z } from 'zod';
 /** What render may know about the call: which schema keys were filled by a default (#774). */
 type RenderContext = { defaulted: ReadonlySet<string> };
 
-export type PromptArgument = { name: string; description: string; required: boolean };
+export type PromptArgument = {
+  name: string;
+  /** Human label (#775); required so no argument ships without one. */
+  title: string;
+  description: string;
+  required: boolean;
+  /** Candidates that start with the typed prefix, for completion/complete. Never serialised. */
+  complete?: (value: string) => string[];
+};
 
 export type PromptDefinition = {
   /** snake_case, unique in the registry (assertPromptNames). */
@@ -78,6 +86,17 @@ export function assertPromptNames(definitions: readonly PromptDefinition[]): voi
     }
     if (seen.has(d.name)) throw new Error(`Duplicate prompt name "${d.name}"`);
     seen.add(d.name);
+  }
+}
+
+/** Every argument needs a non-empty title (#775). */
+export function assertArgumentTitles(definitions: readonly PromptDefinition[]): void {
+  for (const d of definitions) {
+    for (const a of d.arguments) {
+      if (typeof a.title !== 'string' || a.title.trim() === '') {
+        throw new Error(`Prompt "${d.name}" argument "${a.name}" needs a non-empty title`);
+      }
+    }
   }
 }
 

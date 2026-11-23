@@ -22,6 +22,7 @@ export class ActualMCPConnection extends EventEmitter {
       tools: { listChanged: true },
       resources: { listChanged: false },
       prompts: { listChanged: false },
+      completions: {},
       models: { listChanged: false },
       logging: { listChanged: false },
     };
@@ -98,6 +99,7 @@ export class ActualMCPConnection extends EventEmitter {
       },
       resources: false,
       prompts: { listChanged: false },
+      completions: {},
       models: false,
       logging: false,
     };

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
+import { completeEndMonth, completeMonthCount } from './completions.js';
 import { daysInMonth, monthArgSchema, monthStart, previousMonth } from './dates.js';
 import { EMPTY_RESULT_LINE, ZERO_INCOME_LINE, origin } from './shared.js';
 
@@ -44,14 +45,18 @@ const spending_patterns: PromptDefinition = {
   arguments: [
     {
       name: 'end_month',
+      title: 'Last month',
       description:
         "Last full month to include, YYYY-MM. Defaults to the month before the server's current month. Give it first when passing arguments by position.",
       required: false,
+      complete: completeEndMonth,
     },
     {
       name: 'months',
+      title: 'Number of months',
       description: 'Number of full months to analyse, 1 to 24. Defaults to 6. Positional order: end_month, then months.',
       required: false,
+      complete: completeMonthCount,
     },
   ],
   requiredTools: ['summarize_transactions', 'list_budget_months'],

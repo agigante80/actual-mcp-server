@@ -123,6 +123,8 @@ export type McpClient = {
   listPrompts(): Promise<any[]>;
   /** #660: prompts/get. Returns the result, or `{ error: { code, message } }` on a JSON-RPC error, on both transports. */
   getPrompt(name: string, args?: Record<string, unknown>): Promise<PromptGetOutcome>;
+  /** #775: completion/complete with the raw params (so a malformed request can be sent). Result or `{ error }`, on both transports. */
+  completePrompt(params: Record<string, unknown>): Promise<PromptGetOutcome>;
 };
 
 /** The outcome of prompts/get: the parsed result, or the JSON-RPC error (same shape on both transports). */
@@ -296,6 +298,19 @@ function makeClient(request: APIRequestContext, sessionId: string): McpClient {
       }
       return body.error ? { error: { code: body.error.code, message: String(body.error.message) } } : { result: body.result };
     },
+    completePrompt: async (params) => {
+      const res = await request.post(`${DEFAULT_MCP_SERVER_URL}${HTTP_PATH}`, {
+        data: JSON.stringify({ jsonrpc: '2.0', id: 7751, method: 'completion/complete', params }),
+        headers: { 'Content-Type': 'application/json', 'mcp-session-id': sessionId },
+      });
+      const text = await res.text();
+      let body: any;
+      try { body = JSON.parse(text); } catch { body = undefined; }
+      if (!body || (body.result === undefined && body.error === undefined)) {
+        throw new Error(`completion/complete gave no JSON-RPC outcome: HTTP ${res.status()} ${text.slice(0, 300)}`);
+      }
+      return body.error ? { error: { code: body.error.code, message: String(body.error.message) } } : { result: body.result };
+    },
   };
 }
 
@@ -367,6 +382,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
         serverCapabilities: session.serverCapabilities,
         listPrompts: session.listPrompts,
         getPrompt: session.getPrompt,
+        completePrompt: session.completePrompt,
         // stdio has no HTTP envelope to inspect. The two callers of `post` assert on the raw
         // JSON-RPC error shape, which the SDK surfaces as a thrown exception instead, so they
         // are scoped to HTTP rather than asserted differently here. Throwing names the reason.

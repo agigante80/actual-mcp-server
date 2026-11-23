@@ -270,6 +270,7 @@ export {};
       logging: false,
       events: false,
       prompts: true,
+      completions: true,
     };
 
     // Convert to MCP format (object for each capability)

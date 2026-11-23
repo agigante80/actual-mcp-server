@@ -24,7 +24,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { McpError } from '@modelcontextprotocol/sdk/types.js';
+import { CompleteResultSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { pace, extractResult, throwIfToolError } from '../shared/e2e-helpers.js';
@@ -80,6 +80,8 @@ export type StdioSession = {
   listPrompts(): Promise<any[]>;
   /** #660: prompts/get. A JSON-RPC error (an SDK McpError) is returned as `{ error }`, like the HTTP client. */
   getPrompt(name: string, args?: Record<string, unknown>): Promise<{ result?: any; error?: { code: number; message: string } }>;
+  /** #775: completion/complete with the raw params. A JSON-RPC error is returned as `{ error }`, like the HTTP client. */
+  completePrompt(params: Record<string, unknown>): Promise<{ result?: any; error?: { code: number; message: string } }>;
   close(): Promise<void>;
 };
 
@@ -179,6 +181,15 @@ export async function openStdioSession(): Promise<StdioSession> {
       try {
         // The SDK types prompt arguments as strings; a test that passes another type is the test's bug.
         return { result: await client.getPrompt({ name, ...(args ? { arguments: args as Record<string, string> } : {}) }) };
+      } catch (err) {
+        if (err instanceof McpError) return { error: { code: err.code, message: err.message } };
+        throw err;
+      }
+    },
+    completePrompt: async (params) => {
+      try {
+        // client.request does not validate the request params, so a malformed one reaches the server.
+        return { result: await client.request({ method: 'completion/complete', params } as any, CompleteResultSchema) };
       } catch (err) {
         if (err instanceof McpError) return { error: { code: err.code, message: err.message } };
         throw err;

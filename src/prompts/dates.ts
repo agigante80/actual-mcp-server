@@ -80,3 +80,16 @@ export function daysInMonth(month: string): number {
   const [y, m] = month.split('-').map(Number) as [number, number];
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
 }
+
+/**
+ * `count` months ending with `endMonth`, newest first: recentMonths("2026-01", 3) is
+ * ['2026-01', '2025-12', '2025-11']. Integer month index arithmetic only (#775).
+ */
+export function recentMonths(endMonth: string, count: number): string[] {
+  const [y, m] = endMonth.split('-').map(Number) as [number, number];
+  const end = y * 12 + (m - 1);
+  return Array.from({ length: count }, (_, i) => {
+    const idx = end - i;
+    return `${Math.floor(idx / 12)}-${pad2((idx % 12) + 1)}`;
+  });
+}
