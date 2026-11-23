@@ -55,6 +55,7 @@ const LEGACY_SMOKE = [
   'actual_payees_get',
   'actual_payees_update', // #760: the legacy unknown-field refusal for transfer_acct
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
+  'actual_accounts_create', // #767: the legacy create accepts offbudget
   'actual_transactions_create', // #747, #793: the legacy unknown-payee and transfer-payee refusals on create
   'actual_transactions_update_batch', // #744: the legacy unknown-account refusal on a batch item
   'actual_transactions_import', // #744: the legacy unknown-account refusal on import

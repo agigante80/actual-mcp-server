@@ -4448,6 +4448,37 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name: 'x', balance: 5 }))).toMatch(/balance/);
     expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account_group', id: '00000000-0000-4000-8000-000000000000' }))).toMatch(/close accepts only account/);
   });
+
+  // #767: an off-budget account is created in one call; the opening balance has no category.
+  test('manage_accounts create - POSITIVE: offbudget true makes an off-budget account with an uncategorised opening balance (#767)', async ({ mcp, cleanup }) => {
+    const name = `E2E-OffBudget767-${uniqueSuffix()}`;
+    const id = await mcp.call('manage_accounts', { action: 'create', entity: 'account', name, balance: 5000, offbudget: true });
+    cleanup.add(CLEANUP_ORDER.account, `account ${name}`, async () => {
+      await mcp.call('manage_accounts', { action: 'delete', entity: 'account', id }).catch(() => undefined);
+    });
+    expect(typeof id).toBe('string');
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === id)?.offbudget).toBe(true);
+    const data = await mcp.call('search_transactions', { by: 'account', account_id: id });
+    const rows = (Array.isArray(data) ? data : (data?.result ?? [])) as any[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amount).toBe(5000);
+    expect(rows[0].category ?? null).toBeNull();
+  });
+
+  test('manage_accounts create - ERROR: offbudget on an account_group create is refused and no group is written (#767)', async ({ mcp }) => {
+    const name = `E2E-OffBudgetGroup767-${uniqueSuffix()}`;
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name, offbudget: true }))).toMatch(/offbudget/);
+    const groups = ((await mcp.call('list_entities', { type: 'account_group' })) ?? []) as any[];
+    expect(groups.some((g: any) => g?.name === name)).toBe(false);
+  });
+
+  test('manage_accounts create - ERROR: a non-boolean offbudget is refused and no account is written (#767)', async ({ mcp }) => {
+    const name = `E2E-OffBudgetBad767-${uniqueSuffix()}`;
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', entity: 'account', name, offbudget: 'yes' }))).toMatch(/offbudget/);
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.some((a: any) => a?.name === name)).toBe(false);
+  });
 });
 
 test.describe('Docker E2E - compact manage_categories (#676)', () => {
@@ -5777,5 +5808,21 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
   test('actual_server_get_version - returns a version', async ({ mcp }) => {
     expect(await mcp.call('actual_server_get_version')).toBeTruthy();
+  });
+
+  // #767: the legacy create accepts offbudget (it used to strip it and create an on-budget account).
+  test('actual_accounts_create - offbudget true creates an off-budget account; a string is refused (#767)', async ({ mcp, cleanup }) => {
+    const name = `E2E-OffBudgetLegacy767-${uniqueSuffix()}`;
+    const id = (await mcp.call('actual_accounts_create', { name, offbudget: true })) as string;
+    cleanup.add(CLEANUP_ORDER.account, `account ${name}`, async () => {
+      await mcp.call('manage_accounts', { action: 'delete', entity: 'account', id }).catch(() => undefined);
+    });
+    expect(typeof id).toBe('string');
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === id)?.offbudget).toBe(true);
+    const bad = `E2E-OffBudgetLegacyBad767-${uniqueSuffix()}`;
+    expect(await refusal(() => mcp.call('actual_accounts_create', { name: bad, offbudget: 'yes' }))).toMatch(/offbudget/);
+    const after = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(after.some((a: any) => a?.name === bad)).toBe(false);
   });
 });

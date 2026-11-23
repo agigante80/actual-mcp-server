@@ -383,6 +383,16 @@ async function expectCallError(tool, input, label) {
   if (!expectParseOk(accounts_create_tool,
     { name: 'Savings', balance: 10000 },
     'valid name + integer balance accepted')) fail();
+  // #767: offbudget is accepted AND kept (it used to be stripped silently, creating an on-budget account).
+  if (accounts_create_tool.inputSchema.parse({ name: 'Mortgage', offbudget: true }).offbudget !== true) {
+    console.log('  \u2717 accounts_create keeps offbudget: true in the parsed input (#767)');
+    fail();
+  } else {
+    console.log('  \u2713 accounts_create keeps offbudget: true in the parsed input (#767)');
+  }
+  if (!expectParseError(accounts_create_tool,
+    { name: 'Mortgage', offbudget: 'yes' },
+    'non-boolean offbudget rejected (#767)')) fail();
   // #380: `id` was REMOVED, not tightened, because upstream's api/account-create drops it
   // and mints its own UUID. Pinned so a future "add an optional id back" reintroduces the
   // success-lie (caller's id accepted, different id created) and this goes red first.

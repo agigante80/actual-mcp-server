@@ -212,7 +212,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `create` | `accounts_create / account_groups_create` | entity, name | balance (account), sort_order (account_group) | `entity` is `account` or `account_group` |
+| `create` | `accounts_create / account_groups_create` | entity, name | balance, offbudget (account), sort_order (account_group) | `entity` is `account` or `account_group` |
 | `update` | `accounts_update / account_groups_update` | entity, id; at least one field | name, offbudget, closed (account); name, sort_order (account_group) | account: non-id properties wrapped into legacy `fields`; account_group: legacy is flat; an update naming nothing to change is refused (`update needs at least one of: ...`) |
 | `close` | `accounts_close` | id | transfer_account_id, transfer_category_id | `entity` must be omitted or `account` (otherwise `entity: close accepts only account`); `transfer_account_id` may not equal `id`; an account with no transactions is removed rather than closed |
 | `reopen` | `accounts_reopen` | id | none |  |
