@@ -212,5 +212,24 @@ await check('non-string values are still refused, not defaulted (#772)', () => {
   assert.doesNotThrow(() => renderPrompt(d, null), 'arguments: null still means defaults');
 });
 
+// #774: render learns which keys were defaulted, from the NORMALISED input.
+await check('render receives the defaulted keys from the normalised input (#774)', () => {
+  const d = def({
+    arguments: [{ name: 'a', description: 'a', required: false }, { name: 'b', description: 'b', required: false }],
+    argsSchema: z.strictObject({ a: z.string().default('x'), b: z.string().default('y') }),
+    render: (_args, ctx) => [...ctx.defaulted].sort().join(','),
+  });
+  assert.strictEqual(renderPrompt(d, undefined), 'a,b');
+  assert.strictEqual(renderPrompt(d, null), 'a,b');
+  assert.strictEqual(renderPrompt(d, {}), 'a,b');
+  assert.strictEqual(renderPrompt(d, { a: 'given' }), 'b');
+  assert.strictEqual(renderPrompt(d, { a: 'given', b: 'given' }), '');
+  assert.strictEqual(renderPrompt(d, { a: '' }), 'a,b', 'a blank value counts as defaulted (#772)');
+  assert.strictEqual(renderPrompt(d, { a: '  ', b: 'q' }), 'a');
+});
+await check('a one-parameter render still works (#774)', () => {
+  assert.strictEqual(renderPrompt(def(), { month: '2026-10' }), 'Review 2026-10');
+});
+
 console.log(`\n[prompt-registry] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

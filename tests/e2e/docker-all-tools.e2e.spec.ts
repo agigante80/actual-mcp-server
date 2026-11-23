@@ -4970,12 +4970,15 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(text).toContain('get_context');
     expect(text).toMatch(/\d{4}-\d{2}-01/);
     expect(text).not.toContain('this month');
+    expect(text).toContain('server clock');
+    expect(text).toContain('not over');
   });
 
   test('prompts/get monthly_review - an explicit month fills its first and last day (#661)', async ({ mcp }) => {
     const out = await mcp.getPrompt('monthly_review', { month: '2024-02' });
     const text: string = out.result.messages[0].content.text;
     expect(text).toContain('from 2024-02-01 to 2024-02-29');
+    expect(text).not.toContain('server clock');
   });
 
   test('prompts/get monthly_review - a month outside the budget says to list the months first and skip the budget read (#781)', async ({ mcp }) => {
@@ -5003,6 +5006,7 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     const text: string = out.result.messages[0].content.text;
     expect(text).toContain('list_budget_months');
     expect(text).toContain('day 15 of 31');
+    expect(text).not.toContain('server clock');
   });
 
   test('prompts/get monthly_review - an empty month means the default, a concrete YYYY-MM (#772)', async ({ mcp }) => {
@@ -5030,6 +5034,7 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     const text: string = out.result.messages[0].content.text;
     expect(text).toMatch(/as of \d{4}-\d{2}-\d{2}/);
     expect(text).not.toContain('this month');
+    expect(text).toContain('server clock');
   });
 
   test('prompts/get spending_check - ERROR: a non-calendar date is -32602 (#662)', async ({ mcp }) => {

@@ -140,5 +140,45 @@ await check('monthly_review lists the budget months first and says what to skip 
 });
 
 
+// #774: the clock is stubbed from LOCAL components, which is what dates.ts reads, so the results
+// do not depend on the day the test runs or on TZ.
+const RealDate = Date;
+function withClock(y, monthIndex, d, h, fn) {
+  globalThis.Date = class extends RealDate {
+    constructor(...a) { if (a.length) super(...a); else super(y, monthIndex, d, h, 0, 0); }
+    static now() { return new RealDate(y, monthIndex, d, h).getTime(); }
+  };
+  try { return fn(); } finally { globalThis.Date = RealDate; }
+}
+const countOf = (s, sub) => s.split(sub).length - 1;
+const EMPTY_LINE = 'If a step returns no rows, say so plainly and carry on with what exists. Do not widen the date range on your own.';
+const ZERO_LINE = 'If income is 0, say the savings rate cannot be computed instead of dividing by zero.';
+
+await check('a defaulted month says it came from the server clock and is not over (#774)', () => {
+  const text = withClock(2026, 9, 31, 23, () => render({}));
+  assert.ok(text.includes('from 2026-10-01 to 2026-10-31.'), text.split('\n')[0]);
+  assert.strictEqual(countOf(text, 'came from the server clock'), 1);
+  assert.strictEqual(countOf(text, 'That month is not over'), 1);
+  assert.ok(!text.includes('this month') && !text.includes('{'));
+  assert.ok(withClock(2026, 9, 31, 23, () => render({ month: '' })).includes('came from the server clock'), 'a blank month is a default (#772)');
+});
+
+await check('a supplied month, even the current one, carries no origin clause (#774)', () => {
+  for (const month of ['2026-09', '2026-10']) {
+    const text = withClock(2026, 9, 31, 23, () => render({ month }));
+    assert.ok(!text.includes('server clock') && !text.includes('not over'), month);
+  }
+});
+
+await check('monthly_review: empty step, Uncategorized, zero income and count 1000 sentences (#774)', () => {
+  const text = render({ month: '2026-10' });
+  assert.strictEqual(countOf(text, EMPTY_LINE), 1);
+  assert.ok(text.includes('Rows named Uncategorized have no category group'));
+  assert.ok(text.includes('report their total on its own line'));
+  assert.strictEqual(countOf(text, ZERO_LINE), 1);
+  assert.ok(text.includes('if it equals 1000'));
+  assert.ok(!text.includes('hasMore') && !text.includes('truncated'));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

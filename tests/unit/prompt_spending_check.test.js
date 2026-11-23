@@ -184,5 +184,33 @@ await check('the day 1 branch does not ask for over-budget categories when step 
   assert.ok(text.includes('report only categories already over budget, unless step 1 was skipped: with no budget for 2026-09 there is nothing to compare against, so report the spending so far only.'));
 });
 
+// #774: the clock is stubbed from LOCAL components, which is what dates.ts reads, so the results
+// do not depend on the day the test runs or on TZ.
+const RealDate = Date;
+function withClock(y, monthIndex, d, h, fn) {
+  globalThis.Date = class extends RealDate {
+    constructor(...a) { if (a.length) super(...a); else super(y, monthIndex, d, h, 0, 0); }
+    static now() { return new RealDate(y, monthIndex, d, h).getTime(); }
+  };
+  try { return fn(); } finally { globalThis.Date = RealDate; }
+}
+const countOf = (s, sub) => s.split(sub).length - 1;
+const EMPTY_LINE = 'If a step returns no rows, say so plainly and carry on with what exists. Do not widen the date range on your own.';
+const ZERO_LINE = 'If income is 0, say the savings rate cannot be computed instead of dividing by zero.';
+
+await check('spending_check labels a defaulted date and not a supplied one (#774)', () => {
+  const text = withClock(2026, 10, 23, 12, () => render({}));
+  assert.ok(text.includes('as of 2026-11-23'), text.split('\n')[0]);
+  assert.strictEqual(countOf(text, 'came from the server clock'), 1);
+  assert.ok(!text.includes('{'));
+  assert.ok(withClock(2026, 10, 23, 12, () => render({ date: '' })).includes('server clock'));
+  const given = withClock(2026, 10, 23, 12, () => render({ date: '2026-11-23' }));
+  assert.ok(!given.includes('server clock'));
+});
+
+await check('spending_check carries the empty-result line once (#774)', () => {
+  assert.strictEqual(countOf(render({ date: '2026-10-15' }), EMPTY_LINE), 1);
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

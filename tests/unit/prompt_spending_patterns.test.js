@@ -239,5 +239,42 @@ await check('spending_patterns lists the budget months first and says what to sk
 });
 
 
+// #774: the clock is stubbed from LOCAL components, which is what dates.ts reads, so the results
+// do not depend on the day the test runs or on TZ.
+const RealDate = Date;
+function withClock(y, monthIndex, d, h, fn) {
+  globalThis.Date = class extends RealDate {
+    constructor(...a) { if (a.length) super(...a); else super(y, monthIndex, d, h, 0, 0); }
+    static now() { return new RealDate(y, monthIndex, d, h).getTime(); }
+  };
+  try { return fn(); } finally { globalThis.Date = RealDate; }
+}
+const countOf = (s, sub) => s.split(sub).length - 1;
+const EMPTY_LINE = 'If a step returns no rows, say so plainly and carry on with what exists. Do not widen the date range on your own.';
+const ZERO_LINE = 'If income is 0, say the savings rate cannot be computed instead of dividing by zero.';
+
+await check('spending_patterns labels a defaulted end month, rolling back in January (#774)', () => {
+  const text = withClock(2026, 10, 23, 12, () => render({}));
+  assert.ok(text.includes('so 2026-10 is the last full month before the current one on the server clock'), text.split('\n')[0]);
+  assert.strictEqual(countOf(text, 'came from the server clock'), 1);
+  assert.ok(withClock(2026, 0, 15, 12, () => render({})).includes('so 2025-12 is the last full month'));
+  assert.ok(!withClock(2026, 10, 23, 12, () => render({ end_month: '2026-10' })).includes('server clock'));
+  assert.ok(!withClock(2026, 10, 23, 12, () => render({ months: '3', end_month: '2026-10' })).includes('server clock'));
+  assert.ok(withClock(2026, 10, 23, 12, () => render({ months: '3' })).includes('server clock'), 'months alone leaves end_month defaulted');
+});
+
+await check('spending_patterns: zero-income line, empty-result line, one-month sentence only for months 1 (#774)', () => {
+  const ONE = 'The period is a single month, so skip the comparison across months and the ranking of the categories that changed the most, and say so.';
+  const one = render({ months: '1', end_month: '2015-01' });
+  assert.strictEqual(countOf(one, ZERO_LINE), 1);
+  assert.strictEqual(countOf(one, EMPTY_LINE), 1);
+  assert.strictEqual(countOf(one, ONE), 1);
+  assert.ok(!one.includes('{'));
+  const six = render({ months: '6', end_month: '2015-01' });
+  assert.ok(!six.includes('single month'));
+  assert.strictEqual(countOf(six, ZERO_LINE), 1);
+  assert.ok(!render({ end_month: '2015-01' }).includes('single month'));
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

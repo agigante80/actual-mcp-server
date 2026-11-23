@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
 import { dayArgSchema, monthStart } from './dates.js';
+import { EMPTY_RESULT_LINE, origin } from './shared.js';
 
 /**
  * budget_cleanup (#664): a read-only structure review that proposes changes and asks before any
@@ -8,7 +9,7 @@ import { dayArgSchema, monthStart } from './dates.js';
  * the month six months before the date's month, by integer month arithmetic.
  */
 
-const TEMPLATE = `Review the structure of my budget as of {date} and propose a cleanup. This is analysis only: do not create, change, merge or delete anything. A payee, category or account counts as unused only when it has no transaction and no transfer from {start_date} to {date}.
+const TEMPLATE = `Review the structure of my budget as of {date} and propose a cleanup.{origin} This is analysis only: do not create, change, merge or delete anything. A payee, category or account counts as unused only when it has no transaction and no transfer from {start_date} to {date}.
 
 Before step 1, call list_budget_months with no month to get the months the budget covers. If {month} is not in that list, the budget has no data for it: do not call list_budget_months with {month}, say that the budget does not cover {month}, and say that the window from {start_date} to {date} is not fully inside the months the budget covers, so the summaries in step 1 cannot prove that something is unused. Then report duplicates only (the same-name payees in step 2, overlapping rules in step 3, near-duplicate category names in step 4) and mark nothing as unused, stale or closable: skip step 5 and the budget check in step 4.
 
@@ -19,6 +20,8 @@ Before step 1, call list_budget_months with no month to get the months the budge
 5. Call list_entities with type account. Find open accounts (closed false) with balance_current 0 that are unused: no group for the account in the step 1 account result, or both transactionCount and transferCount 0. An account with a transferCount above 0 is in use, so do not propose closing it. A null balance_current is unknown, so skip that account.
 6. Present the findings grouped by payees, rules, categories and accounts. For each give the evidence (the window, transaction counts, balances) and the change you would make, naming the action it needs: manage_payees merge or delete, manage_rules update or delete, manage_categories delete, or manage_accounts close.
 7. End by asking which items I want applied. Do not call any manage_ tool in this turn.
+
+${EMPTY_RESULT_LINE}
 
 Amounts are integer cents; divide by 100 and show currency.`;
 
@@ -36,10 +39,11 @@ const budget_cleanup: PromptDefinition = {
   ],
   requiredTools: ['list_entities', 'summarize_transactions', 'list_budget_months'],
   argsSchema: z.strictObject({ date: dayArgSchema() }),
-  render(args) {
+  render(args, ctx) {
     const date = args.date as string;
     const month = date.slice(0, 7);
-    return TEMPLATE.replaceAll('{date}', date)
+    return TEMPLATE.replace('{origin}', ctx.defaulted.has('date') ? origin.date(date) : '')
+      .replaceAll('{date}', date)
       .replaceAll('{month}', month)
       .replaceAll('{start_date}', monthStart(month, 7));
   },
