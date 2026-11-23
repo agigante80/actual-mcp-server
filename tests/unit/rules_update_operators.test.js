@@ -120,6 +120,30 @@ console.log('\n[#711] rules_update: text on an id field is refused with the exac
   check(calls.length === 0, '  and updateRule is never called');
 }
 
+console.log('\n[#761] rules_update: unknown keys and condition options');
+{
+  const ACT = { op: 'set', field: 'category', value: ID };
+  const run = async (fields) => { calls = []; try { await tool.call({ id: ID, fields }); return ''; } catch (e) { return String(e?.message ?? e); } };
+  let m = await run({ actions: [{ ...ACT, bogus: true }] });
+  check(/bogus/.test(m) && calls.length === 0, 'NEGATIVE: an unknown action key is refused naming it and nothing is written', m);
+  m = await run({ conditions: [{ field: 'notes', op: 'contains', value: 'x', zzz: 1 }] });
+  check(/zzz/.test(m) && calls.length === 0, 'NEGATIVE: an unknown condition key is refused naming it', m);
+  m = await attempt([{ field: 'payee', op: 'is', value: ID, options: { outflow: true } }]);
+  check(m === 'options is only valid on an amount condition' && calls.length === 0, 'NEGATIVE: options on a payee condition is refused with the exact message', m);
+  m = await attempt([{ field: 'amount', op: 'is', value: 5, options: { outflow: true, inflow: true } }]);
+  check(m === 'options cannot set both outflow and inflow', 'NEGATIVE: both flags are refused', m);
+  m = await attempt([{ field: 'amount', op: 'gt', value: -5, options: { inflow: true } }]);
+  check(m === 'an amount condition with outflow or inflow takes a positive value; the direction comes from the option', 'NEGATIVE: a negative value with a flag is refused', m);
+  // A rule shaped as actual_rules_get returns it is accepted unchanged.
+  const stored = {
+    conditions: [{ field: 'amount', op: 'is', value: 5002, type: 'number', options: { outflow: true } }],
+    actions: [{ op: 'set', field: 'notes', value: 'x', type: 'string', options: { template: 'Hi {{payee}}' } }],
+  };
+  m = await run(stored);
+  check(m === '' && calls.length === 1, 'a rule shaped as actual_rules_get returns it is accepted', m);
+  check(calls[0]?.fields?.conditions?.[0]?.options?.outflow === true && calls[0]?.fields?.actions?.[0]?.options?.template === 'Hi {{payee}}', '  and its condition options and action options reach the adapter');
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_update operator checks passed');
 process.exit(0);

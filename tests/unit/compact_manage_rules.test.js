@@ -271,5 +271,35 @@ await check('#711 NEGATIVE: an unknown condition field is refused by the real le
   try { await t.call({ action: 'create', conditions: [{ field: 'description', op: 'contains', value: 'x' }], actions: [ACT] }); } catch (x) { e = x; }
   assert.ok(e && e.message === 'Unknown condition field "description". Valid fields: imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent.', String(e && e.message));
 });
+// ---- #761: condition options and unknown nested keys ----
+
+const OUTFLOW = { field: 'amount', op: 'is', value: 5002, options: { outflow: true } };
+await check('#761: an outflow condition is passed to the legacy call with its options intact', () =>
+  expectCall({ action: 'create', conditions: [OUTFLOW], actions: [ACT] }, 'actual_rules_create', { conditions: [OUTFLOW], actions: [ACT] }));
+await check('#761 NEGATIVE: an unknown condition key is refused naming key and index, for create, upsert and update', async () => {
+  const bad = { ...COND, zzz: 1 };
+  await refused({ action: 'create', conditions: [bad], actions: [ACT] }, /conditions: unknown key "zzz" at 0/);
+  await refused({ action: 'upsert', conditions: [bad], actions: [ACT] }, /conditions: unknown key "zzz" at 0/);
+  await refused({ action: 'update', id: U1, conditions: [bad] }, /conditions: unknown key "zzz" at 0/);
+  await refused({ action: 'create', conditions: [COND, bad], actions: [ACT] }, /conditions: unknown key "zzz" at 1/);
+});
+await check('#761 NEGATIVE: an unknown action key is refused naming key and index (create, upsert, update)', async () => {
+  const bad = { ...ACT, bogus: true };
+  await refused({ action: 'create', conditions: [COND], actions: [bad] }, /actions: unknown key "bogus" at 0/);
+  await refused({ action: 'upsert', conditions: [COND], actions: [ACT, bad] }, /actions: unknown key "bogus" at 1/);
+  await refused({ action: 'update', id: U1, actions: [bad] }, /actions: unknown key "bogus" at 0/);
+});
+await check('#761 NEGATIVE: create_batch refuses an unknown key in a nested condition and action with its path', async () => {
+  await refused({ action: 'create_batch', rules: [{ conditions: [COND], actions: [ACT] }, { conditions: [{ ...COND, zzz: 1 }], actions: [ACT] }] }, /rules: unknown key "zzz" at 1\.conditions\.0/);
+  await refused({ action: 'create_batch', rules: [{ conditions: [COND], actions: [{ ...ACT, bogus: 1 }] }] }, /rules: unknown key "bogus" at 0\.actions\.0/);
+});
+await check('#761 NEGATIVE: an unknown key inside options is refused naming it', () =>
+  refused({ action: 'create', conditions: [{ ...OUTFLOW, options: { outflow: true, sideways: 1 } }], actions: [ACT] }, /sideways/));
+await check('#761 NEGATIVE: options on a payee condition is refused by the real legacy handler through the compact tool', async () => {
+  const t = buildCompactTool(spec, { callOperation: async (_n, a) => legacyCreate.call(a) }, phrases);
+  let e;
+  try { await t.call({ action: 'create', conditions: [{ field: 'payee', op: 'is', value: U1, options: { outflow: true } }], actions: [ACT] }); } catch (x) { e = x; }
+  assert.ok(e && e.message === 'options is only valid on an amount condition', String(e && e.message));
+});
 console.log(`\n[compact-manage-rules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
