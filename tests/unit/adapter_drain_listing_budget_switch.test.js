@@ -94,7 +94,10 @@ describe('(3) two operations on one budget in one drain still share one listing 
   check(accountReads === 1, `the accounts listing was read once (got ${accountReads})`);
 }
 
-describe('(4) a failed load of B still drops the cache');
+// This case cannot tell the finally in loadBudgetOnItsServer from the reload that follows a failed load
+// (the failed load records no loaded budget, so the next operation reloads and drops the cache anyway).
+// It pins the outcome: after a failed load of B, an operation for A never reads a listing cached before it.
+describe('(4) after a failed load of B the next operation re-reads the listing');
 {
   await reset();
   // Singleton on B. A's write loads A (cache filled for A); B's load then rejects; A writes again.
