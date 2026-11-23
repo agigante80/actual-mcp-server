@@ -3952,7 +3952,7 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
   test('manage_payees update - ERROR: transfer_acct with an unknown account id is refused and the payee stays', async ({ mcp, makePayee }) => {
     const payee = await makePayee();
     const message = await refusal(() => mcp.call('manage_payees', { action: 'update', id: payee.id, transfer_acct: '00000000-0000-4000-8000-000000000000' }));
-    expect(message).toMatch(/Unrecognized key: "transfer_acct"/);
+    expect(message).toMatch(/unexpected field\(s\): transfer_acct/);
     expect((await payeesOf(mcp)).find((p: any) => p?.id === payee.id)?.name).toBe(payee.name);
   });
 
@@ -3960,7 +3960,7 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     const account = await makeAccount();
     const payee = await makePayee();
     const message = await refusal(() => mcp.call('manage_payees', { action: 'update', id: payee.id, transfer_acct: account.id }));
-    expect(message).toMatch(/Unrecognized key: "transfer_acct"/);
+    expect(message).toMatch(/unexpected field\(s\): transfer_acct/);
     const rows = await payeesOf(mcp);
     expect(rows.filter((p: any) => p?.transfer_acct === account.id).length).toBe(1);
     expect(rows.find((p: any) => p?.id === payee.id)?.transfer_acct ?? null).toBeNull();
