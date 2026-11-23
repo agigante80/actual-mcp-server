@@ -2881,6 +2881,67 @@ payee: payee.id,
     expect(row?.date?.patterns).toEqual(patterns);
   });
 
+  // #786: a recurrence is refused before the write when its end is missing, impossible or before
+  // its start. Upstream checks a recurrence only when previewing, so these used to be stored.
+  test('manage_schedules create - ERROR: after_n_occurrences without endOccurrences is refused and nothing is written (#786)', async ({ mcp }) => {
+    await refuseScheduleCreate(mcp, { date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'after_n_occurrences' } },
+      'endOccurrences is required when endMode is after_n_occurrences');
+  });
+
+  test('manage_schedules create - ERROR: on_date without endDate is refused and nothing is written (#786)', async ({ mcp }) => {
+    await refuseScheduleCreate(mcp, { date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'on_date' } },
+      'endDate is required when endMode is on_date');
+  });
+
+  test('manage_schedules create - ERROR: an endDate before start is refused and nothing is written (#786)', async ({ mcp }) => {
+    await refuseScheduleCreate(mcp, { date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'on_date', endDate: nextMonth.ymd(2) } },
+      'endDate must not be before start');
+  });
+
+  test('manage_schedules create - ERROR: an impossible recurrence start is refused and nothing is written (#786)', async ({ mcp }) => {
+    await refuseScheduleCreate(mcp, { date: { frequency: 'monthly', start: '2027-02-30' } }, 'Invalid date (not a real calendar day)');
+  });
+
+  test('manage_schedules update - ERROR: an endDate before start is refused and the stored schedule is unchanged (#786)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule({ date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'never' } });
+    const before = await readSchedule(mcp, schedule.id);
+    let message: string | null = null;
+    try {
+      await mcp.call('manage_schedules', {
+        action: 'update',
+        id: schedule.id,
+        date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'on_date', endDate: nextMonth.ymd(2) },
+        reset_next_date: true,
+      });
+    } catch (error) {
+      message = String((error as Error).message);
+    }
+    const after = await readSchedule(mcp, schedule.id);
+    expect(after?.date, 'a refused update must leave the stored recurrence unchanged').toEqual(before?.date);
+    expect(after?.next_date, 'a refused update must leave next_date unchanged').toBe(before?.next_date);
+    if (message === null) throw new Error(`manage_schedules update accepted an endDate before start on schedule ${schedule.id} (cleaned up by the fixture)`);
+    expect(message).toContain('endDate must not be before start');
+  });
+
+  test('manage_schedules create - should preview exactly endOccurrences dates for after_n_occurrences (#786)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule({ date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'after_n_occurrences', endOccurrences: 3 } });
+    const row = await readSchedule(mcp, schedule.id);
+    const data = await mcp.call('list_entities', { type: 'schedule', schedule_id: schedule.id, start: row?.next_date, count: 10 });
+    expect((data?.result ?? data)?.dates).toEqual([nextMonth.ymd(10), nextMonth.ymd(11), nextMonth.ymd(12)]);
+  });
+
+  test('manage_schedules create - should preview the start day when on_date ends on it (#786)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule({ date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'on_date', endDate: nextMonth.ymd(10) } });
+    const row = await readSchedule(mcp, schedule.id);
+    const data = await mcp.call('list_entities', { type: 'schedule', schedule_id: schedule.id, start: row?.next_date, count: 10 });
+    expect((data?.result ?? data)?.dates).toEqual([nextMonth.ymd(10)]);
+  });
+
+  test('manage_schedules create - should accept endMode never with a stray endDate, as a read-back echo (#786)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule({ date: { frequency: 'daily', start: nextMonth.ymd(10), endMode: 'never', endDate: nextMonth.ymd(10) } });
+    expect(await readSchedule(mcp, schedule.id)).toBeTruthy();
+  });
+
   test('list_entities schedule - should list a last-day schedule\'s next dates from next_date (#479)', async ({ mcp, makeSchedule }) => {
     const schedule = await makeSchedule({ date: { frequency: 'monthly', start: nextMonth.ymd(3), endMode: 'never', patterns: [{ type: 'day', value: -1 }] } });
     const row = await readSchedule(mcp, schedule.id);
@@ -4924,6 +4985,62 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
     expect(schedules.find((x: any) => x?.id === schedule.id)?.payee, 'the stored payee must be unchanged').toBe(payee.id);
     if (!refused) throw new Error(`actual_schedules_update accepted an unknown payee on schedule ${schedule.id} (cleaned up by the fixture)`);
+  });
+
+  // #786: the same recurrence refusals through the legacy schedule writers.
+  const legacyRecurRefusals: Array<[string, Record<string, unknown>, string]> = [
+    ['after_n_occurrences without endOccurrences', { frequency: 'daily', start: '2027-04-10', endMode: 'after_n_occurrences' }, 'endOccurrences is required when endMode is after_n_occurrences'],
+    ['on_date without endDate', { frequency: 'daily', start: '2027-04-10', endMode: 'on_date' }, 'endDate is required when endMode is on_date'],
+    ['an endDate before start', { frequency: 'daily', start: '2027-04-10', endMode: 'on_date', endDate: '2027-04-01' }, 'endDate must not be before start'],
+    ['an impossible start', { frequency: 'monthly', start: '2027-02-30' }, 'Invalid date (not a real calendar day)'],
+  ];
+  for (const [label, date, expected] of legacyRecurRefusals) {
+    test(`actual_schedules_create - ERROR: ${label} is refused and nothing is written (#786)`, async ({ mcp }) => {
+      const name = `E2E-BadRecurLegacy-Schedule-${uniqueSuffix()}`;
+      let message: string | null = null;
+      let created: any;
+      try {
+        created = await mcp.call('actual_schedules_create', { name, date, amount: -100 });
+      } catch (error) {
+        message = String((error as Error).message);
+      }
+      // Delete whatever was written BEFORE asserting, so a failing row leaves no residue.
+      const data = await mcp.call('list_entities', { type: 'schedule' });
+      const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
+      const leaked: string[] = [];
+      for (const x of schedules.filter((r: any) => r?.name === name)) {
+        leaked.push(x.id);
+        await mcp.call('actual_schedules_delete', { id: x.id });
+      }
+      if (message === null) throw new Error(`actual_schedules_create accepted ${label} (returned ${JSON.stringify(created)}); the schedule "${name}" was deleted`);
+      expect(message).toContain(expected);
+      expect(leaked, 'a refused schedule must not exist').toEqual([]);
+    });
+  }
+
+  test('actual_schedules_update - ERROR: an endDate before start is refused and the stored schedule is unchanged (#786)', async ({ mcp, makeSchedule }) => {
+    const schedule = await makeSchedule({ date: { frequency: 'daily', start: '2027-04-10', endMode: 'never' } });
+    const readOne = async () => {
+      const data = await mcp.call('list_entities', { type: 'schedule' });
+      const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
+      return schedules.find((x: any) => x?.id === schedule.id);
+    };
+    const before = await readOne();
+    let message: string | null = null;
+    try {
+      await mcp.call('actual_schedules_update', {
+        id: schedule.id,
+        date: { frequency: 'daily', start: '2027-04-10', endMode: 'on_date', endDate: '2027-04-01' },
+        resetNextDate: true,
+      });
+    } catch (error) {
+      message = String((error as Error).message);
+    }
+    const after = await readOne();
+    expect(after?.date, 'a refused update must leave the stored recurrence unchanged').toEqual(before?.date);
+    expect(after?.next_date, 'a refused update must leave next_date unchanged').toBe(before?.next_date);
+    if (message === null) throw new Error(`actual_schedules_update accepted an endDate before start on schedule ${schedule.id} (cleaned up by the fixture)`);
+    expect(message).toContain('endDate must not be before start');
   });
 
   // #764: the same rows through the legacy tools. actual_category_groups_get returns { groups }.
