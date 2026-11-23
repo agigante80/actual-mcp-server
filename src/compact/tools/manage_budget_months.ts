@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
+import { MAX_BUDGET_AMOUNT_CENTS } from '../../lib/budget-limits.js';
 import { asFields, issue, needs, strict, strictDeep } from '../refine.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
@@ -35,13 +36,20 @@ const operations = z
   .describe('1 to 100 items {month, categoryId, amount?, carryover?} with camelCase keys; each needs amount or carryover.');
 
 const MONTH = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format (month 01 to 12)');
-const CENTS = z.number().int('amount must be an integer (cents)');
+const LIMIT_TEXT = `the limit Actual can store, ${MAX_BUDGET_AMOUNT_CENTS}`;
+// #759: set_amount, transfer and the batch item are bounded to what upstream can store. The shared
+// light `amount` schema stays unbounded because `hold` is clamped upstream and accepts any integer.
+const CENTS = z
+  .number()
+  .int('amount must be an integer (cents)')
+  .min(-MAX_BUDGET_AMOUNT_CENTS, `amount must be at least -${MAX_BUDGET_AMOUNT_CENTS} (${LIMIT_TEXT})`)
+  .max(MAX_BUDGET_AMOUNT_CENTS, `amount must be at most ${MAX_BUDGET_AMOUNT_CENTS} (${LIMIT_TEXT})`);
 const POSITIVE = CENTS.positive('amount must be greater than 0 (integer cents)');
 const BATCH_ITEM = z
   .object({
     month: MONTH,
     categoryId: CommonSchemas.categoryId,
-    amount: CommonSchemas.amountCents.optional(),
+    amount: CommonSchemas.budgetAmountCents.optional(),
     carryover: z.boolean().optional(),
   })
   .strict()
@@ -50,6 +58,7 @@ const REAL_BATCH: Readonly<Record<string, z.ZodType>> = { operations: z.array(BA
 
 type V = Record<string, unknown>;
 
+const HOLD_AMOUNT = z.number().int('amount must be an integer (cents)').positive('amount must be greater than 0 (integer cents)');
 const monthRules = { month: MONTH };
 const setAmountFields = asFields(
   z.object({ month, category_id: categoryId, amount }).superRefine((value, ctx) => {
@@ -72,7 +81,7 @@ const carryoverFields = asFields(
 const holdFields = asFields(
   z.object({ month, amount }).superRefine((value, ctx) => {
     needs('hold', ctx, value as V, ['month', 'amount']);
-    strict(ctx, value as V, { ...monthRules, amount: POSITIVE });
+    strict(ctx, value as V, { ...monthRules, amount: HOLD_AMOUNT });
   }),
 );
 const resetHoldFields = asFields(
@@ -105,12 +114,12 @@ export const manageBudgetMonths: CompactToolSpec = {
   description:
     'Change the budget of a month: amounts, carryover, the hold for next month, transfers between categories, the month note; pick one `action`. Writes. ' +
     'To read months use list_budget_months; to switch, import or export a budget file use manage_budget_files; category notes use manage_categories. Cents are integers. Other fields are refused. ' +
-    'set_amount: month, category_id, amount (the month must be one the budget has; an unknown category or month is returned as { success: false, error }). ' +
-    'set_amount_batch: operations, 1 to 100 items {month, categoryId, amount?, carryover?} with camelCase keys, each needing amount or carryover; NOT atomic, no rollback, items applied before a failure stay applied; an unknown category, a month out of range or carryover on an income category fails only that item; the last item wins for the same month and category; after a timeout read the months back before retrying. ' +
+    'set_amount: month, category_id, amount (the month must be one the budget has; an income category is refused on an envelope budget; |amount| at most 2251799813685247; an unknown category or month is returned as { success: false, error }). ' +
+    'set_amount_batch: operations, 1 to 100 items {month, categoryId, amount?, carryover?} with camelCase keys, each needing amount or carryover; NOT atomic, no rollback, items applied before a failure stay applied; an unknown category, a month out of range or carryover, or amount on an envelope budget, on an income category fails only that item; the last item wins for the same month and category; after a timeout read the months back before retrying. ' +
     'set_carryover: month, category_id, flag. ' +
     'hold: month, amount greater than 0; holds for next month and may hold LESS than asked (clamped to what is left to budget); nothing held is an error; Actual ADDS to the buffer, so on an error read the month before retrying. ' +
     'reset_hold: month; releases the whole hold back to to-budget, safe to repeat. ' +
-    'transfer: month, from_category_id, to_category_id (different), amount greater than 0; the source needs that much budgeted; NOT atomic, if the second write fails the source was already lowered. ' +
+    'transfer: month, from_category_id, to_category_id (different, expense categories only), amount greater than 0 and at most 2251799813685247; the source needs that much budgeted; NOT atomic, if the second write fails the source was already lowered. ' +
     'set_note: month, note; sets or clears the note of that budget month. ' +
     'Returns { result } (set_amount), { succeeded, failed, total, successCount, failureCount } (set_amount_batch; failing items are a normal result), { success: true } (set_carryover, reset_hold), { success, held } or { success, partial, requested, held, message } (hold), { result: { success, transferred, fromCategory, toCategory } } (transfer), { result: { success, id, note, cleared } } (set_note).',
   selector: 'action',

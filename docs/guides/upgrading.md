@@ -156,6 +156,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `actual_payees_update` and `manage_payees` `update` with a `name` on a transfer payee (the payee Actual creates for each account) used to report success and change nothing, because a transfer payee shows its account's name. They now refuse it with `"<name>" is a transfer payee: its name is its account's name, so it cannot be renamed here. Rename the account instead.` and write nothing, also when `category` is sent with it; `category` alone on a transfer payee still works. `actual_payees_create` and `manage_payees` `create` used to drop the `notes` argument and return an id with no note. They now store it as the payee's note (read it with `list_entities` type `note`); if the note cannot be stored the error names the new payee id and says the payee exists, so do not create it again.
 
+## An income category is refused on budget writes, and amounts are bounded (#759)
+
+`actual_budgets_set_amount` and `manage_budget_months` `set_amount` (also a `set_amount_batch` item) on an income category of an envelope budget used to report success and write a row nothing reads. They are now refused with `Category "<name>" (<id>) is not an expense category` and nothing is written (`set_amount` answers `success: false`; a batch fails only that item). A tracking budget still accepts an income amount. `actual_budgets_transfer` and `manage_budget_months` `transfer` refuse an income category as source or target on both budget types, where the old call lowered the source and moved the money out of view into "to budget". An amount above 2251799813685247 (or below its negative) is refused at validation naming the limit, instead of failing inside the write; `hold` is unchanged.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

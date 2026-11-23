@@ -2421,6 +2421,83 @@ payee: payee.id,
     expect(errMsg).toContain('Insufficient budget');
   });
 
+  // #759: income categories and the amount bound. The test budget is an envelope budget, so an income
+  // category has no budgeted amount there; a tracking budget cannot be created through the server, so
+  // that half is covered by tests/unit/budget_income_guard.test.js. Assertions are by category id.
+  const budgetedOf = async (mcp: any, id: string) => {
+    const month = await mcp.call('list_budget_months', { month: currentMonth() });
+    return ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []).find((c: any) => c?.id === id);
+  };
+  const makeIncomeCategory = async (mcp: any, cleanup: any) => {
+    const groups = (await mcp.call('list_entities', { type: 'category_group' })) as any;
+    const group = ((Array.isArray(groups) ? groups : groups?.groups ?? []) as any[]).find((g: any) => g?.is_income === true);
+    expect(group, 'the test budget must have an income group').toBeTruthy();
+    const name = `E2E-Inc759-${uniqueSuffix()}`;
+    // Registered before the create and by name, so a create that half succeeds is still removed.
+    cleanup.add(CLEANUP_ORDER.category, `category ${name}`, async () => {
+      const data = await mcp.call('list_entities', { type: 'category' });
+      const leaked = ((Array.isArray(data) ? data : data?.categories ?? []) as any[]).find((c: any) => c?.name === name);
+      if (leaked) await mcp.call('manage_categories', { action: 'delete', entity: 'category', id: leaked.id }).catch(() => undefined);
+    });
+    const id = await mcp.call('manage_categories', { action: 'create', entity: 'category', name, group_id: group.id });
+    expect(typeof id).toBe('string');
+    return { id: id as string, name };
+  };
+
+  test('manage_budget_months set_amount - ERROR: an income category is refused on an envelope budget (#759)', async ({ mcp, cleanup }) => {
+    const income = await makeIncomeCategory(mcp, cleanup);
+    const text = await refusal(() => mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: income.id, amount: 777 }));
+    expect(text).toContain('not an expense category');
+    expect(text).toContain(income.name);
+    expect((await budgetedOf(mcp, income.id))?.budgeted).toBeUndefined();
+  });
+
+  test('manage_budget_months transfer - ERROR: an income category is refused as source or target and the expense side is unchanged (#759)', async ({ mcp, makeCategory, cleanup }) => {
+    const income = await makeIncomeCategory(mcp, cleanup);
+    const expense = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${expense.id}`, async () => {
+      await mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: expense.id, amount: 0 }).catch(() => undefined);
+    });
+    await mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: expense.id, amount: 10000 });
+    const into = await refusal(() => mcp.call('manage_budget_months', { action: 'transfer', month: currentMonth(), from_category_id: expense.id, to_category_id: income.id, amount: 100 }));
+    expect(into).toContain('not an expense category');
+    const out = await refusal(() => mcp.call('manage_budget_months', { action: 'transfer', month: currentMonth(), from_category_id: income.id, to_category_id: expense.id, amount: 100 }));
+    expect(out).toContain('not an expense category');
+    expect(out).not.toContain('Insufficient');
+    expect((await budgetedOf(mcp, expense.id))?.budgeted).toBe(10000);
+  });
+
+  test('manage_budget_months set_amount and transfer - ERROR: an amount above 2251799813685247 is refused at validation (#759)', async ({ mcp, makeCategory }) => {
+    const source = await makeCategory();
+    const target = await makeCategory({ group: { id: source.groupId, name: 'reused' } });
+    const setText = await refusal(() => mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: source.id, amount: 9007199254740991 }));
+    expect(setText).toContain('2251799813685247');
+    const moveText = await refusal(() => mcp.call('manage_budget_months', { action: 'transfer', month: currentMonth(), from_category_id: source.id, to_category_id: target.id, amount: 2251799813685248 }));
+    expect(moveText).toContain('2251799813685247');
+    expect((await budgetedOf(mcp, source.id))?.budgeted ?? 0).toBe(0);
+  });
+
+  test('manage_budget_months set_amount_batch - an income item fails alone and the expense item lands (#759)', async ({ mcp, makeCategory, cleanup }) => {
+    test.setTimeout(60000);
+    const income = await makeIncomeCategory(mcp, cleanup);
+    const expense = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.budgetHold, `restore budget of category ${expense.id}`, async () => {
+      await mcp.call('manage_budget_months', { action: 'set_amount', month: currentMonth(), category_id: expense.id, amount: 0 }).catch(() => undefined);
+    });
+    const result = await mcp.call('manage_budget_months', {
+      action: 'set_amount_batch',
+      operations: [
+        { month: currentMonth(), categoryId: expense.id, amount: 4200 },
+        { month: currentMonth(), categoryId: income.id, amount: 700 },
+      ],
+    }) as any;
+    expect(result.successCount).toBe(1);
+    expect(result.failureCount).toBe(1);
+    expect(result.failed[0].categoryId).toBe(income.id);
+    expect(result.failed[0].error).toContain('not an expense category');
+    expect((await budgetedOf(mcp, expense.id))?.budgeted).toBe(4200);
+  });
+
   // ==================== RULES (4 tools) ====================
   test('list_entities rule - should list rules', async ({ mcp }) => {
     const data = await mcp.call('list_entities', { type: 'rule' });
@@ -5568,6 +5645,29 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(res.structuredContent).toEqual(JSON.parse(res.content[0].text));
     expect(conforms(schema, res.structuredContent)).toBe(true);
     expect(res.structuredContent.result.length).toBeGreaterThan(0);
+  });
+
+  // #759: the legacy writers carry the same refusals as the compact tool that forwards to them.
+  test('actual_budgets_set_amount and actual_budgets_transfer - an income category and an amount above the limit are refused (#759)', async ({ mcp, makeCategory, cleanup }) => {
+    const groups = (await mcp.call('actual_category_groups_get')) as any;
+    const group = ((Array.isArray(groups) ? groups : groups?.groups ?? []) as any[]).find((g: any) => g?.is_income === true);
+    expect(group, 'the test budget must have an income group').toBeTruthy();
+    const name = `E2E-Inc759L-${uniqueSuffix()}`;
+    cleanup.add(CLEANUP_ORDER.category, `category ${name}`, async () => {
+      const data = (await mcp.call('actual_categories_get')) as any;
+      const leaked = ((Array.isArray(data) ? data : data?.categories ?? []) as any[]).find((c: any) => c?.name === name);
+      if (leaked) await mcp.call('actual_categories_delete', { id: leaked.id }).catch(() => undefined);
+    });
+    const created = (await mcp.call('actual_categories_create', { name, group_id: group.id })) as any;
+    const incomeId = (typeof created === 'string' ? created : created?.categoryId ?? created?.id) as string;
+    expect(typeof incomeId).toBe('string');
+    const expense = await makeCategory();
+    const setText = await refusal(() => mcp.call('actual_budgets_set_amount', { month: currentMonth(), categoryId: incomeId, amount: 777 }));
+    expect(setText).toContain('not an expense category');
+    const moveText = await refusal(() => mcp.call('actual_budgets_transfer', { month: currentMonth(), fromCategoryId: expense.id, toCategoryId: incomeId, amount: 100 }));
+    expect(moveText).toContain('not an expense category');
+    const bigText = await refusal(() => mcp.call('actual_budgets_set_amount', { month: currentMonth(), categoryId: expense.id, amount: 9007199254740991 }));
+    expect(bigText).toContain('2251799813685247');
   });
 
   test('actual_transactions_search_by_month - finds a seeded transaction', async ({ mcp, makeAccount, makeTransaction }) => {

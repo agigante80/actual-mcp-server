@@ -68,6 +68,9 @@ const LEGACY_SMOKE = [
   'actual_account_groups_delete', // #816: its cleanup
   'actual_transactions_update_batch', // #744: the legacy unknown-account refusal on a batch item
   'actual_transactions_import', // #744: the legacy unknown-account refusal on import
+  'actual_categories_delete', // #759: the cleanup of the legacy income category row
+  'actual_budgets_set_amount', // #759: the legacy income and amount-limit refusals
+  'actual_budgets_transfer', // #759: the legacy income transfer refusal
   'actual_rules_get',
   'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag
   'actual_rules_update', // #762: the legacy empty-list refusal on update

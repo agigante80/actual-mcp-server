@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import { MAX_BUDGET_AMOUNT_CENTS } from '../lib/budget-limits.js';
 
 const InputSchema = z.object({
   month: z.string()
@@ -14,13 +15,14 @@ const InputSchema = z.object({
   amount: z.number()
     .int('amount must be an integer (cents)')
     .positive('amount must be positive (cents)')
+    .max(MAX_BUDGET_AMOUNT_CENTS, `amount must be at most ${MAX_BUDGET_AMOUNT_CENTS} (the limit Actual can store)`)
     .describe('Amount to transfer in cents (positive integer)'),
 });
 
 const tool: ToolDefinition = {
   name: 'actual_budgets_transfer',
   description:
-    "Move a budgeted amount (positive integer cents) from one category to another within one month (YYYY-MM). The source must have at least that much budgeted and must differ from the target. If the second write fails the error says the source was already lowered: read back with actual_budgets_get_month before retrying. To set an amount outright use actual_budgets_set_amount. Returns { result: { success, transferred, fromCategory, toCategory } }.",
+    "Move a budgeted amount (positive integer cents) from one category to another within one month (YYYY-MM). The source must have at least that much budgeted and must differ from the target. If the second write fails the error says the source was already lowered: read back with actual_budgets_get_month before retrying. To set an amount outright use actual_budgets_set_amount. Both categories must be expense categories; the amount is at most 2251799813685247. Returns { result: { success, transferred, fromCategory, toCategory } }.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
