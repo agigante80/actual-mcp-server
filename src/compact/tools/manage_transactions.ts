@@ -110,6 +110,10 @@ const txs = z
       if (Array.isArray(children)) {
         children.forEach((child, j) => {
           if (child === null || typeof child !== 'object') return;
+          const childAmount = (child as { amount?: unknown }).amount;
+          if (typeof childAmount === 'number' && !Number.isInteger(childAmount)) {
+            ctx.addIssue({ code: 'custom', path: [i, 'subtransactions', j, 'amount'], message: 'Amount must be an integer (cents)' });
+          }
           const bad = Object.keys(child).filter((key) => !TX_CHILD_KEYS.has(key));
           if (bad.length === 0) return;
           const named = bad.map((key) => `"${key}"`).join(', ');

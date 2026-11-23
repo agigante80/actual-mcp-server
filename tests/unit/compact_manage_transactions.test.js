@@ -140,6 +140,10 @@ await check('import refuses an unknown split child key by name and calls nothing
   assert.match(text, /txs\.0\.subtransactions\.1: Unrecognized key: "bogus"/);
   assert.ok(!text.includes('does not exist on table'), text);
 });
+await check('import refuses a fractional split child amount and calls nothing (#749)', async () => {
+  const text = await clientText({ action: 'import', account_id: A, txs: [{ date: '2018-05-01', amount: -100, subtransactions: [{ amount: -0.5 }] }] });
+  assert.match(text, /Amount must be an integer \(cents\)/);
+});
 await check('import forwards split children with every known child key, and a child without amount (#749)', async () => {
   const row = { date: '2018-05-01', amount: -100, subtransactions: [{ amount: -60, category: B, notes: 'n', payee: A }, { notes: 'no amount' }] };
   await expectCall({ action: 'import', account_id: A, txs: [row] }, 'actual_transactions_import', { accountId: A, txs: [row] });

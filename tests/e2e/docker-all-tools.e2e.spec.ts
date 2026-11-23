@@ -1102,9 +1102,13 @@ payee: payee.id,
   });
 
   // #749: an unknown key in an import row is refused by name before any write, with no upstream text.
-  test('manage_transactions import - ERROR: refuses an unknown row key by name and writes nothing (#749)', async ({ mcp, makeAccount }) => {
+  test('manage_transactions import - ERROR: refuses an unknown row key by name and writes nothing (#749)', async ({ mcp, makeAccount, cleanup }) => {
     const account = await makeAccount();
     const notes = `E2E-BogusKey-${uniqueSuffix()}`;
+    cleanup.add(CLEANUP_ORDER.transaction, `import rows ${notes}`, async () => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+      for (const t of ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).filter((r: any) => r?.notes === notes)) await mcp.call('manage_transactions', { action: 'delete', id: t.id });
+    });
     const message = await refusal(() =>
       mcp.call('manage_transactions', {
         action: 'import',
@@ -1120,9 +1124,13 @@ payee: payee.id,
     await expectNoLeak(mcp, account.id, notes);
   });
 
-  test('manage_transactions import - ERROR: refuses an unknown split child key by name and writes nothing (#749)', async ({ mcp, makeAccount }) => {
+  test('manage_transactions import - ERROR: refuses an unknown split child key by name and writes nothing (#749)', async ({ mcp, makeAccount, cleanup }) => {
     const account = await makeAccount();
     const notes = `E2E-BogusChild-${uniqueSuffix()}`;
+    cleanup.add(CLEANUP_ORDER.transaction, `import rows ${notes}`, async () => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+      for (const t of ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).filter((r: any) => r?.notes === notes)) await mcp.call('manage_transactions', { action: 'delete', id: t.id });
+    });
     const message = await refusal(() =>
       mcp.call('manage_transactions', {
         action: 'import',
@@ -1210,7 +1218,9 @@ payee: payee.id,
     expect((await rowOf(second.id))?.date).toBe('2018-05-22');
 
     await mcp.call('manage_transactions', { action: 'update', id: first.id, payee: null });
-    expect((await rowOf(first.id))?.payee ?? null).toBeNull();
+    const cleared = await rowOf(first.id);
+    expect(cleared, 'the updated row exists').toBeTruthy();
+    expect(cleared.payee ?? null).toBeNull();
   });
 
   // #815: an update_batch item with no field is refused as a whole call; nothing is written, and a
@@ -1249,7 +1259,9 @@ payee: payee.id,
     expect((await rowOf(first.id))?.notes).toBe('E2E-Empty815-changed');
 
     await mcp.call('manage_transactions', { action: 'update_batch', updates: [{ id: first.id, fields: { payee: null } }] });
-    expect((await rowOf(first.id))?.payee ?? null).toBeNull();
+    const cleared = await rowOf(first.id);
+    expect(cleared, 'the updated row exists').toBeTruthy();
+    expect(cleared.payee ?? null).toBeNull();
   });
 
   // #489: subtransactions on a PLAIN transaction split it in place. The id must survive (that is
