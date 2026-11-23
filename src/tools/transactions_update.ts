@@ -49,7 +49,8 @@ const tool: ToolDefinition = {
     'Update an existing transaction in Actual Budget. Provide the transaction ID and the fields you want to update. ' +
     'To split an existing transaction across categories in one call, pass fields.subtransactions (amounts summing to the transaction amount): ' +
     'it is split in place, keeping its id and import fields, and the result lists the new child ids. ' +
-    'The parent\'s own category is cleared; a child that names no category inherits it.',
+    'The parent\'s own category is cleared; a child that names no category inherits it. ' +
+    'An unknown payee or category id is refused and nothing is changed.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

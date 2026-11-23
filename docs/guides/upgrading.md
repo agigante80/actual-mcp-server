@@ -108,6 +108,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `actual_transactions_update`, `actual_transactions_update_batch`, `actual_transactions_import` and `manage_transactions` `update`, `update_batch` and `import` used to accept an account id that does not exist, report success and write a row whose account points at nothing, which no listing tool returns. They now refuse it with `Account "<id>" not found` (an update or import is refused as a whole, a batch fails only that item) and write nothing. A closed account is still accepted. A script that moves or imports into an account id that does not exist now gets that refusal.
 
+## An unknown payee or category id is refused on transaction create and update (#747)
+
+`actual_transactions_create`, `actual_transactions_update`, `actual_transactions_update_batch` and `manage_transactions` `create`, `update` and `update_batch` used to accept a `payee` or `category` id (also a split child's category) that does not exist, report success and store the row with that payee or category empty. They now refuse it with `Payee "<id>" not found` or `Category "<id>" not found` and write nothing: `create` answers `success: false`, `update` is refused, and `update_batch` fails only that item. `null` still clears a field, a hidden category and a transfer payee are accepted, and a category group id is not a category. A script or saved prompt that sends a stale id now gets that refusal.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

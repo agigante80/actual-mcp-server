@@ -1505,6 +1505,72 @@ payee: payee.id,
     expect(message).toMatch(/No transactions were imported/);
   });
 
+  // #747: an unknown payee or category id is refused on create, update and update_batch, as an
+  // unknown account is. A call that is NOT refused stores the row with that reference empty, so
+  // every row reads the stored values back with run_query and removes what leaked.
+  const catOfTxn = async (mcp: any, id: string): Promise<{ payee: string | null; category: string | null }> => {
+    const out = await mcp.call('run_query', { query: `SELECT id, payee, category FROM transactions WHERE id = '${id}'` });
+    const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    return { payee: rows[0]?.payee ?? null, category: rows[0]?.category ?? null };
+  };
+
+  test('manage_transactions create - stores a real payee and category, ERROR: an unknown payee or category id is refused and writes nothing (#747)', async ({ mcp, makeAccount, makePayee, makeCategory }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    const category = await makeCategory();
+    const okNotes = `E2E-RefOk-${uniqueSuffix()}`;
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-06-01', amount: -111, payee: payee.id, category: category.id, notes: okNotes });
+    const okIds = await idsWithNotes(mcp, okNotes);
+    expect(okIds).toHaveLength(1);
+    expect(await catOfTxn(mcp, okIds[0])).toEqual({ payee: payee.id, category: category.id });
+    await mcp.call('manage_transactions', { action: 'delete', id: okIds[0] });
+
+    const notes = `E2E-RefBad-${uniqueSuffix()}`;
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    try {
+      const bad = await refusal(() => mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-06-01', amount: -111, payee: unknown, notes }));
+      expect(bad).toMatch(/Payee "00000000-0000-4000-8000-000000000000" not found/);
+      expect(bad).toMatch(/list_entities with type payee/);
+      expect(bad).toMatch(/No transactions were created/);
+      const badCat = await refusal(() => mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-06-01', amount: -111, category: unknown, notes }));
+      expect(badCat).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found/);
+      expect(badCat).toMatch(/No transactions were created/);
+    } finally {
+      const leaked = await idsWithNotes(mcp, notes);
+      for (const id of leaked) await mcp.call('manage_transactions', { action: 'delete', id });
+      expect(leaked, 'a refused create must not write a row').toEqual([]);
+    }
+  });
+
+  test('manage_transactions update and update_batch - ERROR: an unknown category id is refused and the stored category is unchanged (#747)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const single = await makeTransaction({ account, category: category.id });
+    const bad = await makeTransaction({ account, category: category.id });
+    const good = await makeTransaction({ account });
+
+    const message = await refusal(() => mcp.call('manage_transactions', { action: 'update', id: single.id, category: unknown }));
+    expect(message).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found/);
+    expect(message).toMatch(/The transaction was not changed/);
+    expect((await catOfTxn(mcp, single.id)).category).toBe(category.id);
+
+    const note = `E2E-RefBatch-${uniqueSuffix()}`;
+    const data = await mcp.call('manage_transactions', {
+      action: 'update_batch',
+      updates: [
+        { id: bad.id, fields: { category: unknown } },
+        { id: good.id, fields: { notes: note } },
+      ],
+    });
+    const batch = data?.total !== undefined ? data : (data?.result ?? data);
+    expect(batch.failed.map((f: any) => f.id)).toEqual([bad.id]);
+    expect(batch.failed[0].error).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found/);
+    expect(batch.succeeded.map((x: any) => x.id)).toEqual([good.id]);
+    expect(await idsWithNotes(mcp, note)).toEqual([good.id]);
+    expect((await catOfTxn(mcp, bad.id)).category).toBe(category.id);
+  });
+
   test('search_transactions amount - should search by amount', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     const txn = await makeTransaction({ account, amount: -5000 });
@@ -5238,6 +5304,44 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       const kept = await accountOfTxn(id);
       if (kept !== account.id) await mcp.call('actual_transactions_update', { id, fields: { account: account.id } });
       expect(kept, 'a refused update must leave the row in its account').toBe(account.id);
+    }
+  });
+
+  // #747: the legacy transaction tools refuse an unknown payee or category id with the legacy list tool name.
+  test('actual_transactions_create, _update and _update_batch - ERROR: an unknown payee or category id is refused and nothing is stored (#747)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const txn = await makeTransaction({ account, category: category.id });
+    const other = await makeTransaction({ account, category: category.id });
+    const rowsOf = async (query: string) => {
+      const out = await mcp.call('run_query', { query });
+      return (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    };
+
+    const notes = `E2E-LegacyRef-${uniqueSuffix()}`;
+    try {
+      const created = await mcp.call('actual_transactions_create', { account: account.id, date: '2018-06-01', amount: -111, payee: unknown, notes });
+      expect(created.success).toBe(false);
+      expect(created.error).toMatch(/Payee "00000000-0000-4000-8000-000000000000" not found. Use actual_payees_get to list available payees/);
+    } finally {
+      const leaked = await rowsOf(`SELECT id FROM transactions WHERE notes = '${notes}'`);
+      for (const r of leaked) await mcp.call('actual_transactions_delete', { id: r.id });
+      expect(leaked.map((r: any) => r.id), 'a refused create must not write a row').toEqual([]);
+    }
+
+    const single = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { category: unknown } }));
+    expect(single).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found. Use actual_categories_get to list available categories/);
+
+    const batchData = await mcp.call('actual_transactions_update_batch', { updates: [{ id: other.id, fields: { category: unknown } }] });
+    const batch = batchData?.failed !== undefined ? batchData : (batchData?.result ?? batchData);
+    expect(batch.failed.map((f: any) => f.id)).toEqual([other.id]);
+    expect(batch.failed[0].error).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found. Use actual_categories_get/);
+
+    for (const id of [txn.id, other.id]) {
+      const kept = (await rowsOf(`SELECT id, category FROM transactions WHERE id = '${id}'`))[0]?.category ?? null;
+      if (kept !== category.id) await mcp.call('actual_transactions_update', { id, fields: { category: category.id } });
+      expect(kept, 'a refused update must leave the stored category').toBe(category.id);
     }
   });
 

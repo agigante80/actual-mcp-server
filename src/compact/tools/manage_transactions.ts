@@ -215,7 +215,7 @@ export const manageTransactions: CompactToolSpec = {
     'import: account_id, txs; matched like a bank import (rules applied; duplicates by imported_id or same amount within 7 days). ' +
     'merge: ids (two); DESTRUCTIVE, keeps one row by the upstream rule, deletes the other, cannot be undone. ' +
     'transfer: from_account, to_account, amount (positive), date; optional notes. ' +
-    'Returns { success, id } (create; id often null, success false for an unknown account), { success } or { success, split } (update, delete), ' +
+    'Returns { success, id } (create; id often null, success false when an id is unknown), { success } or { success, split } (update, delete), ' +
     '{ succeeded, failed, total, successCount, failureCount } (update_batch), { result: { added, updated, errors } } (import), ' +
     '{ result: { success, keptId, deletedId } } (merge), { result } (transfer; same or unknown account: result.success false).',
   selector: 'action',
