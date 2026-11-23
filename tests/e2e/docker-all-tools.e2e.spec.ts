@@ -4479,6 +4479,36 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
     expect(listed.some((a: any) => a?.name === name)).toBe(false);
   });
+
+  // #768: a close whose pairing cannot keep a category is refused before anything is written.
+  test('manage_accounts close - ERROR: an on-budget account with a balance into an off-budget one needs transfer_category_id (#768)', async ({ mcp, makeAccount, cleanup }) => {
+    const src = await makeAccount({ balance: 5000 });
+    const name = `E2E-CloseDest768-${uniqueSuffix()}`;
+    const dest = (await mcp.call('manage_accounts', { action: 'create', entity: 'account', name, offbudget: true })) as string;
+    cleanup.add(CLEANUP_ORDER.account, `account ${name}`, async () => {
+      await mcp.call('manage_accounts', { action: 'delete', entity: 'account', id: dest }).catch(() => undefined);
+    });
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest }))).toMatch(/needs transferCategoryId/);
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === src.id)?.closed).toBeFalsy();
+  });
+
+  test('manage_accounts close - ERROR: transfer_category_id on an on-budget to on-budget close has no effect and is refused (#768)', async ({ mcp, makeAccount, makeCategory }) => {
+    const src = await makeAccount({ balance: 5000 });
+    const dest = await makeAccount();
+    const category = await makeCategory();
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest.id, transfer_category_id: category.id }))).toMatch(/has no effect/);
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === src.id)?.closed).toBeFalsy();
+  });
+
+  test('manage_accounts delete - POSITIVE: the reply reports detachedTransfers (#768)', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const reply = await mcp.raw('manage_accounts', { action: 'delete', entity: 'account', id: account.id });
+    const body = JSON.parse(reply.content[0].text);
+    expect(body.success).toBe(true);
+    expect(body.detachedTransfers).toBe(0);
+  });
 });
 
 test.describe('Docker E2E - compact manage_categories (#676)', () => {
@@ -5817,5 +5847,16 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(await refusal(() => mcp.call('actual_accounts_create', { name: bad, offbudget: 'yes' }))).toMatch(/offbudget/);
     const after = (await mcp.call('list_entities', { type: 'account' })) as any[];
     expect(after.some((a: any) => a?.name === bad)).toBe(false);
+  });
+
+  // #768: the legacy delete reports how many transfers it unlinked; the legacy close refuses the same pairings.
+  test('actual_accounts_delete and actual_accounts_close - detachedTransfers and the pairing refusal (#768)', async ({ mcp, makeAccount, makeCategory }) => {
+    const gone = await makeAccount();
+    const reply = await mcp.raw('actual_accounts_delete', { id: gone.id });
+    expect(JSON.parse(reply.content[0].text).detachedTransfers).toBe(0);
+    const src = await makeAccount({ balance: 5000 });
+    const dest = await makeAccount();
+    const category = await makeCategory();
+    expect(await refusal(() => mcp.call('actual_accounts_close', { id: src.id, transferAccountId: dest.id, transferCategoryId: category.id }))).toMatch(/has no effect/);
   });
 });

@@ -29,7 +29,19 @@ const OPEN_ID   = 'aaaaaaaa-1111-2222-3333-444444444444';
 const CLOSED_ID = 'bbbbbbbb-1111-2222-3333-444444444444';
 
 (async () => {
-  const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
+  // #768: raw api stubs go in BEFORE the adapter import (it destructures them at module load) so
+  // the REAL adapter.deleteAccount can be exercised below, before the tool tests replace it.
+  const apiMod = await import('@actual-app/api');
+  const apiDefault = (apiMod.default || apiMod);
+  let transferRows = [];
+  let rawDeletes = [];
+  apiDefault.runQuery = async () => ({ data: transferRows });
+  apiDefault.deleteAccount = async (id) => { rawDeletes.push(id); };
+  apiDefault.sync = async () => {};
+  const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
+  adapterMod._setSkipApiInitForTests(true);
+  const adapter = adapterMod.default;
+  const realDeleteAccount = adapter.deleteAccount;
   const tool = (await import('../../dist/src/tools/accounts_delete.js')).default;
 
   // Shaped after the real listing that exposed the bug: closed test accounts
@@ -49,17 +61,38 @@ const CLOSED_ID = 'bbbbbbbb-1111-2222-3333-444444444444';
     deleted.push(id);
     const target = accounts.find((a) => a.id === id);
     if (target && target.closed !== true) accounts = accounts.filter((a) => a.id !== id);
-    return { success: true };
+    return { detachedTransfers };
   };
-  const reset = () => { deleted = []; accounts = [...ACCOUNTS]; };
+  let detachedTransfers = 0;
+  const reset = () => { deleted = []; accounts = [...ACCOUNTS]; detachedTransfers = 0; };
 
   console.log('\n[accounts-delete] an OPEN account is deleted, unchanged behaviour');
   {
     reset();
     const res = await tool.call({ id: OPEN_ID });
     check(res?.success === true, 'reports success');
+    check(res?.detachedTransfers === 0, 'reports detachedTransfers: 0 when there are no transfers (#768)');
     check(deleted.length === 1 && deleted[0] === OPEN_ID, 'and the adapter was actually asked to delete it');
     check(!accounts.some((a) => a.id === OPEN_ID), 'and the account is genuinely gone');
+  }
+
+  console.log('\n[#768] the tool carries the adapter count into its result');
+  {
+    reset();
+    detachedTransfers = 2;
+    const res = await tool.call({ id: OPEN_ID });
+    check(res?.success === true && res?.detachedTransfers === 2, 'detachedTransfers: 2 reaches the tool result');
+  }
+
+  console.log('\n[#768] the real adapter counts the account\'s transfer rows before the delete');
+  {
+    for (const n of [0, 1, 2]) {
+      transferRows = Array.from({ length: n }, (_, i) => ({ id: `t${i}` }));
+      rawDeletes = [];
+      const out = await realDeleteAccount(OPEN_ID);
+      check(out?.detachedTransfers === n, `${n} transfer row(s) give detachedTransfers ${n}`, JSON.stringify(out));
+      check(rawDeletes.length === 1 && rawDeletes[0] === OPEN_ID, 'and the raw delete ran once');
+    }
   }
 
   console.log('\n[accounts-delete] REGRESSION GUARD: a CLOSED account is NOT falsely confirmed');

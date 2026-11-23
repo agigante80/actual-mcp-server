@@ -196,6 +196,11 @@ await check('description: Returns, every action, DESTRUCTIVE, no legacy name', (
   assert.ok(!/actual_/.test(spec.description));
   assert.ok(spec.description.includes('optional balance (account, integer cents) and offbudget (account)'), 'create line names offbudget (#767)');
   assert.ok(!spec.description.includes('on-budget only'), 'the on-budget-only limit is gone (#767)');
+  for (const w of ['detachedTransfers', 'unlinked', 'off-budget one']) assert.ok(spec.description.includes(w), `${w} (#768)`);
+});
+await check('the published manage_accounts entry stays at or under the 3900 byte ceiling (#768)', () => {
+  const entry = JSON.stringify({ name: spec.name, description: spec.description, inputSchema: z.toJSONSchema(tool.inputSchema) });
+  assert.ok(Buffer.byteLength(entry) <= 3900, String(Buffer.byteLength(entry)));
 });
 await check('annotations: destructive write tool, hints only', () => {
   assert.deepStrictEqual(annotationsFor('manage_accounts'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

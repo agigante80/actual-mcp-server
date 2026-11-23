@@ -57,6 +57,8 @@ const LEGACY_SMOKE = [
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
   'actual_accounts_create', // #767: the legacy create accepts offbudget
   'actual_transactions_create', // #747, #793: the legacy unknown-payee and transfer-payee refusals on create
+  'actual_accounts_delete', // #768: the legacy delete reports detachedTransfers
+  'actual_accounts_close', // #768: the legacy close refuses a pairing that cannot keep a category
   'actual_transactions_update_batch', // #744: the legacy unknown-account refusal on a batch item
   'actual_transactions_import', // #744: the legacy unknown-account refusal on import
   'actual_rules_get',

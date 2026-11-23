@@ -107,7 +107,11 @@ export class OutOfRangeRefusal extends PreflightRefusal {
   }
 }
 
-/** The request is well-formed but collides with something that already exists (#701: a tag name). */
+/**
+ * The request is well-formed but collides with something that already exists (#701: a tag name),
+ * or contradicts state the budget already holds (#768: a closing category the account pairing
+ * cannot keep).
+ */
 export class ConflictRefusal extends PreflightRefusal {
   constructor(message: string) {
     super(message, 'conflict');
