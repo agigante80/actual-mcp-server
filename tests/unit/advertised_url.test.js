@@ -65,6 +65,8 @@ const bad = {
   'unterminated IPv6': '[::1',
   'IPv6 without brackets': '::1',
   'IPv6 with a zone and junk': '[::1%25eth0]',
+  'bracketed non-IPv6 (:::)': '[:::]:3601',
+  'bracketed junk': '[1.2.3.4]',
   'oversized': 'a'.repeat(262),
   'oversized with port': 'a'.repeat(300) + ':80',
   'two ports': 'host:80:81',
