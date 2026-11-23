@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
 import { daysInMonth, monthArgSchema, monthStart, previousMonth } from './dates.js';
+import { EMPTY_RESULT_LINE, ZERO_INCOME_LINE, origin } from './shared.js';
 
 /**
  * spending_patterns (#663): a trend analysis over the last N full months. Both defaults live in
@@ -8,14 +9,17 @@ import { daysInMonth, monthArgSchema, monthStart, previousMonth } from './dates.
  * transforms to a number. The server renders the concrete range with integer month arithmetic.
  */
 
+const ONE_MONTH_LINE =
+  'The period is a single month, so skip the comparison across months and the ranking of the categories that changed the most, and say so.';
+
 /** One static message for every way `months` can be wrong (#772). */
 const MONTHS_MESSAGE = 'must be a whole number from 1 to 24';
 
-const TEMPLATE = `Analyse my spending patterns over the last {months} full {unit}, from {start_date} to {end_date}. Stay read-only: do not change anything.
+const TEMPLATE = `Analyse my spending patterns over the last {months} full {unit}, from {start_date} to {end_date}.{origin} Stay read-only: do not change anything.
 
 Before step 1, call list_budget_months with no month to get the months the budget covers. If {end_month} is not in that list, the budget has no data for it: do not call list_budget_months with {end_month}, say that the budget does not cover {end_month}, and skip step 3. Steps 1 and 2 still run.
 
-1. Call summarize_transactions with report grouped, start_date {start_date}, end_date {end_date}, group_by month and include_income true. Each group is one month with income, expenseOutflow, credits and netExpense (expenseOutflow minus credits). The savings rate for a month is income minus netExpense, divided by income.
+1. Call summarize_transactions with report grouped, start_date {start_date}, end_date {end_date}, group_by month and include_income true. Each group is one month with income, expenseOutflow, credits and netExpense (expenseOutflow minus credits). The savings rate for a month is income minus netExpense, divided by income. ${ZERO_INCOME_LINE}
 2. Call summarize_transactions with report grouped, start_date {start_date}, end_date {end_date} and group_by ["category", "month"]. Each group is one category in one month with its netExpense. Compare each category across the months to find the ones rising and falling; a category with no group in a month spent nothing that month.
 3. Call list_budget_months with month {end_month} to compare the trend with what was budgeted for the last month of the range: per expense category it gives budgeted, spent and balance.
 4. Report:
@@ -24,6 +28,8 @@ Before step 1, call list_budget_months with no month to get the months the budge
    - the savings rate trend month by month
    - anything unusual: a single large month, or a category that appeared or went to zero
    - two or three concrete suggestions
+
+{one_month}${EMPTY_RESULT_LINE}
 
 Be specific with numbers and percentages. The tools return integer cents; divide by 100 and show currency.`;
 
@@ -58,11 +64,14 @@ const spending_patterns: PromptDefinition = {
       .default(6),
     end_month: monthArgSchema().default(() => previousMonth()),
   }),
-  render(args) {
+  render(args, ctx) {
     const months = args.months as number;
     const endMonth = args.end_month as string;
     const endDate = `${endMonth}-${String(daysInMonth(endMonth)).padStart(2, '0')}`;
-    return TEMPLATE.replaceAll('{months}', String(months))
+    const note = ctx.defaulted.has('end_month') ? origin.endMonth(endMonth) : '';
+    return TEMPLATE.replace('{origin}', note)
+      .replace('{one_month}', months === 1 ? `${ONE_MONTH_LINE} ` : '')
+      .replaceAll('{months}', String(months))
       .replaceAll('{unit}', months === 1 ? 'month' : 'months')
       .replaceAll('{end_month}', endMonth)
       .replaceAll('{start_date}', monthStart(endMonth, months))

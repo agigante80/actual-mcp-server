@@ -5,6 +5,9 @@
  */
 import { z } from 'zod';
 
+/** What render may know about the call: which schema keys were filled by a default (#774). */
+type RenderContext = { defaulted: ReadonlySet<string> };
+
 export type PromptArgument = { name: string; description: string; required: boolean };
 
 export type PromptDefinition = {
@@ -18,7 +21,7 @@ export type PromptDefinition = {
   requiredTools: string[];
   /** Strict (z.strictObject): an unknown argument key is refused rather than dropped. */
   argsSchema: z.ZodObject<z.ZodRawShape>;
-  render(args: Record<string, unknown>): string;
+  render(args: Record<string, unknown>, ctx: RenderContext): string;
 };
 
 const NAME_RE = /^[a-z][a-z0-9_]*$/;
@@ -59,8 +62,12 @@ export function normalizePromptArgs(raw: unknown, known?: ReadonlySet<string>): 
 /** Validate the raw (string) arguments and render. Throws a ZodError on a bad or missing value. */
 export function renderPrompt(definition: PromptDefinition, rawArgs: unknown): string {
   const known = new Set(definition.arguments.map((a) => a.name));
-  const parsed = definition.argsSchema.parse(normalizePromptArgs(rawArgs ?? {}, known));
-  return definition.render(parsed);
+  // The NORMALISED input decides what was defaulted (#774): a blank value (#772) is removed there,
+  // so it counts as defaulted; the parsed object cannot tell, because the schema fills defaults.
+  const given = normalizePromptArgs(rawArgs ?? {}, known) as Record<string, unknown>;
+  const parsed = definition.argsSchema.parse(given);
+  const defaulted = new Set(Object.keys(parsed).filter((k) => given[k] === undefined));
+  return definition.render(parsed, { defaulted });
 }
 
 export function assertPromptNames(definitions: readonly PromptDefinition[]): void {
