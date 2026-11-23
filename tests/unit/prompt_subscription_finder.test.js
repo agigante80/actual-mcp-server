@@ -35,6 +35,8 @@ const YES = 'Never create anything from the table without a yes for that item.';
 const ONE = 'ONE at a time';
 const WEAK = 'Two sightings are a weak signal';
 const BIG = 'ignore every payee that appears in only one month, without listing it';
+const QUARTERLY = 'a typical gap of 3 months is quarterly';
+const EVERY3 = 'interval 3';
 const CENTS = 'Amounts are integer cents; divide by 100 and show currency.';
 
 await check('subscription_finder is registered last with its title and one optional date argument', () => {
@@ -67,7 +69,7 @@ await check('requiredTools is exact; every compact tool the text names is requir
 
 await check('the text pins the explicit-yes rule, one at a time, the weak signal and cents; no dash, dollar or placeholder', () => {
   const text = render({ date: '2026-11-13' });
-  for (const s of [YES, ONE, WEAK, BIG, CENTS, EMPTY_RESULT_LINE, 'at least 3 different months', 'within 10 percent']) {
+  for (const s of [YES, ONE, WEAK, BIG, QUARTERLY, EVERY3, CENTS, EMPTY_RESULT_LINE, 'at least 3 different months', 'within 10 percent']) {
     assert.ok(text.includes(s), `missing: ${s}`);
   }
   assert.ok(text.includes('group_by ["payee", "month"]'));
