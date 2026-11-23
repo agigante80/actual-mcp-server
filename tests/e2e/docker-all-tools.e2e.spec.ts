@@ -3288,6 +3288,33 @@ payee: payee.id,
     expect(resolvedId).toBe(account.id);
   });
 
+  // #801: a name shared by several accounts or payees is refused with every candidate id instead of
+  // resolving to one of them. The pairs come from the fixture (each registers its own deletion); a
+  // unique name is the positive control and resolves to its id.
+  test('list_entities name - ERROR: a name shared by two accounts or two payees is refused with both ids (#801)', async ({ mcp, makeAccount, makePayee }) => {
+    const sharedAccount = `E2E-DupAcct-${uniqueSuffix()}`;
+    const a1 = await makeAccount({ name: sharedAccount });
+    const a2 = await makeAccount({ name: sharedAccount });
+    const sharedPayee = `E2E-DupPay-${uniqueSuffix()}`;
+    const p1 = await makePayee({ name: sharedPayee });
+    const p2 = await makePayee({ name: sharedPayee });
+    const single = await makeAccount();
+
+    const acct = await refusal(() => mcp.call('list_entities', { type: 'account', name: sharedAccount }));
+    expect(acct).toMatch(new RegExp(`Name "${sharedAccount}" matches 2 accounts, so it does not identify one: `));
+    expect(acct).toContain(a1.id);
+    expect(acct).toContain(a2.id);
+    expect(acct).toMatch(/Nothing was changed\. Use the id of the one you mean\./);
+
+    const pay = await refusal(() => mcp.call('list_entities', { type: 'payee', name: sharedPayee }));
+    expect(pay).toMatch(new RegExp(`Name "${sharedPayee}" matches 2 payees, so it does not identify one: `));
+    expect(pay).toContain(p1.id);
+    expect(pay).toContain(p2.id);
+
+    const data = await mcp.call('list_entities', { type: 'account', name: single.name });
+    expect(data?.id ?? (typeof data === 'string' ? data : null), 'a name with one match still resolves').toBe(single.id);
+  });
+
   // ==================== GET CONTEXT (#484) ====================
   test('get_context structure - should return accounts, category groups, and payees in a single call', async ({ mcp, makeAccount, makeCategory, makePayee }) => {
     const account = await makeAccount();
@@ -5650,6 +5677,20 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       if (kept !== account.id) await mcp.call('actual_transactions_update', { id, fields: { account: account.id } });
       expect(kept, 'a refused update must leave the row in its account').toBe(account.id);
     }
+  });
+
+  // #801: the legacy name lookup refuses a name shared by two payees, listing both ids.
+  test('actual_get_id_by_name - ERROR: a name shared by two payees is refused with both ids (#801)', async ({ mcp, makePayee }) => {
+    const shared = `E2E-LegacyDupPay-${uniqueSuffix()}`;
+    const first = await makePayee({ name: shared });
+    const second = await makePayee({ name: shared });
+    const unique = await makePayee();
+    const msg = await refusal(() => mcp.call('actual_get_id_by_name', { type: 'payees', name: shared }));
+    expect(msg).toMatch(new RegExp(`Name "${shared}" matches 2 payees, so it does not identify one: `));
+    expect(msg).toContain(first.id);
+    expect(msg).toContain(second.id);
+    const ok = await mcp.raw('actual_get_id_by_name', { type: 'payees', name: unique.name });
+    expect(JSON.parse(ok.content[0].text).id, 'a name with one match still resolves').toBe(unique.id);
   });
 
   // #752: the legacy create and import refuse a payee_name shared by two payees, with the legacy list tool name.

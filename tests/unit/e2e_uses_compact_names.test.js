@@ -53,6 +53,7 @@ const LEGACY_SMOKE = [
   'actual_category_groups_get', // #763: named in the legacy refusal text
   'actual_category_groups_create', // #764: the legacy group is_income row
   'actual_payees_get',
+  'actual_get_id_by_name', // #801: the legacy name lookup refuses a shared name
   'actual_payees_update', // #760: the legacy unknown-field refusal for transfer_acct
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
   'actual_accounts_create', // #767: the legacy create accepts offbudget

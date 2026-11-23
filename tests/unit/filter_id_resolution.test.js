@@ -67,12 +67,12 @@ describe('the pure half: what counts as an id, and what counts as a name');
   check(!pure.isEntityId(''), 'the empty string is not an id');
 
   const rows = [{ id: ACC, name: 'Checking' }, { id: ABSENT, name: 'Savings' }];
-  check(pure.matchByName(rows, 'checking')?.id === ACC, 'name matching is case-insensitive');
-  check(pure.matchByName(rows, '  Checking  ')?.id === ACC, 'and trims, because a model pastes whitespace');
-  check(pure.matchByName(rows, 'Nothing') === undefined, 'an unknown name matches nothing');
+  check(pure.matchesByName(rows, 'checking')[0]?.id === ACC, 'name matching is case-insensitive');
+  check(pure.matchesByName(rows, '  Checking  ')[0]?.id === ACC, 'and trims, because a model pastes whitespace');
+  check(pure.matchesByName(rows, 'Nothing').length === 0, 'an unknown name matches nothing');
   // The empty string must never match a row with a blank or missing name, or a caller who sent
   // nothing at all would be told they meant some arbitrary entity.
-  check(pure.matchByName([{ id: ACC, name: '' }, { id: ABSENT }], '') === undefined,
+  check(pure.matchesByName([{ id: ACC, name: '' }, { id: ABSENT }], '').length === 0,
     'the empty string never matches, even against a blank name');
 }
 
@@ -119,6 +119,20 @@ describe('a NAME is refused with the id it resolves to');
     'an unknown name names the listing tool instead');
   check(!unknown.ok && !/instead/.test(unknown.error.message),
     'and does NOT claim to have resolved anything');
+}
+
+// --- #801: a name shared by several rows is refused with every id ------------
+describe('#801: a name shared by two rows is refused with both ids, one match keeps the old text');
+{
+  const dup = [{ id: ACC, name: 'Misc' }, { id: ABSENT, name: ' misc ' }, { id: CAT, name: 'Other' }];
+  const r = await attempt(() => adapter.resolveFilterId('category', 'MISC', { rows: dup }));
+  check(!r.ok && isPreflightRefusal(r.error) && r.error.refusalKind === 'out-of-range', 'two matches: typed out-of-range refusal');
+  check(!r.ok && r.error.message === `Name "MISC" matches 2 categories, so it does not identify one: ${ACC}, ${ABSENT}. Nothing was changed. Use the id of the one you mean.`,
+    'two matches: both ids listed, exact text', r.ok ? '' : r.error.message);
+  const one = await attempt(() => adapter.resolveFilterId('category', 'other', { rows: dup }));
+  check(!one.ok && one.error.refusalKind === 'not-found' && /Use "/.test(one.error.message), 'one match: the not-found "Use <id> instead" text is unchanged');
+  const none = await attempt(() => adapter.resolveFilterId('category', 'Nope', { rows: dup }));
+  check(!none.ok && none.error.refusalKind === 'not-found' && !/instead/.test(none.error.message), 'no match: the plain not-found');
 }
 
 // --- property 3: verifyExists, both halves -----------------------------------

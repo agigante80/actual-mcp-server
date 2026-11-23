@@ -2009,7 +2009,7 @@ export const notifications = new EventEmitter();
 import { normalizeToTransactionArray, normalizeToId, normalizeImportResult } from './actual-adapter/normalize.js';
 import { assertPayeeFields, assertPayeeNamesUnambiguous, payeeNamesToResolve, resolvePayeeName } from './actual-adapter/payee-fields.js';
 import type { PayeeListingRow } from './actual-adapter/payee-fields.js';
-import { isEntityId, matchByName, resolvedNameDetail, FILTER_ID_ENTITIES } from './actual-adapter/filter-ids.js';
+import { ambiguousNameRefusal, isEntityId, matchesByName, resolvedNameDetail, FILTER_ID_ENTITIES } from './actual-adapter/filter-ids.js';
 import type { FilterIdKind, NamedRow } from './actual-adapter/filter-ids.js';
 import type {
   FinancialAnalysisSnapshot,
@@ -2525,9 +2525,17 @@ export async function resolveFilterId(
     throw new NotFoundRefusal(entity, value, listTool);
   }
 
-  const hit = matchByName(rows, value);
-  if (hit && typeof hit.id === 'string') {
-    const resolved = resolvedNameDetail(kind, String(hit.name), hit.id);
+  const hits = matchesByName(rows, value).filter((r) => typeof r.id === 'string');
+  if (hits.length > 1) {
+    // #801: Actual lets two rows share a name, so a name is not a key. Taking the first would
+    // point the caller at one of them as if it were the only one. OutOfRangeRefusal, not a new
+    // class: the candidates are text, not structure (same call as switchBudget and #752). The
+    // listing rows carry no detail, so only the ids are named.
+    throw ambiguousNameRefusal(entity.toLowerCase(), value.trim(), hits.map((r) => ({ id: String(r.id) })));
+  }
+  const hit = hits[0];
+  if (hit) {
+    const resolved = resolvedNameDetail(kind, String(hit.name), String(hit.id));
     throw new NotFoundRefusal(entity, value, listTool, undefined, resolved);
   }
   throw new NotFoundRefusal(entity, value, listTool);
@@ -5563,8 +5571,67 @@ export function getBudgetRegistry() {
 export async function getIDByName(type: string, name: string): Promise<string> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.getIDByName').catch(() => {});
+    // #801: upstream takes `data[0].id` of this same query, so two rows of one name came back as
+    // one arbitrary id. Run the query here to see them all. Exactly one row returns its id with no
+    // second upstream call; none falls through to upstream so its "Not found" text is unchanged.
+    const { q } = (await import('@actual-app/api')) as any;
+    const res = await withConcurrency(() => retry(
+      () => rawRunQuery(q(type).filter({ name }).select('*')) as Promise<{ data?: unknown }>,
+      { retries: 2, backoffMs: 200 },
+    ));
+    const rows = (Array.isArray(res?.data) ? res.data : []) as Array<Record<string, unknown>>;
+    if (rows.length === 1 && typeof rows[0].id === 'string') return rows[0].id;
+    if (rows.length > 1) {
+      const groupNames = type === 'categories' ? await categoryGroupNamesById() : undefined;
+      throw ambiguousNameRefusal(
+        nameLookupNoun(type),
+        name,
+        rows.filter((r) => typeof r.id === 'string').map((r) => ({ id: String(r.id), detail: nameCandidateDetail(type, r, groupNames) })),
+      );
+    }
     return await withConcurrency(() => retry(() => rawGetIDByName(type, name) as Promise<string>, { retries: 2, backoffMs: 200 }));
   });
+}
+
+/** `accounts` to `account`, `categories` to `category`: the noun the #801 refusal counts. */
+function nameLookupNoun(type: string): string {
+  return type === 'categories' ? 'category' : type.replace(/s$/, '');
+}
+
+/** Group names for the category candidates, read once and only on the refusal path (#801). */
+async function categoryGroupNamesById(): Promise<Map<string, string>> {
+  const groups = await withConcurrency(() => retry(
+    () => rawGetCategoryGroups() as Promise<Array<{ id?: string; name?: string }>>,
+    { retries: 2, backoffMs: 200 },
+  ));
+  const out = new Map<string, string>();
+  for (const g of Array.isArray(groups) ? groups : []) {
+    if (typeof g.id === 'string' && typeof g.name === 'string') out.set(g.id, g.name);
+  }
+  return out;
+}
+
+/**
+ * What tells two same-named rows apart, from the `select('*')` row (#801). A missing field
+ * degrades to an empty detail and never throws.
+ */
+function nameCandidateDetail(type: string, row: Record<string, unknown>, groupNames?: Map<string, string>): string {
+  const parts: string[] = [];
+  if (type === 'accounts') {
+    if (row.closed !== undefined) parts.push(row.closed ? 'closed' : 'open');
+    if (row.offbudget !== undefined) parts.push(row.offbudget ? 'off budget' : 'on budget');
+  } else if (type === 'categories') {
+    const gid = row.group ?? row.cat_group;
+    const gname = typeof gid === 'string' ? groupNames?.get(gid) : undefined;
+    if (gname) parts.push(`group "${gname}"`);
+    if (row.hidden) parts.push('hidden');
+  } else if (type === 'payees') {
+    if (row.transfer_acct) parts.push('transfer payee');
+  } else if (type === 'schedules') {
+    if (row.completed) parts.push('completed');
+    else if (typeof row.next_date === 'string') parts.push(`next ${row.next_date}`);
+  }
+  return parts.join(', ');
 }
 
 /**

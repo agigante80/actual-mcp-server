@@ -136,6 +136,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `actual_transactions_create`, `actual_transactions_import` and `manage_transactions` `create` and `import` used to attach the row to an arbitrary one of two payees that share the `payee_name` you sent, and report success. They now refuse it with `Payee name "<name>" matches <n> payees, so it does not identify one: <ids>` and write nothing (an import is refused as a whole, `create` answers `success: false`). Pass `payee` with the id you mean instead. A transfer payee never counts, and a name that matches one payee, or none, behaves as before. A saved prompt that sent a duplicated payee name now gets that refusal.
 
+## A name shared by several entities is refused by the name lookup (#801)
+
+`list_entities` with `name` and `actual_get_id_by_name` used to return one arbitrary id when two accounts, payees, categories or schedules share a name, and the filter tools that accept a name in place of an id named only the first duplicate. They now refuse it with `Name "<name>" matches <n> of them, so it does not identify one: <ids>` and change nothing; use the id of the one you mean. A name that matches one entity, or none, behaves as before.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.
