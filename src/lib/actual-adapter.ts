@@ -2581,7 +2581,7 @@ export async function createPayee(payee: components['schemas']['Payee'] | unknow
  */
 async function storePayeeNote(id: string, name: string, notes: string, opStartedAt: number): Promise<void> {
   const failed = (what: string, err?: unknown) =>
-    new Error(`Payee "${name}" was created (id ${id}) but its notes could not be stored (${what}), so it has no note. The payee exists: set the note with set_note, or delete the payee. Nothing else was changed.`, err === undefined ? undefined : { cause: err });
+    new Error(`Payee "${name}" was created (id ${id}) but its notes could not be stored (${what}), so it has no note. The payee exists: set the note with actual_notes_update, or delete the payee. Nothing else was changed.`, err === undefined ? undefined : { cause: err });
   const T = config.ACTUAL_OP_TIMEOUT_MS;
   const deadline = T > 0
     ? Math.min(Date.now() + SPLIT_VERIFY_TIMEOUT_MS, opStartedAt + Math.floor(T / 2))
