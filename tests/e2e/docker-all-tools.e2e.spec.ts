@@ -1615,15 +1615,17 @@ payee: payee.id,
 
       const payee = await makePayee();
       await mcp.call('manage_transactions', { action: 'create', account: accountA.id, date: '2018-05-21', amount: -4202, payee: payee.id, notes: okNotes });
-      expect(await idsWithNotes(mcp, okNotes)).toHaveLength(1);
+      const okIds = await idsWithNotes(mcp, okNotes);
+      expect(okIds).toHaveLength(1);
+      // Read BEFORE the cleanup: the only row in either account is the ordinary one in A.
+      const out = await mcp.call('run_query', { query: `SELECT id FROM transactions WHERE account IN ('${accountA.id}','${accountB.id}')` });
+      const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+      expect(rows.map((r: any) => r.id), 'a refused create must not write a row in either account').toEqual(okIds);
     } finally {
       for (const n of [notes, okNotes]) {
         for (const id of await idsWithNotes(mcp, n)) await mcp.call('manage_transactions', { action: 'delete', id });
       }
     }
-    const out = await mcp.call('run_query', { query: `SELECT id FROM transactions WHERE account IN ('${accountA.id}','${accountB.id}')` });
-    const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
-    expect(rows, 'a refused create must not write a row in either account').toEqual([]);
   });
 
   test('manage_transactions update and update_batch - ERROR: an unknown category id is refused and the stored category is unchanged (#747)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
@@ -5473,11 +5475,12 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       expect(created.success).toBe(false);
       expect(created.error).toMatch(/is the transfer payee of an account/);
       expect(created.error).toMatch(/use actual_transfers_/);
+      // Read BEFORE the cleanup, so a wrongly written row or mirror is seen.
+      const rows = await rowsOf(`SELECT id FROM transactions WHERE account IN ('${accountA.id}','${accountB.id}')`);
+      expect(rows, 'a refused create must not write a row in either account').toEqual([]);
     } finally {
       for (const r of await rowsOf(`SELECT id FROM transactions WHERE notes = '${notes}'`)) await mcp.call('manage_transactions', { action: 'delete', id: r.id });
     }
-    const rows = await rowsOf(`SELECT id FROM transactions WHERE account IN ('${accountA.id}','${accountB.id}')`);
-    expect(rows, 'a refused create must not write a row in either account').toEqual([]);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {
