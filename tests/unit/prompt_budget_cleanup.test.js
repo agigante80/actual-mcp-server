@@ -259,7 +259,7 @@ await check('the text names no write tool; the only manage_ is the no-write sent
 await check('step 6 names the four changes in words and step 7 is conditional (#805)', () => {
   const text = render({ date: '2026-11-13' });
   const step6 = text.slice(text.indexOf('\n6. '), text.indexOf('\n7. '));
-  for (const w of ['merge or delete a payee', 'update or delete a rule', 'delete a category', 'close an account']) {
+  for (const w of ['merge or delete a payee', 'update or delete a rule', 'delete a category or an empty category group', 'close an account']) {
     assert.ok(step6.includes(w), `step 6 must contain ${w}`);
   }
   const step7 = text.slice(text.indexOf('\n7. '));
