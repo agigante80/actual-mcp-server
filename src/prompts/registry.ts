@@ -34,9 +34,29 @@ export function resolveOfferedPrompts(
   return definitions.filter((d) => d.requiredTools.every((t) => offeredToolNames.has(t)));
 }
 
+/**
+ * An empty or blank string argument means "not provided" (#772): a form-based client sends `""`
+ * for an untouched optional field. For a plain object, a string that is blank after trim() is
+ * dropped and any other string is trimmed; every non-string value (null, a number) passes through
+ * so the strict schema still refuses it. Anything that is not a plain object is returned as it is.
+ * Built with Object.fromEntries so a `__proto__` key from JSON.parse stays an own key (and is
+ * refused by the strict schema); never assign with `out[k] = v`. Values are only removed or
+ * trimmed, never echoed.
+ */
+export function normalizePromptArgs(raw: unknown): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  return Object.fromEntries(
+    Object.entries(raw).flatMap(([k, v]): [string, unknown][] => {
+      if (typeof v !== 'string') return [[k, v]];
+      const t = v.trim();
+      return t === '' ? [] : [[k, t]];
+    }),
+  );
+}
+
 /** Validate the raw (string) arguments and render. Throws a ZodError on a bad or missing value. */
 export function renderPrompt(definition: PromptDefinition, rawArgs: unknown): string {
-  const parsed = definition.argsSchema.parse(rawArgs ?? {});
+  const parsed = definition.argsSchema.parse(normalizePromptArgs(rawArgs ?? {}));
   return definition.render(parsed);
 }
 

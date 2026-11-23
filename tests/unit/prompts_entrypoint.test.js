@@ -123,7 +123,7 @@ await check('prompts/get of an unknown name is -32602 "Unknown prompt: no_such_p
   const err = res.get(3).error;
   assert.ok(err, JSON.stringify(res.get(3)));
   assert.strictEqual(err.code, -32602);
-  assert.strictEqual(err.message, 'MCP error -32602: Unknown prompt: no_such_prompt');
+  assert.strictEqual(err.message, 'Unknown prompt: no_such_prompt', 'one prefix is added by the client, none on the wire (#772)');
 });
 
 console.log(`\n[prompts-entrypoint] Results: ${passed} passed, ${failed} failed`);

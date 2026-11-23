@@ -2,7 +2,7 @@
 
 The server advertises the MCP `prompts` capability (#660). A prompt is a ready-made instruction a client can offer the user as a command, for example a slash command in Claude Desktop. It carries no budget data: it is static text with the caller's arguments filled in, and it names tools the model should call. A prompt never grants access: every tool it names is still subject to authentication, the budget ACL, `MCP_READ_ONLY`, `MCP_TOOLSETS` and `MCP_TOOLS`.
 
-A prompt is offered only when every tool it names is published. Prompts name compact tools, so none is offered on the `legacy` surface (the default until the compact default ships, #680); set `MCP_TOOL_SURFACE=compact` or `all`. On `prompts/get` a hidden prompt is refused exactly like an unknown one (`-32602`, `Unknown prompt`). An invalid or unknown argument is `-32602` too, and the message never echoes the value.
+A prompt is offered only when every tool it names is published. Prompts name compact tools, so none is offered on the `legacy` surface (the default until the compact default ships, #680); set `MCP_TOOL_SURFACE=compact` or `all`. On `prompts/get` a hidden prompt is refused exactly like an unknown one (`-32602`, `Unknown prompt`). An invalid or unknown argument is `-32602` too, and the message never echoes the value and carries one readable text per argument (the client adds the single `MCP error -32602` prefix). An empty or blank optional argument (`""`, `"   "`) means "not provided" and the default applies; surrounding whitespace is trimmed (`" 3 "` is 3). A non-string value (`null`, a number) is still refused.
 
 Defaults that depend on the date (a month, a day) are resolved by the server's local clock, which is UTC in the Docker image, and the rendered text always carries the concrete value.
 
@@ -20,7 +20,7 @@ Budget versus actual for one month: the overspent and the unused categories, inc
 
 | Argument | Required | Validation |
 |----------|----------|------------|
-| `month` | No | `YYYY-MM`, month 01 to 12, at most 7 characters. An unknown key is refused. |
+| `month` | No | `YYYY-MM`, month 01 to 12, at most 7 characters. A bad value is refused with `month: must be YYYY-MM`. An unknown key is refused. |
 
 ## spending_check
 
@@ -28,7 +28,7 @@ A quick mid-month pace check as of one day: am I on track overall, which categor
 
 | Argument | Required | Validation |
 |----------|----------|------------|
-| `date` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-31` and `2026-02-29` are refused, `2024-02-29` is accepted), at most 10 characters. The default is the server's local today, which is UTC in the Docker image, so near local midnight it can be a day off your own date. An unknown key is refused. |
+| `date` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-31` and `2026-02-29` are refused, `2024-02-29` is accepted), at most 10 characters; a bad value is refused with `date: must be YYYY-MM-DD, a real calendar day`. The default is the server's local today, which is UTC in the Docker image, so near local midnight it can be a day off your own date. An unknown key is refused. |
 
 ## spending_patterns
 
@@ -36,8 +36,8 @@ Spending trends over the last N full months: overall direction, the categories t
 
 | Argument | Required | Validation |
 |----------|----------|------------|
-| `months` | No | A string of an integer from 1 to 24, no leading zero and no whitespace, default 6. |
-| `end_month` | No | `YYYY-MM`, month 01 to 12, at most 7 characters. The default is the month before the server's local current month (UTC in the Docker image). An unknown key is refused. |
+| `months` | No | A string of an integer from 1 to 24, no leading zero, default 6 (surrounding whitespace is trimmed first). A bad value is refused with `months: must be a whole number from 1 to 24`. 1 renders as `1 full month`. |
+| `end_month` | No | `YYYY-MM`, month 01 to 12, at most 7 characters; a bad value is refused with `end_month: must be YYYY-MM`. The default is the month before the server's local current month (UTC in the Docker image). An unknown key is refused. |
 
 ## budget_cleanup
 
@@ -45,7 +45,7 @@ A read-only structure review as of one day: duplicate and unused payees, rules t
 
 | Argument | Required | Validation |
 |----------|----------|------------|
-| `date` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-31` is refused), at most 10 characters. The default is the server's local today (UTC in the Docker image). An unknown key is refused. |
+| `date` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-31` is refused), at most 10 characters; a bad value is refused with `date: must be YYYY-MM-DD, a real calendar day`. The default is the server's local today (UTC in the Docker image). An unknown key is refused. |
 
 ## categorize_uncategorized
 
@@ -53,4 +53,4 @@ Categorise uncategorised transactions: find them (50 per round), propose a categ
 
 | Argument | Required | Validation |
 |----------|----------|------------|
-| `since` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-30` is refused), at most 10 characters. Omitted: all uncategorised transactions. There is no default, so the server clock is not read. An unknown key is refused. |
+| `since` | No | `YYYY-MM-DD`, a real calendar day (`2026-02-30` is refused), at most 10 characters; a bad value is refused with `since: must be YYYY-MM-DD, a real calendar day`. Omitted: all uncategorised transactions. There is no default, so the server clock is not read. An unknown key is refused. |

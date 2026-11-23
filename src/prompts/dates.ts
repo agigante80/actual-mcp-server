@@ -15,12 +15,25 @@ const pad2 = (n: number): string => String(n).padStart(2, '0');
  * CommonSchemas.date is not used here: the prompts keep their own stricter regex (month 01 to 12,
  * day 01 to 31) and the 10 character cap (#745).
  */
+const DAY_MESSAGE = 'must be YYYY-MM-DD, a real calendar day';
+const MONTH_MESSAGE = 'must be YYYY-MM';
+
+// Every check before the last carries `abort: true` (#772): Zod 4 otherwise runs the later checks
+// after a failed one and the caller reads two messages for one fault. The messages are static text,
+// never built from the input, so a refusal stays value-free.
 const dayString = () =>
   z
     .string()
-    .max(10)
-    .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/)
-    .refine(isCalendarDay, 'must be a real calendar date');
+    .max(10, { error: DAY_MESSAGE, abort: true })
+    .regex(/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/, { error: DAY_MESSAGE, abort: true })
+    .refine(isCalendarDay, DAY_MESSAGE);
+
+/** The shared `YYYY-MM` argument (month 01 to 12, at most 7 characters), one readable message (#772). */
+export const monthArgSchema = () =>
+  z
+    .string()
+    .max(7, { error: MONTH_MESSAGE, abort: true })
+    .regex(/^\d{4}-(0[1-9]|1[0-2])$/, MONTH_MESSAGE);
 
 export const dayArgSchema = () => dayString().default(() => today());
 

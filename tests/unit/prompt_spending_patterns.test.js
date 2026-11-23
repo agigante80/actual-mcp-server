@@ -111,7 +111,7 @@ await check('render fills the exact ranges', () => {
   ];
   for (const [end, months, start, last] of cases) {
     const text = render({ end_month: end, months });
-    assert.ok(text.includes(`last ${months} full months, from ${start} to ${last}.`), `${end}/${months}: ${text.split('\n')[0]}`);
+    assert.ok(text.includes(`last ${months} full ${Number(months) === 1 ? 'month' : 'months'}, from ${start} to ${last}.`), `${end}/${months}: ${text.split('\n')[0]}`);
     assert.ok(text.includes(`start_date ${start}, end_date ${last}, group_by month`));
     assert.ok(text.includes(`month ${end} to compare`));
   }
@@ -165,6 +165,44 @@ await check('offer matrix through the real policy: compact, all and compact read
   assert.ok((await offered({ surface: 'all' })).includes('spending_patterns'));
   assert.ok((await offered({ surface: 'compact', readOnly: true })).includes('spending_patterns'));
   assert.ok(!(await offered({ surface: 'legacy' })).includes('spending_patterns'));
+});
+
+// ---------------------------------------------------------------- #772
+const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
+const messageOf = (args) => {
+  try { render(args); } catch (err) { return formatZodError(err, def.argsSchema); }
+  throw new Error(`expected a refusal for ${JSON.stringify(args)}`);
+};
+const occurrences = (s, sub) => s.split(sub).length - 1;
+const NOISE = /pattern|at most|\^|\$/;
+await check('empty and blank months and end_month render as omitted; " 3 " renders as 3 (#772)', () => {
+  const base = render({});
+  assert.strictEqual(render({ months: '' }), base);
+  assert.strictEqual(render({ months: '   ', end_month: '' }), base);
+  assert.ok(render({ months: ' 3 ', end_month: '2026-10' }).includes('last 3 full months, from 2026-08-01 to 2026-10-31.'));
+});
+await check('one month reads "1 full month", two read "2 full months" (#772)', () => {
+  assert.ok(render({ months: '1', end_month: '2026-10' }).includes('last 1 full month, from 2026-10-01'));
+  assert.ok(render({ months: '2', end_month: '2026-10' }).includes('last 2 full months, from 2026-09-01'));
+  assert.ok(!/1 full months/.test(render({ months: '1' })));
+});
+await check('a bad months or end_month gives exactly one readable message with no regex and no value (#772)', () => {
+  for (const bad of ['six', '25', '0', '06', '123']) {
+    const m = messageOf({ months: bad });
+    assert.ok(m.includes('months: must be a whole number from 1 to 24'), m);
+    assert.strictEqual(occurrences(m, 'must'), 1, m);
+    assert.ok(!NOISE.test(m) && !m.includes(bad), m);
+  }
+  for (const bad of ['2026-13', 'October', '2026-1', '2026-10-01']) {
+    const m = messageOf({ end_month: bad });
+    assert.ok(m.includes('end_month: must be YYYY-MM'), m);
+    assert.strictEqual(occurrences(m, 'must'), 1, m);
+    assert.ok(!NOISE.test(m) && !m.includes(bad), m);
+  }
+});
+await check('argsSchema.parse itself stays strict about blanks and whitespace (#772)', () => {
+  for (const months of ['', ' 6', '6\n']) assert.throws(() => def.argsSchema.parse({ months }));
+  assert.throws(() => def.argsSchema.parse({ end_month: '' }));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
