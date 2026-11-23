@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 import { isPreflightRefusal } from '../lib/errors.js';
+import { expandSplitsForSearch } from '../lib/split-search.js';
 
 const InputSchema = z.object({
   minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
@@ -17,7 +18,7 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_amount',
-  description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses.',
+  description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses. A split is matched by its children; rows carry parent_id.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     try {
@@ -64,8 +65,34 @@ const tool: ToolDefinition = {
         };
       }
       
+      // #750: resolve the category BEFORE expanding, so an unknown name returns its existing error
+      // result and nothing is expanded. A split parent has a null category, so with a category
+      // filter the split is replaced by its children before the amount filters run (an amount
+      // filter then compares with the child amount).
+      let categoryId: string | undefined;
+      if (input.categoryName) {
+        const categories = await adapter.getCategories();
+        const category = categories.find((c: any) =>
+          c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
+        );
+        if (!category) {
+          // Category not found - return empty
+          return {
+            transactions: [],
+            count: 0,
+            totalAmount: 0,
+            amountRange: {
+              min: input.minAmount,
+              max: input.maxAmount,
+            },
+            error: `Category "${input.categoryName}" not found`,
+          };
+        }
+        categoryId = category.id;
+      }
+
       // Apply JavaScript filters
-      let filtered = allTransactions;
+      let filtered = categoryId ? expandSplitsForSearch(allTransactions).rows : allTransactions;
       
       // Filter by absolute amount (if specified, this takes precedence)
       if (input.absoluteAmount !== undefined) {
@@ -81,27 +108,9 @@ const tool: ToolDefinition = {
         }
       }
       
-      // Filter by category name (need to lookup category ID)
-      if (input.categoryName) {
-        const categories = await adapter.getCategories();
-        const category = categories.find((c: any) =>
-          c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
-        );
-        if (category) {
-          filtered = filtered.filter((t: any) => t.category === category.id);
-        } else {
-          // Category not found - return empty
-          return {
-            transactions: [],
-            count: 0,
-            totalAmount: 0,
-            amountRange: {
-              min: input.minAmount,
-              max: input.maxAmount,
-            },
-            error: `Category "${input.categoryName}" not found`,
-          };
-        }
+      // Filter by category (resolved above)
+      if (categoryId) {
+        filtered = filtered.filter((t: any) => t.category === categoryId);
       }
       
       // Sort by amount descending and apply limit

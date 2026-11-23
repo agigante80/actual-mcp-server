@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import { expandSplitsForSearch } from '../lib/split-search.js';
 
 const InputSchema = z.object({
   payeeName: z.string().optional().describe('Name of the payee/vendor to search for'),
@@ -18,7 +19,7 @@ const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_payee',
   description:
     'Search transactions by payee name (case-insensitive exact match, e.g. "Amazon"), optionally narrowed by a YYYY-MM-DD date range, accountId, categoryName and an amount range in integer cents. Read-only; off-budget accounts are included. ' +
-    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, payeeName }, each row with accountName; count and totalAmount cover only the returned rows. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, payeeName }, each row with accountName; count and totalAmount cover only the returned rows. A split is matched by its children; rows carry parent_id. ' +
     'An unknown payee or category name returns an empty list with an error field. With a payee id use actual_transactions_filter; for per-payee totals use actual_transactions_aggregate.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
@@ -85,20 +86,16 @@ const tool: ToolDefinition = {
     // Step 3: Apply JavaScript filters
     let filtered = allTransactions;
     
-    // Filter by payee ID
-    if (payeeId) {
-      filtered = filtered.filter((t: any) => t.payee === payeeId);
-    }
-    
-    // Filter by category name (need to lookup category ID)
+    // #750: resolve the category BEFORE expanding, so an unknown name returns its existing error
+    // result and nothing is expanded. A split parent has a null category, so with a category
+    // filter the split is replaced by its children before any other filter runs.
+    let categoryId: string | undefined;
     if (input.categoryName) {
       const categories = await adapter.getCategories();
       const category = categories.find((c: any) =>
         c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
       );
-      if (category) {
-        filtered = filtered.filter((t: any) => t.category === category.id);
-      } else {
+      if (!category) {
         // Category not found - return empty
         return {
           transactions: [],
@@ -108,6 +105,18 @@ const tool: ToolDefinition = {
           error: `Category "${input.categoryName}" not found`,
         };
       }
+      categoryId = category.id;
+      filtered = expandSplitsForSearch(filtered).rows;
+    }
+
+    // Filter by payee ID
+    if (payeeId) {
+      filtered = filtered.filter((t: any) => t.payee === payeeId);
+    }
+    
+    // Filter by category (resolved above)
+    if (categoryId) {
+      filtered = filtered.filter((t: any) => t.category === categoryId);
     }
     
     // Filter by amount range
