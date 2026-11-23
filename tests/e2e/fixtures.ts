@@ -160,7 +160,7 @@ export type Fixtures = {
      */
     seedTransaction?: boolean;
   }) => Promise<AccountRef>;
-  makeCategoryGroup: (opts?: { name?: string; isIncome?: boolean }) => Promise<CategoryGroupRef>;
+  makeCategoryGroup: (opts?: { name?: string }) => Promise<CategoryGroupRef>;
   makeCategory: (opts?: { name?: string; group?: CategoryGroupRef }) => Promise<CategoryRef>;
   makePayee: (opts?: { name?: string }) => Promise<PayeeRef>;
   makeTransaction: (opts: {
@@ -428,7 +428,7 @@ export const test = base.extend<Fixtures, WorkerFixtures>({
   makeCategoryGroup: async ({ mcp, cleanup }, use) => {
     await use(async (opts = {}) => {
       const name = opts.name ?? `E2E-Group-${uniqueSuffix()}`;
-      const raw = await mcp.call('actual_category_groups_create', opts.isIncome ? { name, is_income: true } : { name });
+      const raw = await mcp.call('actual_category_groups_create', { name });
       const id = (typeof raw === 'string' ? raw : raw?.id) as string;
       cleanup.add(CLEANUP_ORDER.categoryGroup, `category group ${name}`, async () => {
         await mcp.call('actual_category_groups_delete', { id });
