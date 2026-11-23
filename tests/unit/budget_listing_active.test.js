@@ -51,7 +51,7 @@ console.log('\n[#787] no flag');
 await run({ sessionId: 's6', principal: 'carol', allowedBudgets: ['second-sync'] }, async () => {
   const rows = adapter.getBudgetRegistry();
   check(rows.map((r) => r.name).join() === 'Second', 'a restricted caller lists only its budget');
-  check(activeNames(rows).length <= 1, 'at most one row is marked', JSON.stringify(rows));
+  check(activeNames(rows).join() === 'Second', 'the one permitted row is the marked one', JSON.stringify(rows));
 });
 check(adapter.getBudgetRegistry().every((r) => !('active' in r)), 'a call outside any context gets rows with no flag');
 await run({ allowedBudgets: ['*'] }, async () => {
