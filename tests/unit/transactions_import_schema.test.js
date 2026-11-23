@@ -28,14 +28,23 @@ const eq = (g, w, l) => ok(g === w, l, `got ${JSON.stringify(g)} want ${JSON.str
     'each txs item requires date and amount', JSON.stringify(txs.items?.required));
   ok((js.required || []).includes('accountId') && (js.required || []).includes('txs'),
     'accountId and txs are required at the top level', JSON.stringify(js.required));
-  ok(txs.items?.additionalProperties !== false, 'item schema is OPEN (extra Actual fields not rejected)');
+  eq(txs.items?.additionalProperties, false, 'item schema is CLOSED since #749 (an unknown key is refused)');
 
   console.log('\n[#217] InputSchema.parse: positive (incl. extra fields) and negatives');
   {
     const valid = { accountId: '00000000-0000-0000-0000-000000000001', txs: [{ date: '2024-01-15', amount: -1234, imported_id: 'x1', subtransactions: [{ amount: -1234 }], transfer_id: 't1' }] };
     const r = tool.inputSchema.safeParse(valid);
-    ok(r.success, 'a valid array with EXTRA item fields (subtransactions/transfer_id) is accepted');
-    ok(r.success && r.data.txs[0].subtransactions, 'the extra fields are passed through (loose object)');
+    ok(r.success, 'a valid array with the pass-through fields (subtransactions/transfer_id) is accepted');
+    ok(r.success && r.data.txs[0].subtransactions, 'the pass-through fields are kept');
+    const acct = '00000000-0000-0000-0000-000000000001';
+    const bad = (row) => tool.inputSchema.safeParse({ accountId: acct, txs: [row] });
+    ok(!bad({ date: '2024-01-15', amount: 1, bogus: 1 }).success, '#749: an unknown key is refused');
+    ok(!bad({ date: '2024-01-15', amount: 1, tombstone: 1 }).success, '#749: an internal column (tombstone) is refused');
+    const { TX_IMPORT_ROW_KEYS } = await import('../../dist/src/lib/schemas/common.js');
+    const allKeys = { date: '2024-01-15', amount: 1, payee: acct, payee_name: 'p', imported_payee: 'ip', category: acct, notes: 'n', cleared: true, imported_id: 'i', account: acct, subtransactions: [{ amount: 1 }], transfer_id: 't', reconciled: false };
+    ok(bad(allKeys).success, '#749: a row with all thirteen documented keys is accepted');
+    eq(JSON.stringify(Object.keys(allKeys).sort()), JSON.stringify([...TX_IMPORT_ROW_KEYS].sort()), '#749: the fixture covers exactly TX_IMPORT_ROW_KEYS');
+    eq(JSON.stringify(Object.keys(tool.inputSchema.shape.txs.element.shape).sort()), JSON.stringify([...TX_IMPORT_ROW_KEYS].sort()), '#749: the legacy row schema keys equal TX_IMPORT_ROW_KEYS (cannot drift)');
     ok(!tool.inputSchema.safeParse({ accountId: '00000000-0000-0000-0000-000000000001', txs: [{ amount: 100 }] }).success, 'item without date is rejected');
     ok(!tool.inputSchema.safeParse({ accountId: '00000000-0000-0000-0000-000000000001', txs: [] }).success, 'empty txs array is rejected');
     ok(!tool.inputSchema.safeParse({ txs: [{ date: '2024-01-15', amount: 1 }] }).success, 'missing accountId is rejected');
@@ -52,6 +61,8 @@ const eq = (g, w, l) => ok(g === w, l, `got ${JSON.stringify(g)} want ${JSON.str
     eq(await call({ accountId: acct, txs: [{ amount: 100 }] }),
       'Validation error: txs.0.date is required (Date in YYYY-MM-DD format)',
       'date-less item gives an actionable, path-qualified error (not the cryptic adapter throw)');
+    eq(await call({ accountId: acct, txs: [{ date: '2024-01-15', amount: 1, bogus: 1 }] }),
+      'Validation error: unexpected field(s): bogus', 'an unknown key is refused by name (#749)');
     eq(await call({ accountId: acct, txs: [] }),
       'Validation error: txs: must be at least 1 item', 'empty array gives an actionable error');
     eq(await call({ txs: [{ date: '2024-01-15', amount: 1 }] }),

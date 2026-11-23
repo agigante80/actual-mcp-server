@@ -1101,6 +1101,25 @@ payee: payee.id,
     await expectNoLeak(mcp, account.id, notes);
   });
 
+  // #749: an unknown key in an import row is refused by name before any write, with no upstream text.
+  test('manage_transactions import - ERROR: refuses an unknown row key by name and writes nothing (#749)', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const notes = `E2E-BogusKey-${uniqueSuffix()}`;
+    const message = await refusal(() =>
+      mcp.call('manage_transactions', {
+        action: 'import',
+        account_id: account.id,
+        txs: [
+          { date: '2018-05-01', amount: -100, notes, imported_id: `e2e-bogus-key-ok-${uniqueSuffix()}` },
+          { date: '2018-05-01', amount: -100, notes, bogus_e2e: 1 },
+        ],
+      }),
+    );
+    expect(message).toMatch(/Unrecognized key: "bogus_e2e"/);
+    expect(message).not.toContain('does not exist on table');
+    await expectNoLeak(mcp, account.id, notes);
+  });
+
   test('search_transactions account - should get transaction by ID', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     const txn = await makeTransaction({ account, amount: -5000 });
@@ -5512,6 +5531,21 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(viaTransfer).toMatch(/unexpected field\(s\): transfer_id/);
     const viaBogus = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { notes: 'x', bogus: 1 } }));
     expect(viaBogus).toMatch(/unexpected field\(s\): bogus/);
+  });
+
+  // #749: the legacy import row is closed; an unknown key is refused by name and nothing is written.
+  test('actual_transactions_import - ERROR: an unknown row key is refused and nothing is written (#749)', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const notes = `E2E-LegacyBogusKey-${uniqueSuffix()}`;
+    const message = await refusal(() =>
+      mcp.call('actual_transactions_import', { accountId: account.id, txs: [{ date: '2018-05-01', amount: -100, notes, bogus_e2e: 1 }] }),
+    );
+    expect(message).toMatch(/unexpected field\(s\): bogus_e2e/);
+    expect(message).not.toContain('does not exist on table');
+    const found = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+    const rows = ((Array.isArray(found) ? found : (found?.result ?? [])) as any[]).filter((t: any) => t?.notes === notes);
+    for (const t of rows) await mcp.call('manage_transactions', { action: 'delete', id: t.id });
+    expect(rows.map((t: any) => t.id), 'a refused import must not write a row').toEqual([]);
   });
 
   // #785: the legacy schedule writers refuse an unknown account or payee with the legacy list tool name.

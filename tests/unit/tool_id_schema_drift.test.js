@@ -44,6 +44,10 @@ const EXCEPTIONS = {
   'actual_notes_get:id': 'accepts the synthetic budget-YYYY-MM month id as well as an entity UUID',
   'actual_notes_update:id': 'accepts the synthetic budget-YYYY-MM month id as well as an entity UUID',
 
+  // #749: an import row passes transfer_id through to upstream untouched (open since #217, listed
+  // by name when the row closed). Tightening it to a UUID would change what an import accepts.
+  'actual_transactions_import:txs.[].transfer_id': 'pass-through key of an import row, forwarded to upstream unchecked (#217, #749)',
+
   // CATEGORY B, decided by #388 and now closed. These stay bare strings ON PURPOSE, and the
   // reason is no longer "pending a decision", which is the kind of entry that quietly becomes
   // permanent.

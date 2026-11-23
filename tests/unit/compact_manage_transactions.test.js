@@ -118,6 +118,23 @@ await check('delete forwards id', () => expectCall({ action: 'delete', id: T1 },
 await check('import renames account_id to accountId and keeps the loose rows', () =>
   expectCall({ action: 'import', account_id: A, txs: [{ date: '2026-11-13', amount: -500, imported_id: 'imp-1' }] },
     'actual_transactions_import', { accountId: A, txs: [{ date: '2026-11-13', amount: -500, imported_id: 'imp-1' }] }));
+const IMPORT_ROW_KEYS = ['date', 'amount', 'payee', 'payee_name', 'imported_payee', 'category', 'notes', 'cleared', 'imported_id', 'account', 'subtransactions', 'transfer_id', 'reconciled'];
+await check('import refuses an unknown row key by name and calls nothing (#749)', async () => {
+  const text = await clientText({ action: 'import', account_id: A, txs: [{ date: '2018-05-01', amount: -100, bogus: 1 }] });
+  assert.match(text, /txs\.0: Unrecognized key: "bogus"/);
+  assert.ok(!text.includes('does not exist on table'), text);
+});
+await check('import names every unknown key of a row in the plural wording (#749)', async () =>
+  assert.match(await clientText({ action: 'import', account_id: A, txs: [{ date: '2018-05-01', amount: -100 }, { date: '2018-05-01', amount: -100, a: 1, b: 2 }] }), /txs\.1: Unrecognized keys: "a", "b"/));
+await check('import refuses an internal column such as tombstone (#749)', async () =>
+  assert.match(await clientText({ action: 'import', account_id: A, txs: [{ date: '2018-05-01', amount: -100, tombstone: 1 }] }), /txs\.0: Unrecognized key: "tombstone"/));
+await check('import with a good row then a bad row calls nothing (#749)', () =>
+  refused({ action: 'import', account_id: A, txs: [{ date: '2018-05-01', amount: -100 }, { date: '2018-05-01', amount: -100, bogus: 1 }] }, /Unrecognized key: "bogus"/));
+await check('import forwards a row with all thirteen documented keys intact (#749)', async () => {
+  const row = { date: '2018-05-01', amount: -100, payee: A, payee_name: 'P', imported_payee: 'IP', category: B, notes: 'n', cleared: true, imported_id: 'i', account: A, subtransactions: [{ amount: -100 }], transfer_id: 't', reconciled: false };
+  assert.deepStrictEqual(Object.keys(row).sort(), [...IMPORT_ROW_KEYS].sort());
+  await expectCall({ action: 'import', account_id: A, txs: [row] }, 'actual_transactions_import', { accountId: A, txs: [row] });
+});
 await check('merge forwards ids and returns the legacy value unchanged', async () => {
   const merged = { result: { success: true, keptId: T1, deletedId: T2 } };
   reply = () => merged;
