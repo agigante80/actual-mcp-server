@@ -30,8 +30,9 @@ const spending_patterns: PromptDefinition = {
   title: 'Spending patterns',
   description:
     'Spending trends over the last N full months: direction, biggest category changes, savings rate trend, unusual items.',
-  // #773: positional clients (Claude Code) map tokens by this declared order, so it is a contract:
-  // `/actual:spending_patterns 2026-09` must land in end_month. Do not swap back without a reason.
+  // #773: Claude Code maps positional tokens to arguments by this declared order (measured on
+  // 2.1.330 with a stub server, recorded on the ticket), so the order is a contract: a lone
+  // `2026-09` must land in end_month. Other clients were not checked. Do not swap back without a reason.
   arguments: [
     {
       name: 'end_month',
