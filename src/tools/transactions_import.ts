@@ -4,10 +4,13 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 import adapter from '../lib/actual-adapter.js';
 
 // A single transaction to import. `date` and `amount` are required; the rest are optional.
-// `looseObject` keeps the schema OPEN (additionalProperties is not false) so legitimate
-// Actual `TransactionInput` fields that are not enumerated here (e.g. `subtransactions`,
-// `transfer_id`, `reconciled`) are passed through rather than rejected. (#217)
-const TxItemSchema = z.looseObject({
+// The row is CLOSED (#749): an unknown key is refused by name instead of travelling to
+// `@actual-app/api`, whose database layer throws `Field "x" does not exist on table
+// transactions: <row JSON>`. Besides the nine documented keys, `account` (upstream overwrites it
+// with accountId) and the three pass-through keys `subtransactions`, `transfer_id` and
+// `reconciled` (open since #217, for the Actual `TransactionInput` fields) are accepted. The key
+// list is TX_IMPORT_ROW_KEYS; a unit test pins that this shape equals it.
+const TxItemSchema = z.strictObject({
   date: CommonSchemas.date,
   amount: CommonSchemas.amountCents,
   payee: CommonSchemas.payeeId.optional(),
@@ -17,6 +20,10 @@ const TxItemSchema = z.looseObject({
   notes: CommonSchemas.notes,
   cleared: CommonSchemas.cleared,
   imported_id: z.string().optional().describe('Stable source ID; used to de-duplicate on re-import'),
+  account: CommonSchemas.accountId.optional(),
+  subtransactions: z.array(z.looseObject({ amount: z.number().describe('Child amount in cents') })).optional().describe('Split children'),
+  transfer_id: z.string().optional().describe('Transfer link id'),
+  reconciled: z.boolean().optional().describe('Reconciled flag'),
 });
 
 // #217: `txs` was previously `z.unknown()`, which serialised to an empty `{}` JSON Schema in

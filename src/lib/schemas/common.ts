@@ -360,3 +360,25 @@ export const CommonSchemas = {
  * });
  * ```
  */
+
+/**
+ * The keys an import row may carry (#749): the nine documented ones, `account` (upstream overwrites
+ * it with the target account id), and the three pass-through keys (#217). The legacy
+ * actual_transactions_import row schema and the compact manage_transactions import check both
+ * close on this one list, so a typo or an internal column is refused by name before any adapter call.
+ */
+export const TX_IMPORT_ROW_KEYS = [
+  'date',
+  'amount',
+  'payee',
+  'payee_name',
+  'imported_payee',
+  'category',
+  'notes',
+  'cleared',
+  'imported_id',
+  'account',
+  'subtransactions',
+  'transfer_id',
+  'reconciled',
+] as const;

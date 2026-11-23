@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommonSchemas } from '../../lib/schemas/common.js';
+import { CommonSchemas, TX_IMPORT_ROW_KEYS } from '../../lib/schemas/common.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
 /**
@@ -76,6 +76,7 @@ const BATCH_ITEM = z
   })
   .strict();
 const TX_ITEM = z.looseObject({ date: CommonSchemas.date, amount: CommonSchemas.amountCents });
+const TX_ROW_KEYS: ReadonlySet<string> = new Set(TX_IMPORT_ROW_KEYS);
 
 const updates = z
   .array(z.looseObject({ id: z.string(), fields: z.looseObject({}) }))
@@ -96,6 +97,12 @@ const txs = z
     items.forEach((item, i) => {
       const r = TX_ITEM.safeParse(item);
       if (!r.success) ctx.addIssue({ code: 'custom', path: [i], message: r.error.issues.map((x) => `${x.path.join('.')}: ${x.message}`).join('; ') });
+      // #749: an unknown key would reach the database layer, which throws "Field does not exist" with the row JSON.
+      const unknown = Object.keys(item).filter((key) => !TX_ROW_KEYS.has(key));
+      if (unknown.length > 0) {
+        const named = unknown.map((key) => `"${key}"`).join(', ');
+        ctx.addIssue({ code: 'custom', path: [i], message: `Unrecognized key${unknown.length > 1 ? 's' : ''}: ${named}` });
+      }
     });
   })
   .describe('Rows {date, amount, imported_id?, payee_name?, category?, notes?}.');
