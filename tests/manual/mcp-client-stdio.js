@@ -17,12 +17,12 @@
  * 1. `callMCP('tools/call', ...)` returns the RAW MCP envelope `{ content: [...] }`.
  *    tests/manual/tests/advanced.js:267,296 calls it directly and reads the envelope.
  *
- * 2. `callTool()` MUST NOT branch on `isError`. The HTTP client never inspects it: it
- *    takes `content[0].text`, JSON.parses it, and returns `unwrapToolResult(parsed)`, so a
- *    tool failure arrives as `{ error: "..." }`. Module assertions read that shape
- *    directly (tests/manual/tests/account.js:74 reads `badBalance.error`). If this client
- *    branched on `isError` it would return a different shape, and every nil-UUID negative
- *    assertion would silently stop testing anything while still printing a pass.
+ * 2. `callTool()` throws on an `isError` result (#769), with the tool's own text as the message,
+ *    exactly like the HTTP client. A VALID result that carries `{ error: "..." }` (a missing
+ *    account balance, tests/manual/tests/account.js:74 reads `badBalance.error`) is not
+ *    `isError` and is still returned as `unwrapToolResult(parsed)`. Do not widen the throw to
+ *    any result that merely contains an `error` key, or those nil-UUID negatives stop testing
+ *    anything while still printing a pass.
  *
  * 3. The kill-switches (#133) are per-client CLOSURE state in mcp-client.js, not runner
  *    state, so they are re-implemented here. `MCP_TEST_MAX_SESSION_RETRIES` is HTTP-only:
@@ -147,6 +147,12 @@ export function createClient({ container, rl: _rl, retryPauseMs } = {}) {
   /** Byte-for-byte the HTTP client's unwrapping. See contract note 2 above. */
   async function callTool(toolName, args = {}) {
     const response = await callMCP('tools/call', { name: toolName, arguments: args });
+
+    // #769: a tool failure is an isError result. Throw it with the tool's own text, like the HTTP client.
+    if (response && response.isError === true) {
+      const block = Array.isArray(response.content) ? response.content.find((c) => c && c.type === 'text') : undefined;
+      throw new Error(block && typeof block.text === 'string' ? block.text : `tool ${toolName} failed`);
+    }
 
     if (response && response.content && response.content[0]) {
       const textContent = response.content[0].text;

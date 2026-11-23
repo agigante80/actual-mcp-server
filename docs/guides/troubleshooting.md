@@ -43,9 +43,9 @@ Nothing is listening where the client points. Check that the server is running (
 
 The client must use the Streamable HTTP transport (`streamable-http` in [LibreChat](clients/librechat.md), not `sse`). After editing a client's config file, fully restart the client. See the troubleshooting table on the [client's page](clients/README.md).
 
-## `Tool not found: actual_...` (or a refusal naming `MCP_TOOL_SURFACE`)
+## `Unknown tool` or `Tool not found: actual_...` (or a refusal naming `MCP_TOOL_SURFACE`)
 
-The client is calling an `actual_*` tool, but since #680 the server publishes the 15 compact tools by default and no longer lists the 85 `actual_*` names. The call comes from a saved tool selection, a prompt or skill, or an agent that still holds the old names. Either change the call to its compact equivalent (the [migration guide](migrating-to-compact-tools.md) has one row per old name) and re-select the tools in the client, or start the server with `MCP_TOOL_SURFACE=legacy` to get the old names back (a temporary escape hatch: #682 removes it). The reverse also happens: `MCP_TOOLS` holding an `actual_*` name stops the server at startup under the default surface, and the error names `MCP_TOOL_SURFACE=legacy`.
+Since #769 a name the server has never registered answers `-32602` `Unknown tool: <name>`, and a registered tool the current settings hide is an `isError` result naming the setting (older servers said `Tool not found: <name>` for both). The usual cause is that the client is calling an `actual_*` tool, but since #680 the server publishes the 15 compact tools by default and no longer lists the 85 `actual_*` names. The call comes from a saved tool selection, a prompt or skill, or an agent that still holds the old names. Either change the call to its compact equivalent (the [migration guide](migrating-to-compact-tools.md) has one row per old name) and re-select the tools in the client, or start the server with `MCP_TOOL_SURFACE=legacy` to get the old names back (a temporary escape hatch: #682 removes it). The reverse also happens: `MCP_TOOLS` holding an `actual_*` name stops the server at startup under the default surface, and the error names `MCP_TOOL_SURFACE=legacy`.
 
 ## Session not found after a restart
 

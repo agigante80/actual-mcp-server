@@ -6,7 +6,6 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import {
   ListToolsRequestSchema,
-  CallToolRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import logger, { resolveRequestId } from '../logger.js';
 import { registerPromptHandlers } from '../lib/promptHandlers.js';
@@ -50,7 +49,8 @@ import { requestContext, type RequestStore } from '../lib/requestContext.js';
 import { createShutdownGate, createShutdownHandler } from './shutdown.js';
 import { recordSessionOwner, forgetSessionOwner, sessionOwnerMatches } from '../lib/session-owners.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
-import { executeAndFrame } from '../lib/tool-output.js';
+import { executeToolCall, parseToolCallEnvelope } from '../lib/tool-output.js';
+import { registerToolCallHandler } from '../lib/register-tool-call.js';
 
 // #438 / #452: the init-failure classifier now lives in src/lib/init-failure.ts so BOTH
 // transports can reach it (stdio could not, which was the whole of #452). Re-exported here
@@ -576,25 +576,17 @@ export async function startHttpServer(
 
     // Call tool handler -> proxy to mcp.executeTool or to actualToolsManager
     // Note: sessionId is available via requestContext.getStore() for tools that need it
-    server.setRequestHandler(CallToolRequestSchema, async (request: unknown) => {
-      const req = request as { params?: Record<string, unknown> } | undefined;
-      const params = req?.params ?? {};
-      const rawName = params.name;
-      const args = params.arguments;
-      if (typeof rawName !== 'string') {
-        throw new Error('Tool name must be a string');
-      }
-      const name = rawName;
+    registerToolCallHandler(server, async (request) => {
+      // #769: the envelope check and the error model (isError result vs -32602) are shared with
+      // stdio in tool-output.ts, so the two transports cannot drift.
+      const { name, args } = parseToolCallEnvelope(request?.params);
       // Tool name only: arguments are budget data and never reach the logs (#556).
       logger.debug(`[TOOL CALL] ${name}`);
-      // Prefer ActualMCPConnection executor if provided
-      if (typeof (mcp as unknown as { executeTool?: Function }).executeTool === 'function') {
-        // #642: shared framing; the verdict reaches here so structuredContent is not dropped.
-        return await executeAndFrame(mcp, name, args ?? {});
-      }
       // There is deliberately no second dispatch path here (#483): actualToolsManager has
       // no `invoke`, and every call must go through callTool, which refuses unpublished tools.
-      throw new Error(`Tool executor not available for ${name}`);
+      // #642: shared framing; the verdict reaches here so structuredContent is not dropped. A
+      // connection without an executor is a wiring fault and stays a protocol error (-32603).
+      return executeToolCall(mcp, name, args);
     });
 
     return { server };

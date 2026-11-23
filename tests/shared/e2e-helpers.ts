@@ -90,6 +90,36 @@ export async function callTool(
   args: Record<string, unknown> = {},
   mcpUrl = DEFAULT_MCP_SERVER_URL,
 ): Promise<any> {
+  const result = await callToolEnvelope(request, sessionId, toolName, args, mcpUrl);
+  throwIfToolError(toolName, result);
+  return result;
+}
+
+/**
+ * #769: a tool failure is an `isError` RESULT, not a JSON-RPC error. `call` and `callTool` keep
+ * their historic contract (a failed tool throws, with the tool's own text as the message) by
+ * converting it here; `raw` and `callToolEnvelope` return the result untouched so a test can
+ * assert on the isError shape itself.
+ */
+export function throwIfToolError(toolName: string, result: any, onlyRateLimit = false): void {
+  if (result?.isError === true) {
+    const text = result.content?.find?.((c: any) => c?.type === 'text')?.text;
+    if (onlyRateLimit && !/too many requests|rate ?limit/i.test(String(text))) return;
+    throw new Error(`Tool ${toolName} failed: ${typeof text === 'string' ? text : JSON.stringify(result.content)}`);
+  }
+}
+
+/**
+ * `callTool` without the isError conversion: a JSON-RPC protocol error (-32602 unknown tool,
+ * malformed params) still throws, a tool failure comes back as the `{ isError: true }` result.
+ */
+export async function callToolEnvelope(
+  request: any,
+  sessionId: string,
+  toolName: string,
+  args: Record<string, unknown> = {},
+  mcpUrl = DEFAULT_MCP_SERVER_URL,
+): Promise<any> {
   const rpcUrl = `${mcpUrl}${HTTP_PATH}`;
   const payload = {
     jsonrpc: '2.0',
@@ -251,9 +281,27 @@ export async function callToolPaced(
   toolName: string,
   args: Record<string, unknown> = {},
 ): Promise<any> {
+  return paced(toolName, () => callTool(request, sessionId, toolName, args));
+}
+
+/** `callToolEnvelope`, paced the same way: the result is returned untouched, isError included. */
+export async function callToolPacedEnvelope(
+  request: any,
+  sessionId: string,
+  toolName: string,
+  args: Record<string, unknown> = {},
+): Promise<any> {
+  return paced(toolName, () => callToolEnvelope(request, sessionId, toolName, args));
+}
+
+async function paced(_toolName: string, run: () => Promise<any>): Promise<any> {
   await pace();
   try {
-    return await callTool(request, sessionId, toolName, args);
+    const out = await run();
+    // The envelope variant returns an isError result instead of throwing, so look for the
+    // limiter in its text too (#769): a rate limit is never an outcome a test asserts on.
+    if (out?.isError === true) throwIfToolError(_toolName, out, true);
+    return out;
   } catch (error) {
     if (isRateLimitError(error)) {
       throw new Error(

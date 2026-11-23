@@ -1,7 +1,7 @@
 // src/server/stdioServer.ts
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { randomUUID } from 'node:crypto';
 import logger from '../logger.js';
 import { attachTransportErrorLogger } from '../lib/transportErrorLogger.js';
@@ -12,8 +12,8 @@ import type { ActualMCPConnection } from '../lib/ActualMCPConnection.js';
 import { buildToolListEntries } from '../lib/tool-list-entry.js';
 import { registerPromptHandlers } from '../lib/promptHandlers.js';
 import type { PromptDefinition } from '../prompts/registry.js';
-import { executeAndFrame } from '../lib/tool-output.js';
-import { classifyInitFailure, isInitFailure } from '../lib/init-failure.js';
+import { executeToolCall, parseToolCallEnvelope } from '../lib/tool-output.js';
+import { registerToolCallHandler } from '../lib/register-tool-call.js';
 
 /**
  * The stdio `tools/call` handler, built as a named factory so #452's error mapping can be driven
@@ -23,12 +23,9 @@ import { classifyInitFailure, isInitFailure } from '../lib/init-failure.js';
 export function createStdioCallToolHandler(mcp: ActualMCPConnection, stdioSessionId: string) {
   return async (request: unknown) => {
     const req = request as { params?: Record<string, unknown> } | undefined;
-    const params = req?.params ?? {};
-    const rawName = params.name;
-    const args = params.arguments;
-    if (typeof rawName !== 'string') {
-      throw new Error('Tool name must be a string');
-    }
+    // #769: the envelope check and the error model (isError result vs -32602) are shared with
+    // HTTP in tool-output.ts, so the two transports cannot drift.
+    const { name: rawName, args } = parseToolCallEnvelope(req?.params);
     logger.debug(`[STDIO] tools/call ${rawName}`);
     // Wrap the DISPATCH, not server.connect(). The transport invokes this handler
     // from an I/O event, which is outside any scope established around connect(),
@@ -55,39 +52,27 @@ export function createStdioCallToolHandler(mcp: ActualMCPConnection, stdioSessio
     //   - `allowedBudgets` is absent, so under AUTH_PROVIDER=oidc switchBudget
     //     still denies. Fail closed: a local pipe must not gain budget access an
     //     HTTP caller would need an ACL for.
-    try {
-      // #642: one shared framing (text block, plus structuredContent for a covered tool).
-      return await requestContext.run({ sessionId: stdioSessionId, transport: 'stdio' }, () =>
-        executeAndFrame(mcp, rawName, args ?? {}),
-      );
-    } catch (err) {
-      // #452: give a FAILED CONNECTION the same named causes an HTTP client gets. Until this,
-      // stdio let the raw upstream sentence through, and for the #427 case that sentence
-      // ("Make sure you are using the latest version") names the wrong component: the user has
-      // already upgraded Actual, and the thing to upgrade is actual-mcp-server.
-      //
-      // GATED ON THE BRAND, never on the message. This catch sees EVERY tool error, and the
-      // classifier's last-resort branches match prose: a #270 op timeout would read as `timeout`
-      // and a #422 rate-limit as `auth_failed`, replacing a true message with a false one. Only an
-      // error marked by initActualApiForOperation is classified here. See src/lib/init-failure.ts.
-      if (isInitFailure(err)) {
-        const { cause, sentence } = classifyInitFailure(err);
-        if (cause !== 'unknown') {
-          // stderr only: stdout is JSON-RPC framing (scripts/stdio-framing-check.mjs).
+    //
+    // #642 framing and the #769 error model both live in executeToolCall. #452: a FAILED
+    // CONNECTION gets the same named causes an HTTP client gets, through `onInitFailure`, which
+    // is GATED ON THE BRAND (initActualApiForOperation marks the error), never on the message:
+    // the classifier's last-resort branches match prose, so a #270 op timeout would read as
+    // `timeout` and a #422 rate-limit as `auth_failed`, replacing a true message with a false
+    // one. The sentence is fixed and the upstream string deliberately dropped (#438): a stdio
+    // tool error is handed to a cloud model, so no stack, SQL, path or server URL has to be
+    // scrubbed correctly. See src/lib/init-failure.ts.
+    return requestContext.run({ sessionId: stdioSessionId, transport: 'stdio' }, () =>
+      executeToolCall(mcp, rawName, args, {
+        onInitFailure: (cause) => {
+          // stderr only: stdout is JSON-RPC framing (scripts/stdio-framing-check.mjs). The raw
+          // error stays in the operator's own terminal logs; only the cause is added here.
           logger.warn('[STDIO] tool call failed while establishing the Actual connection', {
             tool: rawName,
             cause,
           });
-          // An MCP tool error, not a thrown exception, so the client renders the sentence as the
-          // tool's result. The upstream string is deliberately dropped rather than appended: a
-          // stdio tool error is handed to a cloud model, and #438's fixed-sentence contract exists
-          // so no upstream stack, SQL, filesystem path or server URL has to be scrubbed correctly.
-          // The raw error is still in the stderr log above the operator's own terminal.
-          return { isError: true, content: [{ type: 'text', text: sentence }] };
-        }
-      }
-      throw err;
-    }
+        },
+      }),
+    );
   };
 }
 
@@ -153,7 +138,7 @@ export async function startStdioServer(
   registerPromptHandlers(server, offeredPrompts);
 
   // Call tool handler — delegates to ActualMCPConnection.executeTool()
-  server.setRequestHandler(CallToolRequestSchema, createStdioCallToolHandler(mcp, stdioSessionId));
+  registerToolCallHandler(server, createStdioCallToolHandler(mcp, stdioSessionId));
 
   const transport = new StdioServerTransport();
   // server.connect() calls transport.start() internally — do NOT call transport.start() manually

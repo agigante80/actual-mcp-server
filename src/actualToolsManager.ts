@@ -4,7 +4,7 @@ import { z } from 'zod';
 
 import { checkToolOutput, type CheckedToolResult, type ToolDefinitionWithOutput } from './lib/tool-output.js';
 import { formatZodError } from './lib/zod-error-format.js';
-import { errorLogFields } from './lib/errors.js';
+import { errorLogFields, UnknownToolError } from './lib/errors.js';
 import config from './config.js';
 import { createModuleLogger } from './lib/loggerFactory.js';
 import { operationUnavailableError, readOnlyError, resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
@@ -302,7 +302,7 @@ class ActualToolsManager implements CompactOperations {
     const policy = this.requirePolicy();
     // Registration is checked BEFORE publication: an unregistered name stays "not found".
     const tool = this.getTool(name);
-    if (!tool) throw new Error(`Tool not found: ${name}`);
+    if (!tool) throw new UnknownToolError(name);
     // Hide AND refuse (#483): omitting a tool from tools/list is not access control.
     // Read-only first (#671): the same check callOperation makes, so the two ways into a
     // writer cannot disagree. For a published tool it never fires (the resolver hid it).
@@ -325,7 +325,7 @@ class ActualToolsManager implements CompactOperations {
   async callOperation(legacyName: string, args: unknown, via?: { tool: string; action: string }): Promise<unknown> {
     const policy = this.requirePolicy();
     const tool = this.tools.get(legacyName);
-    if (!tool || this.compactNames.has(legacyName)) throw new Error(`Tool not found: ${legacyName}`);
+    if (!tool || this.compactNames.has(legacyName)) throw new UnknownToolError(legacyName);
     const unavailable = readOnlyError(policy, legacyName) ?? operationUnavailableError(policy, legacyName);
     if (unavailable) {
       toolsetLog.warn('Refused a compact operation on an unavailable tool', { tool: legacyName, setting: unavailable.setting, via: via?.tool, action: via?.action });

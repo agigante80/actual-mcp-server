@@ -147,8 +147,10 @@ await check('stdio: legacy surface, a hidden tool is refused over the wire, nami
     { id: 3, method: 'tools/call', params: { name: 'actual_bank_sync', arguments: {} } },
   ]);
   const r = res.get(3);
-  const text = r.error ? r.error.message : r.result?.content?.map((c) => c.text).join(' ');
-  assert.ok(r.error || r.result?.isError, `the call must fail, got ${JSON.stringify(r).slice(0, 200)}`);
+  // #769: a hidden tool is a KNOWN tool refused by policy, so exactly one shape: an isError result.
+  assert.strictEqual(r.error, undefined, `a hidden tool must not be a protocol error, got ${JSON.stringify(r).slice(0, 200)}`);
+  assert.strictEqual(r.result?.isError, true, `the call must fail as an isError result, got ${JSON.stringify(r).slice(0, 200)}`);
+  const text = r.result.content.map((c) => c.text).join(' ');
   assert.ok(/MCP_TOOLSETS/.test(text), `the refusal must name MCP_TOOLSETS, got: ${text}`);
 });
 
@@ -161,7 +163,8 @@ await check('stdio: legacy surface, MCP_READ_ONLY=true lists no write-capable to
   assert.ok(names.length > 0);
   assert.deepStrictEqual(names.filter((n) => WRITE_CAPABLE.has(n)), []);
   const r = res.get(3);
-  const text = r.error ? r.error.message : r.result?.content?.map((c) => c.text).join(' ');
+  assert.strictEqual(r.result?.isError, true, `the refusal must be an isError result, got ${JSON.stringify(r).slice(0, 200)}`);
+  const text = r.result.content.map((c) => c.text).join(' ');
   assert.ok(/MCP_READ_ONLY/.test(text), `the refusal must name MCP_READ_ONLY, got: ${text}`);
 });
 

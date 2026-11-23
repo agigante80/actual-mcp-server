@@ -301,7 +301,9 @@ export async function advancedTests(client, context, opts = {}) {
     console.log("\nBank sync: negative-path tests...");
     try {
       const [syncName, syncArgs] = bankSyncCall("00000000-0000-0000-0000-000000000000");
-      await client.callMCP("tools/call", { name: syncName, arguments: syncArgs }, 0, 0, 10000);
+      const env = await client.callMCP("tools/call", { name: syncName, arguments: syncArgs }, 0, 0, 10000);
+      // #769: callMCP hands back the envelope untouched, and a tool failure is an isError result.
+      if (env?.isError === true) throw new Error(env.content?.[0]?.text ?? "tool error");
       fail("non-existent accountId: expected error but got success");
     } catch (err) {
       const msg = err.message || String(err);
@@ -328,6 +330,7 @@ export async function advancedTests(client, context, opts = {}) {
         try {
           const [syncName, syncArgs] = bankSyncCall(acct.id);
           const raw = await client.callMCP("tools/call", { name: syncName, arguments: syncArgs }, 0 /* maxRetries: never retry bank sync */, 0, 90000 /* 90s per account */);
+          if (raw?.isError === true) throw new Error(raw.content?.[0]?.text ?? "tool error"); // #769
           const syncText = raw?.content?.[0]?.text;
           const syncResult = syncText
             ? (() => { try { return JSON.parse(syncText); } catch { return syncText; } })()

@@ -665,10 +665,13 @@ const DISPATCHER = 'src/actualToolsManager.ts';
 const GETTOOL_READERS = new Set([
   DISPATCHER, 'src/index.ts', 'src/lib/ActualMCPConnection.ts', 'src/server/httpServer.ts', 'src/server/stdioServer.ts',
 ]);
+// #769: the one reviewed `.call(` outside the dispatcher. It registers the tools/call HANDLER on
+// the SDK server with an explicit receiver and never looks up or invokes a tool.
+const CALL_EXEMPT = new Set(['src/lib/register-tool-call.ts']);
 function dispatchProblems(files) {
   const problems = [];
   for (const [path, text] of Object.entries(files)) {
-    if (path !== DISPATCHER && (
+    if (path !== DISPATCHER && !CALL_EXEMPT.has(path) && (
       /(?:\?\.|\.)\s*(?:call|apply|bind)\s*\(/.test(text)
       || /\[\s*['"`](?:call|apply|bind)['"`]\s*\]\s*\(/.test(text)
       || /\bReflect\s*\.\s*apply\s*\(/.test(text))) {

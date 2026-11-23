@@ -85,6 +85,8 @@ await check('an ECONNREFUSED init failure yields the network sentence', async ()
 });
 
 section('NEGATIVES: an error that is not an init failure is never relabeled');
+// #769: "propagates" now means the tool's OWN message reaches the client, as an isError result.
+// The sentence replacement is the only rewrite; the original text is never swapped for a cause.
 
 const MUST_PROPAGATE = [
   ['#270 op timeout raised by a TOOL', new Error('Actual API operation timed out after 30000ms (ACTUAL_OP_TIMEOUT_MS)')],
@@ -94,13 +96,9 @@ const MUST_PROPAGATE = [
 ];
 for (const [label, err] of MUST_PROPAGATE) {
   await check(`propagates verbatim: ${label}`, async () => {
-    await assert.rejects(
-      () => handlerThatThrows(err)(REQUEST),
-      (thrown) => {
-        assert.strictEqual(thrown, err, 'the ORIGINAL error object must propagate');
-        return true;
-      },
-    );
+    const res = await handlerThatThrows(err)(REQUEST);
+    assert.strictEqual(res.isError, true, 'a tool failure is an isError result (#769)');
+    assert.strictEqual(res.content[0].text, err.message, 'the ORIGINAL message must reach the client unreplaced');
   });
 }
 
@@ -109,7 +107,9 @@ await check('a BRANDED but unclassifiable error still propagates verbatim', asyn
   // real message in exchange for "see the server log", which is strictly less useful.
   const err = markInitFailure(new Error('something nobody has a name for yet'));
   assert.strictEqual(classifyInitFailure(err).cause, 'unknown');
-  await assert.rejects(() => handlerThatThrows(err)(REQUEST), (thrown) => thrown === err);
+  const res = await handlerThatThrows(err)(REQUEST);
+  assert.strictEqual(res.isError, true);
+  assert.strictEqual(res.content[0].text, err.message);
 });
 
 section('the success path is unchanged');
@@ -138,7 +138,11 @@ await check('#510: a tools/call that OMITS arguments dispatches exactly {}', asy
 
 await check('a non-string tool name still throws', async () => {
   const handler = createStdioCallToolHandler({ executeTool: async () => ({}) }, SESSION);
-  await assert.rejects(() => handler({ params: { name: 42 } }), /Tool name must be a string/);
+  // #769: a malformed envelope is a -32602 with a fixed text and no echo of the value.
+  await assert.rejects(
+    () => handler({ params: { name: 42 } }),
+    (e) => e.code === -32602 && e.message === 'Invalid tools/call params: "name" must be a string' && !e.message.includes('42'),
+  );
 });
 
 section('the classifier is shared, not duplicated');
@@ -317,9 +321,11 @@ for (const key of ['constructor', 'toString', 'valueOf', 'hasOwnProperty', '__pr
 
 await check('and the stdio handler never answers with an undefined text', async () => {
   // The end-to-end consequence, through the real handler: branded (so it reaches the
-  // classifier) with a prototype key. It must PROPAGATE, not return a malformed result.
+  // classifier) with a prototype key. It must keep its own text, not return a malformed result.
   const err = markInitFailure(Object.assign(new Error('upstream text'), { code: 'constructor' }));
-  await assert.rejects(() => handlerThatThrows(err)(REQUEST), (thrown) => thrown === err);
+  const res = await handlerThatThrows(err)(REQUEST);
+  assert.strictEqual(res.isError, true);
+  assert.strictEqual(res.content[0].text, 'upstream text');
 });
 
 log(`\n[#452] Results: ${passed} passed, ${failed} failed`);

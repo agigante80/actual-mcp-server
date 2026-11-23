@@ -81,16 +81,11 @@ test.describe('compact surface (MCP_TOOL_SURFACE=compact)', () => {
   });
 
   test('a direct legacy call is refused with the compact-surface message', async ({ mcp }) => {
-    // The refusal reaches the client as a thrown protocol error or as an isError result,
-    // depending on the SDK path; both carry the same message, so accept either.
-    let message = '';
-    try {
-      const res = await mcp.raw('actual_accounts_list', {});
-      expect(res.isError, 'the refusal must be an error').toBe(true);
-      message = res.content?.[0]?.text ?? '';
-    } catch (error) {
-      message = (error as Error).message;
-    }
+    // #769: a hidden legacy tool is a KNOWN tool refused by policy, so it is an isError result,
+    // on both transports. Exactly one shape: a thrown protocol error here would be a regression.
+    const res = await mcp.raw('actual_accounts_list', {});
+    expect(res.isError, 'the refusal must be an isError result').toBe(true);
+    const message = res.content?.[0]?.text ?? '';
     expect(message).toContain(REFUSAL);
   });
 });

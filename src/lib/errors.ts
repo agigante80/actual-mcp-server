@@ -164,6 +164,25 @@ export class ToolUnavailableError extends Error {
 }
 
 /**
+ * A tools/call named a tool this server has no registration for (#769). A PROTOCOL fault, not a
+ * tool outcome: the transports answer it as JSON-RPC -32602 "Unknown tool: <name>" (the example
+ * the MCP specification gives), where every other tool failure is an isError result. Carries the
+ * requested name and nothing else. The message keeps the historical "Tool not found: <name>" text
+ * so logs and the troubleshooting guide still match; decide on the class, never on that text.
+ * A registered tool that is merely not published is a ToolUnavailableError, not this.
+ */
+export class UnknownToolError extends Error {
+  readonly tool: string;
+
+  constructor(tool: string) {
+    super(`Tool not found: ${tool}`);
+    this.name = 'UnknownToolError';
+    this.tool = tool;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
  * Build a "not found" message with a next-step hint.
  *
  * Prefer THROWING a `NotFoundRefusal` (which builds this string itself) over throwing a

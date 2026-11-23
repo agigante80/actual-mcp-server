@@ -27,6 +27,9 @@
  */
 
 import { z, type ZodTypeAny } from 'zod';
+import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
+import { UnknownToolError } from './errors.js';
+import { sanitizeKey } from './zod-error-format.js';
 import type { ToolDefinition } from '../../types/tool.d.js';
 
 export type ToolDefinitionWithOutput = ToolDefinition & { outputSchema?: ZodTypeAny };
@@ -111,4 +114,122 @@ export async function executeAndFrame(mcp: unknown, name: string, args: unknown)
     throw new Error(`Tool executor not available for ${name}`);
   }
   return frameToolResult(await exec.executeTool(name, args));
+}
+
+// ---- tools/call error model (#769) ----------------------------------------------------------
+//
+// MCP 2025-11-25 (Tools, Error Handling): a tool EXECUTION error (invalid input data, a refusal,
+// an upstream API failure) is a result with `isError: true`, which a model can read and retry
+// from, while a PROTOCOL error (JSON-RPC) is for an unknown tool, a malformed request or a server
+// fault. Many clients hide a protocol error from the model entirely, so everything that is the
+// caller's or the budget's problem is a result, and only the three protocol faults below throw.
+
+/**
+ * A `-32602` protocol error for a tools/call. Deliberately NOT an McpError: the SDK builds the
+ * JSON-RPC error from `code` and `message` as they are, and McpError's own message already
+ * starts "MCP error -32602: " which the client's McpError then prefixes a second time. A plain
+ * Error with a numeric `code` reaches the wire as exactly `-32602` plus this text.
+ */
+export class InvalidToolCallError extends Error {
+  readonly code = ErrorCode.InvalidParams;
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidToolCallError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/** The two fixed `-32602` envelope texts. Never built from a received value. */
+const ENVELOPE_NAME_MESSAGE = 'Invalid tools/call params: "name" must be a string';
+const ENVELOPE_ARGUMENTS_MESSAGE = 'Invalid tools/call params: "arguments" must be an object';
+
+/**
+ * Validate the transport-level `tools/call` envelope and split it. `arguments` omitted is `{}`
+ * (#510). Whatever a model got wrong about a TOOL's arguments is the tool's own Zod validation,
+ * reported as an isError result; this only checks the JSON-RPC shape. The thrown InvalidToolCallError carries
+ * a fixed text: no received value and no Zod dump, so a hostile argument cannot be reflected
+ * into an error message.
+ */
+export function parseToolCallEnvelope(params: unknown): { name: string; args: unknown } {
+  if (!isPlainObject(params) || typeof params.name !== 'string') {
+    throw new InvalidToolCallError(ENVELOPE_NAME_MESSAGE);
+  }
+  const args = params.arguments;
+  if (args === undefined) return { name: params.name, args: {} };
+  if (!isPlainObject(args)) {
+    throw new InvalidToolCallError(ENVELOPE_ARGUMENTS_MESSAGE);
+  }
+  return { name: params.name, args };
+}
+
+/** The most characters of an unknown tool's name echoed back; a name is a lookup key, not content. */
+const MAX_UNKNOWN_TOOL_NAME = 64;
+
+function unknownToolError(name: string): InvalidToolCallError {
+  // sanitizeKey strips control characters; its own cap adds an ellipsis, so cut hard here.
+  const shown = sanitizeKey(name).slice(0, MAX_UNKNOWN_TOOL_NAME);
+  return new InvalidToolCallError(`Unknown tool: ${shown}`);
+}
+
+/** What `executeToolCall` needs to know about the transport it serves. */
+export interface ToolCallOptions {
+  /**
+   * stdio only (#452, #438). Present: a BRANDED init failure is answered with the fixed sentence
+   * instead of the upstream text, and this is called with the cause so the caller can log it.
+   * Absent (HTTP): such an error is forwarded like any other.
+   */
+  onInitFailure?: (cause: string) => void;
+}
+
+/**
+ * The one place a failed tool call becomes the right wire shape, for BOTH transports.
+ * `executeAndFrame` stays the success path.
+ *
+ *   - unknown tool                    -> InvalidToolCallError (-32602) "Unknown tool: <name>"
+ *   - executor missing (wiring fault) -> thrown as before, so -32603: not a tool outcome
+ *   - an McpError already             -> rethrown unchanged
+ *   - everything else                 -> `{ isError: true, content: [{ type: 'text', text }] }`
+ *
+ * The text is `error.message` and NOTHING else: never `stack`, `cause`, `data` or the error
+ * object, so no frame, path or env value can ride along. A thrown value without a string
+ * `message` becomes "Tool call failed". Decisions are by class or brand, never by message text.
+ * Deliberately no log call here: the content-free logging rule (#556, #559) already logs the
+ * failure upstream with the tool name and error class only.
+ */
+export async function executeToolCall(
+  mcp: unknown,
+  name: string,
+  args: unknown,
+  options: ToolCallOptions = {},
+): Promise<FramedToolResult> {
+  const exec = mcp as Executor;
+  if (typeof exec.executeToolChecked !== 'function' && typeof exec.executeTool !== 'function') {
+    // A server wiring fault, so a protocol error. Checked up front, not recognised afterwards
+    // by its message.
+    throw new Error(`Tool executor not available for ${name}`);
+  }
+  try {
+    return await executeAndFrame(mcp, name, args);
+  } catch (err) {
+    if (err instanceof McpError || err instanceof InvalidToolCallError) throw err;
+    if (err instanceof UnknownToolError) throw unknownToolError(err.tool);
+    if (options.onInitFailure) {
+      // Loaded lazily and only for stdio: init-failure.ts reaches the logger through retry.ts, and
+      // src/index.ts imports THIS module statically before the logger may load (a logger loaded
+      // that early patches console and breaks `--version` and the #502 stdout guard).
+      const { classifyInitFailure, isInitFailure } = await import('./init-failure.js');
+      if (isInitFailure(err)) {
+        const { cause, sentence } = classifyInitFailure(err);
+        if (cause !== 'unknown') {
+          options.onInitFailure(cause);
+          return { isError: true, content: [{ type: 'text', text: sentence }] };
+        }
+      }
+    }
+    const message = (err as { message?: unknown } | null | undefined)?.message;
+    return {
+      isError: true,
+      content: [{ type: 'text', text: typeof message === 'string' && message.length > 0 ? message : 'Tool call failed' }],
+    };
+  }
 }

@@ -373,8 +373,10 @@ test.describe('Docker E2E - Error Handling', () => {
     // Should return 200 with JSON-RPC error (not HTTP error)
     expect(callRes.ok()).toBeTruthy();
     const callJson = await callRes.json();
+    // #769: an unknown tool is an invalid-params protocol error, -32602.
     expect(callJson.error).toBeTruthy();
-    expect(callJson.error.message).toContain('Tool not found');
+    expect(callJson.error.code).toBe(-32602);
+    expect(callJson.error.message).toContain('Unknown tool: nonexistent_tool');
     console.log('✅ Invalid tool name handled correctly');
   });
 
@@ -410,11 +412,12 @@ test.describe('Docker E2E - Error Handling', () => {
       },
     }));
 
-    // Should return 200 with JSON-RPC error
+    // Should return 200 with an isError tool result (#769: a validation failure is not a JSON-RPC error)
     expect(callRes.ok()).toBeTruthy();
     const callJson = await callRes.json();
-    expect(callJson.error).toBeTruthy();
-    console.log('✅ Validation error:', callJson.error.message);
+    expect(callJson.error).toBeFalsy();
+    expect(callJson.result.isError).toBe(true);
+    console.log('✅ Validation error:', callJson.result.content[0].text);
   });
 });
 
