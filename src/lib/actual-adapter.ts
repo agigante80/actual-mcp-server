@@ -2924,6 +2924,53 @@ async function resolvePayeeNameInPayload<P>(payload: P, listing?: PayeeListingRo
   const { payee_name: _dropped, ...rest } = f as Record<string, unknown>;
   return { ...rest, payee: id } as P;
 }
+/**
+ * #748: upstream recomputes a split instead of refusing, so a write that leaves the children
+ * not summing to the parent lands and marks the parent with a SplitTransactionError. These
+ * helpers decide, from one family read (the parent plus its children), whether a write keeps
+ * the total valid. Sums are compared, not "any amount change refused", so a parent already in
+ * error can be repaired. Shared by updateTransaction, updateTransactionBatch and deleteTransaction
+ * so the paths cannot drift. Always called inside the caller's queueWriteOperation (no nesting).
+ */
+type SplitFamily = { parentAmount: number | undefined; children: Array<{ id: string; amount: number }> };
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function readSplitFamily(q: any, parentId: string): Promise<SplitFamily> {
+  const data = await withConcurrency(() =>
+    retry(async () => {
+      const res = (await rawRunQuery(
+        q('transactions').options({ splits: 'all' })
+          .filter({ $or: [{ id: parentId }, { parent_id: parentId }] })
+          .select(['id', 'amount', 'parent_id'])
+      )) as { data?: Array<{ id: string; amount?: number; parent_id?: string | null }> };
+      return Array.isArray(res?.data) ? res.data : [];
+    }, { retries: 2, backoffMs: 200 })
+  );
+  return {
+    parentAmount: data.find((r) => r.id === parentId)?.amount,
+    children: data.filter((r) => r.id !== parentId && r.parent_id === parentId).map((r) => ({ id: r.id, amount: r.amount ?? 0 })),
+  };
+}
+type SplitMemberRow = { is_parent?: boolean; is_child?: boolean; amount?: number; parent_id?: string | null };
+/** Refusal message when setting `fields.amount` on this row would unbalance its split, else null. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function splitAmountRefusal(q: any, id: string, row: SplitMemberRow, fields: unknown): Promise<string | null> {
+  const newAmount = (fields as { amount?: unknown } | null)?.amount;
+  if (typeof newAmount !== 'number' || newAmount === row.amount) return null;
+  if (row.is_parent === true) {
+    const { children } = await readSplitFamily(q, id);
+    const childSum = children.reduce((a, c) => a + c.amount, 0);
+    if (childSum === newAmount) return null;
+    return `Transaction "${id}" is a split parent: its children sum to ${childSum}, so its amount cannot become ${newAmount} on its own. Send subtransactions that sum to ${newAmount} in the same update.`;
+  }
+  if (row.is_child === true && typeof row.parent_id === 'string') {
+    const { parentAmount, children } = await readSplitFamily(q, row.parent_id);
+    if (parentAmount === undefined) return null;
+    const newSum = children.filter((c) => c.id !== id).reduce((a, c) => a + c.amount, 0) + newAmount;
+    if (newSum === parentAmount) return null;
+    return `Transaction "${id}" is a split child of "${row.parent_id}": changing its amount to ${newAmount} would make the children sum to ${newSum}, not the parent's ${parentAmount}. Edit the parent with subtransactions that sum to its amount.`;
+  }
+  return null;
+}
 export async function updateTransaction(
   id: string,
   fields: Partial<components['schemas']['Transaction']> | unknown
@@ -2950,8 +2997,8 @@ export async function updateTransaction(
         // regular transactions, split parents, and split children as flat rows, so
         // the existence + is_parent + amount read is correct for every kind.
         const res = (await rawRunQuery(
-          q('transactions').options({ splits: 'all' }).filter({ id }).select(['id', 'is_parent', 'is_child', 'amount', 'category'])
-        )) as { data?: Array<{ id: string; is_parent?: boolean; is_child?: boolean; amount?: number; category?: string | null }> };
+          q('transactions').options({ splits: 'all' }).filter({ id }).select(['id', 'is_parent', 'is_child', 'amount', 'category', 'parent_id'])
+        )) as { data?: Array<{ id: string; is_parent?: boolean; is_child?: boolean; amount?: number; category?: string | null; parent_id?: string | null }> };
         return Array.isArray(res?.data) ? res.data : [];
       }, { retries: 2, backoffMs: 200 })
     );
@@ -3001,6 +3048,14 @@ export async function updateTransaction(
           String(sum)
         );
       }
+    }
+
+    // #748: an amount change on a split member that leaves the children not summing to the parent is
+    // refused (upstream would record a SplitTransactionError). After the account, payee and category
+    // checks, BEFORE resolvePayeeNameInPayload can create a payee. With `subs` the sum check above rules.
+    if (!subs) {
+      const splitRefusal = await splitAmountRefusal(q, id, row, fields);
+      if (splitRefusal) throw new OutOfRangeRefusal(splitRefusal, id);
     }
 
     // #489: a converted parent keeps its old category upstream (the update path nulls a parent's
@@ -3097,8 +3152,8 @@ export async function updateTransactionBatch(
         // as "not found". Splits themselves stay unsupported in batch (FieldsSchema
         // strips `subtransactions`); this only ensures a split parent's OTHER fields
         // are updatable here.
-        const res = (await rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: ids } }).select(['id']))) as { data?: Array<{ id: string }> };
-        return new Set(Array.isArray(res?.data) ? res.data.map((r) => r.id) : []);
+        const res = (await rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: ids } }).select(['id', 'is_parent', 'is_child', 'amount', 'parent_id']))) as { data?: Array<{ id: string } & SplitMemberRow> };
+        return new Map((Array.isArray(res?.data) ? res.data : []).map((r) => [r.id, r] as const));
       }, { retries: 2, backoffMs: 200 })
     );
 
@@ -3124,6 +3179,9 @@ export async function updateTransactionBatch(
         if (typeof targetAccount === 'string') await assertAccountExists(targetAccount, UPDATE_UNKNOWN_ACCOUNT_DETAIL);
         // #747: same for an unknown payee or category id, one listing per kind for the batch.
         await assertTransactionReferencesExist(fields as any, UPDATE_UNKNOWN_REFERENCE_DETAIL);
+        // #748: same split-total rule as updateTransaction, per item (a batch cannot carry subtransactions).
+        const splitRefusal = await splitAmountRefusal(q, id, existing.get(id)!, fields);
+        if (splitRefusal) throw new OutOfRangeRefusal(splitRefusal, id);
         let payload = fields;
         if ((fields as { payee_name?: unknown } | null)?.payee_name !== undefined) {
           payeeListing ??= [...await withConcurrency(() =>
@@ -3170,12 +3228,26 @@ export async function deleteTransaction(id: string): Promise<void> {
         // so without it a split parent reads as non-existent and this check throws
         // "not found" before the raw delete is ever reached. The effect was that a
         // split could be created through the tools but never deleted through them.
-        const res = (await rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ id }).select(['id']))) as { data?: unknown[] };
-        return Array.isArray(res?.data) && res.data.length > 0;
+        // #748: is_child + parent_id ride the same read for the split-total guard below.
+        const res = (await rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ id }).select(['id', 'is_child', 'parent_id']))) as { data?: Array<{ is_child?: boolean; parent_id?: string | null }> };
+        return Array.isArray(res?.data) && res.data.length > 0 ? res.data[0] : null;
       }, { retries: 2, backoffMs: 200 })
     );
     if (!found) {
       throw new Error(`Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
+    }
+    // #748: deleting a split child must leave the children summing to the parent. A sole child is
+    // fine (upstream turns the parent back into a plain transaction); deleting a parent is unchanged.
+    if (found.is_child === true && typeof found.parent_id === 'string') {
+      const { parentAmount, children } = await readSplitFamily(q, found.parent_id);
+      const remaining = children.filter((c) => c.id !== id);
+      const remainingSum = remaining.reduce((a, c) => a + c.amount, 0);
+      if (remaining.length > 0 && parentAmount !== undefined && remainingSum !== parentAmount) {
+        throw new OutOfRangeRefusal(
+          `Transaction "${id}" is a split child of "${found.parent_id}": deleting it would leave the children summing to ${remainingSum}, not the parent's ${parentAmount}. Update the parent with the remaining subtransactions, or delete the parent.`,
+          id
+        );
+      }
     }
     // Non-idempotent: do not retry (#165). A retry after a lost-response would
     // re-issue the delete against an already-removed record and surface a

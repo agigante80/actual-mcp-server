@@ -52,7 +52,8 @@ const tool: ToolDefinition = {
     'To split an existing transaction across categories in one call, pass fields.subtransactions (amounts summing to the transaction amount): ' +
     'it is split in place, keeping its id and import fields, and the result lists the new child ids. ' +
     'The parent\'s own category is cleared; a child that names no category inherits it. ' +
-    'An unknown payee or category id is refused and nothing is changed.',
+    'An unknown payee or category id is refused and nothing is changed. ' +
+    'On a split, changing the parent amount or a child amount alone is refused unless the children still sum to the parent; send subtransactions instead.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

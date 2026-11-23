@@ -164,6 +164,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `list_entities` with `type: "budget_file"` (`actual_budgets_list_available`) now adds `active: true` to the row of the budget the calling session is on, and to no other row; a caller with no session, or whose active budget is not in its permitted list, sees no marked row. The switch behaviour did not change, only its description: a switch takes effect at once in the session, other open sessions keep their budget, and the choice is remembered per caller, so a new session of the same caller starts on it. All holders of the one legacy `MCP_SSE_AUTHORIZATION` token are one caller; use `MCP_STATIC_TOKENS` for separate callers. The listing hint no longer says a partial name works: the switch has always required the exact name (case-insensitive). A client that read "this session only" as private to the session should expect the shared preference described here.
 
+## A split's total is kept on update and delete (#748)
+
+Upstream accepts a write that leaves a split's children not summing to the parent and marks the parent with a `SplitTransactionError`. Four writes did that and reported success: changing only the parent amount, changing a child amount, deleting a child, and the same amount edits through `update_batch`. They are now refused with a message naming the split. A caller that edited one side alone must send the parent with `subtransactions` that sum to its amount instead. Still allowed: an amount that keeps the sum equal (this also repairs a split already in error), deleting the only child of a split, deleting the parent, and any edit that does not change an amount. In a batch the refused item lands in `failed` and the others are written.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.
