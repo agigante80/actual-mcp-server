@@ -160,5 +160,43 @@ await check('an empty or blank date is omitted; a bad date is one readable messa
   assert.throws(() => def.argsSchema.parse({ date: '' }));
 });
 
+// ---------------------------------------------------------------- #780
+const { aggregateTransactions } = await import('../../dist/src/lib/financial-analysis.js');
+const S1 = 'A payee or category counts as unused when it has no transaction from 2026-05-01 to 2026-11-13. An account counts as unused only when it has no transaction and no transfer in that window.';
+const S5 = 'Find open accounts (closed false) with balance_current 0 that are unused: no group for the account in the step 1 account result, or both transactionCount and transferCount 0. An account with a transferCount above 0 is in use, so do not propose closing it. A null balance_current is unknown, so skip that account.';
+await check('a transfer counts as use for an account; payees and categories keep "no transaction" (#780)', () => {
+  const text = render({ date: '2026-11-13' });
+  assert.ok(text.includes(S1), text.split('\n')[0]);
+  assert.ok(text.includes(S5));
+  assert.ok(text.includes('Account groups also have a transferCount, the number of transfers in or out of the account; transactionCount does not include transfers. Anything missing from a result had no transaction and no transfer in the window.'));
+  // mutation: without the account sentence the pinned rule no longer matches
+  assert.ok(!text.replace('An account counts as unused only when it has no transaction and no transfer in that window.', '').includes('no transfer in that window'));
+});
+await check('step 1 names the real group fields, not a generic id and name (#780)', () => {
+  const text = render({ date: '2026-11-13' });
+  for (const f of ['payeeId', 'payeeName', 'categoryId', 'categoryName', 'accountId', 'accountName']) assert.ok(text.includes(f), f);
+  assert.ok(!text.includes('Each group has an id, a name'));
+});
+await check('the field names the text claims are keys of the real aggregate groups (#780)', () => {
+  const snapshot = {
+    transactions: [
+      { id: 'a', date: '2026-06-01', amount: -500, account: 'acc-1', category: 'cat-1', payee: 'pay-1' },
+      { id: 'x', date: '2026-06-02', amount: -900, account: 'acc-1', transfer_id: 'x2' },
+    ],
+    accounts: [{ id: 'acc-1', name: 'Checking' }],
+    categories: [{ id: 'cat-1', name: 'Food', group: 'grp-1' }],
+    categoryGroups: [{ id: 'grp-1', name: 'Expenses' }],
+    payees: [{ id: 'pay-1', name: 'Shop' }],
+  };
+  const keys = (dim) => {
+    const r = aggregateTransactions(snapshot, { startDate: '2026-05-01', endDate: '2026-11-13', groupBy: [dim], includeIncome: true, excludeTransfers: false });
+    return new Set(r.groups.flatMap((g) => Object.keys(g)));
+  };
+  for (const [dim, names] of [['payee', ['payeeId', 'payeeName']], ['category', ['categoryId', 'categoryName']], ['account', ['accountId', 'accountName', 'transactionCount', 'transferCount']]]) {
+    const k = keys(dim);
+    for (const n of names) assert.ok(k.has(n), `${dim} group lacks ${n}`);
+  }
+});
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

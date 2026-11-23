@@ -4961,6 +4961,7 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     const text: string = out.result.messages[0].content.text;
     expect(text).toContain('list_entities');
     expect(text).toContain('from 2025-07-01 to 2026-01-15');
+    expect(text).toContain('transferCount');
     expect(text).toContain('Do not call any manage_ tool in this turn.');
     expect(text).not.toContain('{');
   });
