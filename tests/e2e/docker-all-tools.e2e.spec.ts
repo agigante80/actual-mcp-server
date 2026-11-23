@@ -1437,6 +1437,40 @@ payee: payee.id,
     expect(rows.find((t: any) => t?.id === txn.id)?.is_parent).toBeFalsy();
   });
 
+  // #748: a split's total is kept. Seed a split of -1000 (children -600 and -400), then try the four
+  // writes that would unbalance it; each is refused and the read-back is unchanged. Cleanup is the
+  // account fixture.
+  test('manage_transactions - ERROR: a split parent amount, child amount and child delete that unbalance the split are refused (#748)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const parent = await makeTransaction({ account, amount: -1000 });
+    const res = await mcp.call('manage_transactions', { action: 'update', id: parent.id, subtransactions: [{ amount: -600 }, { amount: -400 }] });
+    const children = res.split.children as string[];
+    const amountsOf = async () => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+      const rows = (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+      const p = rows.find((t: any) => t?.id === parent.id);
+      return { parent: p?.amount, error: p?.error ?? null, children: ((p?.subtransactions ?? []) as any[]).map((c: any) => c.amount).sort((a: number, b: number) => a - b) };
+    };
+    const unchanged = { parent: -1000, error: null, children: [-600, -400] };
+    expect(await amountsOf()).toEqual(unchanged);
+
+    await expect(mcp.call('manage_transactions', { action: 'update', id: parent.id, amount: -2000 }))
+      .rejects.toThrow(`is a split parent: its children sum to -1000, so its amount cannot become -2000 on its own. Send subtransactions that sum to -2000 in the same update.`);
+    await expect(mcp.call('manage_transactions', { action: 'update', id: children[0], amount: -100 }))
+      .rejects.toThrow(`is a split child of "${parent.id}": changing its amount to -100 would make the children sum to`);
+    await expect(mcp.call('manage_transactions', { action: 'delete', id: children[0] }))
+      .rejects.toThrow(`is a split child of "${parent.id}": deleting it would leave the children summing to`);
+    const batch = await mcp.call('manage_transactions', { action: 'update_batch', updates: [{ id: parent.id, fields: { amount: -2000 } }] });
+    expect(batch.succeeded).toEqual([]);
+    expect(batch.failed[0].id).toBe(parent.id);
+    expect(batch.failed[0].error).toContain('is a split parent: its children sum to -1000');
+    expect(await amountsOf()).toEqual(unchanged);
+
+    // The way out works: the parent edited with subtransactions that sum.
+    await mcp.call('manage_transactions', { action: 'update', id: parent.id, amount: -2000, subtransactions: [{ amount: -1200 }, { amount: -800 }] });
+    expect(await amountsOf()).toEqual({ parent: -2000, error: null, children: [-1200, -800] });
+  });
+
   test('search_transactions filter - should filter transactions', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     const txn = await makeTransaction({ account });
@@ -5802,6 +5836,23 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const none = await mcp.call('actual_transactions_search_by_payee', { payeeName: `${name}-nope`, startDate: '2026-10-01', endDate: '2026-10-31', accountId: account.id });
     expect(none.count).toBe(0);
     expect(none.error).toBe(`Payee "${name}-nope" not found`);
+  });
+
+  // #748: the legacy update and delete refuse the same unbalancing writes as the compact tool.
+  test('actual_transactions_update and actual_transactions_delete - ERROR: a split parent amount alone and a child delete are refused (#748)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const parent = await makeTransaction({ account, amount: -1000 });
+    const res = await mcp.call('manage_transactions', { action: 'update', id: parent.id, subtransactions: [{ amount: -600 }, { amount: -400 }] });
+    const children = res.split.children as string[];
+    await expect(mcp.call('actual_transactions_update', { id: parent.id, fields: { amount: -2000 } }))
+      .rejects.toThrow('is a split parent: its children sum to -1000');
+    await expect(mcp.call('actual_transactions_delete', { id: children[0] }))
+      .rejects.toThrow(`is a split child of "${parent.id}": deleting it would leave the children summing to`);
+    const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+    const rows = (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+    const p = rows.find((t: any) => t?.id === parent.id);
+    expect(p?.amount).toBe(-1000);
+    expect((p?.subtransactions ?? []).map((c: any) => c.amount).sort((a: number, b: number) => a - b)).toEqual([-600, -400]);
   });
 
   test('actual_categories_get - lists the categories', async ({ mcp }) => {
