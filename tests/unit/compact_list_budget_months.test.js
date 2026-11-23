@@ -116,5 +116,12 @@ await check('4b: legacy names in an error are rewritten to this tool', async () 
   assert.ok(/list_budget_months with month/.test(e.message) && /try list_budget_months(?! with)/.test(e.message), e.message);
 });
 
+await check('#758: the field meanings and the totalBudgeted sign are stated, Returns stays last', () => {
+  const lines = spec.description.split('\n');
+  assert.ok(lines.some((l) => l.startsWith('Fields: totalBudgeted') && l.includes('sign reversed') && l.includes('totalSpent') && l.includes('forNextMonth')), 'a Fields line');
+  assert.ok(lines[lines.length - 1].startsWith('Returns'), 'Returns is still the last line');
+  assert.ok(lines.every((l) => l.length <= 400), 'every line is at most 400 characters');
+});
+
 console.log(`\n[compact-list-budget-months] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

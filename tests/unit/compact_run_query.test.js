@@ -183,5 +183,13 @@ await check('real path: an upstream failure naming the legacy tool is rewritten 
   assert.ok(r.error && r.error.message.includes('boom from run_query') && !r.error.message.includes('actual_query_run'), r.error && r.error.message);
 });
 
+await check('#758: the Returns shape and the table list match the observed behaviour', () => {
+  const d = spec.description;
+  assert.ok(d.includes('Returns { result: { data: rows, dependencies } }'), 'the real payload');
+  assert.ok(!d.includes('Returns { result: rows }'), 'the stale payload is gone');
+  for (const w of ['schedules', 'rules', 'notes', 'preferences', 'account_groups', 'transfer_acct', 'a bare table name returns only { id }']) assert.ok(d.includes(w), w);
+  assert.ok(!d.includes('accounts (id, name, type,'), 'accounts has no type column');
+});
+
 console.log(`\n[compact-run-query] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

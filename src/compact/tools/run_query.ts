@@ -30,9 +30,10 @@ export const runQuery: CompactToolSpec = {
     'Writes, stacked statements and comments are refused. ' +
     'Transactions come back in split-inline mode: "is_parent = true" returns nothing, use "is_parent = false" to exclude split children. ' +
     'Joins use dot notation: payee.name, category.name, account.name (NOT payee_name). Amounts are in cents: $100.00 = 10000. Dates are quoted YYYY-MM-DD strings: date >= \'2025-01-01\'. ' +
-    'Returns { result: rows }; an empty result may carry a "hint" naming a category.name, payee.name or account.name value that matches no entity, with the query that lists the exact names. ' +
-    'Tables: transactions (id, date, amount, notes, cleared, account, payee, category); accounts (id, name, type, closed, offbudget); ' +
-    'categories (id, name, group, is_income); payees (id, name); category_groups (id, name, is_income).',
+    'Returns { result: { data: rows, dependencies } }; an empty result may carry a "hint" naming a category.name, payee.name or account.name value that matches no entity, with the query that lists the exact names. ' +
+    'Tables: transactions (id, date, amount, notes, cleared, account, payee, category); accounts (id, name, closed, offbudget, sort_order, account_group_id); ' +
+    'categories (id, name, group, is_income, hidden); payees (id, name, transfer_acct); category_groups (id, name, is_income, hidden; rows carry nested categories); also schedules, rules, notes, preferences, account_groups. ' +
+    'Select the fields you need: a bare table name returns only { id }. AS aliases are ignored.',
   selector: null,
   defaultAction: 'run',
   actions: new Map([['run', { legacy: 'actual_query_run', fields: z.object({ query }) }]]),
