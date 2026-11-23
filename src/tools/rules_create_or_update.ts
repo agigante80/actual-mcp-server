@@ -16,7 +16,7 @@
  * Adapted for this project's conventions:
  * - No wrapToolCall: uses the direct call() pattern
  * - Shares ConditionSchema and (#711) the operator check assertConditionOperator with
- *   rules_create.ts (src/lib/schemas/rules.ts); ActionSchema is a private copy of the same shape
+ *   rules_create.ts (src/lib/schemas/rules.ts); ActionSchema is the shared strict one (#761)
  *
  * #376: the read-match-write cycle lives in `adapter.upsertRule` (identity rules in
  * `src/lib/rule-matching.ts`). This tool owns the schema, the operator/UUID validation and
@@ -26,17 +26,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionValue, assertTagOperatorValue, isTextOnIdField } from '../lib/schemas/rules.js';
-
-// #486: the condition schema is the shared one; the action schema stays private (same shape as
-// the shared one) and only borrows the describe text.
-const ActionSchema = z.object({
-  op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default set`),
-  field: z.string().optional().describe(ACTION_DESCRIBE.field),
-  value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
-  type: z.string().optional().describe(ACTION_DESCRIBE.type),
-  options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
-});
+import { ActionSchema, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionOptions, assertConditionValue, assertTagOperatorValue, isTextOnIdField } from '../lib/schemas/rules.js';
 
 const InputSchema = z.object({
   // #342: see the long note in rules_create.ts. null is Actual's DEFAULT stage;
@@ -73,6 +63,7 @@ Returns: { id, created }, created true for a new rule, false for an updated one.
       assertConditionOperator(condition);
       assertTagOperatorValue(condition);
       assertConditionValue(condition);
+      assertConditionOptions(condition);
       if (!isTextOnIdField(condition)) continue;
       if (condition.field === 'payee') {
         throw new Error(

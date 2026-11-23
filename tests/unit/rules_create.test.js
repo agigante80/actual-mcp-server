@@ -288,6 +288,38 @@ console.log('\n[#711] one operator map, equal to what Actual accepts');
     'NEGATIVE: isbetween with a fractional bound is refused with the exact message, before the adapter', z.message);
 }
 
+console.log('\n[#761] rules_create: condition options and unknown keys');
+{
+  const { RuleItemSchema } = await import('../../dist/src/lib/schemas/rules.js');
+  const OUT = { field: 'amount', op: 'is', value: 5002, options: { outflow: true } };
+  const parsed = RuleItemSchema.parse(rule([okCond, OUT], [okAct]));
+  check(parsed.conditions[1].options?.outflow === true, 'RuleItemSchema keeps options.outflow on an amount condition');
+  let r = await attempt(rule([OUT], [okAct]));
+  check(!r.threw && calls[0]?.conditions?.[0]?.options?.outflow === true, 'the outflow condition reaches createRule with its options', r.message);
+
+  const refuse = async (label, conditions, actions, expected) => {
+    const x = await attempt(rule(conditions, actions));
+    const ok = x.threw && (expected instanceof RegExp ? expected.test(x.message) : x.message === expected) && calls.length === 0;
+    check(ok, `NEGATIVE: ${label}`, x.message);
+  };
+  await refuse('an unknown condition key is refused naming it', [{ ...okCond, zzz: 1 }], [okAct], /zzz/);
+  await refuse('an unknown action key is refused naming it', [okCond], [{ ...okAct, bogus: true }], /bogus/);
+  await refuse('options on a payee condition', [{ field: 'payee', op: 'is', value: CAT, options: { outflow: true } }], [okAct], 'options is only valid on an amount condition');
+  await refuse('both flags', [{ ...OUT, options: { outflow: true, inflow: true } }], [okAct], 'options cannot set both outflow and inflow');
+  const NEG = 'an amount condition with outflow or inflow takes a positive value; the direction comes from the option';
+  await refuse('a negative value with outflow', [{ ...OUT, value: -5002 }], [okAct], NEG);
+  await refuse('a negative isbetween bound with inflow', [{ field: 'amount', op: 'isbetween', value: { num1: -6000, num2: -4000 }, options: { inflow: true } }], [okAct], NEG);
+  await refuse('an unknown key inside options', [{ ...OUT, options: { outflow: true, sideways: 1 } }], [okAct], /sideways/);
+  await refuse('a non-boolean outflow', [{ ...OUT, options: { outflow: 'yes' } }], [okAct], /outflow.*boolean/is);
+  r = await attempt(rule([{ ...OUT, value: -5002, options: { outflow: false } }], [okAct]));
+  check(!r.threw, 'a false flag does not trigger the positive-value check', r.message);
+
+  const batch = (await import('../../dist/src/tools/rules_create_batch.js')).default;
+  let be;
+  try { await batch.call({ rules: [rule([okCond], [okAct]), rule([{ ...okCond, zzz: 1 }], [okAct])] }); } catch (e) { be = e; }
+  check(be && /zzz/.test(String(be.message)) && /rules/.test(String(be.message)) && /1/.test(String(be.message)), 'NEGATIVE: create_batch refuses an unknown key in rules[1] with its path', String(be && be.message));
+}
+
 if (failures > 0) { console.error(`\n${failures} check(s) failed`); process.exit(1); }
 console.log('\nAll rules_create characterisation checks passed');
 process.exit(0);

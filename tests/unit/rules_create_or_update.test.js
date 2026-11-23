@@ -286,6 +286,45 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(other?.created === true && createCalls === 1 && updateCalls === 0, 'NEGATIVE: a different range creates a new rule');
   }
 
+  console.log('\n[#761] rules_create_or_update: options are part of the identity');
+  {
+    const PLAIN = { field: 'amount', op: 'is', value: 5002 };
+    const stored = (cond) => [{ id: 'existing-rule-id', stage: 'pre', conditionsOp: 'and', conditions: [cond], actions: [{ op: 'set', field: 'notes', value: 'old' }] }];
+    const call = (cond) => tool.call({ ...validInput, conditions: [cond] });
+    reset(); rulesResponse = stored(PLAIN);
+    let out = await call({ ...PLAIN, options: { outflow: true } });
+    check(out.created === true && createCalls === 1 && updateCalls === 0, 'outflow true against no options creates a second rule', JSON.stringify(out));
+    reset(); rulesResponse = stored(PLAIN);
+    out = await call({ ...PLAIN, options: { outflow: false } });
+    check(out.created === false && out.id === 'existing-rule-id', 'outflow false against no options matches the same rule', JSON.stringify(out));
+    reset(); rulesResponse = stored({ ...PLAIN, options: {} });
+    out = await call(PLAIN);
+    check(out.created === false, 'an empty stored options equals an absent one', JSON.stringify(out));
+    reset(); rulesResponse = stored({ ...PLAIN, options: { outflow: true, inflow: false } });
+    out = await call({ ...PLAIN, options: { outflow: true } });
+    check(out.created === false, 'a false flag and key order do not matter', JSON.stringify(out));
+    reset(); rulesResponse = stored({ field: 'payee', op: 'is', value: PAYEES[0], options: { outflow: true } });
+    let threw = null;
+    try { out = await call({ field: 'payee', op: 'is', value: PAYEES[1] }); } catch (e) { threw = e; }
+    check(!threw && out.created === true, 'a stored payee condition carrying options does not throw in the match', String(threw && threw.message));
+
+    for (const [label, conditions, expected] of [
+      ['options on payee', [{ field: 'payee', op: 'is', value: PAYEES[0], options: { outflow: true } }], 'options is only valid on an amount condition'],
+      ['both flags', [{ ...PLAIN, options: { outflow: true, inflow: true } }], 'options cannot set both outflow and inflow'],
+      ['negative value with a flag', [{ ...PLAIN, value: -5002, options: { outflow: true } }], 'an amount condition with outflow or inflow takes a positive value; the direction comes from the option'],
+    ]) {
+      reset(); threw = null;
+      try { await tool.call({ ...validInput, conditions }); } catch (e) { threw = e; }
+      check(threw?.message === expected && cycles() === 0, `NEGATIVE: ${label} is refused with the exact message`, threw?.message);
+    }
+    reset(); threw = null;
+    try { await tool.call({ ...validInput, actions: [{ op: 'set', field: 'notes', value: 'x', bogus: true }] }); } catch (e) { threw = e; }
+    check(/bogus/.test(threw?.message || '') && cycles() === 0, 'NEGATIVE: an unknown action key is refused naming it');
+    reset(); threw = null;
+    try { await tool.call({ ...validInput, conditions: [{ ...validInput.conditions[0], zzz: 1 }] }); } catch (e) { threw = e; }
+    check(/zzz/.test(threw?.message || '') && cycles() === 0, 'NEGATIVE: an unknown condition key is refused naming it');
+  }
+
   console.log('');
   if (failures === 0) console.log('[#142] All rules_create_or_update tests passed ✓');
   else { console.error(`[#142] ${failures} test(s) FAILED`); process.exit(2); }

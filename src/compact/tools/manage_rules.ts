@@ -31,7 +31,7 @@ const id = z.string().optional().describe('Rule id.');
 const stage = z.string().nullable().optional().describe('null or omitted: normal stage. "pre" runs before the normal stage, "post" after. On update, omit to keep the current stage.');
 const conditionsOp = z.enum(['and', 'or']).optional().describe('How conditions combine; default and.');
 const condition = z.looseObject({ field: z.string(), op: z.string() });
-const conditions = z.array(condition).optional().describe('Items {field, op, value[, type]}; value is text, a number, true or false, an array (oneOf, notOneOf) or {num1, num2} (isbetween).');
+const conditions = z.array(condition).optional().describe('Items {field, op, value[, type, options]}; options {outflow or inflow: true} on amount only; value is text, a number, true or false, an array (oneOf, notOneOf) or {num1, num2} (isbetween).');
 const action = z.looseObject({ op: z.string().optional(), field: z.string().optional() });
 const actions = z.array(action).optional().describe('Items {op, field, value[, type, options]}; op defaults to set on create and upsert, required on update.');
 const rules = z
@@ -47,7 +47,7 @@ const UpdateActionSchema = z.object({
   value: CreateActionSchema.shape.value,
   type: z.string().optional(),
   options: CreateActionSchema.shape.options,
-});
+}).strict(); // #761: an unknown action key is refused, not dropped
 
 const STAGE = z.enum(['pre', 'post']);
 const base = {

@@ -187,6 +187,25 @@ export function assertConditionValue(condition: { field: string; op: string; val
   }
 }
 
+/**
+ * #761: the checks on a condition's `options`, shared by the four write paths (validateRuleInput,
+ * actual_rules_update, actual_rules_create_or_update). Runs on INPUT only, never on a stored rule:
+ * upstream stores `options` on any field without complaint, so a stored one must stay readable.
+ * The key names and booleans are checked by ConditionSchema.
+ */
+export function assertConditionOptions(condition: { field: string; op?: string; value?: unknown; options?: { outflow?: boolean; inflow?: boolean } }): void {
+  const options = condition.options;
+  if (options === undefined) return;
+  if (condition.field !== 'amount') throw new Error('options is only valid on an amount condition');
+  if (options.outflow === true && options.inflow === true) throw new Error('options cannot set both outflow and inflow');
+  if (options.outflow !== true && options.inflow !== true) return;
+  const { value } = condition;
+  const amounts = isPlainObject(value) ? [value.num1, value.num2] : [value];
+  if (amounts.some((amount) => typeof amount === 'number' && amount < 0)) {
+    throw new Error('an amount condition with outflow or inflow takes a positive value; the direction comes from the option');
+  }
+}
+
 // Define the schema for rule conditions and actions
 export const ConditionSchema = z.object({
   field: z.string().describe('Field to match'),
@@ -206,7 +225,17 @@ export const ConditionSchema = z.object({
     ])
     .describe('Value; an array for oneOf, notOneOf; {num1, num2} for isbetween'),
   type: z.string().optional().describe('Type hint, e.g. string, number, id'),
-});
+  // #761: the direction of an amount condition. Strict (an unknown key inside is refused) and the
+  // object is strict too, so a stray key is refused by name instead of being dropped.
+  options: z
+    .object({
+      outflow: z.boolean().optional().describe('Match outflows only'),
+      inflow: z.boolean().optional().describe('Match inflows only'),
+    })
+    .strict()
+    .optional()
+    .describe('amount only: {outflow: true} or {inflow: true} with a positive value'),
+}).strict();
 
 export const ActionSchema = z.object({
   op: z.string().default('set').describe(`${ACTION_DESCRIBE.op}. Default set`),
@@ -214,7 +243,7 @@ export const ActionSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
   options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
-});
+}).strict();
 
 export const RuleItemSchema = z.object({
   // #342: three stages, and the default one is `null`, not a string.
@@ -300,6 +329,7 @@ export function validateRuleInput(input: RuleItem): void {
     assertConditionOperator(condition);
     assertTagOperatorValue(condition);
     assertConditionValue(condition);
+    assertConditionOptions(condition);
     
     // Check if using payee field with text value instead of ID
     if (!isTextOnIdField(condition)) continue;

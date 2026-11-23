@@ -1820,6 +1820,58 @@ payee: payee.id,
     }
   });
 
+  test('manage_rules create - an amount outflow option is stored and applied; unknown keys and bad options are refused (#761)', async ({ mcp, makeAccount, makeCategory, cleanup }) => {
+    test.setTimeout(60000);
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const listRules = async () => {
+      const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+      return (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    };
+    const created = await mcp.call('manage_rules', {
+      action: 'create',
+      conditions: [
+        { field: 'account', op: 'is', value: account.id },
+        { field: 'amount', op: 'is', value: 5002, options: { outflow: true } },
+      ],
+      actions,
+    });
+    const ruleId = (typeof created === 'string' ? created : created?.id) as string;
+    expect(ruleId, 'manage_rules create must return an id').toBeTruthy();
+    cleanup.add(CLEANUP_ORDER.rule, `rule 761 ${ruleId}`, async () => {
+      await mcp.call('manage_rules', { action: 'delete', id: ruleId }).catch(() => undefined);
+    });
+    const stored = (await listRules()).find((r: any) => r?.id === ruleId);
+    expect(stored?.conditions?.find((c: any) => c?.field === 'amount')?.options?.outflow).toBe(true);
+
+    const suffix = uniqueSuffix();
+    const [outflow, inflow] = await importAndRead(mcp, account.id, [
+      { date: today(), amount: -5002, imported_id: `e2e-761-out-${suffix}` },
+      { date: today(), amount: 5002, imported_id: `e2e-761-in-${suffix}` },
+    ]);
+    expect(outflow?.category, 'the outflow row gets the category').toBe(category.id);
+    expect(inflow?.category ?? null, 'the inflow row is untouched').toBeNull();
+
+    // Refusals: each names its cause and creates no rule (and a regression is cleaned up).
+    const before = (await listRules()).length;
+    const refuse = async (conditions: any[], message: RegExp) => {
+      const attempt = await mcp.call('manage_rules', { action: 'create', conditions, actions }).catch((e: Error) => e);
+      if (!(attempt instanceof Error)) {
+        const leaked = (typeof attempt === 'string' ? attempt : attempt?.id) as string;
+        await mcp.call('manage_rules', { action: 'delete', id: leaked }).catch(() => undefined);
+        throw new Error(`expected a refusal, a rule was created: ${leaked}`);
+      }
+      expect(attempt.message).toMatch(message);
+    };
+    const note = { field: 'notes', op: 'contains', value: `E2E-Rule761-${suffix}` };
+    await refuse([{ ...note, zzz: 1 }], /conditions: unknown key "zzz" at 0/);
+    await refuse([{ field: 'payee_name', op: 'is', value: 'x', options: { outflow: true } }], /options is only valid on an amount condition/);
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [note], actions: [{ ...actions[0], bogus: true }] }))
+      .rejects.toThrow(/actions: unknown key "bogus" at 0/);
+    expect((await listRules()).length).toBe(before);
+  });
+
   test('manage_rules create_batch - rejects an empty array at the schema (#485)', async ({ mcp }) => {
     await expect(mcp.call('manage_rules', { action: 'create_batch', rules: [] })).rejects.toThrow(/Validation error: rules/);
   });
@@ -4410,6 +4462,29 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     await expect(mcp.call('actual_rules_create', { conditions, actions }))
       .rejects.toThrow(/Invalid operator "gte" for field "payee_name"\. Field "payee_name" is a string field and only supports: is, isNot, contains, matches, doesNotContain, oneOf, notOneOf, hasTags, hasAnyTag\./);
     expect((await listRules()).length).toBe(before);
+  });
+
+  test('actual_rules_create create - a condition options.outflow is stored and an unknown key is refused (#761)', async ({ mcp, makeCategory, cleanup }) => {
+    const category = await makeCategory();
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const marker = `E2E-Rule761-${uniqueSuffix()}`;
+    const conditions = [{ field: 'notes', op: 'contains', value: marker }, { field: 'amount', op: 'is', value: 5002, options: { outflow: true } }];
+    const raw = await mcp.call('actual_rules_create', { conditions, actions });
+    const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+    cleanup.add(CLEANUP_ORDER.rule, `rule 761 legacy ${marker}`, async () => {
+      await mcp.call('manage_rules', { action: 'delete', id }).catch(() => undefined);
+    });
+    const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+    const rules = (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    expect(rules.find((r: any) => r?.id === id)?.conditions?.find((c: any) => c?.field === 'amount')?.options?.outflow).toBe(true);
+
+    const attempt = await mcp.call('actual_rules_create', { conditions: [{ ...conditions[0], zzz: 1 }], actions }).catch((e: Error) => e);
+    if (!(attempt instanceof Error)) {
+      const leaked = (typeof attempt === 'string' ? attempt : attempt?.id) as string;
+      await mcp.call('manage_rules', { action: 'delete', id: leaked }).catch(() => undefined);
+      throw new Error(`expected a refusal, a rule was created: ${leaked}`);
+    }
+    expect(attempt.message).toMatch(/zzz/);
   });
 
   test('actual_schedules_get - answers', async ({ mcp }) => {

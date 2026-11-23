@@ -39,7 +39,21 @@ export function canonicalize(obj: Record<string, unknown>): string {
   return JSON.stringify(sorted);
 }
 
-export type RuleCondition = { field: string; op: string; value: unknown };
+/**
+ * #761: a condition's `options` as part of its identity, normalised: a false flag is dropped, an
+ * empty object equals an absent one, key order is irrelevant. Total on a stored value of any shape
+ * (upstream keeps `options` on any field), so it never throws.
+ */
+function normalizeOptions(options: unknown): Record<string, unknown> | undefined {
+  if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
+  const kept = Object.entries(options as Record<string, unknown>).filter(([, v]) => v !== false && v !== undefined);
+  return kept.length === 0 ? undefined : Object.fromEntries(kept.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+}
+
+const identity = (c: { field?: unknown; op?: unknown; value?: unknown; options?: unknown }): string =>
+  canonicalize({ field: c.field, op: c.op, value: c.value, options: normalizeOptions(c.options) });
+
+export type RuleCondition = { field: string; op: string; value: unknown; options?: unknown };
 
 /** True when two rules have semantically equivalent conditions (set-based, order-free). */
 export function conditionsMatch(
@@ -54,12 +68,11 @@ export function conditionsMatch(
 
   const existingSet = new Set(
     existingConditions.map((c: unknown) => {
-      const cond = c as Record<string, unknown>;
-      return canonicalize({ field: cond.field, op: cond.op, value: cond.value });
+      return identity((c ?? {}) as Record<string, unknown>);
     }),
   );
   const newSet = new Set(
-    newConditions.map((c) => canonicalize({ field: c.field, op: c.op, value: c.value })),
+    newConditions.map((c) => identity(c)),
   );
 
   if (existingSet.size !== newSet.size) return false;

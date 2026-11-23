@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionValue, assertTagOperatorValue, idFieldPlural, isTextOnIdField } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionOptions, assertConditionValue, assertTagOperatorValue, idFieldPlural, isTextOnIdField } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one. The action schema stays private because `op`
 // is REQUIRED here (the shared one defaults it to "set"); only the describe text is shared.
@@ -12,7 +12,7 @@ const ActionSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.object({}).passthrough()]).describe(ACTION_DESCRIBE.value),
   type: z.string().optional().describe(ACTION_DESCRIBE.type),
   options: z.object({}).passthrough().optional().describe(ACTION_DESCRIBE.options),
-});
+}).strict(); // #761: made strict rather than shared, because op is required here
 
 const InputSchema = z.object({
   id: CommonSchemas.ruleId.describe('Rule ID to update'),
@@ -93,6 +93,7 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
         assertConditionOperator(condition);
         assertTagOperatorValue(condition);
         assertConditionValue(condition);
+        assertConditionOptions(condition);
         if (!isTextOnIdField(condition)) continue;
         if (condition.field === 'payee') {
           throw new Error(
