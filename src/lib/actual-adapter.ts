@@ -3018,8 +3018,21 @@ export function selectDefaultCategoryRule(rules: unknown, payeeId: string): Rule
       a?.op === 'set' && a.field === 'category';
   });
 }
+// #760: Actual creates the link between a payee and an account itself (createAccount inserts the
+// transfer payee). Setting transfer_acct on an existing payee is never legitimate: an unknown
+// account id hides the payee from every read (the v_payees view joins accounts), and a real one
+// makes a second transfer payee for that account. The message names no tool and no id so it stays
+// valid when the legacy surface goes away.
+const PAYEE_TRANSFER_ACCT_REFUSAL =
+  'transfer_acct cannot be set: transfer payees are created by Actual with their account. Rename the account instead.';
+
 export async function updatePayee(id: string, fields: Partial<components['schemas']['Payee']> | unknown): Promise<void> {
   observability.incrementToolCall('actual.payees.update').catch(() => {});
+  // #760: a pure test on the input, so it needs no read and runs before the queue. Any value is
+  // refused (null and "" too), and an unknown payee id gets this refusal rather than not-found.
+  if (fields !== null && typeof fields === 'object' && (fields as Record<string, unknown>).transfer_acct !== undefined) {
+    throw new ConflictRefusal(PAYEE_TRANSFER_ACCT_REFUSAL);
+  }
   return queueWriteOperation(async () => {
     // #378: this guard's pre-read is safe against a SIBLING operation in the same drain only
     // because the batch dispatches sequentially. It reads a listing memoised for this drain,
@@ -3063,7 +3076,7 @@ export async function updatePayee(id: string, fields: Partial<components['schema
       assertRuleReferencesExist(categoryRefs, await loadRuleReferenceListings(categoryRefs), RULE_REFUSAL_CHANGED);
     }
 
-    // Update the payee's direct fields (name, transfer_acct, etc.)
+    // Update the payee's direct fields (name; transfer_acct is refused above)
     if (Object.keys(directFields).length > 0) {
       await withConcurrency(() => retry(() => rawUpdatePayee(id, directFields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     }

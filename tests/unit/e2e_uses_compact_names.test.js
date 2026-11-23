@@ -10,7 +10,7 @@
 // The legacy name set is IMPLEMENTED_TOOLS plus the keys of the deprecated alias map. A legacy
 // name is allowed in exactly these places:
 //   (i)   LEGACY_SMOKE names inside the `legacy smoke (MCP_TOOL_SURFACE=all)` describe block of
-//         tests/e2e/docker-all-tools.e2e.spec.ts (one read-only row per legacy family, plus the #710 and #763 write rows),
+//         tests/e2e/docker-all-tools.e2e.spec.ts (one read-only row per legacy family, plus the #710, #760 and #763 write rows),
 //   (ii)  the two session tools (they have no compact tool) in specs, manual modules and the
 //         session block of prompt-3-advanced.txt between its two markers,
 //   (iii) actual_accounts_list in compact-surface.e2e.spec.ts (the refusal row: a legacy call
@@ -51,6 +51,7 @@ const LEGACY_SMOKE = [
   'actual_categories_update', // #763
   'actual_category_groups_get', // #763: named in the legacy refusal text
   'actual_payees_get',
+  'actual_payees_update', // #760: the legacy unknown-field refusal for transfer_acct
   'actual_rules_get',
   'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag
   'actual_schedules_get',

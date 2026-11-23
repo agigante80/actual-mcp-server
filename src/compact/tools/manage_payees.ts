@@ -25,7 +25,6 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
 const id = z.string().optional().describe('Payee id.');
 const name = z.string().optional().describe('Name, 1 to 255 characters.');
 const notes = z.string().optional().describe('Notes, up to 1000 characters.');
-const transferAcct = z.string().optional().describe('Account id when the payee stands for a transfer.');
 const category = z.string().nullable().optional().describe('Default category id; null clears it.');
 const targetId = z.string().optional().describe('Payee that is kept.');
 const mergeIds = z.array(z.string()).optional().describe('1 to 50 payee ids merged into target_id.');
@@ -35,7 +34,6 @@ const REAL: Readonly<Record<string, z.ZodType>> = {
   id: CommonSchemas.payeeId,
   name: CommonSchemas.name,
   notes: z.string().max(1000, 'Notes cannot exceed 1000 characters'),
-  transfer_acct: CommonSchemas.accountId,
   category: CommonSchemas.categoryId,
   target_id: CommonSchemas.payeeId,
   merge_ids: z.array(CommonSchemas.payeeId).min(1).max(50),
@@ -50,10 +48,10 @@ const createFields = asFields(
   }),
 );
 const updateFields = asFields(
-  z.object({ id, name, transfer_acct: transferAcct, category }).superRefine((value, ctx) => {
+  z.object({ id, name, category }).superRefine((value, ctx) => {
     needs('update', ctx, value as V, ['id']);
     strict(ctx, value as V, REAL);
-    atLeastOne(ctx, value as V, ['name', 'transfer_acct', 'category']);
+    atLeastOne(ctx, value as V, ['name', 'category']);
   }),
 );
 const deleteFields = asFields(
@@ -84,7 +82,7 @@ export const managePayees: CompactToolSpec = {
     'Create, change, delete, merge or annotate payees; pick one `action`. Writes. ' +
     'To read or find ids use list_entities. Other fields are refused. ' +
     'create: name; optional notes. ' +
-    'update: id and at least one of name, transfer_acct, category (a default category, stored as a default-stage rule whose only condition is this payee; null deletes it; pre or post stage rules and rules shared with other payees or conditions are never touched). ' +
+    'update: id and at least one of name, category (a default category, stored as a default-stage rule whose only condition is this payee; null deletes it; pre or post stage rules and rules shared with other payees or conditions are never touched). ' +
     'delete: id; DESTRUCTIVE, cannot be undone: transactions lose the payee; a transfer payee is refused. ' +
     'merge: target_id, merge_ids (1 to 50, never target_id itself); DESTRUCTIVE, cannot be undone: the sources\' transactions move to target_id and the sources are deleted; transfer payees are refused. ' +
     'set_note: id (a payee UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a category note through manage_categories. ' +
