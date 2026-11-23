@@ -312,5 +312,21 @@ console.log('\n[query-run-validation] #526 description date example and syntax-e
   ok('an empty query is still rejected by the min(1) constraint', () => assert.ok(emptyRejected));
 }
 
+// #751: a decimal literal is not a table.column reference. `5.5` was read as column 5 of table 5.
+console.log('\n[query-run-validation] #751 numeric literals are not table.column references');
+for (const where of ['amount = 5.5', 'amount < 5.5', 'amount IN (5.5)', 'amount IN (1, -5.5, .5)', 'amount >= -5.5']) {
+  ok(`accepts decimal literal: ${where}`, () =>
+    assert.strictEqual(validateQuery(`SELECT id FROM transactions WHERE ${where}`).valid, true));
+}
+ok('an unknown joined reference is still refused with the same message', () => {
+  const r = validateQuery('SELECT id FROM transactions WHERE nosuch.field = 1');
+  assert.strictEqual(r.valid, false);
+  assert.strictEqual(r.errors[0].message, 'Table "nosuch" does not exist (referenced in "nosuch.field")');
+});
+ok('a real join path next to a decimal still validates', () =>
+  assert.strictEqual(validateQuery('SELECT id FROM transactions WHERE payee.name = \'x\' AND amount = 5.5').valid, true));
+ok('a string literal containing a.b is blanked as before', () =>
+  assert.strictEqual(validateQuery("SELECT id FROM transactions WHERE notes = 'a.b'").valid, true));
+
 console.log(`\n[query-run-validation] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
