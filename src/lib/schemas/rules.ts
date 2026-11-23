@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isCalendarDay } from '../dates.js';
 
 // #485: the rule input shape and its imperative checks, shared by actual_rules_create and
 // actual_rules_create_batch so both accept and reject exactly the same rules with the same
@@ -278,12 +279,63 @@ export const RuleItemSchema = z.object({
 export type RuleItem = z.output<typeof RuleItemSchema>;
 
 /**
+ * #762: a rule needs at least one condition and one action. A list that is PRESENT and empty is
+ * refused; an absent key (undefined) is skipped, so an update that omits `conditions` keeps the
+ * stored list. Upstream Rule.evalConditions returns false for zero conditions, so an empty list
+ * saves a rule that never fires, and `update conditions: []` silently disables a working rule.
+ *
+ * This is an INPUT check and must stay in the tool validators, not move into the adapter: the
+ * adapter sees the MERGED rule on update and upsert, and would then refuse an update that touches
+ * only `actions` on a rule stored with no conditions before this check existed.
+ */
+export function assertRuleLists(rule: { conditions?: readonly unknown[]; actions?: readonly unknown[] }): void {
+  if (rule.conditions !== undefined && rule.conditions.length === 0) {
+    throw new Error('conditions must contain at least one condition, or the rule never matches');
+  }
+  if (rule.actions !== undefined && rule.actions.length === 0) {
+    throw new Error('actions must contain at least one action');
+  }
+}
+
+const BOOLEAN_SET_FIELDS = new Set(['cleared', 'reconciled', 'transfer', 'parent']);
+
+/**
+ * #762: the value of a `set` action must suit the target field. Upstream never checks it when the
+ * rule is saved, then fails every matching write (`amount` "abc", `date` "nodate") or, for a
+ * boolean column, converts with `value ? 1 : 0` so the string "false" sets the opposite.
+ * Skipped when options.template or options.formula is truthy: upstream coerces the computed
+ * result at run time and uses the same truthy test. Other fields are unchanged (the id checks
+ * for category, payee and account live with the callers).
+ */
+export function assertSetActionValue(action: { op: string; field?: string; value?: unknown; options?: { template?: unknown; formula?: unknown } }): void {
+  if (action.op !== 'set' || !action.field) return;
+  if (action.options?.template || action.options?.formula) return;
+  const { field, value } = action;
+  const got = JSON.stringify(value);
+  if (field === 'amount') {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
+      throw new Error(`Action "set" on field "amount" needs an integer value in cents, but got ${got}.`);
+    }
+  } else if (field === 'date') {
+    if (typeof value !== 'string' || !isCalendarDay(value)) {
+      throw new Error(`Action "set" on field "date" needs a date as YYYY-MM-DD (a real calendar day), but got ${got}.`);
+    }
+  } else if (BOOLEAN_SET_FIELDS.has(field)) {
+    if (typeof value !== 'boolean') {
+      throw new Error(`Action "set" on field "${field}" needs true or false, but got ${got}.`);
+    }
+  }
+}
+
+/**
  * The checks that Zod cannot express, run on a PARSED rule. Throws a plain Error with the
  * message actual_rules_create has always produced. Pure: no I/O.
  */
 export function validateRuleInput(input: RuleItem): void {
+  assertRuleLists(input);
   // Validate that actions with op="set" have a field
   for (const action of input.actions) {
+    assertSetActionValue(action);
     if (action.op === 'set' && !action.field) {
       throw new Error('Action with op="set" requires a "field" property (e.g., "category", "payee", "notes", "cleared")');
     }

@@ -301,5 +301,15 @@ await check('#761 NEGATIVE: options on a payee condition is refused by the real 
   try { await t.call({ action: 'create', conditions: [{ field: 'payee', op: 'is', value: U1, options: { outflow: true } }], actions: [ACT] }); } catch (x) { e = x; }
   assert.ok(e && e.message === 'options is only valid on an amount condition', String(e && e.message));
 });
+await check('#762 NEGATIVE: empty lists and a mistyped set value are refused by the real legacy handlers through the compact tool', async () => {
+  const legacyUpdate = (await import('../../dist/src/tools/rules_update.js')).default;
+  const t = buildCompactTool(spec, { callOperation: async (n, a) => (n === 'actual_rules_update' ? legacyUpdate : legacyCreate).call(a) }, phrases);
+  const msg = async (args) => { try { await t.call(args); return ''; } catch (x) { return String(x && x.message); } };
+  assert.equal(await msg({ action: 'create', conditions: [], actions: [ACT] }), 'conditions must contain at least one condition, or the rule never matches');
+  assert.equal(await msg({ action: 'create', conditions: [COND], actions: [] }), 'actions must contain at least one action');
+  assert.equal(await msg({ action: 'update', id: U1, conditions: [] }), 'conditions must contain at least one condition, or the rule never matches');
+  assert.equal(await msg({ action: 'create', conditions: [COND], actions: [{ op: 'set', field: 'amount', value: 'abc' }] }),
+    'Action "set" on field "amount" needs an integer value in cents, but got "abc".');
+});
 console.log(`\n[compact-manage-rules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

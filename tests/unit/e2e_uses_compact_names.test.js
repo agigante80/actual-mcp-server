@@ -42,7 +42,7 @@ const ALIAS_KEYS = (read('src/lib/tool-aliases.ts').match(/^\s*\['(actual_[A-Za-
   .map((l) => /'(actual_[A-Za-z0-9_]+)'/.exec(l)[1]);
 const LEGACY_NAMES = new Set([...IMPLEMENTED_TOOLS, ...ALIAS_KEYS]);
 
-/** One read-only row per legacy family (plus the #710 write row and the #763 rows: actual_categories_create and actual_categories_update refuse an unknown group_id, and the create row lists groups with actual_category_groups_get), called in the legacy smoke describe block. */
+/** One read-only row per legacy family (plus the #710 write row the #762 actual_rules_update row and the #763 rows: actual_categories_create and actual_categories_update refuse an unknown group_id, and the create row lists groups with actual_category_groups_get), called in the legacy smoke describe block. */
 const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',
@@ -55,6 +55,7 @@ const LEGACY_SMOKE = [
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
   'actual_rules_get',
   'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag
+  'actual_rules_update', // #762: the legacy empty-list refusal on update
   'actual_schedules_get',
   'actual_budgets_get_months',
   'actual_budgets_list_available',

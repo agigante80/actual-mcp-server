@@ -4221,6 +4221,42 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
     for (const m of markers) expect(rows.some((r: any) => JSON.stringify(r?.conditions).includes(m))).toBe(true);
   });
 
+  test('manage_rules - empty condition and action lists and a mistyped set value are refused and nothing is stored (#762)', async ({ mcp, makeCategory, makeRule, cleanup }) => {
+    const category = await makeCategory();
+    const marker = `E2E-Rule762-${uniqueSuffix()}`;
+    const cond = { field: 'notes', op: 'contains', value: marker };
+    const actions = [{ op: 'set', field: 'category', value: category.id }];
+    const NO_COND = /conditions must contain at least one condition/;
+    const NO_ACT = /actions must contain at least one action/;
+    const stored = async () => (await rulesOf(mcp)).filter((r: any) => JSON.stringify(r).includes(marker));
+    cleanup.add(CLEANUP_ORDER.rule, `rules ${marker}`, async () => {
+      for (const r of await stored()) await mcp.call('manage_rules', { action: 'delete', id: r.id }).catch(() => undefined);
+    });
+
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [], actions: [{ op: 'append-notes', value: marker }] })).rejects.toThrow(NO_COND);
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [cond], actions: [] })).rejects.toThrow(NO_ACT);
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [cond], actions: [{ op: 'set', field: 'amount', value: 'abc' }] }))
+      .rejects.toThrow(/integer value in cents/);
+    await expect(mcp.call('manage_rules', { action: 'upsert', conditions: [], actions: [{ op: 'append-notes', value: marker }] })).rejects.toThrow(NO_COND);
+    expect(await stored(), 'no refused call stored a rule').toHaveLength(0);
+
+    // An update that would empty a working rule is refused and the rule keeps its condition.
+    const rule = await makeRule({ categoryId: category.id });
+    await expect(mcp.call('manage_rules', { action: 'update', id: rule.id, conditions: [] })).rejects.toThrow(NO_COND);
+    const kept = (await rulesOf(mcp)).find((r: any) => r?.id === rule.id);
+    expect(kept?.conditions?.length ?? 0).toBeGreaterThan(0);
+
+    // create_batch: the empty item fails alone, the valid one is created.
+    const res = await mcp.call('manage_rules', {
+      action: 'create_batch',
+      rules: [{ stage: 'pre', conditions: [], actions }, { stage: 'pre', conditions: [cond], actions }],
+    });
+    expect(res.failed.map((f: any) => f.index)).toEqual([0]);
+    expect(res.failed[0].error).toMatch(NO_COND);
+    expect(res.succeeded.map((x: any) => x.index)).toEqual([1]);
+    expect(await stored()).toHaveLength(1);
+  });
+
   test('manage_rules - ERROR: create without actions, a batch item with conditions_op and an update action without op name the problem', async ({ mcp }) => {
     const id = '00000000-0000-4000-8000-000000000000';
     const cond = { field: 'notes', op: 'contains', value: 'x' };
@@ -4704,6 +4740,23 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       throw new Error(`expected a refusal, a rule was created: ${leaked}`);
     }
     expect(attempt.message).toMatch(/zzz/);
+  });
+
+  test('actual_rules_create and actual_rules_update - an empty list and a mistyped set value are refused (#762)', async ({ mcp, makeCategory, makeRule }) => {
+    const category = await makeCategory();
+    const marker = `E2E-Rule762L-${uniqueSuffix()}`;
+    const cond = { field: 'notes', op: 'contains', value: marker };
+    await expect(mcp.call('actual_rules_create', { conditions: [], actions: [{ op: 'append-notes', value: marker }] }))
+      .rejects.toThrow(/conditions must contain at least one condition/);
+    await expect(mcp.call('actual_rules_create', { conditions: [cond], actions: [{ op: 'set', field: 'amount', value: 'abc' }] }))
+      .rejects.toThrow(/integer value in cents/);
+    const rule = await makeRule({ categoryId: category.id });
+    await expect(mcp.call('actual_rules_update', { id: rule.id, fields: { conditions: [] } }))
+      .rejects.toThrow(/conditions must contain at least one condition/);
+    const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+    const rules = (Array.isArray(listed) ? listed : (listed?.rules ?? [])) as any[];
+    expect(rules.find((r: any) => r?.id === rule.id)?.conditions?.length ?? 0).toBeGreaterThan(0);
+    expect(rules.some((r: any) => JSON.stringify(r).includes(marker))).toBe(false);
   });
 
   test('actual_schedules_get - answers', async ({ mcp }) => {
