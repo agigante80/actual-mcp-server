@@ -48,11 +48,12 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   growth), and the ceiling is that plus 8. The default compact surface total (42,932
 //   measured) and every per-tool ceiling are unchanged.
 //   Total raised for #747 (an unknown payee or category id is refused on transaction create and
-//   update) from 123,709 to 123,830: three legacy descriptions grew by one clause each. Measured
-//   on develop before this change the legacy total is 123,700 bytes and after it 123,822 (122
-//   added, description text only), and the ceiling is the measured total plus 8. The compact
-//   surface total (43,008 measured, 1 byte smaller) and every per-tool ceiling are unchanged.
-const TOTAL_CEILING = 123830;
+//   update) from 123,709 to 123,776: three legacy descriptions grew by one clause each (122
+//   bytes, description text only). Measured after the rebase on develop (which carries #766,
+//   whose shorter rule descriptions took the total down to 123,646) the legacy total is
+//   123,768 bytes, and the ceiling is that plus 8. The compact surface total and every
+//   per-tool ceiling are unchanged.
+const TOTAL_CEILING = 123776;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
