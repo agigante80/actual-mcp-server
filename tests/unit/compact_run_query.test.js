@@ -133,6 +133,12 @@ const VALIDATOR = [
   ['DELETE FROM transactions', /read-only/i],
   ['SELECT id FROM transactions UNION SELECT id FROM accounts', /compound|union/i],
   ['SELECT id FROM transactions -- x', /comment/i],
+  // #753: unsupported clauses are refused by name, the message says run_query, nothing runs.
+  ['SELECT id FROM transactions LIMIT 2 OFFSET 2', /OFFSET is not supported/],
+  ['SELECT id FROM transactions ORDER BY date, amount', /ORDER BY supports one plain column/],
+  ['SELECT id FROM transactions LIMIT abc', /LIMIT must be a non-negative integer/],
+  ['SELECT COUNT(*) FROM transactions', /aggregate functions/],
+  ['SELECT id FROM accounts;', /does not accept a trailing ";"/],
 ];
 for (const [query, re] of VALIDATOR) {
   await check(`real path: refused, names run_query, nothing runs, no query text logged: ${query.slice(0, 40)}`, async () => {

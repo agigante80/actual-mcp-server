@@ -27,6 +27,11 @@ console.log('\n[query-run-validation] allowed reads (no throw)');
 const ALLOWED = [
   'SELECT * FROM transactions LIMIT 5',
   'SELECT id, payee.name FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 10',
+  "SELECT date, amount FROM transactions WHERE account.name = 'X' ORDER BY date DESC LIMIT 2",  // #753
+  "SELECT id FROM transactions WHERE notes LIKE '%offset%'",                    // #753: keyword in a value
+  "SELECT id FROM transactions WHERE notes = 'order by a, b limit x; group by'", // #753: clauses in a value
+  'SELECT balance_limit FROM accounts ORDER BY sort_order LIMIT 5',            // #753: keyword-like columns
+  'SELECT id FROM accounts ORDER BY sort_order asc',
   'transactions',                                                              // bare table fallthrough
   "SELECT id FROM transactions WHERE imported_payee LIKE '%amazon%'",          // #178 preserved
   'SELECT id FROM transactions WHERE imported_payee IS NULL',                  // #178 preserved
@@ -327,6 +332,51 @@ ok('a real join path next to a decimal still validates', () =>
   assert.strictEqual(validateQuery('SELECT id FROM transactions WHERE payee.name = \'x\' AND amount = 5.5').valid, true));
 ok('a string literal containing a.b is blanked as before', () =>
   assert.strictEqual(validateQuery("SELECT id FROM transactions WHERE notes = 'a.b'").valid, true));
+
+// #753: unsupported trailing clauses are refused by name instead of being folded into the last
+// WHERE value (which returned a silent empty result). Each message is asserted exactly.
+console.log('\n[query-run-validation] #753 unsupported clauses refused by name');
+const TRAILING = 'actual_query_run does not accept a trailing ";". Remove it.';
+const OFFSET = 'actual_query_run: OFFSET is not supported. Only ORDER BY <one column> [ASC|DESC] and LIMIT <n> are supported.';
+const GROUPBY = 'actual_query_run: GROUP BY and HAVING are not supported. Select the rows and add them up yourself.';
+const AGG = 'actual_query_run: aggregate functions (COUNT, SUM, AVG, MIN, MAX) are not supported. Select the rows and add them up yourself.';
+const ORDERBY = 'actual_query_run: ORDER BY supports one plain column with an optional ASC or DESC, for example ORDER BY date DESC.';
+const LIMIT = 'actual_query_run: LIMIT must be a non-negative integer and the last clause, for example LIMIT 10.';
+const STACKED = 'actual_query_run does not allow stacked statements (multiple statements separated by ";").';
+const REFUSED_753 = [
+  ["SELECT date, amount FROM transactions WHERE account.name = 'X' ORDER BY date DESC LIMIT 2 OFFSET 2", OFFSET],
+  ['SELECT id FROM transactions OFFSET 3', OFFSET],
+  ['SELECT id FROM transactions ORDER BY date, amount', ORDERBY],
+  ["SELECT id FROM transactions WHERE account.name = 'X' ORDER BY account.name, date LIMIT 3", ORDERBY],
+  ['SELECT id FROM transactions ORDER BY payee.name', ORDERBY],
+  ['SELECT id FROM transactions ORDER BY date DESC, amount ASC LIMIT 5', ORDERBY],
+  ['SELECT id FROM transactions LIMIT abc', LIMIT],
+  ['SELECT id FROM transactions LIMIT -1', LIMIT],
+  ['SELECT id FROM transactions LIMIT 5, 10', LIMIT],
+  ['SELECT id FROM transactions LIMIT 5 ORDER BY date', LIMIT],
+  ['SELECT id FROM transactions LIMIT', LIMIT],
+  ['SELECT account FROM transactions GROUP BY account', GROUPBY],
+  ['SELECT account FROM transactions GROUP BY account HAVING amount > 1', GROUPBY],
+  ['SELECT account FROM transactions HAVING amount > 1', GROUPBY],
+  ['SELECT COUNT(*) FROM transactions', AGG],
+  ["SELECT SUM(amount) FROM transactions WHERE account.name = 'X'", AGG],
+  ['SELECT max (amount) FROM transactions', AGG],
+  ['SELECT id FROM accounts;', TRAILING],
+  ['SELECT id FROM accounts ;  ', TRAILING],
+  ['transactions;', TRAILING],
+  // The stacked-statement rules keep their own messages (the trailing check sits after them).
+  ['SELECT id FROM accounts; DELETE FROM accounts', STACKED],
+  ['SELECT 1; DROP TABLE x', STACKED],
+];
+for (const [q, msg] of REFUSED_753) {
+  ok(`refuses: ${q.slice(0, 60)}`, () => assert.throws(() => validateQueryShape(q), (e) => e.message === msg));
+}
+ok('no #753 refusal mentions ActualQL, COUNT(*) as an alternative, or the legacy rewrap triggers', () => {
+  for (const m of [TRAILING, OFFSET, GROUPBY, AGG, ORDERBY, LIMIT]) {
+    assert.ok(!/ActualQL|COUNT\(\*\)/.test(m), m);
+    assert.ok(!/parse|syntax|payee_name|category_name|account_name|does not exist in the schema/i.test(m), m);
+  }
+});
 
 console.log(`\n[query-run-validation] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
