@@ -38,7 +38,7 @@ const src = readFileSync(resolve(here, '../../src/server/httpServer.ts'), 'utf8'
 // Isolate the authenticateRequest function body (there are other AUTH_PROVIDER
 // === 'oidc' checks elsewhere in the file, so anchor on the function name).
 const fnStart = src.indexOf('const authenticateRequest');
-const fnWindow = src.slice(fnStart, fnStart + 900);
+const fnWindow = src.slice(fnStart, fnStart + 1200);
 
 check('OIDC branch no longer unconditionally returns true', !/if \(config\.AUTH_PROVIDER === 'oidc'\) return true;/.test(src));
 check('authenticateRequest OIDC branch verifies req.auth.subject', /auth\?\.subject/.test(fnWindow));

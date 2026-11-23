@@ -142,6 +142,8 @@ test.describe('MCP end-to-end (initialize, tools/list, tools/call, SSE)', () => 
     const probeJson = await probeRes.json();
     const probeResult = probeJson?.result ?? probeJson;
     expect(probeResult).toBeTruthy();
+    // #777: the advertised address is the one the probe used, not the container's internal address.
+    expect(new URL(probeResult.advertisedUrl).host).toBe(new URL(probeUrl).host);
     expect(typeof probeResult.capabilities).toBe('object');
     expect(typeof probeResult.capabilities.tools === 'object' || Array.isArray(probeResult.tools)).toBeTruthy();
     // #560: the spec field, as a plain string, and no longer the non-spec serverInstructions object.

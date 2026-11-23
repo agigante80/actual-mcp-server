@@ -22,7 +22,8 @@ import { errorLogFields } from '../lib/errors.js';
 import observability from '../observability.js';
 import config from '../config.js';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
-import { TokenVerificationError } from '../auth/bearer.js';
+import { TokenVerificationError, bearerChallenge, resourceMetadataEndpoint } from '../auth/bearer.js';
+import { advertisedUrlFor } from '../lib/advertised-url.js';
 import { createMcpAuth } from '../auth/setup.js';
 import { resolveJwksSource, buildTrustedJwksHosts, setResolvedOidcMetadata } from '../lib/oidc-discovery.js';
 import { createAssertionPromotionMiddleware } from '../lib/oidc-token-source.js';
@@ -492,6 +493,7 @@ export async function startHttpServer(
       const subject = (req as Request & { auth?: { subject?: string } }).auth?.subject;
       if (subject) return true;
       logger.warn(`[OIDC] Rejected request with no verified principal (req.auth.subject missing) from ${req.ip || req.connection.remoteAddress}`);
+      res.set('WWW-Authenticate', bearerChallenge({ metadataUrl: config.OIDC_RESOURCE ? resourceMetadataEndpoint(config.OIDC_RESOURCE).href : undefined }));
       res.status(401).json({ error: 'Unauthorized: OIDC authentication required' });
       return false;
     }
@@ -507,6 +509,7 @@ export async function startHttpServer(
     const authHeader = req.headers.authorization;
     if (!authHeader) {
       logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Missing Authorization header`);
+      res.set('WWW-Authenticate', bearerChallenge());
       res.status(401).json({ error: 'Unauthorized: Missing Authorization header' });
       return false;
     }
@@ -515,6 +518,7 @@ export async function startHttpServer(
     const match = authHeader.match(/^Bearer\s+(.+)$/i);
     if (!match) {
       logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid Authorization header format`);
+      res.set('WWW-Authenticate', bearerChallenge({ error: 'invalid_request' }));
       res.status(401).json({ error: 'Unauthorized: Invalid Authorization header format. Expected "Bearer <token>"' });
       return false;
     }
@@ -526,6 +530,7 @@ export async function startHttpServer(
 
     if (!hit) {
       logger.warn(`[HTTP] Unauthorized request from ${req.ip || req.connection.remoteAddress}: Invalid token`);
+      res.set('WWW-Authenticate', bearerChallenge({ error: 'invalid_token' }));
       res.status(401).json({ error: 'Unauthorized: Invalid token' });
       return false;
     }
@@ -1158,15 +1163,26 @@ export async function startHttpServer(
   // authorization server to advertise), and in OIDC mode mcpAuth.protectedResourceMetadataRouter()
   // (registered above) still serves the compliant RFC 9728 document.
   const serverIp = process.env.MCP_BRIDGE_PUBLIC_HOST || getLocalIp();
-  const mcpInfo = () => ({
+  const publicHostConfigured = !!process.env.MCP_BRIDGE_PUBLIC_HOST?.trim();
+  const mcpInfo = (req: Request) => ({
     description: serverDescription || "Actual MCP server",
     instructions,
     capabilities: capabilities && Object.keys(capabilities).length ? capabilities : { tools: toolsList.reduce((a: Record<string, object>, n: string) => ({ ...a, [n]: {} }), {}) },
     tools: toolsList,
-    advertisedUrl: advertisedUrl || `${scheme}://${serverIp}:${port}${httpPath}`,
+    // #777: the address the caller used, from a validated Host header; undefined (key dropped)
+    // when it is missing or invalid. MCP_BRIDGE_PUBLIC_HOST, when set, keeps the old value.
+    advertisedUrl: advertisedUrlFor({
+      publicHostConfigured,
+      startupUrl: advertisedUrl,
+      hostHeader: req.headers.host,
+      fallbackScheme: scheme,
+      httpPath,
+      configuredFallbackUrl: `${scheme}://${serverIp}:${port}${httpPath}`,
+    }),
   });
-  app.get('/mcp-info', (_req, res) => { res.json(mcpInfo()); });
-  app.get('/mcp-info/http', (_req, res) => { res.json(mcpInfo()); });
+  const mcpInfoRoute = (req: Request, res: Response) => { res.set('Vary', 'Host'); res.json(mcpInfo(req)); };
+  app.get('/mcp-info', mcpInfoRoute);
+  app.get('/mcp-info/http', mcpInfoRoute);
 
   // /health is unauthenticated, so it reports counts only. Session ids are bearer
   // material for the transport and must never appear here; getConnectionState
