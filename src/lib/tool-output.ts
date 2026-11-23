@@ -176,7 +176,7 @@ export interface ToolCallOptions {
   /**
    * stdio only (#452, #438). Present: a BRANDED init failure is answered with the fixed sentence
    * instead of the upstream text, and this is called with the cause so the caller can log it.
-   * Absent (HTTP): such an error is forwarded like any other.
+   * Absent: such an error is forwarded like any other. Both transports pass it since #769.
    */
   onInitFailure?: (cause: string) => void;
 }

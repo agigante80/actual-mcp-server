@@ -60,10 +60,6 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 These notes are copied from [explanation/security-and-privacy.md](../explanation/security-and-privacy.md), which keeps the full context for each.
 
-### Tool failures are isError results and a bad call is -32602 (#769)
-
-A failed tool call now reaches the client as a tool result with `isError: true` whose single text block is the tool's own message (a Zod validation failure, a typed refusal such as "not found", a hidden tool, an upstream failure). Before, the same failure was a JSON-RPC `error` object. A calling convention that did not change: an unknown tool name and a malformed `tools/call` envelope (a missing or non-string `name`, `arguments` that is not an object) are protocol faults and answer JSON-RPC `-32602`, with `Unknown tool: <name>` (the name is cut to 64 characters) or one of two fixed `Invalid tools/call params` texts, never a schema dump and never an echo of the value sent. A call that omits `arguments` still runs with `{}`. Clients and scripts that detect failure by reading `error` in the JSON-RPC response must also check `result.isError`; an MCP SDK client that throws on the old shape now gets a normal result to inspect. Old text `Tool not found: <name>` for an unknown tool is now `Unknown tool: <name>`.
-
 ### The default tool surface is compact (#680)
 
 `MCP_TOOL_SURFACE` now defaults to `compact`: the server publishes 15 tools (`get_context`, `run_query`, `list_entities`, the `manage_*` family and others) over the same 85 operations, instead of 85 `actual_*` tools. A client, prompt or script that calls an `actual_*` name by default now gets a typed refusal naming `MCP_TOOL_SURFACE=legacy`. To keep the old surface, set `MCP_TOOL_SURFACE=legacy`; `all` publishes both. `MCP_TOOLS` entries must be compact names under `compact` (a legacy name there refuses startup and names the setting). `MCP_TOOLSETS` and the `chat` preset keep working: they select the compact tools whose operations they allow, and each action stays refused when its own toolset or `MCP_READ_ONLY` excludes it. See the [migration guide](migrating-to-compact-tools.md) for the full name mapping, the escape hatch and how to re-select saved tool choices.
@@ -87,6 +83,10 @@ An HTTP server running without a token or OIDC now accepts only `localhost`, `12
 ### Old logs can hold budget data (v0.22.38)
 
 Logs written by earlier versions can contain budget data (tool results at `info`, failed-call arguments at `error`). Purge them or let rotation remove them, including copies held by a log shipper or in Claude Desktop's MCP log files.
+
+## Tool failures are isError results and a bad call is -32602 (#769)
+
+A failed tool call now reaches the client as a tool result with `isError: true` whose single text block is the tool's own message (a Zod validation failure, a typed refusal such as "not found", a hidden tool, an upstream failure). Before, the same failure was a JSON-RPC `error` object. Protocol faults are still JSON-RPC errors, but their code and text changed: an unknown tool name and a malformed `tools/call` envelope (a missing or non-string `name`, `arguments` that is not an object) are protocol faults and answer JSON-RPC `-32602`, with `Unknown tool: <name>` (the name is cut to 64 characters) or one of two fixed `Invalid tools/call params` texts, never a schema dump and never an echo of the value sent. A call that omits `arguments` still runs with `{}`. Clients and scripts that detect failure by reading `error` in the JSON-RPC response must also check `result.isError`; an MCP SDK client that throws on the old shape now gets a normal result to inspect. An unknown tool was `-32603` with `Tool not found: <name>` and is now `-32602` with `Unknown tool: <name>`; a client that matched the old code or text must change.
 
 ## Related
 

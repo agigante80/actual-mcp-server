@@ -667,11 +667,17 @@ const GETTOOL_READERS = new Set([
 ]);
 // #769: the one reviewed `.call(` outside the dispatcher. It registers the tools/call HANDLER on
 // the SDK server with an explicit receiver and never looks up or invokes a tool.
-const CALL_EXEMPT = new Set(['src/lib/register-tool-call.ts']);
+// Only the exact reviewed expression is exempt, not the file: it is removed once from the text
+// before the scan, so any OTHER `.call(` added to the file is still reported.
+const CALL_EXEMPT = new Map([
+  ['src/lib/register-tool-call.ts', '(Protocol.prototype.setRequestHandler as unknown as (this: unknown, schema: unknown, h: unknown) => void).call('],
+]);
 function dispatchProblems(files) {
   const problems = [];
-  for (const [path, text] of Object.entries(files)) {
-    if (path !== DISPATCHER && !CALL_EXEMPT.has(path) && (
+  for (const [path, fullText] of Object.entries(files)) {
+    const reviewed = CALL_EXEMPT.get(path);
+    const text = reviewed ? fullText.replace(reviewed, '') : fullText;
+    if (path !== DISPATCHER && (
       /(?:\?\.|\.)\s*(?:call|apply|bind)\s*\(/.test(text)
       || /\[\s*['"`](?:call|apply|bind)['"`]\s*\]\s*\(/.test(text)
       || /\bReflect\s*\.\s*apply\s*\(/.test(text))) {
@@ -695,6 +701,14 @@ await check('#533 U1 to U1d, P1: dispatchProblems catches every spelling and all
   assert.deepStrictEqual(D('src/tools/x.ts', 'const d = mgr.getTool(n);'), ['src/tools/x.ts: calls getTool( but is not a reviewed registry reader']);
   assert.deepStrictEqual(D('src/lib/x.ts', "await t['call'](a); Reflect.apply(t, null, [a]);"), [`src/lib/x.ts: invokes .call(, .apply( or .bind( (${NOT_MGR})`]);
   assert.deepStrictEqual(D('src/server/httpServer.ts', 'const d = actualToolsManager.getTool(name)?.description;'), []);
+});
+
+await check('#769 L2: the register-tool-call.ts exemption is the reviewed expression only, a stray .call( is reported', () => {
+  const real = stripTsComments(read('src/lib/register-tool-call.ts'));
+  assert.deepStrictEqual(dispatchProblems({ 'src/lib/register-tool-call.ts': real }), []);
+  const stray = dispatchProblems({ 'src/lib/register-tool-call.ts': real + '\nexport const x = (t) => t.call(1);' });
+  assert.strictEqual(stray.length, 1, JSON.stringify(stray));
+  assert.ok(/invokes \.call\(/.test(stray[0]), stray[0]);
 });
 
 await check('only actualToolsManager.ts dispatches a tool (the one place that refuses hidden tools)', () => {

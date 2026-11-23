@@ -586,7 +586,13 @@ export async function startHttpServer(
       // no `invoke`, and every call must go through callTool, which refuses unpublished tools.
       // #642: shared framing; the verdict reaches here so structuredContent is not dropped. A
       // connection without an executor is a wiring fault and stays a protocol error (-32603).
-      return executeToolCall(mcp, name, args);
+      // #438 / #452 parity: a branded init failure gets the same fixed sentence stdio returns, so
+      // an upstream host and port never reach the model. The warn is structured and content-free.
+      return executeToolCall(mcp, name, args, {
+        onInitFailure: (cause) => {
+          logger.warn('[HTTP] tool call failed while establishing the Actual connection', { tool: name, cause });
+        },
+      });
     });
 
     return { server };

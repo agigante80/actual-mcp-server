@@ -263,6 +263,22 @@ try {
     await w.close();
     assert.deepStrictEqual(r.result, { isError: true, content: [{ type: 'text', text: classifyInitFailure(err).sentence }] });
   });
+  await check('a branded init failure is the SAME fixed sentence on http, with no upstream host or port', async () => {
+    const err = markInitFailure(Object.assign(new Error('request to http://10.20.30.40:5006/account/login failed, reason: connect ECONNREFUSED 10.20.30.40:5006'), { code: 'ECONNREFUSED' }));
+    const saved = httpBehaviour;
+    httpBehaviour = async () => { throw err; };
+    try {
+      const hr = await http.call({ name: 'list_entities', arguments: {} });
+      const w = await stdioWire({ executeTool: async () => { throw err; } });
+      const sr = await w.call({ name: 'list_entities', arguments: {} });
+      await w.close();
+      assert.ok(!JSON.stringify(hr.result).includes('10.20.30.40'), `http leaked the upstream host: ${JSON.stringify(hr.result)}`);
+      assert.deepStrictEqual(hr.result, { isError: true, content: [{ type: 'text', text: classifyInitFailure(err).sentence }] });
+      assert.deepStrictEqual(hr.result.content, sr.result.content, 'transports must return byte-identical content');
+    } finally {
+      httpBehaviour = saved;
+    }
+  });
   await check('NEGATIVE: an unbranded error with init-looking prose is NOT replaced by the sentence', async () => {
     const w = await stdioWire({ executeTool: async () => { throw new Error('Authentication failed: Too many requests'); } });
     const r = await w.call({ name: 'list_entities', arguments: {} });
