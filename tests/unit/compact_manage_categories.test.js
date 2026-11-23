@@ -25,7 +25,7 @@ const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
 const { buildCompactTool, legacyPhrases, compactLegacyNames } = await import('../../dist/src/compact/dispatch.js');
 const { WRITE_CAPABLE } = await import('../../dist/src/lib/toolsets.js');
 const { annotationsFor } = await import('../../dist/src/lib/tool-annotations.js');
-const { ToolUnavailableError } = await import('../../dist/src/lib/errors.js');
+const { ToolUnavailableError, NotFoundRefusal, isPreflightRefusal } = await import('../../dist/src/lib/errors.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 
 const spec = COMPACT_TOOLS.find((t) => t.name === 'manage_categories');
@@ -124,6 +124,21 @@ await check('4b: a legacy list name in a refusal is rewritten to list_entities',
   const t = buildCompactTool(spec, { callOperation: async () => ({ success: false, error: 'Group X not found. Use actual_category_groups_get to verify.' }) }, phrases);
   const r = await t.call({ action: 'delete', entity: 'category_group', id: U1 });
   assert.ok(!/actual_category_groups_get/.test(r.error) && /list_entities/.test(r.error), r.error);
+});
+
+await check('NEGATIVE (#763): an unknown group refusal from create and update keeps its class and carries the compact text', async () => {
+  const UNKNOWN = '00000000-0000-4000-8000-000000000000';
+  const t = buildCompactTool(spec, { callOperation: async () => { throw new NotFoundRefusal('Category group', UNKNOWN, 'actual_category_groups_get'); } }, phrases);
+  const want = `Category group "${UNKNOWN}" not found. Use list_entities with type category_group to list available category groups.`;
+  for (const input of [
+    { action: 'create', entity: 'category', name: 'A', group_id: UNKNOWN },
+    { action: 'update', entity: 'category', id: U1, group_id: UNKNOWN },
+  ]) {
+    let e;
+    try { await t.call(input); } catch (x) { e = x; }
+    assert.ok(e && isPreflightRefusal(e), String(e));
+    assert.strictEqual(e.message, want);
+  }
 });
 
 // ---- read-only, published shape, metadata ----

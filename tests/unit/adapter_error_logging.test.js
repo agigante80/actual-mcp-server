@@ -45,6 +45,8 @@ const apiMod = await import('@actual-app/api');
 const apiDefault = (apiMod.default || apiMod);
 apiDefault.sync = async () => {};
 apiDefault.runQuery = async () => { throw new Error('Field "SENTINEL559F" does not exist in table "transactions"'); };
+// #763: createCategory now checks the group exists first, so the fixture group 'g1' must be listed.
+apiDefault.getCategoryGroups = async () => [{ id: 'g1', name: 'G' }];
 apiDefault.createCategory = async (c) => { throw new Error(`category "${c.name}" already exists in group`); };
 
 const adapterMod = await import('../../dist/src/lib/actual-adapter.js');

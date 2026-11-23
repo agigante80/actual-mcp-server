@@ -2193,9 +2193,25 @@ export async function getCategories(): Promise<components['schemas']['Category']
     return await withConcurrency(() => retry(() => rawGetCategories() as Promise<components['schemas']['Category'][]>, { retries: 2, backoffMs: 200 }));
   });
 }
+/**
+ * #763: a category whose group is unknown is written with a null group, which no tool can list,
+ * update, delete or annotate afterwards. Refuse it. The listing is the per-drain category group
+ * one (hidden groups included, deleted ones excluded), so a group created earlier in the same
+ * drain is visible. Call it inside the queued write, before the raw call.
+ */
+async function assertCategoryGroupExists(groupId: string): Promise<void> {
+  const groups = await withConcurrency(() =>
+    retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+  );
+  if (!(Array.isArray(groups) && groups.some((g) => g?.id === groupId))) {
+    throw new NotFoundRefusal('Category group', groupId, 'actual_category_groups_get');
+  }
+}
 export async function createCategory(category: components['schemas']['Category'] | unknown): Promise<string> {
   observability.incrementToolCall('actual.categories.create').catch(() => {});
   return queueWriteOperation(async () => {
+    const groupId = (category as { group_id?: unknown } | null)?.group_id;
+    if (typeof groupId === 'string') await assertCategoryGroupExists(groupId);
     try {
       const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
       return normalizeToId(raw);
@@ -2953,6 +2969,8 @@ export async function updateCategory(id: string, fields: Partial<components['sch
     if (!(Array.isArray(categories) && categories.some((c) => c?.id === id))) {
       throw new NotFoundRefusal('Category', id, 'actual_categories_get');
     }
+    const groupId = (fields as { group_id?: unknown } | null)?.group_id;
+    if (typeof groupId === 'string') await assertCategoryGroupExists(groupId);
     await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
