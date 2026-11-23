@@ -704,6 +704,51 @@ test.describe('Docker E2E - tool surface', () => {
     expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
   });
 
+  // #764: a group created with is_income true is stored as an income group, a category takes its
+  // group's flag, and a contradiction or a move across kinds is refused with nothing written.
+  const listCategories = async (mcp: { call: (t: string, a?: any) => Promise<any> }): Promise<any[]> => {
+    const data = await mcp.call('list_entities', { type: 'category' });
+    return (Array.isArray(data) ? data : data?.categories ?? []) as any[];
+  };
+
+  test('manage_categories create - an income group stores is_income and its category takes it (#764)', async ({ mcp, makeCategoryGroup, makeCategory }) => {
+    const group = await makeCategoryGroup({ isIncome: true });
+    const stored = (await listGroups(mcp)).find((g: any) => g?.id === group.id);
+    expect(stored?.is_income).toBe(true);
+    const category = await makeCategory({ group });
+    expect((await listCategories(mcp)).find((c: any) => c?.id === category.id)?.is_income).toBe(true);
+  });
+
+  test('manage_categories create - ERROR: a contradicting is_income is refused and nothing is created (#764)', async ({ mcp, makeCategoryGroup }) => {
+    const group = await makeCategoryGroup({ isIncome: true });
+    const name = `E2E-Contra-${uniqueSuffix()}`;
+    let refused = false;
+    try {
+      await mcp.call('manage_categories', { action: 'create', entity: 'category', name, group_id: group.id, is_income: false });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain('contradicts its group');
+      refused = true;
+    }
+    if (!refused) throw new Error(`manage_categories accepted a contradicting is_income; remove the category "${name}" by hand`);
+    expect((await listCategories(mcp)).find((c: any) => c?.name === name)).toBeUndefined();
+  });
+
+  test('manage_categories update - ERROR: moving an expense category into an income group needs is_income (#764)', async ({ mcp, makeCategoryGroup, makeCategory }) => {
+    const income = await makeCategoryGroup({ isIncome: true });
+    const category = await makeCategory();
+    let refused = false;
+    try {
+      await mcp.call('manage_categories', { action: 'update', entity: 'category', id: category.id, group_id: income.id });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain('Pass is_income');
+      refused = true;
+    }
+    if (!refused) throw new Error(`manage_categories moved category ${category.id} across kinds without is_income`);
+    const found = (await listCategories(mcp)).find((c: any) => c?.id === category.id);
+    expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
+    expect(found?.is_income).toBe(false);
+  });
+
   test('manage_categories update - should update category', async ({ mcp, makeCategory }) => {
     const category = await makeCategory();
     const newName = `E2E-Category-Updated-${uniqueSuffix()}`;
@@ -4763,6 +4808,55 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
     expect(schedules.find((x: any) => x?.id === schedule.id)?.payee, 'the stored payee must be unchanged').toBe(payee.id);
     if (!refused) throw new Error(`actual_schedules_update accepted an unknown payee on schedule ${schedule.id} (cleaned up by the fixture)`);
+  });
+
+  // #764: the same rows through the legacy tools. actual_category_groups_get returns { groups }.
+  test('actual_category_groups_create - is_income true is stored and the category takes it (#764)', async ({ mcp, cleanup, makeCategory }) => {
+    const name = `E2E-IncomeLegacy-${uniqueSuffix()}`;
+    const raw: any = await mcp.call('actual_category_groups_create', { name, is_income: true });
+    const id = (typeof raw === 'string' ? raw : raw?.id) as string;
+    expect(id, 'actual_category_groups_create must return an id').toBeTruthy();
+    cleanup.add(CLEANUP_ORDER.categoryGroup, `category group ${name}`, async () => {
+      await mcp.call('actual_category_groups_delete', { id });
+    });
+    const group = { id, name };
+    const groupsData: any = await mcp.call('actual_category_groups_get');
+    const stored = ((Array.isArray(groupsData) ? groupsData : groupsData?.groups ?? []) as any[]).find((g: any) => g?.id === group.id);
+    expect(stored?.is_income).toBe(true);
+    const category = await makeCategory({ group });
+    const cats = (await mcp.call('actual_categories_get')) as any[];
+    expect(cats.find((c: any) => c?.id === category.id)?.is_income).toBe(true);
+  });
+
+  test('actual_categories_create - ERROR: a contradicting is_income is refused and nothing is created (#764)', async ({ mcp, makeCategoryGroup }) => {
+    const group = await makeCategoryGroup({ isIncome: true });
+    const name = `E2E-ContraLegacy-${uniqueSuffix()}`;
+    let refused = false;
+    try {
+      await mcp.call('actual_categories_create', { name, group_id: group.id, is_income: false });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain('contradicts its group');
+      refused = true;
+    }
+    if (!refused) throw new Error(`actual_categories_create accepted a contradicting is_income; remove the category "${name}" by hand`);
+    const cats = (await mcp.call('actual_categories_get')) as any[];
+    expect(cats.find((c: any) => c?.name === name)).toBeUndefined();
+  });
+
+  test('actual_categories_update - ERROR: moving an expense category into an income group needs is_income (#764)', async ({ mcp, makeCategoryGroup, makeCategory }) => {
+    const income = await makeCategoryGroup({ isIncome: true });
+    const category = await makeCategory();
+    let refused = false;
+    try {
+      await mcp.call('actual_categories_update', { id: category.id, fields: { group_id: income.id } });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain('Pass is_income');
+      refused = true;
+    }
+    if (!refused) throw new Error(`actual_categories_update moved category ${category.id} across kinds without is_income`);
+    const cats = (await mcp.call('actual_categories_get')) as any[];
+    const found = cats.find((c: any) => c?.id === category.id);
+    expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {
