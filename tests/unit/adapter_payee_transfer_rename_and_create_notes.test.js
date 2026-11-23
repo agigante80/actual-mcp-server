@@ -130,6 +130,14 @@ for (const mode of ['write-fails', 'never-visible']) {
   noteMode = mode;
   check(e !== null && !isPreflightRefusal(e), `${mode}: plain error, not a refusal`);
   check(e && e.message.includes(NEW_ID) && e.message.includes('exists') && !e.message.includes('timed out'), `${mode}: names the id and says the payee exists`, e && e.message);
+  // Legacy surface: the text names the legacy tool, never a compact action name.
+  check(e && e.message.includes('actual_notes_update') && !e.message.includes('set_note'), `${mode}: legacy text names actual_notes_update`, e && e.message);
+  // Compact surface: the dispatcher rewrites the legacy name to its compact phrase.
+  const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
+  const { buildCompactTool, legacyPhrases } = await import('../../dist/src/compact/dispatch.js');
+  const compact = buildCompactTool(COMPACT_TOOLS.find((t) => t.name === 'manage_payees'), { callOperation: async () => { throw e; } }, legacyPhrases(COMPACT_TOOLS));
+  const ce = await attempt(() => compact.call({ action: 'create', name: 'Zed', notes: 'n' }));
+  check(ce && !ce.message.includes('actual_notes_update') && /manage_payees with action set_note/.test(ce.message), `${mode}: compact text names the compact action`, ce && ce.message);
 }
 
 if (failures > 0) { console.error(`\n${failures} failure(s)`); process.exit(1); }
