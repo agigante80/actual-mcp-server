@@ -4509,6 +4509,37 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     expect(body.success).toBe(true);
     expect(body.detachedTransfers).toBe(0);
   });
+
+  // #816: an account is assigned to a group, ungrouped, and an unknown group is refused.
+  test('manage_accounts update - assigns an account to a group, ungroups it, and refuses an unknown group (#816)', async ({ mcp, makeAccount, cleanup }) => {
+    const account = await makeAccount();
+    const name = `E2E-Group816-${uniqueSuffix()}`;
+    const created = await mcp.call('manage_accounts', { action: 'create', entity: 'account_group', name });
+    const groupId = (typeof created === 'string' ? created : (created as any)?.id) as string;
+    cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
+      await mcp.call('manage_accounts', { action: 'delete', entity: 'account_group', id: groupId }).catch(() => undefined);
+    });
+    const groupOf = async () => {
+      const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+      return listed.find((a: any) => a?.id === account.id)?.account_group_id ?? null;
+    };
+    await mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, account_group_id: groupId });
+    expect(await groupOf()).toBe(groupId);
+    await mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, account_group_id: null });
+    expect(await groupOf()).toBeNull();
+    const ghost = '00000000-0000-4000-8000-0000000000ff';
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, account_group_id: ghost }))).toMatch(/Account group.*not found/);
+    expect(await groupOf()).toBeNull();
+  });
+
+  test('manage_accounts update - ERROR: a malformed account_group_id is refused and an account_group_id on create is refused (#816)', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, account_group_id: 'not-a-uuid' }))).toMatch(/account_group_id/);
+    const name = `E2E-GroupCreate816-${uniqueSuffix()}`;
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'create', entity: 'account', name, account_group_id: account.id }))).toMatch(/account_group_id/);
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.some((x: any) => x?.name === name)).toBe(false);
+  });
 });
 
 test.describe('Docker E2E - compact manage_categories (#676)', () => {
@@ -5865,5 +5896,20 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const dest = await makeAccount();
     const category = await makeCategory();
     expect(await refusal(() => mcp.call('actual_accounts_close', { id: src.id, transferAccountId: dest.id, transferCategoryId: category.id }))).toMatch(/has no effect/);
+  });
+
+  // #816: the legacy update accepts account_group_id and refuses a malformed one.
+  test('actual_accounts_update - account_group_id alone is accepted; a malformed id is refused (#816)', async ({ mcp, makeAccount, cleanup }) => {
+    const account = await makeAccount();
+    const name = `E2E-GroupLegacy816-${uniqueSuffix()}`;
+    const created = await mcp.call('actual_account_groups_create', { name });
+    const groupId = (typeof created === 'string' ? created : (created as any)?.id) as string;
+    cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
+      await mcp.call('actual_account_groups_delete', { id: groupId }).catch(() => undefined);
+    });
+    await mcp.call('actual_accounts_update', { id: account.id, fields: { account_group_id: groupId } });
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === account.id)?.account_group_id).toBe(groupId);
+    expect(await refusal(() => mcp.call('actual_accounts_update', { id: account.id, fields: { account_group_id: 'not-a-uuid' } }))).toMatch(/account_group_id/);
   });
 });

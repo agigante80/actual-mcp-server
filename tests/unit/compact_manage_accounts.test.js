@@ -64,6 +64,15 @@ await check('create account_group routes to the group tool with sort_order', () 
   expectCall({ action: 'create', entity: 'account_group', name: 'Savings', sort_order: 2 }, 'actual_account_groups_create', { name: 'Savings', sort_order: 2 }));
 await check('update account wraps everything but id under fields and drops entity', () =>
   expectCall({ action: 'update', entity: 'account', id: U1, name: 'N', offbudget: true }, 'actual_accounts_update', { id: U1, fields: { name: 'N', offbudget: true } }));
+await check('update account with account_group_id wraps it under fields, and null ungroups (#816)', async () => {
+  await expectCall({ action: 'update', entity: 'account', id: U1, account_group_id: U2 }, 'actual_accounts_update', { id: U1, fields: { account_group_id: U2 } });
+  await expectCall({ action: 'update', entity: 'account', id: U1, account_group_id: null }, 'actual_accounts_update', { id: U1, fields: { account_group_id: null } });
+});
+await check('NEGATIVE: a malformed account_group_id, and one on create, are refused (#816)', async () => {
+  await refused({ action: 'update', entity: 'account', id: U1, account_group_id: 'not-a-uuid' }, /account_group_id/);
+  await refused({ action: 'create', entity: 'account', name: 'x', account_group_id: U2 }, /account_group_id.*(not valid for action: create|cannot be used)/);
+  await refused({ action: 'update', entity: 'account_group', id: U1, account_group_id: U2 }, /account_group_id/);
+});
 await check('update account_group is flat', () =>
   expectCall({ action: 'update', entity: 'account_group', id: U1, name: 'G', sort_order: 1 }, 'actual_account_groups_update', { id: U1, name: 'G', sort_order: 1 }));
 await check('close with entity omitted renames the transfer keys', () =>
@@ -120,7 +129,7 @@ await check('NEGATIVE: balance on close is refused', () =>
 await check('NEGATIVE: update without entity, id, or any change is refused', async () => {
   await refused({ action: 'update', id: U1, name: 'x' }, /entity.*required for action: update/);
   await refused({ action: 'update', entity: 'account', name: 'x' }, /id.*required for action: update/);
-  await refused({ action: 'update', entity: 'account', id: U1 }, /update needs at least one of: name, offbudget, closed/);
+  await refused({ action: 'update', entity: 'account', id: U1 }, /update needs at least one of: name, offbudget, closed, account_group_id/);
   await refused({ action: 'update', entity: 'account_group', id: U1 }, /update needs at least one of: name, sort_order/);
 });
 await check('NEGATIVE: offbudget on an account_group update is refused', () =>

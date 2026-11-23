@@ -2724,6 +2724,15 @@ export async function updateAccount(id: string, fields: Partial<components['sche
     if (!(Array.isArray(accounts) && accounts.some((a) => a?.id === id))) {
       throw new NotFoundRefusal('Account', id, 'actual_accounts_list');
     }
+    // #816: an unknown group id would be written as a dangling reference. The groups are another
+    // listing from the accounts, so read them here, in the same cycle; null ungroups and needs no read.
+    const groupId = (fields as { account_group_id?: unknown } | null | undefined)?.account_group_id;
+    if (typeof groupId === 'string') {
+      const groups = await withConcurrency(() => retry(() => rawGetAccountGroups() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 }));
+      if (!(Array.isArray(groups) && groups.some((g) => g?.id === groupId))) {
+        throw new NotFoundRefusal('Account group', groupId, 'actual_account_groups_list');
+      }
+    }
     await withConcurrency(() => retry(() => rawUpdateAccount(id, fields) as Promise<void | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return null;
   });

@@ -29,6 +29,7 @@ const balance = z.number().optional().describe('Opening balance, integer cents.'
 const sortOrder = z.number().optional().describe('Sidebar position; lower first.');
 const offbudget = z.boolean().optional().describe('Off-budget flag.');
 const closed = z.boolean().optional().describe('Closed flag.');
+const accountGroupId = z.string().nullable().optional().describe('Account group id; null ungroups.');
 const transferAccountId = z.string().optional().describe('Account that receives the remaining balance.');
 const transferCategoryId = z.string().optional().describe('Category for the balancing transaction.');
 const accountId = z.string().optional().describe('Account id; omit to sync every linked account.');
@@ -41,6 +42,7 @@ const ACCOUNT_REAL: Readonly<Record<string, z.ZodType>> = {
   transfer_account_id: CommonSchemas.accountId,
   transfer_category_id: CommonSchemas.categoryId,
   account_id: CommonSchemas.accountId,
+  account_group_id: CommonSchemas.accountGroupId,
 };
 const GROUP_REAL: Readonly<Record<string, z.ZodType>> = { ...ACCOUNT_REAL, id: CommonSchemas.accountGroupId };
 
@@ -59,10 +61,10 @@ const createGroupFields = asFields(
   }),
 );
 const updateFields = asFields(
-  z.object({ entity, id, name, offbudget, closed }).superRefine((value, ctx) => {
+  z.object({ entity, id, name, offbudget, closed, account_group_id: accountGroupId }).superRefine((value, ctx) => {
     needs('update', ctx, value as V, ['entity', 'id']);
     strict(ctx, value as V, ACCOUNT_REAL);
-    atLeastOne(ctx, value as V, ['name', 'offbudget', 'closed']);
+    atLeastOne(ctx, value as V, ['name', 'offbudget', 'closed', 'account_group_id']);
   }),
 );
 const updateGroupFields = asFields(
@@ -130,7 +132,7 @@ export const manageAccounts: CompactToolSpec = {
     'To read or find ids use list_entities; month notes belong to manage_budget_months. Other fields are refused. ' +
     'entity (account or account_group) is required for create, update and delete; close takes account or nothing. ' +
     'create: entity, name; optional balance (account, integer cents) and offbudget (account), or sort_order (account_group). ' +
-    'update: entity, id and at least one of name, offbudget, closed (account) or name, sort_order (account_group); to close or reopen prefer those actions. ' +
+    'update: entity, id and at least one of name, offbudget, closed, account_group_id (a group id, or null to ungroup) (account) or name, sort_order (account_group); to close or reopen prefer those actions. ' +
     'close: id; optional transfer_account_id (required for a non-zero balance, not id itself), transfer_category_id (required when a non-zero on-budget account closes into an off-budget one, refused otherwise); an account with no transactions is REMOVED, not closed. ' +
     'reopen: id. ' +
     'delete: entity, id; DESTRUCTIVE, cannot be undone: an account takes its transactions with it and the other half of each transfer stays, unlinked (a closed one cannot be deleted), a group leaves its accounts ungrouped. ' +

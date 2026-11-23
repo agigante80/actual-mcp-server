@@ -8,7 +8,7 @@ export default createTool({
   description:
     'Create a new account, on-budget unless offbudget is true. ' +
     'The optional balance (integer cents, negative for debt) is recorded as a Starting Balance transaction; on an off-budget account it has no category. ' +
-    'Not idempotent: repeating the call creates another account. Returns { result: <new account id> }.',
+    'Not idempotent: repeating the call creates another account; change an existing one with actual_accounts_update. Returns { result: <new account id> }.',
   schema: z.object({ 
     // #380: the `id` field was REMOVED rather than tightened. Upstream ignores it:
     // `handlers['api/account-create']` destructures only name, offbudget, closed and the
