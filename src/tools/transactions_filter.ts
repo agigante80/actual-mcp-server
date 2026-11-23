@@ -40,7 +40,6 @@ const tool: ToolDefinition = {
     // #756: the account listing is read before the fetch so an explicit off-budget account is
     // refused instead of answered with an empty result. No `verifyExists` above (an unknown
     // well-formed id keeps returning { result: [] }); an id absent from the listing passes the guard.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const accounts = await adapter.getAccounts();
     refuseOffBudgetAccount(Array.isArray(accounts) ? accounts : [], input.accountId);
 
