@@ -5651,12 +5651,29 @@ function displayedBudget(file: BudgetFile): BudgetFile {
   return { name: file.name, syncId: file.syncId, serverUrl: logSafeOrigin(file.serverUrl) };
 }
 
+/**
+ * The budget this caller's session is on, or undefined when it cannot be told (#787). Never throws.
+ * Side effect: getActiveBudgetConfig memoises a restored preference into the session slot, so a
+ * listing in a fresh session pins it to the restored budget, the same answer its next budget call
+ * would compute.
+ */
+function activeBudgetForListing(): BudgetConfig | undefined {
+  if (!requestContext.getStore()?.sessionId) return undefined;
+  try { return getActiveBudgetConfig(); } catch { return undefined; }
+}
+
 /** List usable budgets first, then granted encrypted files that need a server key. */
 export function getBudgetRegistry() {
   const allowed = restrictedAllowedBudgets('actual_budgets_list_available');
-  const usable = requestBudgets().filter(b => !allowed || allowed.includes(b.syncId)).map(b => ({
-    ...displayedBudget(b), hasEncryption: !!b.encryptionPassword,
-  }));
+  const active = activeBudgetForListing();
+  let marked = false;
+  const usable = requestBudgets().filter(b => !allowed || allowed.includes(b.syncId)).map(b => {
+    // Match on syncId AND name, never object identity (discovery builds new objects per call), and
+    // mark the FIRST match only. A row outside the filtered list is never marked (#787).
+    const isActive = !marked && !!active && b.syncId === active.syncId && b.name === active.name;
+    if (isActive) marked = true;
+    return { ...displayedBudget(b), hasEncryption: !!b.encryptionPassword, ...(isActive ? { active: true as const } : {}) };
+  });
   return [...usable, ...lockedBudgets().map(file => ({
     ...displayedBudget(file), hasEncryption: true, locked: true as const, hint: LockedRefusal.hint,
   }))];

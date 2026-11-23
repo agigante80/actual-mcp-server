@@ -62,6 +62,16 @@ test.describe('Docker E2E - tool surface', () => {
   // listings must stay whole: every configured budget is listed, and each one's file is
   // visible in get_all. Per-token isolation (#572) is covered by the unit rows in
   // tests/unit/httpServer_static_tokens.test.js instead.
+  test('list_entities budget_file - exactly one row is active and a partial name is refused (#787)', async ({ mcp }) => {
+    const available = await mcp.call('list_entities', { type: 'budget_file' });
+    const active = available.budgets.filter((b: { active?: boolean }) => b.active === true);
+    expect(active.length, `exactly one row is active; got ${JSON.stringify(available.budgets)}`).toBe(1);
+    expect(available.hint, 'the hint must not promise a partial name').not.toMatch(/partial/i);
+    const partial = String(active[0].name).slice(0, 2);
+    await expect(mcp.call('manage_budget_files', { action: 'switch', budget_name: partial }),
+      'a partial name is refused').rejects.toThrow(/not found/i);
+  });
+
   test('list_entities budget_file - an unrestricted session still lists every budget', async ({ mcp }) => {
     const available = await mcp.call('list_entities', { type: 'budget_file' });
     expect(Array.isArray(available?.budgets)).toBe(true);

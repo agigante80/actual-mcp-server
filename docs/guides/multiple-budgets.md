@@ -24,7 +24,7 @@ Use `list_entities` with `type: "budget_file"`, then `manage_budget_files` with
 by configured name first, then by exact Sync ID, then by file name. Names match
 case-insensitively. If several usable files share a name, use an unambiguous
 Sync ID. If configured budgets share a Sync ID across servers, use their
-distinct configured names. The session remembers which server you selected.
+distinct configured names. The switch takes effect at once in this session and other open sessions keep their budget. It is also remembered per caller, so a new session of the same caller starts on the switched budget; all holders of the one legacy `MCP_SSE_AUTHORIZATION` token are one caller (use `MCP_STATIC_TOKENS` for separate callers), and a caller with no identity remembers nothing. The budget listing marks this session's budget with `active: true`. A switch needs the exact name (case-insensitive), not a partial one.
 
 The switch checks locked files only after the usable lookup finds no match.
 An exact locked Sync ID or a unique locked name then gives the missing-key

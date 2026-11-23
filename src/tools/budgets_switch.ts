@@ -42,7 +42,7 @@ const tool: ToolDefinition = {
     'Switch to ' + (showDiscoveredBudgets ? 'another available budget' : 'a different pre-configured budget') + ' for all subsequent operations in this session. ' +
     'Each budget can target a different Actual Budget server, sync ID, and encryption password. ' +
     'Call actual_budgets_list_available first to see the available budget names. ' +
-    'The switch is per-session and takes effect immediately; no server restart required.',
+    'It takes effect at once in this session; other open sessions keep their budget. It is remembered per caller, so a new session of the same caller starts on it; holders of the one legacy MCP_SSE_AUTHORIZATION token are one caller. No server restart required.',
   inputSchema: InputSchema,
   call: async (args: unknown) => {
     const { budgetName } = InputSchema.parse(args);
@@ -52,7 +52,7 @@ const tool: ToolDefinition = {
       budgetName: result.name,
       budgetId: result.syncId,
       serverUrl: result.serverUrl,
-      message: `Switched to budget '${result.name}' (${result.syncId}) on ${result.serverUrl}. All subsequent operations in this session now target this budget.`,
+      message: `Switched to budget '${result.name}' (${result.syncId}) on ${result.serverUrl}. All subsequent operations in this session now target this budget. Authenticated callers also start their new sessions on this budget.`,
     };
   },
 };

@@ -192,7 +192,7 @@ export const amountCentsSchema = z
  */
 export const budgetAmountCentsSchema = z
   .number()
-  .int('amount must be an integer (cents)')
+  .int('Amount must be an integer (cents)')
   .min(-MAX_BUDGET_AMOUNT_CENTS, `amount must be at least -${MAX_BUDGET_AMOUNT_CENTS} (the limit Actual can store)`)
   .max(MAX_BUDGET_AMOUNT_CENTS, `amount must be at most ${MAX_BUDGET_AMOUNT_CENTS} (the limit Actual can store)`)
   .describe('Budget amount in cents, at most 2251799813685247 either way');

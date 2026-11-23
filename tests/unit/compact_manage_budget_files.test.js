@@ -156,7 +156,8 @@ await check('read-only: every action is refused with MCP_READ_ONLY and runs noth
   }
 });
 await check('description states the side-effect semantics', () => {
-  for (const w of ['ADDS a budget', 'replaces nothing', 'NEW server budget file', 'OVERWRITES', 'this session only']) assert.ok(spec.description.includes(w), w);
+  for (const w of ['ADDS a budget', 'replaces nothing', 'NEW server budget file', 'OVERWRITES', 'remembered per caller', 'other open sessions', 'legacy bearer token']) assert.ok(spec.description.includes(w), w);
+  assert.ok(!spec.description.includes('this session only'), 'no bare this session only (#787)');
 });
 // #687: the import overwrites nothing and loads nothing for the session; the old wording said
 // both, and a model that believed it wrote into the configured budget by mistake.

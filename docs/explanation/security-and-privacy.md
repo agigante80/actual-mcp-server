@@ -614,7 +614,7 @@ chown $USER:$USER ./actual-data
 
 **Location**: `MCP_BRIDGE_DATA_DIR/budget-preferences.json`
 
-**Contents**: a map from `sha256(principal)` to a budget sync id. It lets a re-initialized session (after a server restart) restore the user's last active budget.
+**Contents**: a map from `sha256(principal)` to a budget sync id. It lets a re-initialized session (after a server restart) restore the user's last active budget, and any new session of the same principal starts on it. Every holder of the one legacy bearer token is one principal.
 
 **Protection**:
 - ✅ Keys are SHA-256 hashes of the principal: the raw OIDC subject, email, or bearer token is never written to disk

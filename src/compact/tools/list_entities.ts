@@ -78,7 +78,7 @@ export const listEntities: CompactToolSpec = {
     'rule: payee_id to list that payee\'s rules.\n' +
     'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
-    'budget_file: scope configured (default) or server.\n' +
+    'budget_file: scope configured (default; active true marks this session\'s budget) or server.\n' +
     'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
     'Returns the entity list for the type; a query returns { matches, count }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
   selector: 'type',

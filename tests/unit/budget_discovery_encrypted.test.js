@@ -76,7 +76,7 @@ test('list usable rows unchanged, then locked rows in discovery order with safe 
   const files = [file('static', 'Remote'), locked, plain, file('keyed', 'Remote keyed')];
   await run(files, async () => {
     assert.deepEqual((await listAvailable.call({})).budgets, [
-      { name: 'Keyed', syncId: 'keyed', serverUrl: origin, hasEncryption: true },
+      { name: 'Keyed', syncId: 'keyed', serverUrl: origin, hasEncryption: true, active: true },
       { name: 'Private', syncId: 'plain', serverUrl: origin, hasEncryption: false },
       lockedRow('static', 'First', 'https://first.example.test'), lockedRow('locked', 'Locked file'),
     ]);
@@ -160,7 +160,7 @@ test('discovery off keeps the static listing and refusal text', async () => {
   try {
     await run([locked, file('keyed', 'Remote')], async () => {
       assert.deepEqual(adapter.getBudgetRegistry(), [
-        { name: 'Keyed', syncId: 'keyed', serverUrl: origin, hasEncryption: true },
+        { name: 'Keyed', syncId: 'keyed', serverUrl: origin, hasEncryption: true, active: true },
         { name: 'Copy', syncId: 'keyed', serverUrl: origin, hasEncryption: false },
       ]);
       await assert.rejects(adapter.switchBudget('locked'), { name: 'Error', message:
