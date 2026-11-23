@@ -216,8 +216,11 @@ function extractWhereFields(sql: string): Array<{ field: string; table?: string 
   // and without the `(?!NOT\s)` lookahead that alternative read `NOT` as a column and rejected a
   // valid query with `Field "NOT" does not exist`. The lookahead is exact on purpose: it skips only
   // the word NOT followed by whitespace, so every real column name is still extracted and checked.
+  // #751: the table.field alternative must start with a letter or underscore and not continue a
+  // longer token. Without that, the decimal literal `5.5` was read as column `5` of table `5` and
+  // refused with `Table "5" does not exist`, for `= 5.5`, `< 5.5` and `IN (5.5)` alike.
   const fieldMatches = whereClause.matchAll(
-    /(\w+)\.(\w+)|(?:^|\s)(\w+)\s*[=<>!]|(?:^|\s)(?!NOT\s)(\w+)\s+(?:NOT\s+)?(?:IN|LIKE|BETWEEN)\b|(?:^|\s)(\w+)\s+IS\b/gi,
+    /(?<![\w.])([A-Za-z_]\w*)\.(\w+)|(?:^|\s)(\w+)\s*[=<>!]|(?:^|\s)(?!NOT\s)(\w+)\s+(?:NOT\s+)?(?:IN|LIKE|BETWEEN)\b|(?:^|\s)(\w+)\s+IS\b/gi,
   );
   for (const match of fieldMatches) {
     if (match[1] && match[2]) {
