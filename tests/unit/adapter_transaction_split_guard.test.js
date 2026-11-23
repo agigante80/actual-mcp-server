@@ -15,7 +15,7 @@ const check = (cond, label, d = '') => {
   if (cond) console.log(`  ✓ ${label}`);
   else { console.error(`  ✗ FAIL: ${label}${d ? ' (' + d + ')' : ''}`); failures++; }
 };
-process.on('unhandledRejection', () => { unhandled++; });
+process.on('unhandledRejection', (err) => { unhandled++; console.error('unhandled rejection', err); process.exit(1); });
 
 const P = 'p0000000-0000-0000-0000-000000000001';
 const C1 = 'c0000000-0000-0000-0000-000000000001';
@@ -97,43 +97,68 @@ const PLAIN = 'n0000000-0000-0000-0000-000000000001';
 
   console.log('\n[#748] positive: allowed shapes');
   seed();
-  await adapter.updateTransaction(P, { amount: -2000, subtransactions: [{ amount: -1200 }, { amount: -800 }] });
+  e = await attempt(() => adapter.updateTransaction(P, { amount: -2000, subtransactions: [{ amount: -1200 }, { amount: -800 }] }));
+  check(e === null, 'no refusal', e && e.message);
   check(updates.length === 1, 'parent edited through subtransactions that sum');
   seed([-600, -900]);
-  await adapter.updateTransaction(P, { amount: -1500 });
+  e = await attempt(() => adapter.updateTransaction(P, { amount: -1500 }));
+  check(e === null, 'no refusal', e && e.message);
   check(updates.length === 1, 'broken split (children -1500) repaired by amount -1500');
   seed();
-  await adapter.updateTransaction(C1, { amount: -600 });
+  e = await attempt(() => adapter.updateTransaction(C1, { amount: -600 }));
+  check(e === null, 'no refusal', e && e.message);
   check(updates.length === 1, 'child amount equal to stored is a no-op pass');
   seed();
   table.find((x) => x.id === C2).amount = -500; // children -600 + -500 = -1100; setting C1 to -500 gives -1000
   updates.length = 0;
-  await adapter.updateTransaction(C1, { amount: -500 });
+  e = await attempt(() => adapter.updateTransaction(C1, { amount: -500 }));
+  check(e === null, 'no refusal', e && e.message);
   check(updates.length === 1, 'child amount that keeps the sum equal to the parent is allowed');
   seed([-1000]);
-  await adapter.deleteTransaction(C1);
+  e = await attempt(() => adapter.deleteTransaction(C1));
+  check(e === null, 'no refusal', e && e.message);
   check(deletes.length === 1, 'sole child can be deleted');
   seed();
-  await adapter.deleteTransaction(P);
+  e = await attempt(() => adapter.deleteTransaction(P));
+  check(e === null, 'no refusal', e && e.message);
   check(deletes.length === 1 && deletes[0] === P, 'deleting the parent is unchanged');
   seed();
   table.find((x) => x.id === C1).amount = 0;
   table.find((x) => x.id === C2).amount = -1000;
-  await adapter.deleteTransaction(C1);
+  e = await attempt(() => adapter.deleteTransaction(C1));
+  check(e === null, 'no refusal', e && e.message);
   check(deletes.length === 1, 'child delete allowed when the remaining children still sum to the parent');
 
   console.log('\n[#748] no extra reads for non-split or non-amount updates');
   seed();
-  await adapter.updateTransaction(PLAIN, { amount: -75 });
+  e = await attempt(() => adapter.updateTransaction(PLAIN, { amount: -75 })); check(e === null, 'no refusal', e && e.message);
   check(txnQueries === 1, 'plain amount update reads once (the pre-flight)', String(txnQueries));
-  seed(); await adapter.updateTransaction(P, { notes: 'n' });
+  seed(); e = await attempt(() => adapter.updateTransaction(P, { notes: 'n' })); check(e === null, 'no refusal', e && e.message);
   check(txnQueries === 1, 'parent notes-only: no family read', String(txnQueries));
-  seed(); await adapter.updateTransaction(C1, { category: null });
+  seed(); e = await attempt(() => adapter.updateTransaction(C1, { category: null })); check(e === null, 'no refusal', e && e.message);
   check(txnQueries === 1, 'child category-only: no family read', String(txnQueries));
-  seed(); await adapter.updateTransaction(P, { amount: -1000 });
+  seed(); e = await attempt(() => adapter.updateTransaction(P, { amount: -1000 })); check(e === null, 'no refusal', e && e.message);
   check(txnQueries === 1, 'parent amount equal to stored: no family read', String(txnQueries));
-  seed(); await adapter.updateTransaction(PLAIN, { notes: 'n' });
+  seed(); e = await attempt(() => adapter.updateTransaction(PLAIN, { notes: 'n' })); check(e === null, 'no refusal', e && e.message);
   check(txnQueries === 1, 'plain notes update: single read', String(txnQueries));
+
+  console.log('\n[#748] batch: a repeated id is judged against its current amount');
+  seed([-600, -500], -1000);
+  r = await adapter.updateTransactionBatch([{ id: C1, fields: { amount: -500 } }, { id: C1, fields: { amount: -600 } }]);
+  check(r.succeeded.length === 1 && r.failed.length === 1 && r.failed[0].id === C1, 'second write of the same child is refused, not skipped as unchanged', JSON.stringify(r));
+  check(updates.length === 1 && updates[0].fields.amount === -500, 'only the first write was sent');
+  seed([-600, -900], -1000);
+  r = await adapter.updateTransactionBatch([{ id: P, fields: { amount: -1500 } }, { id: P, fields: { amount: -1000 } }]);
+  check(r.succeeded.length === 1 && r.failed.length === 1 && /children sum to -1500/.test(r.failed[0].error), 'repair then revert is refused on the second item', JSON.stringify(r));
+
+  seed([-600, -500], -1000);
+  r = await adapter.updateTransactionBatch([{ id: C1, fields: { amount: -500 } }, { id: C2, fields: { amount: -400 } }]);
+  check(r.succeeded.length === 1 && r.failed.length === 1 && r.failed[0].id === C2, 'a sibling item sees the amount this batch already sent', JSON.stringify(r));
+
+  console.log('\n[#748] batch refusal text points at the single update');
+  seed();
+  r = await adapter.updateTransactionBatch([{ id: P, fields: { amount: -2000 } }]);
+  check(r.failed[0]?.error === `Transaction "${P}" is a split parent: its children sum to -1000, so its amount cannot become -2000 on its own. Use actual_transactions_update with subtransactions that sum to -2000 for this split.`, 'exact batch message', r.failed[0]?.error);
 
   console.log('\n[#748] a refused update creates no payee');
   seed();
@@ -146,4 +171,4 @@ const PLAIN = 'n0000000-0000-0000-0000-000000000001';
   if (failures) { console.error(`\n${failures} failure(s)`); process.exit(1); }
   console.log('\nOK');
   process.exit(0);
-})();
+})().catch((err) => { console.error('test run rejected', err); process.exit(1); });

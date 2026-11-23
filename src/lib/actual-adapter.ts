@@ -2934,7 +2934,7 @@ async function resolvePayeeNameInPayload<P>(payload: P, listing?: PayeeListingRo
  */
 type SplitFamily = { parentAmount: number | undefined; children: Array<{ id: string; amount: number }> };
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function readSplitFamily(q: any, parentId: string): Promise<SplitFamily> {
+async function readSplitFamily(q: any, parentId: string, written?: ReadonlyMap<string, number>): Promise<SplitFamily> {
   const data = await withConcurrency(() =>
     retry(async () => {
       const res = (await rawRunQuery(
@@ -2945,25 +2945,27 @@ async function readSplitFamily(q: any, parentId: string): Promise<SplitFamily> {
       return Array.isArray(res?.data) ? res.data : [];
     }, { retries: 2, backoffMs: 200 })
   );
+  // `written`: amounts this batch already sent, which a read may not show yet (raw writes land late).
+  const amountOf = (r: { id: string; amount?: number }) => written?.get(r.id) ?? r.amount;
   return {
-    parentAmount: data.find((r) => r.id === parentId)?.amount,
-    children: data.filter((r) => r.id !== parentId && r.parent_id === parentId).map((r) => ({ id: r.id, amount: r.amount ?? 0 })),
+    parentAmount: amountOf({ id: parentId, amount: data.find((r) => r.id === parentId)?.amount }),
+    children: data.filter((r) => r.id !== parentId && r.parent_id === parentId).map((r) => ({ id: r.id, amount: amountOf(r) ?? 0 })),
   };
 }
 type SplitMemberRow = { is_parent?: boolean; is_child?: boolean; amount?: number; parent_id?: string | null };
 /** Refusal message when setting `fields.amount` on this row would unbalance its split, else null. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function splitAmountRefusal(q: any, id: string, row: SplitMemberRow, fields: unknown): Promise<string | null> {
+async function splitAmountRefusal(q: any, id: string, row: SplitMemberRow, fields: unknown, written?: ReadonlyMap<string, number>): Promise<string | null> {
   const newAmount = (fields as { amount?: unknown } | null)?.amount;
   if (typeof newAmount !== 'number' || newAmount === row.amount) return null;
   if (row.is_parent === true) {
-    const { children } = await readSplitFamily(q, id);
+    const { children } = await readSplitFamily(q, id, written);
     const childSum = children.reduce((a, c) => a + c.amount, 0);
     if (childSum === newAmount) return null;
-    return `Transaction "${id}" is a split parent: its children sum to ${childSum}, so its amount cannot become ${newAmount} on its own. Send subtransactions that sum to ${newAmount} in the same update.`;
+    return `Transaction "${id}" is a split parent: its children sum to ${childSum}, so its amount cannot become ${newAmount} on its own. ${written ? `Use actual_transactions_update with subtransactions that sum to ${newAmount} for this split.` : `Send subtransactions that sum to ${newAmount} in the same update.`}`;
   }
   if (row.is_child === true && typeof row.parent_id === 'string') {
-    const { parentAmount, children } = await readSplitFamily(q, row.parent_id);
+    const { parentAmount, children } = await readSplitFamily(q, row.parent_id, written);
     if (parentAmount === undefined) return null;
     const newSum = children.filter((c) => c.id !== id).reduce((a, c) => a + c.amount, 0) + newAmount;
     if (newSum === parentAmount) return null;
@@ -3162,6 +3164,8 @@ export async function updateTransactionBatch(
     const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;
     // #743: payees read lazily, once per batch; creations are pushed so a repeated new name reuses them.
     let payeeListing: PayeeListingRow[] | undefined;
+    // #748: amounts already sent in this batch, so a repeated id is judged against its current value.
+    const writtenAmounts = new Map<string, number>();
     for (const [position, { id, fields }] of updates.entries()) {
       if (!existing.has(id)) {
         failed.push({ id, error: `Transaction "${id}" not found. Use actual_transactions_get to list transactions.` });
@@ -3180,7 +3184,7 @@ export async function updateTransactionBatch(
         // #747: same for an unknown payee or category id, one listing per kind for the batch.
         await assertTransactionReferencesExist(fields as any, UPDATE_UNKNOWN_REFERENCE_DETAIL);
         // #748: same split-total rule as updateTransaction, per item (a batch cannot carry subtransactions).
-        const splitRefusal = await splitAmountRefusal(q, id, existing.get(id)!, fields);
+        const splitRefusal = await splitAmountRefusal(q, id, { ...existing.get(id)!, amount: writtenAmounts.get(id) ?? existing.get(id)!.amount }, fields, writtenAmounts);
         if (splitRefusal) throw new OutOfRangeRefusal(splitRefusal, id);
         let payload = fields;
         if ((fields as { payee_name?: unknown } | null)?.payee_name !== undefined) {
@@ -3192,6 +3196,8 @@ export async function updateTransactionBatch(
         await withConcurrency(() =>
           retry(() => rawUpdateTransaction(id, payload) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })
         );
+        const sentAmount = (fields as { amount?: unknown } | null)?.amount;
+        if (typeof sentAmount === 'number') writtenAmounts.set(id, sentAmount);
         succeeded.push({ id });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
