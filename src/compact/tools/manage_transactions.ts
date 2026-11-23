@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommonSchemas, TX_IMPORT_ROW_KEYS, TX_UPDATE_NOT_NULL_KEYS } from '../../lib/schemas/common.js';
+import { CommonSchemas, TX_IMPORT_ROW_KEYS, TX_UPDATE_NEEDS_A_FIELD, TX_UPDATE_NOT_NULL_KEYS, hasFieldToChange } from '../../lib/schemas/common.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
 /**
@@ -72,7 +72,8 @@ const BATCH_ITEM = z
         notes: z.string().nullable().optional(),
         cleared: z.boolean().nullable().optional(),
       })
-      .strict(),
+      .strict()
+      .refine((v) => hasFieldToChange(v, ''), { message: TX_UPDATE_NEEDS_A_FIELD }),
   })
   .strict();
 const TX_ITEM = z.looseObject({ date: CommonSchemas.date, amount: CommonSchemas.amountCents });
@@ -190,9 +191,7 @@ const updateFields = asFields(
         if (v[key] === null) issue(ctx, key, 'cannot be null; omit it to leave it unchanged');
       }
       // The refine runs inside planCall's `.strict()`; the unit test proves it survives that.
-      if (!Object.entries(v).some(([key, val]) => key !== 'id' && val !== undefined)) {
-        issue(ctx, 'id', 'update needs at least one field to change besides id');
-      }
+      if (!hasFieldToChange(v)) issue(ctx, 'id', TX_UPDATE_NEEDS_A_FIELD);
     }),
 );
 

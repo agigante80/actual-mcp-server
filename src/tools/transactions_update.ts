@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { CommonSchemas } from '../lib/schemas/common.js';
+import { CommonSchemas, TX_UPDATE_NEEDS_A_FIELD, hasFieldToChange } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   // #380: REQUIRED, and typed. It was `.optional()` with the describe "optional for smoke
@@ -39,6 +39,8 @@ const InputSchema = z.object({
     // A transfer link is upstream-managed and has no safe edit, so the key is gone; stripping it
     // silently would have turned that call into `fields: {}` and a success lie.
     .strict()
+    // #815: an update that changes nothing is refused instead of reported as a success.
+    .refine((v) => hasFieldToChange(v, ''), { message: TX_UPDATE_NEEDS_A_FIELD })
     .describe('Fields to update'),
 });
 

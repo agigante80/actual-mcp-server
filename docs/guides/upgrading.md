@@ -144,6 +144,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `manage_transactions` `update` and `update_batch`, and the legacy `actual_transactions_update` and `actual_transactions_update_batch`, used to accept `null` for `account`, `date` and `amount`, and the write then failed upstream with `"amount" is required for table "transactions"` and the row JSON. They are NOT NULL columns, so the call is now refused before anything is written, naming the key (`amount: cannot be null; omit it to leave it unchanged`). A batch holding one such item is refused as a whole. Omit the key to leave the value unchanged. `null` still clears `payee`, `category`, `notes` and the other optional keys.
 
+## A transaction update with no field, and an unknown key in a batch item, are refused (#815)
+
+`actual_transactions_update` with `fields: {}`, `actual_transactions_update_batch` items with an empty `fields`, and `manage_transactions` `update_batch` items with no field besides `id` used to be accepted and reported as an update although nothing changed. They are now refused with `update needs at least one field to change besides id`, and a refusal in a batch refuses the whole call before anything is written. The legacy batch also used to strip an unknown key, and `subtransactions`, `imported_id`, `reconciled` and `transfer_id`, silently; it now refuses them, naming the key (`unexpected field(s): bogus`). `null` still counts as a change. A script that sent a stray key in a batch item must stop sending it. To split a transaction use `actual_transactions_update`.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.
