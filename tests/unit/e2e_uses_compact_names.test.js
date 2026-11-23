@@ -59,6 +59,9 @@ const LEGACY_SMOKE = [
   'actual_transactions_create', // #747, #793: the legacy unknown-payee and transfer-payee refusals on create
   'actual_accounts_delete', // #768: the legacy delete reports detachedTransfers
   'actual_accounts_close', // #768: the legacy close refuses a pairing that cannot keep a category
+  'actual_accounts_update', // #816: the legacy update accepts account_group_id
+  'actual_account_groups_create', // #816: the group a legacy update assigns
+  'actual_account_groups_delete', // #816: its cleanup
   'actual_transactions_update_batch', // #744: the legacy unknown-account refusal on a batch item
   'actual_transactions_import', // #744: the legacy unknown-account refusal on import
   'actual_rules_get',

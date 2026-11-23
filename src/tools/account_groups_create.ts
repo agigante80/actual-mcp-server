@@ -8,7 +8,7 @@ export default createTool({
   description:
     'Create a custom account group for organising accounts in the sidebar. ' +
     'Returns the id of the new group. Assigning accounts to it is a separate step: ' +
-    'set the account\'s account_group_id with actual_accounts_update. ' +
+    'assign an account with actual_accounts_update account_group_id. ' +
     'Requires an Actual server on 26.9.0 or newer.',
   schema: z.object({
     name: z.string().min(1).describe('Display name for the group, for example "Savings" or "Joint accounts"'),

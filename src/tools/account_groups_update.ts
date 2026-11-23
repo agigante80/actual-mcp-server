@@ -8,8 +8,8 @@ export default createTool({
   name: 'actual_account_groups_update',
   description:
     'Rename a custom account group or change its sidebar position. ' +
-    'Does not change which accounts belong to it: use actual_accounts_update to move an ' +
-    'account between groups. Refuses with a not-found error, writing nothing, when the group ' +
+    'Does not change which accounts belong to it: use actual_accounts_update ' +
+    'account_group_id to move an account between groups. Refuses with a not-found error, writing nothing, when the group ' +
     'does not exist. Requires an Actual server on 26.9.0 or newer.',
   schema: z.object({
     id: CommonSchemas.accountGroupId.describe('Id of the account group to update (actual_account_groups_list lists them)'),
