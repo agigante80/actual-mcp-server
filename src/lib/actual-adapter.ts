@@ -2073,11 +2073,23 @@ async function assertAccountExists(accountId: string, detail: string): Promise<v
  */
 const CREATE_UNKNOWN_REFERENCE_DETAIL =
   'No transactions were created: Actual would otherwise have stored them with that payee or category empty.';
+/**
+ * #793: on CREATE a payee that is the transfer payee of an account is refused too (same helper,
+ * same payees read, so no extra listing). Upstream's add path defaults runTransfers to false, so
+ * such a row would land with no transfer_id and no mirror row in the other account: half a
+ * transfer reported as success. Only a payee id can reach a transfer payee (their name is empty
+ * and payee_name matches by name). Skipped when the caller asks for runTransfers. A rule can still
+ * set a transfer payee after the write; the adapter cannot see that before it happens.
+ */
+const CREATE_TRANSFER_PAYEE_REFUSAL = (payeeId: string): string =>
+  `Payee "${payeeId}" is the transfer payee of an account, so a transaction created with it would write one side of a transfer only. ` +
+  'Nothing was written. To move money between accounts use actual_transfers_create; for an ordinary payment pass another payee or payee_name.';
 const UPDATE_UNKNOWN_REFERENCE_DETAIL =
   'The transaction was not changed: Actual would otherwise have saved it with that payee or category empty.';
 async function assertTransactionReferencesExist(
   input: { payee?: unknown; category?: unknown; subtransactions?: unknown } | null | undefined,
   detail: string,
+  refuseTransferPayee = false,
 ): Promise<void> {
   if (!input || typeof input !== 'object') return;
   const payeeId = typeof input.payee === 'string' ? input.payee : undefined;
@@ -2090,10 +2102,14 @@ async function assertTransactionReferencesExist(
   }
   if (payeeId !== undefined) {
     const payees = await withConcurrency(() =>
-      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string; tombstone?: boolean }>>), { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<PayeeListingRow[]>), { retries: 2, backoffMs: 200 })
     );
-    const known = (Array.isArray(payees) ? payees : []).some((p) => !p?.tombstone && p?.id === payeeId);
-    if (!known) throw new NotFoundRefusal('Payee', payeeId, 'actual_payees_get', detail);
+    const row = (Array.isArray(payees) ? payees : []).find((p) => !(p as { tombstone?: boolean } | null)?.tombstone && p?.id === payeeId);
+    if (!row) throw new NotFoundRefusal('Payee', payeeId, 'actual_payees_get', detail);
+    if (refuseTransferPayee && row.transfer_acct) {
+      const echo = payeeId.slice(0, 80);
+      throw new OutOfRangeRefusal(CREATE_TRANSFER_PAYEE_REFUSAL(echo), echo);
+    }
   }
   if (categoryIds.length > 0) {
     const categories = await withConcurrency(() =>
@@ -2139,7 +2155,7 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     // #359: the account must exist (see assertAccountExists for the rationale).
     await assertAccountExists(accountId, CREATE_UNKNOWN_ACCOUNT_DETAIL);
     // #747: an unknown payee or category id (also on a child) is refused before anything is written.
-    for (const t of txArray) await assertTransactionReferencesExist(t as any, CREATE_UNKNOWN_REFERENCE_DETAIL);
+    for (const t of txArray) await assertTransactionReferencesExist(t as any, CREATE_UNKNOWN_REFERENCE_DETAIL, options.runTransfers !== true);
 
     // Remove account/accountId from transaction objects as they're passed separately
     const cleanedTxs = txArray.map(tx => {

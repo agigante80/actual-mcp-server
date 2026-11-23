@@ -1589,6 +1589,43 @@ payee: payee.id,
     }
   });
 
+  // #793: a create with the transfer payee of an account would write one side of a transfer, so it
+  // is refused. The transfer payee is the listing row whose transfer_acct is the other account.
+  const transferPayeeOf = async (mcp: any, accountId: string): Promise<string> => {
+    const all = (await mcp.call('list_entities', { type: 'payee' })) as any;
+    const list = (Array.isArray(all) ? all : (all?.payees ?? all?.result ?? [])) as any[];
+    const row = list.find((p: any) => p?.transfer_acct === accountId);
+    expect(row, 'the transfer payee of the account').toBeTruthy();
+    return row.id;
+  };
+
+  test('manage_transactions create - ERROR: a transfer payee is refused and neither account gains a row, an ordinary payee still works (#793)', async ({ mcp, makeAccount, makePayee }) => {
+    const accountA = await makeAccount();
+    const accountB = await makeAccount();
+    const transferPayee = await transferPayeeOf(mcp, accountB.id);
+    const notes = `E2E-XferPayee-${uniqueSuffix()}`;
+    const okNotes = `E2E-XferPayeeOk-${uniqueSuffix()}`;
+    try {
+      // mcp.call returns a create reply's `id` alone (null on a refusal), so the reply is read whole from mcp.raw.
+      const reply = JSON.parse((await mcp.raw('manage_transactions', { action: 'create', account: accountA.id, date: '2018-05-21', amount: -4202, payee: transferPayee, notes })).content[0].text);
+      expect(reply.success).toBe(false);
+      expect(reply.error).toMatch(/is the transfer payee of an account/);
+      expect(reply.error).toMatch(/manage_transactions with action transfer/);
+      expect(reply.error).not.toMatch(/\bactual_transfers_/);
+
+      const payee = await makePayee();
+      await mcp.call('manage_transactions', { action: 'create', account: accountA.id, date: '2018-05-21', amount: -4202, payee: payee.id, notes: okNotes });
+      expect(await idsWithNotes(mcp, okNotes)).toHaveLength(1);
+    } finally {
+      for (const n of [notes, okNotes]) {
+        for (const id of await idsWithNotes(mcp, n)) await mcp.call('manage_transactions', { action: 'delete', id });
+      }
+    }
+    const out = await mcp.call('run_query', { query: `SELECT id FROM transactions WHERE account IN ('${accountA.id}','${accountB.id}')` });
+    const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    expect(rows, 'a refused create must not write a row in either account').toEqual([]);
+  });
+
   test('manage_transactions update and update_batch - ERROR: an unknown category id is refused and the stored category is unchanged (#747)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
     const unknown = '00000000-0000-4000-8000-000000000000';
     const account = await makeAccount();
@@ -5416,6 +5453,31 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       if (kept !== category.id) await mcp.call('actual_transactions_update', { id, fields: { category: category.id } });
       expect(kept, 'a refused update must leave the stored category').toBe(category.id);
     }
+  });
+
+  // #793: the legacy create tool refuses a transfer payee with the legacy transfer tool name.
+  test('actual_transactions_create - ERROR: a transfer payee is refused and neither account gains a row (#793)', async ({ mcp, makeAccount }) => {
+    const accountA = await makeAccount();
+    const accountB = await makeAccount();
+    const all = (await mcp.call('list_entities', { type: 'payee' })) as any;
+    const list = (Array.isArray(all) ? all : (all?.payees ?? all?.result ?? [])) as any[];
+    const transferPayee = list.find((p: any) => p?.transfer_acct === accountB.id)?.id;
+    expect(transferPayee, 'the transfer payee of the account').toBeTruthy();
+    const notes = `E2E-LegacyXferPayee-${uniqueSuffix()}`;
+    const rowsOf = async (query: string) => {
+      const out = await mcp.call('run_query', { query });
+      return (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    };
+    try {
+      const created = JSON.parse((await mcp.raw('actual_transactions_create', { account: accountA.id, date: '2018-05-21', amount: -4202, payee: transferPayee, notes })).content[0].text);
+      expect(created.success).toBe(false);
+      expect(created.error).toMatch(/is the transfer payee of an account/);
+      expect(created.error).toMatch(/use actual_transfers_/);
+    } finally {
+      for (const r of await rowsOf(`SELECT id FROM transactions WHERE notes = '${notes}'`)) await mcp.call('manage_transactions', { action: 'delete', id: r.id });
+    }
+    const rows = await rowsOf(`SELECT id FROM transactions WHERE account IN ('${accountA.id}','${accountB.id}')`);
+    expect(rows, 'a refused create must not write a row in either account').toEqual([]);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {

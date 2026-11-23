@@ -59,7 +59,11 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   the rebase on develop (which carries #747 and #766) the legacy total is 124,160 bytes
 //   (123,768 on develop before this change, so 392 added, description text only), and the
 //   ceiling is that plus 8. Every per-tool ceiling is unchanged.
-const TOTAL_CEILING = 124168;
+//   Total raised for #793 (transfer payee refused on create) from 124,168 to 124,190:
+//   actual_transactions_create says a transfer payee is refused and names
+//   actual_transfers_create. Measured after the rebase on develop (which carries #750) the
+//   legacy total is 124,182 bytes (124,160 before, so 22 added), and the ceiling is that plus 8.
+const TOTAL_CEILING = 124190;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The

@@ -84,7 +84,7 @@ for (const [label, extra, msg, entity] of [
   check(adds.length === 0, `${label}: raw addTransactions not called`);
 }
 
-console.log('\n[#747] create: known ids, hidden category and transfer payee pass; null and absent read nothing');
+console.log('\n[#747] create: known ids and hidden category pass; null and absent read nothing');
 reset();
 let e = await refused(() => adapter.addTransactions([tx({ payee: PAYEE, category: CAT })]));
 check(e === null && adds.length === 1, 'known payee and category written', e && e.message);
@@ -92,8 +92,9 @@ reset();
 e = await refused(() => adapter.addTransactions([tx({ category: HIDDEN_CAT })]));
 check(e === null && adds.length === 1, 'hidden category accepted', e && e.message);
 reset();
+// #793: a transfer payee on create is refused (see adapter_transaction_create_transfer_payee.test.js).
 e = await refused(() => adapter.addTransactions([tx({ payee: TRANSFER_PAYEE })]));
-check(e === null && adds.length === 1, 'transfer payee accepted', e && e.message);
+check(e !== null && isPreflightRefusal(e) && adds.length === 0, 'transfer payee refused on create (#793)', e && e.message);
 reset();
 e = await refused(() => adapter.addTransactions([tx({ payee: null, category: null })]));
 check(e === null && adds.length === 1 && payeeReads === 0 && categoryReads === 0, 'null payee and category read no listing', `${payeeReads}/${categoryReads}`);

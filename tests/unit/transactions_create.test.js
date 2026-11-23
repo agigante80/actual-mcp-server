@@ -16,7 +16,8 @@ console.log('Running JS smoke tests for transactions_create');
   apiDefault.sync = async () => {};
   apiDefault.getAccounts = async () => rawAccounts;
   apiDefault.addTransactions = async () => { addCalls++; return 'ok'; };
-  apiDefault.getPayees = async () => [];
+  // #793: one transfer payee in the (per-drain cached) listing; the #747 case uses an id absent from it.
+  apiDefault.getPayees = async () => [{ id: '55555555-5555-4555-8555-555555555555', name: '', transfer_acct: 'other' }];
   apiDefault.getCategories = async () => [];
 
   const mod = await import('../../dist/src/tools/transactions_create.js');
@@ -117,6 +118,20 @@ console.log('Running JS smoke tests for transactions_create');
     gcheck(res?.success === false, 'success is false');
     gcheck(res?.id === null,       'no id is invented');
     gcheck(typeof res?.error === 'string' && res.error.startsWith('Payee "' + ghost + '" not found. Use actual_payees_get to list available payees.'), 'names the payee and the listing tool', res && res.error);
+    gcheck(addCalls === 0,         'raw addTransactions NOT called');
+  }
+
+  console.log('\n[#793] transactions_create: NEGATIVE, a transfer payee id');
+  {
+    rawAccounts = [{ id: A, name: 'Checking' }];
+    addCalls = 0;
+    const xfer = '55555555-5555-4555-8555-555555555555';
+    let threw = null;
+    let res = null;
+    try { res = await tool.call({ account: A, date: '2026-07-27', amount: -1000, payee: xfer }); } catch (e) { threw = e; }
+    gcheck(threw === null,         'a refusal is returned structurally, not thrown');
+    gcheck(res?.success === false && res?.id === null, 'success false, no id');
+    gcheck(typeof res?.error === 'string' && res.error.startsWith('Payee "' + xfer + '" is the transfer payee of an account') && res.error.includes('actual_transfers_create'), 'names the transfer tool', res && res.error);
     gcheck(addCalls === 0,         'raw addTransactions NOT called');
   }
 
