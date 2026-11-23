@@ -4490,7 +4490,9 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     });
     expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest }))).toMatch(/needs transferCategoryId/);
     const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
-    expect(listed.find((a: any) => a?.id === src.id)?.closed).toBeFalsy();
+    const found = listed.find((a: any) => a?.id === src.id);
+    expect(found).toBeTruthy();
+    expect(found?.closed).toBeFalsy();
   });
 
   test('manage_accounts close - ERROR: transfer_category_id on an on-budget to on-budget close has no effect and is refused (#768)', async ({ mcp, makeAccount, makeCategory }) => {
@@ -4499,7 +4501,9 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     const category = await makeCategory();
     expect(await refusal(() => mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest.id, transfer_category_id: category.id }))).toMatch(/has no effect/);
     const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
-    expect(listed.find((a: any) => a?.id === src.id)?.closed).toBeFalsy();
+    const found = listed.find((a: any) => a?.id === src.id);
+    expect(found).toBeTruthy();
+    expect(found?.closed).toBeFalsy();
   });
 
   test('manage_accounts delete - POSITIVE: the reply reports detachedTransfers (#768)', async ({ mcp, makeAccount }) => {
@@ -4508,6 +4512,8 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     const body = JSON.parse(reply.content[0].text);
     expect(body.success).toBe(true);
     expect(body.detachedTransfers).toBe(0);
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.some((a: any) => a?.id === account.id)).toBe(false);
   });
 
   test('manage_accounts delete - POSITIVE: deleting an account with a transfer reports 1 and unlinks the counterpart (#768)', async ({ mcp, makeAccount }) => {
@@ -4524,6 +4530,8 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     const body = JSON.parse(reply.content[0].text);
     expect(body.success).toBe(true);
     expect(body.detachedTransfers).toBe(1);
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.some((a: any) => a?.id === src.id)).toBe(false);
     const after = (await rowsOf(dst.id)).find((t: any) => t?.amount === 3000);
     expect(after).toBeTruthy();
     expect(after?.transfer_id ?? null).toBeNull();
@@ -4581,7 +4589,7 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     cleanup.add(CLEANUP_ORDER.accountGroup, `account group ${name}`, async () => {
       await mcp.call('manage_accounts', { action: 'delete', entity: 'account_group', id }).catch(() => undefined);
     });
-    expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id, sort_order: 2 }))).toMatch(/sort_order|name/);
+    expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id, name: `${name}-x`, sort_order: 2 }))).toMatch(/sort_order/);
     expect(await refusal(() => mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id }))).toMatch(/name/);
     const renamed = `${name}-renamed`;
     await mcp.call('manage_accounts', { action: 'update', entity: 'account_group', id, name: renamed });
@@ -5942,10 +5950,16 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const gone = await makeAccount();
     const reply = await mcp.raw('actual_accounts_delete', { id: gone.id });
     expect(JSON.parse(reply.content[0].text).detachedTransfers).toBe(0);
+    const afterDelete = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(afterDelete.some((a: any) => a?.id === gone.id)).toBe(false);
     const src = await makeAccount({ balance: 5000 });
     const dest = await makeAccount();
     const category = await makeCategory();
     expect(await refusal(() => mcp.call('actual_accounts_close', { id: src.id, transferAccountId: dest.id, transferCategoryId: category.id }))).toMatch(/has no effect/);
+    const afterRefusal = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    const found = afterRefusal.find((a: any) => a?.id === src.id);
+    expect(found).toBeTruthy();
+    expect(found?.closed).toBeFalsy();
   });
 
   // #816: the legacy update accepts account_group_id and refuses a malformed one.

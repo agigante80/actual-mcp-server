@@ -16,12 +16,18 @@ console.log('Running schema validation (negative-path) tests');
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-function expectParseError(tool, input, label) {
+// `messagePattern` (optional): the refusal must also say the right thing, so a rejection for an
+// unrelated reason cannot pass for the one under test.
+function expectParseError(tool, input, label, messagePattern) {
   try {
     tool.inputSchema.parse(input);
     console.error(`  FAIL (expected Zod error) [${label}]`);
     return false;
-  } catch (_e) {
+  } catch (e) {
+    if (messagePattern && !messagePattern.test(String(e?.message))) {
+      console.error(`  FAIL (rejected for the wrong reason) [${label}]: ${e?.message}`);
+      return false;
+    }
     console.log(`  ✓ correctly rejected [${label}]`);
     return true;
   }
@@ -392,7 +398,7 @@ async function expectCallError(tool, input, label) {
   }
   if (!expectParseError(accounts_create_tool,
     { name: 'Mortgage', offbudget: 'yes' },
-    'non-boolean offbudget rejected (#767)')) fail();
+    'non-boolean offbudget rejected (#767)', /offbudget[\s\S]*boolean/i)) fail();
   // #380: `id` was REMOVED, not tightened, because upstream's api/account-create drops it
   // and mints its own UUID. Pinned so a future "add an optional id back" reintroduces the
   // success-lie (caller's id accepted, different id created) and this goes red first.
