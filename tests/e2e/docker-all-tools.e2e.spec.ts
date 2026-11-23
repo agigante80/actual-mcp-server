@@ -181,6 +181,44 @@ test.describe('Docker E2E - tool surface', () => {
     expect(typeof parsed.error).toBe('string');
   });
 
+  // #769: the error model. A tool FAILURE is an isError result the model can read and retry; a
+  // protocol fault (unknown tool, malformed params) is a JSON-RPC -32602. `mcp.raw` returns the
+  // isError result untouched, where `mcp.call` would convert it to a throw.
+  test('a validation failure is an isError result carrying the Validation error text, on both transports', async ({ mcp }) => {
+    const res = await mcp.raw('list_entities', { type: 'nope' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/Validation error/);
+  });
+
+  test('a typed refusal is an isError result: manage_tags delete of an unknown id names the id', async ({ mcp }) => {
+    const ghost = '00000000-0000-4000-8000-0000000007a9';
+    const res = await mcp.raw('manage_tags', { action: 'delete', id: ghost });
+    // If this is not an error the delete was ACCEPTED for an id that must not exist.
+    expect(res.isError, `manage_tags delete accepted the unknown id ${ghost}`).toBe(true);
+    expect(res.content[0].text).toContain(ghost);
+    expect(res.content[0].text).toMatch(/not found/i);
+  });
+
+  test('an unknown tool is a -32602 protocol error naming the tool, with no schema dump', async ({ mcp }) => {
+    let message = '';
+    try {
+      await mcp.raw('no_such_tool_769', {});
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain('Unknown tool: no_such_tool_769');
+    expect(message).not.toContain('invalid_type');
+  });
+
+  test('a malformed tools/call envelope is a -32602 with a fixed text and no echoed value', async ({ mcp }) => {
+    test.skip(isStdio, 'asserts on the raw HTTP JSON-RPC envelope');
+    const res = await mcp.post({ jsonrpc: '2.0', id: 7691, method: 'tools/call', params: { name: 42 } });
+    const json = await res.json();
+    expect(json.error?.code).toBe(-32602);
+    expect(json.error.message).toBe('Invalid tools/call params: "name" must be a string');
+    expect(JSON.stringify(json)).not.toContain('invalid_type');
+  });
+
   test('conforms() can fail: a wrong-typed value and a missing required key are rejected', async () => {
     const schema = { type: 'object', required: ['result'], properties: { result: { type: 'array' } } };
     expect(conforms(schema, { result: [] })).toBe(true);
@@ -379,8 +417,10 @@ test.describe('Docker E2E - tool surface', () => {
       params: { name: 'manage_accounts', arguments: { action: 'create', entity: 'account', balance: 0 } }, // no 'name'
     });
     const json = await res.json();
-    expect(json.error).toBeTruthy();
-    expect(json.error.message).toMatch(/name|required/i);
+    // #769: a validation failure is an isError result, not a JSON-RPC error.
+    expect(json.error).toBeFalsy();
+    expect(json.result.isError).toBe(true);
+    expect(json.result.content[0].text).toMatch(/name|required/i);
   });
 
   // #543: an UNAUTHENTICATED malformed body on the MCP path. express.json runs before auth, so
@@ -434,9 +474,10 @@ test.describe('Docker E2E - tool surface', () => {
       params: { name: 'list_entities' }, // no 'arguments', so no 'type'
     });
     const json = await res.json();
-    expect(json.error).toBeTruthy();
+    expect(json.error).toBeFalsy();
+    expect(json.result.isError).toBe(true);
     // Only `{}` names the missing field; a regression to `undefined` loses the field name.
-    expect(json.error.message).toMatch(/\btype\b/);
+    expect(json.result.content[0].text).toMatch(/\btype\b/);
   });
 
   test('summarize_transactions balance - should get account balance', async ({ mcp, makeAccount }) => {

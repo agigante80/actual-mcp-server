@@ -48,6 +48,7 @@ import {
   waitForMCPHealth,
   retryRequest,
   callToolPaced,
+  callToolPacedEnvelope,
   extractResult,
   DEFAULT_MCP_SERVER_URL,
   HTTP_PATH,
@@ -245,7 +246,7 @@ function makeClient(request: APIRequestContext, sessionId: string): McpClient {
     // total, so whether it trips depends only on how tightly the run bunches them. See
     // callToolPaced for the measurements. Nothing is retried: a retried create is not
     // idempotent.
-    raw: (tool, args = {}) => callToolPaced(request, sessionId, tool, args),
+    raw: (tool, args = {}) => callToolPacedEnvelope(request, sessionId, tool, args),
     call: async (tool, args = {}) =>
       extractResult(await callToolPaced(request, sessionId, tool, args)),
     post: (payload) =>

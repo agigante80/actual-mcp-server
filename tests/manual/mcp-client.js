@@ -200,6 +200,13 @@ export function createClient({ url, rl, fetchImpl, retryPauseMs }) {
       arguments: args,
     });
 
+    // #769: a tool failure is an isError result, not a JSON-RPC error. Throw it with the tool's
+    // own text, the way the failure used to arrive, so a module's try/catch still sees it.
+    if (response && response.isError === true) {
+      const block = Array.isArray(response.content) ? response.content.find((c) => c && c.type === 'text') : undefined;
+      throw new Error(block && typeof block.text === 'string' ? block.text : `tool ${toolName} failed`);
+    }
+
     // Unwrap MCP envelope: tools return { content: [{ text: '{"result":...}' }] }
     if (response && response.content && response.content[0]) {
       const textContent = response.content[0].text;

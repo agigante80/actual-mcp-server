@@ -151,7 +151,7 @@ Restart the server after the change: configuration is read once at startup. In C
 
 Anything a client stored by tool name now points at a tool that is no longer published. Re-select it against the new names:
 
-- **LibreChat**: open each agent, remove the old `actual_*` entries from its tool list and select the compact tools. An agent keeps the old names and fails with "Tool not found" until you do. The [LibreChat page](clients/librechat.md) has the setup.
+- **LibreChat**: open each agent, remove the old `actual_*` entries from its tool list and select the compact tools. An agent keeps the old names and fails with a refusal naming `MCP_TOOL_SURFACE` until you do. The [LibreChat page](clients/librechat.md) has the setup.
 - **Claude Desktop**: the "always allow" choice is stored per tool name, so you are asked again for each compact tool. Approve the ones you use. Restart the app after changing the server.
 - **Claude Code**: permission rules such as `mcp__actual-budget__actual_accounts_list` in `settings.json` or `settings.local.json` no longer match. Replace them with the compact names (`mcp__actual-budget__list_entities`) or the server wildcard (`mcp__actual-budget`).
 - **Saved prompts, skills and scripts** that name `actual_*` tools: change each to the compact call from the table above. A model that has the old name in its instructions will keep trying it.

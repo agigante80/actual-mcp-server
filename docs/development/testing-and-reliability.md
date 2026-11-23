@@ -301,6 +301,8 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `budget_discovery_selection.test.js` | OIDC discovery starting budgets, saved choices, encrypted files, duplicate Sync IDs across servers and the SDK download target with pooling off (#689) |
 | `oidc_bearer_middleware.test.js` | `src/auth/bearer.ts`, which replaced the `mcp-auth` package (#634), answers exactly as mcp-auth 0.2.0 did: every response captured from that version (`tests/unit/fixtures/mcp-auth-0.2.0-golden.json`, 30 middleware and 35 metadata cases) is replayed and compared on status, auth and CORS headers and body; plus the two deliberate departures (no console write, a pre-set `req.auth` replaced) |
 | `toolsets.test.js` | #483: toolset partition, preset, `MCP_TOOLS`, strict `MCP_READ_ONLY`, the hard-coded `WRITE_CAPABLE` set guarded by the adapter call graph, the import-allowlist side-effect scan (#533), the single-dispatch check widened to `.call(`, `.apply(`, `.bind(`, bracket and `Reflect.apply` spellings plus a reviewed `getTool(` reader list (#533), the chat preset reference guard, hide-and-refuse dispatch, fail-closed before `initialize()` |
+| `tool_error_shape.test.js` | #769: both transports over a real wire (stdio through an in-memory SDK client, HTTP through `startHttpServer`): every failure class becomes an `isError` result carrying `error.message` and nothing else (no stack, cause or data), an unknown tool and a malformed envelope are `-32602` with fixed texts and no echoed value, omitted arguments dispatch `{}`, an executor fault stays `-32603`, the #438 sentence is byte identical, and the two SDK assumptions behind `registerToolCallHandler` are pinned |
+| `manual_mcp_client_iserror.test.js` | #769: the manual HTTP client's `callTool` throws on an `isError` result with the tool's text, `callMCP` returns the envelope untouched, and a success or a valid `{ error }` result does not throw |
 | `toolsets_entrypoint.test.js` | #483: the built entrypoint over stdio and the HTTP no-session list path: filtered `tools/list`, a hidden tool refused naming its setting, and exit 1 on a bad toolset, tool, `MCP_READ_ONLY` or a zero-tool configuration |
 | `compact_default_surface.test.js` | #680: the default surface is compact, spawned against dist with `MCP_TOOL_SURFACE` unset: published names, the typed refusal for a legacy name naming the opt-out, compact `MCP_TOOLS` and toolsets, and a legacy `MCP_TOOLS` refusing startup |
 | `config_tool_surface.test.js` | #671, #680: `MCP_TOOL_SURFACE` parsing (default `compact`, trim, case, rejected values) and the `compact` exclusion of `MCP_TOOLSETS` and `MCP_TOOLS`, through `configSchema.safeParse` |
@@ -1053,6 +1055,8 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `schema_validation.test.js` | Negative-path schema + runtime guards for 11+ tool schemas | 60+ |
 | `contributor_docs.test.js` | Contributor docs (AGENTS.md, CONTRIBUTING.md, PR template, SUPPORT.md, CODE_OF_CONDUCT.md): real scripts, tracked links, `AGENTS.md` required and short, PR template at most 40 lines, the docs-to-update section links a document in every row, instructions files defer to it (#496, #609, #697) | 20+ |
 | `toolsets.test.js` | Toolset policy: partition, preset, read-only set and its call-graph guard, refusal, fail-closed (#483); alias policy (#652) | 58 |
+| `tool_error_shape.test.js` | isError results for tool failures, -32602 for unknown tool and malformed envelope, both transports (#769) | 58 |
+| `manual_mcp_client_iserror.test.js` | Manual client throws on an isError result, envelope untouched in `callMCP` (#769) | 5 |
 | `toolsets_entrypoint.test.js` | Entrypoint spawn: filtered list over stdio and HTTP, refusal, startup failures (#483) | 10 |
 | `compact_default_surface.test.js` | Unset `MCP_TOOL_SURFACE` is compact end to end, legacy opt-out, compact `MCP_TOOLS` and toolsets (#680) | 22 |
 | `config_tool_surface.test.js` | `MCP_TOOL_SURFACE` parsing, default compact (#671, #680) | 20 |
@@ -1169,7 +1173,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 |------|-------------|------------|
 | Initialize | ✅ Valid protocol version | ❌ Unsupported version |
 | List Tools | ✅ Returns 85 tools | ❌ Timeout |
-| Call Tool | ✅ Executes tool | ❌ Tool not found |
+| Call Tool | ✅ Executes tool | ❌ Unknown tool (-32602) |
 | Session Persistence | ✅ Same session across calls | ❌ Session expired |
 | Health Check | ✅ Status: ok | ❌ Status: not-initialized |
 
@@ -1215,7 +1219,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | 7 | Verify session persistence | ✅ 3 consecutive calls work | ❌ Session timeout |
 | 8 | *(removed: SSE transport removed)* | N/A | N/A |
 | 9 | Docker build verification | ✅ All files present | ❌ Missing dependencies |
-| 10 | Handle invalid tool name | ✅ Error: Tool not found | ❌ Unexpected behavior |
+| 10 | Handle invalid tool name | ✅ Error -32602: Unknown tool | ❌ Unexpected behavior |
 | 11 | Handle invalid arguments | ✅ Validation error returned | ❌ Server crash |
 
 **Comprehensive All-Tools Tests (docker-all-tools.e2e.spec.ts - 80+ tests, ~120s):**
@@ -1230,7 +1234,7 @@ The authoritative per-domain breakdown lives in `tests/e2e/docker-all-tools.e2e.
 - Complete cleanup after tests
 
 **Error Scenarios Tested:**
-- ❌ Invalid tool name (Tool not found)
+- ❌ Invalid tool name (Unknown tool, -32602)
 - ❌ Missing required arguments (name, group_id, date)
 - ❌ Invalid argument types (date format, amount format)
 - ❌ Invalid field names (strict validation)

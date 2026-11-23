@@ -27,7 +27,7 @@ import { execFileSync } from 'node:child_process';
 import { McpError } from '@modelcontextprotocol/sdk/types.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { pace, extractResult } from '../shared/e2e-helpers.js';
+import { pace, extractResult, throwIfToolError } from '../shared/e2e-helpers.js';
 
 /** The container the stdio server is exec'd into. Overridable for a differently-named stack. */
 export const STDIO_CONTAINER = process.env.MCP_STDIO_CONTAINER || 'mcp-server-e2e-test';
@@ -163,7 +163,12 @@ export async function openStdioSession(): Promise<StdioSession> {
 
   return {
     raw,
-    call: async (tool, args = {}) => extractResult(await raw(tool, args)),
+    call: async (tool, args = {}) => {
+      const res = await raw(tool, args);
+      // #769: a tool failure is an isError result; `call` keeps throwing it, like the HTTP client.
+      throwIfToolError(tool, res);
+      return extractResult(res);
+    },
     instructions: () => client.getInstructions(),
     serverInfo: () => client.getServerVersion(),
     listToolNames: async () => (await client.listTools()).tools.map((t) => t.name),
