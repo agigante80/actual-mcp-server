@@ -57,6 +57,9 @@ const LEGACY_SMOKE = [
   'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag
   'actual_rules_update', // #762: the legacy empty-list refusal on update
   'actual_schedules_get',
+  'actual_schedules_create', // #785: the legacy unknown-account refusal text
+  'actual_schedules_update', // #785: the legacy unknown-payee refusal text
+  'actual_schedules_delete', // #785: removes a schedule a refusal row found written
   'actual_budgets_get_months',
   'actual_budgets_list_available',
   'actual_tags_list',
