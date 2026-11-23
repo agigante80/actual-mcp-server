@@ -4,6 +4,7 @@ import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 import { expandSplitsForSearch } from '../lib/split-search.js';
 import { idSetByName } from '../lib/actual-adapter/filter-ids.js';
+import { refuseOffBudgetAccount } from '../lib/search-account-guard.js';
 
 const InputSchema = z.object({
   categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation")'),
@@ -18,7 +19,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_category',
   description:
-    'Search transactions by category name (case-insensitive exact match, e.g. "Groceries"), optionally narrowed by a YYYY-MM-DD date range, accountId and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
+    'Search transactions by category name (case-insensitive exact match, e.g. "Groceries"), optionally narrowed by a YYYY-MM-DD date range, accountId and an amount range in integer cents. Read-only; off-budget accounts are excluded, and an off-budget accountId is refused. ' +
     'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, categoryName }, each row with accountName; count and totalAmount cover only the returned rows. With categoryName, a split is matched by its children; rows carry parent_id. ' +
     'An unknown category name returns an empty list with an error field. With a category id use actual_transactions_filter; for per-category totals use actual_transactions_aggregate.',
   inputSchema: InputSchema,
@@ -35,6 +36,8 @@ const tool: ToolDefinition = {
     // tool already paid for.
     if (input.accountId) {
       await adapter.resolveFilterId('account', input.accountId, { verifyExists: true, rows: allAccounts });
+      // #756: an explicit off-budget account is refused, not answered with an empty list.
+      refuseOffBudgetAccount(allAccounts, input.accountId);
     }
 
     // Step 1: Find category ID by name

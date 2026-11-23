@@ -96,6 +96,41 @@ await check('NEGATIVE: a malformed month is refused', () => refused({ by: 'month
 await check('NEGATIVE: a non-integer amount is refused', () => refused({ by: 'filter', min_amount: 1.5 }, /min_amount/));
 await check('NEGATIVE: a zero limit is refused', () => refused({ by: 'amount', limit: 0 }, /limit/));
 await check('NEGATIVE: a negative offset is refused', () => refused({ by: 'uncategorized', offset: -1 }, /offset/));
+// ---- #756: the named routes need their name ----
+
+await check('#756 NEGATIVE: by category without category_name is refused naming the field', () => refused({ by: 'category', start_date: '2019-03-01' }, /category_name.*required for action: category/));
+await check('#756 NEGATIVE: by category with a null category_name is refused naming the field', () => refused({ by: 'category', category_name: null }, /category_name/));
+await check('#756 NEGATIVE: by payee without payee_name is refused naming the field', () => refused({ by: 'payee', account_id: A }, /payee_name.*required for action: payee/));
+await check('#756 NEGATIVE: by payee with a null payee_name is refused naming the field', () => refused({ by: 'payee', payee_name: null }, /payee_name/));
+await check('#756: by category and by payee with the name forward as before', async () => {
+  await expectCall({ by: 'category', category_name: 'Food' }, 'actual_transactions_search_by_category', { categoryName: 'Food' });
+  await expectCall({ by: 'payee', payee_name: 'Costco', account_id: A }, 'actual_transactions_search_by_payee', { payeeName: 'Costco', accountId: A });
+});
+await check('#756: by amount and by month still take their names as optional', async () => {
+  await expectCall({ by: 'amount', absolute_amount: 5, account_id: A }, 'actual_transactions_search_by_amount', { absoluteAmount: 5, accountId: A });
+  await expectCall({ by: 'month' }, 'actual_transactions_search_by_month', {});
+});
+await check('#756: the published schema still types category_name and payee_name and requires only by', () => {
+  const js = z.toJSONSchema(tool.inputSchema);
+  assert.strictEqual(js.properties.category_name.type, 'string');
+  assert.strictEqual(js.properties.payee_name.type, 'string');
+  assert.deepStrictEqual(js.required, ['by']);
+});
+await check('#756: the off-budget refusal reaches the caller naming search_transactions with by account, not the legacy tool', async () => {
+  const { refuseOffBudgetAccount } = await import('../../dist/src/lib/search-account-guard.js');
+  const throwing = buildCompactTool(spec, { callOperation: async () => refuseOffBudgetAccount([{ id: A, offbudget: true }], A) }, phrases);
+  let e;
+  try { await throwing.call({ by: 'filter', account_id: A }); } catch (x) { e = x; }
+  assert.ok(e && isPreflightRefusal(e), 'a preflight refusal');
+  assert.ok(e.message.includes(A) && e.message.includes('search_transactions with by account'), e.message);
+  assert.ok(!e.message.includes('actual_transactions_get'), e.message);
+});
+await check('#756: the Behavior line says the names are needed and which routes refuse an off-budget account_id', () => {
+  const line = spec.description.split('\n').find((l) => l.startsWith('Behavior:'));
+  assert.ok(line.includes('category and payee need their name'), line);
+  assert.ok(line.includes('filter, category, month refuse an off-budget account_id'), line);
+});
+
 await check('a null field is treated as absent (clients that send null for every optional field)', () =>
   expectCall({ by: 'filter', account_id: null, category_id: null, start_date: '2026-01-01' }, 'actual_transactions_filter', { startDate: '2026-01-01' }));
 await check('NEGATIVE: a null selector is still refused naming by', () => refused({ by: null }, /by/));

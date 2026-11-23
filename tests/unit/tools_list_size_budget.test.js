@@ -94,7 +94,14 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   one sentence each on the legacy update, update_batch and delete descriptions. Measured on
 //   develop 126,084 bytes, after 126,413 (329 added), and the ceiling is that plus 8. The compact
 //   total is 43,856 bytes (unchanged by this ticket) and every per-tool ceiling is unchanged.
-const TOTAL_CEILING = 126421;
+//   Total raised for #756 (an explicit off-budget accountId is refused) from 126,421 to 126,541:
+//   the actual_transactions_filter, _search_by_category and _search_by_month descriptions each
+//   say an off-budget accountId is refused (description text only). Measured on develop at
+//   126,413 bytes before and 126,533 after (120 added, 40 per tool), and the ceiling is the
+//   measured total plus 8. The compact total is 43,831 bytes (43,856 before: the compact
+//   search_transactions description was trimmed to pay for its new sentence, 3,874 bytes now,
+//   3,899 before), under COMPACT_TOTAL_CEILING; every per-tool ceiling is unchanged.
+const TOTAL_CEILING = 126541;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
