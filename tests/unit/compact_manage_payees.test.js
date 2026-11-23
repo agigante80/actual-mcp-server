@@ -62,8 +62,8 @@ await check('update wraps fields and forwards a category', () =>
   expectCall({ action: 'update', id: U1, name: 'N', category: U2 }, 'actual_payees_update', { id: U1, fields: { name: 'N', category: U2 } }));
 await check('update with category null forwards null (it clears the default category)', () =>
   expectCall({ action: 'update', id: U1, category: null }, 'actual_payees_update', { id: U1, fields: { category: null } }));
-await check('update forwards transfer_acct', () =>
-  expectCall({ action: 'update', id: U1, transfer_acct: U2 }, 'actual_payees_update', { id: U1, fields: { transfer_acct: U2 } }));
+await check('update forwards name and category only', () =>
+  expectCall({ action: 'update', id: U1, name: 'N', category: U2 }, 'actual_payees_update', { id: U1, fields: { name: 'N', category: U2 } }));
 await check('delete forwards id', () => expectCall({ action: 'delete', id: U1 }, 'actual_payees_delete', { id: U1 }));
 await check('merge renames target_id and merge_ids', () =>
   expectCall({ action: 'merge', target_id: U1, merge_ids: [U2, U3] }, 'actual_payees_merge', { targetId: U1, mergeIds: [U2, U3] }));
@@ -89,7 +89,7 @@ await check('NEGATIVE: create without name, and delete or update without id, nam
   await refused({ action: 'update', name: 'x' }, /id.*required for action: update/);
 });
 await check('NEGATIVE: update with only id is refused with the exact message', () =>
-  refused({ action: 'update', id: U1 }, /update needs at least one of: name, transfer_acct, category/));
+  refused({ action: 'update', id: U1 }, /update needs at least one of: name, category/));
 await check('NEGATIVE: merge needs target_id and merge_ids; empty or 51-item lists are refused', async () => {
   await refused({ action: 'merge', merge_ids: [U2] }, /target_id.*required for action: merge/);
   await refused({ action: 'merge', target_id: U1 }, /merge_ids.*required for action: merge/);
@@ -107,6 +107,13 @@ await check('NEGATIVE: set_note without id or note, a month id and extra keys ar
   await refused({ action: 'set_note', id: U1 }, /note.*required for action: set_note/);
   await refused({ action: 'set_note', id: 'budget-2026-01', note: 'x' }, /id/);
   await refused({ action: 'set_note', id: U1, note: 'x', name: 'y' }, /name.*not valid for action: set_note/);
+});
+await check('NEGATIVE: transfer_acct is not a published update field and is refused for any value (#760)', async () => {
+  for (const v of [U2, null, '', '00000000-0000-4000-8000-000000000000']) {
+    await refused({ action: 'update', id: U1, transfer_acct: v }, /Unrecognized key: "transfer_acct"/);
+  }
+  await refused({ action: 'update', id: U1, name: 'N', transfer_acct: U2 }, /Unrecognized key: "transfer_acct"/);
+  assert.strictEqual(z.toJSONSchema(tool.inputSchema).properties.transfer_acct, undefined);
 });
 await check('NEGATIVE: malformed ids and values are refused', async () => {
   await refused({ action: 'delete', id: 'nope' }, /id/);

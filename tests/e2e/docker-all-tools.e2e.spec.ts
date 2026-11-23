@@ -3946,6 +3946,25 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     expect(await refusal(() => mcp.call('manage_payees', { action: 'merge', target_id: id, merge_ids: [] }))).toMatch(/merge_ids/);
     expect(await refusal(() => mcp.call('manage_payees', { action: 'delete', id: 'nope' }))).toMatch(/\bid\b/);
   });
+
+  // #760: transfer_acct is no longer an update field. An unknown account id used to hide the
+  // payee from every read, and a real one made a second transfer payee for that account.
+  test('manage_payees update - ERROR: transfer_acct with an unknown account id is refused and the payee stays', async ({ mcp, makePayee }) => {
+    const payee = await makePayee();
+    const message = await refusal(() => mcp.call('manage_payees', { action: 'update', id: payee.id, transfer_acct: '00000000-0000-4000-8000-000000000000' }));
+    expect(message).toMatch(/Unrecognized key: "transfer_acct"/);
+    expect((await payeesOf(mcp)).find((p: any) => p?.id === payee.id)?.name).toBe(payee.name);
+  });
+
+  test('manage_payees update - ERROR: transfer_acct with a real account id is refused', async ({ mcp, makeAccount, makePayee }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    const message = await refusal(() => mcp.call('manage_payees', { action: 'update', id: payee.id, transfer_acct: account.id }));
+    expect(message).toMatch(/Unrecognized key: "transfer_acct"/);
+    const rows = await payeesOf(mcp);
+    expect(rows.filter((p: any) => p?.transfer_acct === account.id).length).toBe(1);
+    expect(rows.find((p: any) => p?.id === payee.id)?.transfer_acct ?? null).toBeNull();
+  });
 });
 
 test.describe('Docker E2E - compact manage_tags (#676)', () => {
@@ -4489,6 +4508,15 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const payee = await makePayee();
     const payees = (await mcp.call('actual_payees_get')) as any[];
     expect(payees.map((p: any) => p?.id)).toContain(payee.id);
+  });
+
+  // #760: the legacy update tool no longer publishes transfer_acct.
+  test('actual_payees_update - ERROR: fields.transfer_acct is refused', async ({ mcp, makePayee }) => {
+    const payee = await makePayee();
+    const message = await refusal(() => mcp.call('actual_payees_update', { id: payee.id, fields: { transfer_acct: '00000000-0000-4000-8000-000000000000' } }));
+    expect(message).toMatch(/unexpected field/i);
+    const payees = (await mcp.call('actual_payees_get')) as any[];
+    expect(payees.find((p: any) => p?.id === payee.id)?.name).toBe(payee.name);
   });
 
   test('actual_rules_get - answers', async ({ mcp }) => {
