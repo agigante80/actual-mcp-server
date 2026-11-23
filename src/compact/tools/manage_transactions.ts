@@ -40,7 +40,6 @@ const category = z.string().nullable().optional().describe('Category id.');
 const notes = z.string().nullable().optional().describe('Notes; "#word" tags it.');
 const cleared = z.boolean().nullable().optional().describe('Cleared flag.');
 const importedId = z.string().nullable().optional().describe('Source id.');
-const transferId = z.string().nullable().optional().describe('Transfer id.');
 const reconciled = z.boolean().nullable().optional().describe('Reconciled flag.');
 const subtransactions = z.array(z.looseObject({ amount: z.number() })).optional().describe('Split {amount, category?, notes?}; cents sum to amount.');
 
@@ -88,7 +87,7 @@ const updates = z
       if (!r.success) ctx.addIssue({ code: 'custom', path: [i], message: r.error.issues.map((x) => `${x.path.join('.')}: ${x.message}`).join('; ') });
     });
   })
-  .describe('1 to 50 {id, fields}; fields as update, minus imported_id, transfer_id, reconciled, subtransactions.');
+  .describe('1 to 50 {id, fields}; fields as update, minus imported_id, reconciled, subtransactions.');
 const accountIdImport = z.string().describe('Account id.');
 const txs = z
   .array(z.looseObject({ date: z.string(), amount: z.number() }))
@@ -171,7 +170,6 @@ const updateFields = asFields(
       category,
       notes,
       imported_id: importedId,
-      transfer_id: transferId,
       cleared,
       reconciled,
       subtransactions,
@@ -211,7 +209,7 @@ export const manageTransactions: CompactToolSpec = {
     'Create, change, delete, import, merge or transfer transactions; pick one `action`. Writes. ' +
     'To read use search_transactions; ids come from list_entities. Cents are integers, outflows negative; dates YYYY-MM-DD. Other fields are refused. ' +
     'create: account, date, amount; optional payee, payee_name, notes, category, cleared, imported_id, subtransactions. ' +
-    'update: id and at least one of account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, transfer_id, cleared, reconciled, subtransactions; null clears. ' +
+    'update: id and at least one of account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, cleared, reconciled, subtransactions; null clears. ' +
     'update_batch: updates (1 to 50), NOT atomic, reported per item, no splits. ' +
     'delete: id; DESTRUCTIVE, permanent, balances change, cannot be undone. ' +
     'import: account_id, txs; matched like a bank import (rules applied; duplicates by imported_id or same amount within 7 days). ' +

@@ -68,6 +68,10 @@ These notes are copied from [explanation/security-and-privacy.md](../explanation
 
 The transaction, balance and schedule tools (the legacy ones and the compact tools that front them) now refuse a date that is not a real calendar day (`2018-02-30`, `2018-13-45`) with `Invalid date (not a real calendar day)`. Several of them used to accept such a string, store it, or roll it forward to the next month. A script that sends one must send a real day.
 
+### A transaction update refuses `transfer_id` and any unknown key (#746)
+
+`manage_transactions` `update` and the legacy `actual_transactions_update` no longer accept `transfer_id`. With `transfer_id: null` on a transfer side, upstream wrote a second mirror row in the other account (money duplicated, reported as success); a transfer link has no safe edit. A call that sends it is now refused with `unexpected field(s): transfer_id`. The legacy `fields` object is also strict now: any key it does not declare is refused with the same message instead of being dropped silently. A script that sends a stray key in `fields` must stop sending it; the twelve declared keys are unchanged.
+
 ### HTTP auth is required by default (#242)
 
 An existing HTTP deployment on a non-loopback bind with no token and no OIDC that previously started open will now refuse to start. The startup error names the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or `AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior. See [authentication.md](authentication.md) before choosing the last one.

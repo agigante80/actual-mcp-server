@@ -95,7 +95,6 @@ const EXCEPTIONS = {
   // too but are not id-SHAPED by name so this guard never sees them. Tightening one of the
   // three and not the others would be worse than tightening none. Decide the `fields.*`
   // group together, with Category B.
-  'actual_transactions_update:fields.transfer_id': 'nested fields.* payload id; decide with Category B',
 };
 
 /** Strip comments so an id-shaped name inside prose is not read as a schema field. */
