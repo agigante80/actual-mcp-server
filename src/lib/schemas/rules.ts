@@ -78,7 +78,8 @@ export function assertConditionOperator(condition: { field: string; op: string }
   if (RULE_NEVER_MATCHING_FIELDS.has(field)) {
     throw new Error(
       `Condition field "${field}" never matches in a rule: Actual's rule engine does not set it on the transaction. ` +
-      'To find such transactions use run_query. Nothing was written.'
+      // No tool name here: the query tool is named differently on the legacy and compact surfaces.
+      'To find such transactions, query transfer_id or is_parent instead. On an update, omit conditions to keep the stored ones. Nothing was written.'
     );
   }
   const info = Object.hasOwn(CONDITION_FIELD_OPERATORS, field) ? CONDITION_FIELD_OPERATORS[field] : undefined;
