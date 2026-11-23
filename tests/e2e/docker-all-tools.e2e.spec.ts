@@ -2014,9 +2014,12 @@ payee: payee.id,
     expect(await ids("date IN ('2019-03-01','2019-03-20')")).toEqual([t1.id, t2.id].sort());
     expect(await ids('amount IN (1000)')).toEqual([t2.id]);
     expect(await ids('amount IN (123)')).toEqual([]);
+    // Upstream's parseDate checks the SHAPE (YYYY-MM-DD) only, so an impossible calendar date such as
+    // 2019-13-45 compiles and honestly matches no row. Calendar validity of query literals is out of scope.
+    expect(await ids("date IN ('2019-13-45')")).toEqual([]);
     const refused: Array<[string, RegExp]> = [
       ["amount IN (1000, 'abc')", /Can't convert string to integer/],
-      ["date IN ('2019-13-45')", /Bad date format: 2019-13-45/],
+      ["date IN ('2019-1-5')", /Bad date format: 2019-1-5/],
       ['amount IN (5.5)', /Can't convert float to integer/],
       [`amount IN (${Array.from({ length: 201 }, (_, i) => i + 1).join(',')})`, /at most 200 are allowed/],
     ];
