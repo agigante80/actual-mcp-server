@@ -312,6 +312,8 @@ describe('(9) isolation: separate drains never share cached state, and no module
   // drain, and therefore its cache, because the drain picks one connection from batch[0].
   // That is not a cache defect (they already share the api singleton and its loaded budget)
   // and it is tracked as #390, which is about the drain itself rather than the cache.
+  // Sessions on DIFFERENT budgets in one drain are covered by adapter_drain_listing_budget_switch.test.js
+  // (#799): a budget load inside the drain drops this cache.
 }
 
 // ---------------------------------------------------------------------------
