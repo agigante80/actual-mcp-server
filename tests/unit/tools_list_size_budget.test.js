@@ -75,7 +75,14 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   under its own ceiling). Measured after #802 (which changes no description) the legacy total
 //   is 124,645 bytes (124,567 on develop before #801), and the ceiling is that plus 8. Every
 //   per-tool ceiling is unchanged.
-const TOTAL_CEILING = 124653;
+//   Total raised for #749, #814 and #815 (one pull request) from 124,645 to 125,406: the legacy
+//   import row is a closed object (additionalProperties:false plus described pass-through keys),
+//   update and update_batch lose the null branch on account, date and amount, and the update_batch
+//   item is strict with a reworded description. Measured after the rebase on develop (which carries
+//   #801 and #802) the legacy total is 125,398 bytes (124,645 before, 753 added), and the ceiling
+//   is that plus 8. The compact total is 43,491 bytes (43,466 before), under COMPACT_TOTAL_CEILING;
+//   every per-tool ceiling is unchanged.
+const TOTAL_CEILING = 125406;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The

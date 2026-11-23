@@ -209,11 +209,11 @@ How large the `tools/list` response is for each choice, so you can pick for a sm
 <!-- Generated from scripts/docs/tools-list-sizes.json by `npm run docs:gen`. Do not edit. -->
 | Configuration | Tools | `tools/list` bytes | KiB |
 |---------------|-------|--------------------|-----|
-| Compact surface (default) | 15 | 43466 | 42.4 |
-| Compact, `MCP_TOOLSETS=chat` | 6 | 17089 | 16.7 |
+| Compact surface (default) | 15 | 43491 | 42.5 |
+| Compact, `MCP_TOOLSETS=chat` | 6 | 17114 | 16.7 |
 | Compact, `MCP_READ_ONLY=true` | 6 | 17316 | 16.9 |
-| `MCP_TOOL_SURFACE=legacy` | 85 | 124645 | 121.7 |
-| Legacy, `MCP_TOOLSETS=chat` | 12 | 26074 | 25.5 |
+| `MCP_TOOL_SURFACE=legacy` | 85 | 125398 | 122.5 |
+| Legacy, `MCP_TOOLSETS=chat` | 12 | 25931 | 25.3 |
 | Legacy, `MCP_READ_ONLY=true` | 37 | 45527 | 44.5 |
 
 Measured offline, as the server builds the list (the bytes of the `tools/list` result, not an estimate); reproduce with `node scripts/measure-tools-list-size.mjs`.
