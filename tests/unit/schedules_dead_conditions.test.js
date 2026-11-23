@@ -43,6 +43,9 @@ apiDefault.getRules = async () => { witness?.noteRead(); calls.push(['getRules']
 let updateRuleProvider = async (_rule) => {}; // same reason: the body varies, the stub stays
 apiDefault.updateRule = async (rule) => { witness?.noteWrite(); calls.push(['updateRule', rule]); await updateRuleProvider(rule); };
 apiDefault.sync = async () => {};
+// #785: the adapter refuses an account or payee id that no listing carries, so these ids exist.
+apiDefault.getAccounts = async () => [{ id: ACCOUNT, name: 'Checking' }];
+apiDefault.getPayees = async () => [{ id: PAYEE, name: 'Shop' }];
 
 const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
 const { isRetryableError } = await import('../../dist/src/lib/retry.js');

@@ -41,7 +41,7 @@ const InputSchema = z.strictObject({
 
 const tool: ToolDefinition = {
   name: 'actual_schedules_update',
-  description: `Update a schedule; supply only the fields to change. A new date replaces the stored recurrence, patterns included. Set resetNextDate: true when changing the date or recurrence. Completion and next_date are managed by Actual and cannot be set.`,
+  description: `Update a schedule; supply only the fields to change. A new date replaces the stored recurrence, patterns included. Set resetNextDate: true when changing the date or recurrence. An unknown account or payee id is refused. Completion and next_date are managed by Actual and cannot be set.`,
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

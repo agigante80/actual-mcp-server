@@ -122,7 +122,7 @@ export const manageSchedules: CompactToolSpec = {
   examplePrompt: 'Schedule my $900 rent on the first of every month.',
   description:
     'Create, change or delete schedules (one-off or recurring); pick one `action`. Writes. ' +
-    'To read schedules use list_entities with type schedule; to preview occurrence dates use list_entities with type schedule and schedule_id. Cents are integers, outflows negative. Other fields are refused. ' +
+    'To read schedules use list_entities with type schedule; to preview occurrence dates use list_entities with type schedule and schedule_id. Cents are integers, outflows negative. An unknown account or payee id is refused. Other fields are refused. ' +
     'create: date; optional name, payee, account, amount, amount_op, posts_transaction. amount_op isbetween needs amount {num1, num2}; an object amount needs isbetween. ' +
     'update: id and at least one of name, payee, account (null clears), amount, amount_op, date, posts_transaction, reset_next_date; unsent fields stay; a new date replaces the stored recurrence; completed and next_date cannot be set. ' +
     'delete: id; DESTRUCTIVE, cannot be undone; removes the schedule and the rule that drives it; transactions it already created stay; an unknown id is refused. ' +

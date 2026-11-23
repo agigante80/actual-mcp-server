@@ -2599,6 +2599,63 @@ payee: payee.id,
     expect(row?.completed ?? false).toBe(false);
   });
 
+  // #785: a schedule with an account or payee id that names nothing was stored with a dangling
+  // rule condition and read back with a null field. Each negative deletes what it created when
+  // the expected refusal does not happen, and then fails naming the id.
+  const UNKNOWN_LINK = '00000000-0000-4000-8000-000000000000';
+  const scheduleNamed = async (mcp: any, name: string) => {
+    const listData = await mcp.call('list_entities', { type: 'schedule' });
+    const schedules: any[] = listData?.schedules ?? listData?.result?.schedules ?? (Array.isArray(listData) ? listData : []);
+    return schedules.filter((x: any) => x?.name === name);
+  };
+  const refuseScheduleCreate = async (mcp: any, args: Record<string, unknown>, expected: string) => {
+    const name = `E2E-BadLink-Schedule-${uniqueSuffix()}`;
+    let message: string | null = null;
+    let accepted: any;
+    try {
+      accepted = await mcp.call('manage_schedules', { action: 'create', name, date: '2027-04-01', amount: -100, ...args });
+    } catch (error) {
+      message = String((error as Error).message);
+    }
+    // Delete whatever was written BEFORE asserting, so a failing row leaves no residue.
+    const leaked: string[] = [];
+    for (const x of await scheduleNamed(mcp, name)) {
+      leaked.push(x.id);
+      await mcp.call('manage_schedules', { action: 'delete', id: x.id });
+    }
+    if (message === null) throw new Error(`manage_schedules create accepted ${JSON.stringify(args)} (returned ${JSON.stringify(accepted)}); the schedule "${name}" was deleted`);
+    expect(message).toContain(expected);
+    expect(leaked, 'a refused schedule must not exist').toEqual([]);
+  };
+
+  test('manage_schedules create - ERROR: an unknown account is refused and no schedule is written (#785)', async ({ mcp, makePayee }) => {
+    const payee = await makePayee();
+    await refuseScheduleCreate(mcp, { account: UNKNOWN_LINK, payee: payee.id },
+      `Account "${UNKNOWN_LINK}" not found. Use list_entities with type account to list available accounts.`);
+  });
+
+  test('manage_schedules create - ERROR: a payee id sent as the account is refused (#785)', async ({ mcp, makePayee }) => {
+    const payee = await makePayee();
+    await refuseScheduleCreate(mcp, { account: payee.id },
+      `Account "${payee.id}" not found. Use list_entities with type account to list available accounts.`);
+  });
+
+  test('manage_schedules update - ERROR: an unknown payee is refused and the stored payee is unchanged (#785)', async ({ mcp, makeAccount, makePayee, makeSchedule }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    const schedule = await makeSchedule({ account: account.id, payee: payee.id });
+    let refused = false;
+    try {
+      await mcp.call('manage_schedules', { action: 'update', id: schedule.id, payee: UNKNOWN_LINK });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain(`Payee "${UNKNOWN_LINK}" not found. Use list_entities with type payee to list available payees.`);
+      refused = true;
+    }
+    const row = (await scheduleNamed(mcp, schedule.name))[0];
+    expect(row?.payee, 'the stored payee must be unchanged').toBe(payee.id);
+    if (!refused) throw new Error(`manage_schedules update accepted an unknown payee on schedule ${schedule.id} (cleaned up by the fixture)`);
+  });
+
   // #478: monthly patterns. Upstream computes next_date from max(today, start), so every date
   // here is relative to the month after the current one rather than a literal that goes stale.
   const nextMonth = (() => {
@@ -4664,6 +4721,48 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(viaTransfer).toMatch(/unexpected field\(s\): transfer_id/);
     const viaBogus = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { notes: 'x', bogus: 1 } }));
     expect(viaBogus).toMatch(/unexpected field\(s\): bogus/);
+  });
+
+  // #785: the legacy schedule writers refuse an unknown account or payee with the legacy list tool name.
+  test('actual_schedules_create - ERROR: an unknown account is refused with the legacy text (#785)', async ({ mcp }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const name = `E2E-BadLinkLegacy-Schedule-${uniqueSuffix()}`;
+    let message: string | null = null;
+    let created: any;
+    try {
+      created = await mcp.call('actual_schedules_create', { name, date: '2027-04-01', amount: -100, account: unknown });
+    } catch (error) {
+      message = String((error as Error).message);
+    }
+    // Delete whatever was written BEFORE asserting, so a failing row leaves no residue.
+    const data = await mcp.call('list_entities', { type: 'schedule' });
+    const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
+    const leaked: string[] = [];
+    for (const x of schedules.filter((r: any) => r?.name === name)) {
+      leaked.push(x.id);
+      await mcp.call('actual_schedules_delete', { id: x.id });
+    }
+    if (message === null) throw new Error(`actual_schedules_create accepted an unknown account (returned ${JSON.stringify(created)}); the schedule "${name}" was deleted`);
+    expect(message).toContain(`Account "${unknown}" not found. Use actual_accounts_list to list available accounts.`);
+    expect(leaked, 'a refused schedule must not exist').toEqual([]);
+  });
+
+  test('actual_schedules_update - ERROR: an unknown payee is refused and the stored payee is unchanged (#785)', async ({ mcp, makeAccount, makePayee, makeSchedule }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const account = await makeAccount();
+    const payee = await makePayee();
+    const schedule = await makeSchedule({ account: account.id, payee: payee.id });
+    let refused = false;
+    try {
+      await mcp.call('actual_schedules_update', { id: schedule.id, payee: unknown });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain(`Payee "${unknown}" not found. Use actual_payees_get to list available payees.`);
+      refused = true;
+    }
+    const data = await mcp.call('list_entities', { type: 'schedule' });
+    const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
+    expect(schedules.find((x: any) => x?.id === schedule.id)?.payee, 'the stored payee must be unchanged').toBe(payee.id);
+    if (!refused) throw new Error(`actual_schedules_update accepted an unknown payee on schedule ${schedule.id} (cleaned up by the fixture)`);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {

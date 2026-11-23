@@ -26,7 +26,7 @@ const { buildCompactTool, legacyPhrases, compactLegacyNames } = await import('..
 const { WRITE_CAPABLE } = await import('../../dist/src/lib/toolsets.js');
 const { annotationsFor } = await import('../../dist/src/lib/tool-annotations.js');
 const { titleFor } = await import('../../dist/src/lib/tool-titles.js');
-const { ToolUnavailableError } = await import('../../dist/src/lib/errors.js');
+const { ToolUnavailableError, NotFoundRefusal, isPreflightRefusal } = await import('../../dist/src/lib/errors.js');
 const { ISBETWEEN_NEEDS_RANGE } = await import('../../dist/src/lib/schemas/schedule-amount.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 
@@ -195,6 +195,28 @@ await check('compactLegacyNames covers the three targets, all write-capable', ()
 });
 await check('NEGATIVE: update with only id is refused and calls nothing', () =>
   refused({ action: 'update', id: U1 }, /update needs at least one of: name, payee/));
+
+// #785: the adapter refuses an unknown account or payee; the compact route rewrites the legacy tool name.
+const DETAIL = (what) => `The schedule was not written: its rule would otherwise point at ${what} that does not exist and never match.`;
+for (const [action, input] of [
+  ['create', { action: 'create', date: '2027-04-01', account: U1 }],
+  ['update', { action: 'update', id: U2, account: U1 }],
+]) {
+  await check(`NEGATIVE: ${action} with an unknown account surfaces the compact text and stays a preflight refusal`, async () => {
+    const err = new NotFoundRefusal('Account', U1, 'actual_accounts_list', DETAIL('an account'));
+    const t = buildCompactTool(spec, { callOperation: async () => { throw err; } }, phrases);
+    const e = await t.call(input).catch((x) => x);
+    assert.ok(e instanceof NotFoundRefusal && isPreflightRefusal(e));
+    assert.strictEqual(e.message, `Account "${U1}" not found. Use list_entities with type account to list available accounts. ${DETAIL('an account')}`);
+  });
+}
+await check('NEGATIVE: update with an unknown payee surfaces the compact text', async () => {
+  const err = new NotFoundRefusal('Payee', U1, 'actual_payees_get', DETAIL('a payee'));
+  const t = buildCompactTool(spec, { callOperation: async () => { throw err; } }, phrases);
+  const e = await t.call({ action: 'update', id: U2, payee: U1 }).catch((x) => x);
+  assert.ok(e instanceof NotFoundRefusal && isPreflightRefusal(e));
+  assert.strictEqual(e.message, `Payee "${U1}" not found. Use list_entities with type payee to list available payees. ${DETAIL('a payee')}`);
+});
 
 console.log(`\n[compact-manage-schedules] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

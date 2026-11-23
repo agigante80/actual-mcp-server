@@ -3803,6 +3803,35 @@ async function stripDeadScheduleConditions(
     throw failed('its rule could not be rewritten', err);
   }
 }
+/**
+ * #785: upstream stores any account or payee id on a schedule without a lookup, so an id that
+ * names nothing (or a payee id sent as the account) leaves a rule that can never match, and the
+ * read side shows the field as null. Refuse it, before the raw write, inside the queued write.
+ * `null` is the clear on update and needs no read; undefined is skipped. A closed account and a
+ * transfer payee count as existing; a tombstoned payee does not. Each id is checked against its
+ * own listing only. The account is checked first, so a call with both unknown names the account.
+ * NOT exported: the adapter methods below are the only callers.
+ */
+async function assertScheduleLinksExist(fields: Record<string, unknown>): Promise<void> {
+  if (typeof fields.account === 'string') {
+    const id = fields.account;
+    const accounts = await withConcurrency(() =>
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+    );
+    if (!(Array.isArray(accounts) && accounts.some((a) => a?.id === id))) {
+      throw new NotFoundRefusal('Account', id, 'actual_accounts_list', 'The schedule was not written: its rule would otherwise point at an account that does not exist and never match.');
+    }
+  }
+  if (typeof fields.payee === 'string') {
+    const id = fields.payee;
+    const payees = await withConcurrency(() =>
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string; tombstone?: boolean }>>), { retries: 2, backoffMs: 200 })
+    );
+    if (!(Array.isArray(payees) && payees.some((p) => p?.id === id && !p.tombstone))) {
+      throw new NotFoundRefusal('Payee', id, 'actual_payees_get', 'The schedule was not written: its rule would otherwise point at a payee that does not exist and never match.');
+    }
+  }
+}
 export async function createSchedule(schedule: unknown): Promise<string> {
   observability.incrementToolCall('actual.schedules.create').catch(() => {});
   return queueWriteOperation(async () => {
@@ -3810,6 +3839,7 @@ export async function createSchedule(schedule: unknown): Promise<string> {
     const input = (schedule ?? {}) as Record<string, unknown>;
     // Note: rawCreateSchedule(schedule) passes the external schedule object directly.
     // Do NOT wrap in { schedule: ... }: that would double-nest and break date parsing.
+    await assertScheduleLinksExist(input);
     const raw = await withConcurrency(() => retry(() => rawCreateSchedule(input) as Promise<string>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     // #547: an omitted payee or account is stored as a condition that can never match.
@@ -3847,6 +3877,7 @@ export async function updateSchedule(id: string, fields: unknown, resetNextDate?
         }
       }
     }
+    await assertScheduleLinksExist(patch);
     await withConcurrency(() => retry(() => rawUpdateSchedule(id, patch, resetNextDate) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     // #547: a payee or account cleared with null is stored as the literal string "null".
     await stripDeadScheduleConditions(id, unsetScheduleLinkFields(patch, 'update'), opStartedAt, 'update');
