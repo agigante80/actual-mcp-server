@@ -108,7 +108,7 @@ The 4b rewrite lives in `src/compact/dispatch.ts` (`legacyPhrases`, `rewriteErro
 
 Found in code: the legacy update tools disagree. `accounts_update`, `categories_update`, `category_groups_update`, `payees_update`, `rules_update` and `transactions_update` take `{ id, fields: {...} }`. `account_groups_update`, `schedules_update` and `tags_update` are flat. The compact layer is flat everywhere, and the dispatcher wraps the non-id properties into `fields` where the legacy tool expects it.
 
-`transactions_update_batch` is a separate case: each item of its `updates` array is `{ id, fields }`, and the batch `fields` object has nine keys (`account`, `date`, `amount`, `payee`, `payee_name`, `imported_payee`, `category`, `notes`, `cleared`), fewer than the thirteen of `transactions_update`. `imported_id`, `transfer_id`, `reconciled` and `subtransactions` are not accepted in a batch.
+`transactions_update_batch` is a separate case: each item of its `updates` array is `{ id, fields }`, and the batch `fields` object has nine keys (`account`, `date`, `amount`, `payee`, `payee_name`, `imported_payee`, `category`, `notes`, `cleared`), fewer than the twelve of `transactions_update` (#746 removed `transfer_id` from both: a transfer link has no safe edit). `imported_id`, `reconciled` and `subtransactions` are not accepted in a batch.
 
 ## 6. Settled design points
 
@@ -201,7 +201,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
 | `create` | `transactions_create` | account, date, amount | payee, payee_name, notes, category, cleared, imported_id, subtransactions |  |
-| `update` | `transactions_update` | id | account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, transfer_id, cleared, reconciled, subtransactions | non-id properties are wrapped into the legacy `fields` object; at least one is required; nullable fields keep their legacy null meaning (null clears the field) |
+| `update` | `transactions_update` | id | account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, cleared, reconciled, subtransactions | non-id properties are wrapped into the legacy `fields` object; at least one is required; nullable fields keep their legacy null meaning (null clears the field) |
 | `update_batch` | `transactions_update_batch` | updates | none | `updates` is the legacy array of {id, fields}, max 50, not atomic |
 | `delete` | `transactions_delete` | id | none |  |
 | `import` | `transactions_import` | account_id, txs | none | `account_id` maps to legacy `accountId` |

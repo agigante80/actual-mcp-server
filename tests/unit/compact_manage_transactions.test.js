@@ -75,8 +75,23 @@ await check('update wraps everything but id under fields', () =>
 await check('update with category null forwards null (it clears the field)', () =>
   expectCall({ action: 'update', id: T1, category: null }, 'actual_transactions_update', { id: T1, fields: { category: null } }));
 await check('update forwards payee_name and the update-only keys', () =>
-  expectCall({ action: 'update', id: T1, payee_name: 'Some Shop', reconciled: true, transfer_id: null, imported_payee: 'SHOP' }, 'actual_transactions_update',
-    { id: T1, fields: { payee_name: 'Some Shop', reconciled: true, transfer_id: null, imported_payee: 'SHOP' } }));
+  expectCall({ action: 'update', id: T1, payee_name: 'Some Shop', reconciled: true, imported_payee: 'SHOP' }, 'actual_transactions_update',
+    { id: T1, fields: { payee_name: 'Some Shop', reconciled: true, imported_payee: 'SHOP' } }));
+// #746: transfer_id: null on a transfer side wrote a SECOND mirror row upstream (duplicated money,
+// reported as success). A transfer link has no safe edit, so the key is not accepted at all.
+// The client sees the manager's formatting of the thrown ZodError, so assert that text.
+const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
+const clientText = async (input) => {
+  seen.length = 0;
+  try { await tool.call(input); } catch (e) { assert.strictEqual(seen.length, 0, 'a refusal must not call anything'); return formatZodError(e, tool.inputSchema); }
+  throw new Error(`expected a refusal for ${JSON.stringify(input)}`);
+};
+await check('update refuses transfer_id null next to another field (#746)', async () =>
+  assert.match(await clientText({ action: 'update', id: T1, transfer_id: null, notes: 'x' }), /unexpected field\(s\): transfer_id/));
+await check('update refuses a string transfer_id next to another field (#746)', async () =>
+  assert.match(await clientText({ action: 'update', id: T1, transfer_id: T2, notes: 'x' }), /unexpected field\(s\): transfer_id/));
+await check('update with only transfer_id also names the missing field (#746)', async () =>
+  assert.match(await clientText({ action: 'update', id: T1, transfer_id: null }), /unexpected field\(s\): transfer_id, id: update needs at least one field to change besides id/));
 await check('update forwards a payee id unchanged', () =>
   expectCall({ action: 'update', id: T1, payee: A }, 'actual_transactions_update', { id: T1, fields: { payee: A } }));
 await check('update still forwards a payee name in payee (the adapter refuses it, #743)', () =>

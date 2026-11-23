@@ -1,11 +1,11 @@
 {
   "compact": {
-    "bytes": 42824,
+    "bytes": 42728,
     "label": "Compact surface (default)",
     "tools": 15
   },
   "compact-chat": {
-    "bytes": 17173,
+    "bytes": 17077,
     "label": "Compact, `MCP_TOOLSETS=chat`",
     "tools": 6
   },
@@ -15,12 +15,12 @@
     "tools": 6
   },
   "legacy": {
-    "bytes": 123422,
+    "bytes": 123319,
     "label": "`MCP_TOOL_SURFACE=legacy`",
     "tools": 85
   },
   "legacy-chat": {
-    "bytes": 26051,
+    "bytes": 25948,
     "label": "Legacy, `MCP_TOOLSETS=chat`",
     "tools": 12
   },

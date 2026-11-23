@@ -23,7 +23,6 @@ const InputSchema = z.object({
     category: z.string().nullable().optional().describe('Category ID'),
     notes: z.string().nullable().optional().describe('Transaction notes'),
     imported_id: z.string().nullable().optional().describe('Original imported transaction ID'),
-    transfer_id: z.string().nullable().optional().describe('Transfer transaction ID if this is a transfer'),
     cleared: z.boolean().nullable().optional().describe('Whether transaction is cleared'),
     reconciled: z.boolean().nullable().optional().describe('Whether transaction is reconciled'),
     // #305: edit the children of an existing split. #489: or split a PLAIN transaction in
@@ -34,7 +33,13 @@ const InputSchema = z.object({
     subtransactions: CommonSchemas.subtransactions
       .optional()
       .describe('Split children. On a plain transaction this splits it in place (same id, import fields kept); on a split it replaces the children. Amounts must sum to the parent amount.'),
-  }).describe('Fields to update'),
+  })
+    // #746: strict, so an unknown key is refused instead of stripped. transfer_id was a field here:
+    // `transfer_id: null` on a transfer side wrote a second mirror row upstream (duplicated money).
+    // A transfer link is upstream-managed and has no safe edit, so the key is gone; stripping it
+    // silently would have turned that call into `fields: {}` and a success lie.
+    .strict()
+    .describe('Fields to update'),
 });
 
 

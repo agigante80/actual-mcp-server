@@ -1589,6 +1589,29 @@ payee: payee.id,
     expect(credit.transfer_id).toBe(debit.id);
   });
 
+  // #746: update with transfer_id null used to write a SECOND mirror row in the other account.
+  test('manage_transactions update - ERROR: transfer_id is refused and the transfer pair is unchanged (#746)', async ({ mcp, makeAccount }) => {
+    const src = await makeAccount({ name: `E2E-Xfer746-Src-${uniqueSuffix()}` });
+    const dst = await makeAccount({ name: `E2E-Xfer746-Dst-${uniqueSuffix()}` });
+    const amount = 4404;
+    const created = await mcp.call('manage_transactions', { action: 'transfer', from_account: src.id, to_account: dst.id, amount, date: today() });
+    expect(created?.success).toBeTruthy();
+    const rows = async (acct: string) => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: acct });
+      return (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
+    };
+    const debit = (await rows(src.id)).find((t: any) => t?.amount === -amount);
+    expect(debit).toBeTruthy();
+    const message = await refusal(() => mcp.call('manage_transactions', { action: 'update', id: debit.id, transfer_id: null }));
+    expect(message).toMatch(/unexpected field\(s\): transfer_id/);
+    const withNotes = await refusal(() => mcp.call('manage_transactions', { action: 'update', id: debit.id, transfer_id: debit.transfer_id, notes: 'x' }));
+    expect(withNotes).toMatch(/unexpected field\(s\): transfer_id/);
+    expect((await rows(src.id)).filter((t: any) => t?.amount === -amount)).toHaveLength(1);
+    const dstRows = (await rows(dst.id)).filter((t: any) => t?.amount === amount);
+    expect(dstRows).toHaveLength(1);
+    expect(dstRows[0].transfer_id).toBe(debit.id);
+  });
+
   test('manage_transactions transfer - ERROR: refuses same account, unknown account and a non-positive amount', async ({ mcp, makeAccount }) => {
     const account = await makeAccount({ name: `E2E-Xfer-Neg-${uniqueSuffix()}` });
     const ghost = '00000000-0000-4000-8000-000000000366';
@@ -4631,6 +4654,16 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       mcp.call('actual_transactions_update', { id: txn.id, fields: { payee: existing.name } }),
     ).rejects.toThrow(/payee must be a payee id/);
     expect(await payeeOfTxn()).toBe(existing.id);
+  });
+
+  // #746: the legacy fields object is strict, so transfer_id and any unknown key are refused.
+  test('actual_transactions_update - ERROR: fields.transfer_id and an unknown key are refused (#746)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account });
+    const viaTransfer = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { transfer_id: null } }));
+    expect(viaTransfer).toMatch(/unexpected field\(s\): transfer_id/);
+    const viaBogus = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { notes: 'x', bogus: 1 } }));
+    expect(viaBogus).toMatch(/unexpected field\(s\): bogus/);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {
