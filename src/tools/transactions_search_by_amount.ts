@@ -4,6 +4,7 @@ import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 import { isPreflightRefusal } from '../lib/errors.js';
 import { expandSplitsForSearch } from '../lib/split-search.js';
+import { idSetByName } from '../lib/actual-adapter/filter-ids.js';
 
 const InputSchema = z.object({
   minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
@@ -69,13 +70,11 @@ const tool: ToolDefinition = {
       // result and nothing is expanded. A split parent has a null category, so with a category
       // filter the split is replaced by its children before the amount filters run (an amount
       // filter then compares with the child amount).
-      let categoryId: string | undefined;
+      let categoryIds: Set<string> | undefined;
       if (input.categoryName) {
         const categories = await adapter.getCategories();
-        const category = categories.find((c: any) =>
-          c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
-        );
-        if (!category) {
+        const matched = idSetByName(categories, input.categoryName);
+        if (matched.size === 0) {
           // Category not found - return empty
           return {
             transactions: [],
@@ -88,11 +87,11 @@ const tool: ToolDefinition = {
             error: `Category "${input.categoryName}" not found`,
           };
         }
-        categoryId = category.id;
+        categoryIds = matched;
       }
 
       // Apply JavaScript filters
-      let filtered = categoryId ? expandSplitsForSearch(allTransactions).rows : allTransactions;
+      let filtered = categoryIds ? expandSplitsForSearch(allTransactions).rows : allTransactions;
       
       // Filter by absolute amount (if specified, this takes precedence)
       if (input.absoluteAmount !== undefined) {
@@ -109,8 +108,8 @@ const tool: ToolDefinition = {
       }
       
       // Filter by category (resolved above)
-      if (categoryId) {
-        filtered = filtered.filter((t: any) => t.category === categoryId);
+      if (categoryIds) {
+        filtered = filtered.filter((t: any) => categoryIds.has(t.category));
       }
       
       // Sort by amount descending and apply limit

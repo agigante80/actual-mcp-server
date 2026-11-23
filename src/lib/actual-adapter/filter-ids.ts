@@ -84,6 +84,18 @@ export function matchesByName<T extends NamedRow>(rows: readonly T[], value: str
   return rows.filter((r) => typeof r.name === 'string' && r.name.trim().toLowerCase() === wanted);
 }
 
+/**
+ * #802: the ids of EVERY row carrying the name, for a READ filter. The name-keyed transaction
+ * searches take no id, so refusing a shared name (as `resolveFilterId` does) would leave it with no
+ * way to be searched at all; matching all of them is right for a read. An empty set means "no such
+ * name" and the caller returns its existing not-found result. A row without a string id is skipped.
+ */
+export function idSetByName<T extends NamedRow>(rows: readonly T[], value: string): Set<string> {
+  const ids = new Set<string>();
+  for (const r of matchesByName(rows, value)) if (typeof r.id === 'string') ids.add(r.id);
+  return ids;
+}
+
 /** The most candidates the refusal lists before it turns the rest into a count. */
 const MAX_LISTED_CANDIDATES = 10;
 

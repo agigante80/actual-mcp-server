@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 import { expandSplitsForSearch } from '../lib/split-search.js';
+import { idSetByName } from '../lib/actual-adapter/filter-ids.js';
 
 const InputSchema = z.object({
   payeeName: z.string().optional().describe('Name of the payee/vendor to search for'),
@@ -34,13 +35,12 @@ const tool: ToolDefinition = {
     }
 
     // Step 1: Find payee ID by name
-    let payeeId: string | undefined;
+    let payeeIds: Set<string> | undefined;
     if (input.payeeName) {
       const payees = await adapter.getPayees();
-      const payee = payees.find((p: any) => 
-        p.name && p.name.toLowerCase() === input.payeeName!.toLowerCase()
-      );
-      if (!payee) {
+      // #802: every payee carrying the name (a regular and a transfer payee can share one).
+      const matched = idSetByName(payees, input.payeeName);
+      if (matched.size === 0) {
         // Payee not found - return empty result
         return {
           transactions: [],
@@ -50,7 +50,7 @@ const tool: ToolDefinition = {
           error: `Payee "${input.payeeName}" not found`,
         };
       }
-      payeeId = payee.id;
+      payeeIds = matched;
     }
     
     // Step 2: Get base transactions (filtered by account and date range if provided)
@@ -89,13 +89,11 @@ const tool: ToolDefinition = {
     // #750: resolve the category BEFORE expanding, so an unknown name returns its existing error
     // result and nothing is expanded. A split parent has a null category, so with a category
     // filter the split is replaced by its children before any other filter runs.
-    let categoryId: string | undefined;
+    let categoryIds: Set<string> | undefined;
     if (input.categoryName) {
       const categories = await adapter.getCategories();
-      const category = categories.find((c: any) =>
-        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
-      );
-      if (!category) {
+      const matchedCategories = idSetByName(categories, input.categoryName);
+      if (matchedCategories.size === 0) {
         // Category not found - return empty
         return {
           transactions: [],
@@ -105,18 +103,18 @@ const tool: ToolDefinition = {
           error: `Category "${input.categoryName}" not found`,
         };
       }
-      categoryId = category.id;
+      categoryIds = matchedCategories;
       filtered = expandSplitsForSearch(filtered).rows;
     }
 
     // Filter by payee ID
-    if (payeeId) {
-      filtered = filtered.filter((t: any) => t.payee === payeeId);
+    if (payeeIds) {
+      filtered = filtered.filter((t: any) => payeeIds.has(t.payee));
     }
     
     // Filter by category (resolved above)
-    if (categoryId) {
-      filtered = filtered.filter((t: any) => t.category === categoryId);
+    if (categoryIds) {
+      filtered = filtered.filter((t: any) => categoryIds.has(t.category));
     }
     
     // Filter by amount range
