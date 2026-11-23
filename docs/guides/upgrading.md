@@ -74,7 +74,7 @@ The transaction, balance and schedule tools (the legacy ones and the compact too
 
 ### A note on an unknown id is refused (#757)
 
-`actual_notes_update`, and `set_note` in `manage_accounts`, `manage_categories` and `manage_payees`, now fail with an error result (`Entity "<id>" not found`) when the id names no entity, instead of answering `{ error }` as a success. Nothing was ever written for the unknown id; only the shape of the answer changed. A client that read the `error` field must check for a tool error instead.
+`actual_notes_update`, and `set_note` in `manage_accounts`, `manage_categories` and `manage_payees`, now fail with an error result (`Entity "<id>" not found`) when the id names no entity, instead of answering `{ error }` as a success. Nothing was ever written for the unknown id; only the shape of the answer changed. A client that read the `error` field must check for a tool error instead. The same holds for a note write on a budget that cannot be opened (an encrypted budget without its key, for example): that refusal is an error result too.
 
 ### HTTP auth is required by default (#242)
 
