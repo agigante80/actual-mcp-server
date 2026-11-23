@@ -2254,6 +2254,13 @@ payee: payee.id,
       return (Array.isArray(data) ? data : (data?.rules ?? [])) as any[];
     };
 
+    // Registered before the refused creates: if a refusal ever stops working, the stored rule is
+    // still removed and the failure is the assertion, not residue.
+    cleanup.add(CLEANUP_ORDER.rule, `rules ${marker}`, async () => {
+      for (const r of await listRules()) {
+        if (JSON.stringify(r).includes(marker)) await mcp.call('manage_rules', { action: 'delete', id: r.id }).catch(() => undefined);
+      }
+    });
     await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'transfer', op: 'is', value: true }], actions }))
       .rejects.toThrow(/never matches in a rule/);
     await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'transfer', op: 'is', value: false }], actions }))
@@ -5343,8 +5350,14 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(attempt.message).toMatch(/zzz/);
   });
 
-  test('actual_rules_create - a transfer condition is refused and nothing is written (#766)', async ({ mcp }) => {
+  test('actual_rules_create - a transfer condition is refused and nothing is written (#766)', async ({ mcp, cleanup }) => {
     const marker = `E2E-Rule766L-${uniqueSuffix()}`;
+    cleanup.add(CLEANUP_ORDER.rule, `rules ${marker}`, async () => {
+      const rules = (await mcp.call('list_entities', { type: 'rule' })) as any;
+      for (const r of (Array.isArray(rules) ? rules : (rules?.rules ?? []))) {
+        if (JSON.stringify(r).includes(marker)) await mcp.call('manage_rules', { action: 'delete', id: r.id }).catch(() => undefined);
+      }
+    });
     await expect(mcp.call('actual_rules_create', {
       conditions: [{ field: 'transfer', op: 'is', value: true }],
       actions: [{ op: 'set', field: 'notes', value: marker }],
