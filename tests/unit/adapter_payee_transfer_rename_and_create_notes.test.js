@@ -60,6 +60,7 @@ let pollsBeforeVisible = 0;
 api.getNote = async (id) => {
   getNoteCalls++;
   if (noteMode === 'late' && getNoteCalls <= pollsBeforeVisible) return null;
+  if (noteMode === 'stalled') return new Promise(() => {});
   return noteStore.has(id) ? { id, note: noteStore.get(id) } : null;
 };
 
@@ -124,7 +125,7 @@ for (const [label, arg] of [['empty notes', { name: 'N3', notes: '' }], ['absent
   check(e === null && createPayeeCalls.length === 1 && updateNoteCalls.length === 0 && getNoteCalls === 0, `${label}: no note written or read`);
 }
 
-for (const mode of ['write-fails', 'never-visible']) {
+for (const mode of ['write-fails', 'never-visible', 'stalled']) {
   reset(); noteMode = mode;
   e = await attempt(() => { noteMode = mode; return adapter.createPayee({ name: 'Zed', notes: 'n' }); });
   noteMode = mode;
