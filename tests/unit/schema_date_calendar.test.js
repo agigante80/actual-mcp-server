@@ -22,6 +22,7 @@ async function check(label, fn) {
 console.log('\n[schema-date-calendar]');
 
 const { CommonSchemas } = await import('../../dist/src/lib/schemas/common.js');
+const { formatZodError } = await import('../../dist/src/lib/zod-error-format.js');
 const { isCalendarDay } = await import('../../dist/src/lib/dates.js');
 const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
 const { buildCompactTool, legacyPhrases } = await import('../../dist/src/compact/dispatch.js');
@@ -99,14 +100,15 @@ await check('legacy update tools: date null and an omitted date still parse (the
 
 // ---- legacy transaction writes that already used CommonSchemas.date ----
 
-await check('NEGATIVE: legacy create, import and transfer refuse an impossible date', async () => {
+const issueList = (r) => (r.success ? [] : r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`));
+await check('NEGATIVE: legacy create, import and transfer refuse an impossible date with exactly one issue', async () => {
   const B = '223e4567-e89b-42d3-a456-426614174001';
   const create = await legacy('transactions_create');
-  assert.ok(messages(create.inputSchema.safeParse({ account: ACC, date: BAD, amount: -1 })).includes(CAL));
+  assert.deepStrictEqual(issueList(create.inputSchema.safeParse({ account: ACC, date: BAD, amount: -1 })), [`date: ${CAL}`]);
   const imp = await legacy('transactions_import');
-  assert.ok(messages(imp.inputSchema.safeParse({ accountId: ACC, txs: [{ date: BAD, amount: -1 }] })).includes(CAL));
+  assert.deepStrictEqual(issueList(imp.inputSchema.safeParse({ accountId: ACC, txs: [{ date: BAD, amount: -1 }] })), [`txs.0.date: ${CAL}`]);
   const tr = await legacy('transfers_create');
-  assert.ok(messages(tr.inputSchema.safeParse({ fromAccountId: ACC, toAccountId: B, amount: 1, date: BAD })).includes(CAL));
+  assert.deepStrictEqual(issueList(tr.inputSchema.safeParse({ from_account: ACC, to_account: B, amount: 1, date: BAD })), [`date: ${CAL}`]);
 });
 
 // ---- legacy schedules ----
@@ -120,6 +122,11 @@ for (const name of ['schedules_create', 'schedules_update']) {
     assert.strictEqual(r.success, false);
     assert.deepStrictEqual(r.error.issues.map((i) => [i.path.join('.'), i.message]), [['date', CAL]]);
   });
+  await check(`NEGATIVE: ${tool.name} reports a malformed one-off date as exactly the shape message (oneOffDateSchema, not a bare "Invalid input")`, () => {
+    const r = tool.inputSchema.safeParse(withDate('2018-1-5'));
+    assert.strictEqual(r.success, false);
+    assert.strictEqual(formatZodError(r.error), `Validation error: date: ${SHAPE}`);
+  });
   await check(`POSITIVE: ${tool.name} accepts ${GOOD} and a recurrence object`, () => {
     assert.strictEqual(tool.inputSchema.safeParse(withDate(GOOD)).success, true);
     assert.strictEqual(tool.inputSchema.safeParse(withDate(RECUR)).success, true);
@@ -132,27 +139,26 @@ const phrases = legacyPhrases(COMPACT_TOOLS);
 const seen = [];
 const ops = { callOperation: async (n, a) => { seen.push({ n, a }); return {}; } };
 const compact = (name) => buildCompactTool(COMPACT_TOOLS.find((t) => t.name === name), ops, phrases);
-const refusedText = async (tool, input) => {
+const refusedIssues = async (tool, input) => {
   seen.length = 0;
   let e;
   try { await tool.call(input); } catch (x) { e = x; }
   assert.ok(e, `expected a refusal for ${JSON.stringify(input)}`);
   assert.strictEqual(seen.length, 0, 'a refusal must not call anything');
-  return [e.message, ...(e.issues ?? []).map((i) => `${i.path.join('.')}: ${i.message}`)].join(' | ');
+  return (e.issues ?? []).map((i) => `${i.path.join('.')}: ${i.message}`);
 };
 const B2 = '223e4567-e89b-42d3-a456-426614174001';
 const mt = compact('manage_transactions');
 const cases = [
-  ['create', { action: 'create', account: ACC, date: BAD, amount: -1 }],
-  ['update', { action: 'update', id: ID, date: '2018-13-45' }],
-  ['update_batch', { action: 'update_batch', updates: [{ id: ID, fields: { date: '2018-02-31' } }] }],
-  ['import', { action: 'import', account_id: ACC, txs: [{ date: BAD, amount: -1 }] }],
-  ['transfer', { action: 'transfer', from_account: ACC, to_account: B2, amount: 5, date: '2019-04-31' }],
+  ['create', { action: 'create', account: ACC, date: BAD, amount: -1 }, [`date: ${CAL}`]],
+  ['update', { action: 'update', id: ID, date: '2018-13-45' }, [`date: ${CAL}`]],
+  ['update_batch', { action: 'update_batch', updates: [{ id: ID, fields: { date: '2018-02-31' } }] }, [`updates.0: fields.date: ${CAL}`]],
+  ['import', { action: 'import', account_id: ACC, txs: [{ date: BAD, amount: -1 }] }, [`txs.0: date: ${CAL}`]],
+  ['transfer', { action: 'transfer', from_account: ACC, to_account: B2, amount: 5, date: '2019-04-31' }, [`date: ${CAL}`]],
 ];
-for (const [action, input] of cases) {
-  await check(`NEGATIVE: manage_transactions ${action} refuses an impossible date, nothing is called`, async () => {
-    const text = await refusedText(mt, input);
-    assert.ok(text.includes(CAL), text);
+for (const [action, input, expected] of cases) {
+  await check(`NEGATIVE: manage_transactions ${action} reports an impossible date exactly once, nothing is called`, async () => {
+    assert.deepStrictEqual(await refusedIssues(mt, input), expected);
   });
 }
 await check('POSITIVE: manage_transactions create accepts the leap day and forwards it', async () => {
@@ -161,9 +167,17 @@ await check('POSITIVE: manage_transactions create accepts the leap day and forwa
   assert.strictEqual(seen.length, 1);
   assert.strictEqual(seen[0].a.date, GOOD);
 });
-await check('NEGATIVE: summarize_transactions balance refuses a cutoff of 2019-02-30', async () => {
-  const text = await refusedText(compact('summarize_transactions'), { report: 'balance', account_id: ACC, cutoff: '2019-02-30' });
-  assert.ok(text.includes(CAL), text);
+await check('NEGATIVE: summarize_transactions balance reports a cutoff of 2019-02-30 exactly once', async () => {
+  assert.deepStrictEqual(await refusedIssues(compact('summarize_transactions'), { report: 'balance', account_id: ACC, cutoff: '2019-02-30' }), [`cutoff: ${CAL}`]);
+});
+await check('NEGATIVE: search_transactions reports two impossible dates as exactly two issues (no doubling)', async () => {
+  assert.deepStrictEqual(
+    await refusedIssues(compact('search_transactions'), { by: 'filter', start_date: '2019-02-30', end_date: '2019-04-31' }),
+    [`start_date: ${CAL}`, `end_date: ${CAL}`],
+  );
+});
+await check('NEGATIVE: the dedupe is general: manage_transactions merge with equal ids reports its refine once', async () => {
+  assert.deepStrictEqual(await refusedIssues(mt, { action: 'merge', ids: [ID, ID] }), ['ids: ids must be two DIFFERENT transaction ids']);
 });
 const ms = compact('manage_schedules');
 for (const input of [
@@ -171,14 +185,14 @@ for (const input of [
   { action: 'update', id: ID, date: BAD },
 ]) {
   await check(`NEGATIVE: manage_schedules ${input.action} refuses a one-off date of ${BAD} with the calendar text`, async () => {
-    const text = await refusedText(ms, input);
-    assert.ok(text.includes(CAL), text);
+    assert.deepStrictEqual(await refusedIssues(ms, input), [`date: ${CAL}`]);
   });
 }
 await check('NEGATIVE: manage_schedules create keeps the shape text for a malformed date and gives no calendar text', async () => {
-  const text = await refusedText(ms, { action: 'create', name: 'x', account: ACC, date: '2018-1-5' });
-  assert.ok(text.includes('date must be "YYYY-MM-DD" or a recurrence object'), text);
-  assert.ok(!text.includes(CAL), text);
+  assert.deepStrictEqual(
+    await refusedIssues(ms, { action: 'create', name: 'x', account: ACC, date: '2018-1-5' }),
+    ['date: date must be "YYYY-MM-DD" or a recurrence object {frequency, start, ...}'],
+  );
 });
 await check('POSITIVE: manage_schedules create still takes a recurrence object and a real one-off date', async () => {
   seen.length = 0;

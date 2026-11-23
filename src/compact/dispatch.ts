@@ -284,11 +284,28 @@ function compactInputSchema(spec: CompactToolSpec): z.ZodType {
       } catch (err) {
         if (!(err instanceof z.ZodError)) throw err;
         // The flat shape already reported a field-level issue its own schema found; do not say it twice.
-        // Issues already on ctx carry no message yet (it is resolved later), so match on path and code.
-        // A custom issue is ours alone and is never a repeat.
-        const reported = new Set((ctx.issues ?? []).map((i) => `${(i.path ?? []).join('.')}|${i.code}`));
-        for (const issue of err.issues) {
-          if (issue.code === 'custom' || !reported.has(`${issue.path.join('.')}|${issue.code}`)) ctx.addIssue(issue as never);
+        // A non-custom issue is a repeat when path and code match one already on ctx (ctx issues may not
+        // carry a message yet). A custom issue (a refine) is a repeat only when it sits on the same path
+        // AND is the same refinement (same check instance, or the same message), so two genuinely
+        // different refinements on one path both survive (#745).
+        const at = (i: { path?: PropertyKey[] }) => (i.path ?? []).join('.');
+        const onCtx = (ctx.issues ?? []) as Array<{ code: string; path?: PropertyKey[]; message?: string; inst?: unknown }>;
+        const reported = new Set(onCtx.filter((i) => i.code !== 'custom').map((i) => `${at(i)}|${i.code}`));
+        // A raw issue on ctx has no message until it is finalized; read it from its check's own error.
+        const msgOf = (i: { message?: string; inst?: unknown }): string | undefined => {
+          if (i.message !== undefined) return i.message;
+          const e = (i.inst as { _zod?: { def?: { error?: unknown } } } | undefined)?._zod?.def?.error;
+          const r = typeof e === 'function' ? (e as (x: unknown) => unknown)(i) : e;
+          return typeof r === 'string' ? r : (r as { message?: string } | undefined)?.message;
+        };
+        const customSeen = onCtx.filter((i) => i.code === 'custom');
+        for (const issue of err.issues as Array<{ code: string; path: PropertyKey[]; message?: string; inst?: unknown }>) {
+          if (issue.code === 'custom') {
+            const repeat = customSeen.some((c) => at(c) === at(issue) && (c.inst === issue.inst || (msgOf(c) !== undefined && msgOf(c) === msgOf(issue))));
+            if (repeat) continue;
+            customSeen.push(issue);
+            ctx.addIssue(issue as never);
+          } else if (!reported.has(`${at(issue)}|${issue.code}`)) ctx.addIssue(issue as never);
         }
       }
     });
