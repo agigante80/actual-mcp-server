@@ -4958,6 +4958,58 @@ test.describe('Docker E2E - compact manage_payees (#676)', () => {
     expect(rows.filter((p: any) => p?.transfer_acct === account.id).length).toBe(1);
     expect(rows.find((p: any) => p?.id === payee.id)?.transfer_acct ?? null).toBeNull();
   });
+
+  // #765: a transfer payee cannot be renamed (its name is its account's name) and a create's
+  // notes are stored. The note row outlives the payee (delete leaves it behind), so the note is
+  // cleared first: its cleanup has the lower CLEANUP_ORDER.note and runs before the payee delete.
+  test('manage_payees create - notes are stored, and a create without notes writes no note row (#765)', async ({ mcp, cleanup }) => {
+    const withNote = `E2E-PayeeNote765-${uniqueSuffix()}`;
+    const without = `E2E-PayeeNoNote765-${uniqueSuffix()}`;
+    const text = `note-765-${uniqueSuffix()}`;
+    const track = (id: string, name: string) => {
+      cleanup.add(CLEANUP_ORDER.note, `note of payee ${name}`, async () => {
+        await mcp.call('manage_payees', { action: 'set_note', id, note: '' }).catch(() => undefined);
+      });
+      cleanup.add(CLEANUP_ORDER.payee, `payee ${name}`, async () => {
+        await mcp.call('manage_payees', { action: 'delete', id }).catch(() => undefined);
+      });
+    };
+    const id = (await mcp.call('manage_payees', { action: 'create', name: withNote, notes: text })) as string;
+    expect(typeof id).toBe('string');
+    track(id, withNote);
+    const plainId = (await mcp.call('manage_payees', { action: 'create', name: without })) as string;
+    expect(typeof plainId).toBe('string');
+    track(plainId, without);
+
+    expect((await payeesOf(mcp)).some((p: any) => p?.id === id && p?.name === withNote)).toBe(true);
+    expect((await mcp.call('list_entities', { type: 'note', id }))?.note).toBe(text);
+    expect((await mcp.call('list_entities', { type: 'note', id: plainId }))?.found).toBe(false);
+  });
+
+  test('manage_payees update - ERROR: a transfer payee cannot be renamed, an ordinary payee and a default category still can (#765)', async ({ mcp, makeAccount, makePayee, makeCategory }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const ordinary = await makePayee();
+    const before = await payeesOf(mcp);
+    const transfer = before.find((p: any) => p?.transfer_acct === account.id);
+    expect(transfer, 'the transfer payee of the account').toBeTruthy();
+
+    const message = await refusal(() => mcp.call('manage_payees', { action: 'update', id: transfer.id, name: `E2E-Renamed765-${uniqueSuffix()}` }));
+    expect(message).toMatch(/is a transfer payee/);
+    const both = await refusal(() => mcp.call('manage_payees', { action: 'update', id: transfer.id, name: 'x', category: category.id }));
+    expect(both).toMatch(/is a transfer payee/);
+
+    const after = await payeesOf(mcp);
+    expect(after.find((p: any) => p?.id === transfer.id)?.name, 'the payee name is unchanged').toBe(transfer.name);
+    expect(after.find((p: any) => p?.id === transfer.id)?.name).toBe(account.name);
+
+    // An ordinary payee is renamed as before; a category alone on the transfer payee still works.
+    const renamed = `${ordinary.name}-r`;
+    await mcp.call('manage_payees', { action: 'update', id: ordinary.id, name: renamed });
+    expect((await payeesOf(mcp)).find((p: any) => p?.id === ordinary.id)?.name).toBe(renamed);
+    await mcp.call('manage_payees', { action: 'update', id: transfer.id, category: category.id });
+    await mcp.call('manage_payees', { action: 'update', id: transfer.id, category: null });
+  });
 });
 
 test.describe('Docker E2E - compact manage_tags (#676)', () => {
@@ -6030,6 +6082,30 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(message).toMatch(/unexpected field/i);
     const payees = (await mcp.call('actual_payees_get')) as any[];
     expect(payees.find((p: any) => p?.id === payee.id)?.name).toBe(payee.name);
+  });
+
+  // #765: the legacy payee tools get the same adapter behaviour as manage_payees.
+  test('actual_payees_create - notes are stored and read back, ERROR: actual_payees_update refuses a transfer payee rename (#765)', async ({ mcp, makeAccount, cleanup }) => {
+    const name = `E2E-LegacyPayee765-${uniqueSuffix()}`;
+    const text = `legacy-note-765-${uniqueSuffix()}`;
+    const id = (await mcp.call('actual_payees_create', { name, notes: text })) as string;
+    expect(typeof id).toBe('string');
+    cleanup.add(CLEANUP_ORDER.note, `note of payee ${name}`, async () => {
+      await mcp.call('actual_notes_update', { id, note: '' }).catch(() => undefined);
+    });
+    cleanup.add(CLEANUP_ORDER.payee, `payee ${name}`, async () => {
+      await mcp.call('actual_payees_delete', { id }).catch(() => undefined);
+    });
+    expect((await mcp.call('actual_notes_get', { id }))?.note).toBe(text);
+
+    const account = await makeAccount();
+    const payees = (await mcp.call('actual_payees_get')) as any[];
+    const transfer = payees.find((p: any) => p?.transfer_acct === account.id);
+    expect(transfer, 'the transfer payee of the account').toBeTruthy();
+    const message = await refusal(() => mcp.call('actual_payees_update', { id: transfer.id, fields: { name: 'renamed' } }));
+    expect(message).toMatch(/is a transfer payee/);
+    const after = (await mcp.call('actual_payees_get')) as any[];
+    expect(after.find((p: any) => p?.id === transfer.id)?.name).toBe(transfer.name);
   });
 
   test('actual_rules_get - answers', async ({ mcp }) => {

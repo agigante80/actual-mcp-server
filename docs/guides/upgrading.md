@@ -152,6 +152,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `actual_transactions_update` with `fields: {}`, `actual_transactions_update_batch` items with an empty `fields`, and `manage_transactions` `update_batch` items with no field besides `id` used to be accepted and reported as an update although nothing changed. They are now refused with `update needs at least one field to change besides id`, and a refusal in a batch refuses the whole call before anything is written. The legacy batch also used to strip an unknown key, and `subtransactions`, `imported_id`, `reconciled` and `transfer_id`, silently; it now refuses them, naming the key (`unexpected field(s): bogus`). `null` still counts as a change. A script that sent a stray key in a batch item must stop sending it. To split a transaction use `actual_transactions_update`.
 
+## A transfer payee cannot be renamed, and a payee's notes are stored on create (#765)
+
+`actual_payees_update` and `manage_payees` `update` with a `name` on a transfer payee (the payee Actual creates for each account) used to report success and change nothing, because a transfer payee shows its account's name. They now refuse it with `"<name>" is a transfer payee: its name is its account's name, so it cannot be renamed here. Rename the account instead.` and write nothing, also when `category` is sent with it; `category` alone on a transfer payee still works. `actual_payees_create` and `manage_payees` `create` used to drop the `notes` argument and return an id with no note. They now store it as the payee's note (read it with `list_entities` type `note`); if the note cannot be stored the error names the new payee id and says the payee exists, so do not create it again.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

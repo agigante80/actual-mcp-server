@@ -82,7 +82,7 @@ export const managePayees: CompactToolSpec = {
     'Create, change, delete, merge or annotate payees; pick one `action`. Writes. ' +
     'To read or find ids use list_entities. Other fields are refused. ' +
     'create: name; optional notes. ' +
-    'update: id and at least one of name, category (a default category, stored as a default-stage rule whose only condition is this payee; null deletes it; pre or post stage rules and rules shared with other payees or conditions are never touched). ' +
+    'update: id and at least one of name (a transfer payee is refused: rename its account), category (a default category, stored as a default-stage rule whose only condition is this payee; null deletes it; pre or post stage rules and rules shared with other payees or conditions are never touched). ' +
     'delete: id; DESTRUCTIVE, cannot be undone: transactions lose the payee; a transfer payee is refused. ' +
     'merge: target_id, merge_ids (1 to 50, never target_id itself); DESTRUCTIVE, cannot be undone: the sources\' transactions move to target_id and the sources are deleted; transfer payees are refused. ' +
     'set_note: id (a payee UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a category note through manage_categories. ' +
