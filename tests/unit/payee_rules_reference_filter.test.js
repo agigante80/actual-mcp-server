@@ -72,5 +72,41 @@ check('tolerates a rule with no conditions/actions', ruleReferencesPayee({ id: '
 check('tolerates null/undefined rule', ruleReferencesPayee(null, PAYEE) === false && ruleReferencesPayee(undefined, PAYEE) === false);
 check('tolerates non-array conditions', ruleReferencesPayee({ conditions: 'nope', actions: null }, PAYEE) === false);
 
+// #818: the tool itself. An unknown payee is a typed NotFoundRefusal (an isError result),
+// not a success-shaped { error, rules: [], count: 0 }. The raw api functions are stubbed so
+// the real tool and adapter run; getPayeeRules reads payees and rules through them.
+console.log('\n[payee-rules-reference-filter] #818 actual_payee_rules_get on an unknown payee');
+{
+  // The tool calls adapter.getPayees / adapter.getPayeeRules on the default export, so
+  // replacing those two members stubs the reads without a live budget.
+  let payeeRows = [];
+  let ruleRows = [];
+  const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
+  adapter.getPayees = async () => payeeRows;
+  adapter.getPayeeRules = async () => ruleRows;
+  const { isPreflightRefusal, NotFoundRefusal } = await import('../../dist/src/lib/errors.js');
+  const tool = (await import('../../dist/src/tools/payee_rules_get.js')).default;
+  const UNKNOWN = '00000000-0000-4000-8000-0000000000ff';
+
+  payeeRows = [{ id: PAYEE, name: 'Kroger' }];
+  let err; let res;
+  try { res = await tool.call({ payeeId: UNKNOWN }); } catch (e) { err = e; }
+  check('an unknown payee rejects instead of answering { error }', err !== undefined && res === undefined, JSON.stringify(res));
+  check('the rejection is a NotFoundRefusal and a preflight refusal', err instanceof NotFoundRefusal && isPreflightRefusal(err));
+  check('the message is the exact not-found text naming actual_payees_get',
+    err?.message === `Payee "${UNKNOWN}" not found. Use actual_payees_get to list available payees.`, String(err?.message));
+
+  ruleRows = [];
+  const empty = await tool.call({ payeeId: PAYEE });
+  check('a known payee with no rules is a success with rules [] and count 0',
+    Array.isArray(empty?.rules) && empty.rules.length === 0 && empty.count === 0 && empty.payeeName === 'Kroger');
+  check('and carries no error key', !('error' in (empty ?? {})));
+
+  ruleRows = [defaultCategoryRule, oneOfRule];
+  const two = await tool.call({ payeeId: PAYEE });
+  check('a known payee with rules is unchanged: count 2, no error',
+    two?.count === 2 && !('error' in two), JSON.stringify(two));
+}
+
 console.log(`\n[payee-rules-reference-filter] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

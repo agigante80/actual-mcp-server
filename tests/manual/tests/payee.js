@@ -297,18 +297,23 @@ export async function payeeTests(client, context) {
   if (!Array.isArray(rulesArr)) fail(["Verify payee rules: expected array, got", typeof rulesArr].map(String).join(" "));
   else console.log(`  ✓ Payee rules: ${rulesArr.length} rule(s) (expected 0 for new payee)`);
 
-  // FIXED(BUG-3): list_entities rule with non-existent payeeId now returns actionable error with empty rules array
-  // The adapter post-filters by payee_id, and the tool verifies the payee exists first.
+  // #818: list_entities rule with a non-existent payee_id is refused as not found (an isError
+  // result, which callTool throws), no longer answered as { error, rules: [], count: 0 }.
   console.log("\nNEGATIVE P6: payee_rules_get with non-existent payeeId...");
   {
-    const badRules = await callTool("list_entities", { type: "rule", payee_id: "00000000-0000-0000-0000-000000000000" });
-    const hasError = typeof badRules?.error === 'string';
-    if (hasError && badRules.error.includes('not found') && badRules.error.includes('list_entities with type payee')) {
-      console.log(`  ✓ FIXED(BUG-3): payee_rules_get nil-UUID returns actionable error: ${badRules.error.slice(0, 120)}`);
-    } else if (hasError) {
-      fail(`P6: an error was returned but the message is not actionable: ${badRules.error.slice(0, 120)}`);
+    let thrown = null;
+    let badRules = null;
+    try {
+      badRules = await callTool("list_entities", { type: "rule", payee_id: "00000000-0000-0000-0000-000000000000" });
+    } catch (e) {
+      thrown = String(e?.message ?? e);
+    }
+    if (thrown && thrown.includes('not found') && thrown.includes('list_entities with type payee')) {
+      console.log(`  ✓ #818: payee_rules_get nil-UUID is refused with an actionable error: ${thrown.slice(0, 120)}`);
+    } else if (thrown) {
+      fail(`P6: a refusal was thrown but the message is not actionable: ${thrown.slice(0, 120)}`);
     } else {
-      fail(`P6: unexpected response: ${JSON.stringify(badRules).slice(0, 120)}`);
+      fail(`P6: expected a refusal, got a result: ${JSON.stringify(badRules).slice(0, 120)}`);
     }
   }
 

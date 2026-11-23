@@ -76,6 +76,10 @@ The transaction, balance and schedule tools (the legacy ones and the compact too
 
 `actual_notes_update`, and `set_note` in `manage_accounts`, `manage_categories` and `manage_payees`, now fail with an error result (`Entity "<id>" not found`) when the id names no entity, instead of answering `{ error }` as a success. Nothing was ever written for the unknown id; only the shape of the answer changed. A client that read the `error` field must check for a tool error instead. The same holds for a note write on a budget that cannot be opened (an encrypted budget without its key, for example): that refusal is an error result too.
 
+### An unknown payee id on a rule listing is refused (#818)
+
+`list_entities` with `type: rule` and an unknown `payee_id`, and the legacy `actual_payee_rules_get`, now fail with an error result (`Payee "<id>" not found`) instead of answering `{ error, rules: [], count: 0 }` as a success. A payee that exists but has no rules still answers `{ rules: [], count: 0 }`. A client that read the `error` field must check for a tool error instead.
+
 ### HTTP auth is required by default (#242)
 
 An existing HTTP deployment on a non-loopback bind with no token and no OIDC that previously started open will now refuse to start. The startup error names the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or `AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior. See [authentication.md](authentication.md) before choosing the last one.

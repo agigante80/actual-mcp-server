@@ -212,9 +212,9 @@ How large the `tools/list` response is for each choice, so you can pick for a sm
 | Compact surface (default) | 15 | 43213 | 42.2 |
 | Compact, `MCP_TOOLSETS=chat` | 6 | 17089 | 16.7 |
 | Compact, `MCP_READ_ONLY=true` | 6 | 17262 | 16.9 |
-| `MCP_TOOL_SURFACE=legacy` | 85 | 124182 | 121.3 |
+| `MCP_TOOL_SURFACE=legacy` | 85 | 124106 | 121.2 |
 | Legacy, `MCP_TOOLSETS=chat` | 12 | 26074 | 25.5 |
-| Legacy, `MCP_READ_ONLY=true` | 37 | 45537 | 44.5 |
+| Legacy, `MCP_READ_ONLY=true` | 37 | 45461 | 44.4 |
 
 Measured offline, as the server builds the list (the bytes of the `tools/list` result, not an estimate); reproduce with `node scripts/measure-tools-list-size.mjs`.
 <!-- END GENERATED: capabilities-sizes -->

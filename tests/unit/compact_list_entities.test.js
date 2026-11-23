@@ -189,6 +189,15 @@ await check('4b: a typed refusal naming a legacy tool is rewritten in place and 
   assert.ok(e instanceof NotFoundRefusal && isPreflightRefusal(e));
   assert.ok(!/actual_/.test(e.message) && /list_entities with type account/.test(e.message), e.message);
 });
+await check('4b: an unknown payee on a rule listing is a refusal naming list_entities with type payee (#818)', async () => {
+  const UNKNOWN = '00000000-0000-4000-8000-0000000000ff';
+  const err = new NotFoundRefusal('Payee', UNKNOWN, 'actual_payees_get');
+  const t = buildCompactTool(spec, { callOperation: async () => { throw err; } }, phrases);
+  const e = await t.call({ type: 'rule', payee_id: UNKNOWN }).catch((x) => x);
+  assert.ok(e instanceof NotFoundRefusal && isPreflightRefusal(e));
+  assert.ok(e.message.includes(`Payee "${UNKNOWN}" not found`) && e.message.includes('list_entities with type payee'), e.message);
+  assert.ok(!/actual_/.test(e.message), e.message);
+});
 await check('4b: a returned top-level error string is rewritten to the route phrase', async () => {
   const t = buildCompactTool(spec, { callOperation: async () => ({ error: 'bad call to actual_entities_search' }) }, phrases);
   const r = await t.call({ type: 'account', query: 'x' });
