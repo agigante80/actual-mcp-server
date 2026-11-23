@@ -32,6 +32,9 @@ const api = apiMod.default || apiMod;
 
 let groups, createCalls, updateCalls, groupListCalls;
 api.sync = async () => {};
+api.updateNote = async () => {};
+api.getAccounts = async () => [];
+api.getPayees = async () => [];
 api.getCategories = async () => [{ id: CAT, name: 'Food', group_id: G1 }];
 api.getCategoryGroups = async () => { groupListCalls++; return groups.map((g) => ({ ...g })); };
 api.createCategory = async (c) => { createCalls.push(c); return 'new-category-id'; };
@@ -97,11 +100,28 @@ await check('NEGATIVE: an unknown category id is refused for the category, befor
 await check('one drain: a group create then a category create into that new group is accepted', async () => {
   reset();
   const before = adapterMod._getWriteQueueBatchCountForTests();
+  // updateNote reads every entity listing and preserves them, so the group listing is WARM
+  // when the group create runs. Only the create's invalidation then makes the next guard
+  // re-read it; without the warm-up the case could not tell a stale cache from a fresh one.
+  const w = adapter.updateNote(G1, 'x');
   const g = adapter.createCategoryGroup({ name: 'Fresh' });
   const c = adapter.createCategory({ name: 'X', group_id: NEW_GROUP });
-  await Promise.all([g, c]);
+  await Promise.all([w, g, c]);
   assert.strictEqual(adapterMod._getWriteQueueBatchCountForTests() - before, 1, 'same drain');
   assert.strictEqual(createCalls.length, 1);
+});
+await check('the guard uses the drain cache: a warm group listing is not read again by the create guard', async () => {
+  reset();
+  const before = adapterMod._getWriteQueueBatchCountForTests();
+  // updateNote reads the group listing once and preserves it; createCategory (which declares
+  // nothing, so it invalidates AFTER it runs) must then be served from the cache.
+  await Promise.all([
+    adapter.updateNote(G1, 'x'),
+    adapter.createCategory({ name: 'A', group_id: G1 }),
+  ]);
+  assert.strictEqual(adapterMod._getWriteQueueBatchCountForTests() - before, 1, 'same drain');
+  assert.strictEqual(createCalls.length, 1);
+  assert.strictEqual(groupListCalls, 1);
 });
 
 console.log(`\n[#763] Results: ${passed} passed, ${failed} failed`);

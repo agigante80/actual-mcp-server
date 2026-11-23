@@ -10,7 +10,7 @@
 // The legacy name set is IMPLEMENTED_TOOLS plus the keys of the deprecated alias map. A legacy
 // name is allowed in exactly these places:
 //   (i)   LEGACY_SMOKE names inside the `legacy smoke (MCP_TOOL_SURFACE=all)` describe block of
-//         tests/e2e/docker-all-tools.e2e.spec.ts (one read-only row per legacy family),
+//         tests/e2e/docker-all-tools.e2e.spec.ts (one read-only row per legacy family, plus the #710 and #763 write rows),
 //   (ii)  the two session tools (they have no compact tool) in specs, manual modules and the
 //         session block of prompt-3-advanced.txt between its two markers,
 //   (iii) actual_accounts_list in compact-surface.e2e.spec.ts (the refusal row: a legacy call
@@ -42,7 +42,7 @@ const ALIAS_KEYS = (read('src/lib/tool-aliases.ts').match(/^\s*\['(actual_[A-Za-
   .map((l) => /'(actual_[A-Za-z0-9_]+)'/.exec(l)[1]);
 const LEGACY_NAMES = new Set([...IMPLEMENTED_TOOLS, ...ALIAS_KEYS]);
 
-/** One read-only row per legacy family (plus the #710 write row), called in the legacy smoke describe block. */
+/** One read-only row per legacy family (plus the #710 write row and the #763 rows: actual_categories_create and actual_categories_update refuse an unknown group_id, and the create row lists groups with actual_category_groups_get), called in the legacy smoke describe block. */
 const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',

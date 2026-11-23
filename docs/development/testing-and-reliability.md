@@ -1080,7 +1080,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `compact_manage_transactions.test.js` | Compact `manage_transactions`: seven actions, refusals, read-only, annotations (#675) | 42 |
 | `compact_manage_accounts.test.js` | Compact `manage_accounts`: seven actions, entity routes, refusals, read-only, annotations (#676) | 34 |
 | `compact_manage_categories.test.js` | Compact `manage_categories`: four actions, entity routes, refusals, read-only (#676) | 26 |
-| `adapter_category_group_guard.test.js` | Adapter: create or update of a category with an unknown or deleted group is refused (typed, exact text, no raw write), hidden group accepted, no listing read without `group_id`, same-drain group create (#763) | 8 |
+| `adapter_category_group_guard.test.js` | Adapter: create or update of a category with an unknown or deleted group is refused (typed, exact text, no raw write), hidden group accepted, no listing read without `group_id`, same-drain group create, drain-cache use (#763) | 9 |
 | `categories_create.test.js` | `actual_categories_create` rethrows a typed refusal unchanged, still wraps a plain failure (#763) | 2 |
 | `compact_manage_payees.test.js` | Compact `manage_payees`: five actions, refusals, null category, read-only (#676) | 25 |
 | `compact_manage_tags.test.js` | Compact `manage_tags`: three actions, refusals, read-only, size, annotations (#676) | 19 |

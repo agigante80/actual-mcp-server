@@ -4229,7 +4229,8 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const unknown = '00000000-0000-4000-8000-000000000000';
     const name = `E2E-BadGroupLegacy-${uniqueSuffix()}`;
     // Precondition: the id really is no group (the refusal text points at this listing tool).
-    const groups = (await mcp.call('actual_category_groups_get')) as any[];
+    const groupsData: any = await mcp.call('actual_category_groups_get');
+    const groups = (Array.isArray(groupsData) ? groupsData : groupsData?.groups ?? []) as any[];
     expect(groups.map((g: any) => g?.id)).not.toContain(unknown);
     let created: unknown;
     try {
