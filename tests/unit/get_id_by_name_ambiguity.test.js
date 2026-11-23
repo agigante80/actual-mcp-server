@@ -54,6 +54,7 @@ const GRP_B = 'bbbbbbbb-0000-4000-8000-000000000002';
     check(r.error?.message === `Name "Checking" matches 2 accounts, so it does not identify one: ${id(1)} (open, on budget), ${id(2)} (closed, off budget). ${tail}`, 'accounts: exact text', r.error?.message);
     check(rawLookups.length === 0, 'accounts: the upstream lookup is not called');
     check(queries.length === 1 && queries[0].table === 'accounts', 'accounts: one query on the accounts table', JSON.stringify(queries));
+    check(JSON.stringify(queries[0]?.filter ?? null).includes('Checking'), 'accounts: the query filters on the name (the serialized filterExpressions carry it)', JSON.stringify(queries[0]?.filter));
   }
   {
     reset({ payees: [
