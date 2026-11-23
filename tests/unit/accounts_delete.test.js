@@ -35,7 +35,8 @@ const CLOSED_ID = 'bbbbbbbb-1111-2222-3333-444444444444';
   const apiDefault = (apiMod.default || apiMod);
   let transferRows = [];
   let rawDeletes = [];
-  apiDefault.runQuery = async () => ({ data: transferRows });
+  let lastQuery = null;
+  apiDefault.runQuery = async (query) => { lastQuery = query.serialize(); return { data: transferRows }; };
   apiDefault.deleteAccount = async (id) => { rawDeletes.push(id); };
   apiDefault.sync = async () => {};
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
@@ -93,6 +94,18 @@ const CLOSED_ID = 'bbbbbbbb-1111-2222-3333-444444444444';
       check(out?.detachedTransfers === n, `${n} transfer row(s) give detachedTransfers ${n}`, JSON.stringify(out));
       check(rawDeletes.length === 1 && rawDeletes[0] === OPEN_ID, 'and the raw delete ran once');
     }
+  }
+
+  console.log('\n[#768] the count query asks for this account\'s transfer rows, split children included');
+  {
+    transferRows = [{ id: 't0' }];
+    lastQuery = null;
+    await realDeleteAccount(OPEN_ID);
+    const sq = JSON.stringify(lastQuery?.filterExpressions ?? []);
+    check(lastQuery?.table === 'transactions', 'it queries the transactions table', JSON.stringify(lastQuery));
+    check(sq.includes('"account":"' + OPEN_ID + '"'), 'it filters on this account', sq);
+    check(/"transfer_id":\{"\$ne":null\}/.test(sq), 'it keeps only rows with a transfer_id (not null)', sq);
+    check(lastQuery?.tableOptions?.splits === 'all', 'it reads with splits all, so split children count', JSON.stringify(lastQuery?.tableOptions));
   }
 
   console.log('\n[accounts-delete] REGRESSION GUARD: a CLOSED account is NOT falsely confirmed');
