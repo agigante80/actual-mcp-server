@@ -82,7 +82,15 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   #801 and #802) the legacy total is 125,454 bytes (124,645 before, 809 added; the split child amount is now an integer check), and the ceiling
 //   is that plus 8. The compact total is 43,491 bytes (43,466 before), under COMPACT_TOTAL_CEILING;
 //   every per-tool ceiling is unchanged.
-const TOTAL_CEILING = 125462;
+//   Total raised for #765/#759/#787 (one pull request, ceiling set once) from 125,462 to 126,092:
+//   a transfer payee cannot be renamed and payee create stores notes (#765), income category
+//   amounts are refused on an envelope budget and amounts are bounded (#759), and the budget
+//   listing marks the active budget and the switch text states its scope (#787). Measured
+//   after the rebase on develop (which carries #826) the legacy total is 126,084 bytes
+//   (125,454 on develop before this change, so 630 added, description text only), and the
+//   ceiling is that plus 8. The compact total is 43,856 bytes (43,491 before), under
+//   COMPACT_TOTAL_CEILING. Every per-tool ceiling is unchanged (heaviest entry 3,893 bytes).
+const TOTAL_CEILING = 126092;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
