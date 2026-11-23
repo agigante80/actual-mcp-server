@@ -100,6 +100,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `actual_transactions_update`, `actual_transactions_update_batch` and `manage_transactions` `update` and `update_batch` used to accept a payee name in `payee`, report success and leave the transaction with no payee. `payee` now takes an id only and a name there is refused; pass the name as `payee_name`, which matches an existing payee (any case) or creates one.
 
+## An unknown account is refused on transaction update and import (#744)
+
+`actual_transactions_update`, `actual_transactions_update_batch`, `actual_transactions_import` and `manage_transactions` `update`, `update_batch` and `import` used to accept an account id that does not exist, report success and write a row whose account points at nothing, which no listing tool returns. They now refuse it with `Account "<id>" not found` (an update or import is refused as a whole, a batch fails only that item) and write nothing. A closed account is still accepted. A script that moves or imports into an account id that does not exist now gets that refusal.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

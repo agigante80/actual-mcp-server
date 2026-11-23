@@ -2022,6 +2022,43 @@ import type {
 export { normalizeToTransactionArray, normalizeToId, normalizeImportResult };
 // ---------------------------------------------------------------------------
 
+/**
+ * #359 / #744: refuse an account id that does not exist. Upstream never validates the account
+ * on add, update or import: `addTransactions` (loot-core/src/server/accounts/sync.ts) takes
+ * acctId, normalises, runs rules and inserts, `api/transactions-add` returns 'ok'
+ * unconditionally, `api/transaction-update` merges `{...existing, ...fields}` and
+ * `api/transactions-import` only checks `typeof accountId === 'string'`. Rule evaluation does not
+ * rescue us either (prepareTransactionForRules uses `r._account?.name || ''`). So a bogus account
+ * id produced rows with a dangling `account` column that NO listing tool can return (they all
+ * filter by account), that sync to every other client, and the tool reported success.
+ *
+ * Same guard `createTransfer` has performed since it was written, using the single accounts read
+ * (memoised per drain by readDrainListing, so a batch pays one listing) inside the caller's write
+ * cycle. A CLOSED account is deliberately still allowed: importing history into a closed account
+ * is legitimate, which is why this diverges from createTransfer. It never writes anything.
+ *
+ * Scope: only the account. Payee and category ids (#747), transfer_id (#746), split totals
+ * (#748), a NAME passed as account (#752) and `account: null` (own ticket) are left to other
+ * tickets; a name stays refused as "not found" here. On update the caller must run this BEFORE
+ * any payee creation (#743), so a refusal never leaves a new payee behind.
+ */
+const CREATE_UNKNOWN_ACCOUNT_DETAIL =
+  'No transactions were created: Actual would otherwise have written them against an ' +
+  'account that does not exist, where no tool could retrieve them.';
+const UPDATE_UNKNOWN_ACCOUNT_DETAIL =
+  'The transaction was not changed: Actual would otherwise have moved it to an ' +
+  'account that does not exist, where no tool could retrieve it.';
+const IMPORT_UNKNOWN_ACCOUNT_DETAIL =
+  'No transactions were imported: Actual would otherwise have written them against an ' +
+  'account that does not exist, where no tool could retrieve them.';
+async function assertAccountExists(accountId: string, detail: string): Promise<void> {
+  const accounts = await withConcurrency(() =>
+    retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+  );
+  if (!(accounts as Array<{ id?: string } | null>).some((a) => a?.id === accountId)) {
+    throw new NotFoundRefusal('Account', accountId, 'actual_accounts_list', detail);
+  }
+}
 export async function getAccounts(): Promise<components['schemas']['Account'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.accounts.list').catch(() => {});
@@ -2053,33 +2090,8 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
       throw new Error('Transaction must include account or accountId');
     }
 
-    // #359: upstream never validates the account. `addTransactions`
-    // (loot-core/src/server/accounts/sync.ts) takes acctId, normalises, runs rules and
-    // inserts, and `api/transactions-add` returns the string 'ok' unconditionally. Rule
-    // evaluation does not rescue us either: prepareTransactionForRules resolves the
-    // account with `r._account?.name || ''`. So a bogus account id produced rows with a
-    // dangling `account` column that NO listing tool can return (they all filter by
-    // account), that sync to every other client, and the tool reported success.
-    //
-    // This is the same guard `createTransfer` has performed since it was written, using
-    // the same single accounts read inside the same write cycle. A CLOSED account is
-    // deliberately still allowed: importing history into a closed account is legitimate,
-    // which is why this diverges from createTransfer, where a closed account would be an
-    // odd transfer destination.
-    const accounts = await withConcurrency(() =>
-      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id: string; name?: string }>>), { retries: 2, backoffMs: 200 })
-    );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const accountExists = (accounts as any[]).some((a: any) => a?.id === accountId);
-    if (!accountExists) {
-      throw new NotFoundRefusal(
-        'Account',
-        accountId,
-        'actual_accounts_list',
-        'No transactions were created: Actual would otherwise have written them against an ' +
-          'account that does not exist, where no tool could retrieve them.',
-      );
-    }
+    // #359: the account must exist (see assertAccountExists for the rationale).
+    await assertAccountExists(accountId, CREATE_UNKNOWN_ACCOUNT_DETAIL);
 
     // Remove account/accountId from transaction objects as they're passed separately
     const cleanedTxs = txArray.map(tx => {
@@ -2113,6 +2125,9 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
 export async function importTransactions(accountId: string | undefined, txs: components['schemas']['TransactionInput'][] | unknown) : Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>{
   observability.incrementToolCall('actual.transactions.import').catch(() => {});
   return queueWriteOperation(async () => {
+    // #744: an unknown account is refused before anything is written. An undefined id is left
+    // to upstream's own `accountId must be an id` error.
+    if (typeof accountId === 'string') await assertAccountExists(accountId, IMPORT_UNKNOWN_ACCOUNT_DETAIL);
     const raw = await withConcurrency(() => retry(() => rawImportTransactions(accountId, txs) as Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return raw || { added: [], updated: [], errors: [] };
   });
@@ -2749,6 +2764,10 @@ export async function updateTransaction(
     }
     // #743: refuse bad payee input before any other work (pure, read-free).
     assertPayeeFields(fields);
+    // #744: an unknown account is refused here, BEFORE resolvePayeeNameInPayload can create a payee.
+    // `account: null` or absent reads nothing.
+    const targetAccount = (fields as { account?: unknown } | null)?.account;
+    if (typeof targetAccount === 'string') await assertAccountExists(targetAccount, UPDATE_UNKNOWN_ACCOUNT_DETAIL);
 
     // Split guards, BEFORE the raw write:
     //   (a) a CHILD cannot itself be split: upstream nests one level only.
@@ -2900,6 +2919,9 @@ export async function updateTransactionBatch(
       try {
         // #743: a refusal here lands this item in failed[] and the rest proceed.
         assertPayeeFields(fields);
+        // #744: same for an unknown account (one listing per drain), before any payee creation.
+        const targetAccount = (fields as { account?: unknown } | null)?.account;
+        if (typeof targetAccount === 'string') await assertAccountExists(targetAccount, UPDATE_UNKNOWN_ACCOUNT_DETAIL);
         let payload = fields;
         if ((fields as { payee_name?: unknown } | null)?.payee_name !== undefined) {
           payeeListing ??= [...await withConcurrency(() =>
