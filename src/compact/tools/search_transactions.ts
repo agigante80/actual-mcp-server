@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
+import { asFields, needs } from '../refine.js';
 
 /**
  * search_transactions (#673): the compact front for the seven transaction record lookups.
@@ -65,6 +66,17 @@ const bounded = (target: CompactActionRow): CompactActionRow => ({
   }) as CompactActionRow['fields'],
 });
 
+/**
+ * #756: the legacy category and payee searches treat the name as optional and return every row in
+ * scope without it, which the route name does not suggest. Here the name is required. The key
+ * stays declared once and optional (the flat published schema keeps a key typed only when every
+ * row shares one schema object), and the row requires it. A null is already absent (`nullAsAbsent`).
+ */
+const named = (target: CompactActionRow, key: string, action: string): CompactActionRow => ({
+  ...target,
+  fields: asFields(target.fields.superRefine((value, ctx) => needs(action, ctx, value as Record<string, unknown>, [key]))),
+});
+
 export const searchTransactions: CompactToolSpec = {
   name: 'search_transactions',
   domain: 'Reading transactions',
@@ -73,8 +85,8 @@ export const searchTransactions: CompactToolSpec = {
   // #712: one short line per `by` mode, the behaviours on a line of their own, `Returns` last
   // (the #683 layout). "Read-only" is not restated: the readOnlyHint annotation carries it.
   description: [
-    'Find transaction records (id, date, amount, payee, category, notes), not totals; pick one `by`. Totals: summarize_transactions. Ids: list_entities. Custom query: run_query.',
-    'A field the `by` does not take is refused by name. Amounts: integer cents, outflows negative; dates YYYY-MM-DD.',
+    'Find transaction records, not totals; pick one `by`. Totals: summarize_transactions. Ids: list_entities. Custom query: run_query.',
+    'A field the `by` lacks is refused by name. Amounts: integer cents, outflows negative; dates YYYY-MM-DD.',
     'account: account_id, start_date, end_date.',
     'filter: account_id, start_date, end_date, min_amount, max_amount, category_id, payee_id, notes, cleared, reconciled.',
     'amount: min_amount and max_amount, or absolute_amount, plus start_date, end_date, account_id, category_name, limit.',
@@ -82,7 +94,7 @@ export const searchTransactions: CompactToolSpec = {
     'month: month, account_id, category_name, payee_name, min_amount, max_amount, limit.',
     'payee: payee_name, start_date, end_date, account_id, category_name, min_amount, max_amount, limit.',
     'uncategorized: start_date, end_date, account_id, include_transactions, limit, offset.',
-    'Behavior: only account, amount, payee include off-budget accounts. account and filter have no limit. amount, category, month, payee return limit rows (default 100). uncategorized pages with limit (default 50) and offset. amount needs account_id or a date. An unknown category or payee name gives an error field. Category or notes filters match a split by child (parent_id).',
+    'Behavior: category and payee need their name. filter, category, month refuse an off-budget account_id. account and filter have no limit. amount, category, month, payee return limit rows (default 100). uncategorized pages by limit (default 50), offset. amount needs account_id or a date. An unknown category or payee gives an error field. Category or notes filters match a split by child (parent_id).',
     'Returns { result: [transaction] } for account, filter; { transactions, count, totalAmount } for amount, category, month, payee; { totalCount, totalAmount, byAccount, dateRange } for uncategorized, plus transactions and hasMore with include_transactions.',
   ].join('\n'),
   selector: 'by',
@@ -111,7 +123,7 @@ export const searchTransactions: CompactToolSpec = {
       category_name: categoryName,
       limit,
     }))],
-    ['category', row('actual_transactions_search_by_category', {
+    ['category', named(row('actual_transactions_search_by_category', {
       category_name: categoryName,
       start_date: startDate,
       end_date: endDate,
@@ -119,7 +131,7 @@ export const searchTransactions: CompactToolSpec = {
       min_amount: minAmount,
       max_amount: maxAmount,
       limit,
-    })],
+    }), 'category_name', 'category')],
     ['month', row('actual_transactions_search_by_month', {
       month,
       account_id: accountId,
@@ -129,7 +141,7 @@ export const searchTransactions: CompactToolSpec = {
       max_amount: maxAmount,
       limit,
     })],
-    ['payee', row('actual_transactions_search_by_payee', {
+    ['payee', named(row('actual_transactions_search_by_payee', {
       payee_name: payeeName,
       start_date: startDate,
       end_date: endDate,
@@ -138,7 +150,7 @@ export const searchTransactions: CompactToolSpec = {
       min_amount: minAmount,
       max_amount: maxAmount,
       limit,
-    })],
+    }), 'payee_name', 'payee')],
     ['uncategorized', row('actual_transactions_uncategorized', {
       start_date: startDate,
       end_date: endDate,

@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { expandSplitsForSearch } from '../lib/split-search.js';
 import { idSetByName } from '../lib/actual-adapter/filter-ids.js';
+import { refuseOffBudgetAccount } from '../lib/search-account-guard.js';
 
 const InputSchema = z.object({
   month: z.string().optional().describe('Month to search in YYYY-MM format, e.g. "2025-01" (default: the current month)'),
@@ -17,7 +18,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
   description:
-    'Search the transactions of one calendar month (month as YYYY-MM, default the current month), optionally narrowed by accountId, categoryName, payeeName (case-insensitive exact names) and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
+    'Search the transactions of one calendar month (month as YYYY-MM, default the current month), optionally narrowed by accountId, categoryName, payeeName (case-insensitive exact names) and an amount range in integer cents. Read-only; off-budget accounts are excluded, and an off-budget accountId is refused. ' +
     'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. With categoryName, a split is matched by its children; rows carry parent_id. ' +
     'An unknown category or payee name returns an empty list with an error field. For other date ranges or aggregation use actual_query_run.',
   inputSchema: InputSchema,
@@ -36,6 +37,8 @@ const tool: ToolDefinition = {
     // `verifyExists: true` keeps the existence check this tool already paid for.
     if (input.accountId) {
       await adapter.resolveFilterId('account', input.accountId, { verifyExists: true, rows: accounts });
+      // #756: an explicit off-budget account is refused, not answered with an empty list.
+      refuseOffBudgetAccount(accounts, input.accountId);
     }
 
     // Default to current month if not provided
