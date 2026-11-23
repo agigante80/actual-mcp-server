@@ -286,7 +286,7 @@ function compactInputSchema(spec: CompactToolSpec): z.ZodType {
         // The flat shape already reported a field-level issue its own schema found; do not say it twice.
         // A non-custom issue is a repeat when path and code match one already on ctx (ctx issues may not
         // carry a message yet). A custom issue (a refine) is a repeat only when it sits on the same path
-        // AND is the same refinement (same check instance, or the same message), so two genuinely
+        // AND is the same refinement (the same check instance when both carry one, or the same message), so two genuinely
         // different refinements on one path both survive (#745).
         const at = (i: { path?: PropertyKey[] }) => (i.path ?? []).join('.');
         const onCtx = (ctx.issues ?? []) as Array<{ code: string; path?: PropertyKey[]; message?: string; inst?: unknown }>;
@@ -301,8 +301,9 @@ function compactInputSchema(spec: CompactToolSpec): z.ZodType {
         const customSeen = onCtx.filter((i) => i.code === 'custom');
         for (const issue of err.issues as Array<{ code: string; path: PropertyKey[]; message?: string; inst?: unknown }>) {
           if (issue.code === 'custom') {
-            const repeat = customSeen.some((c) => at(c) === at(issue) && (c.inst === issue.inst || (msgOf(c) !== undefined && msgOf(c) === msgOf(issue))));
+            const repeat = customSeen.some((c) => at(c) === at(issue) && ((c.inst !== undefined && c.inst === issue.inst) || (msgOf(c) !== undefined && msgOf(c) === msgOf(issue))));
             if (repeat) continue;
+            // addIssue stamps `inst` onto the issue object it is given, so a pushed issue then carries one.
             customSeen.push(issue);
             ctx.addIssue(issue as never);
           } else if (!reported.has(`${at(issue)}|${issue.code}`)) ctx.addIssue(issue as never);

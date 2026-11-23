@@ -668,6 +668,30 @@ await check('NEGATIVE: the metadata guard names a compact tool with no title, no
   assert.ok(problems.some((p) => /no "Returns" sentence/.test(p)), problems.join('; '));
 });
 
+// ---- #745: the dedupe of a re-run custom issue is by path AND check instance or message ----
+
+// Two actions name `v` with different schemas, so the flat shape widens it to z.any() and reports
+// nothing; only the re-run of the chosen action's own schema raises the refinements.
+const refinedSpec = (second) => ({
+  name: 'actual_fixture_refined',
+  description: 'Fixture.',
+  actions: new Map([
+    ['a', { legacy: LIST, fields: z.object({ v: z.string().refine((x) => x.length > 3, 'too short').refine((x) => x.includes('x'), second) }) }],
+    ['b', { legacy: LIST, fields: z.object({ v: z.number() }) }],
+  ]),
+});
+const refinedIssues = async (second) => {
+  const t = buildCompactTool(refinedSpec(second), { callOperation: async () => undefined });
+  try { await t.call({ action: 'a', v: 'ab' }); } catch (e) { return (e.issues ?? []).map((i) => `${i.path.join('.')}: ${i.message}`); }
+  throw new Error('expected a refusal');
+};
+await check('NEGATIVE: two DIFFERENT refinements on one path both survive the compact re-run', async () => {
+  assert.deepStrictEqual(await refinedIssues('no x'), ['v: too short', 'v: no x']);
+});
+await check('NEGATIVE: the SAME refinement message raised twice on one path is reported once', async () => {
+  assert.deepStrictEqual(await refinedIssues('too short'), ['v: too short']);
+});
+
 restore();
 await manager.initialize(ALL);
 console.log(`\n[compact-dispatch] Results: ${passed} passed, ${failed} failed`);
