@@ -417,6 +417,13 @@ export function validateQueryShape(query: string): void {
     throw new Error('actual_query_run does not allow stacked statements (multiple statements separated by ";").');
   }
 
+  // #753: a bare trailing semicolon is refused, not stripped, so the rules above and below
+  // stay exactly as strict as before. Placed after the stacked check so `SELECT 1; DROP ...`
+  // keeps its own message.
+  if (/;\s*$/.test(stripped)) {
+    throw new Error('actual_query_run does not accept a trailing ";". Remove it.');
+  }
+
   // #421: SQL comments. Checked on the literal-blanked `stripped`, so a `--` or `/*` INSIDE a
   // string literal is already gone and cannot false-trigger. A comment left in the query is a
   // trailing-SQL smuggling vector (it comments out the tombstone filter this server relies on),
@@ -447,5 +454,31 @@ export function validateQueryShape(query: string): void {
   const isBareTable = /^\w+$/.test(trimmed);
   if (!isSelect && !isBareTable) {
     throw new Error('actual_query_run only supports SELECT queries or a bare table name.');
+  }
+
+  // #753: the adapter's SQL subset is one regex that accepts only `ORDER BY <one plain column>
+  // [ASC|DESC]` and `LIMIT <digits>`. Anything else it cannot match is absorbed by the last WHERE
+  // value (a silent empty result), so each unsupported clause is refused by name here, before a
+  // session starts. Runs on the literal-blanked copy, so a keyword inside a quoted value never
+  // triggers. The texts must not contain parse, syntax, payee_name, category_name, account_name
+  // or "does not exist in the schema": the legacy tool rewraps a refusal that does.
+  if (isSelect) {
+    if (/\bOFFSET\b/i.test(trimmed)) {
+      throw new Error('actual_query_run: OFFSET is not supported. Only ORDER BY <one column> [ASC|DESC] and LIMIT <n> are supported.');
+    }
+    if (/\b(GROUP\s+BY|HAVING)\b/i.test(trimmed)) {
+      throw new Error('actual_query_run: GROUP BY and HAVING are not supported. Select the rows and add them up yourself.');
+    }
+    if (/\b(COUNT|SUM|AVG|MIN|MAX|TOTAL|GROUP_CONCAT)\s*\(/i.test(trimmed)) {
+      throw new Error('actual_query_run: aggregate functions (COUNT, SUM, AVG, MIN, MAX) are not supported. Select the rows and add them up yourself.');
+    }
+    const orderBy = /\bORDER\s+BY\b([\s\S]*?)(?:\bLIMIT\b|$)/i.exec(trimmed);
+    if (orderBy && !/^\w+(\s+(ASC|DESC))?$/i.test(orderBy[1].trim())) {
+      throw new Error('actual_query_run: ORDER BY supports one plain column with an optional ASC or DESC, for example ORDER BY date DESC.');
+    }
+    const limit = /\bLIMIT\b([\s\S]*)$/i.exec(trimmed);
+    if (limit && !/^\d+$/.test(limit[1].trim())) {
+      throw new Error('actual_query_run: LIMIT must be a non-negative integer and the last clause, for example LIMIT 10.');
+    }
   }
 }

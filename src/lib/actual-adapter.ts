@@ -4818,7 +4818,7 @@ export async function runQuery(queryString: string | any): Promise<unknown> {
       const errorMsg = error?.message || String(error);
       
       if (errorMsg.includes('tableName') || errorMsg.includes('expandStar') || errorMsg.includes('Cannot read properties of undefined')) {
-        throw new Error(`SQL query parsing failed. The Actual Budget query engine has limitations with complex SQL features like COUNT(*), SUM(), GROUP BY, and aggregate functions. Try using simpler queries or ActualQL format instead. See https://actualbudget.org/docs/api/actual-ql/ for supported syntax. Error: ${errorMsg}`);
+        throw new Error(`SQL query could not be translated for the query engine. Supported shape: SELECT fields FROM table [WHERE ...] [ORDER BY one column] [LIMIT n]. Error: ${errorMsg}`);
       }
       
       throw error;

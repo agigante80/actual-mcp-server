@@ -167,18 +167,20 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   If bank connected: expect result "Bank sync completed" with newTransactions, matchedTransactions and updatedAccounts as { count, ids }, and truncated
 
 - run_query
-  Run these 3 queries sequentially with { query: "<SQL>" } (each unsupported syntax → ✓ informational, not ✗ failure):
+  Run these 3 queries sequentially with { query: "<SQL>" }:
 
-  Query 1 (simple count):
+  Query 1 (aggregate function, unsupported):
     "SELECT COUNT(*) as total FROM transactions WHERE date >= '2026-01-01'"
+    Expected (#753): a refusal whose message names "aggregate functions". Report ✓ success when the refusal names the clause; a silent empty result, a different message or a hang is ✗ failure.
 
-  Query 2 (aggregation):
+  Query 2 (GROUP BY, unsupported):
     "SELECT account, SUM(amount) as total FROM transactions GROUP BY account LIMIT 10"
+    Expected (#753): a refusal whose message names "GROUP BY and HAVING" (or "aggregate functions"). Same reporting rule as Query 1.
 
   Query 3 (filter + sort):
     "SELECT payee, amount, date FROM transactions WHERE amount < 0 ORDER BY amount ASC LIMIT 5"
 
-  Report each query result as ✓ success or ✓ informational (unsupported): only an exception = ✗ failure
+  Query 3 must return rows (✓ success). Queries 1 and 2 are expected to be refused by name: the refusal is the pass, anything else is ✗ failure
 
 ---
 

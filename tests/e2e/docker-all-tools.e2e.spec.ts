@@ -2372,6 +2372,37 @@ payee: payee.id,
     }
   });
 
+  test('run_query - #753 unsupported clauses are refused by name and a supported shape still runs', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount({ name: `E2E-753-C-${uniqueSuffix()}` });
+    await makeTransaction({ account, date: '2019-05-01', amount: -1000 });
+    const newest = await makeTransaction({ account, date: '2019-05-09', amount: -2000 });
+    type QueryRow = { id: string };
+    const run = async (tail: string) => {
+      const payload = await mcp.call('run_query', {
+        query: `SELECT id FROM transactions WHERE account = '${account.id}'${tail}`,
+      }) as QueryRow[] | { data?: QueryRow[]; result?: { data?: QueryRow[] } } | null;
+      return Array.isArray(payload) ? payload : (payload?.data ?? payload?.result?.data ?? []);
+    };
+    // Positive: a supported shape is unchanged (the newest row only).
+    expect((await run(' ORDER BY date DESC LIMIT 1')).map((row) => row.id)).toEqual([newest.id]);
+    const refused: Array<[string, RegExp]> = [
+      [' ORDER BY date DESC LIMIT 1 OFFSET 1', /OFFSET is not supported/],
+      [' ORDER BY date, amount', /ORDER BY supports one plain column/],
+      [' ORDER BY payee.name', /ORDER BY supports one plain column/],
+      [' LIMIT abc', /LIMIT must be a non-negative integer/],
+      [' LIMIT -1', /LIMIT must be a non-negative integer/],
+      [' GROUP BY account', /GROUP BY and HAVING are not supported/],
+      [';', /does not accept a trailing ";"/],
+    ];
+    for (const [tail, message] of refused) {
+      await expect(run(tail), tail).rejects.toThrow(message);
+    }
+    await expect(
+      mcp.call('run_query', { query: 'SELECT COUNT(*) FROM transactions' }),
+    ).rejects.toThrow(/aggregate functions/);
+    // Nothing was created by the refused calls; the fixtures remove the account and its rows.
+  });
+
   test('run_query - #566 NOT LIKE on a joined name runs and excludes the match', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
     // Before #566 the validator read NOT as a column after payee.name and refused the query.
     const suffix = uniqueSuffix();
@@ -5090,6 +5121,37 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(await ids('amount IN (1000, -1000)')).toEqual([t1.id, t2.id, t3.id].sort());
     expect(await ids("date IN ('2019-03-01','2019-03-20')")).toEqual([t1.id, t2.id].sort());
     await expect(ids("amount IN (1000, 'abc')")).rejects.toThrow(/Can't convert string to integer/);
+  });
+
+  test('actual_query_run - #753 unsupported clauses are refused by name and a supported shape still runs', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount({ name: `E2E-753-L-${uniqueSuffix()}` });
+    await makeTransaction({ account, date: '2019-05-01', amount: -1000 });
+    const newest = await makeTransaction({ account, date: '2019-05-09', amount: -2000 });
+    type QueryRow = { id: string };
+    const run = async (tail: string) => {
+      const payload = await mcp.call('actual_query_run', {
+        query: `SELECT id FROM transactions WHERE account = '${account.id}'${tail}`,
+      }) as QueryRow[] | { data?: QueryRow[]; result?: { data?: QueryRow[] } } | null;
+      return Array.isArray(payload) ? payload : (payload?.data ?? payload?.result?.data ?? []);
+    };
+    // Positive: a supported shape is unchanged (the newest row only).
+    expect((await run(' ORDER BY date DESC LIMIT 1')).map((row) => row.id)).toEqual([newest.id]);
+    const refused: Array<[string, RegExp]> = [
+      [' ORDER BY date DESC LIMIT 1 OFFSET 1', /OFFSET is not supported/],
+      [' ORDER BY date, amount', /ORDER BY supports one plain column/],
+      [' ORDER BY payee.name', /ORDER BY supports one plain column/],
+      [' LIMIT abc', /LIMIT must be a non-negative integer/],
+      [' LIMIT -1', /LIMIT must be a non-negative integer/],
+      [' GROUP BY account', /GROUP BY and HAVING are not supported/],
+      [';', /does not accept a trailing ";"/],
+    ];
+    for (const [tail, message] of refused) {
+      await expect(run(tail), tail).rejects.toThrow(message);
+    }
+    await expect(
+      mcp.call('actual_query_run', { query: 'SELECT COUNT(*) FROM transactions' }),
+    ).rejects.toThrow(/aggregate functions/);
+    // Nothing was created by the refused calls; the fixtures remove the account and its rows.
   });
 
   test('actual_server_get_version - returns a version', async ({ mcp }) => {
