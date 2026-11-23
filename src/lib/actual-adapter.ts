@@ -5660,8 +5660,7 @@ const BUDGET_MONTH_NOTE_RE = /^budget-\d{4}-\d{2}$/;
  * snapshot the write lands on.
  *
  * The refusal is a NotFoundRefusal so the tool can recognise it by type (#377). The tool
- * converts it to its published `{ error }` shape, which is a known deviation from the
- * refusal taxonomy and is tracked on #377 rather than changed here.
+ * lets it propagate.
  */
 export async function updateNote(id: string, note: string): Promise<void> {
   observability.incrementToolCall('actual.notes.update').catch(() => {});

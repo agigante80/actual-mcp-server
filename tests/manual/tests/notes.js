@@ -180,16 +180,10 @@ export async function notesTests(client, context) {
       id: '00000000-0000-4000-8000-000000000000',
       note: 'should not be written',
     });
-    const data = res?.result ?? res;
-    const text = JSON.stringify(data);
-    if (data?.error || text.includes('not found') || text.includes('Entity')) {
-      console.log(`  ok notes_update [orphan id guard]: correctly returned error`);
-    } else {
-      // GAP(error-messages): manage_accounts set_note with orphan id silently accepted
-      fail(`notes_update [orphan id guard]: did not return the expected error: ${text.slice(0, 200)}`);
-    }
+    // #757: an unknown id is a refusal, never a success-shaped { error } answer.
+    fail(`notes_update [orphan id guard]: did not refuse: ${JSON.stringify(res?.result ?? res).slice(0, 200)}`);
   } catch (err) {
-    if (err.message.includes('not found') || err.message.includes('Entity')) {
+    if (err.message.includes('not found')) {
       console.log(`  ok notes_update [orphan id guard]: threw with useful error`);
     } else {
       fail(`notes_update [orphan id guard]: unexpected error: ${err.message}`);

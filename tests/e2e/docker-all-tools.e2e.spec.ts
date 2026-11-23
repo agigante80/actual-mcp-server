@@ -3583,19 +3583,19 @@ payee: payee.id,
     expect(typeof data?.id === 'string').toBeTruthy();
   });
 
-  test('set_note - orphan id returns error without writing', async ({ mcp }) => {
-    // A well-formed UUID that names no entity: manage_accounts checks the id format first.
+  test('set_note - an unknown id is refused as not found in each tool and nothing is written (#757)', async ({ mcp }) => {
+    // A well-formed UUID that names no entity: the compact tools check the id format first.
     const orphan = '00000000-0000-4000-8000-000000000001';
-    const data = await mcp.call('manage_accounts', {
-      action: 'set_note',
-      id: orphan,
-      note: 'should not be written',
-    });
-    // The tool returns { error: '...' } and does NOT write.
-    expect(typeof data?.error === 'string').toBeTruthy();
-
-    const readBack = await mcp.call('list_entities', { type: 'note', id: orphan });
-    expect(readBack?.found).toBe(false);
+    for (const tool of ['manage_accounts', 'manage_categories', 'manage_payees']) {
+      await expect(
+        mcp.call(tool, { action: 'set_note', id: orphan, note: 'should not be written' }),
+        tool,
+      ).rejects.toThrow(new RegExp(`Entity "${orphan}" not found`));
+      const raw = await mcp.raw(tool, { action: 'set_note', id: orphan, note: 'should not be written' });
+      expect(raw.isError, `${tool} isError`).toBe(true);
+      const readBack = await mcp.call('list_entities', { type: 'note', id: orphan });
+      expect(readBack?.found, `${tool} wrote nothing`).toBe(false);
+    }
   });
 
   test('manage_tags update - ERROR: a rename onto a live tag name is refused and both tags are unchanged (#701)', async ({ mcp, cleanup }) => {
@@ -5594,6 +5594,15 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       mcp.call('actual_query_run', { query: 'SELECT COUNT(*) FROM transactions' }),
     ).rejects.toThrow(/aggregate functions/);
     // Nothing was created by the refused calls; the fixtures remove the account and its rows.
+  });
+
+  test('actual_notes_update - an unknown id is refused as not found and nothing is written (#757)', async ({ mcp }) => {
+    const orphan = '00000000-0000-4000-8000-000000000002';
+    await expect(
+      mcp.call('actual_notes_update', { id: orphan, note: 'should not be written' }),
+    ).rejects.toThrow(new RegExp(`Entity "${orphan}" not found`));
+    expect((await mcp.call('actual_notes_get', { id: orphan }))?.found).toBe(false);
+    // Nothing was created, so there is nothing to clean up.
   });
 
   test('actual_server_get_version - returns a version', async ({ mcp }) => {

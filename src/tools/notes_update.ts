@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { createTool } from '../lib/toolFactory.js';
 import adapter from '../lib/actual-adapter.js';
-import { isPreflightRefusal } from '../lib/errors.js';
 
 export default createTool({
   name: 'actual_notes_update',
@@ -28,19 +27,14 @@ export default createTool({
     // write, which was five api lock acquisitions for one operation; `Promise.all` made
     // that look concurrent, but the api mutex is process-global so they serialised anyway.
     //
-    // This tool answers a refusal with `{ error }` rather than throwing. That shape is a
-    // documented deviation from the refusal taxonomy (see the api-design-principles skill)
-    // and it is this tool's PUBLISHED contract, so it is preserved here rather than
-    // quietly changed; #377 tracks the decision. What did change is that the shape is
-    // chosen by TYPE now, not by matching the message.
-    try {
-      await adapter.updateNote(id, note);
-    } catch (error) {
-      if (isPreflightRefusal(error)) {
-        return { error: (error as Error).message };
-      }
-      throw error;
-    }
+    // An unknown id is refused: `adapter.updateNote` throws a NotFoundRefusal and this tool
+    // lets it propagate, so the caller gets an isError result like every other unknown id.
+    // This tool used to catch it and answer `{ error }` as its "published contract" (#377).
+    // That answer was dropped in #757: the legacy tools are no longer the default surface
+    // (the compact tools are), and #769 made a thrown refusal an isError tool result, which
+    // settles the question #377 left open for this tool. A success-shaped answer for a note
+    // that was never written read as success to any client that checks isError.
+    await adapter.updateNote(id, note);
 
     return {
       success: true as const,

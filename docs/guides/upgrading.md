@@ -72,6 +72,10 @@ The transaction, balance and schedule tools (the legacy ones and the compact too
 
 `manage_transactions` `update` and the legacy `actual_transactions_update` no longer accept `transfer_id`. With `transfer_id: null` on a transfer side, upstream wrote a second mirror row in the other account (money duplicated, reported as success); a transfer link has no safe edit. A call that sends it is now refused with `unexpected field(s): transfer_id`. The legacy `fields` object is also strict now: any key it does not declare is refused with the same message instead of being dropped silently. A script that sends a stray key in `fields` must stop sending it; the twelve declared keys are unchanged.
 
+### A note on an unknown id is refused (#757)
+
+`actual_notes_update`, and `set_note` in `manage_accounts`, `manage_categories` and `manage_payees`, now fail with an error result (`Entity "<id>" not found`) when the id names no entity, instead of answering `{ error }` as a success. Nothing was ever written for the unknown id; only the shape of the answer changed. A client that read the `error` field must check for a tool error instead.
+
 ### HTTP auth is required by default (#242)
 
 An existing HTTP deployment on a non-loopback bind with no token and no OIDC that previously started open will now refuse to start. The startup error names the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or `AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior. See [authentication.md](authentication.md) before choosing the last one.

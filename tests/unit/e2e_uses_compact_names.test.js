@@ -68,6 +68,7 @@ const LEGACY_SMOKE = [
   'actual_budgets_list_available',
   'actual_tags_list',
   'actual_notes_get',
+  'actual_notes_update', // #757: the legacy unknown-id refusal
   'actual_entities_search',
   'actual_transactions_summary_by_category',
   'actual_query_run',

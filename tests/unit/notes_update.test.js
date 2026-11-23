@@ -30,11 +30,12 @@ const ORPHAN_ID        = 'not-a-real-entity';
   // the real function runs. They read mutable closure state rather than being reassigned
   // per case, for the same reason.
   let updateNoteCalls = 0;
+  let writeFailure = null; // read by the stub: the adapter captured the stub at load, so state must be mutable
   let entityRows = [];
   // #376: the witness samples the drain counter from INSIDE the raw stubs, which is what
   // distinguishes a read inside the drain from one before it. See helpers/write-cycle.mjs.
   let witness;
-  apiDefault.updateNote = async () => { witness?.noteWrite(); updateNoteCalls++; };
+  apiDefault.updateNote = async () => { if (writeFailure) throw writeFailure; witness?.noteWrite(); updateNoteCalls++; };
   apiDefault.getNote    = async (id) => ({ id, note: '' });
   apiDefault.sync       = async () => {};
   apiDefault.getAccounts = async () => { witness?.noteRead(); return entityRows; };
@@ -43,6 +44,7 @@ const ORPHAN_ID        = 'not-a-real-entity';
   apiDefault.getPayees        = async () => { witness?.noteRead(); return []; };
 
   const { makeCycleWitness } = await import('./helpers/write-cycle.mjs');
+  const { isPreflightRefusal, NotFoundRefusal } = await import('../../dist/src/lib/errors.js');
   const [tool, adapterMod] = await Promise.all([
     import('../../dist/src/tools/notes_update.js').then(m => m.default),
     import('../../dist/src/lib/actual-adapter.js'),
@@ -67,8 +69,8 @@ const ORPHAN_ID        = 'not-a-real-entity';
   };
 
   // createTool wraps handler return in { result: ... }
-  // So tool.call() returns { result: { success, id, note, cleared } }
-  // or { result: { error: '...' } } for the orphan guard path.
+  // So tool.call() returns { result: { success, id, note, cleared } };
+  // the orphan guard path throws a NotFoundRefusal (#757).
 
   console.log('\n[notes_update] positive: valid update on a known account id calls adapter');
   {
@@ -106,18 +108,31 @@ const ORPHAN_ID        = 'not-a-real-entity';
     check(updateNoteCalls === 1, 'the raw note write happened once');
   }
 
-  console.log('\n[notes_update] negative: orphan id (not in any entity list, not budget-YYYY-MM) returns error');
+  console.log('\n[notes_update] negative: orphan id (not in any entity list, not budget-YYYY-MM) is refused (#757)');
   {
     setupEmptyLists();
-    const res = await tool.call({ id: ORPHAN_ID, note: 'x' });
-    const r = res?.result;
-    check(r?.error !== undefined, 'returns error field');
-    check(typeof r?.error === 'string', 'error is a string');
-    check(r?.error?.includes(ORPHAN_ID), 'error contains the bad id');
+    let err;
+    try { await tool.call({ id: ORPHAN_ID, note: 'x' }); } catch (e) { err = e; }
+    check(err !== undefined, 'the call rejects instead of answering { error }');
+    check(isPreflightRefusal(err), 'the rejection is a preflight refusal');
+    check(err instanceof NotFoundRefusal, 'the rejection is a NotFoundRefusal');
+    check(typeof err?.message === 'string' && err.message.includes(`Entity "${ORPHAN_ID}" not found`),
+      'message names the bad id', String(err?.message));
     check(updateNoteCalls === 0,
       'the raw note write NOT reached: this is what prevents an unreadable orphan note');
     check(witness.readInCycleNoWrite(),
       'the reads ran inside the drain and no write followed', witness.describe());
+  }
+
+  console.log('\n[notes_update] negative: a non-refusal failure of the write still propagates unchanged');
+  {
+    setupKnownEntity();
+    writeFailure = new Error('write exploded');
+    let err;
+    try { await tool.call({ id: KNOWN_ACCOUNT_ID, note: 'x' }); } catch (e) { err = e; }
+    writeFailure = null;
+    check(err !== undefined && !isPreflightRefusal(err) && /write exploded/.test(String(err?.message)),
+      'a plain write failure is rethrown, not turned into a refusal', String(err?.message));
   }
 
   console.log('\n[notes_update] schema: rejects missing id');

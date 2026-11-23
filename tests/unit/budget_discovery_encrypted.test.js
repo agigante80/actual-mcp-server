@@ -120,11 +120,12 @@ test('all locked: first file and count, with the existing enforcement audit', as
   assert.equal(downloads.length, 0);
 });
 
-test('transaction and note writes keep their structured refusal results when every grant is locked', async () => {
+test('a transaction write keeps its structured refusal result and a note write is refused when every grant is locked (#757)', async () => {
   await run([locked], async () => {
     assert.deepEqual(await createTransaction.call({ account: randomUUID(), date: '2026-11-20', amount: 1 }),
       { success: false, error: message('locked'), id: null });
-    assert.deepEqual(await updateNote.call({ id: 'budget-2026-11', note: '' }), { result: { error: message('locked') } });
+    // #757: the note tool no longer converts a refusal into an { error } result; it propagates.
+    await assert.rejects(updateNote.call({ id: 'budget-2026-11', note: '' }), lockedError('locked'));
   });
   assert.equal(downloads.length, 0);
 });
