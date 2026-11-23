@@ -15,6 +15,8 @@ function lastDayOfMonth(month: string): string {
 
 const TEMPLATE = `Review my budget for {month}, from {first_day} to {last_day}. Work through these steps and stay read-only: do not change anything.
 
+Before step 1, call list_budget_months with no month to get the months the budget covers. If {month} is not in that list, the budget has no data for it: do not call list_budget_months with {month}, say that the budget does not cover {month}, and skip step 2 and the searches in step 4. Answer from step 3 alone: income, expenses and the savings rate, with no budgeted, overspent or unused-budget figures.
+
 1. Call get_context with include_payees false to see the accounts, category groups and categories.
 2. Call list_budget_months with month {month}. Per expense category it gives budgeted, spent and balance; spent is negative cents for outflows, and balance includes any carryover. A category is overspent when its balance is below zero. The month totals give income, budgeted and spent.
 3. Call summarize_transactions with report by_category, start_date {first_day}, end_date {last_day} and include_income true, to see where the money actually went; the category group tells income from expenses. Compare it with step 2.

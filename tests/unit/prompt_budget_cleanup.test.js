@@ -197,5 +197,27 @@ await check('the field names the text claims are keys of the real aggregate grou
   }
 });
 
+// #781: a month the budget does not cover. list_budget_months with such a month throws, so the
+// text lists the budget months first and says what to skip.
+await check('budget_cleanup lists the budget months first and says what to skip for a month outside them (#781)', () => {
+  const text = render({ date: '2015-01-31' });
+  const para = 'Before step 1, call list_budget_months with no month to get the months the budget covers. If 2015-01 is not in that list, the budget has no data for it: do not call list_budget_months with 2015-01, say that the budget does not cover 2015-01, '  + 'and in step 4 skip the budget check.';
+  assert.ok(text.includes(para), 'the paragraph is missing or changed');
+  assert.ok(text.indexOf(para) < text.indexOf('\n1. '), 'the paragraph comes before step 1');
+  assert.ok(!text.includes('{'), 'no unfilled placeholder');
+  assert.ok(!text.includes('this month'));
+  // Mutation: the same text without the paragraph must fail the match.
+  assert.ok(!text.replace(para, '').includes(para));
+});
+await check('budget_cleanup no longer carries the dead no-categories fallback and never proposes deleting unchecked (#781)', () => {
+  for (const date of ['2026-10-15', '2015-01-31']) {
+    const text = render({ date });
+    assert.ok(!text.includes('returns no categories'), 'the dead fallback is gone');
+    assert.ok(text.includes('do not propose deleting any category, because its balance cannot be checked'));
+    assert.ok(text.includes('list_budget_months with month ' + date.slice(0, 7) + '.'), 'the step 4 call stays');
+  }
+});
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

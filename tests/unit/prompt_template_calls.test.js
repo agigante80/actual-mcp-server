@@ -32,7 +32,8 @@ const { buildCompactTool, legacyPhrases } = await import('../../dist/src/compact
 
 const phrases = legacyPhrases(COMPACT_TOOLS);
 let calls = 0;
-const ops = { callOperation: async () => { calls++; return {}; } };
+let lastLegacy = '';
+const ops = { callOperation: async (legacy) => { calls++; lastLegacy = legacy; return {}; } };
 const tools = new Map(COMPACT_TOOLS.map((spec) => [spec.name, buildCompactTool(spec, ops, phrases)]));
 const accepts = async (tool, input) => {
   calls = 0;
@@ -48,21 +49,25 @@ const RANGE = { start_date: '2026-05-01', end_date: '2026-10-31' };
 // prompt -> [arguments to render with, the calls its text instructs]
 const TABLE = {
   monthly_review: [{ month: '2026-10' }, [
+    ['list_budget_months', {}],
     ['get_context', { include_payees: false }],
     ['list_budget_months', { month: '2026-10' }],
     ['summarize_transactions', { report: 'by_category', ...RANGE, include_income: true }],
     ['search_transactions', { by: 'category', category_name: 'Food', ...RANGE, limit: 1000 }],
   ]],
   spending_check: [{ date: '2026-10-15' }, [
+    ['list_budget_months', {}],
     ['list_budget_months', { month: '2026-10' }],
     ['summarize_transactions', { report: 'by_category', start_date: '2026-10-01', end_date: '2026-10-15' }],
   ]],
   spending_patterns: [{ months: '6' }, [
+    ['list_budget_months', {}],
     ['summarize_transactions', { report: 'grouped', ...RANGE, group_by: 'month', include_income: true }],
     ['summarize_transactions', { report: 'grouped', ...RANGE, group_by: ['category', 'month'] }],
     ['list_budget_months', { month: '2026-10' }],
   ]],
   budget_cleanup: [{ date: '2026-10-15' }, [
+    ['list_budget_months', {}],
     ...['payee', 'category', 'account'].map((g) => ['summarize_transactions', { report: 'grouped', ...RANGE, group_by: g, include_income: true, exclude_transfers: false }]),
     ...['payee', 'rule', 'category_group', 'account'].map((type) => ['list_entities', { type }]),
     ['list_budget_months', { month: '2026-10' }],
@@ -95,6 +100,33 @@ for (const [name, [args, rows]] of Object.entries(TABLE)) {
       await accepts(tool, input);
     });
   }
+}
+
+// #781: the paragraph before step 1 sends the model to the month LIST first. The no-month call
+// must route to the list operation (a string array of YYYY-MM), not to the one-month read that
+// throws for a month the budget lacks, and every prompt must say not to read its own month then.
+await check('list_budget_months with no month reaches the months list, with a month the one-month read (#781)', async () => {
+  await accepts('list_budget_months', {});
+  assert.strictEqual(lastLegacy, 'actual_budgets_get_months');
+  await accepts('list_budget_months', { month: '2026-10' });
+  assert.strictEqual(lastLegacy, 'actual_budgets_get_month');
+});
+await check('the compact tool describes the no-month result as the YYYY-MM list the prompts rely on (#781)', () => {
+  const spec = COMPACT_TOOLS.find((t) => t.name === 'list_budget_months');
+  assert.ok(spec.description.includes('Returns { result: [YYYY-MM, ...] }'));
+});
+for (const [name, args, month] of [
+  ['monthly_review', { month: '2028-01' }, '2028-01'],
+  ['spending_check', { date: '2015-01-15' }, '2015-01'],
+  ['spending_patterns', { months: '1', end_month: '2015-01' }, '2015-01'],
+  ['budget_cleanup', { date: '2015-01-31' }, '2015-01'],
+]) {
+  await check(`${name}: a month outside the budget is not read (#781)`, () => {
+    const text = renderPrompt(PROMPT_DEFINITIONS.find((d) => d.name === name), args);
+    assert.ok(text.includes('call list_budget_months with no month'));
+    assert.ok(text.includes(`do not call list_budget_months with ${month}`));
+    assert.ok(text.includes(`If ${month} is not in that list`));
+  });
 }
 
 // Negative: the harness can refuse. A key no schema has, and an update_batch item with a key
