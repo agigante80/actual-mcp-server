@@ -191,7 +191,10 @@ start on a non-loopback bind, unless `MCP_ALLOW_UNAUTHENTICATED=true` is set del
 every tool, writes included, is served to anyone who can reach the port). A reverse proxy that
 does not authenticate does not replace the token. `/health`, `/metrics`, `/mcp-info` and
 `/mcp-info/http` are unauthenticated by design; with `AUTH_PROVIDER=oidc` the `/.well-known/`
-OAuth metadata documents are public too.
+OAuth metadata documents are public too. The `advertisedUrl` in `/mcp-info` follows the `Host`
+of the request (scheme and path stay the configured ones), so it is an address the caller can
+reach; a `Host` that is not a plain host name or IP with an optional port leaves the field out.
+Setting `MCP_BRIDGE_PUBLIC_HOST` pins it to that host instead.
 
 ---
 

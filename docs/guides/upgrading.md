@@ -100,6 +100,10 @@ An HTTP deployment on `0.0.0.0` whose `MCP_SSE_AUTHORIZATION` is shorter than 32
 
 An HTTP server running without a token or OIDC now accepts only `localhost`, `127.0.0.1`, `[::1]`, its concrete bind address, its advertised host (`MCP_BRIDGE_PUBLIC_HOST` or the detected LAN IP, since #615) and the names in `MCP_ALLOWED_HOSTS` as the `Host` header; any other name gets 403 `Invalid Host: <name>`. That includes a container reaching it by service name and a reverse proxy that forwards the public host (Caddy does by default, the nginx example sets `proxy_set_header Host $host`). Add the name to `MCP_ALLOWED_HOSTS`, or better, configure a token. The URL the server prints at startup works as printed: v0.25.0 refused its own advertised host on a wildcard bind (#615), so from v0.25.1 a `MCP_ALLOWED_HOSTS` entry for it is no longer needed.
 
+### `/mcp-info` advertises the address you used, and 401s carry a challenge (#777)
+
+`advertisedUrl` in `GET /mcp-info` and `/mcp-info/http` used to be the detected LAN IP and the internal listen port, which behind a published port is the container's internal address. It now takes host and port from the request `Host` header (scheme and path stay the configured ones) unless `MCP_BRIDGE_PUBLIC_HOST` is set, in which case it is unchanged. A `Host` that is not a plain host name, IPv4 address or bracketed IPv6 literal with an optional port leaves the field out of the document. The response sends `Vary: Host`. If a script reads `advertisedUrl` from the probe, read it from a request made with the name you actually use. Separately, every 401 from a token server now carries a `WWW-Authenticate: Bearer` challenge; nothing else about the 401 changed.
+
 ### Old logs can hold budget data (v0.22.38)
 
 Logs written by earlier versions can contain budget data (tool results at `info`, failed-call arguments at `error`). Purge them or let rotation remove them, including copies held by a log shipper or in Claude Desktop's MCP log files.

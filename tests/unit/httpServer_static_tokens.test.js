@@ -73,7 +73,7 @@ const send = async (method, authorization, sid, body) => {
   if (authorization !== undefined) headers.Authorization = authorization;
   if (sid) headers['mcp-session-id'] = sid;
   const r = await fetch(base, { method, headers, body: body ? JSON.stringify(body) : undefined });
-  return { status: r.status, sessionId: r.headers.get('mcp-session-id'), body: await r.text() };
+  return { status: r.status, sessionId: r.headers.get('mcp-session-id'), www: r.headers.get('www-authenticate'), body: await r.text() };
 };
 const bearer = (t) => 'Bearer ' + t;
 const initParams = { protocolVersion: '2025-03-26', capabilities: {}, clientInfo: { name: 'static-tokens-test', version: '0' } };
@@ -90,6 +90,14 @@ r.refusals = {
   scheme: (await init('Basic ' + ALICE)).status,
   malformed: (await init('Bearer')).status,
   noneBody: (await init(undefined)).body,
+  // #777: the WWW-Authenticate challenge of each 401, and the presented secret as a probe for a leak.
+  www: {
+    none: (await init(undefined)).www,
+    unknown: (await init(bearer('wrong-token-value'))).www,
+    unknownBody: (await init(bearer('wrong-token-value'))).body,
+    scheme: (await init('Basic abc')).www,
+    malformed: (await init('Bearer')).www,
+  },
 };
 
 if (process.env.MCP_SSE_AUTHORIZATION) {
@@ -161,6 +169,14 @@ const refusalRows = (r) => {
   check('H3 a strict prefix of alice\'s token: 401', () => assert.strictEqual(r.refusals.prefix, 401));
   check('H4 alice\'s token under a non-Bearer scheme: 401', () => assert.strictEqual(r.refusals.scheme, 401));
   check('H5 a malformed header: 401', () => assert.strictEqual(r.refusals.malformed, 401));
+  // #777: RFC 9110 15.5.2, the exact challenge of each 401 branch.
+  check('H1 #777 no header: WWW-Authenticate is the bare realm challenge', () => assert.strictEqual(r.refusals.www.none, 'Bearer realm="actual-mcp-server"'));
+  check('H2 #777 an unknown token: error="invalid_token", and neither header nor body echoes the token', () => {
+    assert.strictEqual(r.refusals.www.unknown, 'Bearer realm="actual-mcp-server", error="invalid_token"');
+    assert.ok(!r.refusals.www.unknown.includes('wrong-token-value') && !r.refusals.www.unknownBody.includes('wrong-token-value'));
+  });
+  check('H4 #777 a non-Bearer scheme: error="invalid_request"', () => assert.strictEqual(r.refusals.www.scheme, 'Bearer realm="actual-mcp-server", error="invalid_request"'));
+  check('H5 #777 a malformed header: error="invalid_request"', () => assert.strictEqual(r.refusals.www.malformed, 'Bearer realm="actual-mcp-server", error="invalid_request"'));
 };
 
 console.log('\n[#572 http] static tokens plus the legacy token');

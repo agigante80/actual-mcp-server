@@ -25,12 +25,20 @@ import assert from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import http from 'node:http';
+import net from 'node:net';
 
 // Dummy env so config.ts parses offline. AUTH_PROVIDER unset => defaults to 'none'.
 process.env.ACTUAL_SERVER_URL = process.env.ACTUAL_SERVER_URL ?? 'http://localhost:5006';
 process.env.ACTUAL_BUDGET_SYNC_ID = process.env.ACTUAL_BUDGET_SYNC_ID ?? '00000000-0000-0000-0000-000000000000';
 process.env.ACTUAL_PASSWORD = process.env.ACTUAL_PASSWORD ?? 'stub-password-for-unit-test';
 delete process.env.AUTH_PROVIDER;
+// #777: a static bearer token is configured so the #612 Host guard is off (it returns null with a
+// token and no MCP_ALLOWED_HOSTS): the hostile-Host rows then reach /mcp-info's own validation
+// instead of being stopped by the guard. /mcp-info stays unauthenticated either way.
+process.env.MCP_SSE_AUTHORIZATION = 'unit-test-token-777';
+delete process.env.MCP_BRIDGE_PUBLIC_HOST;
+delete process.env.MCP_ALLOWED_HOSTS;
 
 let passed = 0, failed = 0;
 function check(label, cond) {
@@ -45,7 +53,7 @@ console.log('\n[mcp-info-route] #286 server-info probe moved off the reserved OA
 const { startHttpServer } = await import('../../dist/src/server/httpServer.js');
 const mcp = {}; // only dereferenced inside protected request handlers, never hit here
 const { listener, cleanup } = await startHttpServer(
-  mcp, 0, '/', {}, ['actual_accounts_list', 'actual_transactions_get'], 'desc', 'instr', {}, 'test', '127.0.0.1', undefined,
+  mcp, 0, '/', {}, ['actual_accounts_list', 'actual_transactions_get'], 'desc', 'instr', {}, 'test', '127.0.0.1', 'http://172.18.0.4:3600/http',
 );
 try {
   if (!listener.listening) {
@@ -84,6 +92,59 @@ try {
     infoHttp.status === 200 && bodyHttp && !('jsonrpc' in bodyHttp));
   check('GET /mcp-info/http instructions is the passed string, no serverInstructions key',
     bodyHttp && bodyHttp.instructions === 'instr' && !('serverInstructions' in bodyHttp));
+
+  // #777: the advertised address is the one the caller used, never the internal startup address.
+  const getInfo = (path, hostHeader) => new Promise((res, rej) => {
+    const headers = hostHeader === undefined ? {} : { host: hostHeader };
+    http.get({ host: '127.0.0.1', port, path, headers, setHost: false }, (r) => {
+      let data = ''; r.on('data', (c) => { data += c; });
+      r.on('end', () => res({ status: r.statusCode, headers: r.headers, text: data }));
+    }).on('error', rej);
+  });
+  const rawGet = (head) => new Promise((res, rej) => {
+    const sock = net.connect(port, '127.0.0.1', () => sock.write(head));
+    let data = ''; sock.on('data', (c) => { data += c; });
+    sock.on('end', () => res(data)); sock.on('error', rej);
+    sock.setTimeout(5000, () => { sock.destroy(); res(data); });
+  });
+  const ok = await getInfo('/mcp-info', 'localhost:3601');
+  const okBody = JSON.parse(ok.text);
+  check(`#777 Host localhost:3601 -> advertisedUrl http://localhost:3601/http (got ${okBody.advertisedUrl})`, okBody.advertisedUrl === 'http://localhost:3601/http');
+  check('#777 the response holds neither the internal address nor its port', !ok.text.includes('172.18.0.4') && !ok.text.includes(':3600'));
+  check(`#777 Vary: Host is set (got ${ok.headers.vary})`, /(^|,\s*)host(\s*,|$)/i.test(String(ok.headers.vary)));
+  const okHttp = await getInfo('/mcp-info/http', '[::1]:3601');
+  check('#777 /mcp-info/http with an IPv6 literal Host', JSON.parse(okHttp.text).advertisedUrl === 'http://[::1]:3601/http' && /host/i.test(String(okHttp.headers.vary)));
+  const noneRaw = await rawGet('GET /mcp-info HTTP/1.0\r\n\r\n');
+  check('#777 raw HTTP/1.0 with no Host: 200, no advertisedUrl, no internal address', /^HTTP\/1\.1 200/.test(noneRaw) && !noneRaw.includes('172.18.0.4') && !/"advertisedUrl"/.test(noneRaw));
+
+  const hostile = {
+    'path traversal': 'evil.test/../admin',
+    'userinfo': 'user:pass@evil.test',
+    'space': 'a b',
+    'oversized': 'a'.repeat(300),
+    'port out of range': 'evil.test:99999',
+    'unterminated IPv6': '[::1',
+  };
+  for (const [name, value] of Object.entries(hostile)) {
+    const raw = await rawGet(`GET /mcp-info HTTP/1.1\r\nHost: ${value}\r\nConnection: close\r\n\r\n`);
+    const bodyText = raw.slice(raw.indexOf('\r\n\r\n') + 4);
+    const is200 = /^HTTP\/1\.1 200/.test(raw);
+    const headerPart = raw.slice(0, raw.indexOf('\r\n\r\n'));
+    check(`#777 hostile Host (${name}): never echoed in the body or the headers, internal address never leaks`,
+      !bodyText.includes('evil') && !bodyText.includes('admin') && !bodyText.includes('172.18.0.4') && !/evil/i.test(headerPart.replace(/^HTTP.*\r\n/, '')));
+    if (is200) check(`#777 hostile Host (${name}): 200 without an advertisedUrl key`, !/"advertisedUrl"/.test(bodyText));
+  }
+  // CR and LF inside the header value: Node's parser may refuse the request outright (400); either
+  // way nothing is reflected, and no injected header appears in the response.
+  // (A CRLF is a header terminator, so "Host: evil.test" is then a valid, ordinary Host and may be
+  // advertised; the assertion for it is only that the second line is not reflected as a header.)
+  for (const [name, inj] of [['CR', 'evil.test\rX-Injected: 1'], ['LF', 'evil.test\nX-Injected: 1'], ['CRLF', 'evil.test\r\nSet-Cookie: a=b']]) {
+    const raw = await rawGet(`GET /mcp-info HTTP/1.1\r\nHost: ${inj}\r\nConnection: close\r\n\r\n`);
+    const headerPart = raw.slice(0, Math.max(raw.indexOf('\r\n\r\n'), 0));
+    check(`#777 header injection (${name}): no injected header and nothing reflected`,
+      !/x-injected/i.test(headerPart) && !/set-cookie/i.test(headerPart) && !raw.includes('172.18.0.4')
+      && (name === 'CRLF' || !raw.includes('evil.test')));
+  }
 } finally {
   await new Promise((res) => listener.close(res));
   process.removeListener('SIGTERM', cleanup);
@@ -98,6 +159,9 @@ check('the server-info probe is registered on /mcp-info',
   /app\.get\(\s*['"]\/mcp-info['"]/.test(src));
 check('OIDC-mode RFC 9728 router is untouched (scenario 2): protectedResourceMetadataRouter still registered',
   /mcpAuth\.protectedResourceMetadataRouter\(\)/.test(src));
+
+check('#777: the OIDC no-principal 401 sets a bearerChallenge with the resource metadata URL (booting OIDC needs a live IdP; behaviour of bearerChallenge itself is pinned in advertised_url.test.js)',
+  /bearerChallenge\(\{ metadataUrl:[^\n]*resourceMetadataEndpoint\(config\.OIDC_RESOURCE\)[^\n]*\}\)\);\s*\n\s*res\.status\(401\)\.json\(\{ error: 'Unauthorized: OIDC authentication required' \}\)/.test(src));
 
 {
   // #473: the root metadata rewrite must sit inside `if (mcpAuth)` (so `none` mode never

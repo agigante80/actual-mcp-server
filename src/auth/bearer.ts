@@ -108,6 +108,17 @@ export function resourceMetadataEndpoint(resource: string): URL {
   return new URL(url.pathname === '/' ? METADATA_ROOT : `${METADATA_ROOT}${url.pathname}`, url.origin);
 }
 
+/**
+ * The WWW-Authenticate value for a 401 (RFC 9110 15.5.2, RFC 6750 3). A fixed shape built only
+ * from constants and our own metadata URL: it never carries the presented token or any request
+ * value. Omit `error` when no credentials were presented (RFC 6750 3.1).
+ */
+export function bearerChallenge(opts: { error?: 'invalid_request' | 'invalid_token'; metadataUrl?: string } = {}): string {
+  return 'Bearer realm="actual-mcp-server"'
+    + (opts.error ? `, error="${opts.error}"` : '')
+    + (opts.metadataUrl ? `, resource_metadata="${opts.metadataUrl}"` : '');
+}
+
 function bearerToken(header: string | undefined): string {
   if (!header) throw new BearerAuthError('missing_auth_header');
   const [scheme, token, ...rest] = header.split(' ');

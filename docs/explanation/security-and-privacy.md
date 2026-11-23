@@ -850,6 +850,19 @@ check is the cross-site defence, and it compares hostnames only (not scheme or p
 other web app served under the same name counts as a trusted Origin. Set
 `MCP_BRIDGE_PUBLIC_HOST` only to a name whose DNS you own.
 
+#777: `/mcp-info` is unauthenticated, so its `advertisedUrl` no longer carries the detected internal address. Unless
+`MCP_BRIDGE_PUBLIC_HOST` is set, it is built from the request `Host` after a strict match (a host
+name, IPv4 address or bracketed IPv6 literal, an optional port in 1 to 65535, at most 261
+characters); the output is assembled only from the matched text and the configured scheme and
+path, so userinfo, a path, whitespace or a control character cannot reach the response. A `Host`
+that fails the match, or none, leaves the field out: it is never echoed and the internal address is
+never the fallback. The route sends `Vary: Host` so a shared cache cannot hand one caller's value
+to another. `X-Forwarded-Host` and `X-Forwarded-Proto` are not read: `trust proxy` is off.
+
+Every 401 from a token server carries a fixed `WWW-Authenticate: Bearer realm="actual-mcp-server"`
+challenge (RFC 9110 15.5.2), with `error="invalid_request"` or `error="invalid_token"` where RFC
+6750 3.1 calls for one. It is built from constants and never contains the presented token.
+
 With a token or OIDC configured nothing changes unless `MCP_ALLOWED_HOSTS` is set; then the
 listed names plus the loopback names are enforced as `Host` (no Origin check). stdio is
 unaffected.

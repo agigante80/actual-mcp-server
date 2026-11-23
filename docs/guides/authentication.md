@@ -26,7 +26,7 @@ openssl rand -hex 32
 MCP_SSE_AUTHORIZATION=<your-generated-token>
 ```
 
-Clients send `Authorization: Bearer <your-generated-token>`. Set the variable to the raw token only: a value that starts with `Bearer ` never matches, and every request gets HTTP 401 `Unauthorized: Invalid token` (`src/server/httpServer.ts`).
+Clients send `Authorization: Bearer <your-generated-token>`. Set the variable to the raw token only: a value that starts with `Bearer ` never matches, and every request gets HTTP 401 `Unauthorized: Invalid token` (`src/server/httpServer.ts`). Every static-token 401 carries a fixed `WWW-Authenticate` challenge (RFC 9110 15.5.2, RFC 6750): `Bearer realm="actual-mcp-server"` when no header was sent, plus `error="invalid_request"` for a header that is not `Bearer <token>` and `error="invalid_token"` for a token that matches no entry. It never contains the presented token.
 
 Every client is the same principal, `static-bearer`, so all clients share one budget preference and can reach every budget. Rotating the token means changing the value and restarting: configuration is read once at startup.
 
