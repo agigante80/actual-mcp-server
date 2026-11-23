@@ -53,7 +53,13 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   whose shorter rule descriptions took the total down to 123,646) the legacy total is
 //   123,768 bytes, and the ceiling is that plus 8. The compact surface total and every
 //   per-tool ceiling are unchanged.
-const TOTAL_CEILING = 123776;
+//   Total raised for #750 (split search) from 123,776 to 124,168: five legacy search tools gained
+//   one sentence ("With categoryName, a split is matched by its children; rows carry
+//   parent_id.", and the categoryId or notes form on actual_transactions_filter). Measured after
+//   the rebase on develop (which carries #747 and #766) the legacy total is 124,160 bytes
+//   (123,768 on develop before this change, so 392 added, description text only), and the
+//   ceiling is that plus 8. Every per-tool ceiling is unchanged.
+const TOTAL_CEILING = 124168;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
