@@ -34,7 +34,7 @@ const amount = z
 const amountOp = z.enum(['is', 'isapprox', 'isbetween']).optional().describe('How to match the amount; default is on create.');
 const date = z.any().meta({
   type: ['string', 'object'],
-  description: 'One-off "YYYY-MM-DD", or a recurrence {frequency daily|weekly|monthly|yearly, start, endMode?, interval?, patterns?, skipWeekend?, weekendSolveMode?, endOccurrences?, endDate?}.',
+  description: 'One-off "YYYY-MM-DD", or a recurrence {frequency daily|weekly|monthly|yearly, start, endMode never|after_n_occurrences|on_date, interval, patterns [{type day|SU|MO|TU|WE|TH|FR|SA, value}] (monthly only), skipWeekend, weekendSolveMode before|after, endOccurrences, endDate}. after_n_occurrences needs endOccurrences; on_date needs endDate, not before start.',
 });
 const postsTransaction = z.boolean().optional().describe('Auto-post a transaction on each occurrence; default false on create.');
 const resetNextDate = z.boolean().optional().describe('Recalculate next_date; set true when changing date.');

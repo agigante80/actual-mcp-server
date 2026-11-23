@@ -85,6 +85,9 @@ await check('the legacy return value comes back unchanged', async () => {
 // ---- refusals: nothing is called ----
 
 await check('NEGATIVE: unknown action lists the three values', () => refused({ action: 'frobnicate' }, /action.*create.*update.*delete/));
+await check('NEGATIVE: a recurrence with after_n_occurrences and no endOccurrences is refused (#786)', () =>
+  refused({ action: 'create', date: { frequency: 'daily', start: '2026-12-01', endMode: 'after_n_occurrences' } },
+    /endOccurrences is required when endMode is after_n_occurrences/));
 await check('NEGATIVE: a missing selector is refused naming action', () => refused({}, /action/));
 await check('NEGATIVE: create without date, update or delete without id, name the key', async () => {
   await refused({ action: 'create', name: 'x' }, /date.*required for action: create/);
