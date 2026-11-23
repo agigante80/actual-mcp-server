@@ -75,6 +75,8 @@ for (const q of INVALID_COLUMN) {
 // Real columns on the same branches must stay valid (no regression on #178 operators).
 const VALID_COLUMN = [
   "SELECT id FROM transactions WHERE notes IN ('groceries','rent')",
+  'SELECT id FROM transactions WHERE amount IN (1000, -1000)', // #751
+  "SELECT id FROM transactions WHERE date IN ('2019-03-01','2019-03-20')", // #751
   "SELECT id FROM transactions WHERE imported_payee LIKE '%amazon%'",
   'SELECT id FROM transactions WHERE imported_payee IS NULL',
 ];
