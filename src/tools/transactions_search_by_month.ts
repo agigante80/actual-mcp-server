@@ -17,7 +17,7 @@ const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
   description:
     'Search the transactions of one calendar month (month as YYYY-MM, default the current month), optionally narrowed by accountId, categoryName, payeeName (case-insensitive exact names) and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
-    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. A split is matched by its children; rows carry parent_id. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. With categoryName, a split is matched by its children; rows carry parent_id. ' +
     'An unknown category or payee name returns an empty list with an error field. For other date ranges or aggregation use actual_query_run.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

@@ -133,7 +133,8 @@ describe('actual_transactions_filter');
   const byChildNotes = await tool.call({ notes: 'child' });
   check(ids(byChildNotes) === 'c1', `notes matching only a child's own notes return that child (${ids(byChildNotes)})`);
   const byParentNotes = await tool.call({ notes: 'trip' });
-  check(ids(byParentNotes) === 'c2', `notes matching only the parent's notes return the child without notes (${ids(byParentNotes)})`);
+  check(ids(byParentNotes) === 'c1,c2', `notes matching the parent's notes return every child, the whole split (${ids(byParentNotes)})`);
+  check(rowsOf(byParentNotes).reduce((n, t) => n + t.amount, 0) === -3000, 'the parent-notes match sums to the split total');
   const none = await tool.call({ categoryId: RENT });
   check(rowsOf(none).length === 0, 'a category with no matching child returns nothing, parent included');
   const plain = await tool.call({ minAmount: -3000, maxAmount: -3000 });
@@ -156,7 +157,8 @@ describe('the helper alone');
   const c2 = rows.find((r) => r.id === 'c2');
   check(childNotesMatch(c2, parentNotes, 'TRIP') === true, 'an empty-notes child matches its parent notes, case-insensitively');
   const c1 = rows.find((r) => r.id === 'c1');
-  check(childNotesMatch(c1, parentNotes, 'trip') === false, 'a child with its own notes does not inherit the parent notes');
+  check(childNotesMatch(c1, parentNotes, 'trip') === true, 'a child with its own notes also matches the parent notes');
+  check(childNotesMatch(c1, parentNotes, 'child') === true && childNotesMatch(c2, parentNotes, 'child') === false, 'a term in one child own notes matches only that child');
 }
 
 log(`\n[#750] ${passed} passed, ${failed} failed`);

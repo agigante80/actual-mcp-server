@@ -74,7 +74,7 @@ export const searchTransactions: CompactToolSpec = {
   // (the #683 layout). "Read-only" is not restated: the readOnlyHint annotation carries it.
   description: [
     'Find transaction records (id, date, amount, payee, category, notes), not totals; pick one `by`. Totals: summarize_transactions. Ids: list_entities. Custom query: run_query.',
-    'All fields optional; one the chosen `by` does not take is refused by name. Amounts: integer cents, outflows negative; dates YYYY-MM-DD.',
+    'A field the `by` does not take is refused by name. Amounts: integer cents, outflows negative; dates YYYY-MM-DD.',
     'account: account_id, start_date, end_date.',
     'filter: account_id, start_date, end_date, min_amount, max_amount, category_id, payee_id, notes, cleared, reconciled.',
     'amount: min_amount and max_amount, or absolute_amount, plus start_date, end_date, account_id, category_name, limit.',
@@ -82,7 +82,7 @@ export const searchTransactions: CompactToolSpec = {
     'month: month, account_id, category_name, payee_name, min_amount, max_amount, limit.',
     'payee: payee_name, start_date, end_date, account_id, category_name, min_amount, max_amount, limit.',
     'uncategorized: start_date, end_date, account_id, include_transactions, limit, offset.',
-    'Behavior: only account, amount, payee include off-budget accounts. account and filter have no limit. amount, category, month, payee return limit rows (default 100). uncategorized pages with limit (default 50) and offset. amount needs account_id or a date. An unknown category or payee name gives an error field. Splits match by child (parent_id).',
+    'Behavior: only account, amount, payee include off-budget accounts. account and filter have no limit. amount, category, month, payee return limit rows (default 100). uncategorized pages with limit (default 50) and offset. amount needs account_id or a date. An unknown category or payee gives an error field. Category or notes filters match a split by child (parent_id).',
     'Returns { result: [transaction] } for account, filter; { transactions, count, totalAmount } for amount, category, month, payee; { totalCount, totalAmount, byAccount, dateRange } for uncategorized, plus transactions and hasMore with include_transactions.',
   ].join('\n'),
   selector: 'by',
