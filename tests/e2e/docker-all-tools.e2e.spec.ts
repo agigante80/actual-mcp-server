@@ -4050,7 +4050,8 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
     ).rejects.toThrow(new RegExp(`Payee "${unknown}" not found`));
     const raw = await mcp.raw('list_entities', { type: 'rule', payee_id: unknown });
     expect(raw.isError).toBe(true);
-    expect(JSON.parse(raw.content[0].text).error ?? raw.content[0].text).toContain('list_entities with type payee');
+    // A refusal's text is the bare message, not JSON.
+    expect(raw.content[0].text).toContain('list_entities with type payee');
     // A real payee with no rules is a valid empty answer, not an error.
     const payee = await makePayee();
     const empty = await mcp.raw('list_entities', { type: 'rule', payee_id: payee.id });
