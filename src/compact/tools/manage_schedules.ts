@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
+import { DATE_PATTERN } from '../../lib/constants.js';
 import { RecurConfigSchema } from '../../lib/schemas/recur.js';
 import { ScheduleAmountSchema, amountOpMismatch, ISBETWEEN_NEEDS_RANGE } from '../../lib/schemas/schedule-amount.js';
 import { asFields, atLeastOne, issue, needs, strict } from '../refine.js';
@@ -58,7 +59,10 @@ const checkUnions = (ctx: z.RefinementCtx, v: V): void => {
   }
   if (v.date !== undefined && v.date !== null) {
     if (typeof v.date === 'string') {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) issue(ctx, 'date', DATE_SHAPE);
+      // A malformed shape keeps DATE_SHAPE (it names the recurrence alternative); a well shaped
+      // string that is not a real day gets the shared calendar message (#745).
+      const r = CommonSchemas.date.safeParse(v.date);
+      if (!r.success) issue(ctx, 'date', DATE_PATTERN.test(v.date) ? (r.error.issues[0]?.message ?? DATE_SHAPE) : DATE_SHAPE);
     } else if (typeof v.date === 'object' && !Array.isArray(v.date)) {
       const r = RecurConfigSchema.safeParse(v.date);
       if (!r.success) {

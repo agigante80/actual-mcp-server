@@ -64,6 +64,10 @@ These notes are copied from [explanation/security-and-privacy.md](../explanation
 
 `MCP_TOOL_SURFACE` now defaults to `compact`: the server publishes 15 tools (`get_context`, `run_query`, `list_entities`, the `manage_*` family and others) over the same 85 operations, instead of 85 `actual_*` tools. A client, prompt or script that calls an `actual_*` name by default now gets a typed refusal naming `MCP_TOOL_SURFACE=legacy`. To keep the old surface, set `MCP_TOOL_SURFACE=legacy`; `all` publishes both. `MCP_TOOLS` entries must be compact names under `compact` (a legacy name there refuses startup and names the setting). `MCP_TOOLSETS` and the `chat` preset keep working: they select the compact tools whose operations they allow, and each action stays refused when its own toolset or `MCP_READ_ONLY` excludes it. See the [migration guide](migrating-to-compact-tools.md) for the full name mapping, the escape hatch and how to re-select saved tool choices.
 
+### Impossible dates are refused (#745)
+
+The legacy transaction, balance and schedule tools now refuse a date that is not a real calendar day (`2018-02-30`, `2018-13-45`) with `Invalid date (not a real calendar day)`. Several of them used to accept such a string, store it, or roll it forward to the next month. A script that sends one must send a real day.
+
 ### HTTP auth is required by default (#242)
 
 An existing HTTP deployment on a non-loopback bind with no token and no OIDC that previously started open will now refuse to start. The startup error names the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or `AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior. See [authentication.md](authentication.md) before choosing the last one.

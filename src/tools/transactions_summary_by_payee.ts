@@ -2,10 +2,11 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import { localIsoDate } from '../lib/localDate.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
-  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format (default: first day of current month)'),
-  endDate: z.string().optional().describe('End date in YYYY-MM-DD format (default: today)'),
+  startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format (default: first day of current month)'),
+  endDate: CommonSchemas.date.optional().describe('End date in YYYY-MM-DD format (default: today)'),
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
   limit: z.number().int().min(1).optional().default(50).describe('Optional: Maximum number of payees to return (default: 50)'),
 });

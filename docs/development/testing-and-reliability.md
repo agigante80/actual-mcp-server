@@ -46,7 +46,8 @@ tests/
 │   ├── generated_tools.smoke.test.js      # All 85 tools: stub adapter + correctness assertions
 │   ├── schema_validation.test.js          # Negative-path schema tests (11+ tool schemas)
 │   ├── schema_json_openai_compat.test.js  # Published input and output schemas OpenAI/ECMA-262 regex-compatible (#293, #642)
-│   └── schema_published_parity.test.js    # Zod and the SDK Ajv validator accept the same inputs; no regex flags (#588)
+│   ├── schema_published_parity.test.js    # Zod and the SDK Ajv validator accept the same inputs; no regex flags (#588)
+│   └── schema_date_calendar.test.js       # Dates are real calendar days in every date key (#745)
 ├── e2e/                     # End-to-end tests
 │   ├── mcp-client.playwright.spec.ts      # Protocol tests (fast, no Docker)
 │   ├── docker.e2e.spec.ts                 # Docker smoke integration (full stack)
@@ -296,6 +297,7 @@ This paragraph is load bearing: `tests/unit/dual_transport_gate.test.js` anchors
 | `transactions_merge_adapter.test.js` | `adapter.mergeTransactions` (#514): typed pre-flight refusals (not found, split child, different accounts, different amounts) never reach the raw call; the happy path sends the plain string tuple once and derives `deletedId` for either kept order |
 | `schema_json_openai_compat.test.js` | Every published tool schema is OpenAI/ECMA-262 regex-compatible: no `\p{...}` escape, each `pattern` compiles without the `u` flag (#293) |
 | `schema_published_parity.test.js` | The published JSON Schema accepts exactly what the Zod schema accepts: every published UUID pattern takes the uppercase Income group id, no regex check in any tool schema carries a flag (`z.toJSONSchema()` drops them), and Zod and the MCP SDK's own Ajv validator agree on a shared fixture set for every regex leaf (#588) |
+| `schema_date_calendar.test.js` | `CommonSchemas.date` refuses an impossible calendar day with one issue and keeps the shape message for a malformed string; the ten legacy transaction tools, the legacy schedule tools and the compact `manage_transactions`, `summarize_transactions` and `manage_schedules` refuse it at the right path (#745) |
 | `contributor_docs.test.js` | `AGENTS.md`, `CONTRIBUTING.md`, the PR template, `SUPPORT.md` and `CODE_OF_CONDUCT.md` name only real `npm run` scripts and link only TRACKED paths; the PR template stays at or under 40 lines (#609); `AGENTS.md` exists, is not ignored and stays at or under 150 lines and has the "Docs to update with a change" section with a linked document in every row (#697); every `.github/instructions/*.instructions.md` defers to `AGENTS.md` and never cites the local-only `CLAUDE.md` (#496) |
 | `budget_discovery_encrypted.test.js` | Granted locked files, typed refusals before download, keyed file switching, and isolation between OIDC users (#690) |
 | `budget_discovery_selection.test.js` | OIDC discovery starting budgets, saved choices, encrypted files, duplicate Sync IDs across servers and the SDK download target with pooling off (#689) |
@@ -1115,6 +1117,7 @@ This project follows a comprehensive testing strategy with multiple levels, from
 | `schedules_dates.test.js` | `actual_schedules_dates`: one-session expansion, the 366 cap, `truncated`, typed refusals (#479) | 40 |
 | `schema_json_openai_compat.test.js` | Walks all 71 published `z.toJSONSchema()` outputs; asserts no `\p{...}` escape and every `pattern` compiles without the `u` flag, so no tool schema is rejected by OpenAI's Responses validator (#293) | 71 schemas |
 | `schema_published_parity.test.js` | Walks every tool's Zod schema down to its regex leaves; asserts every published UUID `pattern` accepts `2E1F5BDB-209B-43F9-AF2C-3CE28E380C00`, that no regex check carries a flag, and that the Zod verdict equals the `AjvJsonSchemaValidator` verdict on a shared fixture set, with negative fixtures proving each detector fires (#588) | 84 tools, 51 id sites |
+| `schema_date_calendar.test.js` | Table of impossible and leap days against `CommonSchemas.date`; each legacy date key and the compact re-checks refuse `2018-02-30` with the exact text; `date: null` and an omitted date still parse on the legacy update tools (#745) | 63 checks |
 | `unhandled-rejection.test.js` | Allow-list predicate for `process.on('unhandledRejection')`: production-shape secondary rejection swallowed; unrelated EACCES still exits; existing allow-list entries unchanged (#152) | 12 |
 | `process_handlers.test.js` | Process handler factory with recording exit, stderr and logger: one gated `sys_crash` per fatal event, sentinel reasons never echoed, benign and bank sync survival, Node floor hint, throwing getters fall back, the `categorizeError` table and `httpStatus` gate, install order and no logger import (#622) | 41 |
 | `process_handlers_child.test.js` | Installed handlers in a child under `MCP_STDIO_MODE=true`: a fatal rejection exits 1 with exactly one `sys_crash` line and no reason text, a bank sync throw is survived, stdout stays empty (#622) | 3 |

@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   accountId: z.string().nullable().optional().describe('Filter by specific account ID'),
-  startDate: z.string().nullable().optional().describe('Start date (YYYY-MM-DD format)'),
-  endDate: z.string().nullable().optional().describe('End date (YYYY-MM-DD format)'),
+  startDate: CommonSchemas.date.nullable().optional().describe('Start date (YYYY-MM-DD format)'),
+  endDate: CommonSchemas.date.nullable().optional().describe('End date (YYYY-MM-DD format)'),
   minAmount: z.number().nullable().optional().describe('Minimum transaction amount in cents (negative for expenses)'),
   maxAmount: z.number().nullable().optional().describe('Maximum transaction amount in cents'),
   categoryId: z.string().nullable().optional().describe('Filter by category ID'),

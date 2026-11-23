@@ -25,7 +25,7 @@ const {
 } = await import('../../dist/src/prompts/registry.js');
 const { PROMPT_DEFINITIONS } = await import('../../dist/src/prompts/index.js');
 const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
-const { isCalendarDay } = await import('../../dist/src/prompts/dates.js');
+const { isCalendarDay } = await import('../../dist/src/lib/dates.js');
 const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 
 const def = PROMPT_DEFINITIONS.find((d) => d.name === 'spending_check');

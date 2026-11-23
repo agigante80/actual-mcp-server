@@ -5,13 +5,15 @@
  */
 
 import { z } from 'zod';
+import { isCalendarDay } from '../lib/dates.js';
 
 const pad2 = (n: number): string => String(n).padStart(2, '0');
 
 /**
  * The shared `date` argument of the prompts that review a month as of a day (#662, #664): a real
  * YYYY-MM-DD calendar day, at most 10 characters, defaulting in the schema to the server's today.
- * CommonSchemas.date is not used: its pattern accepts 2026-02-31.
+ * CommonSchemas.date is not used here: the prompts keep their own stricter regex (month 01 to 12,
+ * day 01 to 31) and the 10 character cap (#745).
  */
 const dayString = () =>
   z
@@ -64,17 +66,4 @@ export function monthStart(endMonth: string, count: number): string {
 export function daysInMonth(month: string): number {
   const [y, m] = month.split('-').map(Number) as [number, number];
   return new Date(Date.UTC(y, m, 0)).getUTCDate();
-}
-
-/**
- * True for a real YYYY-MM-DD calendar day (2024-02-29 yes, 2026-02-29 and 2026-02-31 no). Returns
- * false and never throws for any input, because Zod 4 runs a refine even after the regex failed.
- */
-export function isCalendarDay(value: unknown): boolean {
-  if (typeof value !== 'string') return false;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!m) return false;
-  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const date = new Date(Date.UTC(y, mo - 1, d));
-  return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
 }

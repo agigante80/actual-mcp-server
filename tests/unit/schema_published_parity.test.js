@@ -32,6 +32,8 @@ process.env.ACTUAL_PASSWORD ??= 'stub-password-for-unit-test';
 const toolsIndex = await import('../../dist/src/tools/index.js');
 const { UUID_PATTERN } = await import('../../dist/src/lib/constants.js');
 const { TAG_COLOR_PATTERN } = await import('../../dist/src/lib/schemas/common.js');
+const { DATE_PATTERN } = await import('../../dist/src/lib/constants.js');
+const { isCalendarDay } = await import('../../dist/src/lib/dates.js');
 const { getCanonicalCount } = await import('../../scripts/tool-count.mjs');
 
 /** The fixed id of the default Income category group in Actual's bundled `default-db.sqlite`. */
@@ -172,6 +174,9 @@ const FIXTURES = [
   '2025-01-15',
   '2025-13-45',
   '2025-1-5',
+  '2018-02-30',                           // #745: shape-valid, not a real day
+  '2019-04-31',
+  '2024-02-29',
   '2025-01',
   '2025-1',
   '',
@@ -181,19 +186,30 @@ const FIXTURES = [
   'ABCDEFGH-1234-1234-1234-123456789ABC',
 ];
 
+/**
+ * #745: the one deliberate disagreement. A date leaf is calendar-checked by Zod, but a JSON Schema
+ * pattern cannot express leap years, so the published pattern stays shape-only. The direction is
+ * safe (a client sends a date the server then refuses with a clear message). The exemption is as
+ * narrow as the rule: the leaf's regex check is DATE_PATTERN by identity, Zod refuses, the
+ * published schema accepts, and the fixture really is not a calendar day. Zod accepting MORE than
+ * the published schema (the #588 direction) is never exempt.
+ */
+const exemptDateDisagreement = (cd, zodOk, ajvOk, fixture) =>
+  cd.pattern === DATE_PATTERN && zodOk === false && ajvOk === true && isCalendarDay(fixture) === false;
+
 check('parity: Zod and the SDK Ajv validator agree on every fixture for every regex leaf', () => {
   const validator = new AjvJsonSchemaValidator();
   const disagreements = [];
   // Every leaf is compared, none deduped by its published JSON: two leaves can publish the same
   // schema and still differ on the Zod side (.trim(), .toLowerCase(), .refine()), and that
   // difference is exactly what this check exists to see.
-  for (const [path, leaf] of leaves) {
+  for (const [path, leaf, cd] of leaves) {
     const published = z.toJSONSchema(leaf, { io: 'input' });
     const validate = validator.getValidator(published);
     for (const v of FIXTURES) {
       const zodOk = leaf.safeParse(v).success;
       const ajvOk = validate(v).valid === true;
-      if (zodOk !== ajvOk) disagreements.push(`${path} on ${JSON.stringify(v)}: zod=${zodOk} ajv=${ajvOk}`);
+      if (zodOk !== ajvOk && !exemptDateDisagreement(cd, zodOk, ajvOk, v)) disagreements.push(`${path} on ${JSON.stringify(v)}: zod=${zodOk} ajv=${ajvOk}`);
     }
   }
   assert.strictEqual(disagreements.length, 0, `Zod and the published schema disagree:\n      ${disagreements.slice(0, 6).join('\n      ')}\n      (${disagreements.length} total)`);
@@ -205,6 +221,26 @@ check('the ticket\'s exact call passes both sides: actual_categories_create with
   assert.strictEqual(tool.inputSchema.safeParse(input).success, true, 'Zod must accept it');
   const validate = new AjvJsonSchemaValidator().getValidator(z.toJSONSchema(tool.inputSchema, { io: 'input' }));
   assert.strictEqual(validate(input).valid, true, `published schema must accept it: ${JSON.stringify(validate(input).errorMessage ?? '')}`);
+});
+
+check('the date exemption is reached: shared date leaves exist and the calendar fixtures hit it (#745)', () => {
+  const dateLeaves = leaves.filter(([, , cd]) => cd.pattern === DATE_PATTERN);
+  assert.ok(dateLeaves.length > 0, 'no leaf carries DATE_PATTERN by identity; the exemption can never apply and the date rule moved');
+  const [, leaf, cd] = dateLeaves[0];
+  const validate = new AjvJsonSchemaValidator().getValidator(z.toJSONSchema(leaf, { io: 'input' }));
+  assert.strictEqual(leaf.safeParse('2018-02-30').success, false);
+  assert.strictEqual(validate('2018-02-30').valid, true, 'the published pattern stays shape-only');
+  assert.strictEqual(exemptDateDisagreement(cd, false, true, '2018-02-30'), true);
+});
+
+check('NEGATIVE: a date leaf where Zod accepts more than the published pattern is still a disagreement (#745)', () => {
+  const [, , cd] = leaves.find(([, , c]) => c.pattern === DATE_PATTERN);
+  // zod=true, ajv=false: the #588 direction.
+  assert.strictEqual(exemptDateDisagreement(cd, true, false, '2018-02-30'), false);
+  // A real calendar day on which the two disagree is not exempt either.
+  assert.strictEqual(exemptDateDisagreement(cd, false, true, '2024-02-29'), false);
+  // A different regex leaf is never exempt.
+  assert.strictEqual(exemptDateDisagreement({ pattern: /^\d{4}-\d{2}-\d{2}$/ }, false, true, '2018-02-30'), false);
 });
 
 // NEGATIVE fixtures: prove each detector fires.
