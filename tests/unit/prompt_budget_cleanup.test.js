@@ -201,13 +201,12 @@ await check('the field names the text claims are keys of the real aggregate grou
 // text lists the budget months first and says what to skip.
 await check('budget_cleanup lists the budget months first and says what to skip for a month outside them (#781)', () => {
   const text = render({ date: '2015-01-31' });
-  const para = 'Before step 1, call list_budget_months with no month to get the months the budget covers. If 2015-01 is not in that list, the budget has no data for it: do not call list_budget_months with 2015-01, say that the budget does not cover 2015-01, '  + 'and in step 4 skip the budget check.';
+  const para = 'Before step 1, call list_budget_months with no month to get the months the budget covers. If 2015-01 is not in that list, the budget has no data for it: do not call list_budget_months with 2015-01, say that the budget does not cover 2015-01, '  + 'and say that the window from 2014-07-01 to 2015-01-31 lies outside the months the budget covers, so the summaries in step 1 cannot show use. Then report duplicates only (the same-name payees in step 2, overlapping rules in step 3, near-duplicate category names in step 4) and mark nothing as unused, stale or closable: skip step 5 and the budget check in step 4.';
   assert.ok(text.includes(para), 'the paragraph is missing or changed');
   assert.ok(text.indexOf(para) < text.indexOf('\n1. '), 'the paragraph comes before step 1');
   assert.ok(!text.includes('{'), 'no unfilled placeholder');
   assert.ok(!text.includes('this month'));
-  // Mutation: the same text without the paragraph must fail the match.
-  assert.ok(!text.replace(para, '').includes(para));
+  assert.strictEqual(text.split(para).length - 1, 1, 'the paragraph appears exactly once');
 });
 await check('budget_cleanup no longer carries the dead no-categories fallback and never proposes deleting unchecked (#781)', () => {
   for (const date of ['2026-10-15', '2015-01-31']) {
