@@ -4995,8 +4995,14 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     ['an impossible start', { frequency: 'monthly', start: '2027-02-30' }, 'Invalid date (not a real calendar day)'],
   ];
   for (const [label, date, expected] of legacyRecurRefusals) {
-    test(`actual_schedules_create - ERROR: ${label} is refused and nothing is written (#786)`, async ({ mcp }) => {
+    test(`actual_schedules_create - ERROR: ${label} is refused and nothing is written (#786)`, async ({ mcp, cleanup }) => {
       const name = `E2E-BadRecurLegacy-Schedule-${uniqueSuffix()}`;
+      // Registered before the create: if the listing below fails, teardown still removes the schedule.
+      cleanup.add(CLEANUP_ORDER.schedule, `schedules ${name}`, async () => {
+        const all = await mcp.call('list_entities', { type: 'schedule' });
+        const rows: any[] = all?.schedules ?? all?.result?.schedules ?? (Array.isArray(all) ? all : []);
+        for (const x of rows.filter((r: any) => r?.name === name)) await mcp.call('actual_schedules_delete', { id: x.id }).catch(() => undefined);
+      });
       let message: string | null = null;
       let created: any;
       try {
