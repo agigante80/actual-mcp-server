@@ -4249,7 +4249,7 @@ test.describe('Docker E2E - compact manage_rules (#677)', () => {
     // create_batch: the empty item fails alone, the valid one is created.
     const res = await mcp.call('manage_rules', {
       action: 'create_batch',
-      rules: [{ stage: 'pre', conditions: [], actions }, { stage: 'pre', conditions: [cond], actions }],
+      rules: [{ stage: 'pre', conditions: [], actions: [{ op: 'append-notes', value: marker }] }, { stage: 'pre', conditions: [cond], actions }],
     });
     expect(res.failed.map((f: any) => f.index)).toEqual([0]);
     expect(res.failed[0].error).toMatch(NO_COND);
@@ -4742,10 +4742,20 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(attempt.message).toMatch(/zzz/);
   });
 
-  test('actual_rules_create and actual_rules_update - an empty list and a mistyped set value are refused (#762)', async ({ mcp, makeCategory, makeRule }) => {
+  test('actual_rules_create and actual_rules_update - an empty list and a mistyped set value are refused (#762)', async ({ mcp, makeCategory, makeRule, cleanup }) => {
     const category = await makeCategory();
     const marker = `E2E-Rule762L-${uniqueSuffix()}`;
     const cond = { field: 'notes', op: 'contains', value: marker };
+    const listRules = async () => {
+      const d = (await mcp.call('list_entities', { type: 'rule' })) as any;
+      return (Array.isArray(d) ? d : (d?.rules ?? [])) as any[];
+    };
+    // If a refusal ever stops working, delete whatever the accepted call stored.
+    cleanup.add(CLEANUP_ORDER.rule, `rules ${marker}`, async () => {
+      for (const r of await listRules()) {
+        if (JSON.stringify(r).includes(marker)) await mcp.call('manage_rules', { action: 'delete', id: r.id }).catch(() => undefined);
+      }
+    });
     await expect(mcp.call('actual_rules_create', { conditions: [], actions: [{ op: 'append-notes', value: marker }] }))
       .rejects.toThrow(/conditions must contain at least one condition/);
     await expect(mcp.call('actual_rules_create', { conditions: [cond], actions: [{ op: 'set', field: 'amount', value: 'abc' }] }))
