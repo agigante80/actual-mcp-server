@@ -180,7 +180,7 @@ Select a second different category for the transfer test. Save as `{budget_cat2_
   Query 3 (filter + sort):
     "SELECT payee, amount, date FROM transactions WHERE amount < 0 ORDER BY amount ASC LIMIT 5"
 
-  Query 3 must return rows (✓ success). Queries 1 and 2 are expected to be refused by name: the refusal is the pass, anything else is ✗ failure
+  Query 3 must succeed (✓ success): rows, or an empty list when the active budget holds no negative transaction (Phase 8 may have switched budgets). Queries 1 and 2 are expected to be refused by name: the refusal is the pass, anything else is ✗ failure
 
 ---
 
