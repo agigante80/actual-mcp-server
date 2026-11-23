@@ -466,6 +466,11 @@ export function validateQueryShape(query: string): void {
     if (/\bOFFSET\b/i.test(trimmed)) {
       throw new Error('actual_query_run: OFFSET is not supported. Only ORDER BY <one column> [ASC|DESC] and LIMIT <n> are supported.');
     }
+    // FETCH FIRST n ROWS ONLY is the standard spelling of LIMIT; the adapter would fold it into
+    // the last WHERE value just as it did OFFSET.
+    if (/\bFETCH\s+(FIRST|NEXT)\b/i.test(trimmed)) {
+      throw new Error('actual_query_run: FETCH FIRST is not supported. Use LIMIT <n>.');
+    }
     if (/\b(GROUP\s+BY|HAVING)\b/i.test(trimmed)) {
       throw new Error('actual_query_run: GROUP BY and HAVING are not supported. Select the rows and add them up yourself.');
     }

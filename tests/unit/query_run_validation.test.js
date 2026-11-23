@@ -346,6 +346,8 @@ const STACKED = 'actual_query_run does not allow stacked statements (multiple st
 const REFUSED_753 = [
   ["SELECT date, amount FROM transactions WHERE account.name = 'X' ORDER BY date DESC LIMIT 2 OFFSET 2", OFFSET],
   ['SELECT id FROM transactions OFFSET 3', OFFSET],
+  ['SELECT id FROM transactions WHERE amount < 0 FETCH FIRST 5 ROWS ONLY', 'actual_query_run: FETCH FIRST is not supported. Use LIMIT <n>.'],
+  ['SELECT id FROM transactions fetch next 1 row only', 'actual_query_run: FETCH FIRST is not supported. Use LIMIT <n>.'],
   ['SELECT id FROM transactions ORDER BY date, amount', ORDERBY],
   ["SELECT id FROM transactions WHERE account.name = 'X' ORDER BY account.name, date LIMIT 3", ORDERBY],
   ['SELECT id FROM transactions ORDER BY payee.name', ORDERBY],

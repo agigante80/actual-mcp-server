@@ -2329,13 +2329,19 @@ payee: payee.id,
     // Upstream inlines an id-typed value without escaping, so a quote there would close the literal
     // and run the subquery. The parser refuses it before anything is compiled.
     for (const where of [
-      "account = 'x'||(SELECT group_concat(name) FROM payees)||'x'",
-      "account = 'x''||(SELECT group_concat(name) FROM payees)||'''",
+      "account = 'x'||(SELECT name FROM payees)||'x'",
+      "account = 'x''||(SELECT name FROM payees)||'''",
     ]) {
       await expect(
         mcp.call('run_query', { query: `SELECT id FROM transactions WHERE ${where}` }),
       ).rejects.toThrow(/single quote is only allowed/);
     }
+    // The original proof of concept used an aggregate, which #753 now refuses one step earlier.
+    await expect(
+      mcp.call('run_query', {
+        query: "SELECT id FROM transactions WHERE account = 'x'||(SELECT group_concat(name) FROM payees)||'x'",
+      }),
+    ).rejects.toThrow(/aggregate functions .* are not supported/);
   });
 
   test('run_query - #751 IN on number and date columns matches rows, and bad elements are refused', async ({ mcp, makeAccount, makeTransaction }) => {
