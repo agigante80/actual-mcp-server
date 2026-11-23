@@ -673,24 +673,33 @@ mcpServers:
 
 ### Error Flow
 
-```
-Tool Error
-  └─> Caught by tool implementation
-      └─> Adapter layer retry logic (3 attempts)
-          └─> If all retries fail → Error response
-              └─> ActualMCPConnection formats error
-                  └─> Transport sends JSON-RPC error
+Since #769 the two kinds of failure travel differently, and both transports share one helper (`executeToolCall` in `src/lib/tool-output.ts`):
 
-Error Response Format:
+```
+Tool Error (Zod validation, typed refusal, hidden tool, upstream failure)
+  └─> Adapter layer retry logic (3 attempts)
+      └─> If all retries fail → the error reaches executeToolCall
+          └─> Transport returns a tool RESULT, not a JSON-RPC error
+
+Tool failure result (a model can read it and retry):
 {
   "jsonrpc": "2.0",
   "id": 1,
-  "error": {
-    "code": -32000,
-    "message": "Tool execution failed: ..."
+  "result": {
+    "isError": true,
+    "content": [{ "type": "text", "text": "<error.message>" }]
   }
 }
+
+Protocol fault (unknown tool, malformed tools/call params):
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": { "code": -32602, "message": "Unknown tool: <name>" }
+}
 ```
+
+Only `error.message` is forwarded, never a stack, cause or data. A connection that failed to initialise gets the fixed startup-failure sentence on both transports (#438). A missing executor is a server wiring fault and stays `-32603`. The full table of changes is in [upgrading](../guides/upgrading.md).
 
 ### Retry Logic
 
