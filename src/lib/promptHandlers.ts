@@ -91,11 +91,15 @@ export function registerPromptHandlers(server: Server, offeredPrompts: readonly 
     const argument = request.params?.argument;
     if (
       !isRecord(ref) || typeof ref.type !== 'string' ||
+      (ref.type === 'ref/prompt' && typeof ref.name !== 'string') ||
       !isRecord(argument) || typeof argument.name !== 'string' || typeof argument.value !== 'string'
     ) {
       throw new InvalidPromptCallError(INVALID_COMPLETION_MESSAGE);
     }
-    if (ref.type !== 'ref/prompt' || typeof ref.name !== 'string') return EMPTY_COMPLETION;
+    if (ref.type !== 'ref/prompt') return EMPTY_COMPLETION;
+    // An unknown or hidden prompt name answers an empty completion ON PURPOSE, although the
+    // specification suggests -32602: the two must be indistinguishable, so a client cannot probe
+    // which prompts are hidden. Do not turn this into an error.
     const definition = offeredPrompts.find((p) => p.name === ref.name);
     const arg = definition?.arguments.find((a) => a.name === argument.name);
     if (!definition || !arg?.complete) return EMPTY_COMPLETION;
