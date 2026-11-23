@@ -132,6 +132,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `actual_transactions_create` and `manage_transactions` `create` used to accept a `payee` id that is the transfer payee of an account and report success. Upstream does not run the transfer logic on create, so that wrote one side of a transfer only: the row had the transfer payee and no link, and the other account got no mirror row, leaving the two balances apart. They now refuse it with `Payee "<id>" is the transfer payee of an account` and write nothing (`create` answers `success: false`); to move money between accounts use `manage_transactions` with `action: transfer` (legacy `actual_transfers_create`). Under `MCP_TOOLSETS=chat` that operation is not published while `create` is: an operator whose users move money between accounts adds the `transactions` toolset. Ordinary payees, `payee_name` and no payee are unchanged. The asymmetry is deliberate: `update` onto a transfer payee still mirrors, because upstream runs the transfer logic there. A rule that sets a transfer payee after the write is not seen by this check.
 
+## An ambiguous `payee_name` is refused on transaction create and import (#752)
+
+`actual_transactions_create`, `actual_transactions_import` and `manage_transactions` `create` and `import` used to attach the row to an arbitrary one of two payees that share the `payee_name` you sent, and report success. They now refuse it with `Payee name "<name>" matches <n> payees, so it does not identify one: <ids>` and write nothing (an import is refused as a whole, `create` answers `success: false`). Pass `payee` with the id you mean instead. A transfer payee never counts, and a name that matches one payee, or none, behaves as before. A saved prompt that sent a duplicated payee name now gets that refusal.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

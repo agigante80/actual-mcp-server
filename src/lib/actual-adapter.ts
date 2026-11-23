@@ -2007,7 +2007,7 @@ export const notifications = new EventEmitter();
 // Extracted to ./actual-adapter/normalize.ts (#166). Imported for internal use
 // and re-exported so the public surface and external importers are unchanged.
 import { normalizeToTransactionArray, normalizeToId, normalizeImportResult } from './actual-adapter/normalize.js';
-import { assertPayeeFields, resolvePayeeName } from './actual-adapter/payee-fields.js';
+import { assertPayeeFields, assertPayeeNamesUnambiguous, payeeNamesToResolve, resolvePayeeName } from './actual-adapter/payee-fields.js';
 import type { PayeeListingRow } from './actual-adapter/payee-fields.js';
 import { isEntityId, matchByName, resolvedNameDetail, FILTER_ID_ENTITIES } from './actual-adapter/filter-ids.js';
 import type { FilterIdKind, NamedRow } from './actual-adapter/filter-ids.js';
@@ -2121,6 +2121,22 @@ async function assertTransactionReferencesExist(
     }
   }
 }
+/**
+ * #752: refuse a `payee_name` that two or more payees share, on create and import. Upstream's
+ * `normalizeTransactions` resolves a name through `getPayeeByName`, the first row of an
+ * unordered SELECT, so the row would be attached to an arbitrary one of them while the tool said
+ * success. Runs inside the caller's queueWriteOperation (never its own session), after the
+ * account guard and before the raw write. A call with no row to resolve reads no listing; a
+ * batch reads the payees once (readDrainListing). Pure half: payee-fields.ts.
+ */
+async function assertPayeeNamesUnambiguousInDrain(rows: unknown): Promise<void> {
+  const names = payeeNamesToResolve(rows);
+  if (names.length === 0) return;
+  const listing = await withConcurrency(() =>
+    retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<PayeeListingRow[]>), { retries: 2, backoffMs: 200 })
+  );
+  assertPayeeNamesUnambiguous(names, Array.isArray(listing) ? listing : []);
+}
 export async function getAccounts(): Promise<components['schemas']['Account'][]> {
   return withActualApi(async () => {
     observability.incrementToolCall('actual.accounts.list').catch(() => {});
@@ -2156,6 +2172,8 @@ export async function addTransactions(txs: components['schemas']['TransactionInp
     await assertAccountExists(accountId, CREATE_UNKNOWN_ACCOUNT_DETAIL);
     // #747: an unknown payee or category id (also on a child) is refused before anything is written.
     for (const t of txArray) await assertTransactionReferencesExist(t as any, CREATE_UNKNOWN_REFERENCE_DETAIL, options.runTransfers !== true);
+    // #752: a payee_name shared by two payees is refused (nothing is written).
+    await assertPayeeNamesUnambiguousInDrain(txArray);
 
     // Remove account/accountId from transaction objects as they're passed separately
     const cleanedTxs = txArray.map(tx => {
@@ -2192,6 +2210,8 @@ export async function importTransactions(accountId: string | undefined, txs: com
     // #744: an unknown account is refused before anything is written. An undefined id is left
     // to upstream's own `accountId must be an id` error.
     if (typeof accountId === 'string') await assertAccountExists(accountId, IMPORT_UNKNOWN_ACCOUNT_DETAIL);
+    // #752: a payee_name shared by two payees is refused for the whole batch.
+    await assertPayeeNamesUnambiguousInDrain(txs);
     const raw = await withConcurrency(() => retry(() => rawImportTransactions(accountId, txs) as Promise<{ added?: string[]; updated?: string[]; errors?: string[] }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return raw || { added: [], updated: [], errors: [] };
   });
