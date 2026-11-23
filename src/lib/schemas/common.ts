@@ -390,3 +390,14 @@ export const TX_IMPORT_ROW_KEYS = [
  * the unit tests iterate this one list.
  */
 export const TX_UPDATE_NOT_NULL_KEYS = ['account', 'date', 'amount'] as const;
+
+/** The refusal for an update that changes nothing (#815). One text for the compact and legacy tools. */
+export const TX_UPDATE_NEEDS_A_FIELD = 'update needs at least one field to change besides id';
+
+/**
+ * True when some key other than `except` holds a value that is not undefined (#815). A key set to
+ * null counts as a change (null clears payee, category and notes); an undefined-only object does
+ * not. Pass `except = ''` for a `fields` object, which has no id.
+ */
+export const hasFieldToChange = (v: Record<string, unknown>, except = 'id'): boolean =>
+  Object.entries(v).some(([key, val]) => key !== except && val !== undefined);

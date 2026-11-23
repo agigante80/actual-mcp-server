@@ -1198,6 +1198,45 @@ payee: payee.id,
     expect((await rowOf(first.id))?.payee ?? null).toBeNull();
   });
 
+  // #815: an update_batch item with no field is refused as a whole call; nothing is written, and a
+  // valid item alone still applies. null counts as a change.
+  test('manage_transactions update_batch - ERROR: an item with no field refuses the whole call, and a valid item alone applies (#815)', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    const first = await makeTransaction({ account, amount: -5000, date: '2018-05-21', notes: 'E2E-Empty815-A', payee: payee.id });
+    const second = await makeTransaction({ account, amount: -6000, date: '2018-05-22', notes: 'E2E-Empty815-B' });
+    const rowOf = async (id: string) => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+      return ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).find((t: any) => t?.id === id);
+    };
+
+    const single = await refusal(() => mcp.call('manage_transactions', { action: 'update_batch', updates: [{ id: first.id, fields: {} }] }));
+    expect(single).toMatch(/update needs at least one field to change besides id/);
+    expect((await rowOf(first.id))?.notes).toBe('E2E-Empty815-A');
+
+    const mixed = await refusal(() =>
+      mcp.call('manage_transactions', {
+        action: 'update_batch',
+        updates: [
+          { id: first.id, fields: { notes: 'E2E-Empty815-changed' } },
+          { id: second.id, fields: {} },
+        ],
+      }),
+    );
+    expect(mixed).toMatch(/updates\.1.*update needs at least one field to change besides id/);
+    expect((await rowOf(first.id))?.notes).toBe('E2E-Empty815-A');
+
+    const ok = (await mcp.call('manage_transactions', {
+      action: 'update_batch',
+      updates: [{ id: first.id, fields: { notes: 'E2E-Empty815-changed' } }],
+    })) as any;
+    expect(ok?.failed ?? []).toEqual([]);
+    expect((await rowOf(first.id))?.notes).toBe('E2E-Empty815-changed');
+
+    await mcp.call('manage_transactions', { action: 'update_batch', updates: [{ id: first.id, fields: { payee: null } }] });
+    expect((await rowOf(first.id))?.payee ?? null).toBeNull();
+  });
+
   // #489: subtransactions on a PLAIN transaction split it in place. The id must survive (that is
   // what keeps imported_id and reconciliation state), and the read-back must show the parent as a
   // split with exactly the requested children, not a new parent next to an orphaned original.
@@ -5597,6 +5636,22 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const row = ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).find((t: any) => t?.id === txn.id);
     expect(row?.amount).toBe(-5000);
     expect(row?.date).toBe('2018-05-21');
+  });
+
+  // #815: the legacy update tools refuse an empty fields and, in a batch, an unknown key.
+  test('actual_transactions_update and _update_batch - ERROR: empty fields and an unknown batch key are refused and nothing changes (#815)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -5000, date: '2018-05-21', notes: 'E2E-Legacy815' });
+    const single = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: {} }));
+    expect(single).toContain('update needs at least one field to change besides id');
+    const empty = await refusal(() => mcp.call('actual_transactions_update_batch', { updates: [{ id: txn.id, fields: {} }] }));
+    expect(empty).toContain('update needs at least one field to change besides id');
+    const unknown = await refusal(() => mcp.call('actual_transactions_update_batch', { updates: [{ id: txn.id, fields: { bogus: 1 } }] }));
+    expect(unknown).toContain('unexpected field(s): bogus');
+    const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+    const row = ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).find((t: any) => t?.id === txn.id);
+    expect(row?.notes).toBe('E2E-Legacy815');
+    expect(row?.amount).toBe(-5000);
   });
 
   // #785: the legacy schedule writers refuse an unknown account or payee with the legacy list tool name.

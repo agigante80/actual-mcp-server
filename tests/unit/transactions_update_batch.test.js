@@ -49,7 +49,7 @@ const HINT = '(Array of {id, fields} objects. Maximum 50 per batch (higher value
     const fiftyOne = Array.from({ length: 51 }, (_, i) =>
       ({ id: `50000000-0000-4000-8000-${String(i).padStart(12, '0')}`, fields: { notes: 'x' } }));
     await rejectsWith({ updates: fiftyOne }, 'Validation error: updates: must be at most 50 items', '51 items');
-    await rejectsWith({ updates: [{ id: 'not-a-uuid', fields: {} }] },
+    await rejectsWith({ updates: [{ id: 'not-a-uuid', fields: { notes: 'x' } }] },
       'Validation error: updates.0.id: Invalid transaction ID format (expected UUID)', 'non-UUID id');
     eq(adapterCalls, 0, 'adapter never called for invalid input');
 

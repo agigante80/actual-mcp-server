@@ -14,7 +14,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { CommonSchemas } from '../lib/schemas/common.js';
+import { CommonSchemas, TX_UPDATE_NEEDS_A_FIELD, hasFieldToChange } from '../lib/schemas/common.js';
 
 const FieldsSchema = z.object({
   account: z.string().optional().describe('Account ID'),
@@ -26,7 +26,11 @@ const FieldsSchema = z.object({
   category: z.string().nullable().optional().describe('Category ID'),
   notes: z.string().nullable().optional().describe('Transaction notes'),
   cleared: z.boolean().nullable().optional().describe('Whether transaction is cleared'),
-});
+})
+  // #815: strict, so an unknown key (and subtransactions, imported_id, reconciled, transfer_id,
+  // which were stripped silently) is refused; and an item that changes nothing is refused.
+  .strict()
+  .refine((v) => hasFieldToChange(v, ''), { message: TX_UPDATE_NEEDS_A_FIELD });
 
 const UpdateItemSchema = z.object({
   id: CommonSchemas.transactionId.describe('Transaction ID to update'),
@@ -50,7 +54,7 @@ type BatchResult = {
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_update_batch',
-  description: `Update multiple transactions in a single call. Accepts up to 50 {id, fields} pairs. Each update is applied independently and NOT atomically: items applied before a failure stay applied. A missing id, an unknown payee or category id or an update Actual rejects is reported per item in failed, and the rest continue. If the call itself fails (lost connection, out of memory, timeout), the error names the ids already applied; read the transactions back with actual_transactions_get BEFORE retrying. An item whose error says "not attempted" was never sent, because the batch ran out of time; read back before retrying it too, since others may have been applied. Splits are not supported here: a subtransactions field is ignored in batch. Use actual_transactions_update to edit an existing split's children.
+  description: `Update multiple transactions in a single call. Accepts up to 50 {id, fields} pairs. Each update is applied independently and NOT atomically: items applied before a failure stay applied. A missing id, an unknown payee or category id or an update Actual rejects is reported per item in failed, and the rest continue. If the call itself fails (lost connection, out of memory, timeout), the error names the ids already applied; read the transactions back with actual_transactions_get BEFORE retrying. An item whose error says "not attempted" was never sent, because the batch ran out of time; read back before retrying it too, since others may have been applied. Each item accepts only the listed fields and needs at least one. Splits are not supported here: use actual_transactions_update to split a transaction or edit a split's children.
 
 Returns: { succeeded: [{id}], failed: [{id, error}], total, successCount, failureCount }
 

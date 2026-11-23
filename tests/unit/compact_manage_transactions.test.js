@@ -165,6 +165,48 @@ await check('null still clears payee, category and notes in update and update_ba
   await expectCall({ action: 'update_batch', updates: [{ id: T1, fields: { payee: null, category: null, notes: null } }] }, 'actual_transactions_update_batch', { updates: [{ id: T1, fields: { payee: null, category: null, notes: null } }] });
   assert.strictEqual(legacyUpdate.inputSchema.safeParse({ id: T1, fields: { payee: null, category: null, notes: null } }).success, true);
 });
+const { hasFieldToChange, TX_UPDATE_NEEDS_A_FIELD } = await import('../../dist/src/lib/schemas/common.js');
+await check('hasFieldToChange: empty, undefined-only, null, value and the except argument (#815)', () => {
+  assert.strictEqual(TX_UPDATE_NEEDS_A_FIELD, 'update needs at least one field to change besides id');
+  assert.strictEqual(hasFieldToChange({}), false);
+  assert.strictEqual(hasFieldToChange({ id: 'x' }), false);
+  assert.strictEqual(hasFieldToChange({ id: 'x', notes: undefined }), false);
+  assert.strictEqual(hasFieldToChange({ id: 'x', notes: null }), true);
+  assert.strictEqual(hasFieldToChange({ id: 'x', notes: 'n' }), true);
+  assert.strictEqual(hasFieldToChange({ id: 'x', notes: 'n' }, 'notes'), true);
+  assert.strictEqual(hasFieldToChange({ notes: 'n' }, 'notes'), false);
+  assert.strictEqual(hasFieldToChange({ id: 'x' }, ''), true);
+  assert.strictEqual(hasFieldToChange({ notes: undefined }, ''), false);
+});
+await check('compact update_batch refuses an item with no field, naming the item, and calls nothing (#815)', async () => {
+  const text = await clientText({ action: 'update_batch', updates: [{ id: T1, fields: { notes: 'x' } }, { id: T2, fields: {} }] });
+  assert.match(text, /updates\.1.*fields.*update needs at least one field to change besides id/);
+  assert.match(await clientText({ action: 'update_batch', updates: [{ id: T1, fields: {} }] }), /update needs at least one field to change besides id/);
+});
+await check('compact update_batch: a valid item alone forwards, and payee: null counts as a change (#815)', async () => {
+  await expectCall({ action: 'update_batch', updates: [{ id: T1, fields: { payee: null } }] }, 'actual_transactions_update_batch', { updates: [{ id: T1, fields: { payee: null } }] });
+});
+await check('compact update keeps its message and its path id (#815)', async () => {
+  assert.match(await clientText({ action: 'update', id: T1 }), /id: update needs at least one field to change besides id/);
+});
+await check('legacy update and update_batch refuse empty fields and an unknown key, naming it (#815)', () => {
+  const msgs = (r) => r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`);
+  let r = legacyUpdate.inputSchema.safeParse({ id: T1, fields: {} });
+  assert.strictEqual(r.success, false);
+  assert.deepStrictEqual(msgs(r), ['fields: update needs at least one field to change besides id']);
+  r = legacyUpdate.inputSchema.safeParse({ id: T1, fields: { notes: undefined } });
+  assert.strictEqual(r.success, false);
+  r = legacyBatch.inputSchema.safeParse({ updates: [{ id: T1, fields: {} }] });
+  assert.deepStrictEqual(msgs(r), ['updates.0.fields: update needs at least one field to change besides id']);
+  r = legacyBatch.inputSchema.safeParse({ updates: [{ id: T1, fields: { bogus: 1 } }] });
+  assert.strictEqual(r.success, false);
+  assert.ok(msgs(r).some((m) => /bogus/.test(m)), JSON.stringify(msgs(r)));
+  for (const key of ['subtransactions', 'imported_id', 'reconciled', 'transfer_id']) {
+    assert.strictEqual(legacyBatch.inputSchema.safeParse({ updates: [{ id: T1, fields: { notes: 'x', [key]: key === 'subtransactions' ? [] : 'x' } }] }).success, false, key);
+  }
+  assert.strictEqual(legacyBatch.inputSchema.safeParse({ updates: [{ id: T1, fields: { payee: null } }] }).success, true);
+  assert.strictEqual(legacyUpdate.inputSchema.safeParse({ id: T1, fields: { payee: null } }).success, true);
+});
 await check('merge forwards ids and returns the legacy value unchanged', async () => {
   const merged = { result: { success: true, keptId: T1, deletedId: T2 } };
   reply = () => merged;
