@@ -616,6 +616,43 @@ test.describe('Docker E2E - tool surface', () => {
     throw new Error('a duplicate category name in the same group must be refused');
   });
 
+  // #763: an unknown group_id used to write a category with a null group that no tool can reach.
+  // A leaked category cannot be removed through the tools, so a call that SUCCEEDS fails naming
+  // its id for manual removal.
+  const UNKNOWN_GROUP = '00000000-0000-4000-8000-000000000000';
+  const unknownGroupText = (listTool: string) =>
+    `Category group "${UNKNOWN_GROUP}" not found. Use ${listTool} to list available category groups.`;
+
+  test('manage_categories create - ERROR: an unknown group_id is refused with the compact text (#763)', async ({ mcp }) => {
+    const name = `E2E-BadGroup-${uniqueSuffix()}`;
+    let created: unknown;
+    try {
+      created = await mcp.call('manage_categories', { action: 'create', entity: 'category', name, group_id: UNKNOWN_GROUP });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain(unknownGroupText('list_entities with type category_group'));
+      return;
+    }
+    const id = typeof created === 'string' ? created : (created as any)?.categoryId;
+    throw new Error(`manage_categories accepted an unknown group_id; remove the group-less category "${name}" (id ${String(id)}) by hand`);
+  });
+
+  test('manage_categories update - ERROR: moving to an unknown group_id is refused and the category keeps its group (#763)', async ({ mcp, makeCategory }) => {
+    const category = await makeCategory();
+    let refused = false;
+    try {
+      await mcp.call('manage_categories', { action: 'update', entity: 'category', id: category.id, group_id: UNKNOWN_GROUP });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain(unknownGroupText('list_entities with type category_group'));
+      refused = true;
+    }
+    if (!refused) throw new Error(`manage_categories accepted an unknown group_id: category ${category.id} may now be group-less and unreachable`);
+    const data = await mcp.call('list_entities', { type: 'category' });
+    const categories = (Array.isArray(data) ? data : data?.categories ?? []) as any[];
+    const found = categories.find((c: any) => c?.id === category.id);
+    expect(found).toBeTruthy();
+    expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
+  });
+
   test('manage_categories update - should update category', async ({ mcp, makeCategory }) => {
     const category = await makeCategory();
     const newName = `E2E-Category-Updated-${uniqueSuffix()}`;
@@ -4183,6 +4220,43 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
   test('actual_categories_get - lists the categories', async ({ mcp }) => {
     expect(await mcp.call('actual_categories_get')).toBeTruthy();
+  });
+
+  // #763: the legacy category tools refuse an unknown group_id with the legacy list tool name. A
+  // leaked group-less category cannot be removed through the tools, so a call that SUCCEEDS fails
+  // naming its id for manual removal.
+  test('actual_categories_create - ERROR: an unknown group_id is refused with the legacy text (#763)', async ({ mcp }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const name = `E2E-BadGroupLegacy-${uniqueSuffix()}`;
+    // Precondition: the id really is no group (the refusal text points at this listing tool).
+    const groups = (await mcp.call('actual_category_groups_get')) as any[];
+    expect(groups.map((g: any) => g?.id)).not.toContain(unknown);
+    let created: unknown;
+    try {
+      created = await mcp.call('actual_categories_create', { name, group_id: unknown });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain(`Category group "${unknown}" not found. Use actual_category_groups_get to list available category groups.`);
+      return;
+    }
+    const id = typeof created === 'string' ? created : (created as any)?.categoryId;
+    throw new Error(`actual_categories_create accepted an unknown group_id; remove the group-less category "${name}" (id ${String(id)}) by hand`);
+  });
+
+  test('actual_categories_update - ERROR: moving to an unknown group_id is refused and the category keeps its group (#763)', async ({ mcp, makeCategory }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const category = await makeCategory();
+    let refused = false;
+    try {
+      await mcp.call('actual_categories_update', { id: category.id, fields: { group_id: unknown } });
+    } catch (error) {
+      expect(String((error as Error).message)).toContain(`Category group "${unknown}" not found. Use actual_category_groups_get to list available category groups.`);
+      refused = true;
+    }
+    if (!refused) throw new Error(`actual_categories_update accepted an unknown group_id: category ${category.id} may now be group-less and unreachable`);
+    const data = await mcp.call('list_entities', { type: 'category' });
+    const categories = (Array.isArray(data) ? data : data?.categories ?? []) as any[];
+    const found = categories.find((c: any) => c?.id === category.id);
+    expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {

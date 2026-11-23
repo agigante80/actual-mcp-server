@@ -78,6 +78,19 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     }
   }
 
+  console.log('\n[#763] updateCategory with an unknown group_id');
+  {
+    writes.category = 0;
+    let threw = null;
+    try { await adapter.updateCategory(KNOWN, { group_id: GHOST }); } catch (e) { threw = e; }
+    check(!!threw && /^Category group ".*" not found/.test(threw.message) && threw.message.includes(GHOST) && threw.message.includes('actual_category_groups_get'),
+      'an unknown group_id is refused naming the group, the id and the listing tool');
+    check(writes.category === 0, 'the raw category write was NOT called');
+    let ok = true;
+    try { await adapter.updateCategory(KNOWN, { group_id: KNOWN }); } catch { ok = false; }
+    check(ok && writes.category === 1, 'a known group_id still reaches the raw write');
+  }
+
   console.log('\n[#360] a CLOSED account is still updatable');
   {
     // getAccounts filters `tombstone = 0`, not `closed = 0`, so the guard must not turn

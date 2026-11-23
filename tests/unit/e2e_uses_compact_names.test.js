@@ -47,6 +47,9 @@ const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',
   'actual_categories_get',
+  'actual_categories_create', // #763: the legacy unknown-group refusal text
+  'actual_categories_update', // #763
+  'actual_category_groups_get', // #763: named in the legacy refusal text
   'actual_payees_get',
   'actual_rules_get',
   'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag

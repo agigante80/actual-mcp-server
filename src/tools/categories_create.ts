@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import { withLogMessage } from '../lib/errors.js';
+import { isPreflightRefusal, withLogMessage } from '../lib/errors.js';
 
 const InputSchema = z.object({ 
   name: CommonSchemas.name, 
@@ -16,7 +16,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_categories_create',
   description:
-    "Create a category inside a category group (group_id; find one with actual_category_groups_get). is_income true makes an income category, otherwise it is an expense category. A name already used in that group is refused. Not idempotent. Returns { success: true, categoryId, message } with the new category id.",
+    "Create a category inside a category group (group_id; find one with actual_category_groups_get). is_income true makes an income category, otherwise it is an expense category. An unknown group_id is refused with a not-found refusal (nothing is created). A name already used in that group is refused. Not idempotent. Returns { success: true, categoryId, message } with the new category id.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     // Zod validation errors are formatted centrally by actualToolsManager (#206).
@@ -38,6 +38,8 @@ const tool: ToolDefinition = {
         message: `Category "${input.name}" created successfully`
       };
     } catch (error) {
+      // A typed refusal (unknown category group, #763) keeps its class and exact text.
+      if (isPreflightRefusal(error)) throw error;
       const errorMessage = error instanceof Error ? error.message : String(error);
       
       // Provide helpful error messages for common issues
