@@ -129,15 +129,16 @@ console.log('\n[#759] batch');
   const input = { operations: [
     { month: '2026-02', categoryId: FOOD, amount: 500 },
     { month: '2026-02', categoryId: INC, amount: 700 },
+    { month: '2026-03', categoryId: INC, amount: 800 },
   ] };
   const res = await batchTool.call(input);
-  check(res?.successCount === 1 && res?.failureCount === 1, 'an income amount item fails alone on an envelope budget', JSON.stringify(res));
+  check(res?.successCount === 1 && res?.failureCount === 2, 'income amount items fail alone on an envelope budget', JSON.stringify(res));
   check(/not an expense category/.test(res?.failed?.[0]?.error ?? '') && res?.failed?.[0]?.index === 1, 'the failed item carries the refusal');
   check(writes.length === 1 && writes[0].categoryId === FOOD, 'only the expense item is written');
-  check(monthReads === 1, 'the month is read once per call', `reads ${monthReads}`);
+  check(monthReads === 1, 'the month is read once per call, however many income items (the memo)', `reads ${monthReads}`);
   reset(true);
   const t = await batchTool.call(input);
-  check(t?.successCount === 2 && writes.length === 2, 'both items apply on a tracking budget');
+  check(t?.successCount === 3 && writes.length === 3, 'both items apply on a tracking budget');
   reset();
   const c = await batchTool.call({ operations: [{ month: '2026-02', categoryId: INC, carryover: true }] });
   check(c?.failureCount === 1 && /is an income category, which cannot carry over/.test(c?.failed?.[0]?.error ?? ''), 'the existing carryover refusal and text are unchanged');
