@@ -41,13 +41,13 @@ export function canonicalize(obj: Record<string, unknown>): string {
 
 /**
  * #761: a condition's `options` as part of its identity, normalised: a false flag is dropped, an
- * empty object equals an absent one, key order is irrelevant. Total on a stored value of any shape
+ * empty object equals an absent one (canonicalize sorts the keys). Total on a stored value of any shape
  * (upstream keeps `options` on any field), so it never throws.
  */
 function normalizeOptions(options: unknown): Record<string, unknown> | undefined {
   if (!options || typeof options !== 'object' || Array.isArray(options)) return undefined;
   const kept = Object.entries(options as Record<string, unknown>).filter(([, v]) => v !== false && v !== undefined);
-  return kept.length === 0 ? undefined : Object.fromEntries(kept.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)));
+  return kept.length === 0 ? undefined : Object.fromEntries(kept);
 }
 
 const identity = (c: { field?: unknown; op?: unknown; value?: unknown; options?: unknown }): string =>

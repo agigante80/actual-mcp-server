@@ -302,7 +302,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
     check(out.created === false, 'an empty stored options equals an absent one', JSON.stringify(out));
     reset(); rulesResponse = stored({ ...PLAIN, options: { outflow: true, inflow: false } });
     out = await call({ ...PLAIN, options: { outflow: true } });
-    check(out.created === false, 'a false flag and key order do not matter', JSON.stringify(out));
+    check(out.created === false, 'a false flag does not matter', JSON.stringify(out));
     reset(); rulesResponse = stored({ field: 'payee', op: 'is', value: PAYEES[0], options: { outflow: true } });
     let threw = null;
     try { out = await call({ field: 'payee', op: 'is', value: PAYEES[1] }); } catch (e) { threw = e; }

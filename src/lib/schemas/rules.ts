@@ -229,12 +229,12 @@ export const ConditionSchema = z.object({
   // object is strict too, so a stray key is refused by name instead of being dropped.
   options: z
     .object({
-      outflow: z.boolean().optional().describe('Match outflows only'),
-      inflow: z.boolean().optional().describe('Match inflows only'),
+      outflow: z.boolean().optional().describe('Outflows'),
+      inflow: z.boolean().optional().describe('Inflows'),
     })
     .strict()
     .optional()
-    .describe('amount only: {outflow: true} or {inflow: true} with a positive value'),
+    .describe('amount only; outflow or inflow, not both'),
 }).strict();
 
 export const ActionSchema = z.object({
