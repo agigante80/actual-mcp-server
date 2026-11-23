@@ -105,6 +105,7 @@ for (const [label, env] of CONFIGS) {
     const caps = res.get(1).result.capabilities;
     assert.strictEqual(typeof caps.prompts, 'object', JSON.stringify(caps));
     assert.ok(caps.prompts !== null);
+    assert.strictEqual(typeof caps.completions, 'object', JSON.stringify(caps));
   });
   await check(`${label}: prompts/list follows the surface (legacy offers none, compact offers the read prompts)`, async () => {
     const res = await stdioSession(env, [INIT, INITIALIZED, LIST]);

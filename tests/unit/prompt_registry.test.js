@@ -22,7 +22,7 @@ console.log('\n[prompt-registry]');
 
 const { z, ZodError } = await import('zod');
 const {
-  resolveOfferedPrompts, renderPrompt, assertPromptNames, assertRequiredToolsKnown, assertArgsBounded,
+  resolveOfferedPrompts, renderPrompt, assertPromptNames, assertRequiredToolsKnown, assertArgsBounded, assertArgumentTitles,
 } = await import('../../dist/src/prompts/registry.js');
 const { PROMPT_DEFINITIONS } = await import('../../dist/src/prompts/index.js');
 const { COMPACT_TOOLS } = await import('../../dist/src/compact/registry.js');
@@ -100,6 +100,7 @@ await check('the real PROMPT_DEFINITIONS pass every validator', async () => {
   assertPromptNames(PROMPT_DEFINITIONS);
   assertRequiredToolsKnown(PROMPT_DEFINITIONS, known);
   assertArgsBounded(PROMPT_DEFINITIONS);
+  assertArgumentTitles(PROMPT_DEFINITIONS);
 });
 
 // ---------------------------------------------------------------- assertRequiredToolsKnown

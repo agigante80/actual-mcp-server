@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
+import { completeMonth } from './completions.js';
 import { currentMonth, daysInMonth, monthArgSchema } from './dates.js';
 import { EMPTY_RESULT_LINE, ZERO_INCOME_LINE, origin } from './shared.js';
 
@@ -41,8 +42,10 @@ const monthly_review: PromptDefinition = {
   arguments: [
     {
       name: 'month',
+      title: 'Month',
       description: "Month to review, YYYY-MM. Defaults to the server's current month.",
       required: false,
+      complete: completeMonth,
     },
   ],
   requiredTools: ['get_context', 'list_budget_months', 'summarize_transactions', 'search_transactions'],

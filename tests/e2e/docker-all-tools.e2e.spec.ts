@@ -5647,6 +5647,44 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.code).toBe(-32602);
     expect(out.error?.message).toContain('Unknown prompt');
   });
+
+  // #775: completion. Read only, nothing to clean up.
+  test('initialize advertises completions and completion/complete returns 12 months for monthly_review month (#775)', async ({ mcp }) => {
+    const caps = await mcp.serverCapabilities();
+    expect(caps?.completions, 'capabilities.completions must be advertised').toBeTruthy();
+    expect(typeof caps?.completions).toBe('object');
+    const out = await mcp.completePrompt({ ref: { type: 'ref/prompt', name: 'monthly_review' }, argument: { name: 'month', value: '' } });
+    expect(out.error).toBeUndefined();
+    const values: string[] = out.result.completion.values;
+    expect(values).toHaveLength(12);
+    for (const v of values) expect(v).toMatch(/^\d{4}-\d{2}$/);
+    expect(values[0]).toBe(currentMonth());
+  });
+
+  test('prompts/list carries a title on every argument over HTTP (#775)', async ({ mcp }) => {
+    test.skip(isStdio, 'the stdio helper parses through the SDK Client, which drops the argument title');
+    const prompts = await mcp.listPrompts();
+    for (const p of prompts) {
+      for (const a of p.arguments ?? []) {
+        expect(typeof a.title, `${p.name}.${a.name}`).toBe('string');
+        expect(a.title.length).toBeGreaterThan(0);
+        expect(a.complete).toBeUndefined();
+      }
+    }
+  });
+
+  test('completion/complete - an unknown prompt returns an empty list, not an error (#775)', async ({ mcp }) => {
+    const out = await mcp.completePrompt({ ref: { type: 'ref/prompt', name: 'no_such_prompt' }, argument: { name: 'month', value: '' } });
+    expect(out.error).toBeUndefined();
+    expect(out.result.completion.values).toEqual([]);
+  });
+
+  test('completion/complete - ERROR: a request with no argument is -32602 with the fixed message (#775)', async ({ mcp }) => {
+    const out = await mcp.completePrompt({ ref: { type: 'ref/prompt', name: 'monthly_review' } });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('Invalid completion request');
+  });
 });
 
 // #681: the legacy names are still published on MCP_TOOL_SURFACE=all (and legacy), and this stack

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
+import { completeDay } from './completions.js';
 import { optionalDayArgSchema } from './dates.js';
 
 /**
@@ -28,9 +29,11 @@ const categorize_uncategorized: PromptDefinition = {
   arguments: [
     {
       name: 'since',
+      title: 'Since date',
       description:
         'Only transactions on or after this day, YYYY-MM-DD. Omit for all uncategorised transactions.',
       required: false,
+      complete: completeDay,
     },
   ],
   requiredTools: [

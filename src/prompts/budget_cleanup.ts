@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
+import { completeDay } from './completions.js';
 import { dayArgSchema, monthStart } from './dates.js';
 import { EMPTY_RESULT_LINE, origin } from './shared.js';
 
@@ -37,8 +38,10 @@ const budget_cleanup: PromptDefinition = {
   arguments: [
     {
       name: 'date',
+      title: 'As-of date',
       description: "Day to review as of, YYYY-MM-DD. Defaults to the server's today.",
       required: false,
+      complete: completeDay,
     },
   ],
   requiredTools: ['list_entities', 'summarize_transactions', 'list_budget_months'],

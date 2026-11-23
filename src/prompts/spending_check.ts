@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { PromptDefinition } from './registry.js';
+import { completeDay } from './completions.js';
 import { dayArgSchema, daysInMonth } from './dates.js';
 import { EMPTY_RESULT_LINE, origin } from './shared.js';
 
@@ -34,8 +35,10 @@ const spending_check: PromptDefinition = {
   arguments: [
     {
       name: 'date',
+      title: 'As-of date',
       description: "Day to check as of, YYYY-MM-DD. Defaults to the server's today.",
       required: false,
+      complete: completeDay,
     },
   ],
   requiredTools: ['list_budget_months', 'summarize_transactions'],
