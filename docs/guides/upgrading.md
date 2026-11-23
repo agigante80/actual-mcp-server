@@ -66,7 +66,7 @@ These notes are copied from [explanation/security-and-privacy.md](../explanation
 
 ### Impossible dates are refused (#745)
 
-The legacy transaction, balance and schedule tools now refuse a date that is not a real calendar day (`2018-02-30`, `2018-13-45`) with `Invalid date (not a real calendar day)`. Several of them used to accept such a string, store it, or roll it forward to the next month. A script that sends one must send a real day.
+The transaction, balance and schedule tools (the legacy ones and the compact tools that front them) now refuse a date that is not a real calendar day (`2018-02-30`, `2018-13-45`) with `Invalid date (not a real calendar day)`. Several of them used to accept such a string, store it, or roll it forward to the next month. A script that sends one must send a real day.
 
 ### HTTP auth is required by default (#242)
 

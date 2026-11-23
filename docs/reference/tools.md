@@ -1,6 +1,6 @@
 # Tools reference
 
-Every tool the server registers, grouped by domain, with the caveats you need before calling it. The server publishes 15 tools over 85 operations by default: the 85 operations (the legacy `actual_<category>_<action>` tools) are described by domain below, and the [compact surface](#compact-surface) that fronts them is at the end. Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead. Amounts are integer cents and dates are real calendar days written `YYYY-MM-DD`; an impossible day such as `2026-02-30` is refused.
+Every tool the server registers, grouped by domain, with the caveats you need before calling it. The server publishes 15 tools over 85 operations by default: the 85 operations (the legacy `actual_<category>_<action>` tools) are described by domain below, and the [compact surface](#compact-surface) that fronts them is at the end. Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead. Amounts are integer cents and dates are real calendar days written `YYYY-MM-DD`; an impossible day such as `2026-02-30` is refused (a schedule recurrence's `start` and `endDate` are checked for shape only).
 
 The README's [Tools section](../../README.md#tools) is the generated overview (the 15 compact tools by domain, the prompts and the measured `tools/list` sizes); this page is the full per-operation reference behind it.
 
