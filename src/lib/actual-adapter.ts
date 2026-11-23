@@ -2756,11 +2756,23 @@ export async function getAccountsWithBalances(): Promise<(components['schemas'][
     return result;
   });
 }
-export async function deleteAccount(id: string): Promise<void> {
+/**
+ * #768: upstream deletes the account's rows and, for each transfer row, unlinks the counterpart in
+ * the other account (payee and transfer_id set to null). The caller is told how many, counted in
+ * the same write cycle just before the delete. `splits: 'all'` because a split child can carry a
+ * transfer.
+ */
+export async function deleteAccount(id: string): Promise<{ detachedTransfers: number }> {
   observability.incrementToolCall('actual.accounts.delete').catch(() => {});
   return queueWriteOperation(async () => {
+    const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const res = (await withConcurrency(() =>
+      retry(() => rawRunQuery(q('transactions').options({ splits: 'all' }).filter({ account: id, transfer_id: { $ne: null } }).select(['id'])) as Promise<{ data?: unknown }>, { retries: 2, backoffMs: 200 })
+    ));
+    const detachedTransfers = Array.isArray(res?.data) ? res.data.length : 0;
     // Non-idempotent: do not retry (#165).
     await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    return { detachedTransfers };
   });
 }
 /**
@@ -4103,7 +4115,7 @@ export async function closeAccount(
   observability.incrementToolCall('actual.accounts.close').catch(() => {});
   return queueWriteOperation(async () => {
     const before = await withConcurrency(() =>
-      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean }>>), { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('accounts', () => rawGetAccounts() as Promise<Array<{ id?: string; name?: string; closed?: boolean; offbudget?: boolean }>>), { retries: 2, backoffMs: 200 })
     );
     const list = Array.isArray(before) ? before : [];
     const target = list.find((a) => a?.id === id);
@@ -4136,6 +4148,36 @@ export async function closeAccount(
             'so the closing balance would be moved somewhere hidden from most views. Pick an ' +
             'open account, or reopen that one with actual_accounts_reopen first.'
         );
+      }
+    }
+
+    if (transferAccountId) {
+      const destination = list.find((a) => a?.id === transferAccountId)!;
+      // #768: upstream writes the closing row only when the account's balance (the sum of EVERY
+      // non-parent row, any date, so not rawGetAccountBalance, which stops at today) is non-zero.
+      // Only then do the pairing rules below matter; a zero-balance close ignores both arguments.
+      const { q } = (await import('@actual-app/api')) as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+      const sum = (await withConcurrency(() =>
+        retry(() => rawRunQuery(q('transactions').filter({ account: id }).calculate({ $sum: '$amount' })) as Promise<{ data?: unknown }>, { retries: 2, backoffMs: 200 })
+      ))?.data;
+      if (typeof sum === 'number' && sum !== 0) {
+        // Actual clears the category of a closing row unless an on-budget account is closed into
+        // an off-budget one (clearCategory and onInsert upstream), so only that pairing can keep
+        // one, and it is the only pairing that needs one to stay inside the budget.
+        const srcOn = target.offbudget !== true;
+        const dstOn = destination.offbudget !== true;
+        const srcName = target.name ?? id;
+        const dstName = destination.name ?? transferAccountId;
+        if (srcOn && !dstOn && !transferCategoryId) {
+          throw new ConflictRefusal(
+            `Closing "${srcName}" into the off-budget account "${dstName}" needs transferCategoryId: the closing transaction would otherwise leave the budget as an uncategorised outflow. Nothing was written.`
+          );
+        }
+        if (transferCategoryId && !(srcOn && !dstOn)) {
+          throw new ConflictRefusal(
+            `transferCategoryId has no effect when closing "${srcName}" (${srcOn ? 'on-budget' : 'off-budget'}) into "${dstName}" (${dstOn ? 'on-budget' : 'off-budget'}): Actual keeps a category on the closing transaction only when an on-budget account is closed into an off-budget one. Omit it. Nothing was written.`
+          );
+        }
       }
     }
 

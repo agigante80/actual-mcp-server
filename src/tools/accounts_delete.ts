@@ -47,12 +47,13 @@ const tool: ToolDefinition = {
     'Delete an account from Actual Budget. DESTRUCTIVE: if the account has transactions, they are ' +
     'deleted too, paired transfer transactions are unlinked, and the transfer payee is removed. This ' +
     'cannot be undone. A CLOSED account cannot be deleted (Actual silently ignores it): reopen it with ' +
-    'actual_accounts_reopen first. Deleting an account that does not exist reports success.',
+    'actual_accounts_reopen first. Deleting an account that does not exist reports success. ' +
+    'The result reports detachedTransfers, the number of transfers whose other half stays in its account, unlinked.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
 
-    await adapter.deleteAccount(input.id);
+    const { detachedTransfers } = await adapter.deleteAccount(input.id);
 
     // The verification the old code skipped. One read, after the write, so the
     // success claim is about the observed state rather than about the call having
@@ -73,7 +74,7 @@ const tool: ToolDefinition = {
       );
     }
 
-    return { success: true };
+    return { success: true, detachedTransfers };
   },
 };
 

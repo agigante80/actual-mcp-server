@@ -50,7 +50,8 @@ const tool: ToolDefinition = {
     'transaction. Closing an already-closed account reports that rather than claiming a change. ' +
     'If this call reports an error, re-read the account with actual_accounts_list before retrying: ' +
     'the state is verified AFTER the write, so a failure of that verification read is reported ' +
-    'even though the close itself may have succeeded.',
+    'even though the close itself may have succeeded. ' +
+    'Closing an on-budget account that has a balance into an off-budget one requires transferCategoryId; it is refused for any other pairing.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

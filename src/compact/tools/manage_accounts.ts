@@ -131,14 +131,14 @@ export const manageAccounts: CompactToolSpec = {
     'entity (account or account_group) is required for create, update and delete; close takes account or nothing. ' +
     'create: entity, name; optional balance (account, integer cents) and offbudget (account), or sort_order (account_group). ' +
     'update: entity, id and at least one of name, offbudget, closed (account) or name, sort_order (account_group); to close or reopen prefer those actions. ' +
-    'close: id; optional transfer_account_id (required for a non-zero balance, not id itself), transfer_category_id; an account with no transactions is REMOVED, not closed. ' +
+    'close: id; optional transfer_account_id (required for a non-zero balance, not id itself), transfer_category_id (required when a non-zero on-budget account closes into an off-budget one, refused otherwise); an account with no transactions is REMOVED, not closed. ' +
     'reopen: id. ' +
-    'delete: entity, id; DESTRUCTIVE, cannot be undone: an account takes its transactions with it (a closed one cannot be deleted), a group leaves its accounts ungrouped. ' +
+    'delete: entity, id; DESTRUCTIVE, cannot be undone: an account takes its transactions with it and the other half of each transfer stays, unlinked (a closed one cannot be deleted), a group leaves its accounts ungrouped. ' +
     'bank_sync: optional account_id (omit for every linked open account); reaches the bank providers. ' +
     'set_note: id, note ("" clears); id is any entity UUID, not budget-YYYY-MM; for a category or payee note prefer manage_categories or manage_payees, so each note is set by the tool of its entity kind. ' +
     'Returns { result: id } (create account), { result: { id, name } } (create group), { success, accountId, updatedFields } (update account), ' +
     '{ result: { success, id, updated } } (update group), { success, closed | alreadyClosed | removed } (close), { success, reopened | alreadyOpen } (reopen), ' +
-    '{ success } (delete account), { result: { success, id } } (delete group), { result, newTransactions, matchedTransactions, updatedAccounts, truncated } (bank_sync), ' +
+    '{ success, detachedTransfers } (delete account), { result: { success, id } } (delete group), { result, newTransactions, matchedTransactions, updatedAccounts, truncated } (bank_sync), ' +
     '{ result: { success, id, note, cleared } } (set_note).',
   selector: 'action',
   actions: new Map<string, CompactActionRow>([
