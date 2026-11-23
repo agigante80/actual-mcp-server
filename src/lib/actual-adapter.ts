@@ -2968,12 +2968,12 @@ export async function mergeTransactions(ids: [string, string]): Promise<{ keptId
   return queueWriteOperation(async () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { q } = (await import('@actual-app/api')) as any;
-    type Row = { id: string; account?: string; amount?: number; parent_id?: string | null; is_child?: boolean };
+    type Row = { id: string; account?: string; amount?: number; parent_id?: string | null; is_child?: boolean; transfer_id?: string | null };
     const rows = await withConcurrency(() =>
       retry(async () => {
         // `splits: 'all'` is REQUIRED (#305): the default query excludes split PARENT rows.
         const res = (await rawRunQuery(
-          q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: ids } }).select(['id', 'account', 'amount', 'parent_id', 'is_child'])
+          q('transactions').options({ splits: 'all' }).filter({ id: { $oneof: ids } }).select(['id', 'account', 'amount', 'parent_id', 'is_child', 'transfer_id'])
         )) as { data?: Row[] };
         return Array.isArray(res?.data) ? res.data : [];
       }, { retries: 2, backoffMs: 200 })
@@ -3001,6 +3001,16 @@ export async function mergeTransactions(ids: [string, string]): Promise<{ keptId
       throw new OutOfRangeRefusal(
         `Cannot merge transactions with different amounts: ${ids[0]} is ${first.amount} cents, ${ids[1]} is ${second.amount} cents. Nothing was changed.`,
         String(second.amount)
+      );
+    }
+    // #794: two rows that name the SAME counterpart make upstream merge that counterpart with
+    // itself, which deletes it in the other account and leaves the kept row pointing at nothing.
+    // Distinct counterparts are upstream's correct case and stay allowed. A missing, null or empty
+    // transfer_id is never "shared" (undefined === undefined must not count).
+    if (typeof first.transfer_id === 'string' && first.transfer_id !== '' && first.transfer_id === second.transfer_id) {
+      throw new OutOfRangeRefusal(
+        `Cannot merge ${ids[0]} and ${ids[1]}: both point at the same transfer counterpart ${first.transfer_id}, so merging them would delete that counterpart in the other account. Nothing was changed. Use actual_transactions_get to inspect both rows.`,
+        first.transfer_id
       );
     }
     // Non-idempotent: do not retry (#165, #514). After a lost response the dropped id is gone, so
