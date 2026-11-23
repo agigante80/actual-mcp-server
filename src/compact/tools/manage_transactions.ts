@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommonSchemas, TX_IMPORT_ROW_KEYS, TX_UPDATE_NEEDS_A_FIELD, TX_UPDATE_NOT_NULL_KEYS, hasFieldToChange } from '../../lib/schemas/common.js';
+import { CommonSchemas, TX_IMPORT_CHILD_KEYS, TX_IMPORT_ROW_KEYS, TX_UPDATE_NEEDS_A_FIELD, TX_UPDATE_NOT_NULL_KEYS, hasFieldToChange } from '../../lib/schemas/common.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
 /**
@@ -78,6 +78,7 @@ const BATCH_ITEM = z
   .strict();
 const TX_ITEM = z.looseObject({ date: CommonSchemas.date, amount: CommonSchemas.amountCents });
 const TX_ROW_KEYS: ReadonlySet<string> = new Set(TX_IMPORT_ROW_KEYS);
+const TX_CHILD_KEYS: ReadonlySet<string> = new Set(TX_IMPORT_CHILD_KEYS);
 
 const updates = z
   .array(z.looseObject({ id: z.string(), fields: z.looseObject({}) }))
@@ -103,6 +104,17 @@ const txs = z
       if (unknown.length > 0) {
         const named = unknown.map((key) => `"${key}"`).join(', ');
         ctx.addIssue({ code: 'custom', path: [i], message: `Unrecognized key${unknown.length > 1 ? 's' : ''}: ${named}` });
+      }
+      // #749: the same for a split child, which upstream spreads into the row.
+      const children = (item as { subtransactions?: unknown }).subtransactions;
+      if (Array.isArray(children)) {
+        children.forEach((child, j) => {
+          if (child === null || typeof child !== 'object') return;
+          const bad = Object.keys(child).filter((key) => !TX_CHILD_KEYS.has(key));
+          if (bad.length === 0) return;
+          const named = bad.map((key) => `"${key}"`).join(', ');
+          ctx.addIssue({ code: 'custom', path: [i, 'subtransactions', j], message: `Unrecognized key${bad.length > 1 ? 's' : ''}: ${named}` });
+        });
       }
     });
   })

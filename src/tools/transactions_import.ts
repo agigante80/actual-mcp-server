@@ -21,7 +21,17 @@ const TxItemSchema = z.strictObject({
   cleared: CommonSchemas.cleared,
   imported_id: z.string().optional().describe('Stable source ID; used to de-duplicate on re-import'),
   account: CommonSchemas.accountId.optional(),
-  subtransactions: z.array(z.looseObject({ amount: z.number().describe('Child amount in cents') })).optional().describe('Split children'),
+  subtransactions: z
+    .array(
+      z.strictObject({
+        amount: z.number().optional().describe('Child amount in cents (upstream defaults it to 0)'),
+        category: CommonSchemas.categoryId.optional(),
+        notes: CommonSchemas.notes,
+        payee: CommonSchemas.payeeId.optional(),
+      }),
+    )
+    .optional()
+    .describe('Split children'),
   transfer_id: z.string().optional().describe('Transfer link id'),
   reconciled: z.boolean().optional().describe('Reconciled flag'),
 });

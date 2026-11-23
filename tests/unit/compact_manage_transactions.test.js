@@ -135,6 +135,15 @@ await check('import forwards a row with all thirteen documented keys intact (#74
   assert.deepStrictEqual(Object.keys(row).sort(), [...IMPORT_ROW_KEYS].sort());
   await expectCall({ action: 'import', account_id: A, txs: [row] }, 'actual_transactions_import', { accountId: A, txs: [row] });
 });
+await check('import refuses an unknown split child key by name and calls nothing (#749)', async () => {
+  const text = await clientText({ action: 'import', account_id: A, txs: [{ date: '2018-05-01', amount: -100, subtransactions: [{ amount: -60 }, { amount: -40, bogus: 1 }] }] });
+  assert.match(text, /txs\.0\.subtransactions\.1: Unrecognized key: "bogus"/);
+  assert.ok(!text.includes('does not exist on table'), text);
+});
+await check('import forwards split children with every known child key, and a child without amount (#749)', async () => {
+  const row = { date: '2018-05-01', amount: -100, subtransactions: [{ amount: -60, category: B, notes: 'n', payee: A }, { notes: 'no amount' }] };
+  await expectCall({ action: 'import', account_id: A, txs: [row] }, 'actual_transactions_import', { accountId: A, txs: [row] });
+});
 const { TX_UPDATE_NOT_NULL_KEYS } = await import('../../dist/src/lib/schemas/common.js');
 const nonNullValue = { account: A, date: '2026-11-13', amount: -100 };
 const legacyUpdate = (await import('../../dist/src/tools/transactions_update.js')).default;
