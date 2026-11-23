@@ -1219,6 +1219,36 @@ payee: payee.id,
     expect(((unrelated ?? []) as any[]).find((t: any) => t.id === funChild)).toBeUndefined();
   });
 
+  // #802: a category name shared by two groups, and a payee name carried by two payees, match BOTH.
+  // The fixtures delete their groups, categories, payees and the account at teardown.
+  test('search_transactions - a shared category name and a shared payee name match every entity (#802)', async ({ mcp, makeAccount, makeCategoryGroup, makeCategory, makePayee, makeTransaction }) => {
+    const shared = `E2E-Shared-${uniqueSuffix()}`;
+    const groupA = await makeCategoryGroup();
+    const groupB = await makeCategoryGroup();
+    const catA = await makeCategory({ name: shared, group: groupA });
+    const catB = await makeCategory({ name: shared, group: groupB });
+    const payeeA = await makePayee({ name: `${shared}-P` });
+    const payeeB = await makePayee({ name: `${shared}-P` });
+    const account = await makeAccount();
+    const a = await makeTransaction({ account, amount: -1100, date: '2026-10-05', category: catA.id, payee: payeeA.id });
+    const b = await makeTransaction({ account, amount: -2200, date: '2026-10-06', category: catB.id, payee: payeeB.id });
+    const range = { start_date: '2026-10-01', end_date: '2026-10-31', account_id: account.id };
+
+    const byCategory = await mcp.call('search_transactions', { by: 'category', category_name: shared, ...range });
+    expect(((byCategory?.transactions ?? []) as any[]).map((t: any) => t.id).sort()).toEqual([a.id, b.id].sort());
+    expect(byCategory.count).toBe(2);
+    expect(byCategory.totalAmount).toBe(-3300);
+
+    const byPayee = await mcp.call('search_transactions', { by: 'payee', payee_name: `${shared}-P`, ...range });
+    expect(((byPayee?.transactions ?? []) as any[]).map((t: any) => t.id).sort()).toEqual([a.id, b.id].sort());
+    expect(byPayee.count).toBe(2);
+
+    // NEGATIVE: an unknown name keeps the not-found result, with no rows.
+    const none = await mcp.call('search_transactions', { by: 'category', category_name: `${shared}-nope`, ...range });
+    expect(none.count).toBe(0);
+    expect(none.error).toBe(`Category "${shared}-nope" not found`);
+  });
+
   // #489: a TRANSFER leg split in place. Upstream replaces the single counterpart with one per
   // child, so neither account balance moves. Cleanup is the makeAccount teardown, as in the
   // manage_transactions transfer test below.
@@ -5396,6 +5426,22 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect(found.totalAmount).toBe(-1000);
     const none = await mcp.call('actual_transactions_search_by_category', { categoryName: third.name, startDate: '2026-10-01', endDate: '2026-10-31', accountId: account.id });
     expect(none.count).toBe(0);
+  });
+
+  // #802: the legacy payee search matches every payee carrying the name.
+  test('actual_transactions_search_by_payee - a payee name shared by two payees matches both, an unknown one none (#802)', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const name = `E2E-SharedLegacy-${uniqueSuffix()}`;
+    const payeeA = await makePayee({ name });
+    const payeeB = await makePayee({ name });
+    const account = await makeAccount();
+    const a = await makeTransaction({ account, amount: -1000, date: '2026-10-05', payee: payeeA.id });
+    const b = await makeTransaction({ account, amount: -2000, date: '2026-10-06', payee: payeeB.id });
+    const found = await mcp.call('actual_transactions_search_by_payee', { payeeName: name, startDate: '2026-10-01', endDate: '2026-10-31', accountId: account.id });
+    expect(((found?.transactions ?? []) as any[]).map((t: any) => t.id).sort()).toEqual([a.id, b.id].sort());
+    expect(found.totalAmount).toBe(-3000);
+    const none = await mcp.call('actual_transactions_search_by_payee', { payeeName: `${name}-nope`, startDate: '2026-10-01', endDate: '2026-10-31', accountId: account.id });
+    expect(none.count).toBe(0);
+    expect(none.error).toBe(`Payee "${name}-nope" not found`);
   });
 
   test('actual_categories_get - lists the categories', async ({ mcp }) => {

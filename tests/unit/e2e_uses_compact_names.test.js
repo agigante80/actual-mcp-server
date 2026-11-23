@@ -47,6 +47,7 @@ const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',
   'actual_transactions_search_by_category', // #750: the legacy split-child search
+  'actual_transactions_search_by_payee', // #802: the legacy shared-name payee search
   'actual_categories_get',
   'actual_categories_create', // #763: the legacy unknown-group refusal text
   'actual_categories_update', // #763

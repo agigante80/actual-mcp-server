@@ -69,7 +69,13 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   carries #750, #793 and #818) the legacy total went from 124,106 to 124,567 bytes, and the ceiling is that
 //   plus 8. The compact total is 43,412 bytes (43,213 before the batch), under
 //   COMPACT_TOTAL_CEILING; the per-tool ceiling is unchanged (heaviest entry 3,893 bytes).
-const TOTAL_CEILING = 124575;
+//   Total raised for #801 (a name shared by several entities is refused by the name lookup) from
+//   124,575 to 124,653: the actual_get_id_by_name description gained one sentence (78 bytes of
+//   description text; the compact list_entities clause adds 54 to the compact total, which stays
+//   under its own ceiling). Measured after #802 (which changes no description) the legacy total
+//   is 124,645 bytes (124,567 on develop before #801), and the ceiling is that plus 8. Every
+//   per-tool ceiling is unchanged.
+const TOTAL_CEILING = 124653;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The

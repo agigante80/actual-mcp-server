@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { expandSplitsForSearch } from '../lib/split-search.js';
+import { idSetByName } from '../lib/actual-adapter/filter-ids.js';
 
 const InputSchema = z.object({
   month: z.string().optional().describe('Month to search in YYYY-MM format, e.g. "2025-01" (default: the current month)'),
@@ -82,12 +83,10 @@ const tool: ToolDefinition = {
     // category, so the split is replaced by its children, once the category is known to exist.
     if (input.categoryName) {
       const categories = await adapter.getCategories();
-      const category = categories.find((c: any) =>
-        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
-      );
-      if (category) {
+      const categoryIds = idSetByName(categories, input.categoryName);
+      if (categoryIds.size > 0) {
         filtered = expandSplitsForSearch(filtered).rows;
-        filtered = filtered.filter((t: any) => t.category === category.id);
+        filtered = filtered.filter((t: any) => categoryIds.has(t.category));
       } else {
         // Category not found - return empty
         return {
@@ -103,11 +102,9 @@ const tool: ToolDefinition = {
     // Filter by payee name (need to lookup payee ID)
     if (input.payeeName) {
       const payees = await adapter.getPayees();
-      const payee = payees.find((p: any) =>
-        p.name && p.name.toLowerCase() === input.payeeName!.toLowerCase()
-      );
-      if (payee) {
-        filtered = filtered.filter((t: any) => t.payee === payee.id);
+      const payeeIds = idSetByName(payees, input.payeeName);
+      if (payeeIds.size > 0) {
+        filtered = filtered.filter((t: any) => payeeIds.has(t.payee));
       } else {
         // Payee not found - return empty
         return {

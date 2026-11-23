@@ -76,6 +76,14 @@ describe('the pure half: what counts as an id, and what counts as a name');
     'the empty string never matches, even against a blank name');
 }
 
+describe('#802: idSetByName returns the id of every row carrying the name');
+{
+  const rows = [{ id: ACC, name: 'Dup' }, { id: ABSENT, name: ' dup ' }, { name: 'Dup' }, { id: GRP, name: '' }, { id: PAY }];
+  const set = pure.idSetByName(rows, 'DUP');
+  check(set.size === 2 && set.has(ACC) && set.has(ABSENT), 'every id, trimmed and case-insensitive, a row without an id skipped');
+  check(pure.idSetByName(rows, '').size === 0 && pure.idSetByName(rows, 'Nope').size === 0, 'a blank value and an unknown name give an empty set');
+}
+
 // --- property 1: the happy path is free --------------------------------------
 describe('a well-formed id costs no listing read, so a correct call is unchanged');
 {

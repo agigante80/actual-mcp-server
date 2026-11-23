@@ -3,6 +3,7 @@ import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
 import { expandSplitsForSearch } from '../lib/split-search.js';
+import { idSetByName } from '../lib/actual-adapter/filter-ids.js';
 
 const InputSchema = z.object({
   categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation")'),
@@ -37,13 +38,12 @@ const tool: ToolDefinition = {
     }
 
     // Step 1: Find category ID by name
-    let categoryId: string | undefined;
+    let categoryIds: Set<string> | undefined;
     if (input.categoryName) {
       const categories = await adapter.getCategories();
-      const category = categories.find((c: any) => 
-        c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
-      );
-      if (!category) {
+      // #802: every category carrying the name (the same name can sit in two groups).
+      const matched = idSetByName(categories, input.categoryName);
+      if (matched.size === 0) {
         // Category not found - return empty result
         return {
           transactions: [],
@@ -53,7 +53,7 @@ const tool: ToolDefinition = {
           error: `Category "${input.categoryName}" not found`,
         };
       }
-      categoryId = category.id;
+      categoryIds = matched;
     }
     
     // Step 2: Get base transactions (filtered by account and date range if provided)
@@ -104,9 +104,9 @@ const tool: ToolDefinition = {
     let filtered = allTransactions;
     
     // Filter by category ID. #750: a split parent has a null category, so search its children.
-    if (categoryId) {
+    if (categoryIds) {
       filtered = expandSplitsForSearch(filtered).rows;
-      filtered = filtered.filter((t: any) => t.category === categoryId);
+      filtered = filtered.filter((t: any) => categoryIds.has(t.category));
     }
     
     // Filter by amount range
