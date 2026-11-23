@@ -216,6 +216,8 @@ await check('a malformed request is -32602 with the fixed message and no echo, n
     { ref: 'SECRET-REF', argument: { name: 'month', value: '' } },
     { ref: ref('monthly_review'), argument: 'SECRET-ARG' },
     { ref: { type: 7 }, argument: { name: 'month', value: '' } },
+    { ref: { type: 'ref/prompt' }, argument: { name: 'month', value: '' } },
+    { ref: { type: 'ref/prompt', name: 42 }, argument: { name: 'month', value: '' } },
     { ref: ref('monthly_review'), argument: { name: 5, value: '' } },
     undefined,
   ];
