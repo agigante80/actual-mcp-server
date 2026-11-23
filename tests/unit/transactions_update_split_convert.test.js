@@ -80,6 +80,8 @@ const CAT2 = '00000000-0000-0000-0000-0000000000c2';
     return { data: stored ? [stored] : [] };
   };
   apiDefault.updateTransaction = async (id, fields) => { witness?.noteWrite(); rawUpdateCalls.push(id); rawUpdateFields.push(fields); };
+  // #747: the update guard reads the categories listing for the child categories; every id these cases use exists.
+  apiDefault.getCategories = async () => [CAT1, CAT2, '00000000-0000-0000-0000-0000000000c0'].map((id) => ({ id }));
 
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
   const { isPreflightRefusal } = await import('../../dist/src/lib/errors.js');

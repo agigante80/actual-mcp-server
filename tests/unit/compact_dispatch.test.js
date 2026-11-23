@@ -564,6 +564,19 @@ await check('4b: error and hint under the createTool { result } wrapper are rewr
   assert.strictEqual(r.result.rows[0].error, RA, 'nothing deeper than the wrapper is walked');
 });
 
+await check('4b (#747): the error of each failed batch item is rewritten, top level and under { result }; other item keys are not', async () => {
+  const ph = legacyPhrases([routed]);
+  const item = () => ({ id: RA, error: `use ${RA}`, hint: `keep ${RA}` });
+  const ops = { callOperation: async () => ({ failed: [item(), null, 'x'], succeeded: [{ error: RA }], result: { failed: [item()] } }) };
+  const r = await dispatchCompact(ops, routed, { type: 'account' }, ph);
+  for (const f of [r.failed[0], r.result.failed[0]]) {
+    assert.ok(!/actual_/.test(f.error) && /fixture_routed with type account/.test(f.error), f.error);
+    assert.strictEqual(f.id, RA, 'an id is data');
+    assert.strictEqual(f.hint, `keep ${RA}`, 'only error is rewritten inside an item');
+  }
+  assert.strictEqual(r.succeeded[0].error, RA, 'only `failed` is walked');
+});
+
 await check('4b (#680 R3): a success `message` naming legacy tools is rewritten, top level and under { result }', async () => {
   const ph = legacyPhrases([routed]);
   const ops = { callOperation: async () => ({ message: `Imported 3. Verify with ${RA}.`, result: { message: `then ${RA}`, rows: [{ message: RA }] } }) };
