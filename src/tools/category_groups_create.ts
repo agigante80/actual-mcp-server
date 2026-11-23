@@ -11,7 +11,7 @@ const InputSchema = z.object({
 const tool: ToolDefinition = {
   name: 'actual_category_groups_create',
   description:
-    "Create a category group, the heading that categories sit under. is_income true makes an income group. Not idempotent: repeating the call creates a second group. Add categories to it with actual_categories_create (its group_id); rename or hide it later with actual_category_groups_update. Returns { id, success: true } with the new group id.",
+    "Create a category group, the heading that categories sit under. is_income true makes an income group, refused when the budget already has one. Not idempotent: repeating the call creates a second group. Add categories to it with actual_categories_create (its group_id); rename or hide it later with actual_category_groups_update. Returns { id, success: true } with the new group id.",
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

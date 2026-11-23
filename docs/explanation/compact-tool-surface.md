@@ -224,7 +224,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `create` | `categories_create / category_groups_create` | entity, name; group_id (category) | is_income (both), hidden (category_group only) | `entity` is `category` or `category_group`; a category takes its group's `is_income` and a different value is refused; `hidden` on a category is refused because the legacy category tool has none |
+| `create` | `categories_create / category_groups_create` | entity, name; group_id (category) | is_income (both), hidden (category_group only) | `entity` is `category` or `category_group`; a category takes its group's `is_income` and a different value is refused, and `is_income` on a group is refused when the budget already has an income group; `hidden` on a category is refused because the legacy category tool has none |
 | `update` | `categories_update / category_groups_update` | entity, id; at least one field | name, group_id (category only), is_income, hidden | non-id properties wrapped into legacy `fields`; an empty update is refused; a move to a group with the other `is_income` needs `is_income` too |
 | `delete` | `categories_delete / category_groups_delete` | entity, id | none |  |
 | `set_note` | `notes_update` | id, note | none | id resolves to a category or category group itself, so `entity` must be omitted |

@@ -71,8 +71,24 @@ function reset() {
 }
 const caught = async (fn) => { try { await fn(); } catch (e) { return e; } return null; };
 
-await check('group create with is_income true sets the flag with one update and no delete', async () => {
+const dropIncomeGroup = () => { groups = groups.filter((g) => g.id !== INC); };
+await check('NEGATIVE: group create with is_income true is refused when an income group exists, nothing created', async () => {
   reset();
+  const e = await caught(() => adapter.createCategoryGroup({ name: 'Inc2', is_income: true }));
+  assert.ok(e && isPreflightRefusal(e), String(e));
+  assert.strictEqual(e.message, `Cannot create an income category group: this budget already has one ("Income", ${INC}), and Actual counts only the first income group toward the budget. Add income categories to that group instead.`);
+  assert.strictEqual(groupCreates.length, 0);
+  assert.strictEqual(groupUpdates.length, 0);
+});
+await check('group create with is_income false or absent is never refused by an existing income group', async () => {
+  for (const g of [{ name: 'A' }, { name: 'A', is_income: false }, { name: 'A', is_income: null }]) {
+    reset();
+    await adapter.createCategoryGroup(g);
+    assert.strictEqual(groupCreates.length, 1);
+  }
+});
+await check('group create with is_income true sets the flag with one update and no delete', async () => {
+  reset(); dropIncomeGroup();
   const id = await adapter.createCategoryGroup({ name: 'Inc2', is_income: true });
   assert.strictEqual(id, NEW_GROUP);
   assert.strictEqual(groupCreates.length, 1);
@@ -81,7 +97,7 @@ await check('group create with is_income true sets the flag with one update and 
   assert.strictEqual(groups.find((g) => g.id === NEW_GROUP).is_income, true);
 });
 await check('NEGATIVE: a flag that does not read back is deleted and refused with the exact text', async () => {
-  reset();
+  reset(); dropIncomeGroup();
   updateGroupBehaviour = 'noop';
   const e = await caught(() => adapter.createCategoryGroup({ name: 'Inc2', is_income: true }));
   assert.ok(e, 'expected a throw');
@@ -89,7 +105,7 @@ await check('NEGATIVE: a flag that does not read back is deleted and refused wit
   assert.deepStrictEqual(groupDeletes, [NEW_GROUP]);
 });
 await check('NEGATIVE: update and delete both throw, the error names the group id and the delete tool', async () => {
-  reset();
+  reset(); dropIncomeGroup();
   updateGroupBehaviour = 'throw'; deleteGroupBehaviour = 'throw';
   const e = await caught(() => adapter.createCategoryGroup({ name: 'Inc2', is_income: true }));
   assert.ok(e, 'expected a throw');
@@ -163,9 +179,9 @@ await check('a move to the same group does no implicit check', async () => {
   assert.strictEqual(updateCalls.length, 1);
 });
 await check('one drain: a group create then a category create into it reads the new flag', async () => {
-  reset();
+  reset(); dropIncomeGroup();
   const before = adapterMod._getWriteQueueBatchCountForTests();
-  const w = adapter.updateNote(INC, 'x'); // warms the group listing
+  const w = adapter.updateNote(EXP, 'x'); // warms the group listing
   const g = adapter.createCategoryGroup({ name: 'Fresh', is_income: true });
   const c = adapter.createCategory({ name: 'X', group_id: NEW_GROUP });
   await Promise.all([w, g, c]);

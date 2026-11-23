@@ -4176,6 +4176,17 @@ export async function createCategoryGroup(group: unknown): Promise<string> {
   observability.incrementToolCall('actual.category_groups.create').catch(() => {});
   return queueWriteOperation(async () => {
     const opStartedAt = Date.now();
+    // #764: Actual counts only the FIRST income group toward the budget and a new group is appended
+    // last, so a second income group would hold income the budget never counts. Refuse it first.
+    if ((group as { is_income?: unknown } | null)?.is_income === true) {
+      const existing = await withConcurrency(() =>
+        retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<Array<{ id?: string; name?: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
+      );
+      const income = Array.isArray(existing) ? existing.find((g) => g?.is_income === true) : undefined;
+      if (income) {
+        throw new ConflictRefusal(`Cannot create an income category group: this budget already has one ("${income.name ?? income.id}", ${income.id}), and Actual counts only the first income group toward the budget. Add income categories to that group instead.`);
+      }
+    }
     const raw = await withConcurrency(() => retry(() => rawCreateCategoryGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
     // #764: upstream's api/category-group-create drops is_income, so set it with an update and verify it.
