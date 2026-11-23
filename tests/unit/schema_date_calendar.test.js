@@ -89,12 +89,12 @@ for (const [name, build] of Object.entries(wrap)) {
     });
   }
 }
-await check('legacy update tools: date null and an omitted date still parse (the nullable removal is #749)', async () => {
+await check('legacy update tools: date null is refused and an omitted date still parses (#814)', async () => {
   const u = await legacy('transactions_update');
-  assert.strictEqual(u.inputSchema.safeParse({ id: ID, fields: { date: null } }).success, true);
+  assert.strictEqual(u.inputSchema.safeParse({ id: ID, fields: { date: null } }).success, false);
   assert.strictEqual(u.inputSchema.safeParse({ id: ID, fields: { notes: 'x' } }).success, true);
   const b = await legacy('transactions_update_batch');
-  assert.strictEqual(b.inputSchema.safeParse({ updates: [{ id: ID, fields: { date: null } }] }).success, true);
+  assert.strictEqual(b.inputSchema.safeParse({ updates: [{ id: ID, fields: { date: null } }] }).success, false);
   assert.strictEqual(b.inputSchema.safeParse({ updates: [{ id: ID, fields: { notes: 'x' } }] }).success, true);
 });
 

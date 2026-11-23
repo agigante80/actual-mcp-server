@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CommonSchemas, TX_IMPORT_ROW_KEYS } from '../../lib/schemas/common.js';
+import { CommonSchemas, TX_IMPORT_ROW_KEYS, TX_UPDATE_NOT_NULL_KEYS } from '../../lib/schemas/common.js';
 import type { CompactActionRow, CompactToolSpec } from '../types.js';
 
 /**
@@ -62,9 +62,9 @@ const BATCH_ITEM = z
     id: CommonSchemas.transactionId,
     fields: z
       .object({
-        account: CommonSchemas.accountId.nullable().optional(),
-        date: CommonSchemas.date.nullable().optional(),
-        amount: CommonSchemas.amountCents.nullable().optional(),
+        account: CommonSchemas.accountId.optional(),
+        date: CommonSchemas.date.optional(),
+        amount: CommonSchemas.amountCents.optional(),
         payee: z.string().nullable().optional(),
         payee_name: z.string().nullable().optional(),
         imported_payee: z.string().nullable().optional(),
@@ -184,6 +184,11 @@ const updateFields = asFields(
     .superRefine((value, ctx) => {
       const v = value as Record<string, unknown>;
       strict(ctx, v);
+      // #814: account, date and amount are NOT NULL upstream. The flat key is shared with create
+      // (so it stays nullable in the published schema); update refuses null here, by name.
+      for (const key of TX_UPDATE_NOT_NULL_KEYS) {
+        if (v[key] === null) issue(ctx, key, 'cannot be null; omit it to leave it unchanged');
+      }
       // The refine runs inside planCall's `.strict()`; the unit test proves it survives that.
       if (!Object.entries(v).some(([key, val]) => key !== 'id' && val !== undefined)) {
         issue(ctx, 'id', 'update needs at least one field to change besides id');
@@ -216,7 +221,7 @@ export const manageTransactions: CompactToolSpec = {
     'Create, change, delete, import, merge or transfer transactions; pick one `action`. Writes. ' +
     'To read use search_transactions; ids come from list_entities. Cents are integers, outflows negative; dates YYYY-MM-DD. Other fields are refused. ' +
     'create: account, date, amount; optional payee, payee_name, notes, category, cleared, imported_id, subtransactions. ' +
-    'update: id and at least one of account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, cleared, reconciled, subtransactions; null clears. ' +
+    'update: id and at least one of account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, cleared, reconciled, subtransactions; null clears payee, category or notes. ' +
     'update_batch: updates (1 to 50), NOT atomic, reported per item, no splits. ' +
     'delete: id; DESTRUCTIVE, permanent, balances change, cannot be undone. ' +
     'import: account_id, txs; matched like a bank import (rules applied; duplicates by imported_id or same amount within 7 days). ' +

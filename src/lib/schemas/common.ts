@@ -382,3 +382,11 @@ export const TX_IMPORT_ROW_KEYS = [
   'transfer_id',
   'reconciled',
 ] as const;
+
+/**
+ * The keys of a transaction that are NOT NULL upstream (#814). Create requires them; update and
+ * update_batch accept a new value or no key at all, never null: upstream's conform() throws
+ * `"amount" is required for table "transactions"` with the row JSON. The compact update check and
+ * the unit tests iterate this one list.
+ */
+export const TX_UPDATE_NOT_NULL_KEYS = ['account', 'date', 'amount'] as const;

@@ -14,9 +14,9 @@ const InputSchema = z.object({
   // was not even load bearing when it was removed.
   id: CommonSchemas.transactionId.describe('Transaction ID to update'),
   fields: z.object({
-    account: z.string().nullable().optional().describe('Account ID'),
-    date: CommonSchemas.date.nullable().optional().describe('Transaction date (YYYY-MM-DD)'),
-    amount: z.number().nullable().optional().describe('Amount in cents (e.g., 1000 = $10.00)'),
+    account: z.string().optional().describe('Account ID'),
+    date: CommonSchemas.date.optional().describe('Transaction date (YYYY-MM-DD)'),
+    amount: z.number().optional().describe('Amount in cents (e.g., 1000 = $10.00)'),
     payee: z.string().nullable().optional().describe('Payee ID; null clears'),
     payee_name: z.string().nullable().optional().describe('Payee name; found or created'),
     imported_payee: z.string().nullable().optional().describe('Original imported payee name'),
