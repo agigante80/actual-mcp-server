@@ -256,7 +256,7 @@ console.log('Running generated tools smoke tests');
   if (name.includes('rules_create_batch')) inputExample.rules = [{ conditions: [{ field: 'notes', op: 'contains', value: 'test' }], actions: [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }] }];
   if (name.includes('rules_create_or_update')) inputExample.conditions = [{ field: 'notes', op: 'contains', value: 'test' }], inputExample.actions = [{ op: 'set', field: 'category', value: '00000000-0000-0000-0000-000000000001' }];
   if (name.includes('rules_delete')) inputExample.id = '30000000-0000-4000-8000-000000000001'; // matches getRules stub: { id: '30000000-0000-4000-8000-000000000001' }
-  if (name.includes('rules_update')) inputExample.id = '30000000-0000-4000-8000-000000000001', inputExample.fields = { conditions: [] };
+  if (name.includes('rules_update')) inputExample.id = '30000000-0000-4000-8000-000000000001', inputExample.fields = { conditions: [{ field: 'notes', op: 'contains', value: 'test' }] };
   if (name.includes('budgets_set_amount')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.amount = 100;
   if (name.includes('budgets_get_month')) inputExample.month = '2025-12';
   if (name.includes('budget_updates_batch')) inputExample.operations = [{ month: '2025-12', categoryId: '10000000-0000-4000-8000-000000000001', amount: 100 }];

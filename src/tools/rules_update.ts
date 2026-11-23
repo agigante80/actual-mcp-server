@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
-import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionOptions, assertConditionValue, assertTagOperatorValue, idFieldPlural, isTextOnIdField } from '../lib/schemas/rules.js';
+import { ACTION_DESCRIBE, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionOptions, assertConditionValue, assertRuleLists, assertSetActionValue, assertTagOperatorValue, idFieldPlural, isTextOnIdField } from '../lib/schemas/rules.js';
 
 // #486: the condition schema is the shared one. The action schema stays private because `op`
 // is REQUIRED here (the shared one defaults it to "set"); only the describe text is shared.
@@ -43,9 +43,13 @@ Stage: omit it to leave the rule where it is, pass null for the normal stage, or
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});
     
+    // #762: a list that is present must not be empty (an absent key keeps the stored list).
+    assertRuleLists(input.fields);
+
     // Validate action field values
     if (input.fields.actions) {
       for (const action of input.fields.actions) {
+        assertSetActionValue(action);
         if (action.op === 'set' && !action.field) {
           throw new Error('Action with op="set" requires a "field" property (e.g., "category", "payee", "notes", "cleared")');
         }

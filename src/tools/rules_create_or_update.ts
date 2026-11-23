@@ -26,7 +26,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { ActionSchema, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionOptions, assertConditionValue, assertTagOperatorValue, isTextOnIdField } from '../lib/schemas/rules.js';
+import { ActionSchema, CONDITION_OPERATORS_HELP, ConditionSchema, STAGE_DESCRIBE, assertConditionOperator, assertConditionOptions, assertConditionValue, assertRuleLists, assertSetActionValue, assertTagOperatorValue, isTextOnIdField } from '../lib/schemas/rules.js';
 
 const InputSchema = z.object({
   // #342: see the long note in rules_create.ts. null is Actual's DEFAULT stage;
@@ -58,6 +58,9 @@ Returns: { id, created }, created true for a new rule, false for an updated one.
     // Zod validation errors are formatted centrally by actualToolsManager (#206).
     const input = InputSchema.parse(args || {});
 
+    // #762: both lists must hold at least one item.
+    assertRuleLists(input);
+
     // ── Validate conditions ──
     for (const condition of input.conditions) {
       assertConditionOperator(condition);
@@ -76,6 +79,7 @@ Returns: { id, created }, created true for a new rule, false for an updated one.
 
     // ── Validate actions ──
     for (const action of input.actions) {
+      assertSetActionValue(action);
       if (action.op === 'set' && !action.field) {
         throw new Error('Action with op="set" requires a "field" property.');
       }
