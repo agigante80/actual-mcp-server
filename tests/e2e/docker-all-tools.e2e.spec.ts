@@ -1528,11 +1528,16 @@ payee: payee.id,
     const notes = `E2E-RefBad-${uniqueSuffix()}`;
     const unknown = '00000000-0000-4000-8000-000000000000';
     try {
-      const bad = await refusal(() => mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-06-01', amount: -111, payee: unknown, notes }));
+      // mcp.call returns a create reply's `id` alone (null on a refusal), so the reply is read whole from mcp.raw.
+      const createReply = async (args: Record<string, unknown>): Promise<string> => {
+        const reply = JSON.parse((await mcp.raw('manage_transactions', { action: 'create', ...args })).content[0].text);
+        return reply.success === false ? String(reply.error) : '';
+      };
+      const bad = await createReply({ account: account.id, date: '2018-06-01', amount: -111, payee: unknown, notes });
       expect(bad).toMatch(/Payee "00000000-0000-4000-8000-000000000000" not found/);
       expect(bad).toMatch(/list_entities with type payee/);
       expect(bad).toMatch(/No transactions were created/);
-      const badCat = await refusal(() => mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-06-01', amount: -111, category: unknown, notes }));
+      const badCat = await createReply({ account: account.id, date: '2018-06-01', amount: -111, category: unknown, notes });
       expect(badCat).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found/);
       expect(badCat).toMatch(/No transactions were created/);
     } finally {
@@ -1566,6 +1571,8 @@ payee: payee.id,
     const batch = data?.total !== undefined ? data : (data?.result ?? data);
     expect(batch.failed.map((f: any) => f.id)).toEqual([bad.id]);
     expect(batch.failed[0].error).toMatch(/Category "00000000-0000-4000-8000-000000000000" not found/);
+    expect(batch.failed[0].error, 'a batch item names the compact tool, not the legacy one').toMatch(/list_entities with type category/);
+    expect(batch.failed[0].error).not.toMatch(/actual_/);
     expect(batch.succeeded.map((x: any) => x.id)).toEqual([good.id]);
     expect(await idsWithNotes(mcp, note)).toEqual([good.id]);
     expect((await catOfTxn(mcp, bad.id)).category).toBe(category.id);
@@ -5321,12 +5328,13 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
     const notes = `E2E-LegacyRef-${uniqueSuffix()}`;
     try {
-      const created = await mcp.call('actual_transactions_create', { account: account.id, date: '2018-06-01', amount: -111, payee: unknown, notes });
+      // mcp.call would return the reply's `id` alone (null), so the whole reply is read from mcp.raw.
+      const created = JSON.parse((await mcp.raw('actual_transactions_create', { account: account.id, date: '2018-06-01', amount: -111, payee: unknown, notes })).content[0].text);
       expect(created.success).toBe(false);
       expect(created.error).toMatch(/Payee "00000000-0000-4000-8000-000000000000" not found. Use actual_payees_get to list available payees/);
     } finally {
       const leaked = await rowsOf(`SELECT id FROM transactions WHERE notes = '${notes}'`);
-      for (const r of leaked) await mcp.call('actual_transactions_delete', { id: r.id });
+      for (const r of leaked) await mcp.call('manage_transactions', { action: 'delete', id: r.id });
       expect(leaked.map((r: any) => r.id), 'a refused create must not write a row').toEqual([]);
     }
 

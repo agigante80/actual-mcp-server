@@ -194,7 +194,8 @@ const MESSAGE_KEYS = ['error', 'hint', 'message'] as const;
  * Rewrite the message strings of a returned value (legacy tools return a refusal, or a
  * truncation hint, as a value). Looked for at the top level and one level down under
  * `result`, because createTool() wraps every handler value as `{ result }`. Only the
- * MESSAGE_KEYS are rewritten: a payee or note that happens to contain a tool name is data.
+ * MESSAGE_KEYS are rewritten, plus the `error` of each `failed` item of a batch: a payee or
+ * note that happens to contain a tool name is data.
  */
 function rewriteResult(result: unknown, table: ReadonlyMap<string, string>): unknown {
   const visit = (value: unknown): void => {
@@ -203,6 +204,15 @@ function rewriteResult(result: unknown, table: ReadonlyMap<string, string>): unk
     for (const key of MESSAGE_KEYS) {
       const text = r[key];
       if (typeof text === 'string') r[key] = rewriteText(text, table);
+    }
+    // #747: a batch reports each refused item under `failed`, and its `error` is the same
+    // refusal text a single call would have thrown, so it is rewritten too. Only `error`.
+    if (Array.isArray(r.failed)) {
+      for (const item of r.failed as unknown[]) {
+        if (!item || typeof item !== 'object') continue;
+        const f = item as Record<string, unknown>;
+        if (typeof f.error === 'string') f.error = rewriteText(f.error, table);
+      }
     }
   };
   visit(result);
