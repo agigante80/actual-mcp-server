@@ -4620,7 +4620,9 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.message).toContain('whole number from 1 to 24');
     expect(out.error?.message).not.toContain('six');
     expect(out.error?.message).not.toContain('pattern');
-    expect(out.error?.message).not.toContain('MCP error');
+    // The stdio leg reads the error through the SDK client, which adds its own single
+    // `MCP error -32602:` prefix; the server must not add a second one.
+    expect(out.error?.message).not.toMatch(/MCP error[\s\S]*MCP error/);
   });
 
   test('prompts/get spending_check - the default date is concrete, never "this month" (#662)', async ({ mcp }) => {
