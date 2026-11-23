@@ -475,8 +475,8 @@ jobs:
     # first. Measured on the runs before #593: the steps before it take about 1 minute warm, the
     # log dump and teardown under 15 seconds, the image cache save under 30 seconds, so a run that
     # stalls to the step limit still ends with over 5 minutes of job time to spare. 37 since the
-    # step went to 30 (#678).
-    timeout-minutes: 37
+    # step went to 30 (#678), 52 since it went to 45 (2026-11-23).
+    timeout-minutes: 52
     needs: version
     if: ${{ github.event.inputs.skip_tests != 'true' }}
     # #600: this job only checks out, uses the Actions cache and builds images locally. It pushes
@@ -532,9 +532,14 @@ jobs:
       # and the stdio leg is paced at 90 calls a minute: run 43378416460 passed HTTP in 5.2
       # minutes and was cut off in the last stdio rows at 18; the same sha took 12.3 minutes for
       # stdio alone locally. A healthy run is now about 19 minutes.
+      # 2026-11-23: 45, not 30. The compact surface verification rows grew the suite again (368
+      # tests into the stdio leg and still running at the cut): on the same afternoon the whole
+      # job took 29.6 minutes (run on t/781, passed), 30.3 (t/757, passed) and was cut off at 30
+      # in the last legacy smoke rows (t/750, which adds rows of its own). Every call is paced
+      # at 90 a minute, so the time follows the number of calls, not the runner.
       - name: 🧪 Run Docker E2E tests (FULL - 63 tests)
         id: e2e
-        timeout-minutes: 30
+        timeout-minutes: 45
         run: npm run test:e2e:docker:full
 
       # #593: this runs BEFORE the image cache save so the dump is the first thing after a stalled
