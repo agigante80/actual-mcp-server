@@ -281,7 +281,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 
 | Value | Legacy tool (without `actual_`) | Required fields | Optional fields | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| `switch` | `budgets_switch` | budget_name | none | renamed to `budgetName`; this session only, also saved as the caller's preferred budget; an unconfigured or not permitted name is refused alike |
+| `switch` | `budgets_switch` | budget_name | none | renamed to `budgetName`; takes effect now in this session, other open sessions keep theirs, and it is saved per caller so a new session of the same caller starts on it (holders of the one legacy bearer token are one caller); an unconfigured or not permitted name is refused alike |
 | `import` | `budgets_import` | none | path, base64, type, filename | exactly one of path and base64; `type` has no default here (the legacy default `actual` applies); adds a new local copy and normally uploads a NEW server budget file that no tool removes; replaces nothing, and the session stays on its own configured budget (#687) |
 | `export` | `budgets_export` | none | filename | writes a .zip into the server export directory and overwrites a file of the same name; the contents are not returned |
 
