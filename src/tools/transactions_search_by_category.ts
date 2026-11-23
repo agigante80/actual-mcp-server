@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
 import { CommonSchemas } from '../lib/schemas/common.js';
+import { expandSplitsForSearch } from '../lib/split-search.js';
 
 const InputSchema = z.object({
   categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation")'),
@@ -17,7 +18,7 @@ const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_category',
   description:
     'Search transactions by category name (case-insensitive exact match, e.g. "Groceries"), optionally narrowed by a YYYY-MM-DD date range, accountId and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
-    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, categoryName }, each row with accountName; count and totalAmount cover only the returned rows. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, categoryName }, each row with accountName; count and totalAmount cover only the returned rows. A split is matched by its children; rows carry parent_id. ' +
     'An unknown category name returns an empty list with an error field. With a category id use actual_transactions_filter; for per-category totals use actual_transactions_aggregate.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
@@ -102,8 +103,9 @@ const tool: ToolDefinition = {
     // Step 3: Apply JavaScript filters
     let filtered = allTransactions;
     
-    // Filter by category ID
+    // Filter by category ID. #750: a split parent has a null category, so search its children.
     if (categoryId) {
+      filtered = expandSplitsForSearch(filtered).rows;
       filtered = filtered.filter((t: any) => t.category === categoryId);
     }
     

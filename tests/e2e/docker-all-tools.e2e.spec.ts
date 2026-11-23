@@ -1177,6 +1177,47 @@ payee: payee.id,
     expect(byAmount.get(-2000)).toBe(category.id);
   });
 
+  // #750: a category or notes search matches a split's CHILDREN. The fixtures share the budget, so
+  // every assertion is on the seeded ids, never on a count of the whole budget. Cleanup is the
+  // account, category and group teardown of the fixtures.
+  test('search_transactions - a category search finds a split child, with parent_id (#750)', async ({ mcp, makeAccount, makeCategoryGroup, makeCategory, makeTransaction }) => {
+    const group = await makeCategoryGroup();
+    const food = await makeCategory({ group });
+    const fun = await makeCategory({ group });
+    const third = await makeCategory({ group });
+    const account = await makeAccount();
+    const plain = await makeTransaction({ account, amount: -1000, date: '2026-10-01', category: food.id });
+    const split = await makeTransaction({ account, amount: -3000, date: '2026-10-10' });
+    const res = await mcp.call('manage_transactions', {
+      action: 'update',
+      id: split.id,
+      subtransactions: [{ amount: -1000, category: food.id, notes: 'e2e-child-note' }, { amount: -2000, category: fun.id }],
+    });
+    const [foodChild, funChild] = res.split.children as string[];
+    const range = { start_date: '2026-10-01', end_date: '2026-10-31', account_id: account.id };
+
+    const found = await mcp.call('search_transactions', { by: 'category', category_name: food.name, ...range });
+    const rows = (found?.transactions ?? []) as any[];
+    expect(rows.map((t: any) => t.id).sort()).toEqual([plain.id, foodChild].sort());
+    expect(rows.find((t: any) => t.id === foodChild)?.parent_id).toBe(split.id);
+    expect(found.count).toBe(2);
+    expect(found.totalAmount).toBe(-2000);
+
+    // NEGATIVE: a category none of the children carry returns neither the children nor the parent.
+    const none = await mcp.call('search_transactions', { by: 'category', category_name: third.name, ...range });
+    expect(none.count).toBe(0);
+    expect(none.totalAmount).toBe(0);
+
+    // The notes of a child find the child; a search with no category or notes still returns the parent row.
+    const byNotes = await mcp.call('search_transactions', { by: 'filter', notes: 'e2e-child-note', account_id: account.id });
+    expect(((byNotes?.result ?? []) as any[]).map((t: any) => t.id)).toEqual([foodChild]);
+    const unrelated = await mcp.call('search_transactions', { by: 'filter', min_amount: -3000, max_amount: -3000, account_id: account.id });
+    const parentRows = ((unrelated?.result ?? []) as any[]).filter((t: any) => t.id === split.id);
+    expect(parentRows).toHaveLength(1);
+    expect(parentRows[0].parent_id ?? null).toBeNull();
+    expect(((unrelated?.result ?? []) as any[]).find((t: any) => t.id === funChild)).toBeUndefined();
+  });
+
   // #489: a TRANSFER leg split in place. Upstream replaces the single counterpart with one per
   // child, so neither account balance moves. Cleanup is the makeAccount teardown, as in the
   // manage_transactions transfer test below.
@@ -5032,6 +5073,28 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const data = await mcp.call('actual_transactions_search_by_month', { month: currentMonth() });
     const txns = (Array.isArray(data) ? data : data?.transactions || []) as any[];
     expect(txns.find((t: any) => t?.id === txn.id)).toBeTruthy();
+  });
+
+  // #750: the legacy category search matches a split's children too (the compact tool forwards to it).
+  test('actual_transactions_search_by_category - finds a split child, and a third category finds nothing (#750)', async ({ mcp, makeAccount, makeCategoryGroup, makeCategory, makeTransaction }) => {
+    const group = await makeCategoryGroup();
+    const food = await makeCategory({ group });
+    const fun = await makeCategory({ group });
+    const third = await makeCategory({ group });
+    const account = await makeAccount();
+    const split = await makeTransaction({ account, amount: -3000, date: '2026-10-10' });
+    const res = await mcp.call('manage_transactions', {
+      action: 'update',
+      id: split.id,
+      subtransactions: [{ amount: -1000, category: food.id }, { amount: -2000, category: fun.id }],
+    });
+    const [foodChild] = res.split.children as string[];
+    const found = await mcp.call('actual_transactions_search_by_category', { categoryName: food.name, startDate: '2026-10-01', endDate: '2026-10-31', accountId: account.id });
+    expect(((found?.transactions ?? []) as any[]).map((t: any) => t.id)).toEqual([foodChild]);
+    expect(found.transactions[0].parent_id).toBe(split.id);
+    expect(found.totalAmount).toBe(-1000);
+    const none = await mcp.call('actual_transactions_search_by_category', { categoryName: third.name, startDate: '2026-10-01', endDate: '2026-10-31', accountId: account.id });
+    expect(none.count).toBe(0);
   });
 
   test('actual_categories_get - lists the categories', async ({ mcp }) => {

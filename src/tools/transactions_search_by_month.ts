@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { expandSplitsForSearch } from '../lib/split-search.js';
 
 const InputSchema = z.object({
   month: z.string().optional().describe('Month to search in YYYY-MM format, e.g. "2025-01" (default: the current month)'),
@@ -16,7 +17,7 @@ const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
   description:
     'Search the transactions of one calendar month (month as YYYY-MM, default the current month), optionally narrowed by accountId, categoryName, payeeName (case-insensitive exact names) and an amount range in integer cents. Read-only; off-budget accounts are excluded. ' +
-    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. A split is matched by its children; rows carry parent_id. ' +
     'An unknown category or payee name returns an empty list with an error field. For other date ranges or aggregation use actual_query_run.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
@@ -77,13 +78,15 @@ const tool: ToolDefinition = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let filtered = allTransactions.filter((t: any) => !offBudgetIds.has(t?.account));
     
-    // Filter by category name (need to lookup category ID)
+    // Filter by category name (need to lookup category ID). #750: a split parent has a null
+    // category, so the split is replaced by its children, once the category is known to exist.
     if (input.categoryName) {
       const categories = await adapter.getCategories();
       const category = categories.find((c: any) =>
         c.name && c.name.toLowerCase() === input.categoryName!.toLowerCase()
       );
       if (category) {
+        filtered = expandSplitsForSearch(filtered).rows;
         filtered = filtered.filter((t: any) => t.category === category.id);
       } else {
         // Category not found - return empty

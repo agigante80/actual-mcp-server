@@ -150,7 +150,7 @@ function modeLineProblems(description) {
   }
   return problems;
 }
-const BEHAVIOR_FACTS = ['off-budget', 'no limit', 'default 100', 'default 50', 'unbounded scan', 'error field'];
+const BEHAVIOR_FACTS = ['off-budget', 'no limit', 'default 100', 'default 50', 'error field', 'Splits match by child (parent_id)'];
 function behaviorProblems(description) {
   const mine = description.split('\n').filter((l) => l.startsWith('Behavior:'));
   if (mine.length === 0) return ['no line starts with "Behavior:"'];

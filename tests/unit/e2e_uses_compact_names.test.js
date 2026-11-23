@@ -46,6 +46,7 @@ const LEGACY_NAMES = new Set([...IMPLEMENTED_TOOLS, ...ALIAS_KEYS]);
 const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',
+  'actual_transactions_search_by_category', // #750: the legacy split-child search
   'actual_categories_get',
   'actual_categories_create', // #763: the legacy unknown-group refusal text
   'actual_categories_update', // #763
