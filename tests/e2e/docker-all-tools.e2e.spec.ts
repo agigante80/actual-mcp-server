@@ -1209,13 +1209,14 @@ payee: payee.id,
     expect(none.totalAmount).toBe(0);
 
     // The notes of a child find the child; a search with no category or notes still returns the parent row.
+    // (mcp.call already unwraps the { result } envelope of a filter search: the value IS the row array.)
     const byNotes = await mcp.call('search_transactions', { by: 'filter', notes: 'e2e-child-note', account_id: account.id });
-    expect(((byNotes?.result ?? []) as any[]).map((t: any) => t.id)).toEqual([foodChild]);
+    expect(((byNotes ?? []) as any[]).map((t: any) => t.id)).toEqual([foodChild]);
     const unrelated = await mcp.call('search_transactions', { by: 'filter', min_amount: -3000, max_amount: -3000, account_id: account.id });
-    const parentRows = ((unrelated?.result ?? []) as any[]).filter((t: any) => t.id === split.id);
+    const parentRows = ((unrelated ?? []) as any[]).filter((t: any) => t.id === split.id);
     expect(parentRows).toHaveLength(1);
     expect(parentRows[0].parent_id ?? null).toBeNull();
-    expect(((unrelated?.result ?? []) as any[]).find((t: any) => t.id === funChild)).toBeUndefined();
+    expect(((unrelated ?? []) as any[]).find((t: any) => t.id === funChild)).toBeUndefined();
   });
 
   // #489: a TRANSFER leg split in place. Upstream replaces the single counterpart with one per
