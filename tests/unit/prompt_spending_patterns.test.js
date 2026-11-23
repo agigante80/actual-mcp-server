@@ -235,8 +235,7 @@ await check('spending_patterns lists the budget months first and says what to sk
   assert.ok(text.indexOf(para) < text.indexOf('\n1. '), 'the paragraph comes before step 1');
   assert.ok(!text.includes('{'), 'no unfilled placeholder');
   assert.ok(!text.includes('this month'));
-  // Mutation: the same text without the paragraph must fail the match.
-  assert.ok(!text.replace(para, '').includes(para));
+  assert.strictEqual(text.split(para).length - 1, 1, 'the paragraph appears exactly once');
 });
 
 

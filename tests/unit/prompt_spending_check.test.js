@@ -175,10 +175,14 @@ await check('spending_check lists the budget months first and says what to skip 
   assert.ok(text.indexOf(para) < text.indexOf('\n1. '), 'the paragraph comes before step 1');
   assert.ok(!text.includes('{'), 'no unfilled placeholder');
   assert.ok(!text.includes('this month'));
-  // Mutation: the same text without the paragraph must fail the match.
-  assert.ok(!text.replace(para, '').includes(para));
+  assert.strictEqual(text.split(para).length - 1, 1, 'the paragraph appears exactly once');
 });
 
+
+await check('the day 1 branch does not ask for over-budget categories when step 1 was skipped (#781)', () => {
+  const text = render({ date: '2026-09-01' });
+  assert.ok(text.includes('report only categories already over budget, unless step 1 was skipped: with no budget for 2026-09 there is nothing to compare against, so report the spending so far only.'));
+});
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
