@@ -394,6 +394,8 @@ async function ensureLoadedBudgetMatchesSession(): Promise<void> {
     // download landed. Initialise explicitly instead. No recursion: initActualApiForOperation
     // only calls back into here when the singleton IS live, and it is not.
     await initActualApiForOperation();
+    // #799: a budget load changes what every listing means; a drain can span budgets.
+    invalidateDrainListing('accounts', 'categories', 'categoryGroups', 'payees');
     return;
   }
 
@@ -468,11 +470,17 @@ function loginOf(budget: BudgetConfig): { serverUrl: string; password: string } 
  */
 async function loadBudgetOnItsServer(budget: BudgetConfig): Promise<void> {
   const login = loginOf(budget);
-  if (!isApiLoggedInTo(login)) {
-    logger.info(`[ADAPTER] logging the api in to ${logSafeOrigin(budget.serverUrl)} before loading "${budgetLogName(budget)}"`);
-    await withAuthRetry(() => initApiLoggedIn(config.MCP_BRIDGE_DATA_DIR, login, 'init'));
+  try {
+    if (!isApiLoggedInTo(login)) {
+      logger.info(`[ADAPTER] logging the api in to ${logSafeOrigin(budget.serverUrl)} before loading "${budgetLogName(budget)}"`);
+      await withAuthRetry(() => initApiLoggedIn(config.MCP_BRIDGE_DATA_DIR, login, 'init'));
+    }
+    await loadBudgetTracked(budget.syncId, budget.encryptionPassword);
+  } finally {
+    // #799: a budget load changes what every listing means; a drain can span budgets. In a
+    // finally so a failed or abandoned load (loaded budget unknown) drops the cache too.
+    invalidateDrainListing('accounts', 'categories', 'categoryGroups', 'payees');
   }
-  await loadBudgetTracked(budget.syncId, budget.encryptionPassword);
 }
 
 
