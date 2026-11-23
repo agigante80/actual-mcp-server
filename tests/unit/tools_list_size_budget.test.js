@@ -36,9 +36,12 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   bytes, plus about 2%. The heaviest entry is unchanged, so the per-tool ceiling is too.
 //   Total raised for #711 (one condition operator map equal to Actual's: the rewritten operator
 //   help in three rule tools and the described isbetween range in the shared condition schema
-//   of four) from 120,500 by exactly the 1,455 bytes it added (120,492 to 121,947 measured), so
-//   the list is still 8 bytes under it. The heaviest entry is unchanged, so the per-tool ceiling is too.
-const TOTAL_CEILING = 121955;
+//   of four) from 120,500 by exactly the 1,455 bytes it added (120,492 to 121,947 measured).
+//   Total raised for #761 from 121,955 to 122,792: #761 publishes `options` {outflow, inflow} on
+//   the condition schema of the legacy rule tools, which took the measured total from 121,788
+//   (the base before #761; it had 167 bytes spare) to 122,728, so the ceiling is that plus 64.
+//   The default compact surface total (42,822 to 42,860) and every per-tool ceiling are unchanged.
+const TOTAL_CEILING = 122792;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
