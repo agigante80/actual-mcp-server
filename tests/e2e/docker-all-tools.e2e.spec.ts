@@ -219,6 +219,13 @@ test.describe('Docker E2E - tool surface', () => {
     expect(JSON.stringify(json)).not.toContain('invalid_type');
   });
 
+  test('summarize_transactions balance - ERROR: a cutoff of 2019-02-30 is refused, not rolled forward', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    await expect(
+      mcp.call('summarize_transactions', { report: 'balance', account_id: account.id, cutoff: '2019-02-30' }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+  });
+
   test('conforms() can fail: a wrong-typed value and a missing required key are rejected', async () => {
     const schema = { type: 'object', required: ['result'], properties: { result: { type: 'array' } } };
     expect(conforms(schema, { result: [] })).toBe(true);
@@ -977,6 +984,51 @@ payee: payee.id,
     ).rejects.toThrow(/date|invalid/i);
   });
 
+  // #745: an impossible calendar day is refused before anything is written. Each row proves the
+  // refusal text and that no row carrying the notes marker reached the account; a regression that
+  // stores one fails naming the leaked id instead of leaving it behind.
+  const rowsWithNotes = async (mcp: any, accountId: string, notes: string) => {
+    const d = await mcp.call('search_transactions', { by: 'account', account_id: accountId });
+    return ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).filter((t: any) => t?.notes === notes);
+  };
+  const expectNoLeak = async (mcp: any, accountId: string, notes: string) => {
+    const leaked = await rowsWithNotes(mcp, accountId, notes);
+    for (const t of leaked) await mcp.call('manage_transactions', { action: 'delete', id: t.id });
+    expect(leaked.map((t: any) => t.id), 'an impossible date must not write a row').toEqual([]);
+  };
+
+  test('manage_transactions create - accepts a leap day, ERROR: refuses 2018-02-30 and writes nothing', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const okNotes = `E2E-Leap-${uniqueSuffix()}`;
+    await mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2024-02-29', amount: -4303, notes: okNotes });
+    const stored = await rowsWithNotes(mcp, account.id, okNotes);
+    try {
+      expect(stored.length).toBe(1);
+      expect(stored[0].date).toBe('2024-02-29');
+    } finally {
+      for (const t of stored) await mcp.call('manage_transactions', { action: 'delete', id: t.id });
+    }
+
+    const badNotes = `E2E-BadDate-${uniqueSuffix()}`;
+    await expect(
+      mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-02-30', amount: -4303, notes: badNotes }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    await expectNoLeak(mcp, account.id, badNotes);
+  });
+
+  test('manage_transactions import - ERROR: refuses a row dated 2018-02-30 and writes nothing', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const notes = `E2E-BadImport-${uniqueSuffix()}`;
+    await expect(
+      mcp.call('manage_transactions', {
+        action: 'import',
+        account_id: account.id,
+        txs: [{ date: '2018-02-30', amount: -4303, notes, imported_id: `e2e-bad-import-${uniqueSuffix()}` }],
+      }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    await expectNoLeak(mcp, account.id, notes);
+  });
+
   test('search_transactions account - should get transaction by ID', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     const txn = await makeTransaction({ account, amount: -5000 });
@@ -1000,6 +1052,24 @@ payee: payee.id,
     const rows = ((await mcp.call('search_transactions', { by: 'filter', account_id: account.id })) ??
       []) as any[];
     expect(rows.find((t: any) => t?.id === txn.id)?.amount).toBe(-7500);
+  });
+
+  // #745: the original date must survive a refused update and a refused batch item.
+  test('manage_transactions update and update_batch - ERROR: an impossible date is refused and the stored date is unchanged', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -5000, date: '2018-05-21' });
+    const storedDate = async () => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+      return ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).find((t: any) => t?.id === txn.id)?.date;
+    };
+    await expect(
+      mcp.call('manage_transactions', { action: 'update', id: txn.id, date: '2018-13-45' }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    expect(await storedDate()).toBe('2018-05-21');
+    await expect(
+      mcp.call('manage_transactions', { action: 'update_batch', updates: [{ id: txn.id, fields: { date: '2018-02-31' } }] }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    expect(await storedDate()).toBe('2018-05-21');
   });
 
   // #489: subtransactions on a PLAIN transaction split it in place. The id must survive (that is
@@ -1476,6 +1546,17 @@ payee: payee.id,
     const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
     const txns = (Array.isArray(d) ? d : (d?.result ?? [])) as any[];
     expect(txns.length).toBe(0);
+  });
+
+  test('manage_transactions transfer - ERROR: refuses 2019-04-31 and writes nothing on either account', async ({ mcp, makeAccount }) => {
+    const src = await makeAccount({ name: `E2E-Xfer-BadDate-Src-${uniqueSuffix()}` });
+    const dst = await makeAccount({ name: `E2E-Xfer-BadDate-Dst-${uniqueSuffix()}` });
+    const notes = `E2E-BadTransfer-${uniqueSuffix()}`;
+    await expect(
+      mcp.call('manage_transactions', { action: 'transfer', from_account: src.id, to_account: dst.id, amount: 1234, date: '2019-04-31', notes }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    await expectNoLeak(mcp, src.id, notes);
+    await expectNoLeak(mcp, dst.id, notes);
   });
 
   // ==================== BUDGETS (9 tools) ====================
@@ -2240,6 +2321,20 @@ payee: payee.id,
     const data = await mcp.call('list_entities', { type: 'schedule' });
     const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
     expect(schedules.find((s: any) => s?.id === schedule.id)).toBeTruthy();
+  });
+
+  // #745: a one-off date must be a real day; the union error has to surface the calendar text.
+  test('manage_schedules create - ERROR: a one-off date of 2018-02-30 is refused and no schedule is written', async ({ mcp, makeAccount }) => {
+    const account = await makeAccount();
+    const name = `E2E-BadDate-Schedule-${uniqueSuffix()}`;
+    await expect(
+      mcp.call('manage_schedules', { action: 'create', name, account: account.id, amount: -5000, date: '2018-02-30' }),
+    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    const data = await mcp.call('list_entities', { type: 'schedule' });
+    const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
+    const leaked = schedules.filter((x: any) => x?.name === name);
+    for (const x of leaked) await mcp.call('manage_schedules', { action: 'delete', id: x.id });
+    expect(leaked.map((x: any) => x.id), 'an impossible schedule date must not write a schedule').toEqual([]);
   });
 
   test('manage_schedules update - should update schedule name', async ({ mcp, makeSchedule }) => {

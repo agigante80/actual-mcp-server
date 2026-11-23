@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
-import { CommonSchemas } from '../lib/schemas/common.js';
+import { CommonSchemas, oneOffDateSchema } from '../lib/schemas/common.js';
 import { RecurConfigSchema } from '../lib/schemas/recur.js';
 import { ScheduleAmountSchema, amountOpMismatch } from '../lib/schemas/schedule-amount.js';
 
@@ -18,8 +18,7 @@ const InputSchema = z.strictObject({
   amountOp: z.enum(['is', 'isapprox', 'isbetween']).optional()
     .describe('How to match the amount'),
   date: z.union([
-    z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
-      .describe('One-off schedule on this date'),
+    oneOffDateSchema.describe('One-off schedule on this date'),
     RecurConfigSchema
       .describe('Recurring schedule'),
   ]).optional()

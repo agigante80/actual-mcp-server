@@ -163,12 +163,16 @@ function findUndescribed(name, schema) {
       'removing the startDate description is reported by its full path', JSON.stringify(found));
   }
 
-  // ── Pins: #639 added descriptions only, no validation and no type change ──
-  // The startDate pin records that #639 added no validation; it is not a wish to keep the gap.
-  // A later ticket that adds a real YYYY-MM-DD check should replace this pin, not work around it.
+  // ── Pins: #639 added descriptions only, no type change ──
+  // The startDate pin used to record that no calendar check existed; #745 added it, so the pin now
+  // asserts the refusal.
   console.log('\n[#639] descriptions changed no validation');
-  ok(txGet.inputSchema.safeParse({ startDate: '2026-13-01' }).success,
-    'actual_transactions_get still accepts an unvalidated startDate string');
+  {
+    const r = txGet.inputSchema.safeParse({ startDate: '2026-13-01' });
+    ok(!r.success && r.error.issues.length === 1 && r.error.issues[0].message === 'Invalid date (not a real calendar day)',
+      'actual_transactions_get refuses an impossible startDate (#745)',
+      r.success ? 'accepted' : JSON.stringify(r.error.issues));
+  }
   {
     const r = txGet.inputSchema.safeParse({ accountId: 42 });
     ok(!r.success && r.error.issues.some((i) => i.path.join('.') === 'accountId'),

@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   categoryName: z.string().optional().describe('Name of the category to search for (e.g., "Food", "Rent", "Transportation")'),
-  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format'),
-  endDate: z.string().optional().describe('End date in YYYY-MM-DD format'),
+  startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format'),
+  endDate: CommonSchemas.date.optional().describe('End date in YYYY-MM-DD format'),
   accountId: z.string().optional().describe('Filter by specific account ID'),
   minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses)'),
   maxAmount: z.number().optional().describe('Maximum amount in cents'),

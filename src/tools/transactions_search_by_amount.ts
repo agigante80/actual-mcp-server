@@ -1,14 +1,15 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 import { isPreflightRefusal } from '../lib/errors.js';
 
 const InputSchema = z.object({
   minAmount: z.number().optional().describe('Minimum amount in cents (use negative for expenses, e.g., -10000 for $-100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
   maxAmount: z.number().optional().describe('Maximum amount in cents (e.g., 10000 for $100.00). For expenses, use negative values (e.g., -5000 for -$50.00)'),
   absoluteAmount: z.number().optional().describe('Optional: Search by absolute value (magnitude) in cents, ignoring sign. E.g., 5000 will match both +$50.00 (income) and -$50.00 (expense). If specified, minAmount/maxAmount are ignored.'),
-  startDate: z.string().optional().describe('Optional: Start date in YYYY-MM-DD format'),
-  endDate: z.string().optional().describe('Optional: End date in YYYY-MM-DD format'),
+  startDate: CommonSchemas.date.optional().describe('Optional: Start date in YYYY-MM-DD format'),
+  endDate: CommonSchemas.date.optional().describe('Optional: End date in YYYY-MM-DD format'),
   accountId: z.string().optional().describe('Optional: Filter by specific account ID'),
   categoryName: z.string().optional().describe('Optional: Filter by category name'),
   limit: z.number().optional().default(100).describe('Optional: Maximum number of transactions to return (default: 100)'),

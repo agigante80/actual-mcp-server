@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod';
+import { isCalendarDay } from '../dates.js';
 import { 
   MAX_NAME_LENGTH, 
   MAX_NOTES_LENGTH, 
@@ -136,14 +137,29 @@ export const scheduleIdSchema = z
 // ============================================================================
 
 /**
- * Date in YYYY-MM-DD format
+ * A real calendar day in YYYY-MM-DD format (2018-02-30 is refused, #745). The published JSON
+ * pattern stays shape-only: it cannot express leap years, and Zod being stricter is the safe direction.
  * Used for: transactions, account balance queries, date range filters
  * Example: "2025-11-24"
  */
 export const dateSchema = z
   .string()
-  .regex(DATE_PATTERN, 'Invalid date format (expected YYYY-MM-DD)')
+  // abort: true stops at a bad shape, so a malformed string yields the shape message only (Zod 4
+  // runs a refine after a failed regex otherwise).
+  .regex(DATE_PATTERN, { message: 'Invalid date format (expected YYYY-MM-DD)', abort: true })
+  .refine(isCalendarDay, 'Invalid date (not a real calendar day)')
   .describe('Date in YYYY-MM-DD format');
+
+/**
+ * The one-off branch of a schedule `date` union (#745). dateSchema aborts on a bad shape, and Zod 4
+ * then counts the whole branch as aborted, so a union of it and the recurrence object would answer
+ * a malformed string with a bare "Invalid input". This variant does not abort: the calendar refine
+ * skips a malformed shape, so exactly one issue (shape or calendar) surfaces from the one branch.
+ */
+export const oneOffDateSchema = z
+  .string()
+  .regex(DATE_PATTERN, 'Invalid date format (expected YYYY-MM-DD)')
+  .refine((v) => !DATE_PATTERN.test(v) || isCalendarDay(v), 'Invalid date (not a real calendar day)');
 
 /**
  * Month in YYYY-MM format

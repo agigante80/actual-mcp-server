@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '../../types/tool.d.js';
 import adapter from '../lib/actual-adapter.js';
+import { CommonSchemas } from '../lib/schemas/common.js';
 
 const InputSchema = z.object({
   payeeName: z.string().optional().describe('Name of the payee/vendor to search for'),
-  startDate: z.string().optional().describe('Start date in YYYY-MM-DD format'),
-  endDate: z.string().optional().describe('End date in YYYY-MM-DD format'),
+  startDate: CommonSchemas.date.optional().describe('Start date in YYYY-MM-DD format'),
+  endDate: CommonSchemas.date.optional().describe('End date in YYYY-MM-DD format'),
   accountId: z.string().optional().describe('Filter by specific account ID'),
   categoryName: z.string().optional().describe('Filter by category name'),
   minAmount: z.number().optional().describe('Minimum amount in cents'),

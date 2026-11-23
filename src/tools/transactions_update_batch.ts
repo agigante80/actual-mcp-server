@@ -18,7 +18,7 @@ import { CommonSchemas } from '../lib/schemas/common.js';
 
 const FieldsSchema = z.object({
   account: z.string().nullable().optional().describe('Account ID'),
-  date: z.string().nullable().optional().describe('Transaction date (YYYY-MM-DD)'),
+  date: CommonSchemas.date.nullable().optional().describe('Transaction date (YYYY-MM-DD)'),
   amount: z.number().nullable().optional().describe('Amount in cents (e.g., -1000 = -$10.00)'),
   payee: z.string().nullable().optional().describe('Payee ID'),
   payee_name: z.string().nullable().optional().describe('Payee name (alternative to payee ID)'),

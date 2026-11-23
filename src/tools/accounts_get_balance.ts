@@ -6,7 +6,7 @@ import { notFoundMsg } from '../lib/errors.js';
 
 const InputSchema = z.object({ 
   id: CommonSchemas.accountId.describe('The UUID of the account'),
-  cutoff: z.string().optional().describe('Optional cutoff date (YYYY-MM-DD format)')
+  cutoff: CommonSchemas.date.optional().describe('Optional cutoff date (YYYY-MM-DD format)')
 }).strict();
 
 // #642: ONE flat object admitting both result shapes (a union would publish a root anyOf
