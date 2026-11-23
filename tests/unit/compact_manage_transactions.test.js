@@ -74,9 +74,13 @@ await check('update wraps everything but id under fields', () =>
   expectCall({ action: 'update', id: T1, notes: 'y' }, 'actual_transactions_update', { id: T1, fields: { notes: 'y' } }));
 await check('update with category null forwards null (it clears the field)', () =>
   expectCall({ action: 'update', id: T1, category: null }, 'actual_transactions_update', { id: T1, fields: { category: null } }));
-await check('update accepts a payee name and the update-only keys', () =>
-  expectCall({ action: 'update', id: T1, payee: 'Some Shop', reconciled: true, transfer_id: null, imported_payee: 'SHOP' }, 'actual_transactions_update',
-    { id: T1, fields: { payee: 'Some Shop', reconciled: true, transfer_id: null, imported_payee: 'SHOP' } }));
+await check('update forwards payee_name and the update-only keys', () =>
+  expectCall({ action: 'update', id: T1, payee_name: 'Some Shop', reconciled: true, transfer_id: null, imported_payee: 'SHOP' }, 'actual_transactions_update',
+    { id: T1, fields: { payee_name: 'Some Shop', reconciled: true, transfer_id: null, imported_payee: 'SHOP' } }));
+await check('update forwards a payee id unchanged', () =>
+  expectCall({ action: 'update', id: T1, payee: A }, 'actual_transactions_update', { id: T1, fields: { payee: A } }));
+await check('update still forwards a payee name in payee (the adapter refuses it, #743)', () =>
+  expectCall({ action: 'update', id: T1, payee: 'Some Shop' }, 'actual_transactions_update', { id: T1, fields: { payee: 'Some Shop' } }));
 await check('update_batch forwards the updates unchanged and returns the BatchResult unchanged', async () => {
   const batch = { succeeded: [{ id: T1 }], failed: [], total: 1, successCount: 1, failureCount: 0 };
   reply = () => batch;

@@ -92,6 +92,10 @@ Logs written by earlier versions can contain budget data (tool results at `info`
 
 A failed tool call now reaches the client as a tool result with `isError: true` whose single text block is the tool's own message (a Zod validation failure, a typed refusal such as "not found", a hidden tool, an upstream failure). Before, the same failure was a JSON-RPC `error` object. Protocol faults are still JSON-RPC errors, but their code and text changed: an unknown tool name and a malformed `tools/call` envelope (a missing or non-string `name`, `arguments` that is not an object) are protocol faults and answer JSON-RPC `-32602`, with `Unknown tool: <name>` (the name is cut to 64 characters) or one of two fixed `Invalid tools/call params` texts, never a schema dump and never an echo of the value sent. A call that omits `arguments` still runs with `{}`. Clients and scripts that detect failure by reading `error` in the JSON-RPC response must also check `result.isError`; an MCP SDK client that throws on the old shape now gets a normal result to inspect. An unknown tool was `-32603` with `Tool not found: <name>` and is now `-32602` with `Unknown tool: <name>`; a client that matched the old code or text must change.
 
+## A payee name in `payee` is refused on transaction update (#743)
+
+`actual_transactions_update`, `actual_transactions_update_batch` and `manage_transactions` `update` and `update_batch` used to accept a payee name in `payee`, report success and leave the transaction with no payee. `payee` now takes an id only and a name there is refused; pass the name as `payee_name`, which matches an existing payee (any case) or creates one.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

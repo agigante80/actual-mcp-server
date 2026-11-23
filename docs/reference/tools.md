@@ -35,7 +35,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 | `actual_transactions_filter` | Filter with advanced criteria |
 | `actual_transactions_create` | Create new transaction(s), including splits (pass a `subtransactions` array) |
 | `actual_transactions_import` | Import and reconcile transactions |
-| `actual_transactions_update` | Update a transaction, split a plain one in place, or edit the children of an existing split via `subtransactions` |
+| `actual_transactions_update` | Update a transaction (`payee` takes a payee id or `null`; `payee_name` matches an existing payee case-insensitively or creates one; a name in `payee`, both fields, or a blank name is refused), split a plain one in place, or edit the children of an existing split via `subtransactions` |
 | `actual_transactions_delete` | Delete a transaction |
 | `actual_transactions_merge` | Merge two same-account, same-amount transactions (e.g. a bank-imported duplicate and a manual entry). Upstream keeps one (the imported one first) and DELETES the other, filling only the kept row's empty payee, category, notes and schedule and its false cleared and reconciled flags; irreversible |
 
@@ -46,7 +46,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 | Tool | Description |
 |------|-------------|
 | `actual_transactions_uncategorized` | Summary of uncategorized transactions (totalCount, totalAmount, per-account breakdown); pass `includeTransactions:true` for paginated rows |
-| `actual_transactions_update_batch` | Apply many transaction updates in ONE call (`updates: [{ id, fields }]`); returns per-item success and failure counts |
+| `actual_transactions_update_batch` | Apply many transaction updates in ONE call (`updates: [{ id, fields }]`, `payee` and `payee_name` as in `actual_transactions_update`; a refused item lands in `failed`); returns per-item success and failure counts |
 
 **Exclusive ActualQL-powered**, unique to this MCP server
 
@@ -224,7 +224,7 @@ Fifteen compact tools ship (#672 to #678). They are listed under `MCP_TOOL_SURFA
 | `summarize_transactions` | Totals, chosen by `report`: `by_category`, `by_payee`, `grouped` (requires `start_date`, `end_date`, `group_by`, one grouping or an array of up to 5), `account_flow` (requires `start_date`, `end_date`, `account_ids`), `recurring` (`start_date` or `months`) or `balance` (requires `account_id`, optional `cutoff`). Read-only |
 | `list_budget_months` | List every budget month as `YYYY-MM`, or pass `month` for one month's budget (category groups and categories). No selector. Read-only; a `null` field is treated as omitted |
 | `run_query` | Run one read-only SQL query over the budget data, for example `SELECT id, name FROM accounts`. `query` is required. Read-only |
-| `manage_transactions` | Write transactions, chosen by `action`: `create` (requires `account`, `date`, `amount`), `update` (requires `id` and one field to change; `null` clears a field), `update_batch` (`updates`, 1 to 50 `{id, fields}`; not atomic), `delete` (`id`), `import` (`account_id`, `txs`), `merge` (`ids`, exactly two different ids) or `transfer` (`from_account`, `to_account`, positive `amount`, `date`). Amounts are integer cents. Destructive (delete, merge); hidden under `MCP_READ_ONLY` |
+| `manage_transactions` | Write transactions, chosen by `action`: `create` (requires `account`, `date`, `amount`), `update` (requires `id` and one field to change; `null` clears a field; `payee` is an id only, `payee_name` is matched or created), `update_batch` (`updates`, 1 to 50 `{id, fields}`; not atomic), `delete` (`id`), `import` (`account_id`, `txs`), `merge` (`ids`, exactly two different ids) or `transfer` (`from_account`, `to_account`, positive `amount`, `date`). Amounts are integer cents. Destructive (delete, merge); hidden under `MCP_READ_ONLY` |
 | `manage_accounts` | Write accounts and account groups, chosen by `action`: `create` (`entity` `account` or `account_group`, `name`; optional `balance` for an account, `sort_order` for a group), `update` (`entity`, `id`, at least one field), `close` (`id`, optional `transfer_account_id`, `transfer_category_id`; `entity` omitted or `account`), `reopen` (`id`), `delete` (`entity`, `id`), `bank_sync` (optional `account_id`; reaches the bank providers) or `set_note` (`id`, `note`). Amounts are integer cents. Destructive (delete, close); open-world (bank sync); hidden under `MCP_READ_ONLY` |
 | `manage_categories` | Write categories and category groups, chosen by `action`: `create` (`entity` `category` or `category_group`, `name`; a category needs `group_id`; an unknown `group_id` on create or update is refused as not found, since it would leave a category no tool can reach), `update` (`entity`, `id`, at least one field), `delete` (`entity`, `id`) or `set_note` (`id`, `note`). Destructive (delete); hidden under `MCP_READ_ONLY` |
 | `manage_payees` | Write payees, chosen by `action`: `create` (`name`), `update` (`id`, at least one of `name`, `category`; `null` clears the category; only the payee's own single-condition, default-stage rule is edited or deleted), `delete` (`id`), `merge` (`target_id`, `merge_ids`, 1 to 50) or `set_note` (`id`, `note`). Destructive (delete, merge); hidden under `MCP_READ_ONLY` |

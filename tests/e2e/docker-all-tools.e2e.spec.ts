@@ -1288,6 +1288,81 @@ payee: payee.id,
     expect(negSucceeded).toBe(0);
   });
 
+  // #743: update resolves payee_name in the adapter and takes only an id in payee. The read-back
+  // is run_query on the stored payee id; the payee a call created is found by name and registered
+  // for cleanup (a payee the call made is not a fixture, so nothing else removes it).
+  const payeeOf = async (mcp: any, id: string): Promise<string | null> => {
+    const out = await mcp.call('run_query', { query: `SELECT id, payee FROM transactions WHERE id = '${id}'` });
+    const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    return rows[0]?.payee ?? null;
+  };
+  const payeeIdsNamed = async (mcp: any, name: string): Promise<string[]> => {
+    const all = (await mcp.call('list_entities', { type: 'payee' })) as any;
+    const list = (Array.isArray(all) ? all : (all?.payees ?? all?.result ?? [])) as any[];
+    return list.filter((p: any) => String(p?.name ?? '').toLowerCase() === name.toLowerCase() && !p?.transfer_acct).map((p: any) => p.id);
+  };
+
+  test('manage_transactions update - payee_name matches an existing payee, creates a new one, and payee takes only an id (#743)', async ({ mcp, makeAccount, makePayee, makeTransaction, cleanup }) => {
+    const account = await makeAccount();
+    const existing = await makePayee();
+    const txn = await makeTransaction({ account });
+
+    // Existing payee, any case and padded: its id is stored, no second payee appears.
+    await mcp.call('manage_transactions', { action: 'update', id: txn.id, payee_name: `  ${existing.name.toUpperCase()} ` });
+    expect(await payeeOf(mcp, txn.id)).toBe(existing.id);
+    expect(await payeeIdsNamed(mcp, existing.name)).toEqual([existing.id]);
+
+    // A new name creates the payee exactly once.
+    const fresh = `E2E-New-Payee-${uniqueSuffix()}`;
+    await mcp.call('manage_transactions', { action: 'update', id: txn.id, payee_name: fresh });
+    const created = await payeeIdsNamed(mcp, fresh);
+    expect(created).toHaveLength(1);
+    cleanup.add(CLEANUP_ORDER.payee, `payee ${fresh}`, async () => {
+      await mcp.call('manage_payees', { action: 'delete', id: created[0] });
+    });
+    expect(await payeeOf(mcp, txn.id)).toBe(created[0]);
+
+    // NEGATIVE: a name in payee is refused and the stored payee is unchanged.
+    await expect(
+      mcp.call('manage_transactions', { action: 'update', id: txn.id, payee: existing.name }),
+    ).rejects.toThrow(/payee must be a payee id\. Got ".*"\. To set a payee by name pass payee_name/);
+    expect(await payeeOf(mcp, txn.id)).toBe(created[0]);
+
+    // NEGATIVE: both fields, and a null name.
+    await expect(
+      mcp.call('manage_transactions', { action: 'update', id: txn.id, payee: existing.id, payee_name: 'X' }),
+    ).rejects.toThrow(/payee and payee_name cannot be used together/);
+    await expect(
+      mcp.call('manage_transactions', { action: 'update', id: txn.id, payee_name: null }),
+    ).rejects.toThrow(/payee_name must be a non-empty name\. To clear the payee pass payee: null\./);
+    expect(await payeeOf(mcp, txn.id)).toBe(created[0]);
+
+    // payee: null clears.
+    await mcp.call('manage_transactions', { action: 'update', id: txn.id, payee: null });
+    expect(await payeeOf(mcp, txn.id)).toBeNull();
+  });
+
+  test('manage_transactions update_batch - a refused payee item lands in failed and the other succeeds (#743)', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const existing = await makePayee();
+    const a = await makeTransaction({ account });
+    const b = await makeTransaction({ account });
+    const data = await mcp.call('manage_transactions', {
+      action: 'update_batch',
+      updates: [
+        { id: a.id, fields: { payee_name: existing.name } },
+        { id: b.id, fields: { payee: existing.name } },
+      ],
+    });
+    const batch = data?.total !== undefined ? data : (data?.result ?? data);
+    expect(batch.successCount).toBe(1);
+    expect(batch.failed).toHaveLength(1);
+    expect(batch.failed[0].id).toBe(b.id);
+    expect(batch.failed[0].error).toMatch(/payee must be a payee id/);
+    expect(await payeeOf(mcp, a.id)).toBe(existing.id);
+    expect(await payeeOf(mcp, b.id)).toBeNull();
+  });
+
   test('search_transactions amount - should search by amount', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     const txn = await makeTransaction({ account, amount: -5000 });
@@ -4502,6 +4577,24 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const categories = (Array.isArray(data) ? data : data?.categories ?? []) as any[];
     const found = categories.find((c: any) => c?.id === category.id);
     expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
+  });
+
+  // #743: the legacy update resolves payee_name and refuses a name in payee, like the compact tool.
+  test('actual_transactions_update - payee_name resolves an existing payee and a name in payee is refused (#743)', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const existing = await makePayee();
+    const txn = await makeTransaction({ account });
+    const payeeOfTxn = async () => {
+      const out = await mcp.call('run_query', { query: `SELECT id, payee FROM transactions WHERE id = '${txn.id}'` });
+      const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+      return rows[0]?.payee ?? null;
+    };
+    await mcp.call('actual_transactions_update', { id: txn.id, fields: { payee_name: existing.name.toLowerCase() } });
+    expect(await payeeOfTxn()).toBe(existing.id);
+    await expect(
+      mcp.call('actual_transactions_update', { id: txn.id, fields: { payee: existing.name } }),
+    ).rejects.toThrow(/payee must be a payee id/);
+    expect(await payeeOfTxn()).toBe(existing.id);
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {

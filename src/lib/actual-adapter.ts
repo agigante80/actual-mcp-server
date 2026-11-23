@@ -1999,6 +1999,8 @@ export const notifications = new EventEmitter();
 // Extracted to ./actual-adapter/normalize.ts (#166). Imported for internal use
 // and re-exported so the public surface and external importers are unchanged.
 import { normalizeToTransactionArray, normalizeToId, normalizeImportResult } from './actual-adapter/normalize.js';
+import { assertPayeeFields, resolvePayeeName } from './actual-adapter/payee-fields.js';
+import type { PayeeListingRow } from './actual-adapter/payee-fields.js';
 import { isEntityId, matchByName, resolvedNameDetail, FILTER_ID_ENTITIES } from './actual-adapter/filter-ids.js';
 import type { FilterIdKind, NamedRow } from './actual-adapter/filter-ids.js';
 import type {
@@ -2661,6 +2663,33 @@ export async function deleteAccount(id: string): Promise<void> {
     await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
   });
 }
+/**
+ * #743: replace `payee_name` in an update payload with the id of the payee it names, creating the
+ * payee when none matches. Runs inside the caller's queueWriteOperation (never nested) and must be
+ * the LAST step before `rawUpdateTransaction`, so a refusal never leaves a created payee behind.
+ * If the update itself then fails, a newly created payee remains (an orphan Actual can offer to
+ * remove); accepted. `listing` lets a batch read the payees once and see its own creations.
+ */
+async function resolvePayeeNameInPayload<P>(payload: P, listing?: PayeeListingRow[]): Promise<P> {
+  const f = payload as { payee_name?: unknown } | null;
+  if (!f || typeof f !== 'object' || typeof f.payee_name !== 'string') return payload;
+  const rows = listing ?? await withConcurrency(() =>
+    retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<PayeeListingRow[]>), { retries: 2, backoffMs: 200 })
+  );
+  const hit = resolvePayeeName(f.payee_name, rows);
+  let id: string;
+  if ('id' in hit) {
+    id = hit.id;
+  } else {
+    // Non-idempotent: do not retry (#165).
+    const raw = await withConcurrency(() => retry(() => rawCreatePayee({ name: hit.create }) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    id = normalizeToId(raw);
+    invalidateDrainListing('payees');
+    if (listing) listing.push({ id, name: hit.create });
+  }
+  const { payee_name: _dropped, ...rest } = f as Record<string, unknown>;
+  return { ...rest, payee: id } as P;
+}
 export async function updateTransaction(
   id: string,
   fields: Partial<components['schemas']['Transaction']> | unknown
@@ -2697,6 +2726,8 @@ export async function updateTransaction(
       throw new NotFoundRefusal('Transaction', id, 'actual_transactions_get', undefined,
         `Transaction "${id}" not found. Use actual_transactions_get to list transactions.`);
     }
+    // #743: refuse bad payee input before any other work (pure, read-free).
+    assertPayeeFields(fields);
 
     // Split guards, BEFORE the raw write:
     //   (a) a CHILD cannot itself be split: upstream nests one level only.
@@ -2746,6 +2777,8 @@ export async function updateTransaction(
         subtransactions: f.subtransactions.map((c) => ('category' in c ? c : { ...c, category: inherited })),
       };
     }
+    // #743: resolve payee_name LAST (creating a payee), after every refusal above.
+    payload = await resolvePayeeNameInPayload(payload);
     await withConcurrency(() => retry(() => rawUpdateTransaction(id, payload) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
     if (!converting) return {};
 
@@ -2832,6 +2865,8 @@ export async function updateTransactionBatch(
     const succeeded: { id: string }[] = [];
     const failed: { id: string; error: string }[] = [];
     const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;
+    // #743: payees read lazily, once per batch; creations are pushed so a repeated new name reuses them.
+    let payeeListing: PayeeListingRow[] | undefined;
     for (const [position, { id, fields }] of updates.entries()) {
       if (!existing.has(id)) {
         failed.push({ id, error: `Transaction "${id}" not found. Use actual_transactions_get to list transactions.` });
@@ -2842,8 +2877,17 @@ export async function updateTransactionBatch(
         continue;
       }
       try {
+        // #743: a refusal here lands this item in failed[] and the rest proceed.
+        assertPayeeFields(fields);
+        let payload = fields;
+        if ((fields as { payee_name?: unknown } | null)?.payee_name !== undefined) {
+          payeeListing ??= [...await withConcurrency(() =>
+            retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<PayeeListingRow[]>), { retries: 2, backoffMs: 200 })
+          )];
+          payload = await resolvePayeeNameInPayload(fields, payeeListing);
+        }
         await withConcurrency(() =>
-          retry(() => rawUpdateTransaction(id, fields) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })
+          retry(() => rawUpdateTransaction(id, payload) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })
         );
         succeeded.push({ id });
       } catch (err) {

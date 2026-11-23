@@ -31,8 +31,8 @@ const id = z.string().describe('Transaction id.');
 const account = z.string().nullable().optional().describe('Account id.');
 const date = z.string().nullable().optional().describe('YYYY-MM-DD.');
 const amount = z.number().nullable().optional().describe('Integer cents, outflow negative.');
-const payee = z.string().nullable().optional().describe('Payee id (update: or name).');
-const payeeName = z.string().nullable().optional().describe('Payee name.');
+const payee = z.string().nullable().optional().describe('Payee id.');
+const payeeName = z.string().nullable().optional().describe('Payee name (matched, else created).');
 const importedPayee = z.string().nullable().optional().describe('Imported payee.');
 const category = z.string().nullable().optional().describe('Category id.');
 // No maxLength here: with it Zod publishes anyOf [string, null], which some function-schema
