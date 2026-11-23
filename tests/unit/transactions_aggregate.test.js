@@ -58,6 +58,18 @@ check('transfer-only accounts keep transactionCount 0 and a transferCount above 
   assert.strictEqual(sender.transferCount, 2);
 });
 
+check('a category used only on a transfer has transactionCount 0 and transferCount 1 (#780: every group carries transferCount)', () => {
+  const snapshot = baseSnapshot([
+    { id: 't-out', date: '2025-01-04', amount: -10000, account: 'acc-1', transfer_id: 't-in', category: 'cat-food' },
+    { id: 't-in', date: '2025-01-04', amount: 10000, account: 'acc-2', transfer_id: 't-out' },
+  ]);
+  const r = aggregateTransactions(snapshot, { ...dateRange, groupBy: ['category'], includeIncome: true, excludeTransfers: false });
+  const g = r.groups.find((x) => x.categoryId === 'cat-food');
+  assert.ok(g, 'the category has a group');
+  assert.strictEqual(g.transactionCount, 0);
+  assert.strictEqual(g.transferCount, 1);
+});
+
 
 check('a CATEGORIZED transfer (income category) is excluded even with includeIncome=true', () => {
   const snapshot = baseSnapshot([

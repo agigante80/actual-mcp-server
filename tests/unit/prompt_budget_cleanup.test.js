@@ -162,15 +162,14 @@ await check('an empty or blank date is omitted; a bad date is one readable messa
 
 // ---------------------------------------------------------------- #780
 const { aggregateTransactions } = await import('../../dist/src/lib/financial-analysis.js');
-const S1 = 'A payee or category counts as unused when it has no transaction from 2026-05-01 to 2026-11-13. An account counts as unused only when it has no transaction and no transfer in that window.';
+const S1 = 'A payee, category or account counts as unused only when it has no transaction and no transfer from 2026-05-01 to 2026-11-13.';
 const S5 = 'Find open accounts (closed false) with balance_current 0 that are unused: no group for the account in the step 1 account result, or both transactionCount and transferCount 0. An account with a transferCount above 0 is in use, so do not propose closing it. A null balance_current is unknown, so skip that account.';
-await check('a transfer counts as use for an account; payees and categories keep "no transaction" (#780)', () => {
+await check('a transfer counts as use for an account, a payee and a category alike (#780)', () => {
   const text = render({ date: '2026-11-13' });
   assert.ok(text.includes(S1), text.split('\n')[0]);
   assert.ok(text.includes(S5));
-  assert.ok(text.includes('Account groups also have a transferCount, the number of transfers in or out of the account; transactionCount does not include transfers. Anything missing from a result had no transaction and no transfer in the window.'));
-  // mutation: without the account sentence the pinned rule no longer matches
-  assert.ok(!text.replace('An account counts as unused only when it has no transaction and no transfer in that window.', '').includes('no transfer in that window'));
+  assert.ok(text.includes('Every group also has a transferCount, the number of transfers counted under it (for a category, a transfer to or from an off-budget account that carries the category); transactionCount does not include transfers, so a group with transactionCount 0 and a transferCount above 0 is in use. Anything missing from a result had no transaction and no transfer in the window.'));
+  assert.ok(!text.includes('Account groups also have'), 'every group carries transferCount, not only account groups');
 });
 await check('step 1 names the real group fields, not a generic id and name (#780)', () => {
   const text = render({ date: '2026-11-13' });
