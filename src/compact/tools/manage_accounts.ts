@@ -47,7 +47,7 @@ const GROUP_REAL: Readonly<Record<string, z.ZodType>> = { ...ACCOUNT_REAL, id: C
 type V = Record<string, unknown>;
 
 const createFields = asFields(
-  z.object({ entity, name, balance }).superRefine((value, ctx) => {
+  z.object({ entity, name, balance, offbudget }).superRefine((value, ctx) => {
     needs('create', ctx, value as V, ['entity', 'name']);
     strict(ctx, value as V, ACCOUNT_REAL);
   }),
@@ -129,7 +129,7 @@ export const manageAccounts: CompactToolSpec = {
     'Create, change, close, reopen, delete, bank-sync or annotate accounts and account groups; pick one `action`. Writes. ' +
     'To read or find ids use list_entities; month notes belong to manage_budget_months. Other fields are refused. ' +
     'entity (account or account_group) is required for create, update and delete; close takes account or nothing. ' +
-    'create: entity, name; optional balance (account, integer cents, on-budget only) or sort_order (account_group). ' +
+    'create: entity, name; optional balance (account, integer cents) and offbudget (account), or sort_order (account_group). ' +
     'update: entity, id and at least one of name, offbudget, closed (account) or name, sort_order (account_group); to close or reopen prefer those actions. ' +
     'close: id; optional transfer_account_id (required for a non-zero balance, not id itself), transfer_category_id; an account with no transactions is REMOVED, not closed. ' +
     'reopen: id. ' +

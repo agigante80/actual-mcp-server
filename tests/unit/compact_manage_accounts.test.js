@@ -58,6 +58,8 @@ const expectCall = async (input, n, a) => {
 
 await check('create account drops entity and forwards name and balance', () =>
   expectCall({ action: 'create', entity: 'account', name: 'Checking', balance: 10000 }, 'actual_accounts_create', { name: 'Checking', balance: 10000 }));
+await check('create account forwards offbudget (#767)', () =>
+  expectCall({ action: 'create', entity: 'account', name: 'Mortgage', balance: 5000, offbudget: true }, 'actual_accounts_create', { name: 'Mortgage', balance: 5000, offbudget: true }));
 await check('create account_group routes to the group tool with sort_order', () =>
   expectCall({ action: 'create', entity: 'account_group', name: 'Savings', sort_order: 2 }, 'actual_account_groups_create', { name: 'Savings', sort_order: 2 }));
 await check('update account wraps everything but id under fields and drops entity', () =>
@@ -99,6 +101,10 @@ await check('NEGATIVE: create without entity or name names each', async () => {
 });
 await check('NEGATIVE: balance with entity account_group is refused', () =>
   refused({ action: 'create', entity: 'account_group', name: 'G', balance: 5 }, /balance.*cannot be used with the other fields given for action: create/));
+await check('NEGATIVE: offbudget on an account_group create is refused (#767)', () =>
+  refused({ action: 'create', entity: 'account_group', name: 'G', offbudget: true }, /offbudget.*cannot be used with the other fields given for action: create/));
+await check('NEGATIVE: a non-boolean offbudget on account create is refused (#767)', () =>
+  refused({ action: 'create', entity: 'account', name: 'A', offbudget: 'yes' }, /offbudget/));
 await check('NEGATIVE: sort_order with entity account is refused', () =>
   refused({ action: 'create', entity: 'account', name: 'A', sort_order: 1 }, /sort_order.*cannot be used with the other fields given for action: create/));
 await check('NEGATIVE: an unknown entity is refused', () => refused({ action: 'create', entity: 'payee', name: 'A' }, /entity/));
@@ -188,6 +194,8 @@ await check('published schema: flat, action required, no oneOf or anyOf, every p
 await check('description: Returns, every action, DESTRUCTIVE, no legacy name', () => {
   for (const w of ['Returns', 'list_entities', 'create:', 'update:', 'close:', 'reopen:', 'delete:', 'bank_sync:', 'set_note:', 'DESTRUCTIVE', 'account_group', 'REMOVED']) assert.ok(spec.description.includes(w), w);
   assert.ok(!/actual_/.test(spec.description));
+  assert.ok(spec.description.includes('optional balance (account, integer cents) and offbudget (account)'), 'create line names offbudget (#767)');
+  assert.ok(!spec.description.includes('on-budget only'), 'the on-budget-only limit is gone (#767)');
 });
 await check('annotations: destructive write tool, hints only', () => {
   assert.deepStrictEqual(annotationsFor('manage_accounts'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true });

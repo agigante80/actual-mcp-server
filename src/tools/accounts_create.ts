@@ -6,8 +6,8 @@ import adapter from '../lib/actual-adapter.js';
 export default createTool({
   name: 'actual_accounts_create',
   description:
-    'Create a new on-budget account. It cannot make an off-budget account; for one, create it with no balance, set offbudget with actual_accounts_update, then add the opening balance with actual_transactions_create. ' +
-    'The optional balance (integer cents, negative for debt) is recorded as a Starting Balance transaction. ' +
+    'Create a new account, on-budget unless offbudget is true. ' +
+    'The optional balance (integer cents, negative for debt) is recorded as a Starting Balance transaction; on an off-budget account it has no category. ' +
     'Not idempotent: repeating the call creates another account. Returns { result: <new account id> }.',
   schema: z.object({ 
     // #380: the `id` field was REMOVED rather than tightened. Upstream ignores it:
@@ -19,16 +19,22 @@ export default createTool({
     // publishing the field at all was the defect; typing it would only have made an
     // unusable field look deliberate.
     name: CommonSchemas.name, 
-    balance: CommonSchemas.optionalAmountCents 
+    balance: CommonSchemas.optionalAmountCents,
+    // #767: upstream api/account-create already maps offbudget; it used to be stripped here.
+    offbudget: CommonSchemas.offBudget,
   }),
   handler: async (input) => {
-    const accountPayload = { name: input.name, balance: input.balance };
+    const accountPayload = { name: input.name, balance: input.balance, offbudget: input.offbudget };
     return await adapter.createAccount(accountPayload, input.balance);
   },
   examples: [
     {
       description: 'Create a checking account with $1000 initial balance',
       input: { name: 'Checking', balance: 100000 },
+    },
+    {
+      description: 'Create an off-budget mortgage account with a negative opening balance',
+      input: { name: 'Mortgage', offbudget: true, balance: -25000000 },
     },
     {
       description: 'Create a savings account with no initial balance',
