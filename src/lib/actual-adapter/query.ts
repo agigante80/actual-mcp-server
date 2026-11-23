@@ -252,6 +252,14 @@ export function parseWhereClause(query: any, whereClause: string, tableName?: st
                 `compared against a text column (for example payee.name = 'O''Brien').`,
               );
             }
+            // Upstream reads a string starting with `$` as a field reference and `:` as a named
+            // parameter, so `amount IN (1000, '$amount')` would compile to `amount = amount`.
+            if (typeof v === 'string' && (v.startsWith('$') || v.startsWith(':'))) {
+              throw new Error(
+                `Invalid value for column "${field}": a string starting with "$" or ":" is read as a ` +
+                `field reference or parameter, and is not allowed in an IN list on a number or date column.`,
+              );
+            }
             return v;
           });
           query = query.filter(

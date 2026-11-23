@@ -2016,7 +2016,7 @@ payee: payee.id,
     expect(await ids('amount IN (123)')).toEqual([]);
     const refused: Array<[string, RegExp]> = [
       ["amount IN (1000, 'abc')", /Can't convert string to integer/],
-      ["date IN ('2019-13-45')", /2019-13-45/],
+      ["date IN ('2019-13-45')", /Bad date format: 2019-13-45/],
       ['amount IN (5.5)', /Can't convert float to integer/],
       [`amount IN (${Array.from({ length: 201 }, (_, i) => i + 1).join(',')})`, /at most 200 are allowed/],
     ];
