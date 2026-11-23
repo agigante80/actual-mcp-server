@@ -139,5 +139,11 @@ await check('publication: compact surface publishes both tools, including under 
   assert.strictEqual(legacy.published.length, 85);
 });
 
+await check('#758: the server and preferences topics describe what they return', () => {
+  const d = spec.description;
+  for (const w of ['transport', 'runtime (Node.js, platform, arch)', 'declared and resolved SDK and Actual API versions', 'tools { total published, registered, policy }', 'preferences: { preferences, keys, count, message }']) assert.ok(d.includes(w), w);
+  assert.ok(!d.includes('tool count and uptime, no other fields'), 'the short server clause is gone');
+});
+
 console.log(`\n[compact-get-context] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

@@ -50,9 +50,9 @@ export const getContext: CompactToolSpec = {
     'Pick one `topic` (default structure). ' +
     'structure: accounts, categories with their groups and payees together, optional include_accounts, include_categories, include_payees, include_closed (closed accounts are left out unless true) and payee_limit (1 to 2000, default 500); ' +
     'a section you exclude is omitted, and at least one of the three include_* flags must stay true. ' +
-    'server: the MCP server version, name, Node.js and SDK versions, tool count and uptime, no other fields. ' +
+    'server: the MCP server name, version, description and transport, runtime (Node.js, platform, arch), dependencies (declared and resolved SDK and Actual API versions), uptime and memory use, and tools { total published, registered, policy }; takes no other fields. ' +
     'version: the Actual server version string, not the MCP server version, no other fields. ' +
-    'preferences: the synced display preferences (number format, date format, currency, first day of the week), no other fields; amounts stay integer cents whatever it says. ' +
+    'preferences: { preferences, keys, count, message } with the synced display values (number format, date format, currency, first day of the week), no other fields; amounts stay integer cents whatever it says. ' +
     'A field given for a topic that does not take it is refused naming the field. ' +
     'Returns the topic\'s result object: the accounts, category groups with nested categories and payees for structure, the server details for server, the version string for version, and the preference values for preferences.',
   selector: 'topic',

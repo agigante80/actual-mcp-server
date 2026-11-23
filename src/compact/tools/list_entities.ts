@@ -73,8 +73,8 @@ export const listEntities: CompactToolSpec = {
     'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note or budget_file. For the whole budget structure, server details or preferences in one call use get_context instead.\n' +
     'With only type it lists every entity of that type. A field the type does not take is refused naming the field.\n' +
     'account, category, payee: query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id, refused with the candidate ids when several share it.\n' +
-    'payee: also sort frequency (most used payees).\n' +
-    'schedule: name to resolve its id, or schedule_id with start, end and count to list the dates it falls on.\n' +
+    'payee: also sort frequency (the 10 most used payees of the last 12 weeks; a transfer payee can appear, with transfer_acct null).\n' +
+    'schedule: name to resolve its id, or schedule_id with start, end and count (default and maximum 366) to list the dates it falls on.\n' +
     'rule: payee_id to list that payee\'s rules.\n' +
     'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +

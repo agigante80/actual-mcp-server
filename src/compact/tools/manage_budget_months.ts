@@ -28,7 +28,7 @@ const categoryId = z.string().optional().describe('Category id.');
 const fromCategoryId = z.string().optional().describe('Source category id.');
 const toCategoryId = z.string().optional().describe('Target category id, different from from_category_id.');
 const amount = z.number().int().optional().describe('Integer cents (5000 is $50.00). set_amount: the new budgeted amount; hold and transfer: greater than 0.');
-const flag = z.boolean().optional().describe('true carries the category balance into next month, false does not.');
+const flag = z.boolean().optional().describe('true rolls an overspent balance into the next month, false resets it.');
 const note = z.string().optional().describe('Note text for the month; "" clears it. Template directives such as "#template 250" work.');
 const operations = z
   .array(z.object({ month: z.string(), categoryId: z.string(), amount: z.number().int().optional(), carryover: z.boolean().optional() }).strict())
@@ -113,15 +113,15 @@ export const manageBudgetMonths: CompactToolSpec = {
   examplePrompt: 'Move $50 from Dining Out to Groceries for this month.',
   description:
     'Change the budget of a month: amounts, carryover, the hold for next month, transfers between categories, the month note; pick one `action`. Writes. ' +
-    'To read months use list_budget_months; to switch, import or export a budget file use manage_budget_files; category notes use manage_categories. Cents are integers. Other fields are refused. ' +
+    'To read months use list_budget_months; to switch, import or export a budget file use manage_budget_files; category notes use manage_categories. Other fields are refused. ' +
     'set_amount: month, category_id, amount (the month must be one the budget has; an income category is refused on an envelope budget; |amount| at most 2251799813685247; an unknown category or month is returned as { success: false, error }). ' +
     'set_amount_batch: operations, 1 to 100 items {month, categoryId, amount?, carryover?} with camelCase keys, each needing amount or carryover; NOT atomic, no rollback, items applied before a failure stay applied; an unknown category, a month out of range or carryover, or amount on an envelope budget, on an income category fails only that item; the last item wins for the same month and category; after a timeout read the months back before retrying. ' +
-    'set_carryover: month, category_id, flag. ' +
+    'set_carryover: month, category_id, flag (true rolls an overspent balance into the next month, false resets it; a positive balance always rolls over), from that month on; expense categories only. ' +
     'hold: month, amount greater than 0; holds for next month and may hold LESS than asked (clamped to what is left to budget); nothing held is an error; Actual ADDS to the buffer, so on an error read the month before retrying. ' +
     'reset_hold: month; releases the whole hold back to to-budget, safe to repeat. ' +
     'transfer: month, from_category_id, to_category_id (different, expense categories only), amount greater than 0 and at most 2251799813685247; the source needs that much budgeted; NOT atomic, if the second write fails the source was already lowered. ' +
-    'set_note: month, note; sets or clears the note of that budget month. ' +
-    'Returns { result } (set_amount), { succeeded, failed, total, successCount, failureCount } (set_amount_batch; failing items are a normal result), { success: true } (set_carryover, reset_hold), { success, held } or { success, partial, requested, held, message } (hold), { result: { success, transferred, fromCategory, toCategory } } (transfer), { result: { success, id, note, cleared } } (set_note).',
+    'set_note: month, note; sets or clears the month note. ' +
+    'Returns {} (set_amount), { succeeded, failed, total, successCount, failureCount } (set_amount_batch; failing items are a normal result), { success: true } (set_carryover, reset_hold), { success, held } or { success, partial, requested, held, message } (hold), { result: { success, transferred, fromCategory, toCategory } } (transfer), { result: { success, id, note, cleared } } (set_note).',
   selector: 'action',
   actions: new Map<string, CompactActionRow>([
     ['set_amount', { legacy: 'actual_budgets_set_amount', fields: setAmountFields, rename: { category_id: 'categoryId' } }],

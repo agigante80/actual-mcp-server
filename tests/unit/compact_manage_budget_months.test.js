@@ -221,5 +221,13 @@ await check('read-only: every action is refused with MCP_READ_ONLY and runs noth
   }
 });
 
+await check('#758: the set_amount result and the set_carryover flag semantics match the observed behaviour', () => {
+  const d = spec.description;
+  assert.ok(d.includes('Returns {} (set_amount)'), 'set_amount returns {}');
+  assert.ok(!d.includes('Returns { result } (set_amount)'), 'the stale set_amount result is gone');
+  assert.ok(d.includes('set_carryover: month, category_id, flag (true rolls an overspent balance into the next month, false resets it; a positive balance always rolls over), from that month on; expense categories only.'), 'flag semantics');
+  assert.ok(!/set_carryover: month, category_id, flag\. /.test(d), 'the bare set_carryover clause is gone');
+});
+
 console.log(`\n[compact-manage-budget-months] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

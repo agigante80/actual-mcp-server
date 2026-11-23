@@ -236,5 +236,11 @@ await check('compactLegacyNames covers the targets, all write-capable', () => {
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
 
+await check('#758: a closed account delete is described as a refusal', () => {
+  const d = spec.description;
+  assert.ok(d.includes('a closed account is not deleted: reopen it first'), 'closed rule');
+  assert.ok(!d.includes('a closed one cannot be deleted'), 'the ambiguous phrase is gone');
+});
+
 console.log(`\n[compact-manage-accounts] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
