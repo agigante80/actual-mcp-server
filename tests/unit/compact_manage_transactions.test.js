@@ -67,6 +67,16 @@ await check('create forwards exactly the given fields to actual_transactions_cre
   assert.deepStrictEqual(r, { success: true, id: null });
   reply = (n) => ({ from: n });
 });
+await check('#793: create forwards a payee id unchanged and a transfer payee refusal names the compact transfer action', async () => {
+  const XFER = '523e4567-e89b-42d3-a456-426614174004';
+  reply = () => ({ success: false, id: null, error: `Payee "${XFER}" is the transfer payee of an account. To move money between accounts use actual_transfers_create; for an ordinary payment pass another payee.` });
+  const r = await run({ action: 'create', account: A, date: '2026-11-13', amount: -4202, payee: XFER });
+  assert.deepStrictEqual(seen, [{ n: 'actual_transactions_create', a: { account: A, date: '2026-11-13', amount: -4202, payee: XFER } }]);
+  assert.strictEqual(r.success, false);
+  assert.ok(r.error.includes('manage_transactions with action transfer'), r.error);
+  assert.ok(!r.error.includes('actual_transfers_create'), r.error);
+  reply = (n) => ({ from: n });
+});
 await check('create forwards the optional fields, including a split', () =>
   expectCall({ action: 'create', account: A, date: '2026-11-13', amount: -1000, payee_name: 'Shop', cleared: false, imported_id: 'i1', subtransactions: [{ amount: -400 }, { amount: -600 }] },
     'actual_transactions_create', { account: A, date: '2026-11-13', amount: -1000, payee_name: 'Shop', cleared: false, imported_id: 'i1', subtransactions: [{ amount: -400 }, { amount: -600 }] }));
