@@ -5580,7 +5580,7 @@ export async function getAccountGroups(): Promise<any[]> {
   });
 }
 
-export async function createAccountGroup(group: { name: string; sort_order?: number }): Promise<string> {
+export async function createAccountGroup(group: { name: string }): Promise<string> {
   observability.incrementToolCall('actual.account_groups.create').catch(() => {});
   return queueWriteOperation(async () => {
     const raw = await withConcurrency(() => retry(() => rawCreateAccountGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
@@ -5589,7 +5589,7 @@ export async function createAccountGroup(group: { name: string; sort_order?: num
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
 
-export async function updateAccountGroup(id: string, fields: { name?: string; sort_order?: number }): Promise<void> {
+export async function updateAccountGroup(id: string, fields: { name: string }): Promise<void> {
   observability.incrementToolCall('actual.account_groups.update').catch(() => {});
   return queueWriteOperation(async () => {
     // Read, decide and write inside ONE queued operation, so the existence check and the

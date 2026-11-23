@@ -80,6 +80,10 @@ The transaction, balance and schedule tools (the legacy ones and the compact too
 
 `list_entities` with `type: rule` and an unknown `payee_id`, and the legacy `actual_payee_rules_get`, now fail with an error result (`Payee "<id>" not found`) instead of answering `{ error, rules: [], count: 0 }` as a success. A payee that exists but has no rules still answers `{ rules: [], count: 0 }`. A client that read the `error` field must check for a tool error instead.
 
+### Account group sort_order is removed (#817)
+
+`sort_order` on `actual_account_groups_create`, `actual_account_groups_update` and the account group rows of `manage_accounts` is removed. Actual never stored it: its group model strips the field, so a call that sent it succeeded and changed nothing. A call that still sends `sort_order` is now refused, naming the field, and a group update without `name` is refused too, because `name` is the only field Actual keeps and its own update requires it. Drop `sort_order` from stored prompts and scripts.
+
 ### HTTP auth is required by default (#242)
 
 An existing HTTP deployment on a non-loopback bind with no token and no OIDC that previously started open will now refuse to start. The startup error names the fix: set `MCP_SSE_AUTHORIZATION` (generate with `openssl rand -hex 32`), or `AUTH_PROVIDER=oidc`, or `MCP_ALLOW_UNAUTHENTICATED=true` to keep the old open behavior. See [authentication.md](authentication.md) before choosing the last one.
