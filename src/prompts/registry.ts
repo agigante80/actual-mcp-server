@@ -41,13 +41,15 @@ export function resolveOfferedPrompts(
  * so the strict schema still refuses it. Anything that is not a plain object is returned as it is.
  * Built with Object.fromEntries so a `__proto__` key from JSON.parse stays an own key (and is
  * refused by the strict schema); never assign with `out[k] = v`. Values are only removed or
- * trimmed, never echoed.
+ * trimmed, never echoed. With `known` given, only those keys are touched: a blank value under an
+ * unknown key stays, so the strict schema refuses the key (a mistyped name is never silently
+ * ignored).
  */
-export function normalizePromptArgs(raw: unknown): unknown {
+export function normalizePromptArgs(raw: unknown, known?: ReadonlySet<string>): unknown {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
   return Object.fromEntries(
     Object.entries(raw).flatMap(([k, v]): [string, unknown][] => {
-      if (typeof v !== 'string') return [[k, v]];
+      if (typeof v !== 'string' || (known && !known.has(k))) return [[k, v]];
       const t = v.trim();
       return t === '' ? [] : [[k, t]];
     }),
@@ -56,7 +58,8 @@ export function normalizePromptArgs(raw: unknown): unknown {
 
 /** Validate the raw (string) arguments and render. Throws a ZodError on a bad or missing value. */
 export function renderPrompt(definition: PromptDefinition, rawArgs: unknown): string {
-  const parsed = definition.argsSchema.parse(normalizePromptArgs(rawArgs ?? {}));
+  const known = new Set(definition.arguments.map((a) => a.name));
+  const parsed = definition.argsSchema.parse(normalizePromptArgs(rawArgs ?? {}, known));
   return definition.render(parsed);
 }
 
