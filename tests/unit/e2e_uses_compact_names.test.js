@@ -59,6 +59,7 @@ const LEGACY_SMOKE = [
   'actual_payees_create', // #765: the legacy create stores notes
   'actual_payees_delete', // #765: its cleanup
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
+  'actual_transactions_delete', // #748: the legacy split-child delete refusal
   'actual_accounts_create', // #767: the legacy create accepts offbudget
   'actual_transactions_create', // #747, #793: the legacy unknown-payee and transfer-payee refusals on create
   'actual_accounts_delete', // #768: the legacy delete reports detachedTransfers
