@@ -135,6 +135,36 @@ await check('import forwards a row with all thirteen documented keys intact (#74
   assert.deepStrictEqual(Object.keys(row).sort(), [...IMPORT_ROW_KEYS].sort());
   await expectCall({ action: 'import', account_id: A, txs: [row] }, 'actual_transactions_import', { accountId: A, txs: [row] });
 });
+const { TX_UPDATE_NOT_NULL_KEYS } = await import('../../dist/src/lib/schemas/common.js');
+const nonNullValue = { account: A, date: '2026-11-13', amount: -100 };
+const legacyUpdate = (await import('../../dist/src/tools/transactions_update.js')).default;
+const legacyBatch = (await import('../../dist/src/tools/transactions_update_batch.js')).default;
+await check('TX_UPDATE_NOT_NULL_KEYS is exactly account, date, amount (#814)', () =>
+  assert.deepStrictEqual([...TX_UPDATE_NOT_NULL_KEYS], ['account', 'date', 'amount']));
+for (const key of TX_UPDATE_NOT_NULL_KEYS) {
+  await check(`compact update refuses ${key}: null by name, calls nothing, and a value for ${key} still forwards (#814)`, async () => {
+    assert.match(await clientText({ action: 'update', id: T1, notes: 'x', [key]: null }), new RegExp(`${key}: cannot be null; omit it to leave it unchanged`));
+    await expectCall({ action: 'update', id: T1, notes: 'x', [key]: nonNullValue[key] }, 'actual_transactions_update', { id: T1, fields: { notes: 'x', [key]: nonNullValue[key] } });
+  });
+  await check(`compact update_batch refuses ${key}: null at the item and calls nothing, even beside a valid item (#814)`, async () => {
+    const text = await clientText({ action: 'update_batch', updates: [{ id: T1, fields: { notes: 'x' } }, { id: T2, fields: { [key]: null } }] });
+    assert.match(text, new RegExp(`updates\\.1.*fields\\.${key}.*received null`));
+  });
+  await check(`legacy update and update_batch refuse ${key}: null and name the key (#814)`, () => {
+    const u = legacyUpdate.inputSchema.safeParse({ id: T1, fields: { [key]: null } });
+    assert.strictEqual(u.success, false);
+    assert.ok(u.error.issues.some((i) => i.path.join('.') === `fields.${key}` && /received null/.test(i.message)), JSON.stringify(u.error.issues));
+    const b = legacyBatch.inputSchema.safeParse({ updates: [{ id: T1, fields: { [key]: null } }] });
+    assert.strictEqual(b.success, false);
+    assert.ok(b.error.issues.some((i) => i.path.join('.') === `updates.0.fields.${key}` && /received null/.test(i.message)), JSON.stringify(b.error.issues));
+    assert.strictEqual(legacyUpdate.inputSchema.safeParse({ id: T1, fields: { [key]: nonNullValue[key] } }).success, true);
+  });
+}
+await check('null still clears payee, category and notes in update and update_batch (#814)', async () => {
+  await expectCall({ action: 'update', id: T1, payee: null, category: null, notes: null }, 'actual_transactions_update', { id: T1, fields: { payee: null, category: null, notes: null } });
+  await expectCall({ action: 'update_batch', updates: [{ id: T1, fields: { payee: null, category: null, notes: null } }] }, 'actual_transactions_update_batch', { updates: [{ id: T1, fields: { payee: null, category: null, notes: null } }] });
+  assert.strictEqual(legacyUpdate.inputSchema.safeParse({ id: T1, fields: { payee: null, category: null, notes: null } }).success, true);
+});
 await check('merge forwards ids and returns the legacy value unchanged', async () => {
   const merged = { result: { success: true, keptId: T1, deletedId: T2 } };
   reply = () => merged;

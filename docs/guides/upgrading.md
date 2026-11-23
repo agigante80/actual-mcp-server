@@ -140,6 +140,10 @@ A failed tool call now reaches the client as a tool result with `isError: true` 
 
 `list_entities` with `name` and `actual_get_id_by_name` used to return one arbitrary id when two accounts, payees, categories or schedules share a name, and the filter tools that accept a name in place of an id named only the first duplicate. They now refuse it with `Name "<name>" matches <n> of them, so it does not identify one: <ids>` and change nothing; use the id of the one you mean. A name that matches one entity, or none, behaves as before.
 
+## A transaction update refuses null for account, date and amount (#814)
+
+`manage_transactions` `update` and `update_batch`, and the legacy `actual_transactions_update` and `actual_transactions_update_batch`, used to accept `null` for `account`, `date` and `amount`, and the write then failed upstream with `"amount" is required for table "transactions"` and the row JSON. They are NOT NULL columns, so the call is now refused before anything is written, naming the key (`amount: cannot be null; omit it to leave it unchanged`). A batch holding one such item is refused as a whole. Omit the key to leave the value unchanged. `null` still clears `payee`, `category`, `notes` and the other optional keys.
+
 ## Related
 
 - [deployment.md](deployment.md): Docker and Compose profiles.

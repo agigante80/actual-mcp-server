@@ -637,8 +637,8 @@ async function expectCallError(tool, input, label) {
       else console.log(`  ✓ [#746 ${label}] refused: ${text}`);
     }
     if (!expectParseOk(txn_update_tool,
-      { id, fields: { account: null, date: '2026-01-01', amount: 1, payee: null, payee_name: 'x', imported_payee: 'x', category: null, notes: 'x', imported_id: 'x', cleared: true, reconciled: false, subtransactions: [{ amount: 1 }] } },
-      '#746: the twelve remaining keys are still accepted')) fail();
+      { id, fields: { account: id, date: '2026-01-01', amount: 1, payee: null, payee_name: 'x', imported_payee: 'x', category: null, notes: 'x', imported_id: 'x', cleared: true, reconciled: false, subtransactions: [{ amount: 1 }] } },
+      '#746: the twelve remaining keys are still accepted (account, date and amount cannot be null since #814)')) fail();
   }
 
   const uncategorized_tool = await import('../../dist/src/tools/transactions_uncategorized.js').then(m => m.default);

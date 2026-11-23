@@ -1163,6 +1163,41 @@ payee: payee.id,
     expect(await storedDate()).toBe('2018-05-21');
   });
 
+  // #814: account, date and amount are NOT NULL upstream; null is refused by name before any write,
+  // a batch with one null item writes nothing for any item, and null still clears a payee.
+  test('manage_transactions update and update_batch - ERROR: null amount, account or date is refused and nothing changes (#814)', async ({ mcp, makeAccount, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const payee = await makePayee();
+    const first = await makeTransaction({ account, amount: -5000, date: '2018-05-21', notes: 'E2E-Null814-A', payee: payee.id });
+    const second = await makeTransaction({ account, amount: -6000, date: '2018-05-22', notes: 'E2E-Null814-B' });
+    const rowOf = async (id: string) => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+      return ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).find((t: any) => t?.id === id);
+    };
+
+    const single = await refusal(() => mcp.call('manage_transactions', { action: 'update', id: first.id, amount: null }));
+    expect(single).toMatch(/amount: cannot be null; omit it to leave it unchanged/);
+    expect(single).not.toContain('is required for table');
+    expect((await rowOf(first.id))?.amount).toBe(-5000);
+
+    const batch = await refusal(() =>
+      mcp.call('manage_transactions', {
+        action: 'update_batch',
+        updates: [
+          { id: first.id, fields: { notes: 'E2E-Null814-changed' } },
+          { id: second.id, fields: { date: null } },
+        ],
+      }),
+    );
+    expect(batch).toMatch(/updates\.1.*fields\.date.*received null/);
+    expect(batch).not.toContain('is required for table');
+    expect((await rowOf(first.id))?.notes).toBe('E2E-Null814-A');
+    expect((await rowOf(second.id))?.date).toBe('2018-05-22');
+
+    await mcp.call('manage_transactions', { action: 'update', id: first.id, payee: null });
+    expect((await rowOf(first.id))?.payee ?? null).toBeNull();
+  });
+
   // #489: subtransactions on a PLAIN transaction split it in place. The id must survive (that is
   // what keeps imported_id and reconciliation state), and the read-back must show the parent as a
   // split with exactly the requested children, not a new parent next to an orphaned original.
@@ -5546,6 +5581,22 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const rows = ((Array.isArray(found) ? found : (found?.result ?? [])) as any[]).filter((t: any) => t?.notes === notes);
     for (const t of rows) await mcp.call('manage_transactions', { action: 'delete', id: t.id });
     expect(rows.map((t: any) => t.id), 'a refused import must not write a row').toEqual([]);
+  });
+
+  // #814: the legacy update tools refuse null on the three NOT NULL keys and write nothing.
+  test('actual_transactions_update and _update_batch - ERROR: null account, date or amount is refused and nothing changes (#814)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account, amount: -5000, date: '2018-05-21' });
+    const single = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { account: null } }));
+    expect(single).toMatch(/fields\.account: expected string, received null/);
+    expect(single).not.toContain('is required for table');
+    const batch = await refusal(() => mcp.call('actual_transactions_update_batch', { updates: [{ id: txn.id, fields: { amount: null } }] }));
+    expect(batch).toMatch(/updates\.0\.fields\.amount: expected number, received null/);
+    expect(batch).not.toContain('is required for table');
+    const d = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+    const row = ((Array.isArray(d) ? d : (d?.result ?? [])) as any[]).find((t: any) => t?.id === txn.id);
+    expect(row?.amount).toBe(-5000);
+    expect(row?.date).toBe('2018-05-21');
   });
 
   // #785: the legacy schedule writers refuse an unknown account or payee with the legacy list tool name.
