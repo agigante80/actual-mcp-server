@@ -167,8 +167,10 @@ console.log('\n[#710] array values for oneOf and notOneOf, booleans for the flag
   check(!r.threw && calls.length === 1, 'category notOneOf [id] is accepted', r.message);
   r = await attempt(rule([{ field: 'cleared', op: 'is', value: true }], [okAct]));
   check(!r.threw && calls[0]?.conditions?.[0]?.value === true, 'cleared is true is accepted and stays a boolean', r.message);
+  r = await attempt(rule([{ field: 'reconciled', op: 'is', value: false }], [okAct]));
+  check(!r.threw && calls[0]?.conditions?.[0]?.value === false, 'reconciled is false is accepted', r.message);
   r = await attempt(rule([{ field: 'transfer', op: 'is', value: false }], [okAct]));
-  check(!r.threw && calls[0]?.conditions?.[0]?.value === false, 'transfer is false is accepted', r.message);
+  check(r.threw && r.message.startsWith('Condition field "transfer" never matches in a rule') && calls.length === 0, '#766 NEGATIVE: transfer is false is refused and nothing is written', r.message);
 
   for (const [label, value] of [['an empty array', []], ['a string', A]]) {
     r = await attempt(rule([{ field: 'payee', op: 'notOneOf', value }], [okAct]));
@@ -216,7 +218,7 @@ console.log('\n[#710] array values for oneOf and notOneOf, booleans for the flag
 console.log('\n[#711] one operator map, equal to what Actual accepts');
 {
   const A = '10000000-0000-4000-8000-00000000000a';
-  const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent';
+  const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled';
   const { CONDITION_FIELD_OPERATORS: MAP } = await import('../../dist/src/lib/schemas/rules.js');
   check(MAP?.payee_name?.operators?.join() === 'is,isNot,contains,matches,doesNotContain,oneOf,notOneOf,hasTags,hasAnyTag',
     'the exported map holds payee_name with its nine operators', JSON.stringify(MAP?.payee_name));

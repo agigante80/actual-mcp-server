@@ -30,8 +30,15 @@ const fatal = (message) => { console.error(`  FAIL: ${message}`); process.exit(1
 // The deliberate differences from upstream. Each one is written here, with its reason, so a
 // change to it is a visible edit to this table and not a quiet edit to the map.
 const EXCEPTIONS = {
+  // #766: `transfer` and `parent` are upstream condition fields, but only for FILTER queries
+  // (conditionsToAQL maps them to transfer_id and is_parent). A RULE is evaluated against the
+  // object prepareTransactionForRules builds, which never sets either field, and Condition.eval
+  // returns false for an undefined value under every operator. A rule on them is stored and never
+  // fires, so the map omits them and RULE_NEVER_MATCHING_FIELDS refuses them. The check below
+  // fails if that function ever starts to assign one, so this omission is then revisited.
+  neverMatchingFields: ['transfer', 'parent'],
   // The type `saved` has no operators upstream, so no condition on it can be valid.
-  omittedFields: ['saved'],
+  omittedFields: ['saved', 'transfer', 'parent'],
   // Upstream accepts the text operators on the id fields, but a RULE never matches them:
   // Condition.eval compares the raw id, and only the filter path (conditionsToAQL) maps them to
   // a name. A rule "payee contains amazon" would be saved and never fire.
@@ -135,6 +142,7 @@ console.log(`\n[#711] the local operator map equals upstream (@actual-app/api ${
   check(problems.length === 0, 'no drift in either direction', problems.join('; '));
   for (const field of EXCEPTIONS.omittedFields) {
     check(Object.hasOwn(fieldInfo, field), `recorded omission "${field}" is still an upstream field (else drop the exception)`);
+    if (EXCEPTIONS.neverMatchingFields.includes(field)) continue; // checked against the rule engine below
     // The omission is only right while the field's type takes no operator. If upstream gives it
     // one, conditions on it become valid and this must fail, not stay hidden by the exception.
     const ops = typeInfo[fieldInfo[field]?.type]?.ops;
@@ -145,6 +153,40 @@ console.log(`\n[#711] the local operator map equals upstream (@actual-app/api ${
     const upstreamOps = info ? typeInfo[info.type].ops.filter((op) => !(info.disallowedOps?.has?.(op))) : [];
     check(ops.every((op) => upstreamOps.includes(op)), `recorded refusal on "${field}" is still accepted upstream (else drop the exception)`, ops.join(', '));
   }
+}
+
+/** The body of `async function prepareTransactionForRules`, cut out by balanced braces. */
+function prepareBody(text) {
+  const anchor = 'function prepareTransactionForRules(';
+  const at = text.indexOf(anchor);
+  if (at < 0) throw new Error(`anchor "${anchor}" not found`);
+  const open = text.indexOf('{', text.indexOf(')', at));
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    if (text[i] === '{') depth++;
+    else if (text[i] === '}' && --depth === 0) return text.slice(open, i + 1);
+  }
+  throw new Error('prepareTransactionForRules has no closing brace');
+}
+/** The never-matching fields the body assigns (r.<f> =, r["<f>"] =, or an object key). Pure. */
+function assignedNeverMatching(body, fields) {
+  return fields.filter((f) => new RegExp(`\\b\\w+(?:\\.${f}|\\[["']${f}["']\\])\\s*(?:=|\\?\\?=|\\|\\|=)(?!=)|[{,]\\s*["']?${f}["']?\\s*:`).test(body));
+}
+
+console.log('\n[#766] upstream still never sets transfer or parent on the transaction a rule is evaluated against');
+{
+  let body = '';
+  try { body = prepareBody(src); } catch (err) { fatal(`${err.message}. Find where prepareTransactionForRules moved and update this test; do NOT make it skip.`); }
+  check(body.includes('payee_name') && body.includes('_account_name'), 'the cut body is the rule-preparation function (sets payee_name and _account_name)');
+  const assigned = assignedNeverMatching(body, EXCEPTIONS.neverMatchingFields);
+  check(assigned.length === 0, 'it assigns neither transfer nor parent (else revisit RULE_NEVER_MATCHING_FIELDS)', assigned.join(', '));
+  // The check must be able to fail: a copy of the body that assigns one is reported.
+  check(assignedNeverMatching(body.replace('return r;', 'r.transfer = false;\n\treturn r;'), EXCEPTIONS.neverMatchingFields).join() === 'transfer',
+    'NEGATIVE: a body that assigns r.transfer is reported');
+  check(assignedNeverMatching(body.replace('return r;', 'r["parent"] ??= false;\n\treturn r;'), EXCEPTIONS.neverMatchingFields).join() === 'parent',
+    'NEGATIVE: a body that assigns r["parent"] is reported');
+  check(assignedNeverMatching('const r = { ...trans, transfer: false };', EXCEPTIONS.neverMatchingFields).join() === 'transfer',
+    'NEGATIVE: an object literal key is reported');
 }
 
 console.log('\n[#711] the drift check itself can fail (fixtures)');

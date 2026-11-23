@@ -2242,6 +2242,47 @@ payee: payee.id,
     expect(JSON.stringify(stored.actions)).not.toContain(ghost);
   });
 
+  // #766: a transfer or parent condition never matches in a rule (the engine does not set either
+  // field), so it is refused up front. The refusals assert by absence of the unique marker, never
+  // by a whole-budget rule count.
+  test('manage_rules create and update - a transfer or parent condition is refused and nothing is written; cleared still works (#766)', async ({ mcp, makeCategory, makeRule, cleanup }) => {
+    const category = await makeCategory();
+    const marker = `E2E-Rule766-${uniqueSuffix()}`;
+    const actions = [{ op: 'set', field: 'notes', value: marker }];
+    const listRules = async () => {
+      const data = await mcp.call('list_entities', { type: 'rule' });
+      return (Array.isArray(data) ? data : (data?.rules ?? [])) as any[];
+    };
+
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'transfer', op: 'is', value: true }], actions }))
+      .rejects.toThrow(/never matches in a rule/);
+    await expect(mcp.call('manage_rules', { action: 'create', conditions: [{ field: 'transfer', op: 'is', value: false }], actions }))
+      .rejects.toThrow(/Condition field "transfer" never matches in a rule/);
+    expect(JSON.stringify(await listRules()), 'no rule carries the marker after the refused creates').not.toContain(marker);
+
+    const rule = await makeRule({ categoryId: category.id });
+    const before = (await listRules()).find((r: any) => r?.id === rule.id);
+    await expect(mcp.call('manage_rules', { action: 'update', id: rule.id, conditions: [{ field: 'parent', op: 'is', value: true }] }))
+      .rejects.toThrow(/Condition field "parent" never matches in a rule/);
+    const after = (await listRules()).find((r: any) => r?.id === rule.id);
+    expect(JSON.stringify(after?.conditions)).toBe(JSON.stringify(before?.conditions));
+    expect(JSON.stringify(after?.conditions)).not.toContain('parent');
+
+    // Positive: a flag condition that works is still accepted (ANDed with the marker so it never
+    // matches another test's transaction).
+    const created = await mcp.call('manage_rules', {
+      action: 'create',
+      conditions: [{ field: 'cleared', op: 'is', value: true }, { field: 'notes', op: 'contains', value: marker }],
+      actions,
+    });
+    const id = (typeof created === 'string' ? created : created?.id) as string;
+    expect(id, 'manage_rules create must return an id').toBeTruthy();
+    cleanup.add(CLEANUP_ORDER.rule, `rule 766 ${marker}`, async () => {
+      await mcp.call('manage_rules', { action: 'delete', id }).catch(() => undefined);
+    });
+    expect((await listRules()).find((r: any) => r?.id === id)?.conditions?.find((c: any) => c?.field === 'cleared')).toMatchObject({ op: 'is', value: true });
+  });
+
   test('manage_rules upsert - should upsert rule idempotently', async ({ mcp, makeCategory, cleanup }) => {
     const category = await makeCategory();
     const marker = `E2E-Upsert-${uniqueSuffix()}`;
@@ -5300,6 +5341,16 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       throw new Error(`expected a refusal, a rule was created: ${leaked}`);
     }
     expect(attempt.message).toMatch(/zzz/);
+  });
+
+  test('actual_rules_create - a transfer condition is refused and nothing is written (#766)', async ({ mcp }) => {
+    const marker = `E2E-Rule766L-${uniqueSuffix()}`;
+    await expect(mcp.call('actual_rules_create', {
+      conditions: [{ field: 'transfer', op: 'is', value: true }],
+      actions: [{ op: 'set', field: 'notes', value: marker }],
+    })).rejects.toThrow(/Condition field "transfer" never matches in a rule/);
+    const listed = (await mcp.call('list_entities', { type: 'rule' })) as any;
+    expect(JSON.stringify(listed)).not.toContain(marker);
   });
 
   test('actual_rules_create and actual_rules_update - an empty list and a mistyped set value are refused (#762)', async ({ mcp, makeCategory, makeRule, cleanup }) => {

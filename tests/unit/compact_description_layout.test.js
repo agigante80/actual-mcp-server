@@ -68,7 +68,7 @@ await check('#714: manage_rules has one line per action and one per condition fi
   for (const action of ['create', 'create_batch', 'upsert', 'update', 'delete']) {
     assert.strictEqual(lines.filter((l) => l.startsWith(`${action}: `)).length, 1, `one line starting "${action}: "`);
   }
-  for (const start of ['Conditions match by field and op: imported_payee, payee_name take ', 'notes takes ', 'id fields (', 'cleared, reconciled, transfer, parent take ', 'amount takes ', 'date takes ']) {
+  for (const start of ['Conditions match by field and op: imported_payee, payee_name take ', 'notes takes ', 'id fields (', 'cleared, reconciled take ', 'amount takes ', 'date takes ']) {
     assert.strictEqual(lines.filter((l) => l.startsWith(start)).length, 1, `one line starting "${start}"`);
   }
   // The prefixes alone cannot see a group SPLIT over two lines (its first half still matches), so

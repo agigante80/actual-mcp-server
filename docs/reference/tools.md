@@ -164,9 +164,9 @@ Until v0.28.0 six budget tools had camelCase names. The old names still work as 
 | `account` | `is`, `isNot`, `oneOf`, `notOneOf`, `onBudget`, `offBudget` |
 | `amount` | `is`, `isapprox`, `isbetween`, `gt`, `gte`, `lt`, `lte` |
 | `date` | `is`, `isapprox`, `gt`, `gte`, `lt`, `lte` |
-| `cleared`, `reconciled`, `transfer`, `parent` | `is` |
+| `cleared`, `reconciled` | `is` |
 
-Any other field is refused with the list of valid ones; `description` and `saved` are not condition fields. Two differences from Actual are deliberate: `saved` is left out (Actual gives it no operator), and `contains`, `matches` and `doesNotContain` are refused on the id fields, because a rule compares the stored id and such a rule would never fire. To match a payee by name, use `payee_name` or `imported_payee`.
+Any other field is refused with the list of valid ones; `description` and `saved` are not condition fields, and `transfer` and `parent` are refused (#766): Actual's rule engine never sets them on the transaction a rule is evaluated against, so a rule on them is stored and never matches (use `run_query` to find such transactions). Two differences from Actual are deliberate: `saved` is left out (Actual gives it no operator), and `contains`, `matches` and `doesNotContain` are refused on the id fields, because a rule compares the stored id and such a rule would never fire. To match a payee by name, use `payee_name` or `imported_payee`.
 
 | Tool | Description |
 |------|-------------|

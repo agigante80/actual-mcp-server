@@ -224,7 +224,7 @@ const check = (cond, label, d = '') => cond ? pass(label) : fail(label, d);
 
   console.log('\n[#711] rules_create_or_update: the shared operator map, same messages as actual_rules_create');
   {
-    const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent';
+    const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled';
     for (const [label, c] of [
       ['account onBudget ""', { field: 'account', op: 'onBudget', value: '' }],
       ['amount isbetween {1000, 5000}', { field: 'amount', op: 'isbetween', value: { num1: 1000, num2: 5000 } }],
