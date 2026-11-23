@@ -1628,6 +1628,50 @@ payee: payee.id,
     }
   });
 
+  // #752: a payee_name shared by two payees is refused on create and import and writes nothing. The
+  // two payees come from the fixture (each registers its own deletion); a single-match name is the
+  // positive control and its payee is read back by id.
+  test('manage_transactions create and import - ERROR: a payee_name shared by two payees is refused and writes nothing (#752)', async ({ mcp, makeAccount, makePayee }) => {
+    const account = await makeAccount();
+    const shared = `E2E-DupPayee-${uniqueSuffix()}`;
+    const first = await makePayee({ name: shared });
+    const second = await makePayee({ name: shared });
+    const unique = await makePayee();
+    const ids = `${[first.id, second.id].sort().join(', ')}`;
+    const notes = `E2E-DupName-${uniqueSuffix()}`;
+    try {
+      // mcp.call returns a create reply's `id` alone (null on a refusal), so the reply is read whole from mcp.raw.
+      const created = JSON.parse((await mcp.raw('manage_transactions', { action: 'create', account: account.id, date: '2018-06-01', amount: -111, payee_name: shared, notes })).content[0].text);
+      expect(created.success).toBe(false);
+      expect(String(created.error)).toMatch(new RegExp(`Payee name "${shared}" matches 2 payees, so it does not identify one: (${first.id}|${second.id}), (${first.id}|${second.id})\\. Nothing was written\\. Pass payee \\(the id you mean\\) instead of payee_name; list_entities with type payee lists them\\.`));
+      expect(String(created.error)).toContain(first.id);
+      expect(String(created.error)).toContain(second.id);
+
+      const imported = await refusal(() => mcp.call('manage_transactions', {
+        action: 'import',
+        account_id: account.id,
+        txs: [
+          { date: '2018-06-02', amount: -7, notes, payee_name: unique.name, imported_id: `e2e-dup-clean-${uniqueSuffix()}` },
+          { date: '2018-06-02', amount: -8, notes, payee_name: shared, imported_id: `e2e-dup-name-${uniqueSuffix()}` },
+        ],
+      }));
+      expect(imported).toMatch(new RegExp(`Payee name "${shared}" matches 2 payees, so it does not identify one: `));
+      expect(imported).toContain(ids.split(', ')[0]);
+      expect(imported).toContain(ids.split(', ')[1]);
+      expect(imported).toMatch(/list_entities with type payee lists them/);
+      expect(await idsWithNotes(mcp, notes), 'a refused import writes none of the batch').toEqual([]);
+
+      // Positive control: a name that matches exactly one payee attaches that payee.
+      await mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-06-03', amount: -9, payee_name: unique.name, notes });
+      const stored = await idsWithNotes(mcp, notes);
+      expect(stored).toHaveLength(1);
+      expect((await catOfTxn(mcp, stored[0])).payee).toBe(unique.id);
+    } finally {
+      const leaked = await idsWithNotes(mcp, notes);
+      for (const id of leaked) await mcp.call('manage_transactions', { action: 'delete', id });
+    }
+  });
+
   test('manage_transactions update and update_batch - ERROR: an unknown category id is refused and the stored category is unchanged (#747)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
     const unknown = '00000000-0000-4000-8000-000000000000';
     const account = await makeAccount();
@@ -5605,6 +5649,38 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
       const kept = await accountOfTxn(id);
       if (kept !== account.id) await mcp.call('actual_transactions_update', { id, fields: { account: account.id } });
       expect(kept, 'a refused update must leave the row in its account').toBe(account.id);
+    }
+  });
+
+  // #752: the legacy create and import refuse a payee_name shared by two payees, with the legacy list tool name.
+  test('actual_transactions_create and _import - ERROR: a payee_name shared by two payees is refused and writes nothing (#752)', async ({ mcp, makeAccount, makePayee }) => {
+    const account = await makeAccount();
+    const shared = `E2E-LegacyDupPayee-${uniqueSuffix()}`;
+    const first = await makePayee({ name: shared });
+    const second = await makePayee({ name: shared });
+    const notes = `E2E-LegacyDupName-${uniqueSuffix()}`;
+    const rowsOf = async (query: string) => {
+      const out = await mcp.call('run_query', { query });
+      return (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    };
+    try {
+      const created = JSON.parse((await mcp.raw('actual_transactions_create', { account: account.id, date: '2018-06-01', amount: -111, payee_name: shared, notes })).content[0].text);
+      expect(created.success).toBe(false);
+      expect(String(created.error)).toMatch(new RegExp(`Payee name "${shared}" matches 2 payees, so it does not identify one: `));
+      expect(String(created.error)).toContain(first.id);
+      expect(String(created.error)).toContain(second.id);
+      expect(String(created.error)).toMatch(/actual_payees_get lists them/);
+
+      const imported = await refusal(() => mcp.call('actual_transactions_import', {
+        accountId: account.id,
+        txs: [{ date: '2018-06-02', amount: -8, notes, payee_name: shared, imported_id: `e2e-legacy-dup-${uniqueSuffix()}` }],
+      }));
+      expect(imported).toMatch(new RegExp(`Payee name "${shared}" matches 2 payees`));
+      expect(imported).toMatch(/actual_payees_get lists them/);
+    } finally {
+      const leaked = await rowsOf(`SELECT id FROM transactions WHERE notes = '${notes}'`);
+      for (const r of leaked) await mcp.call('manage_transactions', { action: 'delete', id: r.id });
+      expect(leaked.map((r: any) => r.id), 'a refused create or import must not write a row').toEqual([]);
     }
   });
 

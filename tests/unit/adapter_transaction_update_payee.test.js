@@ -104,7 +104,7 @@ const ACCT = '55555555-5555-4555-8555-555555555555';
   reset(['t-1'], [{ id: P1, name: 'Dup Co' }, { id: P2, name: 'dup co' }]);
   {
     const e = await refused(() => adapter.updateTransaction('t-1', { payee_name: 'dup co' }));
-    check(e && errors.isPreflightRefusal(e), 'typed refusal');
+    check(e && errors.isPreflightRefusal(e) && e.refusalKind === 'out-of-range', 'typed out-of-range refusal');
     check(e?.message === `Payee name "dup co" matches 2 payees, so it does not identify one: ${P1}, ${P2}. Nothing was written. Pass payee (the id you mean) instead of payee_name; actual_payees_get lists them.`, 'exact message', e?.message);
     check(updates.length === 0 && creates.length === 0, 'nothing written or created');
   }
