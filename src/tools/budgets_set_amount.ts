@@ -11,7 +11,7 @@ const InputSchema = z.object({
   month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format')
     .describe('Month as YYYY-MM, one the budget has (see actual_budgets_get_months)'),
   categoryId: CommonSchemas.categoryId,
-  amount: z.number().int('amount must be an integer (cents)')
+  amount: CommonSchemas.budgetAmountCents
     .describe('Budgeted amount for the category in that month, integer cents (5000 is $50.00)'),
 });
 
@@ -21,7 +21,8 @@ const tool: ToolDefinition = {
     'Set the budgeted amount for a specific category in a given month. Amount in cents ' +
     '(e.g., 50000 = $500). Use this to allocate money to spending categories for budget planning. ' +
     'The month must be one the budget actually has: Actual allows from three months before the ' +
-    'earliest transaction to twelve months ahead. Use actual_budgets_get_months to see the range.',
+    'earliest transaction to twelve months ahead. Use actual_budgets_get_months to see the range. ' +
+    'An income category is refused on an envelope budget; the amount is at most 2251799813685247.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     const input = InputSchema.parse(args || {});

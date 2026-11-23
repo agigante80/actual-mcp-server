@@ -10,7 +10,7 @@ const BudgetOperationSchema = z
   .object({
     month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'month must be in YYYY-MM format (e.g. 2025-01)').describe('Budget month in YYYY-MM format'),
     categoryId: CommonSchemas.categoryId.describe('Category ID'),
-    amount: CommonSchemas.amountCents.optional().describe('Budget amount in integer cents (if setting amount)'),
+    amount: CommonSchemas.budgetAmountCents.optional().describe('Budget amount in integer cents (if setting amount)'),
     carryover: z.boolean().optional().describe('Carryover flag (if setting carryover)'),
   })
   .refine((op) => op.amount !== undefined || op.carryover !== undefined, {
@@ -37,7 +37,7 @@ const tool: ToolDefinition = {
   name: 'actual_budget_updates_batch',
   description: `Set budget amounts and/or carryover flags for many month/category pairs in one call. Accepts 1 to 100 operations; each operation needs at least one of amount (integer cents) or carryover (boolean).
 
-Each operation is applied independently and NOT atomically: there is no rollback, so items applied before a failure stay applied. An unknown category, a month outside the budget's range, or a carryover on an income category fails only that item and is reported per item. If an operation sets both amount and carryover and the carryover fails, the amount may already be applied. If the call times out, read the affected months back with actual_budgets_get_month BEFORE retrying; some items may have been applied. If several items target the same month and category, the last one wins.
+Each operation is applied independently and NOT atomically: there is no rollback, so items applied before a failure stay applied. An unknown category, a month outside the budget's range, or a carryover on an income category fails only that item (so does an amount on an income category of an envelope budget) and is reported per item. An amount is at most 2251799813685247. If an operation sets both amount and carryover and the carryover fails, the amount may already be applied. If the call times out, read the affected months back with actual_budgets_get_month BEFORE retrying; some items may have been applied. If several items target the same month and category, the last one wins.
 
 Returns: { succeeded: [{index, month, categoryId}], failed: [{index, month, categoryId, error}], total, successCount, failureCount }. Every item failing is a normal result (successCount 0), not a tool error. To rebalance categories, read the month with actual_budgets_get_month, then send one batch of absolute amounts.
 

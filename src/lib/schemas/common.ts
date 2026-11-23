@@ -8,6 +8,7 @@
 
 import { z } from 'zod';
 import { isCalendarDay } from '../dates.js';
+import { MAX_BUDGET_AMOUNT_CENTS } from '../budget-limits.js';
 import { 
   MAX_NAME_LENGTH, 
   MAX_NOTES_LENGTH, 
@@ -186,6 +187,17 @@ export const amountCentsSchema = z
   .describe('Amount in cents (negative for expenses, positive for income)');
 
 /**
+ * A budget amount in cents (#759): `amountCents` bounded to what Actual can store.
+ * Upstream `safeNumber` allows only 2 ** 51 - 1, well under the `.int()` bound of 2 ** 53 - 1.
+ */
+export const budgetAmountCentsSchema = z
+  .number()
+  .int('amount must be an integer (cents)')
+  .min(-MAX_BUDGET_AMOUNT_CENTS, `amount must be at least -${MAX_BUDGET_AMOUNT_CENTS} (the limit Actual can store)`)
+  .max(MAX_BUDGET_AMOUNT_CENTS, `amount must be at most ${MAX_BUDGET_AMOUNT_CENTS} (the limit Actual can store)`)
+  .describe('Budget amount in cents, at most 2251799813685247 either way');
+
+/**
  * Optional amount in cents
  * Used for: account balance initialization, optional transaction amounts
  */
@@ -325,6 +337,7 @@ export const CommonSchemas = {
   
   // Amounts
   amountCents: amountCentsSchema,
+  budgetAmountCents: budgetAmountCentsSchema,
   optionalAmountCents: optionalAmountCentsSchema,
   
   // Text fields

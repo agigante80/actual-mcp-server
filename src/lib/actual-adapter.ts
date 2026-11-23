@@ -77,6 +77,8 @@ import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
 import { withOpTimeout } from './opTimeout.js';
 import { markInitFailure } from './init-failure.js';
+import { MAX_BUDGET_AMOUNT_CENTS } from './budget-limits.js';
+import { incomeSetAmountRefusal, incomeTransferRefusal, isTrackingBudgetMonth } from './actual-adapter/budget-income.js';
 import { ConflictRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 import { amountOpMismatch } from './schemas/schedule-amount.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
@@ -2655,6 +2657,17 @@ export async function setBudgetAmount(month: string | undefined, categoryId: str
       );
     }
 
+    // #759: on an envelope budget upstream builds no budget cell for an income category, so the
+    // row this write would INSERT is one nothing reads. A tracking budget does read it, so the
+    // refusal depends on the budget type, seen from the month (only paid for an income category).
+    const target = (categories as any[]).find((c: any) => c.id === categoryId);
+    if (target?.is_income) {
+      const budgetMonth = await withConcurrency(() =>
+        retry(() => rawGetBudgetMonth(month) as Promise<unknown>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
+      );
+      if (!isTrackingBudgetMonth(budgetMonth)) throw incomeSetAmountRefusal(target);
+    }
+
     const result = await withConcurrency(() => retry(() => rawSetBudgetAmount(month, categoryId, amount) as Promise<components['schemas']['BudgetSetRequest'] | null | void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     return result;
   }, { preservesListings: ['accounts', 'categories', 'categoryGroups', 'payees'] });
@@ -2727,8 +2740,21 @@ export async function transferBudgetAmount(
     const to = cats.find((c: any) => c.id === toCategoryId);
     if (!from) throw new Error(`Source category ${fromCategoryId} not found in budget`);
     if (!to) throw new Error(`Target category ${toCategoryId} not found in budget`);
+    // #759: a transfer moves budgeted money between expense categories. An income category has
+    // no budgeted amount on an envelope budget (it reads as 0, and the target write would create
+    // a row nothing reads while "to budget" rises), and no to-budget pool exists on a tracking one.
+    if (from.is_income) throw incomeTransferRefusal(from);
+    if (to.is_income) throw incomeTransferRefusal(to);
     const prevFrom = from.budgeted || 0;
     const prevTo = to.budgeted || 0;
+    // The target is written AFTER the source is lowered, and upstream cannot store above
+    // MAX_BUDGET_AMOUNT_CENTS, so refuse here, before the first write, not as a partial transfer.
+    if (prevTo + amount > MAX_BUDGET_AMOUNT_CENTS) {
+      throw new OutOfRangeRefusal(
+        `Transfer of ${amount} would set category "${toCategoryId}" above Actual's limit of ${MAX_BUDGET_AMOUNT_CENTS}. Nothing was written.`,
+        String(toCategoryId),
+      );
+    }
     if (prevFrom < amount) {
       throw new Error(`Insufficient budget in source category. Available: ${prevFrom}, Requested: ${amount}`);
     }
@@ -4704,17 +4730,29 @@ export async function setBudgetBatch(items: BudgetBatchItem[]): Promise<BudgetBa
 
     // Phase 1: reads, then refusal decisions. Both reads happen BEFORE the first write.
     const categories = await withConcurrency(() =>
-      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string; name?: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
     );
-    const categoryById = new Map<string, { id: string; is_income?: boolean }>();
-    for (const c of categories as Array<{ id: string; is_income?: boolean }>) categoryById.set(c.id, c);
+    const categoryById = new Map<string, { id: string; name?: string; is_income?: boolean }>();
+    for (const c of categories as Array<{ id: string; name?: string; is_income?: boolean }>) categoryById.set(c.id, c);
     const months = await withConcurrency(() =>
       retry(() => rawGetBudgetMonths() as Promise<string[]>, { retries: 2, backoffMs: 200 })
     );
     const monthKnown = Array.isArray(months) && months.length > 0;
+    // #759: whether the budget is a tracking budget, read lazily and once per call, only when an
+    // income item carries an amount (an envelope budget has no cell for it, a tracking one does).
+    let trackingBudget: boolean | undefined;
+    const isTracking = async (): Promise<boolean> => {
+      if (trackingBudget === undefined) {
+        const budgetMonth = await withConcurrency(() =>
+          retry(() => rawGetBudgetMonth(months[0]) as Promise<unknown>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
+        );
+        trackingBudget = isTrackingBudgetMonth(budgetMonth);
+      }
+      return trackingBudget;
+    };
 
     const toWrite: Array<{ index: number; item: BudgetBatchItem }> = [];
-    items.forEach((item, index) => {
+    for (const [index, item] of items.entries()) {
       let refusal: Error | null = null;
       const category = categoryById.get(item.categoryId);
       if (!category) {
@@ -4731,10 +4769,12 @@ export async function setBudgetBatch(items: BudgetBatchItem[]): Promise<BudgetBa
             'Nothing was written for this item.',
           String(item.categoryId),
         );
+      } else if (monthKnown && item.amount !== undefined && category.is_income && !(await isTracking())) {
+        refusal = incomeSetAmountRefusal(category);
       }
       if (refusal) failed.push({ index, month: item.month, categoryId: item.categoryId, error: refusal.message });
       else toWrite.push({ index, item });
-    });
+    }
 
     // Phase 2: raw writes only, each awaited on its own (no bracket, see #539 above).
     const deadlineMs = config.ACTUAL_OP_TIMEOUT_MS > 0 ? config.ACTUAL_OP_TIMEOUT_MS * BUDGET_BATCH_DEADLINE_FRACTION : 0;

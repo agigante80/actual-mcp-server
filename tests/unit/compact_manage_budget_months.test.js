@@ -190,6 +190,20 @@ await check('compactLegacyNames covers the targets, all write-capable', () => {
   assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_budget_updates_batch', 'actual_budgets_hold_for_next_month', 'actual_budgets_reset_hold', 'actual_budgets_set_amount', 'actual_budgets_set_carryover', 'actual_budgets_transfer', 'actual_notes_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
+await check('#759 NEGATIVE: set_amount, transfer and a batch item are bounded at 2251799813685247, hold is not', async () => {
+  const limit = 2251799813685247;
+  await refused({ action: 'set_amount', month: M, category_id: C1, amount: 9007199254740991 }, /2251799813685247/);
+  await refused({ action: 'set_amount', month: M, category_id: C1, amount: -limit - 1 }, /2251799813685247/);
+  await refused({ action: 'transfer', month: M, from_category_id: C1, to_category_id: C2, amount: limit + 1 }, /2251799813685247/);
+  await refused({ action: 'set_amount_batch', operations: [{ month: M, categoryId: C1, amount: limit + 1 }] }, /2251799813685247/);
+  await expectCall({ action: 'set_amount', month: M, category_id: C1, amount: limit }, 'actual_budgets_set_amount', { month: M, categoryId: C1, amount: limit });
+  await expectCall({ action: 'hold', month: M, amount: 9007199254740991 }, 'actual_budgets_hold_for_next_month', { month: M, amount: 9007199254740991 });
+});
+await check('#759 the description states the income rule and the limit (the size ceiling is asserted by tools_list_size_budget)', () => {
+  assert.match(spec.description, /income category is refused on an envelope budget/);
+  assert.match(spec.description, /expense categories only/);
+  assert.match(spec.description, /amount on an envelope budget, on an income category/);
+});
 await check('read-only: every action is refused with MCP_READ_ONLY and runs nothing', async () => {
   await manager.initialize({ toolsets: 'all', tools: '', readOnly: true, surface: 'compact' }, COMPACT_TOOLS);
   assert.ok(!manager.getPublishedToolNames().includes('manage_budget_months'));

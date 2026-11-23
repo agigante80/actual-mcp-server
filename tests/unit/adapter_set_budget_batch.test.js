@@ -162,7 +162,9 @@ console.log('\n[#516] an income category carryover is refused BEFORE its amount 
   check(res.failed.length === 1 && /income category/.test(res.failed[0].error), 'refused as an income category', JSON.stringify(res.failed));
   check(writes.length === 0, 'the amount did NOT land first');
   const amountOnly = await run([{ month: '2026-01', categoryId: SALARY, amount: 5000 }]);
-  check(amountOnly.succeeded.length === 1 && writes.length === 1, 'an amount alone on an income category is still allowed');
+  // #759: this stub month is envelope-shaped (no income group budgeted), so the amount alone is refused too.
+  // The tracking-shaped month, where it is written, is covered by budget_income_guard.test.js.
+  check(amountOnly.failed.length === 1 && /not an expense category/.test(amountOnly.failed[0].error) && writes.length === 0, 'an amount alone on an income category of an envelope budget is refused (#759)', JSON.stringify(amountOnly));
 }
 
 console.log('\n[#516] upstream rejection stays as a backstop, reported per item');
