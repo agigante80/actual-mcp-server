@@ -54,6 +54,8 @@ const LEGACY_SMOKE = [
   'actual_payees_get',
   'actual_payees_update', // #760: the legacy unknown-field refusal for transfer_acct
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
+  'actual_transactions_update_batch', // #744: the legacy unknown-account refusal on a batch item
+  'actual_transactions_import', // #744: the legacy unknown-account refusal on import
   'actual_rules_get',
   'actual_rules_create', // #710: the one write row, the legacy rule schema accepts an id list and a flag
   'actual_rules_update', // #762: the legacy empty-list refusal on update

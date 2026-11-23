@@ -1432,6 +1432,79 @@ payee: payee.id,
     expect(await payeeOf(mcp, b.id)).toBeNull();
   });
 
+  // #744: update, update_batch and import refuse an account id that does not exist, as create
+  // does. A call that is NOT refused would leave an orphan row (account null) that no listing tool
+  // returns, so every row reads the account back with run_query and removes what leaked.
+  const UNKNOWN_ACCOUNT = '00000000-0000-4000-8000-000000000000';
+  const accountOfTxn = async (mcp: any, id: string): Promise<string | null> => {
+    const out = await mcp.call('run_query', { query: `SELECT id, account FROM transactions WHERE id = '${id}'` });
+    const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    return rows[0]?.account ?? null;
+  };
+  const idsWithNotes = async (mcp: any, notes: string): Promise<string[]> => {
+    const out = await mcp.call('run_query', { query: `SELECT id FROM transactions WHERE notes = '${notes}'` });
+    const rows = (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    return rows.map((r: any) => r.id);
+  };
+
+  test('manage_transactions update - moves a transaction to another account, ERROR: an unknown account is refused and the row keeps its account (#744)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const first = await makeAccount();
+    const second = await makeAccount();
+    const txn = await makeTransaction({ account: first });
+    await mcp.call('manage_transactions', { action: 'update', id: txn.id, account: second.id });
+    expect(await accountOfTxn(mcp, txn.id)).toBe(second.id);
+    await mcp.call('manage_transactions', { action: 'update', id: txn.id, account: first.id });
+
+    const message = await refusal(() => mcp.call('manage_transactions', { action: 'update', id: txn.id, account: UNKNOWN_ACCOUNT }));
+    expect(message).toMatch(/Account "00000000-0000-4000-8000-000000000000" not found/);
+    expect(message).toMatch(/list_entities with type account/);
+    expect(message).toMatch(/The transaction was not changed/);
+    const kept = await accountOfTxn(mcp, txn.id);
+    if (kept !== first.id) await mcp.call('manage_transactions', { action: 'update', id: txn.id, account: first.id });
+    expect(kept, 'a refused update must leave the row in its account').toBe(first.id);
+  });
+
+  test('manage_transactions update_batch - ERROR: an unknown account fails that item only (#744)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const account = await makeAccount();
+    const bad = await makeTransaction({ account });
+    const good = await makeTransaction({ account });
+    const note = `E2E-AcctBatch-${uniqueSuffix()}`;
+    const data = await mcp.call('manage_transactions', {
+      action: 'update_batch',
+      updates: [
+        { id: bad.id, fields: { account: UNKNOWN_ACCOUNT } },
+        { id: good.id, fields: { notes: note } },
+      ],
+    });
+    const batch = data?.total !== undefined ? data : (data?.result ?? data);
+    const kept = await accountOfTxn(mcp, bad.id);
+    if (kept !== account.id) await mcp.call('manage_transactions', { action: 'update', id: bad.id, account: account.id });
+    expect(kept, 'the refused item must stay in its account').toBe(account.id);
+    expect(batch.failed.map((f: any) => f.id)).toEqual([bad.id]);
+    expect(batch.failed[0].error).toMatch(/Account "00000000-0000-4000-8000-000000000000" not found/);
+    expect(batch.succeeded.map((x: any) => x.id)).toEqual([good.id]);
+    expect(await idsWithNotes(mcp, note)).toEqual([good.id]);
+  });
+
+  test('manage_transactions import - ERROR: an unknown account is refused and writes nothing (#744)', async ({ mcp }) => {
+    const notes = `E2E-AcctImport-${uniqueSuffix()}`;
+    let message = '';
+    try {
+      message = await refusal(() => mcp.call('manage_transactions', {
+        action: 'import',
+        account_id: UNKNOWN_ACCOUNT,
+        txs: [{ date: '2018-06-23', amount: -7, notes, imported_id: `e2e-acct-import-${uniqueSuffix()}` }],
+      }));
+    } finally {
+      const leaked = await idsWithNotes(mcp, notes);
+      for (const id of leaked) await mcp.call('manage_transactions', { action: 'delete', id });
+      expect(leaked, 'an import into an unknown account must not write a row').toEqual([]);
+    }
+    expect(message).toMatch(/Account "00000000-0000-4000-8000-000000000000" not found/);
+    expect(message).toMatch(/list_entities with type account/);
+    expect(message).toMatch(/No transactions were imported/);
+  });
+
   test('search_transactions amount - should search by amount', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     const txn = await makeTransaction({ account, amount: -5000 });
@@ -4895,6 +4968,50 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const found = cats.find((c: any) => c?.id === category.id);
     expect(found?.group_id ?? found?.groupId).toBe(category.groupId);
     expect(found?.is_income).toBe(false);
+  });
+
+  // #744: the legacy transaction tools refuse an unknown account with the legacy list tool name.
+  // A call that is not refused leaves an orphan row, so each row reads the account back and
+  // removes what leaked.
+  test('actual_transactions_update, _update_batch and _import - ERROR: an unknown account is refused and nothing moves (#744)', async ({ mcp, makeAccount, makeTransaction }) => {
+    const unknown = '00000000-0000-4000-8000-000000000000';
+    const account = await makeAccount();
+    const txn = await makeTransaction({ account });
+    const other = await makeTransaction({ account });
+    const rowsOf = async (query: string) => {
+      const out = await mcp.call('run_query', { query });
+      return (Array.isArray(out) ? out : (out?.data ?? out?.result?.data ?? [])) as any[];
+    };
+    const accountOfTxn = async (id: string) => (await rowsOf(`SELECT id, account FROM transactions WHERE id = '${id}'`))[0]?.account ?? null;
+
+    const single = await refusal(() => mcp.call('actual_transactions_update', { id: txn.id, fields: { account: unknown } }));
+    expect(single).toMatch(/Account "00000000-0000-4000-8000-000000000000" not found/);
+    expect(single).toMatch(/Use actual_accounts_list to list available accounts/);
+
+    const batchData = await mcp.call('actual_transactions_update_batch', { updates: [{ id: other.id, fields: { account: unknown } }] });
+    const batch = batchData?.failed !== undefined ? batchData : (batchData?.result ?? batchData);
+    expect(batch.failed.map((f: any) => f.id)).toEqual([other.id]);
+    expect(batch.failed[0].error).toMatch(/Account "00000000-0000-4000-8000-000000000000" not found. Use actual_accounts_list to list available accounts/);
+
+    const notes = `E2E-LegacyAcctImport-${uniqueSuffix()}`;
+    let imported = '';
+    try {
+      imported = await refusal(() => mcp.call('actual_transactions_import', {
+        accountId: unknown,
+        txs: [{ date: '2018-06-23', amount: -7, notes, imported_id: `e2e-legacy-acct-import-${uniqueSuffix()}` }],
+      }));
+    } finally {
+      const leaked = await rowsOf(`SELECT id FROM transactions WHERE notes = '${notes}'`);
+      for (const r of leaked) await mcp.call('manage_transactions', { action: 'delete', id: r.id });
+      expect(leaked.map((r: any) => r.id), 'an import into an unknown account must not write a row').toEqual([]);
+    }
+    expect(imported).toMatch(/Account "00000000-0000-4000-8000-000000000000" not found. Use actual_accounts_list to list available accounts/);
+
+    for (const id of [txn.id, other.id]) {
+      const kept = await accountOfTxn(id);
+      if (kept !== account.id) await mcp.call('actual_transactions_update', { id, fields: { account: account.id } });
+      expect(kept, 'a refused update must leave the row in its account').toBe(account.id);
+    }
   });
 
   test('actual_payees_get - lists a seeded payee', async ({ mcp, makePayee }) => {
