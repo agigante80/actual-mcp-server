@@ -81,7 +81,8 @@ e = await refused(() => adapter.addTransactions([tx({ payee: PAYEE })]));
 check(e === null && adds.length === 1, 'ordinary payee written', e && e.message);
 reset();
 e = await refused(() => adapter.addTransactions([tx({ payee_name: 'Shop' })]));
-check(e === null && adds.length === 1 && payeeReads === 0, 'payee_name written, no payees read', String(payeeReads));
+// #752: a payee_name is looked up once (in the write drain) to refuse a name shared by two payees.
+check(e === null && adds.length === 1 && payeeReads === 1, 'payee_name written, the payees read once for the #752 guard', String(payeeReads));
 reset();
 e = await refused(() => adapter.addTransactions([tx({})]));
 check(e === null && adds.length === 1 && payeeReads === 0, 'no payee written, no payees read', String(payeeReads));
