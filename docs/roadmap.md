@@ -137,6 +137,12 @@ A live review of the tag tools on 2026-11-21 found that they work but describe s
 
 Outcome (2026-11-21): done. All five tickets shipped in v0.33.0. The API does accept `hasTags` and `hasAnyTag`, on `notes` only, so #703 landed as planned, with one addition the plan did not foresee: a value with no tag in it is refused, because upstream would store it and a `hasTags` rule would then act on every transaction that has notes. Nothing was moved out of the phase.
 
+## Phase: Compact surface verification
+state: open
+plan: docs/plans/compact-surface-verification.md
+
+The compact surface (15 tools) became the default in v0.30.0 and the five MCP prompts shipped with it, and both have only been checked by the automated suites written alongside them. On 2026-11-23 the maintainer asked for an exhaustive hand test of every tool and prompt against a live server and the official Actual API documentation, with the findings fixed or ticketed. It comes now because every later change to the surface (#682, #705 to #708) builds on behaviour nobody has verified from the outside.
+
 ## Phase: Backlog
 state: backlog
 
