@@ -244,7 +244,7 @@ await check('#710: the real legacy handler refuses the bad shapes through the co
 await check('#710: the description names the list and flag forms', () => {
   const d = spec.description;
   assert.ok(/oneOf, notOneOf with an array of ids/.test(d), d);
-  assert.ok(/cleared, reconciled, transfer, parent take is with true or false/.test(d), d);
+  assert.ok(/cleared, reconciled take is with true or false/.test(d), d);
 });
 await check('#711: the description names the new operators and fields, and no longer offers description', () => {
   const d = spec.description;
@@ -269,7 +269,7 @@ await check('#711 NEGATIVE: an unknown condition field is refused by the real le
   const t = buildCompactTool(spec, { callOperation: async (_n, a) => legacyCreate.call(a) }, phrases);
   let e;
   try { await t.call({ action: 'create', conditions: [{ field: 'description', op: 'contains', value: 'x' }], actions: [ACT] }); } catch (x) { e = x; }
-  assert.ok(e && e.message === 'Unknown condition field "description". Valid fields: imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent.', String(e && e.message));
+  assert.ok(e && e.message === 'Unknown condition field "description". Valid fields: imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled.', String(e && e.message));
 });
 // ---- #761: condition options and unknown nested keys ----
 

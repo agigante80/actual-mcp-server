@@ -282,7 +282,7 @@ console.log('\n[#711] the shared operator map is applied per item');
   check(res.succeeded.map((s) => s.index).join() === '0,2' && created.length === 2, 'amount isbetween and payee_name contains are created (indices 0 and 2)', JSON.stringify(res));
   check(JSON.stringify(created[0]?.conditions?.[0]?.value) === JSON.stringify({ num1: 1000, num2: 5000 }), '  and the range reaches the raw create unchanged');
   const err = res.failed.find((f) => f.index === 1)?.error ?? '';
-  check(err === 'Unknown condition field "nosuchfield". Valid fields: imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent.',
+  check(err === 'Unknown condition field "nosuchfield". Valid fields: imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled.',
     'NEGATIVE: item 1 (an unknown field) fails with the exact message', err);
 }
 

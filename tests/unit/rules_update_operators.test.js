@@ -67,8 +67,8 @@ console.log('\n[#710] rules_update: array and boolean condition values');
   check(m.includes('expects IDs (UUIDs)') && m.includes('"Checking"') && calls.length === 0, 'NEGATIVE: a non-UUID array element is refused', m);
   m = await attempt([{ field: 'payee', op: 'isNot', value: [A] }]);
   check(m.includes('does not accept an array') && calls.length === 0, 'NEGATIVE: an array on isNot is refused', m);
-  m = await attempt([{ field: 'parent', op: 'is', value: 'yes' }]);
-  check(m.includes('must be true or false') && calls.length === 0, 'NEGATIVE: parent is "yes" is refused', m);
+  m = await attempt([{ field: 'cleared', op: 'is', value: 'yes' }]);
+  check(m.includes('must be true or false') && calls.length === 0, 'NEGATIVE: cleared is "yes" is refused', m);
   m = await attempt([{ field: 'cleared', op: 'isNot', value: true }]);
   check(m.startsWith('Invalid operator "isNot" for field "cleared".') && calls.length === 0, 'NEGATIVE: cleared isNot is refused', m);
   m = await attempt([{ field: 'imported_payee', op: 'is', value: false }]);
@@ -77,7 +77,7 @@ console.log('\n[#710] rules_update: array and boolean condition values');
 
 console.log('\n[#711] rules_update: the shared operator map, same messages as actual_rules_create');
 {
-  const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled, transfer, parent';
+  const VALID = 'imported_payee, payee, payee_name, account, category, category_group, notes, amount, date, cleared, reconciled';
   for (const [label, c] of [
     ['account onBudget ""', { field: 'account', op: 'onBudget', value: '' }],
     ['amount isbetween {1000, 5000}', { field: 'amount', op: 'isbetween', value: { num1: 1000, num2: 5000 } }],

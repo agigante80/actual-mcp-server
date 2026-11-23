@@ -28,7 +28,7 @@ export const CONDITION_OPERATORS_HELP =
   'notes: is, isNot, contains, matches, doesNotContain. notes and payee_name also hasTags (all), hasAnyTag (any): value "#a #b", whole tags, any case. ' +
   'payee, account, category, category_group (ids): is, isNot, oneOf, notOneOf (array of ids); account also onBudget, offBudget (value ""). ' +
   'amount: is, isapprox, isbetween ({num1, num2} cents), gt, gte, lt, lte. date: is, isapprox, gt, gte, lt, lte. ' +
-  'cleared, reconciled, transfer, parent: is true or false.';
+  'cleared, reconciled: is true or false.';
 
 /**
  * #711: the ONE condition operator map, used by every rule write tool. It equals the tables of
@@ -36,6 +36,7 @@ export const CONDITION_OPERATORS_HELP =
  * tests/unit/rules_operator_drift.test.js reads and compares on every unit run, with two
  * recorded exceptions (kept in that test's EXCEPTIONS table, with the reasons):
  *   - `saved` is omitted: its type has no operators upstream.
+ *   - `transfer` and `parent` are omitted (#766): see RULE_NEVER_MATCHING_FIELDS.
  *   - contains, matches and doesNotContain stay refused on payee, account, category and
  *     category_group. Upstream accepts them, but a rule compares the raw id, so such a rule is
  *     saved and never fires.
@@ -54,9 +55,17 @@ export const CONDITION_FIELD_OPERATORS: Readonly<Record<string, { readonly type:
   date: { type: 'date', operators: ['is', 'isapprox', 'gt', 'gte', 'lt', 'lte'] },
   cleared: { type: 'boolean', operators: ['is'] },
   reconciled: { type: 'boolean', operators: ['is'] },
-  transfer: { type: 'boolean', operators: ['is'] },
-  parent: { type: 'boolean', operators: ['is'] },
 };
+
+/**
+ * #766: `transfer` and `parent` are valid upstream condition fields, but only for FILTER queries:
+ * conditionsToAQL maps them to transfer_id and is_parent. A RULE is evaluated against the object
+ * that prepareTransactionForRules builds, which never sets either one, and Condition.eval returns
+ * false for an undefined field value under EVERY operator (isNot included). So a rule with such a
+ * condition is stored and can never match. tests/unit/rules_operator_drift.test.js fails if the
+ * installed upstream starts to set them, so this refusal is revisited then.
+ */
+const RULE_NEVER_MATCHING_FIELDS: ReadonlySet<string> = new Set(['transfer', 'parent']);
 
 const TEXT_OPERATORS: ReadonlySet<string> = new Set(['contains', 'matches', 'doesNotContain']);
 
@@ -66,6 +75,12 @@ const TEXT_OPERATORS: ReadonlySet<string> = new Set(['contains', 'matches', 'doe
  */
 export function assertConditionOperator(condition: { field: string; op: string }): void {
   const { field, op } = condition;
+  if (RULE_NEVER_MATCHING_FIELDS.has(field)) {
+    throw new Error(
+      `Condition field "${field}" never matches in a rule: Actual's rule engine does not set it on the transaction. ` +
+      'To find such transactions use run_query. Nothing was written.'
+    );
+  }
   const info = Object.hasOwn(CONDITION_FIELD_OPERATORS, field) ? CONDITION_FIELD_OPERATORS[field] : undefined;
   if (!info) {
     throw new Error(`Unknown condition field "${field}". Valid fields: ${Object.keys(CONDITION_FIELD_OPERATORS).join(', ')}.`);
@@ -99,7 +114,7 @@ export function assertTagOperatorValue(condition: { field: string; op: string; v
 }
 
 const ARRAY_OPERATORS: ReadonlySet<string> = new Set(['oneOf', 'notOneOf']);
-const BOOLEAN_FIELDS: ReadonlySet<string> = new Set(['cleared', 'reconciled', 'transfer', 'parent']);
+const BOOLEAN_FIELDS: ReadonlySet<string> = new Set(['cleared', 'reconciled']);
 const ID_FIELDS: ReadonlySet<string> = new Set(['payee', 'account', 'category', 'category_group']);
 const UUID_SHAPE = /^[0-9a-f-]{36}$/i;
 // #711: account onBudget and offBudget test the account's budget flag and take no id.
