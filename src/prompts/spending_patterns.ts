@@ -13,6 +13,8 @@ const MONTHS_MESSAGE = 'must be a whole number from 1 to 24';
 
 const TEMPLATE = `Analyse my spending patterns over the last {months} full {unit}, from {start_date} to {end_date}. Stay read-only: do not change anything.
 
+Before step 1, call list_budget_months with no month to get the months the budget covers. If {end_month} is not in that list, the budget has no data for it: do not call list_budget_months with {end_month}, say that the budget does not cover {end_month}, and skip step 3. Steps 1 and 2 still run.
+
 1. Call summarize_transactions with report grouped, start_date {start_date}, end_date {end_date}, group_by month and include_income true. Each group is one month with income, expenseOutflow, credits and netExpense (expenseOutflow minus credits). The savings rate for a month is income minus netExpense, divided by income.
 2. Call summarize_transactions with report grouped, start_date {start_date}, end_date {end_date} and group_by ["category", "month"]. Each group is one category in one month with its netExpense. Compare each category across the months to find the ones rising and falling; a category with no group in a month spent nothing that month.
 3. Call list_budget_months with month {end_month} to compare the trend with what was budgeted for the last month of the range: per expense category it gives budgeted, spent and balance.

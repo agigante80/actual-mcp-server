@@ -4960,6 +4960,14 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(text).toContain('from 2024-02-01 to 2024-02-29');
   });
 
+  test('prompts/get monthly_review - a month outside the budget says to list the months first and skip the budget read (#781)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('monthly_review', { month: '2028-01' });
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('call list_budget_months with no month');
+    expect(text).toContain('do not call list_budget_months with 2028-01');
+    expect(text).toContain('skip step 2');
+  });
+
   test('prompts/get monthly_review - ERROR: a malformed month is -32602 and the value is not echoed (#661)', async ({ mcp }) => {
     const out = await mcp.getPrompt('monthly_review', { month: 'October' });
     expect(out.result).toBeUndefined();

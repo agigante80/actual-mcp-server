@@ -226,5 +226,19 @@ await check('the argument descriptions state the positional order (#773)', () =>
   assert.ok(byName.months.includes('Positional order: end_month, then months.'));
 });
 
+// #781: a month the budget does not cover. list_budget_months with such a month throws, so the
+// text lists the budget months first and says what to skip.
+await check('spending_patterns lists the budget months first and says what to skip for a month outside them (#781)', () => {
+  const text = render({ months: '1', end_month: '2026-09' });
+  const para = 'Before step 1, call list_budget_months with no month to get the months the budget covers. If 2026-09 is not in that list, the budget has no data for it: do not call list_budget_months with 2026-09, say that the budget does not cover 2026-09, '  + 'and skip step 3. Steps 1 and 2 still run.';
+  assert.ok(text.includes(para), 'the paragraph is missing or changed');
+  assert.ok(text.indexOf(para) < text.indexOf('\n1. '), 'the paragraph comes before step 1');
+  assert.ok(!text.includes('{'), 'no unfilled placeholder');
+  assert.ok(!text.includes('this month'));
+  // Mutation: the same text without the paragraph must fail the match.
+  assert.ok(!text.replace(para, '').includes(para));
+});
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

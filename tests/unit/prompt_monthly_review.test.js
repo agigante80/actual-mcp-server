@@ -127,5 +127,19 @@ await check('an empty or blank month is the default; a bad month is one readable
   assert.throws(() => def.argsSchema.parse({ month: '' }));
 });
 
+// #781: a month the budget does not cover. list_budget_months with such a month throws, so the
+// text lists the budget months first and says what to skip.
+await check('monthly_review lists the budget months first and says what to skip for a month outside them (#781)', () => {
+  const text = render({ month: '2026-10' });
+  const para = 'Before step 1, call list_budget_months with no month to get the months the budget covers. If 2026-10 is not in that list, the budget has no data for it: do not call list_budget_months with 2026-10, say that the budget does not cover 2026-10, '  + 'and skip step 2 and the searches in step 4. Answer from step 3 alone: income, expenses and the savings rate, with no budgeted, overspent or unused-budget figures.';
+  assert.ok(text.includes(para), 'the paragraph is missing or changed');
+  assert.ok(text.indexOf(para) < text.indexOf('\n1. '), 'the paragraph comes before step 1');
+  assert.ok(!text.includes('{'), 'no unfilled placeholder');
+  assert.ok(!text.includes('this month'));
+  // Mutation: the same text without the paragraph must fail the match.
+  assert.ok(!text.replace(para, '').includes(para));
+});
+
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
