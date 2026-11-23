@@ -179,3 +179,32 @@ test('a keyed static entry still opens with its configured encryption password',
     ]);
   });
 });
+
+// #787: the active marker in discovery mode. requestBudgets() builds new row objects per call, so
+// the match is on syncId and name, never object identity.
+test('discovery: a shared file the session switched to carries active: true, and no other row does', async () => {
+  await run([plain, other], async () => {
+    await adapter.switchBudget('plain');
+    const rows = adapter.getBudgetRegistry();
+    assert.deepEqual(rows.filter(r => r.active).map(r => r.syncId), ['plain']);
+    assert.equal(rows.filter(r => 'active' in r).length, 1);
+  });
+});
+
+test('discovery: a locked row is never flagged', async () => {
+  await run([locked, other], async () => {
+    const rows = adapter.getBudgetRegistry();
+    assert.ok(rows.some(r => r.locked));
+    assert.deepEqual(rows.filter(r => r.locked && 'active' in r), []);
+  });
+});
+
+test('discovery: an active budget that cannot be resolved gives no flag and no error', async () => {
+  const sessionId = randomUUID();
+  await run([plain], () => adapter.switchBudget('plain'), { sessionId });
+  await run([other], async () => {
+    let rows;
+    assert.doesNotThrow(() => { rows = adapter.getBudgetRegistry(); });
+    assert.deepEqual(rows.filter(r => 'active' in r), []);
+  }, { sessionId });
+});
