@@ -31,15 +31,17 @@ export function expandSplitsForSearch(
 }
 
 /**
- * Case-insensitive notes match for an expanded row. A child with notes of its own matches on them;
- * a child with null or empty notes inherits its parent's notes FOR MATCHING ONLY (the returned row
- * still shows its own notes). A row that is not a split child uses its own notes.
+ * Case-insensitive notes match for an expanded row: the term is in the row's own notes OR in its
+ * split parent's notes (matching only; the returned row still shows its own notes). Matching the
+ * parent's notes for EVERY child, not only those with no notes, keeps a search for the split's
+ * notes returning the whole split (a partial split would understate the total with nothing
+ * marking it partial). A row that is not a split child uses its own notes.
  */
 export function childNotesMatch(
   row: SearchRow,
   parentNotes: Map<string, string | null>,
   term: string,
 ): boolean {
-  const text = row.notes || parentNotes.get(row.id) || '';
-  return text.toLowerCase().includes(term.toLowerCase());
+  const needle = term.toLowerCase();
+  return [row.notes, parentNotes.get(row.id)].some((text) => (text || '').toLowerCase().includes(needle));
 }
