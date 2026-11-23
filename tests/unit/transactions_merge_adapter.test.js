@@ -30,7 +30,13 @@ const ACCT2 = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
   let rows = [];
   let mergeCalls = [];
   let mergeReturn = B;
-  apiDefault.runQuery = async () => ({ data: rows });
+  // The stub returns only the columns the query selects, as the real server does, so
+  // dropping a column a guard reads (transfer_id, #794) turns its cases red.
+  apiDefault.runQuery = async (query) => {
+    const cols = query?.state?.selectExpressions;
+    if (!Array.isArray(cols) || cols.length === 0 || cols.includes('*')) return { data: rows };
+    return { data: rows.map((r) => Object.fromEntries(cols.filter((c) => c in r).map((c) => [c, r[c]]))) };
+  };
   apiDefault.mergeTransactions = async (...args) => { mergeCalls.push(args); return mergeReturn; };
   apiDefault.sync = async () => {};
 
