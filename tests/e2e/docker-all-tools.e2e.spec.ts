@@ -15,6 +15,9 @@
 import { test, expect, today, currentMonth, uniqueSuffix, CLEANUP_ORDER, isStdio } from './fixtures.js';
 import { DEFAULT_MCP_SERVER_URL, HTTP_PATH } from '../shared/e2e-helpers.js';
 
+// #745: the calendar message must appear exactly once in a refusal; a doubled message must not match.
+const CALENDAR_ONCE = /^(?:(?!not a real calendar day)[\s\S])*not a real calendar day(?:(?!not a real calendar day)[\s\S])*$/;
+
 const JSON_TYPES: Record<string, (v: unknown) => boolean> = {
   object: (v) => typeof v === 'object' && v !== null && !Array.isArray(v),
   array: (v) => Array.isArray(v),
@@ -223,7 +226,7 @@ test.describe('Docker E2E - tool surface', () => {
     const account = await makeAccount();
     await expect(
       mcp.call('summarize_transactions', { report: 'balance', account_id: account.id, cutoff: '2019-02-30' }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
   });
 
   test('conforms() can fail: a wrong-typed value and a missing required key are rejected', async () => {
@@ -1012,7 +1015,7 @@ payee: payee.id,
     const badNotes = `E2E-BadDate-${uniqueSuffix()}`;
     await expect(
       mcp.call('manage_transactions', { action: 'create', account: account.id, date: '2018-02-30', amount: -4303, notes: badNotes }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
     await expectNoLeak(mcp, account.id, badNotes);
   });
 
@@ -1025,7 +1028,7 @@ payee: payee.id,
         account_id: account.id,
         txs: [{ date: '2018-02-30', amount: -4303, notes, imported_id: `e2e-bad-import-${uniqueSuffix()}` }],
       }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
     await expectNoLeak(mcp, account.id, notes);
   });
 
@@ -1064,11 +1067,11 @@ payee: payee.id,
     };
     await expect(
       mcp.call('manage_transactions', { action: 'update', id: txn.id, date: '2018-13-45' }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
     expect(await storedDate()).toBe('2018-05-21');
     await expect(
       mcp.call('manage_transactions', { action: 'update_batch', updates: [{ id: txn.id, fields: { date: '2018-02-31' } }] }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
     expect(await storedDate()).toBe('2018-05-21');
   });
 
@@ -1554,7 +1557,7 @@ payee: payee.id,
     const notes = `E2E-BadTransfer-${uniqueSuffix()}`;
     await expect(
       mcp.call('manage_transactions', { action: 'transfer', from_account: src.id, to_account: dst.id, amount: 1234, date: '2019-04-31', notes }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
     await expectNoLeak(mcp, src.id, notes);
     await expectNoLeak(mcp, dst.id, notes);
   });
@@ -2329,7 +2332,7 @@ payee: payee.id,
     const name = `E2E-BadDate-Schedule-${uniqueSuffix()}`;
     await expect(
       mcp.call('manage_schedules', { action: 'create', name, account: account.id, amount: -5000, date: '2018-02-30' }),
-    ).rejects.toThrow(/Invalid date \(not a real calendar day\)/);
+    ).rejects.toThrow(CALENDAR_ONCE);
     const data = await mcp.call('list_entities', { type: 'schedule' });
     const schedules: any[] = data?.schedules ?? data?.result?.schedules ?? (Array.isArray(data) ? data : []);
     const leaked = schedules.filter((x: any) => x?.name === name);
