@@ -126,7 +126,7 @@ console.log('Running generated tools smoke tests');
     },
     createAccount: 'acct-new',
     updateAccount: null,
-    deleteAccount: null,
+    deleteAccount: { detachedTransfers: 0 },
     // #371: closeAccount reports WHICH outcome happened; a bare null would make the tool
     // dereference `.name` on nothing.
     closeAccount: { outcome: 'closed', name: 'Cash' },

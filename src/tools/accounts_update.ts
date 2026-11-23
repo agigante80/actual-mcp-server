@@ -10,7 +10,7 @@ const InputSchema = z.object({
     offbudget: CommonSchemas.offBudget,
     closed: CommonSchemas.closed,
     // #816: a group id, or null to ungroup.
-    account_group_id: CommonSchemas.accountGroupId.nullable().optional(),
+    account_group_id: CommonSchemas.accountGroupId.nullable().optional().describe('Group id to move the account into, or null to ungroup it'),
   }).strict().optional().describe('Fields to update - only recognized fields allowed'),
 });
 
