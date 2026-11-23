@@ -5648,6 +5648,28 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(out.error?.message).toContain('Unknown prompt');
   });
 
+  // #776: read only, nothing to clean up.
+  test('prompts/get subscription_finder - a 12 month window, no write tool named (#776)', async ({ mcp }) => {
+    const prompts = await mcp.listPrompts();
+    expect(prompts.map((p: any) => p.name)).toContain('subscription_finder');
+    const out = await mcp.getPrompt('subscription_finder', { date: '2024-02-29' });
+    expect(out.error).toBeUndefined();
+    expect(out.result.messages).toHaveLength(1);
+    expect(out.result.messages[0].role).toBe('user');
+    const text: string = out.result.messages[0].content.text;
+    expect(text).toContain('2023-03-01');
+    expect(text).toContain('2024-02-29');
+    expect(text).not.toContain('manage_');
+    expect(text).not.toContain('server clock');
+  });
+
+  test('prompts/get subscription_finder - ERROR: a non-calendar date is -32602 naming date (#776)', async ({ mcp }) => {
+    const out = await mcp.getPrompt('subscription_finder', { date: '2026-02-30' });
+    expect(out.result).toBeUndefined();
+    expect(out.error?.code).toBe(-32602);
+    expect(out.error?.message).toContain('date');
+  });
+
   // #775: completion. Read only, nothing to clean up.
   test('initialize advertises completions and completion/complete returns 12 months for monthly_review month (#775)', async ({ mcp }) => {
     const caps = await mcp.serverCapabilities();

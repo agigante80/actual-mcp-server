@@ -72,6 +72,10 @@ const TABLE = {
     ...['payee', 'rule', 'category_group', 'account'].map((type) => ['list_entities', { type }]),
     ['list_budget_months', { month: '2026-10' }],
   ]],
+  subscription_finder: [{ date: '2026-10-15' }, [
+    ['summarize_transactions', { report: 'grouped', start_date: '2025-11-01', end_date: '2026-10-31', group_by: ['payee', 'month'], include_income: false, exclude_transfers: true }],
+    ['list_entities', { type: 'schedule' }],
+  ]],
   categorize_uncategorized: [{ since: '2026-10-01' }, [
     ['search_transactions', { by: 'uncategorized', include_transactions: true, limit: 50, start_date: '2026-10-01' }],
     ['search_transactions', { by: 'uncategorized', include_transactions: true, limit: 50, offset: 3, start_date: '2026-10-01' }],

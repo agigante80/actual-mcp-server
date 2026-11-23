@@ -25,7 +25,7 @@ Talk to your [Actual Budget](https://actualbudget.org/) in plain language: ask w
 
 **Ask it to change things (it confirms first):** "Which uncategorised transactions look like my usual groceries? Categorise them after I confirm.", "Add a $47.50 grocery transaction at Whole Foods to my checking account.", "Move $200 from Dining Out to Emergency Fund for this month."
 
-**Works with:** [Claude Desktop](docs/guides/clients/claude-desktop.md), [Claude Code](docs/guides/clients/claude-code.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md) and [Codex CLI](docs/guides/clients/codex.md) on your own machine, and chat UIs such as [LibreChat](docs/guides/clients/librechat.md) and [LobeChat](docs/guides/clients/lobechat.md) against a server you run in Docker (also on [Unraid](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg) and in the official [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.agigante80/actual-mcp-server`). It needs a client with MCP support: a hosted assistant that cannot reach your machine or private network cannot use it, and neither can a client that supports neither stdio nor HTTP MCP. Every client page: [docs/guides/clients/](docs/guides/clients/README.md).
+**Works with:** [Claude Desktop](docs/guides/clients/claude-desktop.md), [Claude Code](docs/guides/clients/claude-code.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md) and [Codex CLI](docs/guides/clients/codex.md) on your own machine, and chat UIs such as [LibreChat](docs/guides/clients/librechat.md) and [LobeChat](docs/guides/clients/lobechat.md) against a server you run in Docker (also on [Unraid](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg) and in the official [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.agigante80/actual-mcp-server`). It needs a client with MCP support: a hosted assistant that cannot reach your machine or private network cannot use it. Every client page: [docs/guides/clients/](docs/guides/clients/README.md).
 
 ## Quick start
 
@@ -180,7 +180,7 @@ Amounts are integer cents and dates are `YYYY-MM-DD` strings. Each tool takes an
 
 ### Reducing the tool surface
 
-By default the server serves 15 tools over 85 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. Chat clients with a small tool budget (Gemini, LibreChat) do better with fewer. A tool that is not published is also refused if a client calls it by name.
+By default the server serves 15 tools over 85 operations (the compact surface, `MCP_TOOL_SURFACE=compact`). Set `MCP_TOOL_SURFACE=legacy` to publish the 85 `actual_*` tools instead; the toolset names and counts in the table below are operations, and a compact tool is listed when at least one operation behind it is selected. A call to an operation a toolset leaves out is refused naming `MCP_TOOLSETS`. A tool that is not published is also refused if a client calls it by name.
 
 <!-- BEGIN GENERATED: tools-summary -->
 <!-- Generated from dist/src/lib/toolsets.js by `npm run docs:gen`. Do not edit. -->
@@ -241,6 +241,7 @@ Prompts are ready-made workflows a client can offer as templates or slash comman
 | `spending_patterns` | `end_month` (optional), `months` (optional) | Spending trends over the last N full months: direction, biggest category changes, savings rate trend, unusual items. |
 | `budget_cleanup` | `date` (optional) | Read-only review of payees, rules, categories and accounts for duplicates and unused items; proposes changes and asks before writing. |
 | `categorize_uncategorized` | `since` (optional) | Find uncategorised transactions, propose categories from payee history, confirm, apply in one batch, and offer rules for repeat payees. |
+| `subscription_finder` | `date` (optional) | Find recurring charges from 12 months of payee history, compare them with your schedules, and offer a schedule for an unscheduled one only after you say yes. |
 
 A prompt appears only when every tool it names is offered. With `MCP_READ_ONLY=true`, `categorize_uncategorized` is hidden, because it names a tool that can write.
 <!-- END GENERATED: capabilities-prompts -->

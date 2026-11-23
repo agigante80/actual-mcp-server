@@ -107,7 +107,7 @@ On `manage_accounts` and `manage_categories`, `entity` is required for `create`,
 
 Setting `MCP_TOOL_SURFACE=legacy` brings back the 85 `actual_*` names unchanged. `all` publishes both lists and exists for test stacks only. Both values are temporary: #682 removes `legacy` and `all` together with the two session tools, and #682 must update this guide. Treat the escape hatch as time to migrate, not as a place to stay.
 
-What it costs: the 85-tool `tools/list` (the problem the compact surface fixes: Glama's tool-count scoring and the tool budget of chat clients such as Gemini and LibreChat), and the five prompts (#661 to #665) are hidden, because they name compact tools. The two session tools (`actual_session_list`, `actual_session_close`) exist only under `legacy` or `all`.
+What it costs: the 85-tool `tools/list` (the problem the compact surface fixes: Glama's tool-count scoring and the tool budget of chat clients such as Gemini and LibreChat), and the six prompts (#661 to #665 and #776) are hidden, because they name compact tools. The two session tools (`actual_session_list`, `actual_session_close`) exist only under `legacy` or `all`.
 
 The reverse trap: under the default surface a legacy name in `MCP_TOOLS` stops startup. The error names the tool and says to use a compact name or set `MCP_TOOL_SURFACE=legacy`. For example `MCP_TOOLS=actual_accounts_list` fails at start; `MCP_TOOLS=list_entities` works.
 
