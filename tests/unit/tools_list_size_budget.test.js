@@ -90,7 +90,11 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   (125,454 on develop before this change, so 630 added, description text only), and the
 //   ceiling is that plus 8. The compact total is 43,856 bytes (43,491 before), under
 //   COMPACT_TOTAL_CEILING. Every per-tool ceiling is unchanged (heaviest entry 3,893 bytes).
-const TOTAL_CEILING = 126092;
+//   Total raised for #748 (a split's total is kept on update and delete) from 126,092 to 126,421:
+//   one sentence each on the legacy update, update_batch and delete descriptions. Measured on
+//   develop 126,084 bytes, after 126,413 (329 added), and the ceiling is that plus 8. The compact
+//   total is 43,856 bytes (unchanged by this ticket) and every per-tool ceiling is unchanged.
+const TOTAL_CEILING = 126421;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The

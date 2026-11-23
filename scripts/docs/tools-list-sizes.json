@@ -15,12 +15,12 @@
     "tools": 6
   },
   "legacy": {
-    "bytes": 126084,
+    "bytes": 126413,
     "label": "`MCP_TOOL_SURFACE=legacy`",
     "tools": 85
   },
   "legacy-chat": {
-    "bytes": 26211,
+    "bytes": 26540,
     "label": "Legacy, `MCP_TOOLSETS=chat`",
     "tools": 12
   },
