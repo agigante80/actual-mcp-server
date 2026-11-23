@@ -4492,10 +4492,11 @@ test.describe('Docker E2E - compact search_transactions and summarize_transactio
   // #756: an explicit off-budget account_id is refused on filter, category and month (it used to
   // be an empty success), by account still reads it, and category and payee need their name.
   // The seeded account is the fixture's, deleted by its cleanup; assertions are by seeded id.
-  test('search_transactions - an explicit off-budget account is refused on filter, category and month, and read by account (#756)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
+  test('search_transactions - an explicit off-budget account is refused on filter, category and month, and read by account (#756)', async ({ mcp, makeAccount, makeCategory, makePayee, makeTransaction }) => {
     const account = await makeAccount();
     const category = await makeCategory();
-    const txn = await makeTransaction({ account, amount: -777, date: today() });
+    const payee = await makePayee();
+    const txn = await makeTransaction({ account, amount: -777, date: today(), payee: payee.id });
     await mcp.call('manage_accounts', { action: 'update', entity: 'account', id: account.id, offbudget: true });
 
     const own = new RegExp(`${account.id}[\\s\\S]*by account`);
@@ -4508,6 +4509,8 @@ test.describe('Docker E2E - compact search_transactions and summarize_transactio
     // Positive: by account still reads the off-budget account, and by payee is not refused.
     const read = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
     expect(((read ?? []) as any[]).map((t: any) => t.id)).toContain(txn.id);
+    const byPayee = await mcp.call('search_transactions', { by: 'payee', payee_name: payee.name, account_id: account.id });
+    expect(((byPayee?.transactions ?? []) as any[]).map((t: any) => t.id)).toContain(txn.id);
   });
 
   test('search_transactions - an on-budget account_id is unchanged, and category and payee need their name (#756)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
@@ -5889,7 +5892,7 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
   // #756: the legacy filter and category search refuse an explicit off-budget accountId with the
   // legacy tool name, and the legacy category search still accepts a call without a name.
-  test('actual_transactions_filter and _search_by_category - ERROR: an explicit off-budget accountId is refused (#756)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
+  test('actual_transactions_filter, _search_by_category and _search_by_month - ERROR: an explicit off-budget accountId is refused (#756)', async ({ mcp, makeAccount, makeCategory, makeTransaction }) => {
     const account = await makeAccount();
     const category = await makeCategory();
     await makeTransaction({ account, amount: -555, date: today() });
@@ -5900,6 +5903,7 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     const text = new RegExp(`${account.id}[\\s\\S]*${readTool}`);
     await expect(mcp.call('actual_transactions_filter', { accountId: account.id })).rejects.toThrow(text);
     await expect(mcp.call('actual_transactions_search_by_category', { categoryName: category.name, accountId: account.id })).rejects.toThrow(text);
+    await expect(mcp.call('actual_transactions_search_by_month', { month: currentMonth(), accountId: account.id })).rejects.toThrow(text);
     // Positive: a legacy category search without a name still succeeds (the name is optional there).
     const open = await mcp.call('actual_transactions_search_by_category', { startDate: '2099-01-01', endDate: '2099-01-31' });
     expect(open.count).toBe(0);
