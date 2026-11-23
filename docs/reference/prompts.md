@@ -13,6 +13,7 @@ Defaults that depend on the date (a month, a day) are resolved by the server's l
 | `spending_patterns` | Spending patterns | `end_month` (optional, `YYYY-MM`, default the month before the server's current month), `months` (optional, 1 to 24, default 6) | `summarize_transactions`, `list_budget_months` |
 | `budget_cleanup` | Budget cleanup | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_entities`, `summarize_transactions`, `list_budget_months` |
 | `categorize_uncategorized` | Categorise uncategorised transactions | `since` (optional, `YYYY-MM-DD`, default none: all uncategorised transactions). Hidden under `MCP_READ_ONLY=true` and on `legacy` | `list_entities`, `search_transactions`, `summarize_transactions`, `manage_transactions`, `manage_rules` |
+| `subscription_finder` | Subscription finder | `date` (optional, `YYYY-MM-DD`, default the server's today; the 12 whole months ending with its month are analysed) | `summarize_transactions`, `list_entities` |
 
 ## Argument completion
 
@@ -23,7 +24,7 @@ The server also advertises the MCP `completions` capability (#775), so a client 
 | `monthly_review` | `month` | The 12 months ending the current month, newest first |
 | `spending_patterns` | `end_month` | The 12 months ending the month before the current one, newest first |
 | `spending_patterns` | `months` | `3`, `6`, `12`, `24` (suggestions; any whole number from 1 to 24 is accepted) |
-| `spending_check`, `budget_cleanup` | `date` | Today, the first of this month, the first of last month (no duplicate on the 1st) |
+| `spending_check`, `budget_cleanup`, `subscription_finder` | `date` | Today, the first of this month, the first of last month (no duplicate on the 1st) |
 | `categorize_uncategorized` | `since` | The same three days as `date` |
 
 A prompt that is not offered (for example on the `legacy` surface), an unknown prompt, an unknown argument and a `ref/resource` reference all return an empty list (`values: []`, `total: 0`, `hasMore: false`), so a hidden prompt cannot be told from an unknown one. A malformed request (no `argument`, a non-string `value`, a `ref` that is not an object) is `-32602` with the fixed text `Invalid completion request: ref must be {type, name} and argument must be {name, value} strings`, which never echoes the input.
@@ -70,3 +71,13 @@ Categorise uncategorised transactions: find them (50 per round), propose a categ
 | Argument | Title | Required | Validation |
 |----------|-------|----------|------------|
 | `since` | Since date | No | `YYYY-MM-DD`, a real calendar day (`2026-02-30` is refused), at most 10 characters; a bad value is refused with `since: must be YYYY-MM-DD, a real calendar day`. Omitted: all uncategorised transactions. There is no default, so the server clock is not read. An unknown key is refused. |
+
+## subscription_finder
+
+Finds recurring charges from 12 whole months of payee history and compares them with the schedules (#776). Step 1 is one `summarize_transactions` call, `report` `grouped`, `group_by` `["payee", "month"]`, `include_income` false and `exclude_transfers` true, over the 12 whole months ending with the date's month (the server renders the window by integer month arithmetic: 2026-11-15 gives 2025-12-01 to 2026-11-30, 2024-02-29 gives 2023-03-01 to 2024-02-29). A candidate is a payee charged in at least 3 different months, counting only the months within 10 percent of the median monthly amount; the text states the confidence as months seen out of 12, lists a payee seen in only two months as a weak signal outside the main table, and says yearly and quarterly charges are not found. Step 3 reads `list_entities` with type `schedule` and marks each candidate scheduled or not. The table is sorted by estimated annual cost. The `recurring` report of `summarize_transactions` is not used: it has no per-month series.
+
+Both required tools are read tools, so the prompt stays offered under `MCP_READ_ONLY=true` on the `compact` and `all` surfaces and is hidden on `legacy`. The text is the same on every surface and names no `manage_` tool, like `budget_cleanup` (#805): the last step offers to create a schedule only when the model has a tool that can, ONE unscheduled candidate at a time and only after an explicit yes for that item, and otherwise ends after the table. A defaulted date is labelled as coming from the server clock (#774).
+
+| Argument | Title | Required | Validation |
+|----------|-------|----------|------------|
+| `date` | As-of date | No | `YYYY-MM-DD`, a real calendar day (`2026-02-30` is refused), at most 10 characters; a bad value is refused with `date: must be YYYY-MM-DD, a real calendar day`. The default is the server's local today (UTC in the Docker image). An unknown key is refused. |
