@@ -66,10 +66,10 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   2026-11-23, #767/#768/#816/#817 (one batch, ceiling set once): offbudget on account create,
 //   the close refusal and delete detachedTransfers wording, account_group_id on account update,
 //   and sort_order removed from the group tools. Measured after the rebase on develop (which
-//   carries #750 and #793) the legacy total went from 124,182 to 124,643 bytes, and the ceiling is that
-//   plus 8. The compact total is 43,412 bytes (43,169 before the batch), under
+//   carries #750, #793 and #818) the legacy total went from 124,106 to 124,567 bytes, and the ceiling is that
+//   plus 8. The compact total is 43,412 bytes (43,213 before the batch), under
 //   COMPACT_TOTAL_CEILING; the per-tool ceiling is unchanged (heaviest entry 3,893 bytes).
-const TOTAL_CEILING = 124651;
+const TOTAL_CEILING = 124575;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
