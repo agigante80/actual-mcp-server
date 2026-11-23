@@ -67,7 +67,10 @@ export const RecurConfigSchema = z.object({
   }
   // Both must be real days (a bad one already has its own issue); YYYY-MM-DD compares as a
   // string, and an equal pair is allowed.
-  if (cfg.endDate !== undefined && isCalendarDay(cfg.start) && isCalendarDay(cfg.endDate) && cfg.endDate < cfg.start) {
+  // Only under on_date: upstream reads endDate in no other mode, and the Actual UI stores a
+  // leftover endDate next to endMode never. Refusing that echo broke an update that sends a
+  // stored recurrence back (review of #786), so do not widen this to every mode again.
+  if (cfg.endMode === 'on_date' && cfg.endDate !== undefined && isCalendarDay(cfg.start) && isCalendarDay(cfg.endDate) && cfg.endDate < cfg.start) {
     ctx.addIssue({ code: 'custom', path: [], message: END_BEFORE_START });
   }
   // The index in the path and the pattern in the message tell a caller which entry to fix
