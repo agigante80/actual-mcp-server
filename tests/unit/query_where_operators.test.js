@@ -507,6 +507,24 @@ check('#751 refusals keep their exact messages', () => {
   assert.doesNotThrow(() => filtersForTable(`amount IN (${many(200)})`, 'transactions'));
 });
 
+check('#751 a json column keeps $oneof (allow list, not deny list)', () => {
+  assert.deepStrictEqual(
+    filtersForTable("error IN ('a','b')", 'transactions'),
+    [{ error: { $oneof: ['a', 'b'] } }],
+  );
+});
+
+check('#751 a $ or : element on the OR path is refused (field reference or parameter)', () => {
+  const msg = (col) => new RegExp(
+    `^Error: Invalid value for column "${col}": a string starting with "\\$" or ":" is read as a field reference or parameter, and is not allowed in an IN list on a number or date column\\.$`,
+  );
+  assert.throws(() => filtersForTable("amount IN (1000, '$amount')", 'transactions'), msg('amount'));
+  assert.throws(() => filtersForTable("date IN ('$date')", 'transactions'), msg('date'));
+  assert.throws(() => filtersForTable("amount IN (1, ':p')", 'transactions'), msg('amount'));
+  // The text path is untouched.
+  assert.doesNotThrow(() => filtersForTable("notes IN ('$a', ':b')", 'transactions'));
+});
+
 check('#751 the cap applies to number and date columns only, not $oneof', () => {
   const many = Array.from({ length: 201 }, (_, i) => `'v${i}'`).join(', ');
   assert.doesNotThrow(() => filtersForTable(`notes IN (${many})`, 'transactions'));
