@@ -9,6 +9,10 @@ import { EMPTY_RESULT_LINE, origin } from './shared.js';
  * the month six months before the date's month, by integer month arithmetic.
  */
 
+// This prompt stays offered under MCP_READ_ONLY on purpose (its required tools are all reads, and an
+// analysis is useful read-only), so its text names no write tool: each proposal names the change in
+// words, and the ask to apply is conditional on having tools for it. Adding the manage_ tools to
+// requiredTools would hide it exactly where it is safest; that was weighed and rejected (#805).
 const TEMPLATE = `Review the structure of my budget as of {date} and propose a cleanup.{origin} This is analysis only: do not create, change, merge or delete anything. A payee, category or account counts as unused only when it has no transaction and no transfer from {start_date} to {date}.
 
 Before step 1, call list_budget_months with no month to get the months the budget covers. If {month} is not in that list, the budget has no data for it: do not call list_budget_months with {month}, say that the budget does not cover {month}, and say that the window from {start_date} to {date} is not fully inside the months the budget covers, so the summaries in step 1 cannot prove that something is unused. Then report duplicates only (the same-name payees in step 2, overlapping rules in step 3, near-duplicate category names in step 4) and mark nothing as unused, stale or closable: skip step 5 and the budget check in step 4.
@@ -18,8 +22,8 @@ Before step 1, call list_budget_months with no month to get the months the budge
 3. Call list_entities with type rule. Conditions and actions hold ids, not names. Find rules with identical or overlapping conditions, rules that refer to a payee or category id that is not in the lists from steps 2 and 4, and rules whose payee is unused.
 4. Call list_entities with type category_group, then list_budget_months with month {month}. Find unused categories that also have budgeted 0 and balance 0 in {month}, groups with no categories, and near-duplicate category names. Never propose deleting a category that still holds a balance. If {month} is not a budget month (see the paragraph before step 1), skip the budget check, say so, and do not propose deleting any category, because its balance cannot be checked.
 5. Call list_entities with type account. Find open accounts (closed false) with balance_current 0 that are unused: no group for the account in the step 1 account result, or both transactionCount and transferCount 0. An account with a transferCount above 0 is in use, so do not propose closing it. A null balance_current is unknown, so skip that account.
-6. Present the findings grouped by payees, rules, categories and accounts. For each give the evidence (the window, transaction counts, balances) and the change you would make, naming the action it needs: manage_payees merge or delete, manage_rules update or delete, manage_categories delete, or manage_accounts close.
-7. End by asking which items I want applied. Do not call any manage_ tool in this turn.
+6. Present the findings grouped by payees, rules, categories and accounts. For each give the evidence (the window, transaction counts, balances) and the change you would make, naming the change it needs: merge or delete a payee, update or delete a rule, delete a category, or close an account.
+7. If you have tools that can make these changes, end by asking which items I want applied; otherwise end after the findings. Do not call any manage_ tool in this turn.
 
 ${EMPTY_RESULT_LINE}
 

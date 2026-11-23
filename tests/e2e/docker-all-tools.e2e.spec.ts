@@ -5075,6 +5075,8 @@ test.describe('Docker E2E - MCP prompts (#660)', () => {
     expect(text).toContain('from 2025-07-01 to 2026-01-15');
     expect(text).toContain('transferCount');
     expect(text).toContain('Do not call any manage_ tool in this turn.');
+    expect(text).not.toContain('manage_payees');
+    expect(text).toContain('If you have tools that can make these changes');
     expect(text).not.toContain('{');
   });
 

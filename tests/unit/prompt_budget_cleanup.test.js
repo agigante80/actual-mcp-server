@@ -30,7 +30,8 @@ const manager = (await import('../../dist/src/actualToolsManager.js')).default;
 const def = PROMPT_DEFINITIONS.find((d) => d.name === 'budget_cleanup');
 const render = (args) => renderPrompt(def, args);
 const EM_EN = new RegExp(`[${String.fromCharCode(8211, 8212)}]`);
-const MANAGE_ALLOWED = ['manage_payees', 'manage_rules', 'manage_categories', 'manage_accounts'];
+// #805: the text names no write tool, so nothing beyond the three required read tools is allowed.
+const MANAGE_ALLOWED = [];
 const SENTENCE = 'Do not call any manage_ tool in this turn.';
 
 await check('budget_cleanup is registered with its title and one optional date argument', () => {
@@ -51,7 +52,6 @@ await check('requiredTools is exact; every compact tool named is required or an 
   assert.deepStrictEqual(def.requiredTools, ['list_entities', 'summarize_transactions', 'list_budget_months']);
   const text = render({ date: '2026-11-13' });
   const compact = [...manager.getCompactToolNames()];
-  for (const t of MANAGE_ALLOWED) assert.ok(compact.includes(t), `${t} must be a real compact tool`);
   const tokens = text.match(/[a-z_]+/g);
   for (const t of tokens) {
     if (compact.includes(t)) {
@@ -242,6 +242,30 @@ await check('budget_cleanup labels a defaulted date and not a supplied one (#774
 
 await check('budget_cleanup carries the empty-result line once (#774)', () => {
   assert.strictEqual(countOf(render({ date: '2026-11-13' }), EMPTY_LINE), 1);
+});
+
+// ---------------------------------------------------------------- #805
+// The prompt stays offered under MCP_READ_ONLY on purpose, so its text must be valid where no
+// manage_ tool is published: it names each change in words and asks to apply only when it can.
+await check('the text names no write tool; the only manage_ is the no-write sentence (#805)', () => {
+  const text = render({ date: '2026-11-13' });
+  assert.strictEqual(text.replaceAll(SENTENCE, '').includes('manage_'), false);
+  assert.strictEqual(text.split('manage_').length - 1, 1);
+  for (const old of ['manage_payees', 'manage_rules', 'manage_categories', 'manage_accounts', 'naming the action it needs']) {
+    assert.ok(!text.includes(old), `${old} must be gone`);
+  }
+});
+
+await check('step 6 names the four changes in words and step 7 is conditional (#805)', () => {
+  const text = render({ date: '2026-11-13' });
+  const step6 = text.slice(text.indexOf('\n6. '), text.indexOf('\n7. '));
+  for (const w of ['merge or delete a payee', 'update or delete a rule', 'delete a category', 'close an account']) {
+    assert.ok(step6.includes(w), `step 6 must contain ${w}`);
+  }
+  const step7 = text.slice(text.indexOf('\n7. '));
+  assert.ok(step7.includes('If you have tools that can make these changes, end by asking which items I want applied; otherwise end after the findings.'));
+  assert.ok(step7.includes(SENTENCE));
+  assert.ok(!step7.includes('End by asking'), 'the unconditional ask is gone');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
