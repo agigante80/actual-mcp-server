@@ -10,7 +10,7 @@ Defaults that depend on the date (a month, a day) are resolved by the server's l
 |--------|-------|-----------|----------------|
 | `monthly_review` | Monthly budget review | `month` (optional, `YYYY-MM`, default the server's current month) | `get_context`, `list_budget_months`, `summarize_transactions`, `search_transactions` |
 | `spending_check` | Spending check | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_budget_months`, `summarize_transactions` |
-| `spending_patterns` | Spending patterns | `months` (optional, 1 to 24, default 6), `end_month` (optional, `YYYY-MM`, default the month before the server's current month) | `summarize_transactions`, `list_budget_months` |
+| `spending_patterns` | Spending patterns | `end_month` (optional, `YYYY-MM`, default the month before the server's current month), `months` (optional, 1 to 24, default 6) | `summarize_transactions`, `list_budget_months` |
 | `budget_cleanup` | Budget cleanup | `date` (optional, `YYYY-MM-DD`, default the server's today) | `list_entities`, `summarize_transactions`, `list_budget_months` |
 | `categorize_uncategorized` | Categorise uncategorised transactions | `since` (optional, `YYYY-MM-DD`, default none: all uncategorised transactions). Hidden under `MCP_READ_ONLY=true` and on `legacy` | `list_entities`, `search_transactions`, `summarize_transactions`, `manage_transactions`, `manage_rules` |
 
@@ -32,12 +32,12 @@ A quick mid-month pace check as of one day: am I on track overall, which categor
 
 ## spending_patterns
 
-Spending trends over the last N full months: overall direction, the categories that changed most, the savings rate trend and anything unusual. It is a fixed three-call script (a `grouped` report by month, a `grouped` report by category and month, and the last month of the range from `list_budget_months`) whatever `months` is, and the server renders the concrete start and end dates with integer month arithmetic. The text is read-only. Both required tools are read tools, so the prompt stays offered under `MCP_READ_ONLY=true` on the `compact` and `all` surfaces and is hidden on `legacy`.
+Spending trends over the last N full months: overall direction, the categories that changed most, the savings rate trend and anything unusual. It is a fixed three-call script (a `grouped` report by month, a `grouped` report by category and month, and the last month of the range from `list_budget_months`) whatever `months` is, and the server renders the concrete start and end dates with integer month arithmetic. The text is read-only. Both required tools are read tools, so the prompt stays offered under `MCP_READ_ONLY=true` on the `compact` and `all` surfaces and is hidden on `legacy`. The arguments are declared `end_month` first, then `months`, because a client that passes arguments by position (Claude Code) maps tokens by that order: give `end_month` first, so `/actual:spending_patterns 2026-09` sets the month. A call that sends `6 2026-09` is refused with both fields named.
 
 | Argument | Required | Validation |
 |----------|----------|------------|
-| `months` | No | A string of an integer from 1 to 24, no leading zero, default 6 (surrounding whitespace is trimmed first). A bad value is refused with `months: must be a whole number from 1 to 24`. 1 renders as `1 full month`. |
 | `end_month` | No | `YYYY-MM`, month 01 to 12, at most 7 characters; a bad value is refused with `end_month: must be YYYY-MM`. The default is the month before the server's local current month (UTC in the Docker image). An unknown key is refused. |
+| `months` | No | A string of an integer from 1 to 24, no leading zero, default 6 (surrounding whitespace is trimmed first). A bad value is refused with `months: must be a whole number from 1 to 24`. 1 renders as `1 full month`. |
 
 ## budget_cleanup
 

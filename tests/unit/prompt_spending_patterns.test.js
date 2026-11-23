@@ -36,7 +36,9 @@ const pad2 = (n) => String(n).padStart(2, '0');
 await check('spending_patterns is registered with its title and two optional arguments', () => {
   assert.ok(def, 'spending_patterns must be in PROMPT_DEFINITIONS');
   assert.strictEqual(def.title, 'Spending patterns');
-  assert.deepStrictEqual(def.arguments.map((a) => [a.name, a.required]), [['months', false], ['end_month', false]]);
+  // #773: positional clients (Claude Code) map tokens by declared order, so this order is a contract:
+  // `/actual:spending_patterns 2026-09` must land in end_month. Do not swap back without a reason.
+  assert.deepStrictEqual(def.arguments.map((a) => [a.name, a.required]), [['end_month', false], ['months', false]]);
 });
 
 await check('the real PROMPT_DEFINITIONS pass every registry validator (assertArgsBounded sees transform and default)', async () => {
@@ -108,6 +110,7 @@ await check('render fills the exact ranges', () => {
     ['2026-02', '1', '2026-02-01', '2026-02-28'],
     ['2026-12', '24', '2025-01-01', '2026-12-31'],
     ['2024-12', '12', '2024-01-01', '2024-12-31'],
+    ['2026-09', '3', '2026-07-01', '2026-09-30'],
   ];
   for (const [end, months, start, last] of cases) {
     const text = render({ end_month: end, months });
@@ -203,6 +206,24 @@ await check('a bad months or end_month gives exactly one readable message with n
 await check('argsSchema.parse itself stays strict about blanks and whitespace (#772)', () => {
   for (const months of ['', ' 6', '6\n']) assert.throws(() => def.argsSchema.parse({ months }));
   assert.throws(() => def.argsSchema.parse({ end_month: '' }));
+});
+
+// ---------------------------------------------------------------- #773
+await check('one token in end_month renders 6 months to that month (#773)', () => {
+  assert.ok(render({ end_month: '2026-09' }).includes('last 6 full months, from 2026-04-01 to 2026-09-30.'));
+});
+await check('a swapped positional call is refused naming both fields once and echoing neither value (#773)', () => {
+  const m = messageOf({ end_month: '6', months: '2026-09' });
+  assert.ok(m.includes('months: must be a whole number from 1 to 24'), m);
+  assert.ok(m.includes('end_month: must be YYYY-MM'), m);
+  assert.strictEqual(occurrences(m, 'months: must'), 1, m);
+  assert.strictEqual(occurrences(m, 'end_month: must'), 1, m);
+  assert.ok(!m.includes('2026-09') && !/\b6\b/.test(m), m);
+});
+await check('the argument descriptions state the positional order (#773)', () => {
+  const byName = Object.fromEntries(def.arguments.map((a) => [a.name, a.description]));
+  assert.ok(byName.end_month.includes('Give it first when passing arguments by position.'));
+  assert.ok(byName.months.includes('Positional order: end_month, then months.'));
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
