@@ -50,6 +50,8 @@ const LEGACY_SMOKE = [
   'actual_categories_create', // #763: the legacy unknown-group refusal text
   'actual_categories_update', // #763
   'actual_category_groups_get', // #763: named in the legacy refusal text
+  'actual_category_groups_create', // #764: the legacy group is_income row
+  'actual_category_groups_delete', // #764: its cleanup
   'actual_payees_get',
   'actual_payees_update', // #760: the legacy unknown-field refusal for transfer_acct
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal

@@ -176,6 +176,10 @@ await check('description: Returns, every action, DESTRUCTIVE, no legacy name', (
   for (const w of ['Returns', 'list_entities', 'create:', 'update:', 'delete:', 'set_note:', 'DESTRUCTIVE', 'category_group']) assert.ok(spec.description.includes(w), w);
   assert.ok(!/actual_/.test(spec.description));
 });
+await check('#764: description says a category takes its group is_income and a move needs both', () => {
+  assert.ok(spec.description.includes('takes is_income from that group (a different is_income is refused)'));
+  assert.ok(spec.description.includes('moving a category to a group with the other is_income needs both'));
+});
 await check('annotations: destructive write tool, hints only', () => {
   assert.deepStrictEqual(annotationsFor('manage_categories'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
 });

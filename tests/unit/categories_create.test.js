@@ -36,6 +36,18 @@ try {
     try { await tool.call({ name: 'X', group_id: UNKNOWN }); } catch (x) { e = x; }
     assert.strictEqual(e && e.message, 'Failed to create category: boom');
   });
+  await check('#764: is_income is forwarded only when given; null counts as omitted', async () => {
+    const seen = [];
+    adapter.createCategory = async (c) => { seen.push(c); return 'id'; };
+    await tool.call({ name: 'X', group_id: UNKNOWN });
+    await tool.call({ name: 'X', group_id: UNKNOWN, is_income: null });
+    await tool.call({ name: 'X', group_id: UNKNOWN, is_income: true });
+    await tool.call({ name: 'X', group_id: UNKNOWN, is_income: false });
+    assert.ok(!('is_income' in seen[0]), JSON.stringify(seen[0]));
+    assert.ok(!('is_income' in seen[1]), JSON.stringify(seen[1]));
+    assert.strictEqual(seen[2].is_income, true);
+    assert.strictEqual(seen[3].is_income, false);
+  });
 } finally { adapter.createCategory = original; }
 
 console.log(`\n[#763] Results: ${passed} passed, ${failed} failed`);

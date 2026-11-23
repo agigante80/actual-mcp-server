@@ -24,7 +24,7 @@ const entity = z.enum(['category', 'category_group']).optional().describe('categ
 const id = z.string().optional().describe('Category id (category group id with entity category_group).');
 const name = z.string().optional().describe('Name, 1 to 255 characters.');
 const groupId = z.string().optional().describe('Category group id.');
-const isIncome = z.boolean().optional().describe('Income flag; default expense.');
+const isIncome = z.boolean().optional().describe('Income flag; default expense (a category: its group\'s).');
 const hidden = z.boolean().optional().describe('Hidden flag.');
 const note = z.string().optional().describe('Note text; "" clears it.');
 
@@ -102,8 +102,8 @@ export const manageCategories: CompactToolSpec = {
     'Create, change, delete or annotate budget categories and category groups; pick one `action`. Writes. ' +
     'To read or find ids use list_entities; budget amounts and month notes belong to manage_budget_months. Other fields are refused. ' +
     'entity (category or category_group) is required for create, update and delete. ' +
-    'create: entity, name; a category also needs group_id (an unknown group is refused as not found) and may set is_income; a category_group may set is_income and hidden. ' +
-    'update: entity, id and at least one of name, group_id (category only; an unknown group is refused), is_income, hidden; prefer hidden true over delete to retire a category. ' +
+    'create: entity, name; a category also needs group_id (an unknown group is refused as not found) and takes is_income from that group (a different is_income is refused); a category_group may set is_income and hidden. ' +
+    'update: entity, id and at least one of name, group_id (category only; an unknown group is refused), is_income, hidden; is_income must match the group, so moving a category to a group with the other is_income needs both; prefer hidden true over delete to retire a category. ' +
     'delete: entity, id; DESTRUCTIVE, cannot be undone: a category is removed and its transactions are not moved (recategorize them first); deleting a group ALSO deletes every category in it (move them out first with update group_id). ' +
     'set_note: id (a category or category group UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a payee note through manage_payees. ' +
     'Returns { success, categoryId, message } (create category), { id, success } (create group), { success } (update, delete), { result: { success, id, note, cleared } } (set_note).',

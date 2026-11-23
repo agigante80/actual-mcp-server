@@ -2201,21 +2201,34 @@ export async function getCategories(): Promise<components['schemas']['Category']
  * one (hidden groups included, deleted ones excluded), so a group created earlier in the same
  * drain is visible. Call it inside the queued write, before the raw call.
  */
-async function assertCategoryGroupExists(groupId: string): Promise<void> {
+async function assertCategoryGroupExists(groupId: string): Promise<{ id: string; name?: string; is_income?: boolean }> {
   const groups = await withConcurrency(() =>
-    retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+    retry(() => readDrainListing('categoryGroups', () => rawGetCategoryGroups() as Promise<Array<{ id?: string; name?: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
   );
-  if (!(Array.isArray(groups) && groups.some((g) => g?.id === groupId))) {
+  const found = Array.isArray(groups) ? groups.find((g) => g?.id === groupId) : undefined;
+  if (!found) {
     throw new NotFoundRefusal('Category group', groupId, 'actual_category_groups_get');
   }
+  return { ...found, id: groupId };
 }
 export async function createCategory(category: components['schemas']['Category'] | unknown): Promise<string> {
   observability.incrementToolCall('actual.categories.create').catch(() => {});
   return queueWriteOperation(async () => {
     const groupId = (category as { group_id?: unknown } | null)?.group_id;
-    if (typeof groupId === 'string') await assertCategoryGroupExists(groupId);
+    let toCreate: unknown = category;
+    if (typeof groupId === 'string') {
+      // #764: a category takes its group's is_income; an explicit value that contradicts the group is refused.
+      const group = await assertCategoryGroupExists(groupId);
+      const groupFlag = Boolean(group.is_income);
+      const given = (category as { is_income?: unknown }).is_income;
+      if (given === undefined || given === null) {
+        toCreate = { ...(category as object), is_income: groupFlag };
+      } else if (Boolean(given) !== groupFlag) {
+        throw new ConflictRefusal(`Category is_income (${Boolean(given)}) contradicts its group "${group.name ?? groupId}" (is_income ${groupFlag}). Nothing was written.`);
+      }
+    }
     try {
-      const raw = await withConcurrency(() => retry(() => rawCreateCategory(category) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+      const raw = await withConcurrency(() => retry(() => rawCreateCategory(toCreate) as Promise<string | { id?: string }>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
       return normalizeToId(raw);
     } catch (error) {
       // Upstream's message quotes the category name (#559), so the log gets the class only.
@@ -3008,13 +3021,32 @@ export async function updateCategory(id: string, fields: Partial<components['sch
     // Called with no argument, upstream returns every category in every group, hidden
     // included, so a hidden category is not misreported as missing.
     const categories = await withConcurrency(() =>
-      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string; group_id?: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
     );
-    if (!(Array.isArray(categories) && categories.some((c) => c?.id === id))) {
+    const current = Array.isArray(categories) ? categories.find((c) => c?.id === id) : undefined;
+    if (!current) {
       throw new NotFoundRefusal('Category', id, 'actual_categories_get');
     }
-    const groupId = (fields as { group_id?: unknown } | null)?.group_id;
+    const f = (fields ?? {}) as { group_id?: unknown; is_income?: unknown };
+    const groupId = f.group_id;
     if (typeof groupId === 'string') await assertCategoryGroupExists(groupId);
+    // #764: keep a category's is_income consistent with its group. A rename reads no group.
+    const givenFlag = typeof f.is_income === 'boolean' ? f.is_income : undefined;
+    if (typeof groupId === 'string' || givenFlag !== undefined) {
+      const effectiveId = typeof groupId === 'string' ? groupId : current.group_id;
+      if (typeof effectiveId === 'string') {
+        const group = await assertCategoryGroupExists(effectiveId);
+        const groupFlag = Boolean(group.is_income);
+        const label = group.name ?? effectiveId;
+        if (givenFlag !== undefined) {
+          if (givenFlag !== groupFlag) {
+            throw new ConflictRefusal(`Category is_income (${givenFlag}) contradicts its group "${label}" (is_income ${groupFlag}). Nothing was written.`);
+          }
+        } else if (groupId !== current.group_id && groupFlag !== Boolean(current.is_income)) {
+          throw new ConflictRefusal(`Moving the category to group "${label}" (is_income ${groupFlag}) would contradict its is_income (${Boolean(current.is_income)}). Pass is_income ${groupFlag} together with group_id to change both. Nothing was written.`);
+        }
+      }
+    }
     await withConcurrency(() => retry(() => rawUpdateCategory(id, fields) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   });
 }
@@ -4143,10 +4175,43 @@ export async function getCategoryGroups(): Promise<unknown[]> {
 export async function createCategoryGroup(group: unknown): Promise<string> {
   observability.incrementToolCall('actual.category_groups.create').catch(() => {});
   return queueWriteOperation(async () => {
+    const opStartedAt = Date.now();
     const raw = await withConcurrency(() => retry(() => rawCreateCategoryGroup(group) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
     const id = normalizeToId(raw);
+    // #764: upstream's api/category-group-create drops is_income, so set it with an update and verify it.
+    if ((group as { is_income?: unknown } | null)?.is_income === true) {
+      await ensureGroupIsIncome(id, String((group as { name?: unknown }).name ?? id), opStartedAt);
+    }
     return id;
   });
+}
+async function ensureGroupIsIncome(id: string, name: string, opStartedAt: number): Promise<void> {
+  // Neither message below contains a TRANSIENT_ERROR_PATTERNS substring ("timed out" included):
+  // _shouldDropPoolOnError would drop the session's connection. Upstream causes stay in `cause`.
+  const T = config.ACTUAL_OP_TIMEOUT_MS;
+  const deadline = T > 0
+    ? Math.min(Date.now() + SPLIT_VERIFY_TIMEOUT_MS, opStartedAt + Math.floor(T / 2))
+    : Date.now() + SPLIT_VERIFY_TIMEOUT_MS;
+  let cause: unknown;
+  try {
+    await withConcurrency(() => retry(() => rawUpdateCategoryGroup(id, { is_income: true }) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    for (;;) {
+      const groups = await withConcurrency(() => retry(() => rawGetCategoryGroups() as Promise<Array<{ id?: string; is_income?: boolean }>>, { retries: 2, backoffMs: 200 }));
+      const row = (Array.isArray(groups) ? groups : []).find((g) => g?.id === id);
+      if (row?.is_income === true) return;
+      if (Date.now() >= deadline) break;
+      await new Promise((resolve) => setTimeout(resolve, SPLIT_VERIFY_INTERVAL_MS));
+    }
+  } catch (err) {
+    cause = err;
+  }
+  const base = `Category group "${name}" was not created as an income group (is_income could not be set).`;
+  try {
+    await withConcurrency(() => retry(() => rawDeleteCategoryGroup(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+  } catch (delErr) {
+    throw new Error(`${base} The group "${id}" EXISTS: delete it with actual_category_groups_delete.`, { cause: delErr });
+  }
+  throw new Error(`${base} Nothing was kept.`, { cause });
 }
 export async function updateCategoryGroup(id: string, fields: unknown): Promise<void> {
   observability.incrementToolCall('actual.category_groups.update').catch(() => {});
