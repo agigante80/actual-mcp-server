@@ -47,14 +47,7 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   (122,862 on develop before this change, so 839 added, validation and not description
 //   growth), and the ceiling is that plus 8. The default compact surface total (42,932
 //   measured) and every per-tool ceiling are unchanged.
-//   Total raised for #764 (category is_income consistency) from 123,709 to 123,725: the descriptions
-//   of actual_categories_create, actual_categories_update and actual_category_groups_create now
-//   state the group-flag rule, the conflict refusal and the one-income-group refusal. Measured
-//   after the rebase on develop (which carries #760, #743 and #762) the legacy total is 123,717
-//   bytes (123,422 before this change, so 295 added), and the ceiling is that plus 8. The compact
-//   total (43,054 measured, 230 more for manage_categories) stays under its ceiling and every
-//   per-tool ceiling is unchanged.
-const TOTAL_CEILING = 123725;
+const TOTAL_CEILING = 123709;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
