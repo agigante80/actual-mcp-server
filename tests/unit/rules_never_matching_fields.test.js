@@ -22,7 +22,7 @@ const check = (cond, label, d = '') => {
 const ID = '123e4567-e89b-42d3-a456-426614174000';
 const ACT = { op: 'set', field: 'notes', value: 'x' };
 const OK = { field: 'cleared', op: 'is', value: true };
-const msg = (field) => `Condition field "${field}" never matches in a rule: Actual's rule engine does not set it on the transaction. To find such transactions, query transfer_id or is_parent instead. On an update, omit conditions to keep the stored ones. Nothing was written.`;
+const msg = (field) => `Condition field "${field}" never matches in a rule: Actual's rule engine does not set it on the transaction. To find such transactions, query transfer_id or is_parent instead. On an update, omit conditions to keep the stored ones. This rule was not written.`;
 
 const adapter = (await import('../../dist/src/lib/actual-adapter.js')).default;
 let writes = [];
