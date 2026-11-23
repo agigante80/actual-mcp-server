@@ -730,10 +730,17 @@ test.describe('Docker E2E - tool surface', () => {
     expect((await listGroups(mcp)).find((g: any) => g?.name === name)).toBeUndefined();
   });
 
-  test('manage_categories create - a category in the income group takes its is_income (#764)', async ({ mcp, makeCategory }) => {
+  test('manage_categories create - a category in the income group takes its is_income (#764)', async ({ mcp, cleanup }) => {
     const group = await incomeGroupOf(mcp);
-    const category = await makeCategory({ group: { ...group } as any });
-    expect((await listCategories(mcp)).find((c: any) => c?.id === category.id)?.is_income).toBe(true);
+    const name = `E2E-IncomeCat-${uniqueSuffix()}`;
+    // Registered before the create and by name, so a create that half succeeds is still removed.
+    cleanup.add(CLEANUP_ORDER.category, `category ${name}`, async () => {
+      const leaked = (await listCategories(mcp)).find((c: any) => c?.name === name);
+      if (leaked) await mcp.call('manage_categories', { action: 'delete', entity: 'category', id: leaked.id }).catch(() => undefined);
+    });
+    // Through the compact tool itself (not the makeCategory fixture, which calls the legacy create).
+    await mcp.call('manage_categories', { action: 'create', entity: 'category', name, group_id: group.id });
+    expect((await listCategories(mcp)).find((c: any) => c?.name === name)?.is_income).toBe(true);
   });
 
   test('manage_categories create - ERROR: a contradicting is_income is refused and nothing is created (#764)', async ({ mcp }) => {
