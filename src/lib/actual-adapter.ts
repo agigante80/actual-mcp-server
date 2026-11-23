@@ -2586,17 +2586,29 @@ async function storePayeeNote(id: string, name: string, notes: string, opStarted
   const deadline = T > 0
     ? Math.min(Date.now() + SPLIT_VERIFY_TIMEOUT_MS, opStartedAt + Math.floor(T / 2))
     : Date.now() + SPLIT_VERIFY_TIMEOUT_MS;
+  // A raw call that never answers must not hand the caller the generic op-timeout error, which
+  // omits the created id: bound each one by the deadline and report the payee instead.
+  const STALLED = Symbol('stalled');
+  const bounded = async <R>(work: () => Promise<R>): Promise<R> => {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        work(),
+        new Promise<never>((_, reject) => { timer = setTimeout(() => reject(STALLED), Math.max(0, deadline - Date.now())); }),
+      ]);
+    } finally { clearTimeout(timer); }
+  };
   try {
-    await withConcurrency(() => retry(() => rawUpdateNote(id, notes) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+    await bounded(() => withConcurrency(() => retry(() => rawUpdateNote(id, notes) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError })));
   } catch (err) {
-    throw failed('the note write failed', err);
+    throw failed(err === STALLED ? 'the note write did not answer in time' : 'the note write failed', err === STALLED ? undefined : err);
   }
   for (;;) {
     let current: { note?: string } | null | undefined;
     try {
-      current = await withConcurrency(() => retry(() => rawGetNote(id) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }));
+      current = await bounded(() => withConcurrency(() => retry(() => rawGetNote(id) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 })));
     } catch (err) {
-      throw failed('the note could not be read back', err);
+      throw failed(err === STALLED ? 'the read-back did not answer in time' : 'the note could not be read back', err === STALLED ? undefined : err);
     }
     if (current?.note === notes) return;
     if (Date.now() >= deadline) throw failed('the note was not visible on read-back');
