@@ -238,7 +238,7 @@ Prompts are ready-made workflows a client can offer as templates or slash comman
 |--------|------------|-------------|
 | `monthly_review` | `month` (optional) | Review a month: budget versus actual per category, overspent and unused categories, income versus expenses, and suggestions. |
 | `spending_check` | `date` (optional) | Quick check on a month so far: on track or overspending, categories to watch, and what is left to spend. |
-| `spending_patterns` | `months` (optional), `end_month` (optional) | Spending trends over the last N full months: direction, biggest category changes, savings rate trend, unusual items. |
+| `spending_patterns` | `end_month` (optional), `months` (optional) | Spending trends over the last N full months: direction, biggest category changes, savings rate trend, unusual items. |
 | `budget_cleanup` | `date` (optional) | Read-only review of payees, rules, categories and accounts for duplicates and unused items; proposes changes and asks before writing. |
 | `categorize_uncategorized` | `since` (optional) | Find uncategorised transactions, propose categories from payee history, confirm, apply in one batch, and offer rules for repeat payees. |
 
