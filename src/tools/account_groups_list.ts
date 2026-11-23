@@ -13,7 +13,7 @@ export default createTool({
   name: 'actual_account_groups_list',
   description:
     'List the custom account groups used to organise accounts in the sidebar. ' +
-    'Returns each group with its id, name and sort order. An account whose account_group_id ' +
+    'Returns each group with its id and name. An account whose account_group_id ' +
     'does not appear here is ungrouped: upstream clears member references best-effort under ' +
     'sync, so a dangling reference is expected and is not an error. Requires an Actual server ' +
     'on 26.9.0 or newer, which is where account groups were introduced.',

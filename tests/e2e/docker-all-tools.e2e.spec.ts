@@ -4510,6 +4510,44 @@ test.describe('Docker E2E - compact manage_accounts (#676)', () => {
     expect(body.detachedTransfers).toBe(0);
   });
 
+  test('manage_accounts delete - POSITIVE: deleting an account with a transfer reports 1 and unlinks the counterpart (#768)', async ({ mcp, makeAccount }) => {
+    const src = await makeAccount({ balance: 5000 });
+    const dst = await makeAccount();
+    await mcp.call('manage_transactions', { action: 'transfer', from_account: src.id, to_account: dst.id, amount: 3000, date: today() });
+    const rowsOf = async (acct: string) => {
+      const d = await mcp.call('search_transactions', { by: 'account', account_id: acct });
+      return (Array.isArray(d) ? d : (d as any)?.result ?? []) as any[];
+    };
+    const before = (await rowsOf(dst.id)).find((t: any) => t?.amount === 3000);
+    expect(before?.transfer_id).toBeTruthy();
+    const reply = await mcp.raw('manage_accounts', { action: 'delete', entity: 'account', id: src.id });
+    const body = JSON.parse(reply.content[0].text);
+    expect(body.success).toBe(true);
+    expect(body.detachedTransfers).toBe(1);
+    const after = (await rowsOf(dst.id)).find((t: any) => t?.amount === 3000);
+    expect(after).toBeTruthy();
+    expect(after?.transfer_id ?? null).toBeNull();
+  });
+
+  // #768: the one pairing that keeps a category: the closing transaction carries it.
+  test('manage_accounts close - POSITIVE: an on-budget account closed into an off-budget one with a category succeeds and the closing row carries it (#768)', async ({ mcp, makeAccount, makeCategory, cleanup }) => {
+    const src = await makeAccount({ balance: 5000 });
+    const category = await makeCategory();
+    const name = `E2E-CloseKeep768-${uniqueSuffix()}`;
+    const dest = (await mcp.call('manage_accounts', { action: 'create', entity: 'account', name, offbudget: true })) as string;
+    cleanup.add(CLEANUP_ORDER.account, `account ${name}`, async () => {
+      await mcp.call('manage_accounts', { action: 'delete', entity: 'account', id: dest }).catch(() => undefined);
+    });
+    await mcp.call('manage_accounts', { action: 'close', entity: 'account', id: src.id, transfer_account_id: dest, transfer_category_id: category.id });
+    const listed = (await mcp.call('list_entities', { type: 'account' })) as any[];
+    expect(listed.find((a: any) => a?.id === src.id)?.closed).toBeTruthy();
+    const d = await mcp.call('search_transactions', { by: 'account', account_id: src.id });
+    const rows = (Array.isArray(d) ? d : (d as any)?.result ?? []) as any[];
+    const closing = rows.find((t: any) => t?.amount === -5000);
+    expect(closing).toBeTruthy();
+    expect(closing?.category).toBe(category.id);
+  });
+
   // #816: an account is assigned to a group, ungrouped, and an unknown group is refused.
   test('manage_accounts update - assigns an account to a group, ungroups it, and refuses an unknown group (#816)', async ({ mcp, makeAccount, cleanup }) => {
     const account = await makeAccount();
