@@ -2550,9 +2550,56 @@ export async function getCommonPayees(): Promise<any[]> {
 export async function createPayee(payee: components['schemas']['Payee'] | unknown): Promise<string> {
   observability.incrementToolCall('actual.payees.create').catch(() => {});
   return queueWriteOperation(async () => {
-    const raw = await withConcurrency(() => retry(() => rawCreatePayee(payee) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
-    return normalizeToId(raw);
+    const opStartedAt = Date.now();
+    // #765: upstream api/payee-create passes only `{ name }` on, so `notes` was dropped while
+    // the call reported an id. Strip it here and store it as the payee's note (a row of the
+    // notes table keyed by the payee id) after the create, inside this same operation. The
+    // adapter's own updateNote opens its own queued operation, so it must NOT be called from
+    // here (a nested session deadlocks); the raw binding is used instead.
+    const isObj = payee !== null && typeof payee === 'object';
+    const { notes, ...rest } = (isObj ? payee : {}) as Record<string, unknown>;
+    const toCreate = isObj ? rest : payee;
+    const raw = await withConcurrency(() => retry(() => rawCreatePayee(toCreate) as Promise<string | { id?: string }>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
+    const id = normalizeToId(raw);
+    if (typeof notes === 'string' && notes !== '') {
+      await storePayeeNote(id, String(rest.name ?? ''), notes, opStartedAt);
+    }
+    return id;
   });
+}
+
+/**
+ * #765: write a payee's note right after the create and read it back. The read sits INSIDE the
+ * drain, before its closing api.sync(), so it polls (the #493 measurement; a later tool call
+ * needs none). The poll ends before the op timeout does, like the split poll (#494). A failure
+ * is a plain Error that says the payee EXISTS, so the caller does not create it again; the
+ * payee is not deleted (a rollback is a third write that can fail too). Every message avoids the
+ * TRANSIENT_ERROR_PATTERNS substrings ("timed out" included), or the pool drops the session's
+ * connection; upstream causes stay in `cause`.
+ */
+async function storePayeeNote(id: string, name: string, notes: string, opStartedAt: number): Promise<void> {
+  const failed = (what: string, err?: unknown) =>
+    new Error(`Payee "${name}" was created (id ${id}) but its notes could not be stored (${what}), so it has no note. The payee exists: set the note with set_note, or delete the payee. Nothing else was changed.`, err === undefined ? undefined : { cause: err });
+  const T = config.ACTUAL_OP_TIMEOUT_MS;
+  const deadline = T > 0
+    ? Math.min(Date.now() + SPLIT_VERIFY_TIMEOUT_MS, opStartedAt + Math.floor(T / 2))
+    : Date.now() + SPLIT_VERIFY_TIMEOUT_MS;
+  try {
+    await withConcurrency(() => retry(() => rawUpdateNote(id, notes) as Promise<void>, { retries: 0, backoffMs: 200, isRetryable: isRetryableError }));
+  } catch (err) {
+    throw failed('the note write failed', err);
+  }
+  for (;;) {
+    let current: { note?: string } | null | undefined;
+    try {
+      current = await withConcurrency(() => retry(() => rawGetNote(id) as Promise<{ id: string; note: string } | null>, { retries: 2, backoffMs: 200 }));
+    } catch (err) {
+      throw failed('the note could not be read back', err);
+    }
+    if (current?.note === notes) return;
+    if (Date.now() >= deadline) throw failed('the note was not visible on read-back');
+    await new Promise((resolve) => setTimeout(resolve, SPLIT_VERIFY_INTERVAL_MS));
+  }
 }
 export async function getBudgetMonths(): Promise<string[]> {
   return withActualApi(async () => {
@@ -3281,13 +3328,24 @@ export async function updatePayee(id: string, fields: Partial<components['schema
     // whose account no longer exists, is not a real workflow, and because the alternative
     // is leaving four tools able to create phantom rows.
     const payees = await withConcurrency(() =>
-      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string }>>), { retries: 2, backoffMs: 200 })
+      retry(() => readDrainListing('payees', () => rawGetPayees() as Promise<Array<{ id?: string; name?: string; transfer_acct?: string | null }>>), { retries: 2, backoffMs: 200 })
     );
-    if (!(Array.isArray(payees) && payees.some((p) => p?.id === id))) {
+    const payeeRow = Array.isArray(payees) ? payees.find((p) => p?.id === id) : undefined;
+    if (!payeeRow) {
       throw new NotFoundRefusal('Payee', id, 'actual_payees_get');
     }
 
     const fieldsObj = fields as Record<string, unknown>;
+
+    // #765: a transfer payee's shown name is its account's name (upstream getPayees and the
+    // v_payees view return COALESCE(account.name, payee.name)), so a stored rename never shows
+    // and the call used to report success for nothing. Refuse the whole call, before any write,
+    // so `name` with `category` writes neither. Any `name` value is refused, the current one
+    // too; `category` alone stays allowed (the default-category rule is a rule, not the name).
+    // The text names no tool, like the #760 refusal above.
+    if (payeeRow.transfer_acct && fieldsObj.name !== undefined) {
+      throw new ConflictRefusal(`"${payeeRow.name ?? id}" is a transfer payee: its name is its account's name, so it cannot be renamed here. Rename the account instead. Nothing was written.`);
+    }
 
     // Extract `category` — it is NOT a direct column on the payees table in Actual Budget.
     // The "default category" feature is implemented via rules (condition: payee is X → action: set category).

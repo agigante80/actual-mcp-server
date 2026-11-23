@@ -56,6 +56,8 @@ const LEGACY_SMOKE = [
   'actual_payees_get',
   'actual_get_id_by_name', // #801: the legacy name lookup refuses a shared name
   'actual_payees_update', // #760: the legacy unknown-field refusal for transfer_acct
+  'actual_payees_create', // #765: the legacy create stores notes
+  'actual_payees_delete', // #765: its cleanup
   'actual_transactions_update', // #743: the legacy payee_name resolution and the name-in-payee refusal
   'actual_accounts_create', // #767: the legacy create accepts offbudget
   'actual_transactions_create', // #747, #793: the legacy unknown-payee and transfer-payee refusals on create

@@ -90,6 +90,9 @@ await check('NEGATIVE: create without name, and delete or update without id, nam
 });
 await check('NEGATIVE: update with only id is refused with the exact message', () =>
   refused({ action: 'update', id: U1 }, /update needs at least one of: name, category/));
+await check('description: update names the transfer payee refusal (#765)', () => {
+  assert.ok(spec.description.includes('name (a transfer payee is refused: rename its account)'), 'update clause names the refusal');
+});
 await check('NEGATIVE: merge needs target_id and merge_ids; empty or 51-item lists are refused', async () => {
   await refused({ action: 'merge', merge_ids: [U2] }, /target_id.*required for action: merge/);
   await refused({ action: 'merge', target_id: U1 }, /merge_ids.*required for action: merge/);
