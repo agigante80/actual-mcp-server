@@ -36,10 +36,10 @@ const InputSchema = z.object({
  * read and the write land in different sessions, so a concurrent close could
  * commit between them and reproduce the original false success.
  *
- * The deliberate consequence is that deleting an id that never existed still
- * reports success. That is idempotent-delete semantics, it matches the behaviour
- * before this change, and the post-condition ("no account with this id exists")
- * is true either way.
+ * #771: an id that never existed is refused, not reported as a success. Upstream
+ * throws for it (no tombstone filter, nothing found), and the adapter turns that
+ * into a NotFoundRefusal after one fresh read confirms the id is absent. The
+ * pre-check stays out for the reason above: only a failed delete is followed by a read.
  */
 const tool: ToolDefinition = {
   name: 'actual_accounts_delete',
@@ -47,7 +47,7 @@ const tool: ToolDefinition = {
     'Delete an account from Actual Budget. DESTRUCTIVE: if the account has transactions, they are ' +
     'deleted too, paired transfer transactions are unlinked, and the transfer payee is removed. This ' +
     'cannot be undone. A CLOSED account cannot be deleted (Actual silently ignores it): reopen it with ' +
-    'actual_accounts_reopen first. Deleting an account that does not exist reports success. ' +
+    'actual_accounts_reopen first. An id that does not exist is refused. ' +
     'The result reports detachedTransfers, the number of transfers whose other half stays in its account, unlinked.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {

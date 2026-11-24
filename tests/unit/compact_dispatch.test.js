@@ -705,6 +705,38 @@ await check('NEGATIVE: the SAME refinement message raised twice on one path is r
   assert.deepStrictEqual(await refinedIssues('too short'), ['v: too short']);
 });
 
+// ---- #771: legacy field names in messages become the compact names ----
+const renameSpec = {
+  name: 'fixture_rename',
+  description: 'fixture',
+  selector: 'action',
+  actions: new Map([
+    ['close', { legacy: 'actual_fixture_close', fields: z.object({ id: z.string(), transfer_account_id: z.string().optional() }).strict(), rename: { transfer_account_id: 'transferAccountId' } }],
+    ['plain', { legacy: 'actual_fixture_plain', fields: z.object({ id: z.string() }).strict() }],
+  ]),
+};
+await check('#771: a thrown error naming a renamed legacy field is rewritten to the compact field, class kept', async () => {
+  const { NotFoundRefusal } = await import('../../dist/src/lib/errors.js');
+  const err = new NotFoundRefusal('Account', 'a1', 'actual_accounts_list');
+  err.message = 'balance is non-zero: transferAccountId is required, and transferAccountIdx stays';
+  await assert.rejects(
+    () => dispatchCompact({ callOperation: async () => { throw err; } }, renameSpec, { action: 'close', id: 'a1' }),
+    (e) => e === err && e instanceof NotFoundRefusal && e.message === 'balance is non-zero: transfer_account_id is required, and transferAccountIdx stays',
+  );
+});
+await check('#771: a returned error is rewritten, a data field naming the legacy field is not', async () => {
+  const out = await dispatchCompact(
+    { callOperation: async () => ({ result: { error: 'needs transferAccountId', name: 'transferAccountId' } }) },
+    renameSpec, { action: 'close', id: 'a1' });
+  assert.deepStrictEqual(out, { result: { error: 'needs transfer_account_id', name: 'transferAccountId' } });
+});
+await check('NEGATIVE: an action with no rename leaves the same text unchanged', async () => {
+  const out = await dispatchCompact(
+    { callOperation: async () => ({ error: 'needs transferAccountId' }) },
+    renameSpec, { action: 'plain', id: 'a1' });
+  assert.deepStrictEqual(out, { error: 'needs transferAccountId' });
+});
+
 restore();
 await manager.initialize(ALL);
 console.log(`\n[compact-dispatch] Results: ${passed} passed, ${failed} failed`);

@@ -15,7 +15,7 @@ Which tools a client actually sees depends on `MCP_TOOLSETS`, `MCP_TOOLS`, `MCP_
 | `actual_accounts_list` | List all accounts |
 | `actual_accounts_create` | Create a new account, on-budget unless offbudget is true, optionally with an opening balance in integer cents |
 | `actual_accounts_update` | Update account details, including `account_group_id` (a group id, or null to ungroup). An id that does not exist is refused rather than creating a partial record, and so is an unknown group |
-| `actual_accounts_delete` | Permanently delete account; the result reports detachedTransfers, the transfers left unlinked in other accounts |
+| `actual_accounts_delete` | Permanently delete account; the result reports detachedTransfers, the transfers left unlinked in other accounts; an id that does not exist is refused |
 | `actual_accounts_close` | Close account. An account with NO transactions is REMOVED by Actual, not closed. A balance moved from an on-budget to an off-budget account needs transferCategoryId; refused for any other pairing |
 | `actual_accounts_reopen` | Reopen closed account. An id that is not an account is refused rather than creating one |
 | `actual_accounts_get_balance` | Get account balance at a date |

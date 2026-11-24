@@ -212,7 +212,7 @@ How large the `tools/list` response is for each choice, so you can pick for a sm
 | Compact surface (default) | 15 | 44810 | 43.8 |
 | Compact, `MCP_TOOLSETS=chat` | 6 | 18143 | 17.7 |
 | Compact, `MCP_READ_ONLY=true` | 6 | 18179 | 17.8 |
-| `MCP_TOOL_SURFACE=legacy` | 85 | 126533 | 123.6 |
+| `MCP_TOOL_SURFACE=legacy` | 85 | 126514 | 123.5 |
 | Legacy, `MCP_TOOLSETS=chat` | 12 | 26540 | 25.9 |
 | Legacy, `MCP_READ_ONLY=true` | 37 | 45698 | 44.6 |
 

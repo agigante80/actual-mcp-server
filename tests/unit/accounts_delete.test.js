@@ -37,7 +37,13 @@ const CLOSED_ID = 'bbbbbbbb-1111-2222-3333-444444444444';
   let rawDeletes = [];
   let lastQuery = null;
   apiDefault.runQuery = async (query) => { lastQuery = query.serialize(); return { data: transferRows }; };
-  apiDefault.deleteAccount = async (id) => { rawDeletes.push(id); };
+  // #771: the raw delete can throw upstream's text, and the fresh read that follows is stubbed too.
+  let rawDeleteError = null;
+  let rawAccounts = [{ id: OPEN_ID }];
+  let rawAccountsThrow = false;
+  let rawAccountReads = 0;
+  apiDefault.deleteAccount = async (id) => { rawDeletes.push(id); if (rawDeleteError) throw rawDeleteError; };
+  apiDefault.getAccounts = async () => { rawAccountReads++; if (rawAccountsThrow) throw new Error('read failed'); return rawAccounts; };
   apiDefault.sync = async () => {};
   const adapterMod = await import('../../dist/src/lib/actual-adapter.js');
   adapterMod._setSkipApiInitForTests(true);
@@ -140,11 +146,30 @@ const CLOSED_ID = 'bbbbbbbb-1111-2222-3333-444444444444';
     check(res?.success === true, 'deleting an id that is already absent reports success (idempotent)');
   }
 
-  console.log('\n[accounts-delete] an unknown id is idempotent, matching prior behaviour');
+  console.log('\n[#771] an unknown id is refused with a next step, not reported as a success');
   {
-    reset();
-    const res = await tool.call({ id: 'cccccccc-0000-0000-0000-000000000000' });
-    check(res?.success === true, 'an id that never existed reports success');
+    const { isPreflightRefusal, NotFoundRefusal } = await import('../../dist/src/lib/errors.js');
+    const UNKNOWN = 'cccccccc-0000-0000-0000-000000000000';
+    const upstream = new Error(`Account with ID ${UNKNOWN} not found.`);
+    const run = async () => { try { await realDeleteAccount(UNKNOWN); return null; } catch (e) { return e; } };
+
+    rawDeletes = []; rawDeleteError = upstream; rawAccounts = [{ id: OPEN_ID }]; rawAccountsThrow = false; rawAccountReads = 0;
+    let err = await run();
+    check(err instanceof NotFoundRefusal && isPreflightRefusal(err), 'upstream not-found plus an absent id is a NotFoundRefusal', String(err));
+    check(/actual_accounts_list/.test(err?.message ?? '') && !/Account with ID/.test(err?.message ?? ''), 'it names the list tool and not upstream text', err?.message);
+    check(rawDeletes.length === 1, 'the delete was attempted once (no retry)');
+
+    rawAccounts = [{ id: UNKNOWN }];
+    err = await run();
+    check(err === upstream, 'NEGATIVE: the id is still listed, so the original error is rethrown unchanged', String(err));
+
+    rawAccounts = [{ id: OPEN_ID }]; rawAccountsThrow = true;
+    err = await run();
+    check(err === upstream, 'NEGATIVE: the re-read fails, so the original error is rethrown unchanged', String(err));
+
+    rawDeleteError = null; rawAccountsThrow = false; rawAccountReads = 0;
+    await realDeleteAccount(UNKNOWN);
+    check(rawAccountReads === 0, 'a delete that succeeds (a tombstoned id) reads nothing and is not refused');
   }
 
   console.log('\n[accounts-delete] schema validation still runs before any adapter call');

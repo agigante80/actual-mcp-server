@@ -2893,7 +2893,23 @@ export async function deleteAccount(id: string): Promise<{ detachedTransfers: nu
     ));
     const detachedTransfers = Array.isArray(res?.data) ? res.data.length : 0;
     // Non-idempotent: do not retry (#165).
-    await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    try {
+      await withConcurrency(() => retry(() => rawDeleteAccount(id) as Promise<void>, { retries: 0, backoffMs: 200 }));
+    } catch (err: unknown) {
+      // #771: upstream throws the bare `Account with ID <id> not found.` for an id that never
+      // existed. No pre-check: the listing hides a tombstoned (closed-then-removed) account that
+      // upstream still deletes, so only a FAILED delete is followed by one fresh read. The read
+      // decides, never the message text; if the id is present or the read fails, the original
+      // error is rethrown unchanged.
+      let rows: Array<{ id?: string }> | null = null;
+      try {
+        rows = (await withConcurrency(() => retry(() => rawGetAccounts() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 }))) as Array<{ id?: string }>;
+      } catch {
+        rows = null;
+      }
+      if (Array.isArray(rows) && !rows.some((a) => a?.id === id)) throw new NotFoundRefusal('Account', id, 'actual_accounts_list');
+      throw err;
+    }
     return { detachedTransfers };
   });
 }
@@ -4274,6 +4290,17 @@ export async function deleteSchedule(id: string): Promise<void> {
 export async function setBudgetCarryover(month: string, categoryId: string, flag: boolean): Promise<void> {
   observability.incrementToolCall('actual.budgets.setCarryover').catch(() => {});
   return queueWriteOperation(async () => {
+    // #771: upstream refuses an income category with its internal handler name
+    // (`budget-set-carryover: category "<id>" is not an expense category`). Read first and refuse
+    // in the caller's words; a race past this read still reaches upstream's own refusal.
+    const categories = await withConcurrency(() =>
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id?: string; name?: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
+    );
+    const category = Array.isArray(categories) ? categories.find((c) => c?.id === categoryId) : undefined;
+    if (!category && Array.isArray(categories)) throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
+    if (category?.is_income) {
+      throw new ConflictRefusal(`Category "${category.name ?? categoryId}" (${categoryId}) is an income category, and carryover applies only to expense categories. Nothing was written.`);
+    }
     await withConcurrency(() => retry(() => rawSetBudgetCarryover(month, categoryId, flag) as Promise<void>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError }));
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
