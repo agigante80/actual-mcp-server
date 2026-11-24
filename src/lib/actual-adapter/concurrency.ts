@@ -4,6 +4,7 @@
 // module boundary. It prevents bursts from overloading the Actual server.
 // Intentionally tiny; replace with Bottleneck or p-queue for production.
 
+import { AsyncResource } from 'node:async_hooks';
 import { DEFAULT_CONCURRENCY_LIMIT } from '../constants.js';
 
 let MAX_CONCURRENCY = parseInt(process.env.ACTUAL_API_CONCURRENCY || String(DEFAULT_CONCURRENCY_LIMIT), 10);
@@ -33,7 +34,13 @@ export function withConcurrency<T>(fn: () => Promise<T>): Promise<T> {
     });
   }
   return new Promise((resolve, reject) => {
-    queue.push(async () => {
+    // #800: bind to the CREATOR's async context. A queued task is started from the continuation
+    // of whichever task frees a slot, so without this it would run (and assertOperationLive would
+    // read the abandon token) in the RELEASER's context: a live write refused by an abandoned
+    // releaser, or an abandoned write let through by a live one.
+    // (runInAsyncScope, not AsyncResource.bind: tests/unit/toolsets.test.js forbids the text .bind( outside the tool manager.)
+    const owner = new AsyncResource('withConcurrency');
+    queue.push(() => owner.runInAsyncScope(async () => {
       try {
         const r = await fn();
         resolve(r);
@@ -43,7 +50,7 @@ export function withConcurrency<T>(fn: () => Promise<T>): Promise<T> {
         running--;
         processQueue();
       }
-    });
+    }));
   });
 }
 

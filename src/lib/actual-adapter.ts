@@ -9,77 +9,125 @@ import api from '@actual-app/api';
 // IS module.exports, so all methods are accessible as properties.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const {
-  addTransactions: rawAddTransactions,
+  addTransactions: rawAddTransactionsUnguarded,
   getAccounts: rawGetAccounts,
-  importTransactions: rawImportTransactions,
+  importTransactions: rawImportTransactionsUnguarded,
   getTransactions: rawGetTransactions,
   getCategories: rawGetCategories,
-  createCategory: rawCreateCategory,
+  createCategory: rawCreateCategoryUnguarded,
   getPayees: rawGetPayees,
   getCommonPayees: rawGetCommonPayees,
-  createPayee: rawCreatePayee,
+  createPayee: rawCreatePayeeUnguarded,
   getBudgetMonths: rawGetBudgetMonths,
   getBudgetMonth: rawGetBudgetMonth,
-  setBudgetAmount: rawSetBudgetAmount,
-  createAccount: rawCreateAccount,
-  updateAccount: rawUpdateAccount,
+  setBudgetAmount: rawSetBudgetAmountUnguarded,
+  createAccount: rawCreateAccountUnguarded,
+  updateAccount: rawUpdateAccountUnguarded,
   getAccountBalance: rawGetAccountBalance,
-  updateTransaction: rawUpdateTransaction,
-  deleteTransaction: rawDeleteTransaction,
-  updateCategory: rawUpdateCategory,
-  deleteCategory: rawDeleteCategory,
-  updatePayee: rawUpdatePayee,
-  deletePayee: rawDeletePayee,
-  deleteAccount: rawDeleteAccount,
+  updateTransaction: rawUpdateTransactionUnguarded,
+  deleteTransaction: rawDeleteTransactionUnguarded,
+  updateCategory: rawUpdateCategoryUnguarded,
+  deleteCategory: rawDeleteCategoryUnguarded,
+  updatePayee: rawUpdatePayeeUnguarded,
+  deletePayee: rawDeletePayeeUnguarded,
+  deleteAccount: rawDeleteAccountUnguarded,
   getRules: rawGetRules,
-  createRule: rawCreateRule,
-  updateRule: rawUpdateRule,
-  deleteRule: rawDeleteRule,
-  setBudgetCarryover: rawSetBudgetCarryover,
-  closeAccount: rawCloseAccount,
-  reopenAccount: rawReopenAccount,
+  createRule: rawCreateRuleUnguarded,
+  updateRule: rawUpdateRuleUnguarded,
+  deleteRule: rawDeleteRuleUnguarded,
+  setBudgetCarryover: rawSetBudgetCarryoverUnguarded,
+  closeAccount: rawCloseAccountUnguarded,
+  reopenAccount: rawReopenAccountUnguarded,
   getCategoryGroups: rawGetCategoryGroups,
-  createCategoryGroup: rawCreateCategoryGroup,
-  updateCategoryGroup: rawUpdateCategoryGroup,
-  deleteCategoryGroup: rawDeleteCategoryGroup,
-  mergePayees: rawMergePayees,
-  mergeTransactions: rawMergeTransactions,
+  createCategoryGroup: rawCreateCategoryGroupUnguarded,
+  updateCategoryGroup: rawUpdateCategoryGroupUnguarded,
+  deleteCategoryGroup: rawDeleteCategoryGroupUnguarded,
+  mergePayees: rawMergePayeesUnguarded,
+  mergeTransactions: rawMergeTransactionsUnguarded,
   getPayeeRules: rawGetPayeeRules,
-  holdBudgetForNextMonth: rawHoldBudgetForNextMonth,
-  resetBudgetHold: rawResetBudgetHold,
+  holdBudgetForNextMonth: rawHoldBudgetForNextMonthUnguarded,
+  resetBudgetHold: rawResetBudgetHoldUnguarded,
   runQuery: rawRunQuery,
-  runBankSync: rawRunBankSync,
+  runBankSync: rawRunBankSyncUnguarded,
   getBudgets: rawGetBudgets,
   getIDByName: rawGetIDByName,
   getServerVersion: rawGetServerVersion,
   getSchedules: rawGetSchedules,
   getScheduleDates: rawGetScheduleDates,
-  createSchedule: rawCreateSchedule,
-  updateSchedule: rawUpdateSchedule,
-  deleteSchedule: rawDeleteSchedule,
+  createSchedule: rawCreateScheduleUnguarded,
+  updateSchedule: rawUpdateScheduleUnguarded,
+  deleteSchedule: rawDeleteScheduleUnguarded,
   getTags: rawGetTags,
-  createTag: rawCreateTag,
-  updateTag: rawUpdateTag,
-  deleteTag: rawDeleteTag,
+  createTag: rawCreateTagUnguarded,
+  updateTag: rawUpdateTagUnguarded,
+  deleteTag: rawDeleteTagUnguarded,
   getNote: rawGetNote,
-  updateNote: rawUpdateNote,
+  updateNote: rawUpdateNoteUnguarded,
   exportBudget: rawExportBudget,
-  importBudget: rawImportBudget,
+  importBudget: rawImportBudgetUnguarded,
   getPreferences: rawGetPreferences,
   getAccountGroups: rawGetAccountGroups,
-  createAccountGroup: rawCreateAccountGroup,
-  updateAccountGroup: rawUpdateAccountGroup,
-  deleteAccountGroup: rawDeleteAccountGroup,
+  createAccountGroup: rawCreateAccountGroupUnguarded,
+  updateAccountGroup: rawUpdateAccountGroupUnguarded,
+  deleteAccountGroup: rawDeleteAccountGroupUnguarded,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 } = api as any;
 import { EventEmitter } from 'events';
 import observability from '../observability.js';
 import { retry, isRetryableError, isRateLimitError } from './retry.js';
-import { withOpTimeout } from './opTimeout.js';
+import { withOpTimeout, runAbandonable, assertOperationLive } from './opTimeout.js';
 import { markInitFailure } from './init-failure.js';
 import { MAX_BUDGET_AMOUNT_CENTS } from './budget-limits.js';
 import { incomeSetAmountRefusal, incomeTransferRefusal, isTrackingBudgetMonth } from './actual-adapter/budget-income.js';
 import { ConflictRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
+
+// #800: every raw WRITE binding refuses to run once its operation was abandoned after the write
+// timeout (see opTimeout.ts). One chokepoint at the binding, so no tool or adapter call site
+// changes and a new write method inherits it. Per-site checks were rejected (#390/#393: they miss
+// a site). Reads, runQuery, exportBudget and getServerVersion stay unwrapped on purpose.
+const guarded = <A extends unknown[], R>(fn: (...a: A) => R) => (...a: A): R => {
+  assertOperationLive();
+  return fn(...a);
+};
+const rawAddTransactions = guarded(rawAddTransactionsUnguarded);
+const rawImportTransactions = guarded(rawImportTransactionsUnguarded);
+const rawSetBudgetAmount = guarded(rawSetBudgetAmountUnguarded);
+const rawCreateAccount = guarded(rawCreateAccountUnguarded);
+const rawUpdateAccount = guarded(rawUpdateAccountUnguarded);
+const rawUpdateTransaction = guarded(rawUpdateTransactionUnguarded);
+const rawDeleteTransaction = guarded(rawDeleteTransactionUnguarded);
+const rawCreateCategory = guarded(rawCreateCategoryUnguarded);
+const rawUpdateCategory = guarded(rawUpdateCategoryUnguarded);
+const rawDeleteCategory = guarded(rawDeleteCategoryUnguarded);
+const rawCreatePayee = guarded(rawCreatePayeeUnguarded);
+const rawUpdatePayee = guarded(rawUpdatePayeeUnguarded);
+const rawDeletePayee = guarded(rawDeletePayeeUnguarded);
+const rawDeleteAccount = guarded(rawDeleteAccountUnguarded);
+const rawCreateRule = guarded(rawCreateRuleUnguarded);
+const rawUpdateRule = guarded(rawUpdateRuleUnguarded);
+const rawDeleteRule = guarded(rawDeleteRuleUnguarded);
+const rawSetBudgetCarryover = guarded(rawSetBudgetCarryoverUnguarded);
+const rawCloseAccount = guarded(rawCloseAccountUnguarded);
+const rawReopenAccount = guarded(rawReopenAccountUnguarded);
+const rawCreateCategoryGroup = guarded(rawCreateCategoryGroupUnguarded);
+const rawUpdateCategoryGroup = guarded(rawUpdateCategoryGroupUnguarded);
+const rawDeleteCategoryGroup = guarded(rawDeleteCategoryGroupUnguarded);
+const rawMergePayees = guarded(rawMergePayeesUnguarded);
+const rawMergeTransactions = guarded(rawMergeTransactionsUnguarded);
+const rawHoldBudgetForNextMonth = guarded(rawHoldBudgetForNextMonthUnguarded);
+const rawResetBudgetHold = guarded(rawResetBudgetHoldUnguarded);
+const rawRunBankSync = guarded(rawRunBankSyncUnguarded);
+const rawCreateSchedule = guarded(rawCreateScheduleUnguarded);
+const rawUpdateSchedule = guarded(rawUpdateScheduleUnguarded);
+const rawDeleteSchedule = guarded(rawDeleteScheduleUnguarded);
+const rawCreateTag = guarded(rawCreateTagUnguarded);
+const rawUpdateTag = guarded(rawUpdateTagUnguarded);
+const rawDeleteTag = guarded(rawDeleteTagUnguarded);
+const rawUpdateNote = guarded(rawUpdateNoteUnguarded);
+const rawImportBudget = guarded(rawImportBudgetUnguarded);
+const rawCreateAccountGroup = guarded(rawCreateAccountGroupUnguarded);
+const rawUpdateAccountGroup = guarded(rawUpdateAccountGroupUnguarded);
+const rawDeleteAccountGroup = guarded(rawDeleteAccountGroupUnguarded);
 import { amountOpMismatch } from './schemas/schedule-amount.js';
 import { findMatchingRule, type RuleCondition } from './rule-matching.js';
 import logger from '../logger.js';
@@ -914,7 +962,8 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
         // #390: verify the singleton holds THIS session's budget before the operation runs.
         // Inside the lock, so no other session can change it in between.
         await ensureLoadedBudgetMatchesSession();
-        const result = await withOpTimeout(operation);
+        // #800: a write, so a callback that outlives the bound must not write later.
+        const result = await runAbandonable(operation);
         // Propagate the write to the server so other clients (and our next
         // read) see it. Pre-#134 this happened implicitly via api.shutdown().
         try {
@@ -954,7 +1003,7 @@ export async function withActualApiWrite<T>(operation: () => Promise<T>): Promis
     let forceFullShutdown = false;
     try {
       await initActualApiForOperation();
-      return await withOpTimeout(operation);
+      return await runAbandonable(operation);
     } catch (err) {
       // #419: force a full teardown on an infrastructure-level error so the next
       // stdio op re-inits fresh (see the read-path catch for the rationale).
@@ -1683,7 +1732,9 @@ async function processWriteQueue() {
               // acquiring the mutex (#392), and the `finally` below touches every session in the
               // batch before the lock is released. A sweep that queued behind this drain therefore
               // finds the entry fresh and returns without evicting.
-              return await withOpTimeout(operation, 'operation', timeoutMs);
+              // #800: runAbandonable, not withOpTimeout: once this entry loses the race its callback
+              // may still be awaiting a read, and must not write after the next entry has started.
+              return await runAbandonable(operation, 'operation', timeoutMs);
             });
             resolve(result);
           } catch (error) {
