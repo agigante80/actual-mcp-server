@@ -19,7 +19,7 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_amount',
-  description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses. With categoryName, a split is matched by its children; rows carry parent_id.',
+  description: 'Search transactions by amount. Supports two modes: (1) Signed amount range using minAmount/maxAmount (expenses are negative, e.g., -5000 for -$50), or (2) Absolute value using absoluteAmount to find any transaction with that magnitude regardless of sign (e.g., absoluteAmount=5000 matches both +$50 income and -$50 expense). When user says "amount 50", use absoluteAmount=5000 to match both income and expenses. Returns up to limit rows (default 100) as { transactions, count, totalAmount, hasMore }; count and totalAmount cover only the returned rows, hasMore is true when more matched. With categoryName, a split is matched by its children; rows carry parent_id.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
     try {
@@ -59,6 +59,7 @@ const tool: ToolDefinition = {
           transactions: [],
           count: 0,
           totalAmount: 0,
+          hasMore: false,
           amountRange: {
             min: input.minAmount,
             max: input.maxAmount,
@@ -80,6 +81,7 @@ const tool: ToolDefinition = {
             transactions: [],
             count: 0,
             totalAmount: 0,
+            hasMore: false,
             amountRange: {
               min: input.minAmount,
               max: input.maxAmount,
@@ -119,6 +121,8 @@ const tool: ToolDefinition = {
         return amountB - amountA;
       });
       
+      // #755: computed before the slice, so a caller can tell a complete answer from a cut one.
+      const hasMore = filtered.length > (input.limit || 100);
       const limited = filtered.slice(0, input.limit || 100);
       
       // Enrich transactions with account names (listing already in hand, see above)
@@ -136,6 +140,7 @@ const tool: ToolDefinition = {
         transactions: enrichedTransactions,
         count: enrichedTransactions.length,
         totalAmount,
+        hasMore,
         amountRange: input.absoluteAmount !== undefined 
           ? { absolute: input.absoluteAmount }
           : { min: input.minAmount, max: input.maxAmount },
@@ -153,6 +158,7 @@ const tool: ToolDefinition = {
         transactions: [],
         count: 0,
         totalAmount: 0,
+        hasMore: false,
         amountRange: {},
         error: `search_by_amount failed: ${message}`,
       };

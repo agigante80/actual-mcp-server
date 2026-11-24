@@ -80,7 +80,7 @@ export const listEntities: CompactToolSpec = {
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
     'budget_file: scope configured (default; active true marks this session\'s budget) or server.\n' +
     'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
-    'Returns the entity list for the type; a query returns { matches, count }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
+    'Returns the list for the type; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
   selector: 'type',
   actions: new Map<string, CompactActionRow>([
     ['account', row('actual_accounts_list', [searchRoute('accounts'), nameRoute('accounts')])],

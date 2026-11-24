@@ -217,5 +217,8 @@ await check('#758: payee frequency and the schedule count cap are documented', (
   assert.ok(!d.includes('sort frequency (most used payees).'), 'the bare frequency clause is gone');
 });
 
+await check('#755: the description says a query returns total and truncated', () => {
+  assert.ok(spec.description.includes('a query returns { matches, count, total, truncated }'));
+});
 console.log(`\n[compact-list-entities] Results: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);

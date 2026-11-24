@@ -105,6 +105,32 @@ const FIXTURE = {
     check(cat.count === 1 && names(cat)[0] === 'Gas', 'categories type works');
   }
 
+  console.log('\n[#755] total and truncated, counted after the name filter and before the limit');
+  {
+    // 12 payees containing "a", plus a null name and a name without "a" that the filter drops.
+    const many = [
+      ...Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, name: `Shop a${String(i).padStart(2, '0')}` })),
+      { id: 'n1', name: null },
+      { id: 'n2', name: 'Zed' },
+    ];
+    adapter.getPayees = async () => many;
+    const cut = await run({ type: 'payees', query: 'a' });
+    check(cut.count === 10 && cut.total === 12 && cut.truncated === true, 'default limit 10 of 12: count 10, total 12, truncated true', JSON.stringify([cut.count, cut.total, cut.truncated]));
+    const wide = await run({ type: 'payees', query: 'a', limit: 100 });
+    check(wide.count === 12 && wide.total === 12 && wide.truncated === false, 'limit 100: count 12, total 12, truncated false');
+    const exact = await run({ type: 'payees', query: 'a', limit: 12 });
+    check(exact.count === 12 && exact.total === 12 && exact.truncated === false, 'limit equal to the matches is not truncated');
+    const small = await run({ type: 'payees', query: 'zed' });
+    check(small.count === 1 && small.total === 1 && small.truncated === false, 'a query within the limit is not truncated');
+    const multi = await run({ type: 'payees', query: ['a00', 'a01', 'zed'], limit: 2 });
+    check(multi.count === 2 && multi.total === 3 && multi.truncated === true, 'multi-pattern: total counts every pattern match', JSON.stringify([multi.count, multi.total]));
+    const fuzzy = await run({ type: 'payees', query: 'Shop a05', matchType: 'fuzzy', limit: 1 });
+    check(fuzzy.count === 1 && fuzzy.total >= 1 && fuzzy.truncated === (fuzzy.total > 1), 'fuzzy: total is the number of fuzzy matches before the limit', JSON.stringify([fuzzy.count, fuzzy.total]));
+    const none = await run({ type: 'payees', query: 'qqqq' });
+    check(none.count === 0 && none.total === 0 && none.truncated === false, 'no match: total 0, truncated false');
+    adapter.getPayees = async () => FIXTURE.payees;
+  }
+
   console.log('\n[#204] Zod negatives (tool.call must throw)');
   {
     const throws = async (input, label) => {

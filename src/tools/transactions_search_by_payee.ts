@@ -20,7 +20,7 @@ const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_payee',
   description:
     'Search transactions by payee name (case-insensitive exact match, e.g. "Amazon"), optionally narrowed by a YYYY-MM-DD date range, accountId, categoryName and an amount range in integer cents. Read-only; off-budget accounts are included. ' +
-    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, payeeName }, each row with accountName; count and totalAmount cover only the returned rows. With categoryName, a split is matched by its children; rows carry parent_id. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, hasMore, payeeName }, each row with accountName; count and totalAmount cover only the returned rows, hasMore is true when more rows matched. With categoryName, a split is matched by its children; rows carry parent_id. ' +
     'An unknown payee or category name returns an empty list with an error field. With a payee id use actual_transactions_filter; for per-payee totals use actual_transactions_aggregate.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
@@ -46,6 +46,7 @@ const tool: ToolDefinition = {
           transactions: [],
           count: 0,
           totalAmount: 0,
+          hasMore: false,
           payeeName: input.payeeName,
           error: `Payee "${input.payeeName}" not found`,
         };
@@ -79,6 +80,7 @@ const tool: ToolDefinition = {
         transactions: [],
         count: 0,
         totalAmount: 0,
+        hasMore: false,
         payeeName: input.payeeName,
       };
     }
@@ -99,6 +101,7 @@ const tool: ToolDefinition = {
           transactions: [],
           count: 0,
           totalAmount: 0,
+          hasMore: false,
           payeeName: input.payeeName,
           error: `Category "${input.categoryName}" not found`,
         };
@@ -132,6 +135,8 @@ const tool: ToolDefinition = {
       return dateB.localeCompare(dateA);
     });
     
+    // #755: computed before the slice, so a caller can tell a complete answer from a cut one.
+    const hasMore = filtered.length > (input.limit || 100);
     const limited = filtered.slice(0, input.limit || 100);
     
     // Enrich transactions with account names
@@ -150,6 +155,7 @@ const tool: ToolDefinition = {
       transactions: enrichedTransactions,
       count: enrichedTransactions.length,
       totalAmount,
+      hasMore,
       payeeName: input.payeeName,
     };
   },

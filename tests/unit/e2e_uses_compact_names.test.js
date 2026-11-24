@@ -46,6 +46,7 @@ const LEGACY_NAMES = new Set([...IMPLEMENTED_TOOLS, ...ALIAS_KEYS]);
 const LEGACY_SMOKE = [
   'actual_accounts_list',
   'actual_transactions_search_by_month',
+  'actual_transactions_search_by_amount', // #755: the legacy search carries hasMore
   'actual_transactions_filter', // #756: the legacy off-budget accountId refusal
   'actual_transactions_search_by_category', // #750: the legacy split-child search
   'actual_transactions_search_by_payee', // #802: the legacy shared-name payee search

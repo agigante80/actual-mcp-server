@@ -112,7 +112,14 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   Measured at 126,514 before and 126,549 after; the ceiling is the measured total plus 8. The compact
 //   total is 44,813 bytes (44,810 before), under COMPACT_TOTAL_CEILING; every per-tool ceiling is unchanged
 //   (manage_budget_months was trimmed back under 3,900 after the envelope qualification).
-const TOTAL_CEILING = 126557;
+//   Total raised for #755 (a cut search says so) from 126,557 to 127,066: the five legacy search
+//   descriptions gain the hasMore sentence (and the entities search the total and truncated one),
+//   description text only. Measured on develop at 126,549 bytes before and 127,058 after (509
+//   added), and the ceiling is the measured total plus 8. The compact total is 44,852 bytes
+//   (44,814 before), under COMPACT_TOTAL_CEILING: the compact search_transactions entry is under
+//   3,900, paid for by shorter min_amount, max_amount, cleared and reconciled descriptions; list_entities is exactly 3,900 (the word "entity" was dropped from its Returns line).
+//   Every per-tool ceiling is unchanged.
+const TOTAL_CEILING = 127066;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
