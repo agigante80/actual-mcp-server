@@ -1,6 +1,6 @@
 // #755: the four legacy search tools say when more rows matched than `limit` returned.
 //
-// count and totalAmount keep covering the returned rows; hasMore is computed BEFORE the slice.
+// count and totalAmount keep covering the returned rows; hasMore compares the matches with the returned slice.
 // Each tool is driven with three matching rows and limit 1 (truncated), limit 3 (exact fit) and
 // limit 100 (fewer than the limit), and with the empty results, so a hasMore taken from the
 // sliced list (or left off an early return) fails here.
@@ -79,6 +79,16 @@ describe('empty results carry hasMore false');
     const tool = await load(file);
     const r = await tool.call({ ...input, ...empty, ...(input.month ? { month: '2020-01' } : {}) });
     check(r.count === 0 && r.hasMore === false, `${label}: no rows gives count 0 and hasMore false (${JSON.stringify(r).slice(0, 160)})`);
+  }
+}
+
+describe('limit -1 with no matches reports hasMore false (the slice is empty)');
+{
+  const empty = { startDate: '2020-01-01', endDate: '2020-01-31' };
+  for (const [label, file, input] of cases) {
+    const tool = await load(file);
+    const r = await tool.call({ ...input, ...empty, ...(input.month ? { month: '2020-01' } : {}), limit: -1 });
+    check(r.count === 0 && r.hasMore === false, `${label}: limit -1 and no rows gives count 0 and hasMore false (${r.count}, ${r.hasMore})`);
   }
 }
 
