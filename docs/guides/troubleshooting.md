@@ -27,7 +27,9 @@ The `sys_startup` line the server logs once it has started: versions, transport,
 
 ## A call stalls for 30 seconds, then `Actual API operation timed out`
 
-Every upstream call is bounded by `ACTUAL_OP_TIMEOUT_MS` (default 30000, `src/lib/opTimeout.ts`) so a stall cannot hold the API lock forever. A timeout means the Actual server did not answer in time: check that it is reachable from the MCP server and not overloaded. If the Actual server is reachable but slow, raise `ACTUAL_OP_TIMEOUT_MS` (see [reference/configuration.md](../reference/configuration.md)); a client may also need its own request timeout raised (for example `timeout` in a [LibreChat](clients/librechat.md) entry).
+Every upstream call is bounded by `ACTUAL_OP_TIMEOUT_MS` (default 30000, `src/lib/opTimeout.ts`) so a stall cannot hold the API lock forever. Two calls have a longer bound of their own: a budget import (`ACTUAL_IMPORT_TIMEOUT_MS`) and the provider call of a bank sync (`ACTUAL_BANK_SYNC_TIMEOUT_MS`, default 300000, `0` disables), whose message is `Actual API bank sync timed out` and names that variable. A timeout means the Actual server did not answer in time: check that it is reachable from the MCP server and not overloaded. If the Actual server is reachable but slow, raise `ACTUAL_OP_TIMEOUT_MS` (see [reference/configuration.md](../reference/configuration.md)); a client may also need its own request timeout raised (for example `timeout` in a [LibreChat](clients/librechat.md) entry).
+
+A different message, `Write operation did not start within <n>ms`, is not a stall of the Actual server: the write waited `ACTUAL_OP_TIMEOUT_MS` for the API lock while a longer operation (a bank sync or a budget import) held it. The write never ran and nothing was modified, so retry it once the long operation has ended.
 
 If you are changing a tool and every call to it stalls this way, the tool most likely nests one adapter session inside another; the API lock is not reentrant (see [AGENTS.md](../../AGENTS.md)).
 
@@ -55,7 +57,7 @@ The HTTP transport is stateful: each client connection gets an `mcp-session-id`,
 HTTP 404  {"jsonrpc":"2.0","error":{"code":-32001,"message":"Session not found. Please re-initialize ..."}}
 ```
 
-**A client that ends its session frees its slot at once (#563).** Clients that send HTTP `DELETE` with their `mcp-session-id` when they disconnect (the MCP spec's way to end a session; Gemini is one) release the session immediately, including its connection-pool slot and any budget it selected. Clients that just stop calling are reaped by the idle sweep after `SESSION_IDLE_TIMEOUT_MINUTES`, so on a busy server a client that never sends `DELETE` holds a slot until then.
+**A client that ends its session frees its slot at once (#563).** Clients that send HTTP `DELETE` with their `mcp-session-id` when they disconnect (the MCP spec's way to end a session; Gemini is one) release the session immediately, including its connection-pool slot and any budget it selected. Clients that just stop calling are reaped by the idle sweep after `SESSION_IDLE_TIMEOUT_MINUTES`, so on a busy server a client that never sends `DELETE` holds a slot until then. A session with a request still in flight is not reaped, however long the request runs (a bank sync can take minutes); its idle time starts again when the response ends.
 
 **A session that was never usable reports why (#438).** The 404 above means the session is simply gone. A different case looks identical to a client but is not: the session was created, its connection to Actual failed to initialise, and the transport was never registered. Since #438 that answer names the cause instead of the generic sentence:
 
