@@ -19,7 +19,7 @@ const tool: ToolDefinition = {
   name: 'actual_transactions_search_by_month',
   description:
     'Search the transactions of one calendar month (month as YYYY-MM, default the current month), optionally narrowed by accountId, categoryName, payeeName (case-insensitive exact names) and an amount range in integer cents. Read-only; off-budget accounts are excluded, and an off-budget accountId is refused. ' +
-    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, month }. count and totalAmount cover only the returned rows, so raise limit for a full total. With categoryName, a split is matched by its children; rows carry parent_id. ' +
+    'Returns up to limit rows (default 100), newest first, as { transactions, count, totalAmount, hasMore, month }. count and totalAmount cover only the returned rows (hasMore is true when more rows matched), so raise limit for a full total. With categoryName, a split is matched by its children; rows carry parent_id. ' +
     'An unknown category or payee name returns an empty list with an error field. For other date ranges or aggregation use actual_query_run.',
   inputSchema: InputSchema,
   call: async (args: unknown, _meta?: unknown) => {
@@ -65,6 +65,7 @@ const tool: ToolDefinition = {
         transactions: [],
         count: 0,
         totalAmount: 0,
+        hasMore: false,
         month,
       };
     }
@@ -96,6 +97,7 @@ const tool: ToolDefinition = {
           transactions: [],
           count: 0,
           totalAmount: 0,
+          hasMore: false,
           month,
           error: `Category "${input.categoryName}" not found`,
         };
@@ -114,6 +116,7 @@ const tool: ToolDefinition = {
           transactions: [],
           count: 0,
           totalAmount: 0,
+          hasMore: false,
           month,
           error: `Payee "${input.payeeName}" not found`,
         };
@@ -135,6 +138,8 @@ const tool: ToolDefinition = {
       return dateB.localeCompare(dateA);
     });
     
+    // #755: computed before the slice, so a caller can tell a complete answer from a cut one.
+    const hasMore = filtered.length > (input.limit || 100);
     const limited = filtered.slice(0, input.limit || 100);
     
     // Enrich transactions with account names (reuse already-fetched accounts)
@@ -152,6 +157,7 @@ const tool: ToolDefinition = {
       transactions: enrichedTransactions,
       count: enrichedTransactions.length,
       totalAmount,
+      hasMore,
       month,
     };
   },

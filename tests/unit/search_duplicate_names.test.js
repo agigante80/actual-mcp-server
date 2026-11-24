@@ -74,12 +74,12 @@ const TXNS = [
     check(ids(n) === 't1,t2', 'by_payee with a category: both payees, both categories', ids(n));
   }
 
-  console.log('\n[#802] unknown and blank names keep the existing not-found result');
+  console.log('\n[#802] unknown and blank names keep the existing not-found result (#755: plus hasMore false)');
   {
     const c = await byCategory.call({ categoryName: 'Nope' });
-    check(JSON.stringify(c) === JSON.stringify({ transactions: [], count: 0, totalAmount: 0, categoryName: 'Nope', error: 'Category "Nope" not found' }), 'by_category unknown', JSON.stringify(c));
+    check(JSON.stringify(c) === JSON.stringify({ transactions: [], count: 0, totalAmount: 0, hasMore: false, categoryName: 'Nope', error: 'Category "Nope" not found' }), 'by_category unknown', JSON.stringify(c));
     const p = await byPayee.call({ payeeName: 'Nobody' });
-    check(JSON.stringify(p) === JSON.stringify({ transactions: [], count: 0, totalAmount: 0, payeeName: 'Nobody', error: 'Payee "Nobody" not found' }), 'by_payee unknown', JSON.stringify(p));
+    check(JSON.stringify(p) === JSON.stringify({ transactions: [], count: 0, totalAmount: 0, hasMore: false, payeeName: 'Nobody', error: 'Payee "Nobody" not found' }), 'by_payee unknown', JSON.stringify(p));
     const m = await byMonth.call({ month: '2026-03', categoryName: 'Nope' });
     check(m.count === 0 && m.error === 'Category "Nope" not found', 'by_month unknown category');
     const mp = await byMonth.call({ month: '2026-03', payeeName: 'Nobody' });

@@ -4491,6 +4491,45 @@ test.describe('Docker E2E - compact search_transactions and summarize_transactio
     expect(compact).toBeTruthy();
   });
 
+  // #755: a search cut by `limit` says so. Three seeded rows in one account: limit 1 is cut, a limit
+  // of 100 is not, and the unrelated account route carries no hasMore. Asserted on this account only.
+  test('search_transactions - hasMore is true when limit cuts the answer and false when it does not (#755)', async ({ mcp, makeAccount, makeCategory, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const payee = await makePayee();
+    for (let i = 0; i < 3; i++) await makeTransaction({ account, amount: -1357, category: category.id, payee: payee.id });
+    const { start, end } = range();
+    const routes: Record<string, unknown>[] = [
+      { by: 'amount', account_id: account.id, absolute_amount: 1357 },
+      { by: 'category', category_name: category.name, start_date: start, end_date: end, account_id: account.id },
+      { by: 'month', month: currentMonth(), account_id: account.id },
+      { by: 'payee', payee_name: payee.name, start_date: start, end_date: end, account_id: account.id },
+    ];
+    for (const route of routes) {
+      const cut = await mcp.call('search_transactions', { ...route, limit: 1 });
+      expect(cut.count, `${route.by} limit 1`).toBe(1);
+      expect(cut.hasMore, `${route.by} limit 1`).toBe(true);
+      const whole = await mcp.call('search_transactions', { ...route, limit: 100 });
+      expect(whole.count, `${route.by} limit 100`).toBe(3);
+      expect(whole.hasMore, `${route.by} limit 100`).toBe(false);
+    }
+    const byAccount = await mcp.call('search_transactions', { by: 'account', account_id: account.id });
+    expect(JSON.stringify(byAccount)).not.toContain('hasMore');
+  });
+
+  test('list_entities - a query reports total and truncated (#755)', async ({ mcp, makePayee }) => {
+    const token = `Tq${uniqueSuffix().replace(/-/g, '')}`;
+    for (let i = 0; i < 3; i++) await makePayee({ name: `E2E-${token}-${i}` });
+    const cut = await mcp.call('list_entities', { type: 'payee', query: token.toLowerCase(), limit: 2 });
+    expect(cut.count).toBe(2);
+    expect(cut.total).toBe(3);
+    expect(cut.truncated).toBe(true);
+    const whole = await mcp.call('list_entities', { type: 'payee', query: token.toLowerCase(), limit: 50 });
+    expect(whole.count).toBe(3);
+    expect(whole.total).toBe(3);
+    expect(whole.truncated).toBe(false);
+  });
+
   test('search_transactions - by uncategorized', async ({ mcp, makeAccount, makeTransaction }) => {
     const account = await makeAccount();
     await makeTransaction({ account, amount: -999 });
@@ -6599,6 +6638,36 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     expect((found.matches as any[]).some((m: any) => m.id === payee.id)).toBe(true);
     const none = await mcp.call('actual_entities_search', { type: 'payees', query: 'zzz-definitely-nonexistent-payee-xqz-9999', matchType: 'contains', limit: 10 });
     expect(none.matches).toHaveLength(0);
+  });
+
+  // #755: the legacy searches carry hasMore and the entities search total and truncated.
+  test('legacy searches - hasMore marks a cut answer, and actual_entities_search reports total and truncated (#755)', async ({ mcp, makeAccount, makeCategory, makePayee, makeTransaction }) => {
+    const account = await makeAccount();
+    const category = await makeCategory();
+    const payee = await makePayee();
+    for (let i = 0; i < 3; i++) await makeTransaction({ account, amount: -2468, category: category.id, payee: payee.id });
+    const start = `${currentMonth()}-01`;
+    const end = today();
+    const calls: [string, Record<string, unknown>][] = [
+      ['actual_transactions_search_by_amount', { absoluteAmount: 2468, accountId: account.id }],
+      ['actual_transactions_search_by_category', { categoryName: category.name, startDate: start, endDate: end, accountId: account.id }],
+      ['actual_transactions_search_by_month', { month: currentMonth(), accountId: account.id }],
+      ['actual_transactions_search_by_payee', { payeeName: payee.name, startDate: start, endDate: end, accountId: account.id }],
+    ];
+    for (const [tool, args] of calls) {
+      const cut = await mcp.call(tool, { ...args, limit: 1 });
+      expect(cut.count, `${tool} limit 1`).toBe(1);
+      expect(cut.hasMore, `${tool} limit 1`).toBe(true);
+      const whole = await mcp.call(tool, { ...args, limit: 100 });
+      expect(whole.count, `${tool} limit 100`).toBe(3);
+      expect(whole.hasMore, `${tool} limit 100`).toBe(false);
+    }
+    const token = `Te${uniqueSuffix().replace(/-/g, '')}`;
+    for (let i = 0; i < 3; i++) await makePayee({ name: `E2E-${token}-${i}` });
+    const cutEntities = await mcp.call('actual_entities_search', { type: 'payees', query: token.toLowerCase(), matchType: 'contains', limit: 2 });
+    expect([cutEntities.count, cutEntities.total, cutEntities.truncated]).toEqual([2, 3, true]);
+    const wholeEntities = await mcp.call('actual_entities_search', { type: 'payees', query: token.toLowerCase(), matchType: 'contains', limit: 50 });
+    expect([wholeEntities.count, wholeEntities.total, wholeEntities.truncated]).toEqual([3, 3, false]);
   });
 
   test('actual_transactions_summary_by_category - answers', async ({ mcp }) => {

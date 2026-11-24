@@ -27,8 +27,8 @@ import { asFields, needs } from '../refine.js';
 const accountId = z.string().min(1).describe('Account id from list_entities. Omit for all accounts.').optional();
 const startDate = CommonSchemas.date.describe('First day, inclusive.').optional();
 const endDate = CommonSchemas.date.describe('Last day, inclusive (uncategorized: default today).').optional();
-const minAmount = z.number().int().describe('Smallest amount in cents; outflows negative.').optional();
-const maxAmount = z.number().int().describe('Largest amount in cents; outflows negative.').optional();
+const minAmount = z.number().int().describe('Smallest amount in cents.').optional();
+const maxAmount = z.number().int().describe('Largest amount in cents.').optional();
 const categoryName = z.string().min(1).describe('Category name, case-insensitive.').optional();
 const payeeName = z.string().min(1).describe('Payee name, case-insensitive.').optional();
 const limit = z.number().int().min(1).max(1000).describe('Maximum rows, up to 1000 (default 100; uncategorized 50).').optional();
@@ -37,8 +37,8 @@ const absoluteAmount = z.number().int().describe('Amount in cents, either sign; 
 const categoryId = z.string().describe('Category id from list_entities.').optional();
 const payeeId = z.string().describe('Payee id from list_entities.').optional();
 const notes = z.string().describe('Notes substring, case-insensitive; "#trip" also finds "#tripod".').optional();
-const cleared = z.boolean().describe('Only rows with this cleared status.').optional();
-const reconciled = z.boolean().describe('Only rows with this reconciled status.').optional();
+const cleared = z.boolean().describe('Match this cleared flag.').optional();
+const reconciled = z.boolean().describe('Match this reconciled flag.').optional();
 const includeTransactions = z.boolean().describe('true also returns the rows (default false: counts only).').optional();
 const offset = z.number().int().min(0).describe('First row of the page (default 0).').optional();
 
@@ -94,8 +94,9 @@ export const searchTransactions: CompactToolSpec = {
     'month: month, account_id, category_name, payee_name, min_amount, max_amount, limit.',
     'payee: payee_name, start_date, end_date, account_id, category_name, min_amount, max_amount, limit.',
     'uncategorized: start_date, end_date, account_id, include_transactions, limit, offset.',
-    'Behavior: category and payee need their name. filter, category, month refuse an off-budget account_id. account and filter have no limit. amount, category, month, payee return limit rows (default 100). uncategorized pages by limit (default 50), offset. amount needs account_id or a date. An unknown category or payee gives an error field. Category or notes filters match a split by child (parent_id).',
-    'Returns { result: [transaction] } for account, filter; { transactions, count, totalAmount } for amount, category, month, payee; { totalCount, totalAmount, byAccount, dateRange } for uncategorized, plus transactions and hasMore with include_transactions.',
+    'Behavior: category and payee need their name. filter, category, month refuse an off-budget account_id. account and filter have no limit.',
+    'Limits: amount, category, month, payee return limit rows (default 100; hasMore: more exist; count and totalAmount cover returned rows). uncategorized pages by limit (default 50), offset. amount needs account_id or a date. An unknown category or payee gives an error field. Category or notes filters match a split by child (parent_id).',
+    'Returns { result: [transaction] } for account, filter; { transactions, count, totalAmount, hasMore } for amount, category, month, payee; { totalCount, totalAmount, byAccount, dateRange } for uncategorized, plus transactions and hasMore with include_transactions.',
   ].join('\n'),
   selector: 'by',
   nullAsAbsent: true,

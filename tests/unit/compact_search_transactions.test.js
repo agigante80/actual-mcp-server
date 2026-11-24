@@ -159,6 +159,10 @@ await check('published schema: flat object, by required, no oneOf or anyOf, ever
   assert.ok(/d\{4\}-/.test(js.properties.start_date.pattern), 'dates keep the YYYY-MM-DD pattern');
   assert.strictEqual(js.properties.limit.type, 'integer');
 });
+await check('#755: the description names hasMore and says count and totalAmount cover the returned rows', () => {
+  assert.ok(spec.description.includes('{ transactions, count, totalAmount, hasMore } for amount, category, month, payee'));
+  assert.ok(/hasMore: more exist; count and totalAmount cover returned rows/.test(spec.description));
+});
 await check('description: Returns, every action, siblings, no legacy name', () => {
   for (const w of ['Returns', 'summarize_transactions', 'list_entities', 'run_query', 'account:', 'filter:', 'amount:', 'category:', 'month:', 'payee:', 'uncategorized:']) assert.ok(spec.description.includes(w), w);
   assert.ok(!/actual_/.test(spec.description));
@@ -190,7 +194,9 @@ function behaviorProblems(description) {
   const mine = description.split('\n').filter((l) => l.startsWith('Behavior:'));
   if (mine.length === 0) return ['no line starts with "Behavior:"'];
   if (mine.length > 1) return [`${mine.length} lines start with "Behavior:", expected 1`];
-  return BEHAVIOR_FACTS.filter((fact) => !mine[0].includes(fact)).map((fact) => `the Behavior line does not say "${fact}"`);
+  // #755: the Behavior text runs on into a `Limits:` line (a single line passed the 400 character cap).
+  const block = [mine[0], ...description.split('\n').filter((l) => l.startsWith('Limits:'))].join('\n');
+  return BEHAVIOR_FACTS.filter((fact) => !block.includes(fact)).map((fact) => `the Behavior line does not say "${fact}"`);
 }
 function restatementProblems(description) {
   return /read-only/i.test(description) ? ['search_transactions must not restate Read-only'] : [];
@@ -223,7 +229,7 @@ await check('#712 NEGATIVE: a description with no Behavior line is reported', ()
   assert.deepStrictEqual(behaviorProblems(mutated), ['no line starts with "Behavior:"']);
 });
 await check('#712 NEGATIVE: a Behavior line that loses a fact is reported', () => {
-  const mutated = mutateLine('Behavior:', (l) => l.replace('default 50', 'a default'));
+  const mutated = mutateLine('Limits:', (l) => l.replace('default 50', 'a default'));
   assert.deepStrictEqual(behaviorProblems(mutated), ['the Behavior line does not say "default 50"']);
 });
 await check('#712: the readOnlyHint annotation is not restated in the description', () => {

@@ -15,7 +15,7 @@ import adapter from '../lib/actual-adapter.js';
  * library, chosen over a hand-rolled Levenshtein). Regex is intentionally out of scope
  * (separate Phase 2 ticket: ReDoS attack surface).
  *
- * On no match the tool returns `{ matches: [], count: 0 }` (never an error): an empty
+ * On no match the tool returns `{ matches: [], count: 0, total: 0, truncated: false }` (never an error): an empty
  * result is a valid "found nothing" signal that lets the AI retry with a broader
  * matchType (e.g. switch `contains` to `fuzzy`).
  */
@@ -49,7 +49,8 @@ export default createTool({
     'Find accounts, categories, or payees by a name pattern. Use this to resolve a partial or mistyped name to its entity (the fix for "payee not found"). ' +
     'matchType: contains (default), startsWith, endsWith, exact (all case-insensitive), or fuzzy (typo-tolerant, e.g. "amzon" matches "Amazon.com"). ' +
     'query may be a single string or an array (matches if ANY matches). Read-only. ' +
-    'On no match it returns { matches: [], count: 0 } (not an error): retry with a broader matchType such as fuzzy.',
+    'Returns { matches, count, total, truncated, type, matchType }; count is the returned matches, total all matches, truncated is true when total exceeds count. ' +
+    'On no match it returns { matches: [], count: 0, total: 0, truncated: false } (not an error): retry with a broader matchType such as fuzzy.',
   schema,
   examples: [
     { description: 'Find the payee for a partial name', input: { type: 'payees', query: 'amazon', matchType: 'contains', limit: 10 } },
@@ -107,6 +108,7 @@ export default createTool({
     }
 
     const limited = matches.slice(0, limit);
-    return { matches: limited, count: limited.length, type, matchType };
+    // #755: `total` is counted after the name filter and before the limit, so a cut answer says so.
+    return { matches: limited, count: limited.length, total: matches.length, truncated: matches.length > limited.length, type, matchType };
   },
 });
