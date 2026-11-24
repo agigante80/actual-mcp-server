@@ -135,9 +135,9 @@ const tool: ToolDefinition = {
       return dateB.localeCompare(dateA);
     });
     
-    // #755: computed before the slice, so a caller can tell a complete answer from a cut one.
-    const hasMore = filtered.length > (input.limit || 100);
+    // #755: computed against the slice, so it agrees with the rows returned even for a negative limit.
     const limited = filtered.slice(0, input.limit || 100);
+    const hasMore = filtered.length > limited.length;
     
     // Enrich transactions with account names
     const accounts = await adapter.getAccounts();
