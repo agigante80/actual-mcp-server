@@ -113,7 +113,7 @@ export const manageBudgetMonths: CompactToolSpec = {
   examplePrompt: 'Move $50 from Dining Out to Groceries for this month.',
   description:
     'Change the budget of a month: amounts, carryover, the hold for next month, transfers between categories, the month note; pick one `action`. Writes. ' +
-    'To read months use list_budget_months; to switch, import or export a budget file use manage_budget_files; category notes use manage_categories.' +
+    'To read months use list_budget_months; to switch, import or export a budget file use manage_budget_files; category notes use manage_categories. ' +
     'set_amount: month, category_id, amount (the month must be one the budget has; an income category is refused on an envelope budget; |amount| at most 2251799813685247; an unknown category or month is returned as { success: false, error }). ' +
     'set_amount_batch: operations, 1 to 100 items {month, categoryId, amount?, carryover?} with camelCase keys, each needing amount or carryover; NOT atomic, no rollback, items applied before a failure stay applied; an unknown category, a month out of range or carryover, or amount on an envelope budget, on an income category fails only that item; after a timeout read the months back before retrying. ' +
     'set_carryover: month, category_id, flag (true rolls an overspent balance into the next month, false resets it; envelope budget: a positive balance always rolls over; tracking budget: only with the flag), from that month on; expense categories only. ' +

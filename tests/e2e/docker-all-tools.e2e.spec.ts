@@ -2498,10 +2498,11 @@ payee: payee.id,
 
   test('manage_budget_months set_carryover - ERROR: an income category is refused in plain words and the flag is unchanged (#771)', async ({ mcp, cleanup }) => {
     const income = await makeIncomeCategory(mcp, cleanup);
+    const before = (await budgetedOf(mcp, income.id))?.carryover;
     const text = await refusal(() => mcp.call('manage_budget_months', { action: 'set_carryover', month: currentMonth(), category_id: income.id, flag: true }));
     expect(text).toContain('is an income category, and carryover applies only to expense categories. Nothing was written.');
     expect(text).not.toContain('budget-set-carryover');
-    expect((await budgetedOf(mcp, income.id))?.carryover).not.toBe(true);
+    expect((await budgetedOf(mcp, income.id))?.carryover).toEqual(before);
   });
 
   test('manage_budget_months set_carryover - ERROR: an unknown category names the compact lookup (#771)', async ({ mcp }) => {
@@ -6711,12 +6712,12 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
     });
     const created = (await mcp.call('actual_categories_create', { name, group_id: group.id })) as any;
     const incomeId = (typeof created === 'string' ? created : created?.categoryId ?? created?.id) as string;
+    const readFlag = async () => (((((await mcp.call('list_budget_months', { month: currentMonth() })) as any)?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []).find((c: any) => c?.id === incomeId))?.carryover;
+    const flagBefore = await readFlag();
     const text = await refusal(() => mcp.call('actual_budgets_set_carryover', { month: currentMonth(), categoryId: incomeId, flag: true }));
     expect(text).toContain('is an income category, and carryover applies only to expense categories. Nothing was written.');
     expect(text).not.toContain('budget-set-carryover');
-    const month = (await mcp.call('list_budget_months', { month: currentMonth() })) as any;
-    const row = ((month?.categoryGroups ?? []) as any[]).flatMap((g: any) => g?.categories ?? []).find((c: any) => c?.id === incomeId);
-    expect(row?.carryover).not.toBe(true);
+    expect(await readFlag()).toEqual(flagBefore);
     expect(await refusal(() => mcp.call('actual_budgets_set_carryover', { month: currentMonth(), categoryId: '00000000-0000-4000-8000-000000000771', flag: true }))).toMatch(/actual_categories_get/);
   });
 
