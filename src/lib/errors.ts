@@ -35,7 +35,7 @@
  */
 const REFUSAL_BRAND = Symbol.for('actual-mcp-server.PreflightRefusal');
 
-export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict' | 'locked';
+export type RefusalKind = 'not-found' | 'out-of-range' | 'conflict' | 'locked' | 'feature-disabled';
 
 /**
  * A pre-flight refusal: the operation was NOT attempted, because the request named
@@ -115,6 +115,13 @@ export class OutOfRangeRefusal extends PreflightRefusal {
 export class ConflictRefusal extends PreflightRefusal {
   constructor(message: string) {
     super(message, 'conflict');
+  }
+}
+
+/** The request needs a budget feature that is turned off (goal templates are an experimental flag). */
+export class FeatureDisabledRefusal extends PreflightRefusal {
+  constructor(message: string) {
+    super(message, 'feature-disabled');
   }
 }
 

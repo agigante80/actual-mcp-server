@@ -52,7 +52,7 @@ interface CategoryInput {
 /** Closed mapping, first match wins. Never reads message text. */
 export function categorizeError({ errorClass, refusalKind, code, httpStatus: s }: CategoryInput): ErrorCategory {
   if (refusalKind === 'not-found') return 'not_found';
-  if (refusalKind === 'out-of-range') return 'validation';
+  if (refusalKind === 'out-of-range' || refusalKind === 'feature-disabled') return 'validation';
   if (refusalKind === 'locked') return 'auth';
   if (refusalKind === 'conflict') return 'conflict';
   if (s === 401 || s === 403) return 'auth';

@@ -136,7 +136,7 @@ await check('publication: compact surface publishes both tools, including under 
   assert.deepStrictEqual([...ro.published], ['get_context', 'list_entities', 'search_transactions', 'summarize_transactions', 'list_budget_months', 'run_query']);  // manage_transactions writes, so read-only hides it (#675)
   const legacy = resolvePublishedToolNames(names, { toolsets: 'all', tools: '', readOnly: false, surface: 'legacy' }, meta);
   assert.ok(!legacy.published.includes('get_context'), 'hidden on the legacy surface');
-  assert.strictEqual(legacy.published.length, 85);
+  assert.strictEqual(legacy.published.length, 89);
 });
 
 await check('#758: the server and preferences topics describe what they return', () => {

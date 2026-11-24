@@ -26,7 +26,7 @@ tests/manual/
     ├── smoke.js               ← sanity + account balances, categories, recent txns
     ├── account.js             ← account lifecycle: create → update → close → reopen
     ├── category-group.js      ← category group: create, update, delete (+ nil-UUID negative test)
-    ├── category.js            ← category: create, update, delete, verify absence (requires categoryGroupId)
+    ├── category.js            ← category: create, read automations, update, delete, verify absence (requires categoryGroupId)
     ├── payee.js               ← payee: create, update, merge (read-back target present), payee rules, delete
     ├── transaction.js         ← transaction: create, get, update, filter, import (T6 read-back), delete
     ├── budget.js              ← budget: list/switch budgets, amounts, carryover, hold, transfer, batch
@@ -71,7 +71,7 @@ npm run test:integration:full
 npm run test:integration:cleanup
 ```
 
-The modules call the compact tools, so a direct `npm run test:integration:*` run against a server on the default surface (compact since #680: 15 tools; `all` publishes 100, `legacy` 85) must set `EXPECTED_TOOL_COUNT`.
+The modules call the compact tools, so a direct `npm run test:integration:*` run against a server on the default surface (compact since #680: 15 tools; `all` publishes 104, `legacy` 89) must set `EXPECTED_TOOL_COUNT`.
 
 ### Direct invocation
 
@@ -98,7 +98,7 @@ node tests/manual/index.js [MCP_URL] [TOKEN] [LEVEL] [CLEANUP]
 | `MCP_AUTH_TOKEN` | Bearer token |
 | `MCP_TEST_LEVEL` | Test level |
 | `ACTUAL_SERVER_URL` | Shown in cleanup prompt (default `http://localhost:5006`) |
-| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `85`) |
+| `EXPECTED_TOOL_COUNT` | Expected registered tool count (default `89`) |
 | `MCP_TEST_BANK_SYNC` | Enable bank sync tests (default `false`, set to `true` to enable) |
 
 Variables are loaded from the project root `.env` automatically.

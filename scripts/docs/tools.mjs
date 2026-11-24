@@ -54,7 +54,7 @@ export const TOOLSET_SCOPES = {
   context: 'Orientation, lookups and server information',
   transactions: 'Transaction reads, create, update, delete, import and transfers',
   analysis: 'Summaries, aggregates and balances',
-  budget: 'Budget months, amounts, carryover, holds, transfers, batch updates and notes',
+  budget: 'Budget months, transfers, notes, templates and category automations',
   rules: 'Rules and payee rules, including `actual_rules_create_batch`',
   schedules: 'Scheduled transactions',
   structure: 'Accounts, account groups, categories, category groups, payees and tags',

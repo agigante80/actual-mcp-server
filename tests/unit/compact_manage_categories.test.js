@@ -72,6 +72,23 @@ await check('set_note forwards id and note, and "" clears', async () => {
   await expectCall({ action: 'set_note', id: U1, note: 'hi' }, 'actual_notes_update', { id: U1, note: 'hi' });
   await expectCall({ action: 'set_note', id: U1, note: '' }, 'actual_notes_update', { id: U1, note: '' });
 });
+await check('set_automations renames id and forwards the items unchanged', async () => {
+  const automations = [{ type: 'fixed', amount: 25000, priority: 2 }, { type: 'remainder' }];
+  await expectCall({ action: 'set_automations', id: U1, automations }, 'actual_categories_set_automations', { categoryId: U1, automations });
+  await expectCall({ action: 'set_automations', id: U1, automations: [], replace: true }, 'actual_categories_set_automations', { categoryId: U1, automations: [], replace: true });
+});
+await check('set_automations forwards cleanup alone, unchanged', () => {
+  const cleanup = ['source', 'Fun'];
+  return expectCall({ action: 'set_automations', id: U1, cleanup }, 'actual_categories_set_automations', { categoryId: U1, cleanup });
+});
+await check('NEGATIVE: set_automations needs id and automations, and checks each item', async () => {
+  await refused({ action: 'set_automations', id: U1 }, /give automations, cleanup or both for action: set_automations/);
+  await refused({ action: 'set_automations', id: U1, cleanup: ['#cleanup source'] }, /leave out the/);
+  await refused({ action: 'set_automations', automations: [] }, /id.*required for action: set_automations/);
+  await refused({ action: 'set_automations', id: U1, automations: [{ type: 'refill', amount: 5 }] }, /amount is not valid for a refill automation/);
+  await refused({ action: 'set_automations', id: U1, automations: [{ type: 'schedule' }] }, /scheduleId is required/);
+  await refused({ action: 'set_automations', id: U1, automations: [], note: 'x' }, /note.*not valid for action: set_automations/);
+});
 await check('the legacy return value comes back unchanged', async () => {
   reply = () => ({ success: true, categoryId: U1, message: 'ok' });
   assert.deepStrictEqual(await run({ action: 'create', entity: 'category', name: 'A', group_id: U1 }), { success: true, categoryId: U1, message: 'ok' });
@@ -165,7 +182,7 @@ await check('published schema: flat, action required, no oneOf or anyOf, every p
   assert.strictEqual(js.anyOf, undefined);
   assert.ok(!/oneOf|anyOf/.test(JSON.stringify(js.properties)), 'no oneOf or anyOf in any property');
   assert.deepStrictEqual(js.required, ['action']);
-  assert.deepStrictEqual(js.properties.action.enum, ['create', 'update', 'delete', 'set_note']);
+  assert.deepStrictEqual(js.properties.action.enum, ['create', 'update', 'delete', 'set_automations', 'set_note']);
   for (const [k, v] of Object.entries(js.properties)) {
     if (k === 'action') continue;
     assert.ok(v.description, `${k} has no description`);
@@ -173,7 +190,7 @@ await check('published schema: flat, action required, no oneOf or anyOf, every p
   }
 });
 await check('description: Returns, every action, DESTRUCTIVE, no legacy name', () => {
-  for (const w of ['Returns', 'list_entities', 'create:', 'update:', 'delete:', 'set_note:', 'DESTRUCTIVE', 'category_group']) assert.ok(spec.description.includes(w), w);
+  for (const w of ['Returns', 'list_entities', 'create:', 'update:', 'delete:', 'set_automations:', 'set_note:', 'DESTRUCTIVE', 'category_group']) assert.ok(spec.description.includes(w), w);
   assert.ok(!/actual_/.test(spec.description));
 });
 await check('#764: description says a category takes its group is_income and a move needs both', () => {
@@ -184,7 +201,7 @@ await check('annotations: destructive write tool, hints only', () => {
   assert.deepStrictEqual(annotationsFor('manage_categories'), { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false });
 });
 await check('compactLegacyNames covers the targets, all write-capable', () => {
-  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_categories_create','actual_categories_delete','actual_categories_update','actual_category_groups_create','actual_category_groups_delete','actual_category_groups_update','actual_notes_update']);
+  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_categories_create','actual_categories_delete','actual_categories_set_automations','actual_categories_update','actual_category_groups_create','actual_category_groups_delete','actual_category_groups_update','actual_notes_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
 

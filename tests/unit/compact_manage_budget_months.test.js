@@ -54,7 +54,7 @@ const expectCall = async (input, n, a) => {
 const C1 = '123e4567-e89b-42d3-a456-426614174000';
 const C2 = '223e4567-e89b-42d3-a456-426614174001';
 const M = '2026-11';
-const ACTIONS = ['set_amount', 'set_amount_batch', 'set_carryover', 'hold', 'reset_hold', 'transfer', 'set_note'];
+const ACTIONS = ['set_amount', 'set_amount_batch', 'set_carryover', 'hold', 'reset_hold', 'transfer', 'apply_templates', 'run_cleanup', 'set_note'];
 const READ_ONLY_CASES = [
   ['actual_budgets_set_amount', { action: 'set_amount', month: M, category_id: C1, amount: 100 }],
   ['actual_budget_updates_batch', { action: 'set_amount_batch', operations: [{ month: M, categoryId: C1, amount: 1 }] }],
@@ -62,6 +62,8 @@ const READ_ONLY_CASES = [
   ['actual_budgets_hold_for_next_month', { action: 'hold', month: M, amount: 100 }],
   ['actual_budgets_reset_hold', { action: 'reset_hold', month: M }],
   ['actual_budgets_transfer', { action: 'transfer', month: M, from_category_id: C1, to_category_id: C2, amount: 100 }],
+  ['actual_budgets_apply_templates', { action: 'apply_templates', month: M }],
+  ['actual_budgets_run_cleanup', { action: 'run_cleanup', month: M }],
   ['actual_notes_update', { action: 'set_note', month: M, note: 'x' }],
 ];
 
@@ -85,6 +87,23 @@ await check('reset_hold forwards the month', () =>
   expectCall({ action: 'reset_hold', month: M }, 'actual_budgets_reset_hold', { month: M }));
 await check('transfer renames both category ids', () =>
   expectCall({ action: 'transfer', month: M, from_category_id: C1, to_category_id: C2, amount: 300 }, 'actual_budgets_transfer', { month: M, fromCategoryId: C1, toCategoryId: C2, amount: 300 }));
+await check('apply_templates forwards the month, and renames category_id when given', async () => {
+  await expectCall({ action: 'apply_templates', month: M }, 'actual_budgets_apply_templates', { month: M });
+  await expectCall({ action: 'apply_templates', month: M, category_id: C1 }, 'actual_budgets_apply_templates', { month: M, categoryId: C1 });
+});
+await check('NEGATIVE: apply_templates needs month, a valid month and category id, and no other key', async () => {
+  await refused({ action: 'apply_templates' }, /month.*required for action: apply_templates/);
+  await refused({ action: 'apply_templates', month: '2026-1' }, /month must be in YYYY-MM format/);
+  await refused({ action: 'apply_templates', month: M, category_id: 'nope' }, /category_id/);
+  await refused({ action: 'apply_templates', month: M, amount: 5 }, /amount.*not valid for action: apply_templates/);
+});
+await check('run_cleanup forwards the month', () =>
+  expectCall({ action: 'run_cleanup', month: M }, 'actual_budgets_run_cleanup', { month: M }));
+await check('NEGATIVE: run_cleanup needs a valid month and no other key', async () => {
+  await refused({ action: 'run_cleanup' }, /month.*required for action: run_cleanup/);
+  await refused({ action: 'run_cleanup', month: '2026-1' }, /month must be in YYYY-MM format/);
+  await refused({ action: 'run_cleanup', month: M, category_id: '123e4567-e89b-42d3-a456-426614174000' }, /category_id.*not valid for action: run_cleanup/);
+});
 await check('set_note builds the budget-<month> id', () =>
   expectCall({ action: 'set_note', month: '2026-11', note: '#template 250' }, 'actual_notes_update', { id: 'budget-2026-11', note: '#template 250' }));
 await check('set_note "" clears (forwarded as an empty string)', () =>
@@ -187,7 +206,7 @@ await check('annotations and title', () => {
   assert.strictEqual(titleFor('manage_budget_months'), 'Manage budget months');
 });
 await check('compactLegacyNames covers the targets, all write-capable', () => {
-  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_budget_updates_batch', 'actual_budgets_hold_for_next_month', 'actual_budgets_reset_hold', 'actual_budgets_set_amount', 'actual_budgets_set_carryover', 'actual_budgets_transfer', 'actual_notes_update']);
+  assert.deepStrictEqual([...compactLegacyNames(spec)].sort(), ['actual_budget_updates_batch', 'actual_budgets_apply_templates', 'actual_budgets_hold_for_next_month', 'actual_budgets_reset_hold', 'actual_budgets_run_cleanup', 'actual_budgets_set_amount', 'actual_budgets_set_carryover', 'actual_budgets_transfer', 'actual_notes_update']);
   for (const n of compactLegacyNames(spec)) assert.ok(WRITE_CAPABLE.has(n), n);
 });
 await check('#759 NEGATIVE: set_amount, transfer and a batch item are bounded at 2251799813685247, hold is not', async () => {

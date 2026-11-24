@@ -119,7 +119,8 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   (44,814 before), under COMPACT_TOTAL_CEILING: the compact search_transactions entry is under
 //   3,900, paid for by shorter min_amount, max_amount, cleared and reconciled descriptions; list_entities is exactly 3,900 (the word "entity" was dropped from its Returns line).
 //   Every per-tool ceiling is unchanged.
-const TOTAL_CEILING = 127066;
+// Budget templates, cleanup and category automation tools raise the legacy list to 134560 bytes.
+const TOTAL_CEILING = 134568;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
@@ -135,7 +136,8 @@ const PER_TOOL_CEILING = 3900;
 // #678 (manage_budget_months, manage_budget_files) completed the fifteen-tool compact surface at 40681 bytes, so the ceiling is that plus about 10%.
 // #679 (set_note routing sentences in manage_accounts, manage_categories, manage_payees) grew the fifteen-tool total from 40681 to 41000 bytes (319 more), so the ceiling rose by the same 319, from 44800 to 45119.
 // Each later compact ticket raises it by its own measured size, stated here.
-const COMPACT_TOTAL_CEILING = 45119;
+// Budget automation actions raise the compact list to 46073 bytes, 1221 above develop.
+const COMPACT_TOTAL_CEILING = 46340;
 
 const sizeOf = (value) => Buffer.byteLength(JSON.stringify(value));
 

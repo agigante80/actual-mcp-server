@@ -37,6 +37,9 @@ On `manage_accounts` and `manage_categories`, `entity` is required for `create`,
 | `actual_budgets_get_months` | `list_budget_months` | none |
 | `actual_budgets_hold_for_next_month` | `manage_budget_months` (`action: "hold"`) | none |
 | `actual_budgets_reset_hold` | `manage_budget_months` (`action: "reset_hold"`) | none |
+| `actual_budgets_apply_templates` | `manage_budget_months` (`action: "apply_templates"`) | `category_id` is sent as `categoryId` |
+| `actual_budgets_run_cleanup` | `manage_budget_months` (`action: "run_cleanup"`) | none |
+| `actual_categories_set_automations` | `manage_categories` (`action: "set_automations"`) | `id` is sent as `categoryId` |
 | `actual_budgets_set_amount` | `manage_budget_months` (`action: "set_amount"`) | `category_id` is sent as `categoryId` |
 | `actual_budgets_set_carryover` | `manage_budget_months` (`action: "set_carryover"`) | `category_id` is sent as `categoryId` |
 | `actual_budgets_transfer` | `manage_budget_months` (`action: "transfer"`) | `from_category_id` is sent as `fromCategoryId`; `to_category_id` is sent as `toCategoryId` |
@@ -44,6 +47,7 @@ On `manage_accounts` and `manage_categories`, `entity` is required for `create`,
 | `actual_categories_create` | `manage_categories` (`action: "create"`) | `entity` is not forwarded |
 | `actual_categories_delete` | `manage_categories` (`action: "delete"`) | `entity` is not forwarded |
 | `actual_categories_get` | `list_entities` (`type: "category"`) | none |
+| `actual_categories_get_automations` | `list_entities` (`type: "category_automations"`) | `category_id` is sent as `categoryId` |
 | `actual_categories_update` | `manage_categories` (`action: "update"`) | `entity` is not forwarded; keys other than `id` are sent under `fields` |
 | `actual_category_groups_create` | `manage_categories` (`action: "create"`), when `entity: "category_group"` | `entity` is not forwarded |
 | `actual_category_groups_delete` | `manage_categories` (`action: "delete"`), when `entity: "category_group"` | `entity` is not forwarded |

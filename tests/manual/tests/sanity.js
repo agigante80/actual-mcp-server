@@ -8,16 +8,16 @@
  * Writes to context:   (none)
  *
  * Environment:
- *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 85, the number
+ *   EXPECTED_TOOL_COUNT  Expected number of registered MCP tools (default: 88, the number
  *                        of operations; the sanity count anchor owns it). The published count
  *                        differs per MCP_TOOL_SURFACE: compact (the server default since #680) 15,
- *                        legacy 85, all 100. A direct run against a compact or all server must
+ *                        legacy 88, all 103. A direct run against a compact or all server must
  *                        set it; deploy-and-test.sh does.
  */
 
 import { noteTolerated } from '../assert.js';
 
-const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '85', 10);
+const EXPECTED_TOOL_COUNT = parseInt(process.env.EXPECTED_TOOL_COUNT || '89', 10);
 
 /**
  * @param {{ listTools: Function, callTool: Function }} client

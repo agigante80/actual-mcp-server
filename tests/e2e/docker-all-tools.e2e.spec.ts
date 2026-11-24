@@ -4427,6 +4427,19 @@ test.describe('Docker E2E - compact get_context and list_entities (#672)', () =>
     expect(typeof (await mcp.call('list_entities', { type: 'note', id: 'budget-1970-01' }))?.found).toBe('boolean');
   });
 
+  test('list_entities category_automations - reads the latest note directives', async ({ mcp, makeCategory, cleanup }) => {
+    const { id } = await makeCategory();
+    cleanup.add(CLEANUP_ORDER.note, `clear note on ${id}`, async () => {
+      await mcp.call('manage_categories', { action: 'set_note', id, note: '' });
+    });
+    await mcp.call('manage_categories', { action: 'set_note', id, note: 'Prose\n#template 10\n#goal 100\n#cleanup source' });
+    expect(await mcp.call('list_entities', { type: 'category_automations', category_id: id })).toEqual({
+      categoryId: id, source: 'notes', noteDirectives: ['#template 10', '#goal 100', '#cleanup source'],
+    });
+    await expect(mcp.call('list_entities', { type: 'category_automations', category_id: '00000000-0000-0000-0000-000000000000' }))
+      .rejects.toThrow(/Category.*not found.*list_entities with type category/);
+  });
+
   test('list_entities - budget_file scope configured is the default, and server lists the files', async ({ mcp }) => {
     const configured = await mcp.call('list_entities', { type: 'budget_file', scope: 'configured' });
     expect(configured).toEqual(await mcp.call('list_entities', { type: 'budget_file' }));
@@ -5570,6 +5583,96 @@ test.describe('Docker E2E - compact manage_budget_months (#678)', () => {
     expect(Number(released?.forNextMonth ?? 0)).toBe(0);
   });
 
+  test('manage_categories set_automations - an editor-style automation budgets the category when applied', async ({ mcp, makeCategory, cleanup }) => {
+    // Gated on two flags no tool can set, so the row follows the budget: off asserts the refusal,
+    // on writes a "#template 10" note, adds a $25 fixed automation (the note template is imported
+    // first, as the editor does), applies that one category and reads the amount back.
+    const prefs = (await mcp.call('get_context', { topic: 'preferences' }))?.preferences ?? {};
+    const enabled = prefs['flags.goalTemplatesEnabled'] === 'true' && prefs['flags.goalTemplatesUIEnabled'] === 'true';
+    const category = await makeCategory();
+    const month = currentMonth();
+    const automations = [{ type: 'fixed', amount: 2500 }];
+    if (!enabled) {
+      await expect(mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations })).rejects.toThrow(/Settings > Experimental features/);
+    } else {
+      restoreCategory(cleanup, mcp, category.id);
+      cleanup.add(CLEANUP_ORDER.budgetHold, `clear automations of ${category.id}`, async () => {
+        await mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [], replace: true, cleanup: [] }).catch(() => undefined);
+      });
+      cleanup.add(CLEANUP_ORDER.note, `note on ${category.id}`, async () => {
+        await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' }).catch(() => undefined);
+      });
+      await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '#template 10' });
+      const set = parse(await mcp.raw('manage_categories', { action: 'set_automations', id: category.id, automations }));
+      expect(set.result).toMatchObject({ success: true, categoryId: category.id, imported: 1, count: 2 });
+      const applied = parse(await mcp.raw('manage_budget_months', { action: 'apply_templates', month, category_id: category.id }));
+      expect(applied.result.applied).toBe(1);
+      // The imported note template is priority 0, which Actual never caps; the $25 at priority 1 is
+      // capped by what is left to budget, so only the floor is certain.
+      expect((await catOf(mcp, category.id))?.budgeted).toBeGreaterThanOrEqual(1000);
+      // cleanup alone keeps the automations; a new pool is created by name (and tombstoned when cleared).
+      const cl = parse(await mcp.raw('manage_categories', { action: 'set_automations', id: category.id, cleanup: ['source', `E2E-Pool-${uniqueSuffix()} sink`] }));
+      expect(cl.result).toMatchObject({ success: true, count: 2, cleanup: 2 });
+      const saved = await mcp.call('list_entities', { type: 'category_automations', category_id: category.id });
+      expect(saved).toMatchObject({
+        source: 'ui',
+        automations: [{ type: 'periodic', amount: 1000 }, { type: 'periodic', amount: 2500 }],
+        cleanup: [{ role: 'source', groupId: null }, { role: 'sink', pool: expect.stringMatching(/^E2E-Pool-/) }],
+      });
+      await expect(mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [{ type: 'goal' }, { type: 'goal' }] }))
+        .rejects.toThrow(/Only one.*goal/);
+      expect(await mcp.call('list_entities', { type: 'category_automations', category_id: category.id })).toEqual(saved);
+      // overwrite: lower the budget by hand, then the whole-month overwrite recomputes it. Tests run
+      // serially on the fixture budget, so this category is the only templated one.
+      await mcp.call('manage_budget_months', { action: 'set_amount', month, category_id: category.id, amount: 1 });
+      const over = parse(await mcp.raw('manage_budget_months', { action: 'apply_templates', month, overwrite: true }));
+      expect(over.result.applied).toBeGreaterThanOrEqual(1);
+      expect((await catOf(mcp, category.id))?.budgeted).toBeGreaterThanOrEqual(1000);
+    }
+    await expect(mcp.call('manage_categories', { action: 'set_automations', id: category.id, automations: [{ type: 'refill', amount: 5 }] })).rejects.toThrow(/amount is not valid for a refill automation/);
+    await expect(mcp.call('manage_categories', { action: 'set_automations', id: category.id, cleanup: ['#cleanup source'] })).rejects.toThrow(/leave out the/);
+  });
+
+  test('manage_budget_months run_cleanup - refused without writing, on either side of the flag', async ({ mcp }) => {
+    // A real cleanup covers EVERY overspent category in the budget and cannot be undone per
+    // category, so this row asserts only refusals that write nothing: the flag refusal when goal
+    // templates are off, a month outside the budget when they are on. The unit test covers the run.
+    const prefs = (await mcp.call('get_context', { topic: 'preferences' }))?.preferences ?? {};
+    const call = mcp.call('manage_budget_months', { action: 'run_cleanup', month: '2000-01' });
+    if (prefs['flags.goalTemplatesEnabled'] === 'true') await expect(call).rejects.toThrow(/Month "2000-01" is outside this budget's range/);
+    else await expect(call).rejects.toThrow(/Settings > Experimental features/);
+    await expect(mcp.call('manage_budget_months', { action: 'run_cleanup', month: '2026-1' })).rejects.toThrow(/month must be in YYYY-MM format/);
+  });
+
+  test('manage_budget_months apply_templates - refused unless goal templates are on', async ({ mcp, makeCategory, cleanup }) => {
+    // Templates are an experimental per-budget flag that no tool can set, so the row follows the
+    // budget: off (a fresh budget) asserts the refusal, on asserts the result shape. Either way
+    // no amount is left behind: a fresh category has no template note, so applying sets no budget.
+    const prefs = await mcp.call('get_context', { topic: 'preferences' });
+    const enabled = prefs?.preferences?.['flags.goalTemplatesEnabled'] === 'true';
+    const month = currentMonth();
+    const category = await makeCategory();
+    if (!enabled) {
+      await expect(mcp.call('manage_budget_months', { action: 'apply_templates', month })).rejects.toThrow(/Settings > Experimental features/);
+      await expect(mcp.call('manage_budget_months', { action: 'apply_templates', month, category_id: category.id })).rejects.toThrow(/turned off/);
+    } else {
+      const res = parse(await mcp.raw('manage_budget_months', { action: 'apply_templates', month, category_id: category.id }));
+      expect(res.result.success).toBe(true);
+      expect(res.result.month).toBe(month);
+      expect(res.result.applied).toBe(0);
+      cleanup.add(CLEANUP_ORDER.note, `clear invalid template note on ${category.id}`, async () => {
+        await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '' });
+      });
+      await mcp.call('manage_categories', { action: 'set_note', id: category.id, note: '#template unparseable' });
+      await expect(mcp.call('manage_budget_months', { action: 'apply_templates', month, category_id: category.id, overwrite: false }))
+        .rejects.toThrow(/single category always overwrites/i);
+      await expect(mcp.call('manage_budget_months', { action: 'apply_templates', month, category_id: category.id }))
+        .rejects.toThrow(/#template unparseable/);
+    }
+    // Negative regardless of the flag: the schema refuses before the adapter is reached.
+    await expect(mcp.call('manage_budget_months', { action: 'apply_templates', month: '2026-1' })).rejects.toThrow(/month must be in YYYY-MM format/);
+  });
+
   test('manage_budget_months transfer', async ({ mcp, makeCategory, cleanup }) => {
     const source = await makeCategory();
     const target = await makeCategory({ group: { id: source.groupId, name: 'reused' } });
@@ -6614,6 +6717,65 @@ test.describe('legacy smoke (MCP_TOOL_SURFACE=all)', () => {
 
   test('actual_budgets_get_months - answers', async ({ mcp }) => {
     expect(await mcp.call('actual_budgets_get_months', {})).toBeTruthy();
+  });
+
+  test('actual_budgets_apply_templates - the legacy name follows the flag, and refuses a bad month', async ({ mcp, makeCategory }) => {
+    // Same row as the compact apply_templates one, on the legacy name: no tool can set the flag.
+    const prefs = await mcp.call('get_context', { topic: 'preferences' });
+    const enabled = prefs?.preferences?.['flags.goalTemplatesEnabled'] === 'true';
+    const category = await makeCategory();
+    const call = mcp.call('actual_budgets_apply_templates', { month: currentMonth(), categoryId: category.id });
+    if (enabled) expect((await call)?.applied).toBe(0);
+    else await expect(call).rejects.toThrow(/Settings > Experimental features/);
+    // overwrite on the legacy name: serial run, and no templated category exists here, so it writes nothing.
+    const over = mcp.call('actual_budgets_apply_templates', { month: currentMonth(), overwrite: true });
+    if (enabled) expect((await over)?.success).toBe(true);
+    else await expect(over).rejects.toThrow(/Settings > Experimental features/);
+    await expect(mcp.call('actual_budgets_apply_templates', { month: '2026-1' })).rejects.toThrow(/month must be in YYYY-MM format/);
+    await expect(mcp.call('actual_budgets_apply_templates', { month: currentMonth(), overwrite: 'yes' })).rejects.toThrow(/overwrite/);
+    if (enabled) {
+      await expect(mcp.call('actual_budgets_apply_templates', { month: currentMonth(), categoryId: category.id, overwrite: false }))
+        .rejects.toThrow(/single category always overwrites/i);
+    }
+  });
+
+  test('actual_budgets_run_cleanup - the legacy name refuses without writing', async ({ mcp }) => {
+    // Same reasoning as the compact run_cleanup row: only refusals that write nothing.
+    const prefs = (await mcp.call('get_context', { topic: 'preferences' }))?.preferences ?? {};
+    const call = mcp.call('actual_budgets_run_cleanup', { month: '2000-01' });
+    if (prefs['flags.goalTemplatesEnabled'] === 'true') await expect(call).rejects.toThrow(/outside this budget's range/);
+    else await expect(call).rejects.toThrow(/Settings > Experimental features/);
+    await expect(mcp.call('actual_budgets_run_cleanup', { month: '2026-10', extra: 1 })).rejects.toThrow(/extra|Unrecognized/);
+  });
+
+  test('actual_categories_set_automations - the legacy name follows the flags, and refuses a bad item', async ({ mcp, makeCategory, cleanup }) => {
+    const prefs = (await mcp.call('get_context', { topic: 'preferences' }))?.preferences ?? {};
+    const enabled = prefs['flags.goalTemplatesEnabled'] === 'true' && prefs['flags.goalTemplatesUIEnabled'] === 'true';
+    const category = await makeCategory();
+    if (enabled) {
+      cleanup.add(CLEANUP_ORDER.budgetHold, `clear automations of ${category.id}`, async () => {
+        await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [], replace: true }).catch(() => undefined);
+      });
+      expect((await mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'remainder' }] }))?.count).toBe(1);
+      await expect(mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'goal' }, { type: 'goal' }] }))
+        .rejects.toThrow(/Only one.*goal/);
+      expect(await mcp.call('actual_categories_get_automations', { categoryId: category.id })).toMatchObject({
+        source: 'ui', automations: [{ type: 'remainder', weight: 1 }],
+      });
+    } else {
+      await expect(mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [] })).rejects.toThrow(/Settings > Experimental features/);
+    }
+    await expect(mcp.call('actual_categories_set_automations', { categoryId: category.id, automations: [{ type: 'schedule' }] })).rejects.toThrow(/scheduleId is required/);
+    await expect(mcp.call('actual_categories_set_automations', { categoryId: category.id, cleanup: Array(21).fill('source') })).rejects.toThrow(/cleanup/);
+  });
+
+  test('actual_categories_get_automations - reads a note-managed category and refuses an unknown id', async ({ mcp, makeCategory }) => {
+    const { id } = await makeCategory();
+    expect(await mcp.call('actual_categories_get_automations', { categoryId: id })).toEqual({
+      categoryId: id, source: 'notes', noteDirectives: [],
+    });
+    await expect(mcp.call('actual_categories_get_automations', { categoryId: '00000000-0000-0000-0000-000000000000' }))
+      .rejects.toThrow(/Category.*not found.*actual_categories_get/);
   });
 
   test('actual_budgets_list_available - lists at least one budget', async ({ mcp }) => {

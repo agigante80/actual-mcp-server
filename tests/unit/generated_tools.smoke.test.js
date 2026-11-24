@@ -119,6 +119,10 @@ console.log('Running generated tools smoke tests');
     // for 10000, so returning that models a hold that was granted in full.
     holdBudgetForNextMonth: 10000,
     resetBudgetHold: null,
+    applyBudgetTemplates: { type: 'message', message: 'templates-applied', count: 3 },
+    setCategoryAutomations: { imported: 0, count: 1 },
+    getCategoryAutomations: { categoryId: '10000000-0000-4000-8000-000000000001', source: 'notes', noteDirectives: [] },
+    runBudgetCleanup: { type: 'message', message: 'cleanup-applied', sourceCount: 1, sinkCount: 2 },
     // #516: setBudgetBatch returns the per-item verdicts; the tool adds the counts.
     setBudgetBatch: {
       succeeded: [{ index: 0, month: '2025-12', categoryId: '10000000-0000-4000-8000-000000000001' }],
@@ -261,6 +265,10 @@ console.log('Running generated tools smoke tests');
   if (name.includes('budgets_get_month')) inputExample.month = '2025-12';
   if (name.includes('budget_updates_batch')) inputExample.operations = [{ month: '2025-12', categoryId: '10000000-0000-4000-8000-000000000001', amount: 100 }];
   if (name.includes('budgets_hold_for_next_month')) inputExample.month = '2025-12', inputExample.amount = 10000;
+  if (name.includes('budgets_apply_templates')) inputExample.month = '2025-12';
+  if (name.includes('budgets_run_cleanup')) inputExample.month = '2025-12';
+  if (name.includes('categories_set_automations')) inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.automations = [{ type: 'fixed' }];
+  if (name.includes('categories_get_automations')) inputExample.categoryId = '10000000-0000-4000-8000-000000000001';
   if (name.includes('budgets_reset_hold')) inputExample.month = '2025-12'; // no categoryId — tool operates on whole month
   if (name.includes('budgets_set_carryover')) inputExample.month = '2025-12', inputExample.categoryId = '10000000-0000-4000-8000-000000000001', inputExample.flag = true;
   // #332: a fixed name keeps the smoke run from accumulating timestamped files.
@@ -344,6 +352,23 @@ console.log('Running generated tools smoke tests');
         'budgets_set_carryover'];
       if (successTools.includes(n)) {
         if (!res || res.success !== true) shapeErr(`expected success=true`);
+      }
+
+      if (n === 'categories_set_automations') {
+        const r = res?.result;
+        if (r?.success !== true || r?.count !== 1) shapeErr('expected result { success: true, categoryId, count: 1 }');
+      }
+      if (n === 'categories_get_automations') {
+        const r = res?.result;
+        if (!r?.categoryId || r.source !== 'notes' || !Array.isArray(r.noteDirectives)) shapeErr('expected result { categoryId, source, noteDirectives }');
+      }
+      if (n === 'budgets_run_cleanup') {
+        const r = res?.result;
+        if (r?.success !== true || r?.outcome !== 'cleanup-applied' || r?.sources !== 1 || r?.sinks !== 2 || !Array.isArray(r?.warnings)) shapeErr('expected result { success, month, outcome, sources: 1, sinks: 2, warnings }');
+      }
+      if (n === 'budgets_apply_templates') {
+        const r = res?.result; // createTool wraps its return value in { result }
+        if (r?.success !== true || r?.month !== '2025-12' || r?.applied !== 3) shapeErr('expected result { success: true, month, applied: 3 }');
       }
 
       // #514: actual_transactions_merge reports which transaction survived

@@ -1,5 +1,6 @@
 import type { components } from '../../generated/actual-client/types.js';
 import { subtransactionsSum } from './schemas/common.js';
+import { importNoteTemplates, type CleanupRow } from './schemas/automations.js';
 
 import { AsyncLocalStorage } from 'async_hooks';
 import api from '@actual-app/api';
@@ -79,7 +80,7 @@ import { withOpTimeout, runAbandonable, assertOperationLive } from './opTimeout.
 import { markInitFailure } from './init-failure.js';
 import { MAX_BUDGET_AMOUNT_CENTS } from './budget-limits.js';
 import { incomeSetAmountRefusal, incomeTransferRefusal, isTrackingBudgetMonth } from './actual-adapter/budget-income.js';
-import { ConflictRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
+import { ConflictRefusal, FeatureDisabledRefusal, LockedRefusal, NotFoundRefusal, OutOfRangeRefusal, constraintErrorMsg, errorLogFields, isPreflightRefusal } from './errors.js';
 
 // #800: every raw WRITE binding refuses to run once its operation was abandoned after the write
 // timeout (see opTimeout.ts). One chokepoint at the binding, so no tool or adapter call site
@@ -5044,6 +5045,362 @@ export async function resetBudgetHold(month: string): Promise<void> {
     await withConcurrency(() => retry(() => rawResetBudgetHold(month) as Promise<void>, { retries: 2, backoffMs: 200 }));
   }, { preservesListings: PRESERVES_ALL_ENTITY_LISTINGS });
 }
+
+/**
+ * Upstream's answer from `budget/apply-goal-template` and `budget/apply-single-template`
+ * (`TemplateNotification` in core's budget/template-notification.ts).
+ */
+export interface TemplateNotification {
+  type?: 'message' | 'error' | 'warning';
+  message: string;
+  pre?: string;
+  count?: number;
+  sourceCount?: number;
+  sinkCount?: number;
+}
+
+/**
+ * The budget-templates handlers have no public api method, so they go through the
+ * `internal` lib that `api.init` returns (`lib.send` runs `app.handlers[name]`). Read lazily:
+ * `internal` is null until init. A `let` so a unit test can stand in for it, because the
+ * upstream export is a non-configurable getter.
+ */
+let rawInternalSend = (name: string, args: unknown): Promise<unknown> => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lib = (api as any).internal;
+  if (!lib) throw new Error('Actual API is not initialised: cannot reach the budget template handlers.');
+  return lib.send(name, args);
+};
+const rawInternalWrite = guarded((name: string, args: unknown) => rawInternalSend(name, args));
+
+export function _setInternalSendForTests(fn: typeof rawInternalSend): void {
+  rawInternalSend = fn;
+}
+
+/** Refuse unless goal templates (and, with `ui`, the Budget automations UI sub-toggle) are on. Raw reads only. */
+async function assertTemplatesEnabled(ui: boolean): Promise<Record<string, unknown> | null> {
+  const prefs = await withConcurrency(() =>
+    retry(() => rawGetPreferences() as Promise<Record<string, unknown> | null>, { retries: 2, backoffMs: 200, isRetryable: isRetryableError })
+  );
+  if (prefs?.['flags.goalTemplatesEnabled'] !== 'true') {
+    throw new FeatureDisabledRefusal(
+      'Budget templates are turned off for this budget. Enable them in Actual under ' +
+        'Settings > Experimental features > Goal templates, then try again. Nothing was changed.',
+    );
+  }
+  if (ui && prefs?.['flags.goalTemplatesUIEnabled'] !== 'true') {
+    throw new FeatureDisabledRefusal(
+      'Budget automations are turned off for this budget. Enable them in Actual under ' +
+        'Settings > Experimental features > Goal templates > Budget automations UI, then try again. Nothing was changed.',
+    );
+  }
+  return prefs;
+}
+
+/** Refuse a month outside the budget's range. Raw reads only, for use inside a queued write. */
+async function assertMonthInRange(month: string): Promise<void> {
+  const months = await withConcurrency(() =>
+    retry(() => rawGetBudgetMonths() as Promise<string[]>, { retries: 2, backoffMs: 200 })
+  );
+  if (Array.isArray(months) && months.length > 0 && !months.includes(month)) {
+    throw new OutOfRangeRefusal(
+      `Month "${month}" is outside this budget's range, which runs from ${months[0]} to ` +
+        `${months[months.length - 1]}. Use actual_budgets_get_months to see the months you can budget to.`,
+      month,
+    );
+  }
+}
+
+/**
+ * Match Actual's fill, overwrite, and single-category menu actions. Single-category apply always
+ * overwrites. Check parser errors within the same write cycle because the bundled engine can
+ * ignore those errors and reset an allocation when processing the malformed template.
+ */
+export async function applyBudgetTemplates(month: string, categoryId?: string, overwrite?: boolean): Promise<TemplateNotification> {
+  observability.incrementToolCall('actual.budgets.applyTemplates').catch(() => {});
+  return queueWriteOperation(async () => {
+    const prefs = await assertTemplatesEnabled(false);
+
+    if (categoryId !== undefined) {
+      if (overwrite === false) throw new ConflictRefusal('Applying a single category always overwrites its budget. Omit overwrite or set it to true.');
+      const categories = await withConcurrency(() =>
+        retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string }>>), { retries: 2, backoffMs: 200 })
+      );
+      if (!categories.some((c) => c.id === categoryId)) {
+        throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
+      }
+    }
+
+    await assertMonthInRange(month);
+    const malformed = await findMalformedTemplates(month, categoryId, overwrite === true, prefs?.budgetType === 'tracking');
+    if (malformed) return { message: 'template-errors', pre: malformed };
+
+    // Not retried: a second attempt after a committed first would re-run the templates.
+    return await withConcurrency(() => (categoryId !== undefined
+      ? rawInternalWrite('budget/apply-single-template', { month, category: categoryId })
+      : rawInternalWrite(overwrite ? 'budget/overwrite-goal-template' : 'budget/apply-goal-template', { month })) as Promise<TemplateNotification>);
+  }, { preservesListings: ['accounts', 'categoryGroups', 'payees'] });
+}
+
+/** Actual saves parser errors in goal_def. Exclude the categories its apply handler would skip. */
+async function findMalformedTemplates(month: string, categoryId: string | undefined, overwrite: boolean, tracking: boolean) {
+  let ids: string[];
+  if (categoryId !== undefined) {
+    ids = [categoryId];
+  } else {
+    type Category = { id: string; is_income?: boolean };
+    const groups = await withConcurrency(() => rawGetCategoryGroups({ hidden: false }) as Promise<{ categories?: Category[] }[]>);
+    const allowed = groups.flatMap((g) => g.categories ?? []).filter((c) => tracking || !c.is_income);
+    ids = allowed.map((c) => c.id);
+    if (!overwrite && ids.length) {
+      const budget = await withConcurrency(() => rawGetBudgetMonth(month) as Promise<{
+        categoryGroups: { categories: { id: string; budgeted?: number }[] }[];
+      }>);
+      const funded = new Set(budget.categoryGroups.flatMap((g) => g.categories.filter((c) => c.budgeted).map((c) => c.id)));
+      ids = ids.filter((id) => !funded.has(id));
+    }
+  }
+  if (!ids.length) return undefined;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { q } = (await import('@actual-app/api')) as any;
+  await withConcurrency(() => rawInternalWrite('budget/store-note-templates', ids));
+  const { data } = await withConcurrency(() => rawRunQuery(
+    q('categories').filter({ id: { $oneof: ids }, goal_def: { $ne: null } }).select(['name', 'goal_def']),
+  ) as Promise<{ data: { name: string; goal_def: string }[] }>);
+  const errors = data.flatMap(({ name, goal_def }) => {
+    const templates = JSON.parse(goal_def) as { type: string; line?: string; error?: string }[];
+    return templates.filter((t) => t.type === 'error').map((t) => `${name}: ${t.line ?? t.error ?? 'Invalid template'}`);
+  });
+  return errors.length ? errors.join('\n\n') : undefined;
+}
+
+/**
+ * Run Actual's "End of month cleanup" for a month (`budget/cleanup-goal-template`): categories
+ * set to send return their leftover, every overspent expense category without carryover is covered
+ * from To Budget as far as it goes, then receivers share what is left by weight; named pools move
+ * money only among their own members. Envelope budgets only, as in Actual's month menu.
+ */
+export async function runBudgetCleanup(month: string): Promise<TemplateNotification> {
+  observability.incrementToolCall('actual.budgets.runCleanup').catch(() => {});
+  return queueWriteOperation(async () => {
+    const prefs = await assertTemplatesEnabled(false);
+    if (prefs?.budgetType === 'tracking') {
+      throw new FeatureDisabledRefusal(
+        'End of month cleanup only works with envelope budgeting, and this budget uses tracking budgeting. Nothing was changed.',
+      );
+    }
+    await assertMonthInRange(month);
+    // Not retried: a second run after a committed first would move money again.
+    return await withConcurrency(() => rawInternalWrite('budget/cleanup-goal-template', { month }) as Promise<TemplateNotification>);
+  }, { preservesListings: ['accounts', 'categoryGroups', 'payees'] });
+}
+
+/** Read the active source without running the note refresh handlers, which write to the budget. */
+export async function getCategoryAutomations(categoryId: string) {
+  observability.incrementToolCall('actual.categories.getAutomations').catch(() => {});
+  return withActualApi(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const query = <T>(selection: unknown) => withConcurrency(() =>
+      retry(() => rawRunQuery(selection) as Promise<{ data: T[] }>, { retries: 2, backoffMs: 200 })
+    );
+    const { data: [category] } = await query<{
+      template_settings?: { source?: string } | null;
+      goal_def: string | null;
+      cleanup_def: string | null;
+    }>(q('categories').filter({ id: categoryId }).select(['template_settings', 'goal_def', 'cleanup_def']));
+    if (!category) throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
+
+    if (category.template_settings?.source !== 'ui') {
+      const note = await withConcurrency(() =>
+        retry(() => rawGetNote(categoryId) as Promise<{ note: string } | null>, { retries: 2, backoffMs: 200 })
+      );
+      const noteDirectives = (note?.note ?? '').split('\n').flatMap((line) => {
+        const directive = line.substring(line.indexOf('#')).trim();
+        if (directive.startsWith('#template') || directive.startsWith('#goal')) return [directive];
+        // Actual looks for cleanup at the beginning of the trimmed line, unlike templates.
+        const trimmed = line.trim();
+        return trimmed.toLowerCase().startsWith('#cleanup ') ? [trimmed] : [];
+      });
+      return { categoryId, source: 'notes' as const, noteDirectives };
+    }
+
+    const templates = JSON.parse(category.goal_def ?? '[]') as Record<string, unknown>[];
+    const cleanup = JSON.parse(category.cleanup_def ?? '[]') as { role: string; groupId: string | null; weight?: number }[];
+    const ids = [...new Set(cleanup.flatMap(({ groupId }) => groupId === null ? [] : [groupId]))];
+    const pools = ids.length
+      ? (await query<{ id: string; name: string }>(q('cleanup_groups').filter({ id: { $oneof: ids } }).select(['id', 'name']))).data
+      : [];
+    const names = new Map(pools.map(({ id, name }) => [id, name]));
+    return {
+      categoryId, source: 'ui' as const,
+      automations: templates.map(automationAmountsInCents),
+      cleanup: cleanup.map((row) => ({ ...row, ...(row.groupId === null ? {} : { pool: names.get(row.groupId) }) })),
+    };
+  });
+}
+
+function automationAmountsInCents(template: Record<string, unknown>) {
+  const result = { ...template };
+  for (const key of ['amount', 'monthly', ...(template.adjustmentType === 'fixed' ? ['adjustment'] : [])]) {
+    const value = template[key];
+    if (typeof value === 'number') result[key] = Math.round(value * 100);
+  }
+  const limit = template.limit as { amount?: number } | undefined;
+  if (typeof limit?.amount === 'number') result.limit = { ...limit, amount: Math.round(limit.amount * 100) };
+  return result;
+}
+
+/**
+ * Save a category's budget automations the way Actual's automation editor does:
+ * `budget/set-category-automations` with `source: 'ui'`. The note is not touched; once the
+ * source is 'ui', upstream stops reading that note's `#template` and `#cleanup` lines
+ * (statements.ts, cleanup-template-notes.ts).
+ *
+ * Like the editor, it starts from what the category already has. A category still on notes
+ * (source not 'ui') has its note re-parsed (`budget/store-note-templates`, and
+ * `budget/store-note-cleanups` unless `cleanup` is given, as the editor does on open) and its templates imported with
+ * `importNoteTemplates`; a note with a template Actual cannot parse is refused, as the editor
+ * refuses to migrate it. Its cleanup stays in `cleanup_def`, so it keeps working. A 'ui'
+ * category starts from its saved automations. `templates` are added after those, or replace
+ * them with `replace`. A schedule template gets its schedule's name filled in; a percentage
+ * template's income category must be "all income", "available funds" or an income category id.
+ * `cleanup`, when given, replaces the category's end of month cleanup (`[]` clears it); its pools
+ * are created by name (`budget/create-cleanup-group`, case-insensitive, as the editor's picker
+ * does) after every check has passed. Omitted, the cleanup is left as it is.
+ */
+export async function setCategoryAutomations(
+  categoryId: string,
+  templates: Array<Record<string, unknown>>,
+  replace = false,
+  cleanup?: CleanupRow[],
+): Promise<{ imported: number; count: number; cleanup?: number }> {
+  observability.incrementToolCall('actual.categories.setAutomations').catch(() => {});
+  return queueWriteOperation(async () => {
+    await assertTemplatesEnabled(true);
+    const categories = await withConcurrency(() =>
+      retry(() => readDrainListing('categories', () => rawGetCategories() as Promise<Array<{ id: string; name?: string; is_income?: boolean }>>), { retries: 2, backoffMs: 200 })
+    );
+    if (!categories.some((c) => c.id === categoryId)) throw new NotFoundRefusal('Category', categoryId, 'actual_categories_get');
+    const schedules = await withConcurrency(() =>
+      retry(() => rawGetSchedules() as Promise<Array<{ id: string; name?: string | null; completed?: boolean; tombstone?: boolean }>>, { retries: 2, backoffMs: 200 })
+    );
+
+    for (const t of templates) {
+      if (t.type === 'percentage' && t.category !== 'all income' && t.category !== 'available funds'
+        && !categories.some((c) => c.id === t.category && c.is_income)) {
+        throw new NotFoundRefusal('Income category', String(t.category), 'actual_categories_get');
+      }
+      if (t.type === 'schedule') {
+        const found = schedules.find((x) => x.id === t.scheduleId && x.name && !x.completed && !x.tombstone);
+        if (!found) throw new NotFoundRefusal('Schedule', String(t.scheduleId), 'actual_schedules_get');
+        t.name = found.name ?? '';
+      }
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { q } = (await import('@actual-app/api')) as any;
+    const rows = await withConcurrency(() =>
+      rawRunQuery(q('categories').filter({ id: categoryId }).select(['id', 'template_settings'])) as Promise<{ data?: Array<{ template_settings?: { source?: string } | null }> }>
+    );
+    const onNotes = (rows?.data?.[0]?.template_settings?.source ?? 'notes') !== 'ui';
+    let existing: Array<Record<string, unknown>> = [];
+    if (onNotes) await withConcurrency(() => rawInternalWrite('budget/store-note-templates', [categoryId]));
+    // A notes category is always read, even with replace: the editor will not open one whose note
+    // it cannot parse, so neither replacing nor importing may switch it to 'ui'.
+    if (onNotes || !replace) {
+      const saved = await withConcurrency(() => rawInternalSend('budget/get-category-automations', categoryId) as Promise<Record<string, Array<Record<string, unknown>>> | null>);
+      existing = saved?.[categoryId] ?? [];
+      const bad = existing.find((t) => t.type === 'error');
+      if (onNotes && bad) {
+        throw new ConflictRefusal(
+          `Category "${categoryId}" has a note template Actual cannot read: ${String(bad.line ?? '').trim()}. ` +
+            'Fix or remove that line in the category note, then try again. No automations were saved.',
+        );
+      }
+      if (onNotes) existing = importNoteTemplates(existing, schedules, categories.filter((c) => c.is_income));
+      if (replace) existing = [];
+    }
+    const all = [...existing, ...templates];
+    const dates = all.flatMap((t) => {
+      if (t.type === 'periodic' && typeof t.starting === 'string') return [t.starting];
+      if ((t.type === 'by' || t.type === 'spend') && typeof t.month === 'string') return [`${t.month}-01`];
+      return [];
+    }).sort();
+    const now = new Date();
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    for (const t of templates) {
+      if (t.type === 'limit' && t.period === 'weekly' && t.start === undefined) t.start = dates[0] ?? monthStart;
+    }
+
+    validateCategoryAutomations(all, schedules, categories.filter((c) => c.is_income));
+
+    // Only after the automations pass validation, and only when this call keeps the cleanup:
+    // given `cleanup` replaces cleanup_def, so the note's #cleanup lines are not refreshed (or
+    // their pools revived) for nothing.
+    if (onNotes && !cleanup) await withConcurrency(() => rawInternalWrite('budget/store-note-cleanups', [categoryId]));
+
+    let cleanupDef: Array<Record<string, unknown>> | undefined;
+    if (cleanup) {
+      const poolIds = new Map<string, string>();
+      for (const name of new Set(cleanup.flatMap((r) => (r.pool === null ? [] : [r.pool.toLowerCase()])))) {
+        const original = cleanup.find((r) => r.pool?.toLowerCase() === name)!.pool!;
+        const res = await withConcurrency(() => rawInternalWrite('budget/create-cleanup-group', { name: original }) as Promise<{ id: string }>);
+        poolIds.set(name, res.id);
+      }
+      cleanupDef = cleanup.map(({ role, pool, weight }) => ({
+        role,
+        groupId: pool === null ? null : poolIds.get(pool.toLowerCase()),
+        ...(role === 'sink' ? { weight } : {}),
+      }));
+    }
+
+    await withConcurrency(() => rawInternalWrite('budget/set-category-automations', {
+      categoriesWithTemplates: [{ id: categoryId, templates: all, ...(cleanupDef ? { cleanup: cleanupDef } : {}) }],
+      source: 'ui',
+    }));
+    return { imported: onNotes ? existing.length : 0, count: all.length, ...(cleanupDef ? { cleanup: cleanupDef.length } : {}) };
+  }, { preservesListings: ['accounts', 'categoryGroups', 'payees'] });
+}
+
+function validateCategoryAutomations(
+  templates: Record<string, unknown>[],
+  schedules: { id: string; name?: string | null; completed?: boolean; tombstone?: boolean }[],
+  incomeCategories: { id: string; name?: string }[],
+): void {
+  const limits = templates.filter((t) => t.type === 'limit' || t.limit);
+  if (limits.length > 1) throw new ConflictRefusal('Only one budget limit is allowed per category.');
+  const limit = limits[0]?.type === 'limit' ? limits[0] : limits[0]?.limit as Record<string, unknown> | undefined;
+  if (limit?.period === 'weekly' && !limit.start) throw new ConflictRefusal('A weekly limit needs a start date.');
+  if (templates.filter((t) => t.type === 'goal').length > 1) throw new ConflictRefusal('Only one long-term goal is allowed per category.');
+  if (templates.filter((t) => t.type === 'spend').length > 1) throw new ConflictRefusal('Only one spend template is allowed per category.');
+  if (templates.some((t) => t.type === 'refill') && !limits.length) throw new ConflictRefusal('A refill needs a budget limit.');
+  if (limits[0]?.type === 'limit' && !templates.some((t) => !['limit', 'goal', 'error'].includes(String(t.type)))) {
+    throw new ConflictRefusal('A budget limit needs a contributing automation, such as fixed or refill.');
+  }
+  if (new Set(templates.filter((t) => t.type === 'schedule' || t.type === 'by').map((t) => t.priority)).size > 1) {
+    throw new ConflictRefusal('Schedule and By automations must use the same priority.');
+  }
+  const percentages = new Map<string, number>();
+  for (const t of templates) {
+    if (t.type === 'schedule' && !schedules.some((s) => s.name && !s.completed && !s.tombstone &&
+      (t.scheduleId ? s.id === t.scheduleId : s.name.trim() === String(t.name).trim()))) {
+      throw new NotFoundRefusal('Schedule', String(t.scheduleId ?? t.name), 'actual_schedules_get');
+    }
+    if (t.type === 'percentage') {
+      const name = String(t.category).toLowerCase();
+      const source = ['all income', 'available funds'].includes(name) ? name :
+        incomeCategories.find((c) => c.id === t.category || c.name?.toLowerCase() === name)?.id;
+      if (!source) throw new NotFoundRefusal('Income category', String(t.category), 'actual_categories_get');
+      const key = `${Boolean(t.previous)}:${source}`;
+      const percent = Number(t.percent);
+      const total = (percentages.get(key) ?? 0) + percent;
+      if (!(percent > 0) || total > 100) throw new ConflictRefusal('Percentage automations must be positive and total at most 100% per income source and month.');
+      percentages.set(key, total);
+    }
+  }
+}
 /**
  * #561: an empty result whose category.name, payee.name or account.name condition names no
  * existing entity gains a sibling `hint` naming the value and the query that lists the exact
@@ -6355,6 +6712,10 @@ export default {
   transferBudgetAmount,
   holdBudgetForNextMonth,
   resetBudgetHold,
+  applyBudgetTemplates,
+  getCategoryAutomations,
+  setCategoryAutomations,
+  runBudgetCleanup,
   runQuery,
   runBankSync,
   getBudgets,

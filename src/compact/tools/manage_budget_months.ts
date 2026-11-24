@@ -11,7 +11,7 @@ import { FULL_SURFACE, type CompactActionRow, type CompactToolSpec, type Descrip
  * Mapping (#670 section 7): set_amount -> actual_budgets_set_amount, set_amount_batch ->
  * actual_budget_updates_batch, set_carryover -> actual_budgets_set_carryover, hold ->
  * actual_budgets_hold_for_next_month, reset_hold -> actual_budgets_reset_hold, transfer ->
- * actual_budgets_transfer, set_note -> actual_notes_update (shared, allowed in the parity test
+ * actual_budgets_transfer, apply_templates -> actual_budgets_apply_templates, run_cleanup -> actual_budgets_run_cleanup, set_note -> actual_notes_update (shared, allowed in the parity test
  * only from set_note) with the id built by the `build` hook as `budget-<month>`.
  *
  * WRITE tool: `nullAsAbsent` is NOT set and no schema carries a `.default()`.
@@ -23,11 +23,11 @@ import { FULL_SURFACE, type CompactActionRow, type CompactToolSpec, type Descrip
  * tool validates again with its own unchanged schema.
  */
 
-const month = z.string().optional().describe('Budget month as YYYY-MM, one the budget has (list_budget_months lists them).');
+const month = z.string().optional().describe('Existing budget month (YYYY-MM).');
 const categoryId = z.string().optional().describe('Category id.');
 const fromCategoryId = z.string().optional().describe('Source category id.');
-const toCategoryId = z.string().optional().describe('Target category id, different from from_category_id.');
-const amount = z.number().int().optional().describe('Integer cents (5000 is $50.00). set_amount: the new budgeted amount; hold and transfer: greater than 0.');
+const toCategoryId = z.string().optional().describe('Target category id (different from source).');
+const amount = z.number().int().optional().describe('Integer cents. Positive for hold and transfer.');
 const flag = z.boolean().optional().describe('true rolls an overspent balance into the next month, false resets it.');
 const note = z.string().optional().describe('Note text for the month; "" clears it. Template directives such as "#template 250" work.');
 const operations = z
@@ -98,6 +98,18 @@ const transferFields = asFields(
     if (v.from_category_id !== undefined && v.from_category_id === v.to_category_id) issue(ctx, 'to_category_id', 'must differ from from_category_id');
   }),
 );
+const applyTemplatesFields = asFields(
+  z.object({ month, category_id: categoryId, overwrite: z.boolean().optional().describe('Reapply all templates.') }).superRefine((value, ctx) => {
+    needs('apply_templates', ctx, value as V, ['month']);
+    strict(ctx, value as V, { ...monthRules, category_id: CommonSchemas.categoryId });
+  }),
+);
+const cleanupFields = asFields(
+  z.object({ month }).superRefine((value, ctx) => {
+    needs('run_cleanup', ctx, value as V, ['month']);
+    strict(ctx, value as V, monthRules);
+  }),
+);
 const noteFields = asFields(
   z.object({ month, note }).superRefine((value, ctx) => {
     needs('set_note', ctx, value as V, ['month', 'note']);
@@ -114,12 +126,14 @@ function describe(ctx: DescriptionContext): string {
     (a('set_amount') || a('set_amount_batch')) && 'amounts',
     a('set_carryover') && 'carryover',
     (a('hold') || a('reset_hold')) && 'the hold for next month',
-    a('transfer') && 'transfers between categories',
+    a('transfer') && 'transfers',
+    a('apply_templates') && 'templates',
+    a('run_cleanup') && 'cleanup',
     a('set_note') && 'the month note',
   ].filter((x): x is string => typeof x === 'string');
   const pointers = [
-    ctx.hasTool('list_budget_months') && 'To read months use list_budget_months',
-    ctx.hasTool('manage_budget_files') && 'to switch, import or export a budget file use manage_budget_files',
+    ctx.hasTool('list_budget_months') && 'read with list_budget_months',
+    ctx.hasTool('manage_budget_files') && 'files use manage_budget_files',
     ctx.hasTool('manage_categories') && 'category notes use manage_categories',
   ].filter((x): x is string => typeof x === 'string');
   const shapes = (names: string[], shape: string) => (only(names).length > 0 ? [`${shape} (${only(names).join(', ')})`] : []);
@@ -129,18 +143,22 @@ function describe(ctx: DescriptionContext): string {
     ...shapes(['set_carryover', 'reset_hold'], '{ success: true }'),
     ...(a('hold') ? ['{ success, held } or { success, partial, requested, held, message } (hold)'] : []),
     ...(a('transfer') ? ['{ result: { success, transferred, fromCategory, toCategory } } (transfer)'] : []),
+    ...(a('apply_templates') ? ['{ result: { success, month, applied } } (apply_templates)'] : []),
+    ...(a('run_cleanup') ? ['{ result: { success, month, outcome, sources, sinks, warnings } } (run_cleanup)'] : []),
     ...(a('set_note') ? ['{ result: { success, id, note, cleared } } (set_note)'] : []),
   ];
   return (
-    `Change the budget of a month: ${nouns.join(', ')}; pick one \`action\`. Writes. ` +
+    `Change a budget month: ${nouns.join(', ')}; pick one \`action\`. Writes. ` +
     (pointers.length > 0 ? `${pointers.join('; ').replace(/^./, (c) => c.toUpperCase())}. ` : '') +
     (a('set_amount') ? 'set_amount: month, category_id, amount (the month must be one the budget has; an income category is refused on an envelope budget; |amount| at most 2251799813685247; an unknown category or month is returned as { success: false, error }). ' : '') +
-    (a('set_amount_batch') ? 'set_amount_batch: operations, 1 to 100 items {month, categoryId, amount?, carryover?} with camelCase keys, each needing amount or carryover; NOT atomic, no rollback, items applied before a failure stay applied; an unknown category, a month out of range or carryover, or amount on an envelope budget, on an income category fails only that item; after a timeout read the months back before retrying. ' : '') +
+    (a('set_amount_batch') ? 'set_amount_batch: operations, 1 to 100 operations (see schema). NOT atomic. An unknown category, invalid month or carryover, or amount on an envelope budget, on an income category fails only that item. Read back before retrying. ' : '') +
     (a('set_carryover') ? 'set_carryover: month, category_id, flag (true rolls an overspent balance into the next month, false resets it; envelope budget: a positive balance always rolls over; tracking budget: only with the flag), from that month on; expense categories only. ' : '') +
-    (a('hold') ? 'hold: month, amount greater than 0; holds for next month and may hold LESS than asked (clamped to what is left to budget); nothing held is an error; Actual ADDS to the buffer, so on an error read the month before retrying. ' : '') +
+    (a('hold') ? 'hold: month, amount greater than 0. Adds up to To Budget to the hold for next month. Zero held errors. Read before retrying. ' : '') +
     (a('reset_hold') ? 'reset_hold: month; releases the whole hold back to to-budget. ' : '') +
-    (a('transfer') ? 'transfer: month, from_category_id, to_category_id (different, expense categories only), amount greater than 0 and at most 2251799813685247; the source needs that much budgeted; NOT atomic, if the second write fails the source was already lowered. ' : '') +
-    (a('set_note') ? 'set_note: month, note; sets or clears the month note. ' : '') +
+    (a('transfer') ? 'transfer: month, from_category_id, to_category_id (different, expense categories only), amount greater than 0 and at most 2251799813685247; source needs that much budgeted. NOT atomic: the debit can outlive a failed credit. ' : '') +
+    (a('apply_templates') ? 'apply_templates: month, category_id?, overwrite?; fills unbudgeted categories. Overwrite true redoes all; category_id overwrites one. ' : '') +
+    (a('run_cleanup') ? 'run_cleanup: month; envelope cleanup covers overspending without carryover. Read before retrying. ' : '') +
+    (a('set_note') ? 'set_note: month, note; "" clears. ' : '') +
     `Returns ${returns.join(', ')}.`
   );
 }
@@ -160,6 +178,8 @@ export const manageBudgetMonths: CompactToolSpec = {
     ['hold', { legacy: 'actual_budgets_hold_for_next_month', fields: holdFields }],
     ['reset_hold', { legacy: 'actual_budgets_reset_hold', fields: resetHoldFields }],
     ['transfer', { legacy: 'actual_budgets_transfer', fields: transferFields, rename: { from_category_id: 'fromCategoryId', to_category_id: 'toCategoryId' } }],
+    ['apply_templates', { legacy: 'actual_budgets_apply_templates', fields: applyTemplatesFields, rename: { category_id: 'categoryId' } }],
+    ['run_cleanup', { legacy: 'actual_budgets_run_cleanup', fields: cleanupFields }],
     ['set_note', { legacy: 'actual_notes_update', fields: noteFields, build: (a) => ({ id: `budget-${String(a.month)}`, note: a.note }) }],
   ]),
 };

@@ -150,6 +150,9 @@ merely proposed. Where it says OPEN, the ticket exists and the behaviour is stil
 | `actual_budgets_set_amount` (unknown category) | adapter pre-check since #89 |
 | `actual_budgets_set_carryover` | upstream validates BOTH month and category |
 | `actual_budgets_reset_hold` | `setBuffer(month, 0)`, no conditional path |
+| `actual_categories_set_automations` | adapter refuses unless `flags.goalTemplatesEnabled` and `flags.goalTemplatesUIEnabled` are `'true'`, and pre-checks the category, each schedule id and each percentage income category in the SAME queued operation. A notes category has its note re-parsed and imported in that same operation; a note template upstream cannot parse is refused (`ConflictRefusal`) before anything is saved, and cleanup pools are created only after every check passes. Upstream's `storeTemplates` returns nothing, so the count is what was sent |
+| `actual_budgets_run_cleanup` | adapter refuses unless `flags.goalTemplatesEnabled` is `'true'` and the budget is not `tracking`, and checks the month range in the SAME queued operation; upstream answers `cleanup-applied`, `cleanup-up-to-date` or `cleanup-no-funds` (with warnings), all reported as a result, because money may have moved in each |
+| `actual_budgets_apply_templates` | adapter checks the flag, category, month range and affected note syntax in the same queued operation. The syntax check refreshes Actual's parsed note cache. If it finds an error, the call leaves budget amounts alone |
 | `actual_transfers_create` | adapter validates both accounts, refuses closed ones, and requires the destination transfer payee |
 | `actual_notes_update` | the tool validates the entity id against four listings to prevent orphan notes |
 | `actual_session_close` | pool only, not an Actual write |

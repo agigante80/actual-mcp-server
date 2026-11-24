@@ -83,6 +83,10 @@ const LEGACY_SMOKE = [
   'actual_schedules_update', // #785: the legacy unknown-payee refusal text
   'actual_schedules_delete', // #785: removes a schedule a refusal row found written
   'actual_budgets_get_months',
+  'actual_budgets_apply_templates', // a write row: the legacy twin of the compact apply_templates row
+  'actual_categories_set_automations', // a write row: the legacy twin of the compact set_automations row
+  'actual_categories_get_automations', // direct legacy coverage of the category automation read
+  'actual_budgets_run_cleanup', // refusal-only rows: a real cleanup touches the whole budget
   'actual_budgets_list_available',
   'actual_tags_list',
   'actual_notes_get',

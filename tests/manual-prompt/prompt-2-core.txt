@@ -20,7 +20,7 @@ HOW TO USE
 WHAT IT TESTS
   Phase 2:   Accounts                        (6 operations)
   Phase 2b: Account Groups                  (4 operations)
-  Phase 3:   Category Groups & Categories    (6 operations)
+  Phase 3:   Category Groups & Categories    (7 operations)
   Phase 4:   Payees                          (6 operations)
   Phase 5:   Rules                           (4 operations)
   Phase 5b:  Batch, Uncategorized, Upsert    (4 operations)
@@ -113,7 +113,7 @@ lookup on the notes marker to recover the id.
   NOTE: deleting a group does NOT delete its accounts, they become ungrouped. An account
   still pointing at a deleted group is expected under sync and means ungrouped, not an error.
 
-**Phase 3: Category Groups & Categories (6 operations):**
+**Phase 3: Category Groups & Categories (7 operations):**
 
 - manage_categories, action: "create" with entity: "category_group"
   Input: { action: "create", entity: "category_group", name: "MCP-Group-{TS}" }
@@ -129,6 +129,11 @@ lookup on the notes marker to recover the id.
   Input: { action: "create", entity: "category", name: "MCP-Cat-{TS}", group_id: "{group_id}" }
   Expect: created with id
   Save as `{cat_id}`
+
+- list_entities, type: "category_automations"
+  Input: { type: "category_automations", category_id: "{cat_id}" }
+  Expect: the new category has source "notes" and no note directives
+  NEGATIVE: use "00000000-0000-0000-0000-000000000000" as category_id; expect "not found" and a reference to list_entities with type category
 
 - manage_categories, action: "update" with entity: "category"
   Input: { action: "update", entity: "category", id: "{cat_id}", name: "MCP-Cat-{TS}-Updated" }
@@ -469,14 +474,14 @@ After completing all phases, output:
 === PROMPT 2 RESULTS ===
 Phase 2  Accounts:         X / 6
 Phase 2b Account Groups:   X / 4
-Phase 3  Categories:       X / 6
+Phase 3  Categories:       X / 7
 Phase 4  Payees:           X / 6
 Phase 5  Rules:            X / 4
 Phase 5b Batch/Upsert:     X / 4
 Phase 6  Transactions:     X / 12
 Phase 6b Schedules:        X / 5
 Phase 6c Tags:             X / 7
-Total:                     X / 54
+Total:                     X / 55
 Failed:        X
 Informational: X
 Active IDs: txn_acct_id={txn_acct_id}, txn1_id={txn1_id}, txn2_id={txn2_id}, payee_id={payee_id}, upsert_rule_id={upsert_rule_id}

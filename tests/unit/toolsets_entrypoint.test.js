@@ -255,7 +255,7 @@ await check('NEGATIVE: the default surface does not list the legacy tools (#680)
   assert.strictEqual(dflt.length, 15);
   const legacy = (await stdioSession(LEGACY, [INIT, INITIALIZED, LIST])).get(2).result.tools.map((t) => t.name);
   assert.ok(!legacy.includes('get_context') && !legacy.includes('list_entities'));
-  assert.strictEqual(legacy.length, 85);
+  assert.strictEqual(legacy.length, 89);
 });
 
 await check('a configuration that resolves to zero tools exits 1', async () => {

@@ -2,7 +2,7 @@ import { fail, skip } from '../assert.js';
 /**
  * tests/category.js
  *
- * CATEGORY TESTS: create and update an MCP-Cat-* category inside the group
+ * CATEGORY TESTS: create, update and read automations for an MCP-Cat-* category inside the group
  * created by categoryGroupTests.
  *
  * Reads from context:  categoryGroupId (skips if absent)
@@ -50,6 +50,22 @@ export async function categoryTests(client, context) {
     if (!found) fail(["Verify create: category not found in list (id:", categoryId, ")"].map(String).join(" "));
     else if (found.name === `MCP-Cat-${timestamp}`) console.log(`  ✓ Verify create: name="${found.name}"`);
     else fail(`Verify create: expected "MCP-Cat-${timestamp}", got "${found.name}"`);
+  }
+
+  try {
+    const read = await callTool("list_entities", { type: "category_automations", category_id: categoryId });
+    if (read?.categoryId === categoryId && read.source === "notes" && read.noteDirectives?.length === 0) {
+      console.log("  ✓ New category has no automation directives");
+    } else fail("category_automations: expected no note directives on the new category");
+  } catch (err) {
+    fail(`category_automations: ${err.message}`);
+  }
+  try {
+    await callTool("list_entities", { type: "category_automations", category_id: "00000000-0000-0000-0000-000000000000" });
+    fail("category_automations: expected an error for the nil UUID");
+  } catch (err) {
+    if (/not found.*list_entities with type category/.test(err.message)) console.log("  ✓ Unknown category is refused");
+    else fail(`category_automations: unexpected error: ${err.message}`);
   }
 
   // Update

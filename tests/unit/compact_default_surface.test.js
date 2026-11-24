@@ -4,7 +4,7 @@
 // flip, because that code published the 85 legacy tools when the variable was unset.
 //
 // What this proves, and why each part exists:
-//   - the three surfaces list what they promise (15 compact, 85 legacy, both), and the default
+//   - the three surfaces list what they promise (15 compact, 89 legacy, both), and the default
 //     is read from the REAL built entrypoint with the variable unset, not from a parameter;
 //   - MCP_TOOLSETS=chat and MCP_TOOLS work in compact names (ticket decisions R1, R2): the chat
 //     preset lists six tools, and each ACTION stays refused per legacy operation, naming the
@@ -125,9 +125,9 @@ await check('the built entrypoint with MCP_TOOL_SURFACE unset lists exactly the 
   assert.ok(names.every((n) => !n.startsWith('actual_')));
 });
 
-await check('NEGATIVE: MCP_TOOL_SURFACE=legacy on the built entrypoint lists 85 actual_ tools and no compact one', async () => {
+await check('NEGATIVE: MCP_TOOL_SURFACE=legacy on the built entrypoint lists 89 actual_ tools and no compact one', async () => {
   const names = await stdioList({ MCP_TOOL_SURFACE: 'legacy' });
-  assert.strictEqual(names.length, 85);
+  assert.strictEqual(names.length, 89);
   assert.ok(names.every((n) => n.startsWith('actual_')));
   assert.ok(!names.includes('get_context'));
 });
@@ -153,16 +153,16 @@ await check('the config schema default for MCP_TOOL_SURFACE is compact', async (
   assert.strictEqual(r.data.MCP_TOOL_SURFACE, 'compact');
 });
 
-await check('compact lists the 15 compact tools, legacy lists 85, all lists both (100)', async () => {
+await check('compact lists the 15 compact tools, legacy lists 89, all lists both (104)', async () => {
   await init({ surface: 'compact' });
   assert.deepStrictEqual(manager.getPublishedToolNames(), COMPACT_NAMES);
   await init({ surface: 'legacy' });
   const legacy = manager.getPublishedToolNames();
-  assert.strictEqual(legacy.length, 85);
+  assert.strictEqual(legacy.length, 89);
   assert.ok(legacy.every((n) => n.startsWith('actual_')));
   await init({ surface: 'all' });
   const all = manager.getPublishedToolNames();
-  assert.strictEqual(all.length, 100);
+  assert.strictEqual(all.length, 104);
   sameSet(all, [...legacy, ...COMPACT_NAMES]);
 });
 

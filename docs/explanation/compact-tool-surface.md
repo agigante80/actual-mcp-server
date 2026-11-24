@@ -154,6 +154,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | `account_group` | `account_groups_list` | none | none |  |
 | `category` | `categories_get` | none | query, match_type, limit, name | same query/name routing as account (type categories) |
 | `category_group` | `category_groups_get` | none | none |  |
+| `category_automations` | `categories_get_automations` | category_id | none | reads saved automations and cleanup or the current note directives; works with Goal templates off |
 | `payee` | `payees_get` | none | query, match_type, limit, name, sort | same routing (type payees); `sort: "frequency"` -> actual_payees_common_list (and then no other field is allowed) |
 | `tag` | `tags_list` | none | none |  |
 | `rule` | `rules_get` | none | payee_id | `payee_id` -> actual_payee_rules_get (legacy `payeeId`) |
@@ -227,6 +228,7 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | `create` | `categories_create / category_groups_create` | entity, name; group_id (category) | is_income (both), hidden (category_group only) | `entity` is `category` or `category_group`; a category takes its group's `is_income` and a different value is refused, and `is_income: true` on a group is refused when the budget already has an income group; `hidden` on a category is refused because the legacy category tool has none |
 | `update` | `categories_update / category_groups_update` | entity, id; at least one field | name, group_id (category only), is_income, hidden | non-id properties wrapped into legacy `fields`; an empty update is refused; a move to a group with the other `is_income` needs `is_income` too |
 | `delete` | `categories_delete / category_groups_delete` | entity, id | none |  |
+| `set_automations` | `categories_set_automations` | id; automations or cleanup | automations, replace, cleanup | `id` renamed to `categoryId`; keeps the existing automations (note templates are imported first) unless `replace`; items keep camelCase keys and are checked against the legacy item schema; refused unless goal templates and the Budget automations UI are on |
 | `set_note` | `notes_update` | id, note | none | id resolves to a category or category group itself, so `entity` must be omitted |
 
 **`manage_payees`** (selector `action`, required)
@@ -274,6 +276,8 @@ Per compact tool, the fields per selector value. "Legacy tool" is without the `a
 | `set_carryover` | `budgets_set_carryover` | month, category_id, flag | none |  |
 | `hold` | `budgets_hold_for_next_month` | month, amount | none | amount greater than 0; may hold less than asked (`partial`); nothing held is an error |
 | `reset_hold` | `budgets_reset_hold` | month | none |  |
+| `run_cleanup` | `budgets_run_cleanup` | month | none | end of month cleanup, requires Goal templates and envelope budgeting. Every outcome can accompany changes. Missing source and sink counts are `null` |
+| `apply_templates` | `budgets_apply_templates` | month | category_id, overwrite | `category_id` renamed to `categoryId`. Single-category apply overwrites its budget and refuses `overwrite: false`. Requires Goal templates. Affected malformed templates are refused before amounts change |
 | `transfer` | `budgets_transfer` | month, from_category_id, to_category_id, amount | none | amount greater than 0; the two categories must differ; NOT atomic |
 | `set_note` | `notes_update` | month, note | none | the dispatcher builds the legacy id `budget-YYYY-MM` from `month` |
 

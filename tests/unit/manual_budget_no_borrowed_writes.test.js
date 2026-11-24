@@ -76,7 +76,7 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
   // The module calls the compact tools: a call is (tool, selector value in `action`, `type` or `by`),
   // and the stub dispatches, throws and drifts on that `tool/selector` key.
   const callTool = async (tool, args) => {
-    const name = `${tool}/${args.action ?? args.type ?? args.by ?? ''}`;
+    const name = `${tool}/${args.action ?? args.type ?? args.by ?? args.topic ?? ''}`;
     if (name === throwOn) throw new Error(`stub: ${name} failed`);
     // Simulates a write that lands on the pre-existing category through a path the writes log
     // does not see (another tool, a server-side side effect): only the drift check can catch it.
@@ -142,6 +142,18 @@ function makeBudget({ preExisting, throwOn = null, driftOn = null }) {
         cell(args.month, args.to_category_id).budgeted += args.amount;
         return { success: true };
       }
+      case 'get_context/preferences':
+        return { preferences: {} };
+      case 'manage_budget_months/apply_templates':
+        // Goal templates are off in this budget (no flag above), so every call is refused, as the
+        // adapter does, and nothing is written. A whole-month apply would touch every category.
+        throw new Error('Budget templates are turned off for this budget. Enable them in Actual under Settings > Experimental features > Goal templates, then try again. Nothing was changed.');
+      case 'manage_budget_months/run_cleanup':
+        throw new Error('Budget templates are turned off for this budget. Enable them in Actual under Settings > Experimental features > Goal templates, then try again. Nothing was changed.');
+      case 'manage_categories/set_automations':
+        // Automations are off in this budget too; a schedule item without scheduleId is a schema refusal.
+        if (args.automations?.some((a) => a.type === 'schedule' && !a.scheduleId)) throw new Error('scheduleId is required for a schedule automation');
+        throw new Error('Budget templates are turned off for this budget. Enable them in Actual under Settings > Experimental features > Goal templates, then try again. Nothing was changed.');
       case 'manage_budget_months/set_amount_batch':
         if (args.operations.some(o => !/^\d{4}-\d{2}$/.test(o.month))) throw new Error('month must be YYYY-MM');
         for (const o of args.operations) setAmount(o.month, o.categoryId, o.amount);

@@ -412,6 +412,73 @@ export async function budgetTests(client, context) {
       }
     }
 
+    // Budget templates. Only the single-category form runs on the positive path, and only on this
+    // module's own category (it has no template note, so no amount is set): a whole-month apply
+    // on a templates-enabled budget would change categories this module does not own.
+    console.log("\nTesting apply_templates...");
+    {
+      const prefsRes = await callTool("get_context", { topic: "preferences" });
+      const enabled = (prefsRes?.result || prefsRes)?.preferences?.["flags.goalTemplatesEnabled"] === "true";
+      if (enabled) {
+        const res = await callTool("manage_budget_months", { action: "apply_templates", month: currentDate, category_id: budgetCatId });
+        const r = res?.result || res;
+        if (r?.success === true && r?.applied === 0) console.log("  ✓ apply_templates on a category with no template applies nothing");
+        else fail(`apply_templates: expected { success: true, applied: 0 }, got ${JSON.stringify(r)}`);
+      } else {
+        let refused = null;
+        try { await callTool("manage_budget_months", { action: "apply_templates", month: currentDate }); } catch (err) { refused = err; }
+        if (refused && /Settings > Experimental features/.test(refused.message)) console.log("  ✓ apply_templates refused: goal templates are off, and the error says where to turn them on");
+        else fail(`apply_templates with templates off: expected a refusal naming Settings > Experimental features, got ${refused ? refused.message : 'success'}`);
+      }
+      let bad = null;
+      try { await callTool("manage_budget_months", { action: "apply_templates", month: currentDate, category_id: "00000000-0000-4000-8000-0000000000ff" }); } catch (err) { bad = err; }
+      if (bad && (enabled ? /not found/i.test(bad.message) : /turned off/.test(bad.message))) console.log("  ✓ apply_templates with an unknown category is refused");
+      else fail(`apply_templates with an unknown category: expected a refusal, got ${bad ? bad.message : 'success'}`);
+    }
+
+    // Budget automations, on this module's own category only. Saved and then cleared, so the
+    // category's budget amounts are never touched.
+    console.log("\nTesting set_automations...");
+    {
+      const prefsRes = await callTool("get_context", { topic: "preferences" });
+      const p = (prefsRes?.result || prefsRes)?.preferences ?? {};
+      const enabled = p["flags.goalTemplatesEnabled"] === "true" && p["flags.goalTemplatesUIEnabled"] === "true";
+      if (enabled) {
+        const res = await callTool("manage_categories", { action: "set_automations", id: budgetCatId, automations: [{ type: "fixed", amount: 2500 }] });
+        const r = res?.result || res;
+        if (r?.success === true && r?.count === 1) console.log("  ✓ set_automations saved one automation");
+        else fail(`set_automations: expected { success: true, count: 1 }, got ${JSON.stringify(r)}`);
+        const withCleanup = await callTool("manage_categories", { action: "set_automations", id: budgetCatId, cleanup: ["source"] });
+        if ((withCleanup?.result || withCleanup)?.cleanup === 1) console.log("  ✓ set_automations set a cleanup and kept the automation");
+        else fail(`set_automations cleanup: expected cleanup 1, got ${JSON.stringify(withCleanup)}`);
+        const cleared = await callTool("manage_categories", { action: "set_automations", id: budgetCatId, automations: [], replace: true, cleanup: [] });
+        if ((cleared?.result || cleared)?.count === 0) console.log("  ✓ set_automations replace with [] cleared them");
+        else fail(`set_automations replace []: expected count 0, got ${JSON.stringify(cleared)}`);
+      } else {
+        let refused = null;
+        try { await callTool("manage_categories", { action: "set_automations", id: budgetCatId, automations: [] }); } catch (err) { refused = err; }
+        if (refused && /Settings > Experimental features/.test(refused.message)) console.log("  ✓ set_automations refused: automations are off, and the error says where to turn them on");
+        else fail(`set_automations with automations off: expected a refusal naming Settings > Experimental features, got ${refused ? refused.message : 'success'}`);
+      }
+      let bad = null;
+      try { await callTool("manage_categories", { action: "set_automations", id: budgetCatId, automations: [{ type: "schedule" }] }); } catch (err) { bad = err; }
+      if (bad && /scheduleId is required/.test(bad.message)) console.log("  ✓ set_automations refuses a schedule automation without scheduleId");
+      else fail(`set_automations without scheduleId: expected a refusal, got ${bad ? bad.message : 'success'}`);
+    }
+
+    // End of month cleanup moves money across the whole budget, so only refusals that write nothing
+    // run here: the flag refusal, or a month outside the budget.
+    console.log("\nTesting run_cleanup (refusals only)...");
+    {
+      const prefsRes = await callTool("get_context", { topic: "preferences" });
+      const on = (prefsRes?.result || prefsRes)?.preferences?.["flags.goalTemplatesEnabled"] === "true";
+      let refused = null;
+      try { await callTool("manage_budget_months", { action: "run_cleanup", month: "2000-01" }); } catch (err) { refused = err; }
+      const re = on ? /outside this budget's range/ : /Settings > Experimental features/;
+      if (refused && re.test(refused.message)) console.log("  ✓ run_cleanup refused without writing");
+      else fail(`run_cleanup 2000-01: expected a refusal matching ${re}, got ${refused ? refused.message : 'success'}`);
+    }
+
     // Transfer between categories
     console.log("\nTesting budget transfer...");
     // Both ids come from creates above; a failed create throws before this point, so there is

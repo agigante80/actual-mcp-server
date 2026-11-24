@@ -35,6 +35,7 @@ const start = CommonSchemas.date.describe('First date, YYYY-MM-DD (default today
 const end = CommonSchemas.date.describe('Last date, YYYY-MM-DD, inclusive. Needs schedule_id.');
 const count = z.number().int().min(1).max(SCHEDULE_DATES_CAP).describe(`How many dates to return, 1 to ${SCHEDULE_DATES_CAP}. Needs schedule_id.`);
 const id = z.string().min(1).describe('Required for type note: an account, category, category group or payee UUID, or budget-YYYY-MM.');
+const categoryId = CommonSchemas.categoryId.describe('Required for type category_automations.');
 const scope = z
   .enum(['configured', 'server'])
   .describe('For budget_file only. configured (default): ' +
@@ -70,23 +71,25 @@ export const listEntities: CompactToolSpec = {
   summary: 'List or look up accounts, categories, payees, rules, schedules, tags, notes or budget files, and resolve a name to an id.',
   examplePrompt: 'List my payees whose name contains Market.',
   description:
-    'List, search or look up budget entities of one `type`: account, account_group, category, category_group, payee, tag, rule, schedule, note or budget_file. For the whole budget structure, server details or preferences in one call use get_context instead.\n' +
-    'With only type it lists every entity of that type. A field the type does not take is refused naming the field.\n' +
-    'account, category, payee: query (string or array) with match_type and limit to search by name, or name to resolve one exact name to its id, refused with the candidate ids when several share it.\n' +
+    'List, search or look up one entity type. For budget structure, server details or preferences use get_context.\n' +
+    'Without filters, lists the type. Inapplicable fields are refused by name.\n' +
+    'account, category, payee: query searches names; name resolves an exact match, refused with the candidate ids when several share it.\n' +
     'payee: also sort frequency (the 10 most used payees of the last 12 weeks; a transfer payee can appear, with transfer_acct null).\n' +
     'schedule: name to resolve its id, or schedule_id with start, end and count (default and maximum 366) to list the dates it falls on.\n' +
     'rule: payee_id to list that payee\'s rules.\n' +
     'tag: the tag list (colour, description); tags used only in notes are not listed.\n' +
     'note: requires id (an entity UUID or budget-YYYY-MM).\n' +
-    'budget_file: scope configured (default; active true marks this session\'s budget) or server.\n' +
-    'query and name are mutually exclusive, as are schedule_id and name; match_type and limit need query; start, end and count need schedule_id; sort allows no other field.\n' +
-    'Returns the list for the type; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
+    'category_automations: requires category_id; reads saved automations and cleanup or note directives, even with Goal templates off.\n' +
+    'budget_file: active true marks this session\'s budget.\n' +
+    'name excludes query and schedule_id; sort must be used alone.\n' +
+    'Returns a list for account_group, category_group, and other unfiltered types; a query returns { matches, count, total, truncated }, a name returns the id, a schedule_id returns { schedule_id, name, dates, count, truncated }, and a note returns { found, id, note }.',
   selector: 'type',
   actions: new Map<string, CompactActionRow>([
     ['account', row('actual_accounts_list', [searchRoute('accounts'), nameRoute('accounts')])],
     ['account_group', row('actual_account_groups_list')],
     ['category', row('actual_categories_get', [searchRoute('categories'), nameRoute('categories')])],
     ['category_group', row('actual_category_groups_get')],
+    ['category_automations', { legacy: 'actual_categories_get_automations', fields: z.object({ category_id: categoryId }), rename: { category_id: 'categoryId' } }],
     ['payee', row('actual_payees_get', [
       searchRoute('payees'),
       nameRoute('payees'),

@@ -69,6 +69,13 @@ for (const [type, legacy] of Object.entries(DEFAULTS)) {
 }
 await check('type note with id calls actual_notes_get with the id', () => expectCall({ type: 'note', id: U }, 'actual_notes_get', { id: U }));
 await check('type note with a budget month id', () => expectCall({ type: 'note', id: 'budget-1970-01' }, 'actual_notes_get', { id: 'budget-1970-01' }));
+await check('type category_automations maps category_id to the legacy categoryId', () =>
+  expectCall({ type: 'category_automations', category_id: U }, 'actual_categories_get_automations', { categoryId: U }));
+await check('NEGATIVE: category_automations requires a category UUID and accepts no note id', async () => {
+  await refused({ type: 'category_automations' }, /category_id: required for type: category_automations/);
+  await refused({ type: 'category_automations', category_id: 'bad' }, /Invalid category ID/i);
+  await refused({ type: 'category_automations', category_id: U, id: U }, /id.*not valid for type: category_automations/);
+});
 
 // ---- routes ----
 
@@ -166,7 +173,7 @@ await check('published schema: no oneOf/anyOf outside the query union, no output
   assert.deepStrictEqual(js.required, ['type']);
 });
 await check('description: no Read-only restatement, Returns, every type, the sibling tool, no legacy name', () => {
-  for (const w of ['Returns', 'get_context', ...Object.keys(DEFAULTS), 'note']) assert.ok(spec.description.includes(w), w);
+  for (const w of ['Returns', 'get_context', ...Object.keys(DEFAULTS), 'note', 'category_automations']) assert.ok(spec.description.includes(w), w);
   assert.ok(!spec.description.includes('Read-only'), 'the readOnlyHint annotation is not restated (#713)');
   assert.ok(!/actual_/.test(spec.description));
 });
@@ -176,7 +183,7 @@ await check('annotations: read-only, and no row or route target is write-capable
 });
 await check('compactLegacyNames covers every default and route target of the shipped tool', () => {
   const names = compactLegacyNames(spec);
-  for (const n of [...Object.values(DEFAULTS), 'actual_notes_get', 'actual_entities_search', 'actual_get_id_by_name', 'actual_payees_common_list', 'actual_payee_rules_get', 'actual_schedules_dates', 'actual_budgets_get_all']) assert.ok(names.includes(n), n);
+  for (const n of [...Object.values(DEFAULTS), 'actual_notes_get', 'actual_categories_get_automations', 'actual_entities_search', 'actual_get_id_by_name', 'actual_payees_common_list', 'actual_payee_rules_get', 'actual_schedules_dates', 'actual_budgets_get_all']) assert.ok(names.includes(n), n);
 });
 
 // ---- 4b rewrite ----

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
-import { asFields, atLeastOne, needs, strict } from '../refine.js';
+import { AutomationSchema, CleanupSchema } from '../../lib/schemas/automations.js';
+import { asFields, atLeastOne, issue, needs, strict } from '../refine.js';
 import type { CompactActionRow, CompactRoute, CompactToolSpec } from '../types.js';
 
 /**
@@ -12,7 +13,7 @@ import type { CompactActionRow, CompactRoute, CompactToolSpec } from '../types.j
  * (entity category_group); update -> actual_categories_update, or actual_category_groups_update;
  * delete -> actual_categories_delete, or actual_category_groups_delete; set_note ->
  * actual_notes_update (shared with the other manage_* tools, allowed in the parity test only
- * from the action set_note).
+ * from the action set_note); set_automations -> actual_categories_set_automations.
  *
  * WRITE tool: `nullAsAbsent` is NOT set. `entity` is consumed here and never forwarded.
  * `hidden` exists only for a category group on create (the legacy category tool has none);
@@ -27,6 +28,9 @@ const groupId = z.string().optional().describe('Category group id.');
 const isIncome = z.boolean().optional().describe('Income flag; default expense (a category: its group\'s).');
 const hidden = z.boolean().optional().describe('Hidden flag.');
 const note = z.string().optional().describe('Note text; "" clears it.');
+const automations = z.array(z.object({ type: z.string() }).loose()).optional().describe('set_automations: 0 to 20 items {type, ...} with camelCase keys.');
+const replace = z.boolean().optional().describe('set_automations: drop the existing automations.');
+const cleanup = z.array(z.string()).optional().describe('set_automations: #cleanup lines without the prefix ("source", "sink 2", "<pool> source", "<pool>").');
 
 const CATEGORY_REAL: Readonly<Record<string, z.ZodType>> = {
   id: CommonSchemas.categoryId,
@@ -82,6 +86,14 @@ const noteFields = asFields(
   }),
 );
 
+const automationFields = asFields(
+  z.object({ id, automations, replace, cleanup }).superRefine((value, ctx) => {
+    needs('set_automations', ctx, value as V, ['id']);
+    strict(ctx, value as V, { ...CATEGORY_REAL, automations: z.array(AutomationSchema).max(20), cleanup: CleanupSchema });
+    if (value.automations === undefined && value.cleanup === undefined) issue(ctx, 'automations', 'give automations, cleanup or both for action: set_automations');
+  }),
+);
+
 const groupRoute = (legacy: string, fields: CompactActionRow['fields']): CompactRoute => ({
   triggers: ['entity'],
   when: (call) => call.entity === 'category_group',
@@ -105,13 +117,15 @@ export const manageCategories: CompactToolSpec = {
     'create: entity, name; a category also needs group_id (an unknown group is refused as not found) and takes is_income from that group (a different is_income is refused); a category_group may set is_income (true is refused when the budget already has an income group) and hidden. ' +
     'update: entity, id and at least one of name, group_id (category only; an unknown group is refused), is_income, hidden; is_income must match the group, so moving a category to a group with the other is_income needs both; prefer hidden true over delete to retire a category. ' +
     'delete: entity, id; DESTRUCTIVE, cannot be undone: a category is removed and its transactions are not moved (recategorize them first); deleting a group ALSO deletes every category in it (move them out first with update group_id). ' +
+    'set_automations: id, automations?, replace?, cleanup?; adds automations as Actual\'s automation editor saves them, keeping the existing ones (note #template lines are imported first; the note is unchanged and no longer read); replace drops them, replace with [] clears; not idempotent; each item needs only type (fixed, refill, percentage, schedule needs scheduleId, average, copy, by, remainder, limit, goal), other fields take the editor defaults (priority 1), amounts in cents; cleanup (#cleanup lines) replaces the end of month cleanup ([] clears, pools are created by name); needs goal templates and Budget automations UI on. ' +
     'set_note: id (a category or category group UUID), note ("" clears); not budget-YYYY-MM; an account note goes through manage_accounts and a payee note through manage_payees. ' +
-    'Returns { success, categoryId, message } (create category), { id, success } (create group), { success } (update, delete), { result: { success, id, note, cleared } } (set_note).',
+    'Returns { success, categoryId, message } (create category), { id, success } (create group), { success } (update, delete), { result: { success, id, note, cleared } } (set_note), { result: { success, categoryId, imported, count, cleanup? } } (set_automations).',
   selector: 'action',
   actions: new Map<string, CompactActionRow>([
     ['create', { legacy: 'actual_categories_create', fields: createFields, drop: ['entity'], routes: [groupRoute('actual_category_groups_create', createGroupFields)] }],
     ['update', { legacy: 'actual_categories_update', fields: updateFields, drop: ['entity'], wrap: wrapped, routes: [groupWrapped('actual_category_groups_update', updateGroupFields)] }],
     ['delete', { legacy: 'actual_categories_delete', fields: deleteFields, drop: ['entity'], routes: [groupRoute('actual_category_groups_delete', deleteGroupFields)] }],
+    ['set_automations', { legacy: 'actual_categories_set_automations', fields: automationFields, rename: { id: 'categoryId' } }],
     ['set_note', { legacy: 'actual_notes_update', fields: noteFields }],
   ]),
 };
