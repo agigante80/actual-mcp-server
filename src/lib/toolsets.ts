@@ -148,13 +148,21 @@ export const TOOLSET_NAMES = Object.keys(TOOLSETS) as ToolsetName[];
  * name is. Presets are exempt from the one-group-per-tool rule.
  *
  * `chat` is seeded from a real day-to-day chat-assistant flow (#477): bootstrap, one read
- * path, the batch writes, and the few single writes a chat assistant needs. It is 12 tools
- * where the full surface is 83, roughly a 76% cut in tools/list bytes.
+ * path, the batch writes, and the few single writes a chat assistant needs. It is 16 tools
+ * where the full surface is 85, roughly a 77% cut in tools/list bytes (29,201 of 126,533 on the legacy surface).
  *
  * actual_budgets_get_month is in it on purpose (decision recorded on #483): budget_updates_batch
  * and budgets_set_amount tell the model to read a month back with it, and query_run has no
- * budget-month table to stand in. actual_budgets_get_months is NOT in it: the out-of-range
- * refusal from setAmount and the batch already states the budget's first and last month.
+ * budget-month table to stand in.
+ *
+ * #770 reversed the #483 decision to leave actual_budgets_get_months out (the out-of-range
+ * refusal states the range). The compact list_budget_months default action is the bare `list`,
+ * which is that tool and has no such refusal to fall back on, so a published tool whose
+ * no-argument form is refused is worse than 16 bytes of preset. The same reasoning added the
+ * three read-only topics of get_context (server_info, server_get_version, preferences_get):
+ * `chat` agrees with every compact action it publishes for the cheap read-only first calls.
+ * Writers stay out; an action whose legacy tool is not selected is left out of the compact
+ * tool's published selector, fields and description instead (src/compact/dispatch.ts).
  * tests/unit/toolsets.test.js scans every member's description and input schema for
  * references to tools the preset hides, and each such reference must name a published
  * substitute there, so a preset cannot quietly point the model at a tool it cannot call.
@@ -173,6 +181,10 @@ export const PRESETS = {
     'actual_budgets_transfer',
     'actual_budgets_set_amount',
     'actual_budgets_get_month',
+    'actual_budgets_get_months',
+    'actual_server_info',
+    'actual_server_get_version',
+    'actual_preferences_get',
   ],
 } as const satisfies Record<string, readonly string[]>;
 
@@ -539,9 +551,23 @@ export function readOnlyError(policy: PublishedPolicy, tool: string): ToolUnavai
  * `all`) is still refused naming that setting, exactly as a direct call is. Fails closed:
  * a missing hide reason counts as MCP_TOOLSETS, and the bypass needs the `compact` surface.
  */
-export function operationUnavailableError(policy: PublishedPolicy, tool: string): ToolUnavailableError | undefined {
+export function operationUnavailableError(
+  policy: PublishedPolicy,
+  tool: string,
+  /** Set when a compact action is the caller (#770): the refusal then says the ACTION is not enabled. */
+  via?: { tool: string; action: string },
+): ToolUnavailableError | undefined {
   if (policy.published.includes(tool)) return undefined;
   const reason = policy.hidden.get(tool) ?? 'MCP_TOOLSETS';
   if (reason === 'MCP_TOOL_SURFACE' && policy.settings?.surface === 'compact') return undefined;
-  return new ToolUnavailableError(tool, reason, policy.settings?.surface);
+  return new ToolUnavailableError(tool, reason, policy.settings?.surface, via ? 'action' : 'tool');
+}
+
+/**
+ * Whether a compact action may call this legacy tool (#770): the same two checks callOperation
+ * makes, so what a compact tool advertises is exactly what it will not refuse. It reads the
+ * policy only, never an annotation.
+ */
+export function isOperationPublished(policy: PublishedPolicy, tool: string): boolean {
+  return readOnlyError(policy, tool) === undefined && operationUnavailableError(policy, tool) === undefined;
 }

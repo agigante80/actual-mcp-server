@@ -25,7 +25,7 @@ Talk to your [Actual Budget](https://actualbudget.org/) in plain language: ask w
 
 **Ask it to change things (it confirms first):** "Which uncategorised transactions look like my usual groceries? Categorise them after I confirm.", "Add a $47.50 grocery transaction at Whole Foods to my checking account.", "Move $200 from Dining Out to Emergency Fund for this month."
 
-**Works with:** [Claude Desktop](docs/guides/clients/claude-desktop.md), [Claude Code](docs/guides/clients/claude-code.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md) and [Codex CLI](docs/guides/clients/codex.md) on your own machine, and chat UIs such as [LibreChat](docs/guides/clients/librechat.md) and [LobeChat](docs/guides/clients/lobechat.md) against a server you run in Docker (also on [Unraid](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg) and in the official [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.agigante80/actual-mcp-server`). It needs a client with MCP support: a hosted assistant that cannot reach your machine or private network cannot use it. Every client page: [docs/guides/clients/](docs/guides/clients/README.md).
+**Works with:** [Claude Desktop](docs/guides/clients/claude-desktop.md), [Claude Code](docs/guides/clients/claude-code.md), [Cursor](docs/guides/clients/cursor.md), [VS Code with Copilot](docs/guides/clients/vscode-copilot.md), [Gemini CLI](docs/guides/clients/gemini-cli.md) and [Codex CLI](docs/guides/clients/codex.md) on your own machine, and chat UIs such as [LibreChat](docs/guides/clients/librechat.md) and [LobeChat](docs/guides/clients/lobechat.md) against a server you run in Docker (also on [Unraid](https://ca.unraid.net/apps/actual-mcp-server-0bghkvs0c7c8bg) and in the official [MCP Registry](https://registry.modelcontextprotocol.io/) as `io.github.agigante80/actual-mcp-server`). It needs a client with MCP support: a hosted assistant that cannot reach your machine or private network cannot use it.
 
 ## Quick start
 
@@ -198,7 +198,7 @@ By default the server serves 15 tools over 85 operations (the compact surface, `
 
 On the default compact surface the `chat` preset publishes 6 tools: `get_context`, `list_budget_months`, `run_query`, `manage_transactions`, `manage_rules` and `manage_budget_months`.
 
-With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 12 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount` and `actual_budgets_get_month`.
+With `MCP_TOOL_SURFACE=legacy` the `chat` preset publishes 16 tools: `actual_get_context`, `actual_query_run`, `actual_transactions_update_batch`, `actual_budget_updates_batch`, `actual_rules_create_batch`, `actual_transactions_create`, `actual_transactions_update`, `actual_transactions_delete`, `actual_rules_create`, `actual_budgets_transfer`, `actual_budgets_set_amount`, `actual_budgets_get_month`, `actual_budgets_get_months`, `actual_server_info`, `actual_server_get_version` and `actual_preferences_get`.
 
 `MCP_READ_ONLY=true` publishes 6 compact tools (`get_context`, `list_entities`, `search_transactions`, `summarize_transactions`, `list_budget_months` and `run_query`); every tool that can write is hidden whole. With `MCP_TOOL_SURFACE=legacy` it hides and refuses 48 write-capable tools and leaves 37 published.
 <!-- END GENERATED: tools-summary -->
@@ -210,10 +210,10 @@ How large the `tools/list` response is for each choice, so you can pick for a sm
 | Configuration | Tools | `tools/list` bytes | KiB |
 |---------------|-------|--------------------|-----|
 | Compact surface (default) | 15 | 44852 | 43.8 |
-| Compact, `MCP_TOOLSETS=chat` | 6 | 18147 | 17.7 |
-| Compact, `MCP_READ_ONLY=true` | 6 | 18261 | 17.8 |
+| Compact, `MCP_TOOLSETS=chat` | 6 | 14697 | 14.4 |
+| Compact, `MCP_READ_ONLY=true` | 6 | 18207 | 17.8 |
 | `MCP_TOOL_SURFACE=legacy` | 85 | 127058 | 124.1 |
-| Legacy, `MCP_TOOLSETS=chat` | 12 | 26575 | 26.0 |
+| Legacy, `MCP_TOOLSETS=chat` | 16 | 29236 | 28.6 |
 | Legacy, `MCP_READ_ONLY=true` | 37 | 46242 | 45.2 |
 
 Measured offline, as the server builds the list (the bytes of the `tools/list` result, not an estimate); reproduce with `node scripts/measure-tools-list-size.mjs`.

@@ -86,6 +86,18 @@ export const COMPACT_DOMAINS = [
 
 export type CompactDomain = (typeof COMPACT_DOMAINS)[number];
 
+/**
+ * What a description may mention (#770): which of ITS OWN actions are published and which compact
+ * tools the same tools/list carries. Under the full surface both answers are always yes.
+ */
+export interface DescriptionContext {
+  hasAction(action: string): boolean;
+  hasTool(tool: string): boolean;
+}
+
+/** The context of the unfiltered surface: every action and every sibling tool is published. */
+export const FULL_SURFACE: DescriptionContext = { hasAction: () => true, hasTool: () => true };
+
 /** A compact tool: one published name, many actions. */
 export interface CompactToolSpec {
   /** Published name, `actual_<domain>` style; must not collide with a legacy tool name. */
@@ -97,6 +109,14 @@ export interface CompactToolSpec {
   /** Docs only (#668): one example user prompt for the README. Fictional values only. Never published in tools/list. */
   examplePrompt: string;
   description: string;
+  /**
+   * Builds the description for a narrowed surface (#770): leave out the clause of an action that
+   * is not published and the name of a sibling tool that is not in the same tools/list. Declare
+   * it for a tool whose text names either; then `description` is `describeFor(FULL_SURFACE)`, so
+   * the full surface keeps today's text and the two cannot drift. A tool without it publishes
+   * `description` unchanged.
+   */
+  describeFor?: (ctx: DescriptionContext) => string;
   /**
    * The argument that picks the action. Defaults to `action`. `null` means the tool has no
    * selector (#674): one action, which must be `defaultAction`; no selector property is
@@ -113,4 +133,11 @@ export interface CompactToolSpec {
   nullAsAbsent?: boolean;
   /** Action name to row. A Map, so `__proto__` or `constructor` can never name an action. */
   actions: ReadonlyMap<string, CompactActionRow>;
+}
+
+/** "a, b and c" (or "a, b, and c" with `oxford`), for descriptions that name only the published parts. */
+export function joinAnd(parts: readonly string[], oxford = false): string {
+  if (parts.length <= 1) return parts.join('');
+  if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+  return `${parts.slice(0, -1).join(', ')}${oxford ? ',' : ''} and ${parts[parts.length - 1]}`;
 }

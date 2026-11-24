@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ToolUnavailableError } from '../lib/errors.js';
 import type { ToolDefinitionWithOutput } from '../lib/tool-output.js';
 import type { CompactActionRow, CompactOperations, CompactTarget, CompactToolSpec } from './types.js';
 
@@ -7,15 +8,17 @@ const selectorOf = (spec: CompactToolSpec): string => spec.selector ?? 'action';
 /** A tool declared `selector: null` has one action and publishes no selector property (#674). */
 const hasSelector = (spec: CompactToolSpec): boolean => spec.selector !== null;
 
-function unknownActionError(selector: string, spec: CompactToolSpec, got: unknown): z.ZodError {
+/** The wording Zod gives a bad enum value, so a narrowed list reads like the default one. */
+const expectedOneOf = (names: readonly string[]): string => `Invalid option: expected one of ${names.map((a) => `"${a}"`).join('|')}`;
+
+function unknownActionError(selector: string, spec: CompactToolSpec, got: unknown, listed?: readonly string[]): z.ZodError {
+  const names = listed ?? [...spec.actions.keys()];
   return new z.ZodError([
     {
       code: 'invalid_value',
-      values: [...spec.actions.keys()],
+      values: [...names],
       path: [selector],
-      message: `Invalid option: expected one of ${[...spec.actions.keys()].map((a) => `"${a}"`).join('|')}${
-        typeof got === 'string' ? `, got "${got}"` : ''
-      }`,
+      message: `${expectedOneOf(names)}${typeof got === 'string' ? `, got "${got}"` : ''}`,
     },
   ]);
 }
@@ -59,9 +62,9 @@ const rowKeys = (row: CompactActionRow): Set<string> =>
 const customIssue = (key: string, message: string): z.core.$ZodIssue => ({ code: 'custom', path: [key], message });
 
 /** The message for a key the chosen target does not accept, naming the actions that do. */
-function notValidMessage(spec: CompactToolSpec, selector: string, chosen: string, row: CompactActionRow, key: string): string {
+function notValidMessage(spec: CompactToolSpec, selector: string, chosen: string, row: CompactActionRow, key: string, listed?: readonly string[]): string {
   if (!hasSelector(spec)) return rowKeys(row).has(key) ? 'cannot be used with the other fields given' : `not accepted by ${spec.name}`;
-  const owners = [...spec.actions].filter(([, r]) => rowKeys(r).has(key)).map(([name]) => name);
+  const owners = [...spec.actions].filter(([name, r]) => rowKeys(r).has(key) && (listed === undefined || listed.includes(name))).map(([name]) => name);
   if (rowKeys(row).has(key)) return `cannot be used with the other fields given for ${selector}: ${chosen}`;
   return owners.length > 0
     ? `not valid for ${selector}: ${chosen}; valid only for ${selector}: ${owners.join(', ')}`
@@ -79,13 +82,13 @@ interface CallPlan {
  * bad selector, two routes at once, a key the target does not accept, or a bad value. Nothing
  * here reaches a legacy tool, so every refusal is made before any call.
  */
-function planCall(spec: CompactToolSpec, input: unknown): CallPlan {
+function planCall(spec: CompactToolSpec, input: unknown, listed?: readonly string[]): CallPlan {
   const selector = selectorOf(spec);
   const record = input && typeof input === 'object' ? { ...(input as Record<string, unknown>) } : {};
   const chosen = hasSelector(spec) ? (record[selector] ?? spec.defaultAction) : spec.defaultAction;
   if (hasSelector(spec)) delete record[selector];
   const row = typeof chosen === 'string' ? spec.actions.get(chosen) : undefined;
-  if (!row || typeof chosen !== 'string') throw unknownActionError(selector, spec, chosen);
+  if (!row || typeof chosen !== 'string') throw unknownActionError(selector, spec, chosen, listed);
 
   const hits = (row.routes ?? []).filter(
     (r) => r.triggers.some((t) => record[t] !== undefined) && (r.when?.(record) ?? true),
@@ -116,7 +119,7 @@ function planCall(spec: CompactToolSpec, input: unknown): CallPlan {
       ...(result.success ? [] : result.error.issues).filter((issue) => !missing.includes(String(issue.path[0]))).flatMap(
         (issue): z.core.$ZodIssue[] =>
           issue.code === 'unrecognized_keys'
-            ? issue.keys.map((key) => customIssue(key, notValidMessage(spec, selector, chosen, row, key)))
+            ? issue.keys.map((key) => customIssue(key, notValidMessage(spec, selector, chosen, row, key, listed)))
             : [issue],
       ),
     ];
@@ -239,22 +242,65 @@ function rewriteResult(result: unknown, table: ReadonlyMap<string, string>, fiel
  * `ops`, return its value with legacy names rewritten (4b). A bad call is a ZodError,
  * formatted like any tool's (#206). `names` is the table for ALL compact tools, so an error
  * naming a tool of a sibling compact tool is translated too; it defaults to this spec's own.
+ * `listed` (#770) is the actions this server publishes for the tool: a bad selector value
+ * names only those, and an action the policy refuses lists them as the enabled ones. It never
+ * widens or narrows what is CALLABLE, which callOperation alone decides.
  */
 export async function dispatchCompact(
   ops: CompactOperations,
   spec: CompactToolSpec,
   input: unknown,
   names: ReadonlyMap<string, string> = legacyPhrases([spec]),
+  listed?: readonly string[],
 ): Promise<unknown> {
-  const { chosen, target, parsed } = planCall(spec, input);
+  const { chosen, target, parsed } = planCall(spec, input, listed);
   const fields = fieldPhrases(target.rename);
   try {
     const result = await ops.callOperation(target.legacy, shapeArgs(target, parsed), { tool: spec.name, action: chosen });
     return rewriteResult(result, names, fields);
   } catch (err) {
     rewriteError(err, names, fields);
+    if (err instanceof ToolUnavailableError && err.scope === 'action' && hasSelector(spec) && listed && listed.length > 0) {
+      err.message = `${err.message} Enabled actions: ${listed.join(', ')}.`;
+    }
     throw err;
   }
+}
+
+/** What the server publishes around a compact tool (#770): its callable legacy tools and its sibling compact tools. */
+export interface CompactAvailability {
+  /** True when an action may call this legacy tool: not hidden by MCP_TOOLSETS, not refused by MCP_READ_ONLY. */
+  isAvailable(legacy: string): boolean;
+  /** The compact tools in the same tools/list. */
+  tools: ReadonlySet<string>;
+}
+
+/**
+ * The actions of `spec` that a call can reach (#770): a row stays when its default legacy tool or
+ * any route target is available, and a route whose target is not is dropped from the row. When
+ * nothing is available the whole table is returned: a published tool never has an empty selector
+ * (that only happens under the `all` surface, where MCP_TOOLSETS never hides a compact tool).
+ */
+export function availableActions(spec: CompactToolSpec, isAvailable: (legacy: string) => boolean): ReadonlyMap<string, CompactActionRow> {
+  const out = new Map<string, CompactActionRow>();
+  for (const [name, row] of spec.actions) {
+    const routes = (row.routes ?? []).filter((r) => isAvailable(r.legacy));
+    if (!isAvailable(row.legacy) && routes.length === 0) continue;
+    out.set(name, routes.length === (row.routes ?? []).length ? row : { ...row, routes });
+  }
+  return out.size > 0 ? out : spec.actions;
+}
+
+/** The spec as this server publishes it: the available actions and the description built for them. */
+function narrowSpec(spec: CompactToolSpec, published: CompactAvailability): CompactToolSpec {
+  const actions = availableActions(spec, published.isAvailable);
+  const ctx = { hasAction: (a: string) => actions.has(a), hasTool: (t: string) => published.tools.has(t) };
+  return {
+    ...spec,
+    actions,
+    defaultAction: spec.defaultAction !== undefined && actions.has(spec.defaultAction) ? spec.defaultAction : undefined,
+    description: spec.describeFor ? spec.describeFor(ctx) : spec.description,
+  };
 }
 
 /** Every key the spec declares, with the schema of its first declaration (see compactInputSchema). */
@@ -276,7 +322,7 @@ const stripOptional = (schema: z.ZodType): z.ZodType => (schema instanceof z.Zod
  * (required there) and `x.optional()` in another count as the same object and the key stays
  * typed and described (#676). The target schema still decides.
  */
-function compactInputSchema(spec: CompactToolSpec): z.ZodType {
+function compactInputSchema(spec: CompactToolSpec, listed?: readonly string[]): z.ZodType {
   const selector = selectorOf(spec);
   const names = [...spec.actions.keys()] as [string, ...string[]];
   const withSelector = hasSelector(spec);
@@ -296,7 +342,9 @@ function compactInputSchema(spec: CompactToolSpec): z.ZodType {
     }
   }
   if (withSelector) {
-    const selectorSchema = z.enum(names);
+    // `listed` (#770): the schema still ACCEPTS every action, so a call to one the policy hides
+    // reaches callOperation and is refused naming MCP_TOOLSETS; only the wording of a bad value narrows.
+    const selectorSchema = listed ? z.enum(names, { error: () => expectedOneOf(listed) }) : z.enum(names);
     shape[selector] = spec.defaultAction === undefined ? selectorSchema : selectorSchema.optional();
   }
   return z
@@ -304,7 +352,7 @@ function compactInputSchema(spec: CompactToolSpec): z.ZodType {
     .strict()
     .superRefine((value, ctx) => {
       try {
-        planCall(spec, value);
+        planCall(spec, value, listed);
       } catch (err) {
         if (!(err instanceof z.ZodError)) throw err;
         // The flat shape already reported a field-level issue its own schema found; do not say it twice.
@@ -345,18 +393,25 @@ export function buildCompactTool(
   spec: CompactToolSpec,
   ops: CompactOperations,
   names?: ReadonlyMap<string, string>,
+  published?: CompactAvailability,
 ): ToolDefinitionWithOutput {
-  const inputSchema = compactInputSchema(spec);
+  // #770: with `published`, tools/list shows the narrowed spec (selector enum, fields, description) while
+  // `call` parses with the FULL one, so a hidden action is still refused by the policy, never by the schema.
+  const shown = published ? narrowSpec(spec, published) : spec;
+  const narrowed = shown.actions.size < spec.actions.size || [...shown.actions].some(([name, row]) => row !== spec.actions.get(name));
+  const listed = published && narrowed ? [...shown.actions.keys()] : undefined;
+  const inputSchema = compactInputSchema(shown);
+  const callSchema = listed ? compactInputSchema(spec, listed) : inputSchema;
   return {
     name: spec.name,
-    description: spec.description,
+    description: shown.description,
     inputSchema,
     call: async (args: unknown) => {
       const sent =
         spec.nullAsAbsent && args && typeof args === 'object' && !Array.isArray(args)
           ? Object.fromEntries(Object.entries(args).filter(([, value]) => value !== null))
           : (args ?? {});
-      return dispatchCompact(ops, spec, inputSchema.parse(sent), names);
+      return dispatchCompact(ops, spec, callSchema.parse(sent), names, listed);
     },
   };
 }
