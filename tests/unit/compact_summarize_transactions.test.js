@@ -164,6 +164,18 @@ await check('NEGATIVE: exclude_transfers named on another line is rejected', () 
   const problems = descriptionProblems(spec.description.replace('by_payee: ', 'by_payee: exclude_transfers, '));
   assert.ok(problems.includes('exclude_transfers must appear only on the grouped: line'), JSON.stringify(problems));
 });
+// #754: the sign convention differs per report, and so does the transfer rule.
+await check('description (#754): signed reports, positive reports and the transfer rule are stated', () => {
+  const d = spec.description;
+  assert.ok(/by_category, by_payee and balance are signed \(outflows negative\)/.test(d), 'signed reports');
+  assert.ok(/grouped, account_flow and recurring give outflows as positive amounts/.test(d), 'positive reports');
+  assert.ok(/by_category and by_payee include transfers/.test(d), 'by_category and by_payee include transfers');
+  assert.ok(/grouped leaves them out by default/.test(d), 'grouped leaves transfers out by default');
+  assert.ok(/account_flow keeps them apart/.test(d), 'account_flow keeps transfers apart');
+});
+await check('NEGATIVE (#754): the false blanket claim "integer cents, outflows negative" is gone', () => {
+  assert.ok(!/integer cents, outflows negative/.test(spec.description));
+});
 await check('annotations: read-only, and no row target is write-capable', () => {
   assert.strictEqual(annotationsFor('summarize_transactions').readOnlyHint, true);
   for (const n of compactLegacyNames(spec)) assert.ok(!WRITE_CAPABLE.has(n), n);

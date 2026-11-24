@@ -19,10 +19,10 @@ import type { CompactActionRow, CompactToolSpec } from '../types.js';
  * defaults are applied by the legacy tool.
  */
 
-const startDate = CommonSchemas.date.describe('First day, inclusive. Required for grouped and account_flow.').optional();
-const endDate = CommonSchemas.date.describe('Last day, inclusive. Required for grouped and account_flow.').optional();
-const accountId = z.string().min(1).describe('Account id from list_entities. Required for balance.').optional();
-const accountIds = z.array(z.string().min(1)).min(1).max(100).describe('Account ids from list_entities. Required for account_flow.').optional();
+const startDate = CommonSchemas.date.describe('First day, inclusive.').optional();
+const endDate = CommonSchemas.date.describe('Last day, inclusive.').optional();
+const accountId = z.string().min(1).describe('Account id from list_entities.').optional();
+const accountIds = z.array(z.string().min(1)).min(1).max(100).describe('Account ids from list_entities.').optional();
 const includeIncome = z.boolean().describe('true also counts income (default false).').optional();
 const limit = z.number().int().min(1).describe('Maximum payees (default 50).').optional();
 const groupBy = z
@@ -30,7 +30,7 @@ const groupBy = z
     z.enum(['month', 'category', 'category_group', 'payee', 'account']),
     z.array(z.enum(['month', 'category', 'category_group', 'payee', 'account'])).min(1).max(5),
   ])
-  .describe('One grouping, or an array of up to 5. Required for grouped.')
+  .describe('One grouping, or an array of up to 5.')
   .optional();
 const categoryIds = z.array(z.string().min(1)).min(1).max(100).describe('Only these category ids.').optional();
 const categoryGroupIds = z.array(z.string().min(1)).min(1).max(100).describe('Only these category group ids.').optional();
@@ -38,7 +38,7 @@ const payeeIds = z.array(z.string().min(1)).min(1).max(100).describe('Only these
 const excludeTransfers = z.boolean().describe('false keeps transfers (default true).').optional();
 const months = z.number().int().min(1).max(60).describe('Look back this many months, instead of start_date.').optional();
 const minOccurrences = z.number().int().min(2).max(100).describe('Fewest occurrences to count (default 3).').optional();
-const includeInactive = z.boolean().describe('true also lists series that have stopped (default false).').optional();
+const includeInactive = z.boolean().describe('true also lists stopped series (default false).').optional();
 const cutoff = CommonSchemas.date.describe('Balance as of this day (default now).').optional();
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -83,15 +83,15 @@ export const summarizeTransactions: CompactToolSpec = {
   summary: 'Total spending and income by category, payee, account or month, find recurring expenses and read account balances.',
   examplePrompt: 'How much did I spend on groceries each month this year?',
   description:
-    'Totals, not records: spending sums, grouped breakdowns, recurring expenses and account balance; pick one `report`. For individual transactions use search_transactions; for ids use list_entities; for budgeted versus spent use list_budget_months; for a custom query use run_query.\n' +
-    'A parameter the chosen `report` does not take is refused by name. Amounts are integer cents, outflows negative; dates YYYY-MM-DD.\n' +
+    'Totals, not records: spending sums, breakdowns, recurring expenses and balance; pick one `report`. For individual transactions use search_transactions; for ids use list_entities; for budgeted versus spent use list_budget_months; for a custom query use run_query.\n' +
+    'A parameter the chosen `report` does not take is refused by name. Amounts are integer cents; dates YYYY-MM-DD. by_category, by_payee and balance are signed (outflows negative); grouped, account_flow and recurring give outflows as positive amounts. by_category and by_payee include transfers; grouped leaves them out by default, account_flow keeps them apart.\n' +
     'by_category: start_date (default first day of the current month), end_date (default today), account_id, include_income.\n' +
-    'by_payee: start_date, end_date (same defaults), account_id, limit (default 50); largest spending first, limit keeps the top and totalAmount sums the returned rows.\n' +
+    'by_payee: start_date, end_date (same defaults), account_id, limit (default 50); largest spending first, limit keeps the top, totalAmount sums them.\n' +
     'grouped: requires start_date, end_date, group_by; optional account_ids, category_ids, category_group_ids, payee_ids, include_income, exclude_transfers (default true).\n' +
     'account_flow: requires start_date, end_date, account_ids.\n' +
     'recurring: start_date or months, account_ids, min_occurrences, include_inactive.\n' +
     'balance: requires account_id; optional cutoff date.\n' +
-    'Returns { summary: [{ categoryGroup, categoryName, totalAmount, transactionCount }], totalAmount, dateRange } for by_category; the same with payeeName for by_payee; aggregated groups with totals for grouped and account_flow; repeating payees for recurring; { balance, accountName } in cents for balance.',
+    'Returns { summary: [{ categoryGroup, categoryName, totalAmount, transactionCount }], totalAmount, dateRange } for by_category (payeeName for by_payee); groups with totals for grouped and account_flow; repeating payees for recurring; { balance, accountName } for balance.',
   selector: 'report',
   actions: new Map<string, CompactActionRow>([
     ['by_category', row('actual_transactions_summary_by_category', { start_date: startDate, end_date: endDate, account_id: accountId, include_income: includeIncome }, 'by_category')],
