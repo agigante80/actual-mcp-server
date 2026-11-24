@@ -1,4 +1,6 @@
+import { AsyncLocalStorage } from 'node:async_hooks';
 import config from '../config.js';
+import { createModuleLogger } from './loggerFactory.js';
 
 /**
  * Bound a single upstream Actual API call so a stall cannot hold the process-global
@@ -62,4 +64,74 @@ export function withOpTimeout<T>(
   return Promise.race([Promise.resolve().then(fn), timeout]).finally(() => {
     if (timer) clearTimeout(timer);
   });
+}
+
+const logger = createModuleLogger('OP_TIMEOUT');
+
+/**
+ * #800: `withOpTimeout` rejects the caller but cannot stop the callback, so a write that awaited
+ * something (a guard listing, a read-back, a retry backoff) could resume AFTER the drain had moved
+ * on, synced and released the api lock, and then do its raw write against whatever the api
+ * singleton pointed at by then. The caller had been told "timed out, please retry", so the late
+ * write became a duplicate.
+ *
+ * Design (options B, C and D were weighed and rejected in the ticket; do not re-litigate them):
+ * a per-operation token held in an AsyncLocalStorage, set by `runAbandonable` once the bounded
+ * callback has settled or lost the race, and checked by `assertOperationLive` at the one place
+ * every raw write goes through (the guarded bindings in actual-adapter.ts).
+ *
+ * Limits, on purpose: only the window BEFORE a raw write starts is closed. A raw write already
+ * called is in flight inside upstream and cannot be cancelled; a late read is wasteful but
+ * harmless. A fire-and-forget write started after the callback's own settle would be outside the
+ * token; none exists today.
+ */
+export class OperationAbandonedError extends Error {
+  constructor() {
+    // No "timed out" (the pool-drop classifier would match it) and no ids. Nobody normally sees
+    // this: the caller already has the timeout error.
+    super('Write operation was abandoned after its timeout and did not run; no data was modified by this step.');
+    this.name = 'OperationAbandonedError';
+  }
+}
+
+interface AbandonToken { abandoned: boolean }
+const abandonStore = new AsyncLocalStorage<AbandonToken>();
+
+/** `withOpTimeout` for a WRITE: once it settles for any reason, the callback may no longer write. */
+export async function runAbandonable<T>(
+  fn: () => Promise<T>,
+  label = 'operation',
+  overrideMs?: number,
+  overrideKnob?: string,
+): Promise<T> {
+  const token: AbandonToken = { abandoned: false };
+  try {
+    return await withOpTimeout(() => abandonStore.run(token, fn), label, overrideMs, overrideKnob);
+  } finally {
+    // A settled callback has nothing left to write, so marking unconditionally is correct.
+    token.abandoned = true;
+  }
+}
+
+/**
+ * Throws when the calling write lost its race: EVERY raw write attempted by an abandoned
+ * operation is refused, including a follow-up write of an operation that already started one.
+ * No store means not inside a bounded write.
+ *
+ * DECISION (2026-11-24, maintainer, option A; do not re-litigate): an earlier version let an
+ * operation that had already started a raw write finish (a "started" relaxation), then limited
+ * that to the same open budget. Review found both unsound: on the legacy path a timeout shuts the
+ * api down, so the identity check refused the follow-up anyway, and the check is point-in-time,
+ * so a follow-up could still land in a budget the next drain entry had just loaded. The simple
+ * rule is the only one that can never write into a wrong budget. The cost, accepted and
+ * documented in docs/development/testing-and-reliability.md: a multi-write operation that timed
+ * out between two raw writes leaves a half-written state (for example a category group created as
+ * expense instead of income, a schedule whose link condition was never stripped).
+ */
+export function assertOperationLive(): void {
+  const token = abandonStore.getStore();
+  if (token?.abandoned) {
+    logger.debug('Refusing a raw write from an abandoned operation');
+    throw new OperationAbandonedError();
+  }
 }
