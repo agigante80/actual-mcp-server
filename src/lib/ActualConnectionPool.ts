@@ -901,7 +901,8 @@ class ActualConnectionPool {
         // #392 review: RE-CHECK expiry, because the decision above was taken before the lock and
         // the eviction now waits for it. Before #392 that wait was effectively zero; since #378
         // made drains sequential, one lock hold is the SUM of a batch's operations, so it is
-        // bounded only by batch length times ACTUAL_OP_TIMEOUT_MS. A session that was idle when
+        // bounded only by batch length times ACTUAL_OP_TIMEOUT_MS (#619: or by one bank sync,
+        // ACTUAL_BANK_SYNC_TIMEOUT_MS plus its trailing sync). A session that was idle when
         // marked can be active again by the time the lock arrives, and evicting it then closes
         // its transport mid-conversation. Deciding and acting on the same side of the mutex is
         // what makes the decision mean anything.
