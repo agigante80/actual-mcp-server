@@ -101,7 +101,12 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   measured total plus 8. The compact total is 43,831 bytes (43,856 before: the compact
 //   search_transactions description was trimmed to pay for its new sentence, 3,874 bytes now,
 //   3,899 before), under COMPACT_TOTAL_CEILING; every per-tool ceiling is unchanged.
-const TOTAL_CEILING = 126541;
+//   Total lowered for #771 from 126,541 to 126,522: the actual_accounts_delete description now ends
+//   `An id that does not exist is refused.` in place of `Deleting an account that does not exist
+//   reports success.` (19 bytes fewer). Measured on develop at 126,533 bytes before and 126,514 after,
+//   and the ceiling is the measured total plus 8. The compact total is 44,810 bytes (43,831 before,
+//   the #758 description corrections), under COMPACT_TOTAL_CEILING; every per-tool ceiling is unchanged.
+const TOTAL_CEILING = 126522;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The

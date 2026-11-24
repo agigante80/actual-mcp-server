@@ -172,19 +172,32 @@ export function legacyPhrases(specs: readonly CompactToolSpec[]): ReadonlyMap<st
   return new Map([...phrases].map(([legacy, list]) => [legacy, list.join(' or ')]));
 }
 
-const rewriteText = (text: string, table: ReadonlyMap<string, string>): string =>
-  text.replace(LEGACY_NAME, (name) => table.get(name) ?? name);
+/**
+ * #771: the legacy field names a message can carry, mapped back to the compact names the caller
+ * sent. Built from the dispatched action's own `rename` map inverted (`transferAccountId` to
+ * `transfer_account_id`), so it cannot drift from the rename the call went through. Applied to
+ * message strings only, never to data.
+ */
+export function fieldPhrases(rename: Readonly<Record<string, string>> | undefined): ReadonlyMap<string, string> {
+  return new Map(Object.entries(rename ?? {}).filter(([compact, legacy]) => compact !== legacy).map(([compact, legacy]) => [legacy, compact]));
+}
+
+const rewriteText = (text: string, table: ReadonlyMap<string, string>, fields?: ReadonlyMap<string, string>): string => {
+  const named = text.replace(LEGACY_NAME, (name) => table.get(name) ?? name);
+  if (!fields || fields.size === 0) return named;
+  return named.replace(/\b[A-Za-z][A-Za-z0-9]*\b/g, (word) => fields.get(word) ?? word);
+};
 
 /**
  * Rewrite legacy names inside an error IN PLACE, so a NotFoundRefusal or OutOfRangeRefusal
  * keeps its class (isPreflightRefusal and instanceof still hold) and only the text a client
  * reads changes. The stack's first line quotes the old message, so it is rewritten too.
  */
-function rewriteError(err: unknown, table: ReadonlyMap<string, string>): void {
+function rewriteError(err: unknown, table: ReadonlyMap<string, string>, fields?: ReadonlyMap<string, string>): void {
   if (!err || typeof err !== 'object') return;
   const e = err as { message?: unknown; stack?: unknown };
-  if (typeof e.message === 'string') e.message = rewriteText(e.message, table);
-  if (typeof e.stack === 'string') e.stack = rewriteText(e.stack, table);
+  if (typeof e.message === 'string') e.message = rewriteText(e.message, table, fields);
+  if (typeof e.stack === 'string') e.stack = rewriteText(e.stack, table, fields);
 }
 
 /** The message keys a legacy result carries text for the model in. Data keys are never touched. */
@@ -197,13 +210,13 @@ const MESSAGE_KEYS = ['error', 'hint', 'message'] as const;
  * MESSAGE_KEYS are rewritten, plus the `error` of each `failed` item of a batch: a payee or
  * note that happens to contain a tool name is data.
  */
-function rewriteResult(result: unknown, table: ReadonlyMap<string, string>): unknown {
+function rewriteResult(result: unknown, table: ReadonlyMap<string, string>, fields?: ReadonlyMap<string, string>): unknown {
   const visit = (value: unknown): void => {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return;
     const r = value as Record<string, unknown>;
     for (const key of MESSAGE_KEYS) {
       const text = r[key];
-      if (typeof text === 'string') r[key] = rewriteText(text, table);
+      if (typeof text === 'string') r[key] = rewriteText(text, table, fields);
     }
     // #747: a batch reports each refused item under `failed`, and its `error` is the same
     // refusal text a single call would have thrown, so it is rewritten too. Only `error`.
@@ -211,7 +224,7 @@ function rewriteResult(result: unknown, table: ReadonlyMap<string, string>): unk
       for (const item of r.failed as unknown[]) {
         if (!item || typeof item !== 'object') continue;
         const f = item as Record<string, unknown>;
-        if (typeof f.error === 'string') f.error = rewriteText(f.error, table);
+        if (typeof f.error === 'string') f.error = rewriteText(f.error, table, fields);
       }
     }
   };
@@ -234,11 +247,12 @@ export async function dispatchCompact(
   names: ReadonlyMap<string, string> = legacyPhrases([spec]),
 ): Promise<unknown> {
   const { chosen, target, parsed } = planCall(spec, input);
+  const fields = fieldPhrases(target.rename);
   try {
     const result = await ops.callOperation(target.legacy, shapeArgs(target, parsed), { tool: spec.name, action: chosen });
-    return rewriteResult(result, names);
+    return rewriteResult(result, names, fields);
   } catch (err) {
-    rewriteError(err, names);
+    rewriteError(err, names, fields);
     throw err;
   }
 }
