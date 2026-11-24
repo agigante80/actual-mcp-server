@@ -78,21 +78,70 @@ await check('chat preset: the bare preset publishes list_budget_months with its 
   assert.ok(manager.getToolNames().length > 0);
 });
 
-await check('chat preset: every published selector value reaches the dispatcher; none is refused', async () => {
-  const FIELDS = {
-    structure: {}, server: {}, version: {}, preferences: {},
-  };
-  for (const [name, actions] of Object.entries(CHAT_ACTIONS)) {
-    const tool = buildCompactTool(spec(name), policyOps(), undefined, {
+const U = '11111111-1111-4111-8111-111111111111';
+const V = '22222222-2222-4222-8222-222222222222';
+const cond = [{ field: 'imported_payee', op: 'is', value: 'x' }];
+const act = [{ op: 'set', field: 'category', value: U }];
+/** Minimal VALID fields per action, so a call gets past validation and meets the policy (#770 M2). */
+const VALID = {
+  get_context: { structure: {}, server: {}, version: {}, preferences: {} },
+  manage_transactions: {
+    create: { account: U, date: '2026-01-05', amount: 100 },
+    update: { id: U, notes: 'n' },
+    update_batch: { updates: [{ id: U, fields: { notes: 'n' } }] },
+    delete: { id: U },
+    import: { account_id: U, txs: [{ date: '2026-01-05', amount: 100 }] },
+    merge: { ids: [U, V] },
+    transfer: { from_account: U, to_account: V, amount: 100, date: '2026-01-05' },
+  },
+  manage_budget_months: {
+    set_amount: { month: '2026-01', category_id: U, amount: 100 },
+    set_amount_batch: { operations: [{ month: '2026-01', categoryId: U, amount: 100 }] },
+    set_carryover: { month: '2026-01', category_id: U, flag: true },
+    hold: { month: '2026-01', amount: 100 },
+    reset_hold: { month: '2026-01' },
+    transfer: { month: '2026-01', from_category_id: U, to_category_id: V, amount: 100 },
+    set_note: { month: '2026-01', note: 'n' },
+  },
+  manage_rules: {
+    create: { conditions: cond, actions: act },
+    create_batch: { rules: [{ conditions: cond, actions: act }] },
+    upsert: { conditions: cond, actions: act },
+    update: { id: U, stage: 'pre' },
+    delete: { id: U },
+  },
+};
+
+await check('chat preset: a published action reaches the operation callback, a hidden one is refused by the policy', async () => {
+  for (const [name, byAction] of Object.entries(VALID)) {
+    const reached = [];
+    const ops = {
+      callOperation: async (legacy, args, via) => {
+        const err = readOnlyError(manager.policy, legacy) ?? operationUnavailableError(manager.policy, legacy, via);
+        if (err) throw err;
+        reached.push(legacy);
+        return { ok: true };
+      },
+    };
+    const tool = buildCompactTool(spec(name), ops, undefined, {
       isAvailable: (l) => isOperationPublished(manager.policy, l),
       tools: new Set(manager.policy.published),
     });
-    for (const action of actions) {
+    const published = new Set(selectorValues(name));
+    for (const [action, fields] of Object.entries(byAction)) {
       const selector = name === 'get_context' ? 'topic' : 'action';
-      // Validation of the row's own fields is not under test: a field error is fine, a policy refusal is not.
-      const err = await tool.call({ [selector]: action, ...FIELDS[action] }).then(() => null, (e) => e);
-      assert.ok(!(err instanceof ToolUnavailableError), `${name} ${action} must not be refused by the policy, got ${err?.message}`);
+      const before = reached.length;
+      const err = await tool.call({ [selector]: action, ...fields }).then(() => null, (e) => e);
+      if (published.has(action)) {
+        assert.strictEqual(err, null, `${name} ${action} is published and must succeed, got ${err?.message}`);
+        assert.strictEqual(reached.length, before + 1, `${name} ${action} must reach the operation callback`);
+      } else {
+        assert.ok(err instanceof ToolUnavailableError, `${name} ${action} is hidden and must be refused by the policy, got ${err?.message}`);
+        assert.strictEqual(reached.length, before, `${name} ${action} must not reach the operation callback`);
+      }
     }
+    // Every published action is covered by a fixture (a new action cannot slip past this test).
+    for (const action of published) assert.ok(action in byAction, `${name}: no fixture for published action ${action}`);
   }
 });
 
@@ -159,6 +208,24 @@ await check('NEGATIVE: a field that belongs only to a hidden action is refused n
   const text = String(err.message);
   assert.ok(/flag/.test(text), text);
   assert.ok(!/set_carryover/.test(text), `the refusal must not offer the hidden set_carryover: ${text}`);
+});
+
+await check('NEGATIVE: the formatted text a client receives for a bad selector lists exactly the published actions (M1)', async () => {
+  const err = await manager.callTool('manage_budget_months', { action: 'nope' }).then(() => null, (e) => e);
+  assert.ok(err, 'must be refused');
+  assert.strictEqual(err.message, 'Validation error: action: allowed values: set_amount, set_amount_batch, transfer');
+  assert.ok(!/hold|set_carryover|set_note/.test(err.message), `a hidden action leaked: ${err.message}`);
+});
+
+await check('NEGATIVE: a published action whose default route is hidden says which argument selects the enabled route (L1)', async () => {
+  await open({ toolsets: 'analysis' });
+  const err = await manager.getTool('list_entities').call({ type: 'payee' }).then(() => null, (e) => e);
+  assert.ok(err instanceof ToolUnavailableError, `expected ToolUnavailableError, got ${err}`);
+  assert.strictEqual(
+    err.message,
+    'Tool "list_entities with type payee" is not available: this server\'s MCP_TOOLSETS configuration does not enable that action. Only the payee call that sets sort is enabled.',
+  );
+  await open({ toolsets: 'chat' });
 });
 
 await check('default surface (toolsets all): every action is published and the text is the spec text, byte for byte', async () => {
