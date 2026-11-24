@@ -2901,6 +2901,9 @@ export async function deleteAccount(id: string): Promise<{ detachedTransfers: nu
       // upstream still deletes, so only a FAILED delete is followed by one fresh read. The read
       // decides, never the message text; if the id is present or the read fails, the original
       // error is rethrown unchanged.
+      // Accepted: a delete that fails for another reason (timeout, sync error) on an id that is
+      // already tombstoned is also absent from the listing and reads as not found. A listing
+      // pre-check would instead refuse the close-then-delete teardown, which is worse (#771 review).
       let rows: Array<{ id?: string }> | null = null;
       try {
         rows = (await withConcurrency(() => retry(() => rawGetAccounts() as Promise<Array<{ id?: string }>>, { retries: 2, backoffMs: 200 }))) as Array<{ id?: string }>;

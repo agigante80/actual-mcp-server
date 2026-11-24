@@ -225,7 +225,7 @@ await check('#758: the set_amount result and the set_carryover flag semantics ma
   const d = spec.description;
   assert.ok(d.includes('Returns {} (set_amount)'), 'set_amount returns {}');
   assert.ok(!d.includes('Returns { result } (set_amount)'), 'the stale set_amount result is gone');
-  assert.ok(d.includes('set_carryover: month, category_id, flag (true rolls an overspent balance into the next month, false resets it; a positive balance always rolls over), from that month on; expense categories only.'), 'flag semantics');
+  assert.ok(d.includes('set_carryover: month, category_id, flag (true rolls an overspent balance into the next month, false resets it; envelope budget: a positive balance always rolls over; tracking budget: only with the flag), from that month on; expense categories only.'), 'flag semantics');
   assert.ok(!/set_carryover: month, category_id, flag\. /.test(d), 'the bare set_carryover clause is gone');
 });
 

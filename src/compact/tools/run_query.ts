@@ -21,7 +21,6 @@ export const runQuery: CompactToolSpec = {
   examplePrompt: 'Run a query for my uncleared transactions over $500 since January.',
   description:
     'Run a read-only SQL query against the budget data; the escape hatch when search_transactions, summarize_transactions, list_entities and list_budget_months do not fit (prefer them when they do). ' +
-    'A bare table name (e.g. "transactions") returns all its records. ' +
     'Form: SELECT [fields] FROM [table] WHERE [conditions] ORDER BY [field] DESC LIMIT [n]. ' +
     'Example: "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 10". ' +
     'WHERE supports =, !=, >, >=, <, <=; IN (v1, v2); LIKE / NOT LIKE (case and accent-insensitive, % wildcard, e.g. imported_payee LIKE \'%amazon%\'); IS NULL / IS NOT NULL; ' +
