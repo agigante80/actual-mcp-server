@@ -10,17 +10,19 @@
 #       - actual-mcp-server-backend  port 3600  OIDC/Casdoor  (LibreChat, LobeChat)
 #       - actual-mcp-bearer-backend  port 3601  Bearer token  (automated tests)
 #     Both defined in: actual-mcp-server/docker-compose-local-build.yaml
-#   • LibreChat       (LibreChat/docker-compose.yml)
-#   • LobeChat        (lobechatAI/docker-compose.yml)
+#   • LibreChat and LobeChat (LibreChat/docker-compose.yml, lobechatAI/docker-compose.yml):
+#     ONLY with --with-chat-clients. Without the flag this script neither pulls,
+#     starts nor recreates them: a gate run on 2026-11-24 brought both stacks back
+#     up after they had been stopped on purpose.
 #
 # This script does NOT perform first-time installation. It simply keeps
 # everything up to date and verifies the MCP server is working correctly:
 #
 #   1. Sync latest dev code → docker build folder & rebuild MCP image
-#   2. Pull latest upstream images (actual-budget, librechat, lobechat)
+#   2. Pull latest upstream images (actual-budget; librechat and lobechat only with --with-chat-clients)
 #   3. Recreate BOTH MCP containers (OIDC:3600 + Bearer:3601)
-#   4. Independently restart LibreChat        (picks up new image if any)
-#   5. Independently restart LobeChat         (picks up new image if any)
+#   4. (--with-chat-clients only) Restart LibreChat   (picks up new image if any)
+#   5. (--with-chat-clients only) Restart LobeChat    (picks up new image if any)
 #   6. Wait for actual-mcp-bearer-backend (port 3601) to become healthy
 #   7. Run the integration suite over HTTP against the bearer instance (port 3601)
 #   8. Run the SAME integration suite over stdio (#280: real parity, not a smoke)
@@ -36,10 +38,12 @@
 #     $DOCKER_DIR/lobechatAI/                        ← LobeChat config files
 #
 # Usage:
-#   bash scripts/deploy-and-test.sh [TEST_LEVEL] [--bank-sync]
+#   bash scripts/deploy-and-test.sh [TEST_LEVEL] [--bank-sync] [--with-chat-clients]
 #   TEST_LEVEL: sanity | smoke | normal | extended | full (default: full)
 #   --bank-sync: opt-in flag to include per-account bank sync tests (GoCardless/SimpleFIN)
 #                Skipped by default. Also honoured via MCP_TEST_BANK_SYNC=true env var.
+#   --with-chat-clients: also pull and recreate LibreChat and LobeChat (steps 4 and 5).
+#                Off by default. Also honoured via DEPLOY_CHAT_CLIENTS=true env var.
 
 set -euo pipefail
 
@@ -66,15 +70,20 @@ STDIO_CONTAINER="actual-mcp-bearer-backend"   # container the stdio smoke execs 
 # Parse positional + flag args
 TEST_LEVEL="full"
 BANK_SYNC_FLAG=""   # empty = disabled
+CHAT_CLIENTS_FLAG=""   # empty = LibreChat and LobeChat are left exactly as they are
 for arg in "$@"; do
   case "$arg" in
     --bank-sync) BANK_SYNC_FLAG="true" ;;
+    --with-chat-clients) CHAT_CLIENTS_FLAG="true" ;;
     *)           TEST_LEVEL="$arg"    ;;
   esac
 done
 # Also honour the environment variable
 if [ "${MCP_TEST_BANK_SYNC:-}" = "true" ]; then
   BANK_SYNC_FLAG="true"
+fi
+if [ "${DEPLOY_CHAT_CLIENTS:-}" = "true" ]; then
+  CHAT_CLIENTS_FLAG="true"
 fi
 HEALTH_RETRIES=30          # × 3s = 90s max wait
 # EXPECTED_TOOL_COUNT is computed after Step 6 (#681): it depends on the surface the container publishes.
@@ -139,9 +148,11 @@ pull_image() {
 }
 
 pull_image "actualbudget/actual-server:latest"                      "Actual Budget"
-pull_image "ghcr.io/danny-avila/librechat:latest"                   "LibreChat"
-pull_image "ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest"  "LibreChat RAG API"
-pull_image "lobehub/lobe-chat-database:latest"                      "LobeChat"
+if [ "$CHAT_CLIENTS_FLAG" = "true" ]; then
+  pull_image "ghcr.io/danny-avila/librechat:latest"                   "LibreChat"
+  pull_image "ghcr.io/danny-avila/librechat-rag-api-dev-lite:latest"  "LibreChat RAG API"
+  pull_image "lobehub/lobe-chat-database:latest"                      "LobeChat"
+fi
 
 # #618: a pull alone never reached the running Actual server, so it stayed on 26.7.0
 # while the image tag moved to 26.11.0 and every gate tested against the old server.
@@ -167,18 +178,26 @@ ok "actual-mcp-server-backend (OIDC, port 3600) recreated"
 ok "actual-mcp-bearer-backend (Bearer, port 3601) recreated"
 
 # ── 4. Restart LibreChat ────────────────────────────────────────────────────
-info "Step 4/9: Restarting LibreChat (ai-librechat, ai-librechat-rag-api)..."
-docker compose \
-  -f "$DOCKER_DIR/LibreChat/docker-compose.yml" \
-  up -d --force-recreate ai-librechat ai-librechat-rag-api
-ok "LibreChat restarted (mongo/pgvector/meilisearch untouched)"
+if [ "$CHAT_CLIENTS_FLAG" = "true" ]; then
+  info "Step 4/9: Restarting LibreChat (ai-librechat, ai-librechat-rag-api)..."
+  docker compose \
+    -f "$DOCKER_DIR/LibreChat/docker-compose.yml" \
+    up -d --force-recreate ai-librechat ai-librechat-rag-api
+  ok "LibreChat restarted (mongo/pgvector/meilisearch untouched)"
+else
+  info "Step 4/9: LibreChat left untouched (pass --with-chat-clients to restart it)"
+fi
 
 # ── 5. Restart LobeChat ────────────────────────────────────────────────────
-info "Step 5/9: Restarting LobeChat (lobe)..."
-docker compose \
-  -f "$DOCKER_DIR/lobechatAI/docker-compose.yml" \
-  up -d --force-recreate lobe
-ok "LobeChat restarted (postgres/minio/casdoor untouched)"
+if [ "$CHAT_CLIENTS_FLAG" = "true" ]; then
+  info "Step 5/9: Restarting LobeChat (lobe)..."
+  docker compose \
+    -f "$DOCKER_DIR/lobechatAI/docker-compose.yml" \
+    up -d --force-recreate lobe
+  ok "LobeChat restarted (postgres/minio/casdoor untouched)"
+else
+  info "Step 5/9: LobeChat left untouched (pass --with-chat-clients to restart it)"
+fi
 
 # ── 6. Wait for bearer MCP server health ─────────────────────────────────
 info "Step 6/9: Waiting for actual-mcp-bearer-backend (port 3601) to become healthy..."
