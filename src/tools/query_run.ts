@@ -11,7 +11,7 @@ const InputSchema = z.object({
 
 const tool: ToolDefinition = {
   name: 'actual_query_run',
-  description: `Run a read-only SQL query against the budget data. Prefer SQL; a bare table name (e.g. "transactions") returns all its records.
+  description: `Run a read-only SQL query against the budget data. Prefer SQL; a bare table name (e.g. "transactions") returns only { id } per row, so select the fields you need.
 
 Form: SELECT [fields] FROM [table] WHERE [conditions] ORDER BY [field] DESC LIMIT [n]
 Example: "SELECT id, date, amount, payee.name FROM transactions WHERE amount < 0 ORDER BY date DESC LIMIT 10"

@@ -26,7 +26,7 @@ export const listBudgetMonths: CompactToolSpec = {
     'List the budget months, or read one month\'s budget when `month` is given. Use it for budgeted versus spent per category; for actual spending totals use summarize_transactions, for ids use list_entities, for individual transactions use search_transactions. To change a budgeted amount use manage_budget_months.\n' +
     'month: optional, YYYY-MM; the only input, any other property is refused by name.\n' +
     'Returns { result: [YYYY-MM, ...] }, the budget months and nothing else, when `month` is omitted.\n' +
-    'Fields: totalBudgeted is the expense budgets summed with the sign reversed (negative when money is budgeted); totalSpent sums expense transactions (negative for spending); toBudget is what is left to budget; forNextMonth is the amount held; totalBalance sums the category balances.\n' +
+    'Fields: totalSpent sums expense transactions (negative for spending); totalBalance sums the category balances. On an envelope budget totalBudgeted is the expense budgets summed with the sign reversed (negative when money is budgeted), toBudget is what is left to budget and forNextMonth the amount held; on a tracking budget totalBudgeted is a plain positive sum and the other two are absent.\n' +
     'Returns { result } holding that month\'s budget when `month` is given: totals (totalIncome, totalBudgeted, totalSpent, toBudget, forNextMonth, totalBalance) and categoryGroups; an expense category carries budgeted, spent and balance, an income category received; amounts are integer cents.',
   selector: null,
   defaultAction: 'list',

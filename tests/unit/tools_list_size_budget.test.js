@@ -106,7 +106,13 @@ for (const k of ['MCP_TOOLSETS', 'MCP_TOOLS', 'MCP_READ_ONLY', 'MCP_TOOL_SURFACE
 //   reports success.` (19 bytes fewer). Measured on develop at 126,533 bytes before and 126,514 after,
 //   and the ceiling is the measured total plus 8. The compact total is 44,810 bytes (43,831 before,
 //   the #758 description corrections), under COMPACT_TOTAL_CEILING; every per-tool ceiling is unchanged.
-const TOTAL_CEILING = 126522;
+//   Total raised for the #758 review from 126,522 to 126,557: the legacy actual_query_run description
+//   now says a bare table name `returns only { id } per row, so select the fields you need` in place
+//   of `returns all its records` (35 bytes more, so the legacy text agrees with the compact one).
+//   Measured at 126,514 before and 126,549 after; the ceiling is the measured total plus 8. The compact
+//   total is 44,813 bytes (44,810 before), under COMPACT_TOTAL_CEILING; every per-tool ceiling is unchanged
+//   (manage_budget_months was trimmed back under 3,900 after the envelope qualification).
+const TOTAL_CEILING = 126557;
 const PER_TOOL_CEILING = 3900;
 // The ceiling for the compact tools COMBINED (what the `compact` surface lists; the design
 // record plans 15). The per-tool ceiling above applies to each compact entry unchanged. The
