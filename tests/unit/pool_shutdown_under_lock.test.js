@@ -168,6 +168,31 @@ describe('a session touched while the eviction waited for the lock is not closed
   check(connectionPool.connections?.get?.('sess-D') === undefined, 'an unconditional shutdown still evicts');
 }
 
+// --- 4b. #619: a session with a request in flight is not idle ------------------
+// beginRequest stamps once, at the start. A bank sync may hold the lock for minutes, so a session
+// whose request is still running (or waiting behind it) can look expired when the sweep's
+// eviction finally gets the lock, before endRequest has stamped it again.
+describe('a session with a request in flight is not evicted by the idle sweep');
+{
+  apiState.setApiInitialized(true);
+  connectionPool.connections?.set?.('sess-E', {
+    sessionId: 'sess-E', initialized: true, lastActivity: 0,
+    dataDir: '/tmp/unit392', serverUrl: 'http://test-server', password: 'pw', syncId: 'budget-A',
+  });
+  connectionPool.beginRequest('sess-E');
+  connectionPool.connections.get('sess-E').lastActivity = 0;   // the request began a long time ago
+  await connectionPool.shutdownConnection('sess-E', { evict: true, onlyIfExpired: true });
+  check(
+    connectionPool.connections?.get?.('sess-E') !== undefined,
+    'an expired stamp with a request in flight keeps the connection',
+  );
+  // Negative: once the request has ended and the stamp is old again, the sweep evicts it.
+  connectionPool.endRequest('sess-E');
+  connectionPool.connections.get('sess-E').lastActivity = 0;
+  await connectionPool.shutdownConnection('sess-E', { evict: true, onlyIfExpired: true });
+  check(connectionPool.connections?.get?.('sess-E') === undefined, 'with no request in flight the expired session is evicted');
+}
+
 // --- 5. #412: shutdownAll takes ONE acquisition, not one per session -------
 // Since #392 each shutdownConnection takes the api mutex, and since #393 acquiring it settles any
 // abandoned load, bounded, and throws on timeout while KEEPING the registration. So with a stuck

@@ -1537,6 +1537,35 @@ async function processWriteQueue() {
     }
   };
   armStrandedBound(batch);
+  // #619: bound the wait for the api LOCK as well. The residency timers were cleared above, the
+  // per-operation bound starts only inside the lock, and the wait between the two had no bound at
+  // all. That was harmless while one hold lasted milliseconds. A bank sync may now hold the lock
+  // for ACTUAL_BANK_SYNC_TIMEOUT_MS (default 5 minutes): a write queued behind it ran long after
+  // its client had given up (MCP clients default to 60 seconds), and the retry then ran too, so
+  // the transaction existed twice. A write that waits longer than the general bound for the lock
+  // is rejected as never run. Armed only when the general bound is on: with it disabled the
+  // stranded bound above already covers the wait, and both use the same timer slot.
+  const lockWaitLimitMs = config.ACTUAL_OP_TIMEOUT_MS;
+  let lockAcquired = false;
+  if (Number.isFinite(lockWaitLimitMs) && lockWaitLimitMs > 0) {
+    for (const entry of batch) {
+      entry.residencyTimer = setTimeout(() => {
+        if (lockAcquired || entry.settledEarly) return;
+        entry.settledEarly = true;
+        logger.error(
+          `[WRITE QUEUE] Operation did not get the api lock within ${lockWaitLimitMs}ms; rejecting it (#619)`,
+        );
+        // No "timed out" substring, for the reason given at the residency bound: the write never
+        // touched upstream, so it must not be classified as an infrastructure failure.
+        entry.reject(new Error(
+          `Write operation did not start within ${lockWaitLimitMs}ms: a longer operation ` +
+          '(a bank sync or a budget import, for example) was holding the Actual API (ACTUAL_OP_TIMEOUT_MS). ' +
+          'The operation never ran and no data was modified. Retry it.',
+        ));
+      }, lockWaitLimitMs);
+      entry.residencyTimer.unref?.();
+    }
+  }
   writeQueueBatchCount++;
 
 
@@ -1576,6 +1605,11 @@ async function processWriteQueue() {
 
     await drainListingStore.run(new Map(), async () => {
     await withApiLock(async () => {
+      // #619: the lock is held, so the lock-wait bound no longer applies. Set and cleared before
+      // any await, so it can never fire on a batch that is running. Entries it already rejected
+      // carry settledEarly and are skipped by the loop below.
+      lockAcquired = true;
+      if (lockWaitLimitMs > 0) clearStrandedBounds();
       try {
         if (usePoolBranch) {
           // Pool branch: api singleton already live for this session, no need
