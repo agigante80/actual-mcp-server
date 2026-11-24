@@ -7,7 +7,7 @@ import { formatZodError } from './lib/zod-error-format.js';
 import { errorLogFields, UnknownToolError } from './lib/errors.js';
 import config from './config.js';
 import { createModuleLogger } from './lib/loggerFactory.js';
-import { operationUnavailableError, readOnlyError, resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
+import { isOperationPublished, operationUnavailableError, readOnlyError, resolvePublishedToolNames, unavailableError, type PublishedPolicy, type ToolsetSettings } from './lib/toolsets.js';
 import { COMPACT_TOOLS } from './compact/registry.js';
 import { buildCompactTool, compactLegacyNames, legacyPhrases } from './compact/dispatch.js';
 import type { CompactOperations, CompactToolSpec } from './compact/types.js';
@@ -214,8 +214,12 @@ class ActualToolsManager implements CompactOperations {
     );
     // One table for ALL compact tools (#670 4b): an error from one may name a sibling's tool.
     const phrases = legacyPhrases(compactTools);
+    // #770: each compact tool publishes only the actions its policy lets a call reach, and its text
+    // names only the compact tools this same tools/list carries.
+    const policy = this.policy;
+    const published = { isAvailable: (legacy: string) => isOperationPublished(policy, legacy), tools: new Set(policy.published) };
     for (const spec of compactTools) {
-      this.tools.set(spec.name, buildCompactTool(spec, this, phrases));
+      this.tools.set(spec.name, buildCompactTool(spec, this, phrases, published));
       this.compactNames.add(spec.name);
     }
     toolsetLog.info(
@@ -326,7 +330,7 @@ class ActualToolsManager implements CompactOperations {
     const policy = this.requirePolicy();
     const tool = this.tools.get(legacyName);
     if (!tool || this.compactNames.has(legacyName)) throw new UnknownToolError(legacyName);
-    const unavailable = readOnlyError(policy, legacyName) ?? operationUnavailableError(policy, legacyName);
+    const unavailable = readOnlyError(policy, legacyName) ?? operationUnavailableError(policy, legacyName, via);
     if (unavailable) {
       toolsetLog.warn('Refused a compact operation on an unavailable tool', { tool: legacyName, setting: unavailable.setting, via: via?.tool, action: via?.action });
       throw unavailable;

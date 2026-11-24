@@ -487,10 +487,6 @@ function modelFacingText(name) {
  * the real signal that the preset is wrong.
  */
 const CHAT_REFERENCE_ALLOWLIST = {
-  actual_budgets_get_months: {
-    substitute: 'actual_budgets_get_month',
-    reason: 'the out-of-range refusal from setAmount and the budget batch states the first and last month',
-  },
   actual_rules_get: {
     substitute: 'actual_query_run',
     reason: 'query_run reads the rules table (actual-schema.ts)',
@@ -756,12 +752,12 @@ await check('#652: MCP_READ_ONLY refuses the old name of a writer exactly like t
 });
 
 await check('#652: MCP_TOOLSETS=chat refuses the old name of a non-chat tool exactly like the new name', async () => {
-  assert.ok(!PRESETS.chat.includes('actual_budgets_get_months'), 'fixture: get_months must be outside the chat preset');
+  assert.ok(!PRESETS.chat.includes('actual_budgets_set_carryover'), 'fixture: set_carryover must be outside the chat preset');
   await manager.initialize({ toolsets: 'chat', tools: '', readOnly: false });
-  for (const name of ['actual_budgets_getMonths', 'actual_budgets_get_months']) {
+  for (const name of ['actual_budgets_setCarryover', 'actual_budgets_set_carryover']) {
     await assert.rejects(
       () => manager.callTool(name, {}),
-      (e) => e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS' && e.message.includes('actual_budgets_get_months'),
+      (e) => e instanceof ToolUnavailableError && e.setting === 'MCP_TOOLSETS' && e.message.includes('actual_budgets_set_carryover'),
       name,
     );
   }

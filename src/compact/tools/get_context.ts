@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { CompactToolSpec } from '../types.js';
+import { FULL_SURFACE, joinAnd, type CompactToolSpec, type DescriptionContext } from '../types.js';
 
 /**
  * get_context (#672): the compact front for the four context tools. One selector, `topic`,
@@ -38,23 +38,41 @@ const structureFields = z
 
 const none = z.object({});
 
+/** The published text for the topics and sibling tools this server carries (#770); the full surface is the default text. */
+function describe(ctx: DescriptionContext): string {
+  const topic = (t: string) => ctx.hasAction(t);
+  const returns = [
+    topic('structure') && 'the accounts, category groups with nested categories and payees for structure',
+    topic('server') && 'the server details for server',
+    topic('version') && 'the version string for version',
+    topic('preferences') && 'the preference values for preferences',
+  ].filter((x): x is string => typeof x === 'string');
+  return (
+    'Read the budget structure or the Actual server details in one call; start here to learn what exists before reading or changing anything. ' +
+    (ctx.hasTool('list_entities')
+      ? 'Use list_entities instead to list or look up one kind of entity (accounts, categories, payees, rules, schedules, tags, notes, budget files) or to resolve a name to an id; ' +
+        'this tool returns the whole structure at once. '
+      : '') +
+    'Pick one `topic`' + (topic('structure') ? ' (default structure)' : '') + '. ' +
+    (topic('structure')
+      ? 'structure: accounts, categories with their groups and payees together, optional include_accounts, include_categories, include_payees, include_closed (closed accounts are left out unless true) and payee_limit (1 to 2000, default 500); ' +
+        'a section you exclude is omitted, and at least one of the three include_* flags must stay true. '
+      : '') +
+    (topic('server') ? 'server: the MCP server name, version, description and transport, runtime (Node.js, platform, arch), dependencies (declared and resolved SDK and Actual API versions), uptime and memory use, and tools { total published, registered, policy }; takes no other fields. ' : '') +
+    (topic('version') ? 'version: the Actual server version string, not the MCP server version, no other fields. ' : '') +
+    (topic('preferences') ? 'preferences: { preferences, keys, count, message } with the synced display values (number format, date format, currency, first day of the week), no other fields; amounts stay integer cents whatever it says. ' : '') +
+    'A field given for a topic that does not take it is refused naming the field. ' +
+    'Returns the topic\'s result object: ' + joinAnd(returns, true) + '.'
+  );
+}
+
 export const getContext: CompactToolSpec = {
   name: 'get_context',
   domain: 'Context and lookup',
   summary: 'Read the budget structure (accounts, categories, payees) or the Actual server details in one call.',
   examplePrompt: 'What accounts and categories do I have?',
-  description:
-    'Read the budget structure or the Actual server details in one call; start here to learn what exists before reading or changing anything. ' +
-    'Use list_entities instead to list or look up one kind of entity (accounts, categories, payees, rules, schedules, tags, notes, budget files) or to resolve a name to an id; ' +
-    'this tool returns the whole structure at once. ' +
-    'Pick one `topic` (default structure). ' +
-    'structure: accounts, categories with their groups and payees together, optional include_accounts, include_categories, include_payees, include_closed (closed accounts are left out unless true) and payee_limit (1 to 2000, default 500); ' +
-    'a section you exclude is omitted, and at least one of the three include_* flags must stay true. ' +
-    'server: the MCP server name, version, description and transport, runtime (Node.js, platform, arch), dependencies (declared and resolved SDK and Actual API versions), uptime and memory use, and tools { total published, registered, policy }; takes no other fields. ' +
-    'version: the Actual server version string, not the MCP server version, no other fields. ' +
-    'preferences: { preferences, keys, count, message } with the synced display values (number format, date format, currency, first day of the week), no other fields; amounts stay integer cents whatever it says. ' +
-    'A field given for a topic that does not take it is refused naming the field. ' +
-    'Returns the topic\'s result object: the accounts, category groups with nested categories and payees for structure, the server details for server, the version string for version, and the preference values for preferences.',
+  description: describe(FULL_SURFACE),
+  describeFor: describe,
   selector: 'topic',
   defaultAction: 'structure',
   actions: new Map([

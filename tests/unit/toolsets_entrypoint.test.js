@@ -178,6 +178,19 @@ await check('stdio: MCP_TOOLSETS=chat under the default surface lists the six co
   sameSet(res.get(2).result.tools.map((t) => t.name), COMPACT_CHAT);
 });
 
+await check('stdio: MCP_TOOLSETS=chat publishes only reachable actions, and a hidden one is refused naming MCP_TOOLSETS (#770)', async () => {
+  const call = { id: 3, method: 'tools/call', params: { name: 'manage_budget_months', arguments: { action: 'hold', month: '2026-01', amount: 5 } } };
+  const res = await stdioSession({ MCP_TOOLSETS: 'chat' }, [INIT, INITIALIZED, LIST, call]);
+  const tools = new Map(res.get(2).result.tools.map((t) => [t.name, t]));
+  assert.deepStrictEqual(tools.get('manage_budget_months').inputSchema.properties.action.enum, ['set_amount', 'set_amount_batch', 'transfer']);
+  assert.ok(!tools.get('run_query').description.includes('search_transactions'), 'run_query must not name a tool the preset hides');
+  assert.ok(tools.has('list_budget_months'), 'actual_budgets_get_months is in the chat preset, so list_budget_months is published');
+  const r = res.get(3);
+  assert.strictEqual(r.result?.isError, true);
+  const text = r.result.content.map((c) => c.text).join(' ');
+  assert.ok(/MCP_TOOLSETS/.test(text) && /Enabled actions: set_amount, set_amount_batch, transfer\./.test(text), text);
+});
+
 await check('stdio: legacy surface with unset toolsets lists the whole registry', async () => {
   const res = await stdioSession(LEGACY, [INIT, INITIALIZED, LIST]);
   const names = res.get(2).result.tools.map((t) => t.name);

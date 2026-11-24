@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { CommonSchemas } from '../../lib/schemas/common.js';
 import { ACTION_DESCRIBE, ConditionSchema, RuleItemSchema, ActionSchema as CreateActionSchema } from '../../lib/schemas/rules.js';
 import { asFields, atLeastOne, needs, strict, strictDeep } from '../refine.js';
-import type { CompactActionRow, CompactToolSpec } from '../types.js';
+import { FULL_SURFACE, type CompactActionRow, type CompactToolSpec, type DescriptionContext } from '../types.js';
 
 /**
  * manage_rules (#677): the compact front for the five rule writers. Selector `action` is
@@ -87,21 +87,45 @@ const deleteFields = asFields(
   }),
 );
 
+/** The published text covers only the actions and sibling tools this server carries (#770); the full surface is the default text. */
+function describe(ctx: DescriptionContext): string {
+  const a = (name: string) => ctx.hasAction(name);
+  const verbs = [
+    (a('create') || a('create_batch')) && 'create',
+    a('upsert') && 'upsert',
+    a('update') && 'change',
+    a('delete') && 'delete',
+  ].filter((x): x is string => typeof x === 'string');
+  const createUpdate = ['create', 'create_batch'].filter(a);
+  const updateDelete = ['update', 'delete'].filter(a);
+  const returns = [
+    ...(a('create') ? ['{ id, success } (create)'] : []),
+    ...(a('create_batch') ? ['{ result: { succeeded, failed, total, successCount, failureCount } } (create_batch)'] : []),
+    ...(a('upsert') ? ['{ id, created } (upsert)'] : []),
+    ...(updateDelete.length > 0 ? [`{ success: true } (${updateDelete.join(', ')})`] : []),
+  ];
+  const lead = verbs.length > 1 ? `${verbs.slice(0, -1).join(', ')} or ${verbs[verbs.length - 1]}` : verbs.join('');
+  return (
+    `${lead.charAt(0).toUpperCase()}${lead.slice(1)} budget rules; pick one \`action\`. Writes. ` +
+    (ctx.hasTool('list_entities') ? 'To read rules use list_entities with type rule. ' : '') +
+    'Other fields are refused.\n' +
+    'Conditions match by field and op: imported_payee, payee_name take is, isNot, contains, matches, doesNotContain, and oneOf, notOneOf with an array of text;\nnotes takes is, isNot, contains, matches, doesNotContain;\nid fields (payee, account, category, category_group) take is, isNot, and oneOf, notOneOf with an array of ids; account also onBudget, offBudget (value "");\ncleared, reconciled take is with true or false;\namount takes is, isapprox, isbetween ({num1, num2} cents), gt, gte, lt, lte;\ndate takes is, isapprox, gt, gte, lt, lte. notes and payee_name also take hasTags (all) and hasAnyTag (any): value "#a #b", whole tags, any case.\nOther condition fields are refused. Ids must exist or the call is refused and nothing is written (ids in link-schedule actions and category_group conditions are not checked).\n' +
+    (createUpdate.includes('create') ? 'create: conditions, actions; optional stage, conditions_op.\n' : '') +
+    (a('create_batch') ? 'create_batch: rules (1 to 50, items with camelCase keys); NOT atomic, no rollback: a failing rule is reported in failed and the rest are still attempted; if the call itself fails, read the rules back before retrying.\n' : '') +
+    (a('upsert') ? 'upsert: conditions, actions; optional stage, conditions_op; a rule with the same conditions and conditions_op (any order) has its actions replaced and its stage replaced only if sent, else a rule is created.\n' : '') +
+    (a('update') ? 'update: id and at least one of stage, conditions_op, conditions, actions; unsent fields stay.\n' : '') +
+    (a('delete') ? `delete: id; DESTRUCTIVE, cannot be undone; a rule owned by a schedule is refused${ctx.hasTool('manage_schedules') ? ' (use manage_schedules delete)' : ''}; an unknown id is refused.\n` : '') +
+    `Returns ${returns.join(', ')}.`
+  );
+}
+
 export const manageRules: CompactToolSpec = {
   name: 'manage_rules',
   domain: 'Changing data',
   summary: 'Create, upsert, change or delete the rules that categorize imported transactions.',
   examplePrompt: 'Make a rule that files every Spotify transaction under Subscriptions.',
-  description:
-    'Create, upsert, change or delete budget rules; pick one `action`. Writes. ' +
-    'To read rules use list_entities with type rule. Other fields are refused.\n' +
-    'Conditions match by field and op: imported_payee, payee_name take is, isNot, contains, matches, doesNotContain, and oneOf, notOneOf with an array of text;\nnotes takes is, isNot, contains, matches, doesNotContain;\nid fields (payee, account, category, category_group) take is, isNot, and oneOf, notOneOf with an array of ids; account also onBudget, offBudget (value "");\ncleared, reconciled take is with true or false;\namount takes is, isapprox, isbetween ({num1, num2} cents), gt, gte, lt, lte;\ndate takes is, isapprox, gt, gte, lt, lte. notes and payee_name also take hasTags (all) and hasAnyTag (any): value "#a #b", whole tags, any case.\nOther condition fields are refused. Ids must exist or the call is refused and nothing is written (ids in link-schedule actions and category_group conditions are not checked).\n' +
-    'create: conditions, actions; optional stage, conditions_op.\n' +
-    'create_batch: rules (1 to 50, items with camelCase keys); NOT atomic, no rollback: a failing rule is reported in failed and the rest are still attempted; if the call itself fails, read the rules back before retrying.\n' +
-    'upsert: conditions, actions; optional stage, conditions_op; a rule with the same conditions and conditions_op (any order) has its actions replaced and its stage replaced only if sent, else a rule is created.\n' +
-    'update: id and at least one of stage, conditions_op, conditions, actions; unsent fields stay.\n' +
-    'delete: id; DESTRUCTIVE, cannot be undone; a rule owned by a schedule is refused (use manage_schedules delete); an unknown id is refused.\n' +
-    'Returns { id, success } (create), { result: { succeeded, failed, total, successCount, failureCount } } (create_batch), { id, created } (upsert), { success: true } (update, delete).',
+  description: describe(FULL_SURFACE),
+  describeFor: describe,
   selector: 'action',
   actions: new Map<string, CompactActionRow>([
     ['create', { legacy: 'actual_rules_create', fields: createFields, rename: { conditions_op: 'conditionsOp' } }],

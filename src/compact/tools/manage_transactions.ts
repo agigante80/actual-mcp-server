@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { CommonSchemas, TX_IMPORT_CHILD_KEYS, TX_IMPORT_ROW_KEYS, TX_UPDATE_NEEDS_A_FIELD, TX_UPDATE_NOT_NULL_KEYS, hasFieldToChange } from '../../lib/schemas/common.js';
-import type { CompactActionRow, CompactToolSpec } from '../types.js';
+import { FULL_SURFACE, type CompactActionRow, type CompactToolSpec, type DescriptionContext } from '../types.js';
 
 /**
  * manage_transactions (#675): the compact front for the seven transaction writers.
@@ -227,24 +227,53 @@ const transferFields = asFields(
   }),
 );
 
+/** The published text covers only the actions and sibling tools this server carries (#770); the full surface is the default text. */
+function describe(ctx: DescriptionContext): string {
+  const a = (name: string) => ctx.hasAction(name);
+  const verbs = [
+    a('create') && 'create',
+    (a('update') || a('update_batch')) && 'change',
+    a('delete') && 'delete',
+    a('import') && 'import',
+    a('merge') && 'merge',
+    a('transfer') && 'transfer',
+  ].filter((x): x is string => typeof x === 'string');
+  const pointers = [
+    ctx.hasTool('search_transactions') && 'To read use search_transactions',
+    ctx.hasTool('list_entities') && 'ids come from list_entities',
+  ].filter((x): x is string => typeof x === 'string');
+  const updateDelete = ['update', 'delete'].filter(a);
+  const returns = [
+    ...(a('create') ? ['{ success, id } (create; id often null, success false when an id is unknown or a payee is a transfer payee)'] : []),
+    ...(updateDelete.length > 0 ? [`{ success } or { success, split } (${updateDelete.join(', ')})`] : []),
+    ...(a('update_batch') ? ['{ succeeded, failed, total, successCount, failureCount } (update_batch)'] : []),
+    ...(a('import') ? ['{ result: { added, updated, errors } } (import)'] : []),
+    ...(a('merge') ? ['{ result: { success, keptId, deletedId } } (merge)'] : []),
+    ...(a('transfer') ? ['{ result } (transfer; same or unknown account: result.success false)'] : []),
+  ];
+  const lead = verbs.length > 1 ? `${verbs.slice(0, -1).join(', ')} or ${verbs[verbs.length - 1]}` : verbs.join('');
+  return (
+    `${lead.charAt(0).toUpperCase()}${lead.slice(1)} transactions; pick one \`action\`. Writes. ` +
+    (pointers.length > 0 ? `${pointers.join('; ').replace(/^./, (c) => c.toUpperCase())}. ` : '') +
+    'Cents are integers, outflows negative; dates YYYY-MM-DD. Other fields are refused. ' +
+    (a('create') ? 'create: account, date, amount; optional payee, payee_name, notes, category, cleared, imported_id, subtransactions. ' : '') +
+    (a('update') ? 'update: id and at least one of account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, cleared, reconciled, subtransactions; null clears payee, category or notes. ' : '') +
+    (a('update_batch') ? 'update_batch: updates (1 to 50), NOT atomic, reported per item, no splits. ' : '') +
+    (a('delete') ? 'delete: id; DESTRUCTIVE, permanent, balances change, cannot be undone. ' : '') +
+    (a('import') ? 'import: account_id, txs; matched like a bank import (rules applied; duplicates by imported_id or same amount within 7 days). ' : '') +
+    (a('merge') ? 'merge: ids (two); DESTRUCTIVE, keeps one row by the upstream rule, deletes the other, cannot be undone. ' : '') +
+    (a('transfer') ? 'transfer: from_account, to_account, amount (positive), date; optional notes. ' : '') +
+    `Returns ${returns.join(', ')}.`
+  );
+}
+
 export const manageTransactions: CompactToolSpec = {
   name: 'manage_transactions',
   domain: 'Changing data',
   summary: 'Create, change, delete, import, merge or transfer transactions.',
   examplePrompt: 'Add a $12.50 coffee purchase to my checking account for today.',
-  description:
-    'Create, change, delete, import, merge or transfer transactions; pick one `action`. Writes. ' +
-    'To read use search_transactions; ids come from list_entities. Cents are integers, outflows negative; dates YYYY-MM-DD. Other fields are refused. ' +
-    'create: account, date, amount; optional payee, payee_name, notes, category, cleared, imported_id, subtransactions. ' +
-    'update: id and at least one of account, date, amount, payee, payee_name, imported_payee, category, notes, imported_id, cleared, reconciled, subtransactions; null clears payee, category or notes. ' +
-    'update_batch: updates (1 to 50), NOT atomic, reported per item, no splits. ' +
-    'delete: id; DESTRUCTIVE, permanent, balances change, cannot be undone. ' +
-    'import: account_id, txs; matched like a bank import (rules applied; duplicates by imported_id or same amount within 7 days). ' +
-    'merge: ids (two); DESTRUCTIVE, keeps one row by the upstream rule, deletes the other, cannot be undone. ' +
-    'transfer: from_account, to_account, amount (positive), date; optional notes. ' +
-    'Returns { success, id } (create; id often null, success false when an id is unknown or a payee is a transfer payee), { success } or { success, split } (update, delete), ' +
-    '{ succeeded, failed, total, successCount, failureCount } (update_batch), { result: { added, updated, errors } } (import), ' +
-    '{ result: { success, keptId, deletedId } } (merge), { result } (transfer; same or unknown account: result.success false).',
+  description: describe(FULL_SURFACE),
+  describeFor: describe,
   selector: 'action',
   actions: new Map<string, CompactActionRow>([
     ['create', { legacy: 'actual_transactions_create', fields: createFields }],

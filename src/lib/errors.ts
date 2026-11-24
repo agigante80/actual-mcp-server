@@ -144,9 +144,18 @@ export type ToolUnavailableSetting = 'MCP_TOOLSETS' | 'MCP_READ_ONLY' | 'MCP_TOO
 export class ToolUnavailableError extends Error {
   readonly tool: string;
   readonly setting: ToolUnavailableSetting;
+  /**
+   * `action` when a compact tool's ACTION is refused although the compact tool itself is
+   * published (#770); the MCP_TOOLSETS text then says the action is not enabled, not that a
+   * published tool is missing.
+   */
+  readonly scope: 'tool' | 'action';
 
-  /** @param surface the MCP_TOOL_SURFACE value, named in the message for that setting only. */
-  constructor(tool: string, setting: ToolUnavailableSetting, surface?: string) {
+  /**
+   * @param surface the MCP_TOOL_SURFACE value, named in the message for that setting only.
+   * @param scope see the field; defaults to `tool`.
+   */
+  constructor(tool: string, setting: ToolUnavailableSetting, surface?: string, scope: 'tool' | 'action' = 'tool') {
     super(
       setting === 'MCP_READ_ONLY'
         ? `Tool "${tool}" is not available: it can change state and this server runs with MCP_READ_ONLY=true.`
@@ -158,11 +167,14 @@ export class ToolUnavailableError extends Error {
                 ? ' The compact tools are published only with MCP_TOOL_SURFACE=compact.'
                 : ''
           }`
-          : `Tool "${tool}" is not available: it is not published by this server's MCP_TOOLSETS configuration.`,
+          : scope === 'action'
+            ? `Tool "${tool}" is not available: this server's MCP_TOOLSETS configuration does not enable that action.`
+            : `Tool "${tool}" is not available: it is not published by this server's MCP_TOOLSETS configuration.`,
     );
     this.name = 'ToolUnavailableError';
     this.tool = tool;
     this.setting = setting;
+    this.scope = scope;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }

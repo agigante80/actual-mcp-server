@@ -60,6 +60,10 @@ For Claude Desktop (stdio), restart Claude after upgrading.
 
 These notes are copied from [explanation/security-and-privacy.md](../explanation/security-and-privacy.md), which keeps the full context for each.
 
+### The chat preset publishes `actual_budgets_get_months` and the server details (#770)
+
+`MCP_TOOLSETS=chat` now has 16 legacy tools (it had 12): the four added are `actual_budgets_get_months`, `actual_server_info`, `actual_server_get_version` and `actual_preferences_get`, so `list_budget_months` and every `get_context` topic work under the preset. On the compact surface each tool now lists only the actions the toolset can reach: `manage_budget_months` under `chat` offers `set_amount`, `set_amount_batch` and `transfer`, and its text names only tools that are published. A call to an action the toolset hides is still refused, naming `MCP_TOOLSETS` and listing the enabled actions. Nothing changes without `MCP_TOOLSETS` or `MCP_READ_ONLY`.
+
 ### The default tool surface is compact (#680)
 
 `MCP_TOOL_SURFACE` now defaults to `compact`: the server publishes 15 tools (`get_context`, `run_query`, `list_entities`, the `manage_*` family and others) over the same 85 operations, instead of 85 `actual_*` tools. A client, prompt or script that calls an `actual_*` name by default now gets a typed refusal naming `MCP_TOOL_SURFACE=legacy`. To keep the old surface, set `MCP_TOOL_SURFACE=legacy`; `all` publishes both. `MCP_TOOLS` entries must be compact names under `compact` (a legacy name there refuses startup and names the setting). `MCP_TOOLSETS` and the `chat` preset keep working: they select the compact tools whose operations they allow, and each action stays refused when its own toolset or `MCP_READ_ONLY` excludes it. See the [migration guide](migrating-to-compact-tools.md) for the full name mapping, the escape hatch and how to re-select saved tool choices.

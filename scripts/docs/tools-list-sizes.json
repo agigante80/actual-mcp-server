@@ -5,12 +5,12 @@
     "tools": 15
   },
   "compact-chat": {
-    "bytes": 18147,
+    "bytes": 14697,
     "label": "Compact, `MCP_TOOLSETS=chat`",
     "tools": 6
   },
   "compact-read-only": {
-    "bytes": 18261,
+    "bytes": 18207,
     "label": "Compact, `MCP_READ_ONLY=true`",
     "tools": 6
   },
@@ -20,9 +20,9 @@
     "tools": 85
   },
   "legacy-chat": {
-    "bytes": 26575,
+    "bytes": 29236,
     "label": "Legacy, `MCP_TOOLSETS=chat`",
-    "tools": 12
+    "tools": 16
   },
   "legacy-read-only": {
     "bytes": 46242,
